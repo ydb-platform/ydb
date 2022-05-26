@@ -618,12 +618,12 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             STFUNC(StateWork)
             {
                 switch (ev->GetTypeRewrite()) {
-                    HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
-                    HFunc(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult, Handle);
                     HFunc(TEvents::TEvWakeup, HandleTimeout);
-                    HFunc(TEvServerlessProxy::TEvToken, HandleToken);
-                    HFunc(TEvServerlessProxy::TEvError, HandleError);
                     HFunc(TEvServerlessProxy::TEvClientReady, HandleClientReady);
+                    HFunc(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult, Handle);
+                    HFunc(TEvServerlessProxy::TEvError, HandleError);
+                    HFunc(TEvServerlessProxy::TEvGrpcRequestResult, HandleGrpcResponse);
+                    HFunc(TEvServerlessProxy::TEvToken, HandleToken);
                     default:
                         HandleUnexpectedEvent(ev, ctx);
                         break;
@@ -654,23 +654,49 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                         .AuthToken(HttpContext.IamToken)
                         .DiscoveryMode(NYdb::EDiscoveryMode::Async);
 
-                if (!HttpContext.DatabaseName.empty()) {
-                    if (!HttpContext.ServiceConfig.GetTestMode()) {
-                        clientSettings.Database(HttpContext.DatabaseName);
-                    }
+                if (!HttpContext.DatabaseName.empty() && !HttpContext.ServiceConfig.GetTestMode()) {
+                    clientSettings.Database(HttpContext.DatabaseName);
                 }
                 Y_VERIFY(!Client);
                 Client.Reset(new TDataStreamsClient(*HttpContext.Driver, clientSettings));
                 DiscoveryFuture = MakeHolder<NThreading::TFuture<void>>(Client->DiscoveryCompleted());
-                DiscoveryFuture->Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()](const NThreading::TFuture<void>&) {
-                    actorSystem->Send(actorId, new TEvServerlessProxy::TEvClientReady());
-                });
+                DiscoveryFuture->Subscribe(
+                    [actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()] (const NThreading::TFuture<void>&) {
+                        actorSystem->Send(actorId, new TEvServerlessProxy::TEvClientReady());
+                    });
             }
 
             void HandleClientReady(TEvServerlessProxy::TEvClientReady::TPtr&, const TActorContext& ctx){
-                SendGrpcRequest(ctx);
+                HttpContext.Driver ? SendGrpcRequest(ctx) : SendGrpcRequestNoDriver(ctx);
             }
 
+            void SendGrpcRequestNoDriver(const TActorContext& ctx) {
+                RequestState = StateGrpcRequest;
+                LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                              "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
+                              "' database: '" << HttpContext.DatabaseName <<
+                              "' iam token size: " << HttpContext.IamToken.size());
+
+                RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabaseName,
+                                                            HttpContext.SerializedUserToken, ctx.ActorSystem());
+                RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
+                                    (const NThreading::TFuture<TProtoResponse>& future) {
+                    auto& response = future.GetValueSync();
+                    auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                    Y_VERIFY(response.operation().ready());
+                    if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
+                        TProtoResult rs;
+                        response.operation().result().UnpackTo(&rs);
+                        result->Message = MakeHolder<TProtoResult>(rs);
+                    }
+                    NYql::TIssues issues;
+                    NYql::IssuesFromMessage(response.operation().issues(), issues);
+                    result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()),
+                                                               std::move(issues));
+                    actorSystem->Send(actorId, result.Release());
+                });
+                return;
+            }
 
             void SendGrpcRequest(const TActorContext& ctx) {
                 RequestState = StateGrpcRequest;
@@ -678,42 +704,29 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabaseName <<
                               "' iam token size: " << HttpContext.IamToken.size());
-                if (!HttpContext.Driver) {
-                    RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabaseName, HttpContext.SerializedUserToken, ctx.ActorSystem());
-                    RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()](const NThreading::TFuture<TProtoResponse>& future) {
-                        auto& response = future.GetValueSync();
-                        auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
-                        Y_VERIFY(response.operation().ready());
-                        if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
-                            TProtoResult rs;
-                            response.operation().result().UnpackTo(&rs);
-                            result->Message = MakeHolder<TProtoResult>(rs);
-                        }
-                        NYql::TIssues issues;
-                        NYql::IssuesFromMessage(response.operation().issues(), issues);
-                        result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()), std::move(issues));
-                        actorSystem->Send(actorId, result.Release());
-                    });
-                    return;
-                }
+
                 Y_VERIFY(Client);
                 Y_VERIFY(DiscoveryFuture->HasValue());
 
                 TProtoResponse response;
 
-                LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY, "sending grpc request " << Request.DebugString());
+                LOG_SP_DEBUG_S(ctx, NKikimrServices::HTTP_PROXY,
+                               "sending grpc request " << Request.DebugString());
 
-                Future = MakeHolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(Client->template DoProtoRequest<TProtoRequest, TProtoResponse, TProtoResult, TProtoCall>(std::move(Request), ProtoCall));
-                Future->Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()](const NThreading::TFuture<TProtoResultWrapper<TProtoResult>>& future) {
-                    auto& response = future.GetValueSync();
-                    auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
-                    if (response.IsSuccess()) {
-                        result->Message = MakeHolder<TProtoResult>(response.GetResult());
-                    }
-                    result->Status = MakeHolder<NYdb::TStatus>(response);
-                    actorSystem->Send(actorId, result.Release());
-                });
-
+                Future = MakeHolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>>(
+                    Client->template DoProtoRequest<TProtoRequest, TProtoResponse, TProtoResult,
+                    TProtoCall>(std::move(Request), ProtoCall));
+                Future->Subscribe(
+                    [actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()]
+                    (const NThreading::TFuture<TProtoResultWrapper<TProtoResult>>& future) {
+                        auto& response = future.GetValueSync();
+                        auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                        if (response.IsSuccess()) {
+                            result->Message = MakeHolder<TProtoResult>(response.GetResult());
+                        }
+                        result->Status = MakeHolder<NYdb::TStatus>(response);
+                        actorSystem->Send(actorId, result.Release());
+                    });
             }
 
             void HandleUnexpectedEvent(const TAutoPtr<NActors::IEventHandle>& ev, const TActorContext& ctx) {
@@ -728,7 +741,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                 if (HttpContext.Driver) {
                     SendYdbDriverRequest(ctx);
                 } else {
-                    SendGrpcRequest(ctx);
+                    SendGrpcRequestNoDriver(ctx);
                 }
             }
 
@@ -758,7 +771,8 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                 TBase::Die(ctx);
             }
 
-            void Handle(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult::TPtr ev, const TActorContext& ctx) {
+            void Handle(TEvServerlessProxy::TEvDiscoverDatabaseEndpointResult::TPtr ev,
+                        const TActorContext& ctx) {
                 if (ev->Get()->DatabaseInfo) {
                     auto& db = ev->Get()->DatabaseInfo;
                     HttpContext.FolderId = db->FolderId;
@@ -775,8 +789,10 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                     }
 
                     FillInputCustomMetrics<TProtoRequest>(Request, HttpContext, ctx);
-                    ctx.Send(MakeMetricsServiceID(), new TEvServerlessProxy::TEvCounter{1, true, true, BuildLabels(Method, HttpContext, "api.http.requests_per_second")
-                                            });
+                    ctx.Send(MakeMetricsServiceID(),
+                             new TEvServerlessProxy::TEvCounter{1, true, true,
+                                 BuildLabels(Method, HttpContext, "api.http.requests_per_second")
+                             });
                     CreateClient(ctx);
                     return;
                 }
@@ -786,7 +802,8 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
 
             void ReportLatencyCounters(const TActorContext& ctx) {
                 TDuration dur = ctx.Now() - StartTime;
-                ctx.Send(MakeMetricsServiceID(), new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
+                ctx.Send(MakeMetricsServiceID(),
+                         new TEvServerlessProxy::TEvHistCounter{static_cast<i64>(dur.MilliSeconds()), 1,
                                     BuildLabels(Method, HttpContext, "api.http.requests_duration_milliseconds")
                         });
             }
@@ -797,7 +814,8 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                 // return http response;
                 if (ev->Get()->Status->IsSuccess()) {
                     ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.ResponseBody);
-                    FillOutputCustomMetrics<TProtoResult>(*(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
+                    FillOutputCustomMetrics<TProtoResult>(
+                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ReportLatencyCounters(ctx);
 
                     ctx.Send(MakeMetricsServiceID(),
@@ -815,7 +833,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                     case ERetryErrorClass::LongRetry:
                         RetryCounter.Click();
                         if (RetryCounter.HasAttemps()) {
-                            return SendGrpcRequest(ctx);
+                            return HttpContext.Driver ? SendGrpcRequest(ctx) : SendGrpcRequestNoDriver(ctx);
                         }
                     case ERetryErrorClass::NoRetry: {
                         TString errorText;
@@ -856,11 +874,14 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                               "database '" << HttpContext.DatabaseName << "' " <<
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
-                if (HttpContext.IamToken.empty() || !HttpContext.Driver) { //use Signature or no sdk mode - then need to auth anyway
-                    if (HttpContext.IamToken.empty() && !Signature) { //Test mode - no driver and no creds
-                        SendGrpcRequest(ctx);
+                // Use Signature or no sdk mode - then need to auth anyway
+                if (HttpContext.IamToken.empty() || !HttpContext.Driver) {
+                    // Test mode - no driver and no creds
+                    if (HttpContext.IamToken.empty() && !Signature) {
+                        SendGrpcRequestNoDriver(ctx);
                     } else {
-                        AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(ctx.SelfID, HttpContext, std::move(Signature)));
+                        AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(
+                                                     ctx.SelfID, HttpContext, std::move(Signature)));
                     }
                 } else {
                     SendYdbDriverRequest(ctx);

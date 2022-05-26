@@ -40,9 +40,9 @@ TVector<TPQLabelsInfo> GetLabels(const TTopicConverterPtr& topic)
 TVector<TPQLabelsInfo> GetLabelsForStream(const TTopicConverterPtr& topic, const TString& cloudId,
                                         const TString& dbId, const TString& folderId) {
     TVector<TPQLabelsInfo> res = {
-            {{{"database", dbId}}, {dbId}},
             {{{"cloud", cloudId}}, {cloudId}},
             {{{"folder", folderId}}, {folderId}},
+            {{{"database", dbId}}, {dbId}},
             {{{"stream", topic->GetClientsideName()}}, {topic->GetClientsideName()}}};
     return res;
 }

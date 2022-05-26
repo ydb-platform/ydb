@@ -201,6 +201,13 @@ TFinishedCompactionInfo TCompactionLogic::GetFinishedCompactionInfo(ui32 table) 
         tableInfo->Strategy->GetLastFinishedForcedCompactionTs());
 }
 
+void TCompactionLogic::AllowBorrowedGarbageCompaction(ui32 table) {
+    auto *tableInfo = State->Tables.FindPtr(table);
+    Y_VERIFY(tableInfo && tableInfo->Strategy, "Cannot AllowBorrowedGarbageCompaction for unexpected table %" PRIu32, table);
+    tableInfo->AllowBorrowedGarbageCompaction = true;
+    tableInfo->Strategy->AllowBorrowedGarbageCompaction();
+}
+
 TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
 {
     TReflectSchemeChangesResult result;
@@ -247,6 +254,10 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
                 }
             } else {
                 table.Strategy->Start({ });
+            }
+
+            if (table.AllowBorrowedGarbageCompaction) {
+                table.Strategy->AllowBorrowedGarbageCompaction();
             }
         } else {
             Y_VERIFY(table.Strategy);

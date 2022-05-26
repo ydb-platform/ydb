@@ -100,6 +100,8 @@ struct TCompactionLogicState {
 
         bool ChangesRequested = false;
 
+        bool AllowBorrowedGarbageCompaction = true;
+
         TTableInfo() = default;
 
         ~TTableInfo();
@@ -216,6 +218,8 @@ public:
     ui64 PrepareForceCompaction(ui32 table, EForceCompaction mode = EForceCompaction::Full);
 
     TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 table);
+
+    void AllowBorrowedGarbageCompaction(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
     void ReflectRemovedRowVersions(ui32 table);

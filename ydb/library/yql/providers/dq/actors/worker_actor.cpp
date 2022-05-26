@@ -76,13 +76,11 @@ public:
 
     explicit TDqWorker(
         const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-        const IDqSourceFactory::TPtr& sourceFactory,
-        const IDqSinkFactory::TPtr& sinkFactory,
+        const IDqAsyncIoFactory::TPtr& asyncIoFactory,
         TWorkerRuntimeData* runtimeData,
         const TString& traceId)
         : TRichActor<TDqWorker>(&TDqWorker::Handler)
-        , SourceFactory(sourceFactory)
-        , SinkFactory(sinkFactory)
+        , AsyncIoFactory(asyncIoFactory)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , RuntimeData(runtimeData)
         , TraceId(traceId)
@@ -265,8 +263,8 @@ private:
                         auto& source = SourcesMap[inputId];
                         source.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
                         std::tie(source.Source, source.Actor) =
-                            SourceFactory->CreateDqSource(
-                            IDqSourceFactory::TArguments{
+                            AsyncIoFactory->CreateDqSource(
+                            IDqAsyncIoFactory::TSourceArguments {
                                 .InputDesc = input,
                                 .InputIndex = static_cast<ui64>(inputId),
                                 .TxId = TraceId,
@@ -295,8 +293,8 @@ private:
                     if (output.HasSink()) {
                         auto& sink = SinksMap[outputId];
                         sink.TypeEnv = const_cast<NKikimr::NMiniKQL::TTypeEnvironment*>(&typeEnv);
-                        std::tie(sink.Sink, sink.Actor) = SinkFactory->CreateDqSink(
-                            IDqSinkFactory::TArguments {
+                        std::tie(sink.Sink, sink.Actor) = AsyncIoFactory->CreateDqSink(
+                            IDqAsyncIoFactory::TSinkArguments {
                                 .OutputDesc = output,
                                 .OutputIndex = static_cast<ui64>(outputId),
                                 .TxId = TraceId,
@@ -706,8 +704,7 @@ private:
 
     /*_________________________________________________________*/
 
-    IDqSourceFactory::TPtr SourceFactory;
-    IDqSinkFactory::TPtr SinkFactory;
+    IDqAsyncIoFactory::TPtr AsyncIoFactory;
     ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
     NTaskRunnerActor::ITaskRunnerActor* Actor = nullptr;
     TActorId TaskRunnerActor;
@@ -745,15 +742,13 @@ NActors::IActor* CreateWorkerActor(
     TWorkerRuntimeData* runtimeData,
     const TString& traceId,
     const ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    const IDqSourceFactory::TPtr& sourceFactory,
-    const IDqSinkFactory::TPtr& sinkFactory)
+    const IDqAsyncIoFactory::TPtr& asyncIoFactory)
 {
     Y_VERIFY(taskRunnerActorFactory);
     return new TLogWrapReceive(
         new TDqWorker(
             taskRunnerActorFactory,
-            sourceFactory,
-            sinkFactory,
+            asyncIoFactory,
             runtimeData,
             traceId), traceId);
 }

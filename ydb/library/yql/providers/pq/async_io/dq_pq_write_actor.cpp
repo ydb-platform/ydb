@@ -1,7 +1,7 @@
 #include "dq_pq_write_actor.h"
 #include "probes.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
@@ -412,11 +412,11 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(
     return {actor, actor};
 }
 
-void RegisterDqPqWriteActorFactory(TDqSinkFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
-    factory.Register<NPq::NProto::TDqPqTopicSink>("PqSink",
+void RegisterDqPqWriteActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+    factory.RegisterSink<NPq::NProto::TDqPqTopicSink>("PqSink",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory)](
             NPq::NProto::TDqPqTopicSink&& settings,
-            IDqSinkFactory::TArguments&& args)
+            IDqAsyncIoFactory::TSinkArguments&& args)
         {
             NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
             return CreateDqPqWriteActor(

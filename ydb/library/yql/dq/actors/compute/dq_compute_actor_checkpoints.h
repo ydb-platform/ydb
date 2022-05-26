@@ -1,7 +1,7 @@
 #pragma once
 
 #include "dq_compute_actor.h"
-#include "dq_compute_actor_async_output.h"
+#include "dq_compute_actor_async_io.h"
 #include "retry_queue.h"
 
 #include <ydb/library/yql/dq/common/dq_common.h>

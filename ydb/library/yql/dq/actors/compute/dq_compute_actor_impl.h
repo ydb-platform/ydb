@@ -3,8 +3,7 @@
 #include "dq_compute_actor.h"
 #include "dq_compute_actor_channels.h"
 #include "dq_compute_actor_checkpoints.h"
-#include "dq_compute_actor_async_input.h"
-#include "dq_compute_actor_async_output.h"
+#include "dq_compute_actor_async_io.h"
 #include "dq_compute_issues_buffer.h"
 #include "dq_compute_memory_quota.h"
 
@@ -142,7 +141,7 @@ public:
 
 protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-        IDqSourceFactory::TPtr sourceFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+        IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, bool ownMemoryQuota = true, bool passExceptions = false)
         : ExecuterId(executerId)
@@ -151,9 +150,7 @@ protected:
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn)
-        , SourceFactory(std::move(sourceFactory))
-        , SinkFactory(std::move(sinkFactory))
-        , OutputTransformFactory(std::move(transformFactory))
+        , AsyncIoFactory(std::move(asyncIoFactory))
         , FunctionRegistry(functionRegistry)
         , CheckpointingMode(GetTaskCheckpointingMode(Task))
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
@@ -168,7 +165,7 @@ protected:
     }
 
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, const NDqProto::TDqTask& task,
-        IDqSourceFactory::TPtr sourceFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+        IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
         : ExecuterId(executerId)
@@ -177,9 +174,7 @@ protected:
         , RuntimeSettings(settings)
         , MemoryLimits(memoryLimits)
         , CanAllocateExtraMemory(RuntimeSettings.ExtraMemoryAllocationPool != 0 && MemoryLimits.AllocateMemoryFn)
-        , SourceFactory(std::move(sourceFactory))
-        , SinkFactory(std::move(sinkFactory))
-        , OutputTransformFactory(std::move(transformFactory))
+        , AsyncIoFactory(std::move(asyncIoFactory))
         , FunctionRegistry(functionRegistry)
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , MemoryQuota(InitMemoryQuota())
@@ -1249,12 +1244,12 @@ protected:
         }
         for (auto& [inputIndex, source] : SourcesMap) {
             if (TaskRunner) { source.Buffer = TaskRunner->GetSource(inputIndex); Y_VERIFY(source.Buffer);}
-            Y_VERIFY(SourceFactory);
+            Y_VERIFY(AsyncIoFactory);
             const auto& inputDesc = Task.GetInputs(inputIndex);
             const ui64 i = inputIndex; // Crutch for clang
             CA_LOG_D("Create source for input " << i << " " << inputDesc);
-            std::tie(source.AsyncInput, source.Actor) = SourceFactory->CreateDqSource(
-                IDqSourceFactory::TArguments{
+            std::tie(source.AsyncInput, source.Actor) = AsyncIoFactory->CreateDqSource(
+                IDqAsyncIoFactory::TSourceArguments {
                     .InputDesc = inputDesc,
                     .InputIndex = inputIndex,
                     .TxId = TxId,
@@ -1275,12 +1270,12 @@ protected:
             if (TaskRunner) {
                 transform.ProgramBuilder.ConstructInPlace(TaskRunner->GetTypeEnv(), *FunctionRegistry);
                 std::tie(transform.Buffer, transform.OutputBuffer) = TaskRunner->GetOutputTransform(outputIndex);
-                Y_VERIFY(OutputTransformFactory);
+                Y_VERIFY(AsyncIoFactory);
                 const auto& outputDesc = Task.GetOutputs(outputIndex);
                 const ui64 i = outputIndex; // Crutch for clang
                 CA_LOG_D("Create transform for output " << i << " " << outputDesc.ShortDebugString());
-                std::tie(transform.AsyncOutput, transform.Actor) = OutputTransformFactory->CreateDqOutputTransform(
-                    IDqOutputTransformFactory::TArguments {
+                std::tie(transform.AsyncOutput, transform.Actor) = AsyncIoFactory->CreateDqOutputTransform(
+                    IDqAsyncIoFactory::TOutputTransformArguments {
                         .OutputDesc = outputDesc,
                         .OutputIndex = outputIndex,
                         .TxId = TxId,
@@ -1297,12 +1292,12 @@ protected:
         }
         for (auto& [outputIndex, sink] : SinksMap) {
             if (TaskRunner) { sink.Buffer = TaskRunner->GetSink(outputIndex); }
-            Y_VERIFY(SinkFactory);
+            Y_VERIFY(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             const ui64 i = outputIndex; // Crutch for clang
             CA_LOG_D("Create sink for output " << i << " " << outputDesc.ShortDebugString());
-            std::tie(sink.AsyncOutput, sink.Actor) = SinkFactory->CreateDqSink(
-                IDqSinkFactory::TArguments {
+            std::tie(sink.AsyncOutput, sink.Actor) = AsyncIoFactory->CreateDqSink(
+                IDqAsyncIoFactory::TSinkArguments {
                     .OutputDesc = outputDesc,
                     .OutputIndex = outputIndex,
                     .TxId = TxId,
@@ -1576,9 +1571,7 @@ protected:
     const TComputeRuntimeSettings RuntimeSettings;
     const TComputeMemoryLimits MemoryLimits;
     const bool CanAllocateExtraMemory = false;
-    const IDqSourceFactory::TPtr SourceFactory;
-    const IDqSinkFactory::TPtr SinkFactory;
-    const IDqOutputTransformFactory::TPtr OutputTransformFactory;
+    const IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
     const NDqProto::ECheckpointingMode CheckpointingMode;
     TIntrusivePtr<IDqTaskRunner> TaskRunner;

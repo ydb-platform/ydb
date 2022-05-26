@@ -25,7 +25,6 @@ namespace NYql::NDqs {
         TWorkerRuntimeData* runtimeData,
         const TString& traceId,
         const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-        const NDq::IDqSourceFactory::TPtr& sourceFactory,
-        const NDq::IDqSinkFactory::TPtr& sinkFactory);
+        const NDq::IDqAsyncIoFactory::TPtr& asyncIoFactory);
 
 } // namespace NYql::NDqs

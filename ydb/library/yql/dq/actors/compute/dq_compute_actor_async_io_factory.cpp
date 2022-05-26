@@ -1,17 +1,16 @@
 #include "dq_compute_actor_async_io_factory.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 
 namespace NYql::NDq {
 
-std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> TDqSourceFactory::CreateDqSource(IDqSourceFactory::TArguments&& args) const
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> TDqAsyncIoFactory::CreateDqSource(TSourceArguments&& args) const
 {
     const TString& type = args.InputDesc.GetSource().GetType();
     YQL_ENSURE(!type.empty(), "Attempt to create source of empty type");
-    const TCreatorFunction* creatorFunc = CreatorsByType.FindPtr(type);
+    const TSourceCreatorFunction* creatorFunc = SourceCreatorsByType.FindPtr(type);
     YQL_ENSURE(creatorFunc, "Unknown type of source: \"" << type << "\"");
     std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
     Y_VERIFY(actor.first);
@@ -19,17 +18,17 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> TDqSourceFactory::Create
     return actor;
 }
 
-void TDqSourceFactory::Register(const TString& type, TCreatorFunction creator)
+void TDqAsyncIoFactory::RegisterSource(const TString& type, TSourceCreatorFunction creator)
 {
-    auto [_, registered] = CreatorsByType.emplace(type, std::move(creator));
+    auto [_, registered] = SourceCreatorsByType.emplace(type, std::move(creator));
     Y_VERIFY(registered);
 }
 
-std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqSinkFactory::CreateDqSink(IDqSinkFactory::TArguments&& args) const
+std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqAsyncIoFactory::CreateDqSink(TSinkArguments&& args) const
 {
     const TString& type = args.OutputDesc.GetSink().GetType();
     YQL_ENSURE(!type.empty(), "Attempt to create sink of empty type");
-    const TCreatorFunction* creatorFunc = CreatorsByType.FindPtr(type);
+    const TSinkCreatorFunction* creatorFunc = SinkCreatorsByType.FindPtr(type);
     YQL_ENSURE(creatorFunc, "Unknown type of sink: \"" << type << "\"");
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
     Y_VERIFY(actor.first);
@@ -37,24 +36,27 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqSinkFactory::CreateD
     return actor;
 }
 
-void TDqSinkFactory::Register(const TString& type, TCreatorFunction creator)
+void TDqAsyncIoFactory::RegisterSink(const TString& type, TSinkCreatorFunction creator)
 {
-    auto [_, registered] = CreatorsByType.emplace(type, std::move(creator));
+    auto [_, registered] = SinkCreatorsByType.emplace(type, std::move(creator));
     Y_VERIFY(registered);
 }
 
-std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqOutputTransformFactory::CreateDqOutputTransform(TArguments&& args) {
-    auto creator = CreatorsByType.find(args.OutputDesc.GetTransform().GetType());
-    YQL_ENSURE(creator != CreatorsByType.end(), "Unregistered type of transform actor: \"" << args.OutputDesc.GetTransform().GetType() << "\"");
-
-    std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> actor = (creator->second)(std::move(args));
+std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqAsyncIoFactory::CreateDqOutputTransform(TOutputTransformArguments&& args)
+{
+    const TString& type = args.OutputDesc.GetTransform().GetType();
+    YQL_ENSURE(!type.empty(), "Attempt to create output transform of empty type");
+    const TOutputTransformCreatorFunction* creatorFunc = OutputTransformCreatorsByType.FindPtr(type);
+    YQL_ENSURE(creatorFunc, "Unknown type of output transform: \"" << type << "\"");
+    std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
     Y_VERIFY(actor.first);
     Y_VERIFY(actor.second);
     return actor;
 }
 
-void TDqOutputTransformFactory::Register(const TString& type, TCreatorFunction creator) {
-    auto [_, registered] = CreatorsByType.emplace(type, std::move(creator));
+void TDqAsyncIoFactory::RegisterOutputTransform(const TString& type, TOutputTransformCreatorFunction creator)
+{
+    auto [_, registered] = OutputTransformCreatorsByType.emplace(type, std::move(creator));
     Y_VERIFY(registered);
 }
 

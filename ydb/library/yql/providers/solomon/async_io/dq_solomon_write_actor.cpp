@@ -1,7 +1,7 @@
 #include "dq_solomon_write_actor.h"
 #include "metrics_encoder.h"
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 
@@ -500,11 +500,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSolo
     return {actor, actor};
 }
 
-void RegisterDQSolomonWriteActorFactory(TDqSinkFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
-    factory.Register<NSo::NProto::TDqSolomonShard>("SolomonSink",
+void RegisterDQSolomonWriteActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) {
+    factory.RegisterSink<NSo::NProto::TDqSolomonShard>("SolomonSink",
         [credentialsFactory](
             NYql::NSo::NProto::TDqSolomonShard&& settings,
-            IDqSinkFactory::TArguments&& args)
+            IDqAsyncIoFactory::TSinkArguments&& args)
         {
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
 

@@ -33,11 +33,11 @@ public:
     static constexpr char ActorName[] = "DQ_COMPUTE_ACTOR";
 
     TDqComputeActor(const TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
-        IDqSourceFactory::TPtr sourceFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+        IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const TTaskRunnerFactory& taskRunnerFactory)
-        : TBase(executerId, txId, std::move(task), std::move(sourceFactory), std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits)
+        : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits)
         , TaskRunnerFactory(taskRunnerFactory)
     {}
 
@@ -68,12 +68,12 @@ private:
 
 
 IActor* CreateDqComputeActor(const TActorId& executerId, const TTxId& txId, NYql::NDqProto::TDqTask&& task,
-    IDqSourceFactory::TPtr sourceFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+    IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, const TTaskRunnerFactory& taskRunnerFactory)
 {
-    return new TDqComputeActor(executerId, txId, std::move(task), std::move(sourceFactory),
-        std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits, taskRunnerFactory);
+    return new TDqComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
+        functionRegistry, settings, memoryLimits, taskRunnerFactory);
 }
 
 } // namespace NDq

@@ -2,7 +2,7 @@
 #include "probes.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
@@ -410,11 +410,11 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(
     return {actor, actor};
 }
 
-void RegisterDqPqReadActorFactory(TDqSourceFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
-    factory.Register<NPq::NProto::TDqPqTopicSource>("PqSource",
+void RegisterDqPqReadActorFactory(TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory, bool rangesMode) {
+    factory.RegisterSource<NPq::NProto::TDqPqTopicSource>("PqSource",
         [driver = std::move(driver), credentialsFactory = std::move(credentialsFactory), rangesMode](
             NPq::NProto::TDqPqTopicSource&& settings,
-            IDqSourceFactory::TArguments&& args)
+            IDqAsyncIoFactory::TSourceArguments&& args)
     {
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(DQ_PQ_PROVIDER));
         return CreateDqPqReadActor(

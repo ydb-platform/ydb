@@ -33,10 +33,10 @@ public:
     }
 
     TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
-        IDqSourceFactory::TPtr sourceFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+        IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
-        : TBase(executerId, txId, std::move(task), std::move(sourceFactory), std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true)
+        : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true)
         , ComputeCtx(settings.StatsMode)
     {
         if (GetTask().GetMeta().Is<NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta>()) {
@@ -318,12 +318,12 @@ private:
 } // anonymous namespace
 
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask&& task,
-    IDqSourceFactory::TPtr sourceFactory, IDqSinkFactory::TPtr sinkFactory, IDqOutputTransformFactory::TPtr transformFactory,
+    IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
 {
-    return new TKqpComputeActor(executerId, txId, std::move(task), std::move(sourceFactory),
-        std::move(sinkFactory), std::move(transformFactory), functionRegistry, settings, memoryLimits);
+    return new TKqpComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
+        functionRegistry, settings, memoryLimits);
 }
 
 } // namespace NKqp

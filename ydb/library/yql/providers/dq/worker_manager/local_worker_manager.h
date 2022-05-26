@@ -1,7 +1,6 @@
 #pragma once
 
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_input.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_output.h>
+#include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/counters.h>
@@ -22,9 +21,7 @@ namespace NYql::NDqs {
     struct TLocalWorkerManagerOptions {
         TWorkerManagerCounters Counters;
         NTaskRunnerProxy::IProxyFactory::TPtr Factory;
-        NDq::IDqSourceFactory::TPtr SourceFactory;
-        NDq::IDqSinkFactory::TPtr SinkFactory;
-        NDq::IDqOutputTransformFactory::TPtr TransformFactory;
+        NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
         TWorkerRuntimeData* RuntimeData = nullptr;
         TTaskRunnerInvokerFactory::TPtr TaskRunnerInvokerFactory;

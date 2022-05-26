@@ -115,8 +115,7 @@ void Init(
         NYql::CreateYdbDqTaskTransformFactory()
     });
 
-    auto sourceFactory = MakeIntrusive<NYql::NDq::TDqSourceFactory>();
-    auto sinkFactory = MakeIntrusive<NYql::NDq::TDqSinkFactory>();
+    auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
     NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory;
     const auto httpGateway = NYql::IHTTPGateway::Make(
@@ -135,14 +134,14 @@ void Init(
     }
 
     if (protoConfig.GetPrivateApi().GetEnabled()) {
-        RegisterDqPqReadActorFactory(*sourceFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
-        RegisterYdbReadActorFactory(*sourceFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
-        RegisterS3ReadActorFactory(*sourceFactory, credentialsFactory,
+        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, !protoConfig.GetReadActorsFactoryConfig().GetPqReadActorFactoryConfig().GetCookieCommitMode());
+        RegisterYdbReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
+        RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory,
             httpGateway, std::make_shared<NYql::NS3::TRetryConfig>(protoConfig.GetReadActorsFactoryConfig().GetS3ReadActorFactoryConfig().GetRetryConfig()));
-        RegisterClickHouseReadActorFactory(*sourceFactory, credentialsFactory, httpGateway);
+        RegisterClickHouseReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway);
 
-        RegisterDqPqWriteActorFactory(*sinkFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
-        RegisterDQSolomonWriteActorFactory(*sinkFactory, credentialsFactory);
+        RegisterDqPqWriteActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory);
+        RegisterDQSolomonWriteActorFactory(*asyncIoFactory, credentialsFactory);
     }
 
     ui64 mkqlInitialMemoryLimit = 8_GB;
@@ -160,8 +159,7 @@ void Init(
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Counters = workerManagerCounters;
         lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
-        lwmOptions.SourceFactory = sourceFactory;
-        lwmOptions.SinkFactory = sinkFactory;
+        lwmOptions.AsyncIoFactory = asyncIoFactory;
         lwmOptions.FunctionRegistry = appData->FunctionRegistry;
         lwmOptions.TaskRunnerInvokerFactory = new NYql::NDqs::TTaskRunnerInvokerFactory();
         lwmOptions.MkqlInitialMemoryLimit = mkqlInitialMemoryLimit;

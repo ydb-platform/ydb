@@ -109,7 +109,7 @@ struct TJsonRequestParameters<TJsonTopicInfo> {
                       {"name":"enums","in":"query","description":"convert enums to strings","required":false,"type":"boolean"},
                       {"name":"all","in":"query","description":"return all topics and all clients","required":false,"type":"boolean","default":false},
                       {"name":"ui64","in":"query","description":"return ui64 as number","required":false,"type":"boolean"},
-                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer",default:10000}])___";
+                      {"name":"timeout","in":"query","description":"timeout in ms","required":false,"type":"integer","default":10000}])___";
     }
 };
 

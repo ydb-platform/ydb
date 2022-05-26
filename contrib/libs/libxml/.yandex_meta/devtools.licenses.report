@@ -190,7 +190,7 @@ BELONGS ya.make
 
 KEEP     MIT                  db4a32b2f76695e476e159b02d538062
 BELONGS ya.make
-FILE_INCLUDE Copyright found in files: DOCBparser.c at line 8, HTMLparser.c at line 4, HTMLtree.c at line 4, SAX.c at line 5, SAX2.c at line 4, buf.c at line 10, c14n.c at line 8, catalog.c at line 10, debugXML.c at line 5, encoding.c at line 16, entities.c at line 4, error.c at line 4, globals.c at line 8, legacy.c at line 5, nanohttp.c at line 9, parser.c at line 28, parserInternals.c at line 5, pattern.c at line 9, relaxng.c at line 4, schematron.c at line 4, threads.c at line 4, uri.c at line 6, valid.c at line 5, xinclude.c at line 7, xlink.c at line 5, xmlIO.c at line 4, xmlmodule.c at line 4, xmlreader.c at line 8, xmlregexp.c at line 12, xmlsave.c at line 4, xmlschemas.c at line 5, xmlschemastypes.c at line 5, xmlstring.c at line 8, xpointer.c at line 12, xzlib.c at line 5
+FILE_INCLUDE Copyright found in files: HTMLparser.c at line 4, HTMLtree.c at line 4, SAX.c at line 5, SAX2.c at line 4, buf.c at line 10, c14n.c at line 8, catalog.c at line 10, debugXML.c at line 5, encoding.c at line 16, entities.c at line 4, error.c at line 4, globals.c at line 8, legacy.c at line 5, nanohttp.c at line 9, parser.c at line 28, parserInternals.c at line 5, pattern.c at line 9, relaxng.c at line 4, schematron.c at line 4, threads.c at line 4, uri.c at line 6, valid.c at line 5, xinclude.c at line 7, xlink.c at line 5, xmlIO.c at line 4, xmlmodule.c at line 4, xmlreader.c at line 8, xmlregexp.c at line 12, xmlsave.c at line 4, xmlschemas.c at line 5, xmlschemastypes.c at line 5, xmlstring.c at line 8, xpointer.c at line 12, xzlib.c at line 5
     License text:
          * See Copyright for the status of this software.
     Scancode info:
@@ -199,7 +199,6 @@ FILE_INCLUDE Copyright found in files: DOCBparser.c at line 8, HTMLparser.c at l
         Match type      : REFERENCE
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
     Files with this license:
-        DOCBparser.c [8:8]
         HTMLparser.c [4:4]
         HTMLtree.c [4:4]
         SAX.c [5:5]

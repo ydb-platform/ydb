@@ -127,7 +127,7 @@ private:
         HFunc(TEvTaskRunnerCreateFinished, OnTaskRunnerCreated);
         HFunc(TEvChannelPopFinished, OnChannelPopFinished);
         HFunc(TEvTaskRunFinished, OnRunFinished);
-        HFunc(TEvSourcePushFinished, OnSourcePushFinished);
+        HFunc(TEvAsyncInputPushFinished, OnAsyncInputPushFinished);
 
         // weird to have two events for error handling, but we need to use TEvDqFailure
         // between worker_actor <-> executer_actor, cause it transmits statistics in 'Metric' field
@@ -564,7 +564,7 @@ private:
                     source.PushStarted = true;
                     source.Finished = finished;
 
-                    Actor->SourcePush(0, index, std::move(batch), space, finished);
+                    Actor->AsyncInputPush(0, index, std::move(batch), space, finished);
                 }
                 break;
             }
@@ -663,7 +663,7 @@ private:
         Y_UNUSED(ev->Get()->InputIndex);
         SendFailure(MakeHolder<TEvDqFailure>(ev->Get()->IsFatal ? NYql::NDqProto::StatusIds::UNSPECIFIED : NYql::NDqProto::StatusIds::INTERNAL_ERROR, ev->Get()->Issues.ToString()));
     }
-    void OnSourcePushFinished(TEvSourcePushFinished::TPtr& ev, const TActorContext& ctx) {
+    void OnAsyncInputPushFinished(TEvAsyncInputPushFinished::TPtr& ev, const TActorContext& ctx) {
         auto index = ev->Get()->Index;
         auto& source = SourcesMap[index];
         source.PushStarted = false;

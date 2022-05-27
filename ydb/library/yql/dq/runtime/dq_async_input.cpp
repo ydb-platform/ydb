@@ -3,11 +3,11 @@
 
 namespace NYql::NDq {
 
-class TDqSource : public TDqInputImpl<TDqSource, IDqSource> {
-    using TBaseImpl = TDqInputImpl<TDqSource, IDqSource>;
+class TDqAsyncInputBuffer : public TDqInputImpl<TDqAsyncInputBuffer, IDqAsyncInputBuffer> {
+    using TBaseImpl = TDqInputImpl<TDqAsyncInputBuffer, IDqAsyncInputBuffer>;
     friend TBaseImpl;
 public:
-    TDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats)
+    TDqAsyncInputBuffer(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectProfileStats)
         : TBaseImpl(inputType, maxBufferBytes)
         , InputIndex(inputIndex)
         , BasicStats(InputIndex)
@@ -34,10 +34,10 @@ private:
     TDqAsyncInputBufferStats* ProfileStats = nullptr;
 };
 
-IDqSource::TPtr CreateDqSource(
+IDqAsyncInputBuffer::TPtr CreateDqAsyncInputBuffer(
     ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, bool collectStats)
 {
-    return new TDqSource(inputIndex, inputType, maxBufferBytes, collectStats);
+    return new TDqAsyncInputBuffer(inputIndex, inputType, maxBufferBytes, collectStats);
 }
 
 } // namespace NYql::NDq

@@ -1286,7 +1286,7 @@ public:
         return new TOutputChannel(Task.GetId(), channelId, Input, Output);
     }
 
-    IDqSource::TPtr GetSource(ui64 index) override {
+    IDqAsyncInputBuffer::TPtr GetSource(ui64 index) override {
         return new TDqSource(Task.GetId(), index, this);
     }
 
@@ -1463,7 +1463,7 @@ public:
         return channel;
     }
 
-    IDqSource::TPtr GetSource(ui64 inputIndex) override {
+    IDqAsyncInputBuffer::TPtr GetSource(ui64 inputIndex) override {
         auto& source = Sources[inputIndex];
         if (!source) {
             source = new TDqSource(
@@ -1499,6 +1499,10 @@ public:
             // Stats.Sinks[outputIndex] = sink->GetStats();
         }
         return sink;
+    }
+
+    std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 /*inputIndex*/) override {
+        return {};
     }
 
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 /*outputIndex*/) override {
@@ -1567,7 +1571,7 @@ private:
     mutable TDqTaskRunnerStats Stats;
 
     THashMap<ui64, IDqInputChannel::TPtr> InputChannels;
-    THashMap<ui64, IDqSource::TPtr> Sources;
+    THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources;
     THashMap<ui64, IDqOutputChannel::TPtr> OutputChannels;
     THashMap<ui64, IDqAsyncOutputBuffer::TPtr> Sinks;
 };

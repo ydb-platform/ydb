@@ -11,7 +11,7 @@ extern const TString WorkingDirectoryParamName;
 extern const TString WorkingDirectoryDontInitParamName; // COMPAT(aozeritsky)
 extern const TString UseMetaParamName; // COMPAT(aozeritsky)
 
-class IStringSource: public NDq::IDqSource {
+class IStringSource: public NDq::IDqAsyncInputBuffer {
 public:
     virtual ~IStringSource() = default;
     virtual void PushString(TVector<TString>&& batch, i64 space) = 0;
@@ -61,7 +61,7 @@ public:
 
     virtual IInputChannel::TPtr GetInputChannel(ui64 channelId) = 0;
     virtual IOutputChannel::TPtr GetOutputChannel(ui64 channelId) = 0;
-    virtual NDq::IDqSource::TPtr GetSource(ui64 index) = 0;
+    virtual NDq::IDqAsyncInputBuffer::TPtr GetSource(ui64 index) = 0;
     virtual NDq::IDqAsyncOutputBuffer::TPtr GetSink(ui64 index) = 0;
 
     virtual const THashMap<TString,TString>& GetTaskParams() const = 0;

@@ -414,9 +414,34 @@ public:
             auto& inputDesc = task.GetInputs(i);
 
             TVector<IDqInput::TPtr> inputs{Reserve(std::max<ui64>(inputDesc.ChannelsSize(), 1))}; // 1 is for "source" type of input.
+            TInputTransformInfo* transform = nullptr;
+            TType** inputType = &ProgramParsed.InputItemTypes[i];
+            if (inputDesc.HasTransform()) {
+                const auto& transformDesc = inputDesc.GetTransform();
+                transform = &InputTransforms[i];
+                Y_VERIFY(!transform->TransformInput);
+                Y_VERIFY(!transform->TransformOutput);
+
+                TStringBuilder err;
+                transform->TransformInputType = NCommon::ParseTypeFromYson(TStringBuf{transformDesc.GetInputType()}, *pb, err.Out);
+                YQL_ENSURE(transform->TransformInputType, "Can't parse transform input type: " << err);
+
+                err.clear();
+                TType* outputType = NCommon::ParseTypeFromYson(TStringBuf{transformDesc.GetOutputType()}, *pb, err.Out);
+                YQL_ENSURE(outputType, "Can't parse transform output type: " << err);
+                YQL_ENSURE(outputType->IsSameType(*ProgramParsed.InputItemTypes[i]));
+                LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
+                    << transformDesc.GetType() << " with input type: " << *transform->TransformInputType
+                    << " , output type: " << *outputType);
+
+                transform->TransformOutput = CreateDqAsyncInputBuffer(i, outputType,
+                    memoryLimits.ChannelBufferSize, Settings.CollectProfileStats);
+
+                inputType = &transform->TransformInputType;
+            }
 
             if (inputDesc.HasSource()) {
-                auto source = CreateDqSource(i, ProgramParsed.InputItemTypes[i],
+                auto source = CreateDqAsyncInputBuffer(i, *inputType,
                     memoryLimits.ChannelBufferSize, Settings.CollectProfileStats);
                 auto [_, inserted] = Sources.emplace(i, source);
                 Y_VERIFY(inserted);
@@ -424,7 +449,7 @@ public:
             } else {
                 for (auto& inputChannelDesc : inputDesc.GetChannels()) {
                     ui64 channelId = inputChannelDesc.GetId();
-                    auto inputChannel = CreateDqInputChannel(channelId, ProgramParsed.InputItemTypes[i],
+                    auto inputChannel = CreateDqInputChannel(channelId, *inputType,
                         memoryLimits.ChannelBufferSize, Settings.CollectProfileStats, typeEnv, holderFactory,
                         inputChannelDesc.GetTransportVersion());
                     auto ret = InputChannels.emplace(channelId, inputChannel);
@@ -434,8 +459,16 @@ public:
             }
 
             auto entryNode = ProgramParsed.CompGraph->GetEntryPoint(i, true);
-            entryNode->SetValue(ProgramParsed.CompGraph->GetContext(),
-                DqBuildInputValue(inputDesc, ProgramParsed.InputItemTypes[i], std::move(inputs), holderFactory));
+            if (transform) {
+                transform->TransformInput = DqBuildInputValue(inputDesc, transform->TransformInputType, std::move(inputs), holderFactory);
+                inputs.clear();
+                inputs.emplace_back(transform->TransformOutput);
+                entryNode->SetValue(ProgramParsed.CompGraph->GetContext(),
+                    CreateInputUnionValue(std::move(inputs), holderFactory));
+            } else {
+                entryNode->SetValue(ProgramParsed.CompGraph->GetContext(),
+                    DqBuildInputValue(inputDesc, ProgramParsed.InputItemTypes[i], std::move(inputs), holderFactory));
+            }
         }
 
         TVector<IDqOutputConsumer::TPtr> outputConsumers(task.OutputsSize());
@@ -447,11 +480,11 @@ public:
             }
 
             TVector<IDqOutput::TPtr> outputs{Reserve(std::max<ui64>(outputDesc.ChannelsSize(), 1))};
-            TTransformInfo* transform = nullptr;
+            TOutputTransformInfo* transform = nullptr;
             TType** taskOutputType = &ProgramParsed.OutputItemTypes[i];
             if (outputDesc.HasTransform()) {
                 const auto& transformDesc = outputDesc.GetTransform();
-                transform = &Transforms[i];
+                transform = &OutputTransforms[i];
                 Y_VERIFY(!transform->TransformInput);
                 Y_VERIFY(!transform->TransformOutput);
 
@@ -604,7 +637,7 @@ public:
         return *ptr;
     }
 
-    IDqSource::TPtr GetSource(ui64 inputIndex) override {
+    IDqAsyncInputBuffer::TPtr GetSource(ui64 inputIndex) override {
         auto ptr = Sources.FindPtr(inputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have input index: " << inputIndex);
         return *ptr;
@@ -622,8 +655,14 @@ public:
         return *ptr;
     }
 
+    std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 inputIndex) override {
+        auto ptr = InputTransforms.FindPtr(inputIndex);
+        YQL_ENSURE(ptr, "task: " << TaskId << " does not have input index: " << inputIndex << " or such transform");
+        return {ptr->TransformInput, ptr->TransformOutput};
+    }
+
     std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) override {
-        auto ptr = Transforms.FindPtr(outputIndex);
+        auto ptr = OutputTransforms.FindPtr(outputIndex);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have output index: " << outputIndex << " or such transform");
         return {ptr->TransformInput, ptr->TransformOutput};
     }
@@ -742,7 +781,13 @@ private:
     std::unique_ptr<NKikimr::NMiniKQL::TScopedAlloc> SelfAlloc;       // if not set -> use Context.Alloc
     std::unique_ptr<NKikimr::NMiniKQL::TTypeEnvironment> SelfTypeEnv; // if not set -> use Context.TypeEnv
 
-    struct TTransformInfo {
+    struct TInputTransformInfo {
+        NUdf::TUnboxedValue TransformInput;
+        IDqAsyncInputBuffer::TPtr TransformOutput;
+        TType* TransformInputType = nullptr;
+    };
+
+    struct TOutputTransformInfo {
         IDqAsyncOutputBuffer::TPtr TransformInput;
         IDqOutputConsumer::TPtr TransformOutput;
         TType* TransformOutputType = nullptr;
@@ -761,10 +806,11 @@ private:
     TProgramParsed ProgramParsed;
 
     THashMap<ui64, IDqInputChannel::TPtr> InputChannels; // Channel id -> Channel
-    THashMap<ui64, IDqSource::TPtr> Sources; // Input index -> Source
+    THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources; // Input index -> Source
+    THashMap<ui64, TInputTransformInfo> InputTransforms; // Output index -> Transform
     THashMap<ui64, IDqOutputChannel::TPtr> OutputChannels; // Channel id -> Channel
     THashMap<ui64, IDqAsyncOutputBuffer::TPtr> Sinks; // Output index -> Sink
-    THashMap<ui64, TTransformInfo> Transforms; // Output index -> Transform
+    THashMap<ui64, TOutputTransformInfo> OutputTransforms; // Output index -> Transform
     IDqOutputConsumer::TPtr Output;
     NUdf::TUnboxedValue ResultStream;
 

@@ -159,6 +159,19 @@ public:
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
     };
 
+    struct TInputTransformArguments {
+        const NDqProto::TTaskInput& InputDesc;
+        const ui64 InputIndex;
+        TTxId TxId;
+        const NUdf::TUnboxedValue TransformInput;
+        const THashMap<TString, TString>& SecureParams;
+        const THashMap<TString, TString>& TaskParams;
+        const NActors::TActorId& ComputeActorId;
+        const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
+        const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        NKikimr::NMiniKQL::TProgramBuilder& ProgramBuilder;
+    };
+
     struct TOutputTransformArguments {
         const NDqProto::TTaskOutput& OutputDesc;
         const ui64 OutputIndex;
@@ -180,6 +193,11 @@ public:
     // Could throw YQL errors.
     // IActor* and IDqComputeActorAsyncOutput* returned by method must point to the objects with consistent lifetime.
     virtual std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TSinkArguments&& args) const = 0;
+
+    // Creates input transform.
+    // Could throw YQL errors.
+    // IActor* and IDqComputeActorAsyncInput* returned by method must point to the objects with consistent lifetime.
+    virtual std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqInputTransform(TInputTransformArguments&& args) = 0;
 
     // Creates output transform.
     // Could throw YQL errors.

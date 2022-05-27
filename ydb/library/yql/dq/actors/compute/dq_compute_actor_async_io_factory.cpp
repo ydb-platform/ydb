@@ -42,6 +42,24 @@ void TDqAsyncIoFactory::RegisterSink(const TString& type, TSinkCreatorFunction c
     Y_VERIFY(registered);
 }
 
+std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> TDqAsyncIoFactory::CreateDqInputTransform(TInputTransformArguments&& args)
+{
+    const TString& type = args.InputDesc.GetTransform().GetType();
+    YQL_ENSURE(!type.empty(), "Attempt to create input transform of empty type");
+    const TInputTransformCreatorFunction* creatorFunc = InputTransformCreatorsByType.FindPtr(type);
+    YQL_ENSURE(creatorFunc, "Unknown type of input transform: \"" << type << "\"");
+    std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> actor = (*creatorFunc)(std::move(args));
+    Y_VERIFY(actor.first);
+    Y_VERIFY(actor.second);
+    return actor;
+}
+
+void TDqAsyncIoFactory::RegisterInputTransform(const TString& type, TInputTransformCreatorFunction creator)
+{
+    auto [_, registered] = InputTransformCreatorsByType.emplace(type, std::move(creator));
+    Y_VERIFY(registered);
+}
+
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> TDqAsyncIoFactory::CreateDqOutputTransform(TOutputTransformArguments&& args)
 {
     const TString& type = args.OutputDesc.GetTransform().GetType();

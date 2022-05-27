@@ -155,7 +155,7 @@ public:
         return new TLocalOutputChannel(Runner->GetOutputChannel(channelId), Task.GetId(), channelId, &QueryStat);
     }
 
-    IDqSource::TPtr GetSource(ui64 index) override {
+    IDqAsyncInputBuffer::TPtr GetSource(ui64 index) override {
         return Runner->GetSource(index);
     }
 

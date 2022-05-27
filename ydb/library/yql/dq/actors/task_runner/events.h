@@ -34,8 +34,8 @@ struct TTaskRunnerEvents {
         // ES_CONTINUE_RUN -> TaskRunner->Run() -> TEvTaskRunFinished
         ES_RUN_FINISHED,
 
-        ES_SOURCE_PUSH,
-        ES_SOURCE_PUSH_FINISHED,
+        ES_ASYNC_INPUT_PUSH,
+        ES_ASYNC_INPUT_PUSH_FINISHED,
 
         ES_SINK_POP,
         ES_SINK_POP_FINISHED,
@@ -300,11 +300,11 @@ struct TEvContinueRun
     bool CheckpointOnly = false;
 };
 
-struct TEvSourcePushFinished
-    : NActors::TEventLocal<TEvSourcePushFinished, TTaskRunnerEvents::ES_SOURCE_PUSH_FINISHED>
+struct TEvAsyncInputPushFinished
+    : NActors::TEventLocal<TEvAsyncInputPushFinished, TTaskRunnerEvents::ES_ASYNC_INPUT_PUSH_FINISHED>
 {
-    TEvSourcePushFinished() = default;
-    TEvSourcePushFinished(ui64 index)
+    TEvAsyncInputPushFinished() = default;
+    TEvAsyncInputPushFinished(ui64 index)
         : Index(index)
     { }
 

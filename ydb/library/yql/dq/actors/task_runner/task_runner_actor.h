@@ -26,7 +26,7 @@ struct ITaskRunnerActor {
 
     virtual ~ITaskRunnerActor() = default;
 
-    virtual void SourcePush(
+    virtual void AsyncInputPush(
         ui64 cookie,
         ui64 index,
         NKikimr::NMiniKQL::TUnboxedValueVector&& batch,

@@ -23,9 +23,9 @@ struct TDqAsyncInputBufferStats : TDqInputStats {
     }
 };
 
-class IDqSource : public IDqInput {
+class IDqAsyncInputBuffer : public IDqInput {
 public:
-    using TPtr = TIntrusivePtr<IDqSource>;
+    using TPtr = TIntrusivePtr<IDqAsyncInputBuffer>;
 
     virtual ui64 GetInputIndex() const = 0;
 
@@ -36,7 +36,7 @@ public:
     virtual const TDqAsyncInputBufferStats* GetStats() const = 0;
 };
 
-IDqSource::TPtr CreateDqSource(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
+IDqAsyncInputBuffer::TPtr CreateDqAsyncInputBuffer(ui64 inputIndex, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes,
     bool collectProfileStats);
 
 } // namespace NYql::NDq

@@ -245,7 +245,7 @@ private:
                 ev->Cookie));
     }
 
-    void SourcePush(
+    void AsyncInputPush(
         ui64 cookie,
         ui64 index,
         NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
@@ -262,7 +262,7 @@ private:
             new IEventHandle(
                 ParentId,
                 SelfId(),
-                new TEvSourcePushFinished(index),
+                new TEvAsyncInputPushFinished(index),
                 /*flags=*/0,
                 cookie));
     }

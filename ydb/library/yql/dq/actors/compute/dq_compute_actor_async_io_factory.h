@@ -16,7 +16,12 @@ concept TCastsToAsyncInputPair =
     std::is_convertible_v<T, std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>>;
 
 template <class T, class TProto>
-concept TSourceCreatorFunc = requires(T f, TProto&& settings, IDqAsyncIoFactory::TSourceArguments args) {
+concept TSourceCreatorFunc = requires(T f, TProto&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+    { f(std::move(settings), std::move(args)) } -> TCastsToAsyncInputPair;
+};
+
+template <class T, class TProto>
+concept TInputTransformCreatorFunc = requires(T f, TProto&& settings, IDqAsyncIoFactory::TInputTransformArguments&& args) {
     { f(std::move(settings), std::move(args)) } -> TCastsToAsyncInputPair;
 };
 
@@ -38,6 +43,7 @@ class TDqAsyncIoFactory : public IDqAsyncIoFactory {
 public:
     using TSourceCreatorFunction = std::function<std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>(TSourceArguments&& args)>;
     using TSinkCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TSinkArguments&& args)>;
+    using TInputTransformCreatorFunction = std::function<std::pair<IDqComputeActorAsyncInput*, NActors::IActor*>(TInputTransformArguments&& args)>;
     using TOutputTransformCreatorFunction = std::function<std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*>(TOutputTransformArguments&& args)>;
 
     // Registration
@@ -75,6 +81,23 @@ public:
         });
     }
 
+    void RegisterInputTransform(const TString& type, TInputTransformCreatorFunction creator);
+
+    template <class TProtoMsg, TInputTransformCreatorFunc<TProtoMsg> TCreatorFunc>
+    void RegisterInputTransform(const TString& type, TCreatorFunc creator) {
+        RegisterInputTransform(type,
+            [creator = std::move(creator), type](TInputTransformArguments&& args)
+            {
+                const google::protobuf::Any& settingsAny = args.InputDesc.GetTransform().GetSettings();
+                YQL_ENSURE(settingsAny.Is<TProtoMsg>(),
+                    "Input transform \"" << type << "\" settings are expected to have protobuf type " << TProtoMsg::descriptor()->full_name()
+                    << ", but got " << settingsAny.type_url());
+                TProtoMsg settings;
+                YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings of type \"" << type << "\"");
+                return creator(std::move(settings), std::move(args));
+        });
+    }
+
     void RegisterOutputTransform(const TString& type, TOutputTransformCreatorFunction creator);
 
     template <class TProtoMsg, TOutputTransformCreatorFunc<TProtoMsg> TCreatorFunc>
@@ -95,11 +118,13 @@ public:
     // Creation
     std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSource(TSourceArguments&& args) const override;
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqSink(TSinkArguments&& args) const override;
+    std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqInputTransform(TInputTransformArguments&& args) override;
     std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqOutputTransform(TOutputTransformArguments&& args) override;
 
 private:
     THashMap<TString, TSourceCreatorFunction> SourceCreatorsByType;
     THashMap<TString, TSinkCreatorFunction> SinkCreatorsByType;
+    THashMap<TString, TInputTransformCreatorFunction> InputTransformCreatorsByType;
     THashMap<TString, TOutputTransformCreatorFunction> OutputTransformCreatorsByType;
 };
 

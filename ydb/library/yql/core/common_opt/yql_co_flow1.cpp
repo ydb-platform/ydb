@@ -67,16 +67,8 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
     }
 
     if (IsJustOrSingleAsList(innerBody.Ref())) {
-        auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder");
-
-        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) {
-                return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
-            }
-            return node;
-        }, ctx, TOptimizeExprSettings(types));
-
-        if (status.Level == IGraphTransformer::TStatus::Error) {
+        auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(outerLambda, ctx, types);
+        if (!placeHolder) {
             return {};
         }
 
@@ -99,7 +91,7 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
                         .Args({"item"})
                         .template Body<TCoToFlow>()
                             .template Input<TExprApplier>()
-                                .Apply(TCoLambda(outerLambda))
+                                .Apply(TCoLambda(lambdaWithPlaceholder))
                                 .With(0, outerArgValue)
                                 .With(clonedInnerLambda.Args().Arg(0), "item")
                                 .With(TExprBase(placeHolder), "item")
@@ -169,23 +161,13 @@ TExprNode::TPtr FuseFlatmaps(TCoFlatMapBase outerMap, TExprContext& ctx, TTypeAn
         const auto clonedInnerLambda = TCoLambda(ctx.DeepCopyLambda(innerMap.Lambda().Ref()));
         const auto conditional = clonedInnerLambda.Body().template Cast<TCoConditionalValueBase>();
 
-        auto placeHolder = ctx.NewArgument(outerMap.Pos(), "placeholder");
-        auto outerLambda = outerMap.Lambda().Ptr();
-        auto outerLambdaArg = outerMap.Lambda().Args().Arg(0).Raw();
-
-        auto status = OptimizeExpr(outerLambda, outerLambda, [&placeHolder, outerLambdaArg](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
-            if (TCoDependsOn::Match(node.Get()) && node->Child(0) == outerLambdaArg) {
-                return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
-            }
-            return node;
-        }, ctx, TOptimizeExprSettings(types));
-
-        if (status.Level == IGraphTransformer::TStatus::Error) {
+        auto [placeHolder, lambdaWithPlaceholder] = ReplaceDependsOn(outerMap.Lambda().Ptr(), ctx, types);
+        if (!placeHolder) {
             return {};
         }
 
         auto value = ctx.Builder(outerMap.Pos())
-            .Apply(outerLambda)
+            .Apply(lambdaWithPlaceholder)
             .With(0, conditional.Value().Ptr())
             .Seal()
             .Build();

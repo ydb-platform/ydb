@@ -1377,4 +1377,21 @@ IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNo
 
 }
 
+std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lambda, TExprContext& ctx, TTypeAnnotationContext* typeCtx) {
+    auto placeHolder = ctx.NewArgument(lambda->Pos(), "placeholder");
+
+    auto status = OptimizeExpr(lambda, lambda, [&placeHolder, arg = &lambda->Head().Head()](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+        if (TCoDependsOn::Match(node.Get()) && &node->Head() == arg) {
+            return ctx.ChangeChild(*node, 0, TExprNode::TPtr(placeHolder));
+        }
+        return node;
+    }, ctx, TOptimizeExprSettings{typeCtx});
+
+    if (status.Level == IGraphTransformer::TStatus::Error) {
+        return std::pair<TExprNode::TPtr, TExprNode::TPtr>{};
+    }
+
+    return {placeHolder, lambda};
+}
+
 }

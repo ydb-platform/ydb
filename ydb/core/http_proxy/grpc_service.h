@@ -33,7 +33,6 @@ private:
 
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider_;
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
-    NActors::TActorId GRpcRequestProxyId_;
     NGrpc::TGlobalLimiter* Limiter_;
 };
 

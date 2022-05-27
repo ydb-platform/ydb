@@ -409,6 +409,10 @@ ids {
   severity: S_WARNING
 }
 ids {
+  code: YT_MISSING_PROTO_FIELD
+  severity: S_WARNING
+}
+ids {
   code: STAT_DEPRECATED_STRING_TREE
   severity: S_WARNING
 }

@@ -30,7 +30,10 @@ public:
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& , ICheckerIface* iface) override {
-        const TString scope = GetPeerMetaValues("x-yq-scope").GetOrElse("");
+        TString scope = GetPeerMetaValues("x-fq-scope").GetOrElse("");
+        if (scope.empty()) {
+            scope = GetPeerMetaValues("x-yq-scope").GetOrElse(""); // TODO: remove YQ-1055
+        }
         if (scope.StartsWith("yandexcloud://")) {
             const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
             if (path.size() == 2 || path.size() == 3) {

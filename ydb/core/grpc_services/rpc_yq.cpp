@@ -66,15 +66,19 @@ public:
         }
         Token = *authToken;
 
-        const TString scope = Request_->GetPeerMetaValues("x-yq-scope").GetOrElse("");
+        TString scope = Request_->GetPeerMetaValues("x-fq-scope").GetOrElse("");
+        if (scope.empty()) {
+            scope = Request_->GetPeerMetaValues("x-yq-scope").GetOrElse(""); // TODO: remove YQ-1055
+        }
+
         if (!scope.StartsWith("yandexcloud://")) {
-            ReplyWithStatus("x-yq-scope should start with yandexcloud:// but got " + scope, StatusIds::BAD_REQUEST);
+            ReplyWithStatus("x-fq-scope should start with yandexcloud:// but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }
 
         const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
         if (path.size() != 2 && path.size() != 3) {
-            ReplyWithStatus("x-yq-scope format is invalid. Must be yandexcloud://folder_id, but got " + scope, StatusIds::BAD_REQUEST);
+            ReplyWithStatus("x-fq-scope format is invalid. Must be yandexcloud://folder_id, but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }
 

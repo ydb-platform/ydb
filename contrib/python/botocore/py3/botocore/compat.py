@@ -341,3 +341,10 @@ IPV6_ADDRZ_RE = re.compile("^" + IPV6_ADDRZ_PAT + "$")
 
 # These are the characters that are stripped by post-bpo-43882 urlparse().
 UNSAFE_URL_CHARS = frozenset('\t\r\n')
+
+# Detect if gzip is available for use
+try:
+    import gzip
+    HAS_GZIP = True
+except ImportError:
+    HAS_GZIP = False

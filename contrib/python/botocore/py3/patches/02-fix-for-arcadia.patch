@@ -81,17 +81,17 @@
  import os
  
  from botocore import BOTOCORE_ROOT
--from botocore.compat import OrderedDict, json
-+from botocore.compat import OrderedDict, json, six
+-from botocore.compat import HAS_GZIP, OrderedDict, json
++from botocore.compat import HAS_GZIP, OrderedDict, json, six
  from botocore.exceptions import DataNotFoundError, UnknownServiceError
  from botocore.utils import deep_merge
  
 +from library.python import resource
 +
- logger = logging.getLogger(__name__)
- 
- 
-@@ -177,6 +180,51 @@ class JSONFileLoader(object):
+ _JSON_OPEN_METHODS = {
+     '.json': open,
+ }
+@@ -197,6 +200,51 @@ class JSONFileLoader(object):
          return json.loads(payload, object_pairs_hook=OrderedDict)
  
  
@@ -143,7 +143,7 @@
  def create_loader(search_path_string=None):
      """Create a Loader class.
  
-@@ -211,7 +259,7 @@ class Loader(object):
+@@ -231,7 +279,7 @@ class Loader(object):
  
      """
 
@@ -152,7 +152,7 @@
      # The included models in botocore/data/ that we ship with botocore.
      BUILTIN_DATA_PATH = os.path.join(BOTOCORE_ROOT, 'data')
      # For convenience we automatically add ~/.aws/models to the data path.
-@@ -296,6 +344,11 @@ class Loader(object):
+@@ -316,6 +364,11 @@ class Loader(object):
                      if self.file_loader.exists(full_load_path):
                          services.add(service_name)
                          break
@@ -164,7 +164,7 @@
          return sorted(services)
  
      @instance_cache
-@@ -347,6 +400,11 @@ class Loader(object):
+@@ -367,6 +420,11 @@ class Loader(object):
                  # to the type_name passed in.
                  if self.file_loader.exists(full_path):
                      known_api_versions.add(dirname)
@@ -176,7 +176,7 @@
          if not known_api_versions:
              raise DataNotFoundError(data_path=service_name)
          return sorted(known_api_versions)
-@@ -434,6 +492,12 @@ class Loader(object):
+@@ -454,6 +512,12 @@ class Loader(object):
              found = self.file_loader.load_file(possible_path)
              if found is not None:
                  return found

@@ -383,6 +383,7 @@ public:
 
     void SendCacheRequest(const TCacheKey& cacheKey, TCacheRecord& cacheRecord, const NActors::TActorContext& ctx) {
         cacheRecord.Request = cacheRecord.Request->Duplicate();
+        cacheRecord.Request->AcceptEncoding.Clear(); // disable compression
         IncomingRequests[cacheRecord.Request.Get()] = cacheKey;
         TActorId handler = GetRequestHandler(cacheRecord.Request);
         if (handler) {

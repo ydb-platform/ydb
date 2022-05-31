@@ -102,9 +102,16 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         NHttp::THttpOutgoingResponsePtr response = new NHttp::THttpOutgoingResponse(request, "HTTP", "1.1", "200", "OK");
         TString compressedBody = "something very long to compress with deflate algorithm. something very long to compress with deflate algorithm.";
         response->EnableCompression();
+        size_t size1 = response->Size();
         response->SetBody(compressedBody);
+        size_t size2 = response->Size();
+        size_t compressedBodySize = size2 - size1;
         UNIT_ASSERT_VALUES_EQUAL("deflate", response->ContentEncoding);
-        UNIT_ASSERT_VALUES_UNEQUAL(compressedBody, response->Body);
+        UNIT_ASSERT(compressedBodySize < compressedBody.size());
+        NHttp::THttpOutgoingResponsePtr response2 = response->Duplicate(request);
+        UNIT_ASSERT_VALUES_EQUAL(response->Body, response2->Body);
+        UNIT_ASSERT_VALUES_EQUAL(response->ContentLength, response2->ContentLength);
+        UNIT_ASSERT_VALUES_EQUAL(response->Size(), response2->Size());
     }
 
     Y_UNIT_TEST(BasicPartialParsing) {
@@ -192,7 +199,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+        //actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);
@@ -225,7 +232,7 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;
         actorSystem.Initialize();
-        actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
+        //actorSystem.SetLogPriority(NActorsServices::HTTP, NActors::NLog::PRI_DEBUG);
 
         NActors::IActor* proxy = NHttp::CreateHttpProxy();
         NActors::TActorId proxyId = actorSystem.Register(proxy);

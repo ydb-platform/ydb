@@ -277,6 +277,10 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
                 if (!ContentLength.empty()) {
                     if (ProcessData(Body, data, FromString(ContentLength))) {
                         Stage = EParseStage::Done;
+                        if (Body && ContentEncoding == "deflate") {
+                            Content = DecompressDeflate(Body);
+                            Body = Content;
+                        }
                     }
                 } else if (TEqNoCase()(TransferEncoding, "chunked")) {
                     Stage = EParseStage::ChunkLength;
@@ -284,6 +288,10 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
                     if (ProcessData(Content, data, GetBodySizeFromTotalSize())) {
                         Body = Content;
                         Stage = EParseStage::Done;
+                        if (Body && ContentEncoding == "deflate") {
+                            Content = DecompressDeflate(Body);
+                            Body = Content;
+                        }
                     }
                 } else {
                     // Invalid body encoding
@@ -323,6 +331,10 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
                                 if (ChunkLength == 0) {
                                     Body = Content;
                                     Stage = EParseStage::Done;
+                                    if (Body && ContentEncoding == "deflate") {
+                                        Content = DecompressDeflate(Body);
+                                        Body = Content;
+                                    }
                                 } else {
                                     Stage = EParseStage::ChunkLength;
                                 }
@@ -447,7 +459,7 @@ THttpOutgoingResponsePtr THttpIncomingRequest::CreateResponse(TStringBuf status,
         if (Method == "HEAD") {
             response->Set<&THttpResponse::ContentLength>(ToString(body.size()));
         } else {
-            response->Set<&THttpResponse::Body>(body);
+            response->SetBody(body);
         }
     }
     return response;
@@ -468,9 +480,30 @@ THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPt
 }
 
 THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPtr request) {
-    THttpOutgoingResponsePtr response = new THttpOutgoingResponse(*this);
-    response->Reparse();
-    response->Request = request;
+    THeadersBuilder headers(Headers);
+    if (!request->Endpoint->WorkerName.empty()) {
+        headers.Set("X-Worker-Name", request->Endpoint->WorkerName);
+    }
+    THttpOutgoingResponsePtr response = new THttpOutgoingResponse(request);
+    response->InitResponse(Protocol, Version, Status, Message);
+    if (Body) {
+        if (ContentType && !request->Endpoint->CompressContentTypes.empty()) {
+            TStringBuf contentType = ContentType.Before(';');
+            Trim(contentType, ' ');
+            if (Count(request->Endpoint->CompressContentTypes, contentType) != 0) {
+                if (response->EnableCompression()) {
+                    headers.Erase("Content-Length"); // we will need new length after compression
+                }
+            }
+        }
+        response->Set(headers);
+        response->SetBody(Body);
+    } else {
+        response->Set(headers);
+        if (!response->ContentLength) {
+            response->Set<&THttpResponse::ContentLength>("0");
+        }
+    }
     return response;
 }
 

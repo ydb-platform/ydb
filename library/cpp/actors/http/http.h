@@ -29,6 +29,8 @@ void TrimBegin(TStringBuf& target, char delim);
 void TrimEnd(TStringBuf& target, char delim);
 void Trim(TStringBuf& target, char delim);
 void TrimEnd(TString& target, char delim);
+TString CompressDeflate(TStringBuf source);
+TString DecompressDeflate(TStringBuf source);
 
 struct TLessNoCase {
     bool operator()(TStringBuf l, TStringBuf r) const {
@@ -443,6 +445,7 @@ public:
     };
 
     ERenderStage Stage = ERenderStage::Init;
+    TString Content; // body storage
 
     //THttpRenderer(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version); // request
     void InitRequest(TStringBuf method, TStringBuf url, TStringBuf protocol, TStringBuf version) {
@@ -592,8 +595,13 @@ public:
         parser.Clear();
         parser.Advance(size);
         // move buffer and result back
+        bool needReassignBody = (parser.Body.data() == parser.Content.data());
         static_cast<HeaderType&>(*this) = std::move(static_cast<HeaderType&>(parser));
         static_cast<BufferType&>(*this) = std::move(static_cast<BufferType&>(parser));
+        if (needReassignBody) {
+            Content = std::move(parser.Content);
+            HeaderType::Body = Content;
+        }
         switch (parser.Stage) {
         case THttpParser<HeaderType, BufferType>::EParseStage::Method:
         case THttpParser<HeaderType, BufferType>::EParseStage::URL:
@@ -798,12 +806,21 @@ public:
         return false;
     }
 
-    static TString CompressDeflate(TStringBuf source);
-
     void SetBody(TStringBuf body) {
         if (ContentEncoding == "deflate") {
             TString compressedBody = CompressDeflate(body);
             THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(compressedBody);
+            Body = Content = body;
+        } else {
+            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(body);
+        }
+    }
+
+    void SetBody(const TString& body) {
+        if (ContentEncoding == "deflate") {
+            TString compressedBody = CompressDeflate(body);
+            THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(compressedBody);
+            Body = Content = body;
         } else {
             THttpRenderer<THttpResponse, TSocketBuffer>::SetBody(body);
         }

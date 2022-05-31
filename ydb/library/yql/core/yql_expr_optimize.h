@@ -24,6 +24,7 @@ struct TOptimizeExprSettings {
     bool VisitLambdas = true;
     TTypeAnnotationContext* Types;
     bool VisitTuples = false;
+    std::function<bool(const TExprNode&)> VisitChecker;
 };
 
 IGraphTransformer::TStatus OptimizeExpr(const TExprNode::TPtr& input, TExprNode::TPtr& output, TCallableOptimizer optimizer,

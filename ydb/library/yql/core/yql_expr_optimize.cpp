@@ -100,6 +100,10 @@ namespace {
             return node;
         }
 
+        if (ctx.Settings.VisitChecker && !ctx.Settings.VisitChecker(*node)) {
+            return node;
+        }
+
         YQL_ENSURE(level < 3000U, "Too deep graph!");
 
         if (ctx.Settings.ProcessedNodes) {

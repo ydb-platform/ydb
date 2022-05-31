@@ -1223,6 +1223,9 @@ public:
         case T_A_ArrayExpr: {
             return ParseAArrayExpr(CAST_NODE(A_ArrayExpr, node), settings);
         }
+        case T_SubLink: {
+            return ParseSubLinkExpr(CAST_NODE(SubLink, node), settings);
+        }
         default:
             NodeNotImplemented(node);
             return nullptr;
@@ -1263,6 +1266,65 @@ public:
         }
 
         return VL(args.data(), args.size());
+    }
+
+    TAstNode* ParseSubLinkExpr(const SubLink* value, const TExprSettings& settings) {
+        TString linkType;
+        TString operName;
+        switch (value->subLinkType) {
+        case EXISTS_SUBLINK:
+            linkType = "exists";
+            break;
+        case ALL_SUBLINK:
+            linkType = "all";
+            operName = "=";
+            break;
+        case ANY_SUBLINK:
+            linkType = "any";
+            operName = "=";
+            break;
+        case EXPR_SUBLINK:
+            linkType = "expr";
+            break;
+        default:
+            AddError(TStringBuilder() << "SublinkExpr: unsupported link type: " << (int)value->subLinkType);
+            return nullptr;
+        }
+
+        if (ListLength(value->operName) > 1) {
+            AddError("SubLink: unsuppoted opername");
+            return nullptr;
+        } else if (ListLength(value->operName) == 1) {
+            auto nameNode = ListNodeNth(value->operName, 0);
+            if (NodeTag(nameNode) != T_String) {
+                NodeNotImplemented(value, nameNode);
+                return nullptr;
+            }
+
+            operName = StrVal(nameNode);
+        }
+
+        TAstNode* rowTest;
+        if (value->testexpr) {
+            TExprSettings settings;
+            settings.AllowColumns = true;
+            settings.Scope = "SUBLINK TEST";
+            auto test = ParseExpr(value->testexpr, settings);
+            if (!test) {
+                return nullptr;
+            }
+
+            rowTest = L(A("lambda"), QL(A("value")), L(A("PgOp"), QAX(operName), test, A("value")));
+        } else {
+            rowTest = L(A("Void"));
+        }
+
+        auto select = ParseSelectStmt(CAST_NODE(SelectStmt, value->subselect), true);
+        if (!select) {
+            return nullptr;
+        }
+
+        return L(A("PgSubLink"), QA(linkType), L(A("Void")), L(A("Void")), rowTest, L(A("lambda"), QL(), select));
     }
 
     TAstNode* ParseFuncCall(const FuncCall* value, const TExprSettings& settings) {

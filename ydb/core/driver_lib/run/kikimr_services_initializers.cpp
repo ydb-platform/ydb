@@ -730,7 +730,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 } else {
                     TYandexQueryInitializer::SetIcPort(node.second.second);
                     icCommon->TechnicalSelfHostName = node.second.Host;
-                    TString address = "::"; //bind ipv6 interfaces by default
+                    TString address;
                     if (node.second.first)
                         address = node.second.first;
                     auto listener = new TInterconnectListenerTCP(
@@ -750,7 +750,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 auto &info = Config.GetDynamicNodeConfig().GetNodeInfo();
                 icCommon->TechnicalSelfHostName = info.GetHost();
 
-                TString address = "::"; //bind ipv6 interfaces by default
+                TString address;
                 if (info.GetAddress()) {
                     address = info.GetAddress();
                 }
@@ -770,8 +770,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     if (nodesManagerConfig.GetEnabled()) {
                         TYandexQueryInitializer::SetIcPort(nodesManagerConfig.GetPort());
                         icCommon->TechnicalSelfHostName = nodesManagerConfig.GetHost();
-                        //bind ipv6 interfaces by default
-                        auto listener = new TInterconnectListenerTCP("::", nodesManagerConfig.GetPort(), icCommon);
+                        auto listener = new TInterconnectListenerTCP({}, nodesManagerConfig.GetPort(), icCommon);
                         if (int err = listener->Bind()) {
                             Cerr << "Failed to set up IC listener on port " << nodesManagerConfig.GetPort()
                                 << " errno# " << err << " (" << strerror(err) << ")" << Endl;

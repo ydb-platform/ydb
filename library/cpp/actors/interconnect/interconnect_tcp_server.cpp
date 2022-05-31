@@ -10,7 +10,8 @@ namespace NActors {
     TInterconnectListenerTCP::TInterconnectListenerTCP(const TString& address, ui16 port, TInterconnectProxyCommon::TPtr common, const TMaybe<SOCKET>& socket)
         : TActor(&TThis::Initial)
         , TInterconnectLoggingBase(Sprintf("ICListener: %s", SelfId().ToString().data()))
-        , Address(address.c_str(), port)
+        , Address(address)
+        , Port(port)
         , Listener(
             socket
             ? new NInterconnect::TStreamSocket(*socket)
@@ -33,54 +34,54 @@ namespace NActors {
     }
 
     int TInterconnectListenerTCP::Bind() {
-        NInterconnect::TAddress addr = Address;
-
-        if (ProxyCommonCtx->Settings.BindOnAllAddresses) {
-            switch (addr.GetFamily()) {
-                case AF_INET: {
-                    auto *sa = reinterpret_cast<sockaddr_in*>(addr.SockAddr());
-                    sa->sin_addr = {INADDR_ANY};
-                    break;
-                }
-
-                case AF_INET6: {
-                    auto *sa = reinterpret_cast<sockaddr_in6*>(addr.SockAddr());
-                    sa->sin6_addr = in6addr_any;
-                    break;
-                }
-
-                default:
-                    Y_FAIL("Unsupported address family");
+        auto doTry = [&](NInterconnect::TAddress addr) {
+            int error;
+            Listener = NInterconnect::TStreamSocket::Make(addr.GetFamily(), &error);
+            if (*Listener == -1) {
+                return error;
             }
-        }
+            SetNonBlock(*Listener);
+            Listener->SetSendBufferSize(ProxyCommonCtx->Settings.GetSendBufferSize()); // TODO(alexvru): WTF?
+            SetSockOpt(*Listener, SOL_SOCKET, SO_REUSEADDR, 1);
+            if (addr.GetFamily() == AF_INET6) {
+                SetSockOpt(*Listener, IPPROTO_IPV6, IPV6_V6ONLY, 0);
+            }
+            if (const auto e = -Listener->Bind(addr)) {
+                return e;
+            } else if (const auto e = -Listener->Listen(SOMAXCONN)) {
+                return e;
+            } else {
+                return 0;
+            }
+        };
 
-        Listener = NInterconnect::TStreamSocket::Make(addr.GetFamily());
-        if (*Listener == -1) {
-            return errno;
-        }
-        SetNonBlock(*Listener);
-        Listener->SetSendBufferSize(ProxyCommonCtx->Settings.GetSendBufferSize()); // TODO(alexvru): WTF?
-        SetSockOpt(*Listener, SOL_SOCKET, SO_REUSEADDR, 1);
-        if (const auto e = -Listener->Bind(addr)) {
-            return e;
-        } else if (const auto e = -Listener->Listen(SOMAXCONN)) {
-            return e;
+        if (Address) {
+            NInterconnect::TAddress addr(Address, Port);
+            if (ProxyCommonCtx->Settings.BindOnAllAddresses) {
+                addr = addr.GetFamily() == AF_INET ? NInterconnect::TAddress::AnyIPv4(Port) :
+                    addr.GetFamily() == AF_INET6 ? NInterconnect::TAddress::AnyIPv6(Port) : addr;
+            }
+            return doTry(addr);
         } else {
-            return 0;
+            int error = doTry(NInterconnect::TAddress::AnyIPv6(Port));
+            if (error == EAFNOSUPPORT || error == EPROTONOSUPPORT) {
+                error = doTry(NInterconnect::TAddress::AnyIPv4(Port));
+            }
+            return error;
         }
     }
 
     void TInterconnectListenerTCP::Bootstrap(const TActorContext& ctx) {
         if (!Listener) {
             if (const int err = Bind()) {
-                LOG_ERROR_IC("ICL01", "Bind failed: %s (%s)", strerror(err), Address.ToString().data());
+                LOG_ERROR_IC("ICL01", "Bind failed: %s (%s:%u)", strerror(err), Address.data(), Port);
                 Listener.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);
                 return;
             }
         }
         if (const auto& callback = ProxyCommonCtx->InitWhiteboard) {
-            callback(Address.GetPort(), TlsActivationContext->ExecutorThread.ActorSystem);
+            callback(Port, TlsActivationContext->ExecutorThread.ActorSystem);
         }
         const bool success = ctx.Send(MakePollerActorId(), new TEvPollerRegister(Listener, SelfId(), {}));
         Y_VERIFY(success);
@@ -103,7 +104,7 @@ namespace NActors {
                 continue;
             } else if (-r != EAGAIN && -r != EWOULDBLOCK) {
                 Y_VERIFY(-r != ENFILE && -r != EMFILE && !ExternalSocket);
-                LOG_ERROR_IC("ICL06", "Listen failed: %s (%s)", strerror(-r), Address.ToString().data());
+                LOG_ERROR_IC("ICL06", "Listen failed: %s (%s:%u)", strerror(-r), Address.data(), Port);
                 Listener.Reset();
                 PollerToken.Reset();
                 Become(&TThis::Initial, TDuration::Seconds(1), new TEvents::TEvBootstrap);

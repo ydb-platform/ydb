@@ -44,12 +44,14 @@ struct TSettings {
     TControlWrapper CacheDataAfterIndexing;
     TControlWrapper CacheDataAfterCompaction;
     TControlWrapper MaxSmallBlobSize;
+    TControlWrapper OverloadTxInFly;
 
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
         , CacheDataAfterCompaction(1, 0, 1)
         , MaxSmallBlobSize(0, 0, 8000000)
+        , OverloadTxInFly(1000, 10, 10000)
     {}
 
     void RegisterControls(TControlBoard& icb) {
@@ -57,6 +59,7 @@ struct TSettings {
         icb.RegisterSharedControl(CacheDataAfterIndexing, "ColumnShardControls.CacheDataAfterIndexing");
         icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
         icb.RegisterSharedControl(MaxSmallBlobSize, "ColumnShardControls.MaxSmallBlobSize");
+        icb.RegisterSharedControl(OverloadTxInFly, "ColumnShardControls.OverloadTxInFly");
     }
 };
 
@@ -400,6 +403,7 @@ private:
     ui64 GetOutdatedStep() const;
     ui64 GetAllowedStep() const;
     bool HaveOutdatedTxs() const;
+    bool ShardOverloaded() const { return Executor()->GetStats().TxInFly > (ui64)Settings.OverloadTxInFly; }
 
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);

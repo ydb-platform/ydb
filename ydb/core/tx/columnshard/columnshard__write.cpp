@@ -135,21 +135,34 @@ void TTxWrite::Complete(const TActorContext& ctx) {
 void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
 
-    auto& data = Proto(ev->Get()).GetData();
-    const ui64 tableId = ev->Get()->Record.GetTableId();
+    auto& record = Proto(ev->Get());
+    auto& data = record.GetData();
+    ui64 tableId = record.GetTableId();
+    ui64 metaShard = record.GetTxInitiator();
+    ui64 writeId = record.GetWriteId();
+    TString dedupId = record.GetDedupId();
+
     bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !IsTableWritable(tableId)
         || ev->Get()->PutStatus == NKikimrProto::ERROR;
 
     if (error) {
         LOG_S_WARN("Write (fail) " << data.size() << " bytes at tablet " << TabletID());
 
-        ev->Get()->PutStatus = NKikimrProto::ERROR;
-        Execute(new TTxWrite(this, ev), ctx);
-    } else if (InsertTable->IsOverloaded(tableId)) {
+        IncCounter(COUNTER_WRITE_FAIL);
+
+        auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+            TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::ERROR);
+        ctx.Send(ev->Get()->GetSource(), result.release());
+
+    } else if (InsertTable->IsOverloaded(tableId) || ShardOverloaded()) {
         LOG_S_INFO("Write (overload) " << data.size() << " bytes for table " << tableId << " at tablet " << TabletID());
 
-        ev->Get()->PutStatus = NKikimrProto::TRYLATER;
-        Execute(new TTxWrite(this, ev), ctx);
+        IncCounter(COUNTER_WRITE_FAIL);
+
+        auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+            TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+        ctx.Send(ev->Get()->GetSource(), result.release());
+
     } else if (ev->Get()->BlobId.IsValid()) {
         LOG_S_DEBUG("Write (record) " << data.size() << " bytes at tablet " << TabletID());
 
@@ -159,8 +172,11 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             LOG_S_ERROR("Write (out of disk space) at tablet " << TabletID());
 
             IncCounter(COUNTER_OUT_OF_SPACE);
-            ev->Get()->PutStatus = NKikimrProto::TRYLATER;
-            Execute(new TTxWrite(this, ev), ctx);
+            IncCounter(COUNTER_WRITE_FAIL);
+
+            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+                TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+            ctx.Send(ev->Get()->GetSource(), result.release());
         } else {
             LOG_S_DEBUG("Write (blob) " << data.size() << " bytes at tablet " << TabletID());
 

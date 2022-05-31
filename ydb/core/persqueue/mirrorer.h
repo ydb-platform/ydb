@@ -37,6 +37,7 @@ private:
 
     const TDuration LOG_STATE_INTERVAL = TDuration::Minutes(1);
     const TDuration INIT_TIMEOUT = TDuration::Minutes(1);
+    const TDuration RECEIVE_READ_EVENT_TIMEOUT = TDuration::Minutes(1);
     const TDuration WRITE_TIMEOUT = TDuration::Minutes(10);
 
 
@@ -189,6 +190,7 @@ private:
     TMap<ui64, std::pair<TInstant, NThreading::TFuture<void>>> ReadFeatures;
     ui64 ReadFeatureId = 0;
     ui64 ReadFuturesInFlight = 0;
+    TInstant LastReadEventTime;
 };
 
 }// NPQ

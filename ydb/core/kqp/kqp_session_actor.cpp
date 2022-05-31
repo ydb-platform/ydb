@@ -630,7 +630,9 @@ public:
                     break;
                }
                case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET:
-                   YQL_ENSURE(false);
+                    ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST)
+                        << "wrong TxControl: tx_selector must be set";
+                    break;
             }
         } else {
             QueryState->TxCtx = MakeIntrusive<TKqpTransactionContext>(false);

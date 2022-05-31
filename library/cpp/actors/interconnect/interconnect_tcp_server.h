@@ -43,7 +43,8 @@ namespace NActors {
 
         void Process(const TActorContext& ctx);
 
-        const NInterconnect::TAddress Address;
+        const TString Address;
+        const ui16 Port;
         TIntrusivePtr<NInterconnect::TStreamSocket> Listener;
         const bool ExternalSocket;
         TPollerToken::TPtr PollerToken;

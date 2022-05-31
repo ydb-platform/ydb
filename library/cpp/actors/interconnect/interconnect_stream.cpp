@@ -92,11 +92,14 @@ namespace NInterconnect {
 
     /////////////////////////////////////////////////////////////////
 
-    TIntrusivePtr<TStreamSocket> TStreamSocket::Make(int domain) {
+    TIntrusivePtr<TStreamSocket> TStreamSocket::Make(int domain, int *error) {
         const SOCKET res = ::socket(domain, SOCK_STREAM | SOCK_NONBLOCK, 0);
         if (res == -1) {
             const int err = LastSocketError();
             Y_VERIFY(err != EMFILE && err != ENFILE);
+            if (error) {
+                *error = err;
+            }
         }
         return MakeIntrusive<TStreamSocket>(res);
     }

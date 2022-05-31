@@ -327,6 +327,14 @@ public:
             QueryState->OldEngineFallback = true;
         }
 
+        auto replyError = [this, &ctx] (NYql::EYqlIssueCode status, const TString& info) {
+            QueryState->AsyncQueryResult = MakeKikimrResultHolder(NCommon::ResultFromError<TQueryResult>(
+                YqlIssue(TPosition(), status, info)));
+
+            ContinueQueryProcess(ctx);
+            Become(&TKqpWorkerActor::PerformQueryState);
+        };
+
         if (queryRequest.HasTxControl()) {
             const auto& txControl = queryRequest.GetTxControl();
 
@@ -336,12 +344,7 @@ public:
 
                     auto txInfo = KqpHost->GetTransactionInfo(QueryState->TxId);
                     if (!txInfo) {
-                        QueryState->AsyncQueryResult = MakeKikimrResultHolder(NCommon::ResultFromError<TQueryResult>(
-                            YqlIssue(TPosition(), TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND, TStringBuilder()
-                                << "Transaction not found: " << QueryState->TxId)));
-
-                        ContinueQueryProcess(ctx);
-                        Become(&TKqpWorkerActor::PerformQueryState);
+                        replyError(TIssuesIds::KIKIMR_TRANSACTION_NOT_FOUND, TStringBuilder() << "Transaction not found: " << QueryState->TxId);
                         return;
                     }
 
@@ -361,7 +364,8 @@ public:
                 }
 
                 case Ydb::Table::TransactionControl::TX_SELECTOR_NOT_SET: {
-                    Y_VERIFY(false);
+                    replyError(TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder() << "wrong TxControl: tx_selector must be set");
+                    return;
                 }
             }
         } else {

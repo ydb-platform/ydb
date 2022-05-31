@@ -1,0 +1,17 @@
+package NKikimrBlobDepot;
+
+message TChannelProfile {
+    optional string StoragePoolKind = 1;
+    optional uint32 Count = 2;
+}
+
+enum EOperationMode {
+    VirtualGroup = 0;
+    KeyValueStorage = 1;
+}
+
+message TBlobDepotConfig {
+    optional EOperationMode OperationMode = 1; // can't be changed after tablet is created
+    repeated TChannelProfile ChannelProfiles = 2;
+    repeated uint32 DecomittingGroups = 3;
+}

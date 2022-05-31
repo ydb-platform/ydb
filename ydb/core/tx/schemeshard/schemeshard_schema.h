@@ -1597,6 +1597,15 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, Description>;
     };
 
+    struct BlobDepots : Table<102> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Description : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -1697,7 +1706,8 @@ struct Schema : NIceDb::Schema {
         Sequences,
         SequencesAlters,
         Replications,
-        ReplicationsAlterData
+        ReplicationsAlterData,
+        BlobDepots
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

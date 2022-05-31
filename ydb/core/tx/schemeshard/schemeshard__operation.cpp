@@ -763,7 +763,7 @@ TOperation::TSplitTransactionsResult TOperation::SplitIntoTransactions(const TTx
 }
 
 ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::ETxState txState) {
-        switch (txType) {
+    switch (txType) {
         case TTxState::ETxType::TxMkDir:
             return CreateMkDir(NextPartId(), txState);
         case TTxState::ETxType::TxRmDir:
@@ -910,11 +910,19 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
         case TTxState::ETxType::TxDropReplication:
             return CreateDropReplication(NextPartId(), txState);
 
+        // BlobDepot
+        case TTxState::ETxType::TxCreateBlobDepot:
+            return CreateNewBlobDepot(NextPartId(), txState);
+        case TTxState::ETxType::TxAlterBlobDepot:
+            return CreateAlterBlobDepot(NextPartId(), txState);
+        case TTxState::ETxType::TxDropBlobDepot:
+            return CreateDropBlobDepot(NextPartId(), txState);
+
         case TTxState::ETxType::TxInvalid:
             Y_UNREACHABLE();
-        }
+    }
 
-        Y_UNREACHABLE();
+    Y_UNREACHABLE();
 }
 
 ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationType opType, const TTxTransaction& tx) {
@@ -1090,6 +1098,14 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         Y_FAIL("TODO: implement");
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropReplication:
         return CreateDropReplication(NextPartId(), tx);
+
+    // BlobDepot
+    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateBlobDepot:
+        return CreateNewBlobDepot(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpAlterBlobDepot:
+        return CreateAlterBlobDepot(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpDropBlobDepot:
+        return CreateDropBlobDepot(NextPartId(), tx);
     }
 
     Y_UNREACHABLE();

@@ -90,6 +90,8 @@ public:
             return NKikimrViewer::EObjectType::Sequence;
         case NKikimrSchemeOp::EPathType::EPathTypeReplication:
             return NKikimrViewer::EObjectType::Replication;
+        case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
+            return NKikimrViewer::EObjectType::BlobDepot;
         case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
         case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
         case NKikimrSchemeOp::EPathType::EPathTypeInvalid:

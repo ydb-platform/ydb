@@ -460,6 +460,10 @@ public:
         return PathType == EPathType::EPathTypeReplication;
     }
 
+    bool IsBlobDepot() const {
+        return PathType == EPathType::EPathTypeBlobDepot;
+    }
+
     bool IsContainer() const {
         return PathType == EPathType::EPathTypeDir || PathType == EPathType::EPathTypeSubDomain
             || PathType == EPathType::EPathTypeColumnStore;

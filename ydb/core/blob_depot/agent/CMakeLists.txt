@@ -7,13 +7,13 @@
 
 
 
-add_library(ydb-core-blob_depot)
-target_link_libraries(ydb-core-blob_depot PUBLIC
+add_library(core-blob_depot-agent)
+target_link_libraries(core-blob_depot-agent PUBLIC
   contrib-libs-cxxsupp
   yutil
-  ydb-core-tablet_flat
+  ydb-core-blob_depot
   ydb-core-protos
 )
-target_sources(ydb-core-blob_depot PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
+target_sources(core-blob_depot-agent PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
 )

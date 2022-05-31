@@ -124,6 +124,7 @@ struct TSchemeCacheNavigate {
         KindCdcStream = 13,
         KindSequence = 14,
         KindReplication = 15,
+        KindBlobDepot = 16,
     };
 
     struct TListNodeEntry : public TAtomicRefCount<TListNodeEntry> {
@@ -201,6 +202,11 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TReplicationDescription Description;
     };
 
+    struct TBlobDepotInfo : TAtomicRefCount<TBlobDepotInfo> {
+        EKind Kind = KindUnknown;
+        NKikimrSchemeOp::TBlobDepotDescription Description;
+    };
+
     struct TEntry {
         enum class ERequestType : ui8 {
             ByPath,
@@ -245,6 +251,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo;
         TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
         TIntrusiveConstPtr<TReplicationInfo> ReplicationInfo;
+        TIntrusiveConstPtr<TBlobDepotInfo> BlobDepotInfo;
 
         TString ToString() const;
         TString ToString(const NScheme::TTypeRegistry& typeRegistry) const;

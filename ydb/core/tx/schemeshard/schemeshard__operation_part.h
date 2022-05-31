@@ -16,6 +16,7 @@
 #include <ydb/core/tx/replication/controller/public_events.h>
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
+#include <ydb/core/blob_depot/events.h>
 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -65,6 +66,7 @@
     action(NKesus::TEvKesus::TEvSetConfigResult,          NSchemeShard::TXTYPE_KESUS_CONFIG_RESULT)      \
     action(TEvPersQueue::TEvDropTabletReply,              NSchemeShard::TXTYPE_DROP_TABLET_RESULT)       \
     action(TEvPersQueue::TEvUpdateConfigResponse,         NSchemeShard::TXTYPE_PERSQUEUE_CONFIG_RESULT)  \
+    action(TEvBlobDepot::TEvApplyConfigResult,            NSchemeShard::TXTYPE_BLOB_DEPOT_CONFIG_RESULT) \
 \
     action(TEvPrivate::TEvOperationPlan,                   NSchemeShard::TXTYPE_PLAN_STEP)                             \
     action(TEvPrivate::TEvPrivate::TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
@@ -455,6 +457,13 @@ ISubOperationBase::TPtr CreateNewReplication(TOperationId id, const TTxTransacti
 ISubOperationBase::TPtr CreateNewReplication(TOperationId id, TTxState::ETxState state);
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropReplication(TOperationId id, TTxState::ETxState state);
+
+ISubOperationBase::TPtr CreateNewBlobDepot(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateNewBlobDepot(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateAlterBlobDepot(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateAlterBlobDepot(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateDropBlobDepot(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateDropBlobDepot(TOperationId id, TTxState::ETxState state);
 
 }
 }

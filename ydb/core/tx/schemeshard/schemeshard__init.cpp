@@ -3743,6 +3743,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
                 domainInfo->AddReplicationController(shardIdx);
                 break;
+            case ETabletType::BlobDepot:
+                Self->TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Add(1);
+                break;
             default:
                 Y_FAIL_S("dont know how to interpret tablet type"
                          << ", type id: " << (ui32)si.second.TabletType
@@ -4526,6 +4529,31 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Y_VERIFY_S(Self->Replications.contains(pathId),
                     "Cannot load alter for replication " << pathId);
                 Self->Replications[pathId]->AlterData = alterData;
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+        }
+
+        // Read blob depots
+        {
+            using T = Schema::BlobDepots;
+
+            auto rowset = db.Table<T>().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                const TPathId pathId = Self->MakeLocalId(rowset.GetValue<T::PathId>());
+                const ui64 alterVersion = rowset.GetValue<T::AlterVersion>();
+                NKikimrSchemeOp::TBlobDepotDescription description;
+                const bool success = description.ParseFromString(rowset.GetValue<T::Description>());
+                Y_VERIFY(success);
+
+                Self->BlobDepots[pathId] = MakeIntrusive<TBlobDepotInfo>(alterVersion, description);
+                Self->IncrementPathDbRefCount(pathId);
 
                 if (!rowset.Next()) {
                     return false;

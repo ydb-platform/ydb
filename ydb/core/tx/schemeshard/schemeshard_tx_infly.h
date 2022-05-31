@@ -110,6 +110,9 @@ struct TTxState {
         item(TxCreateReplication, 65) \
         item(TxAlterReplication, 66) \
         item(TxDropReplication, 67) \
+        item(TxCreateBlobDepot, 68) \
+        item(TxAlterBlobDepot, 69) \
+        item(TxDropBlobDepot, 70)
 
     // TX_STATE_TYPE_ENUM
 
@@ -309,6 +312,7 @@ struct TTxState {
         case TxCreateCdcStream:
         case TxCreateSequence:
         case TxCreateReplication:
+        case TxCreateBlobDepot:
             return true;
         case TxInitializeBuildIndex: //this is more like alter
         case TxCreateCdcStreamAtTable:
@@ -335,6 +339,7 @@ struct TTxState {
         case TxDropCdcStreamAtTable:
         case TxDropSequence:
         case TxDropReplication:
+        case TxDropBlobDepot:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -360,6 +365,7 @@ struct TTxState {
         case TxAlterCdcStreamAtTable:
         case TxAlterSequence:
         case TxAlterReplication:
+        case TxAlterBlobDepot:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -388,6 +394,7 @@ struct TTxState {
         case TxDropCdcStream:
         case TxDropSequence:
         case TxDropReplication:
+        case TxDropBlobDepot:
             return true;
         case TxMkDir:
         case TxCreateTable:
@@ -408,6 +415,7 @@ struct TTxState {
         case TxCreateCdcStreamAtTable:
         case TxCreateSequence:
         case TxCreateReplication:
+        case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
         case TxCreateLockForIndexBuild:
         case TxDropLock:
@@ -439,6 +447,7 @@ struct TTxState {
         case TxAlterCdcStreamAtTable:
         case TxAlterSequence:
         case TxAlterReplication:
+        case TxAlterBlobDepot:
             return false;
         case TxMoveTable:
         case TxMoveTableIndex:
@@ -467,6 +476,7 @@ struct TTxState {
         case TxDropCdcStream:
         case TxDropSequence:
         case TxDropReplication:
+        case TxDropBlobDepot:
             return true;
         case TxDropTableIndex:
         case TxRmDir:
@@ -490,6 +500,7 @@ struct TTxState {
         case TxCreateCdcStreamAtTable:
         case TxCreateSequence:
         case TxCreateReplication:
+        case TxCreateBlobDepot:
         case TxInitializeBuildIndex:
         case TxCreateLockForIndexBuild:
         case TxDropLock:
@@ -521,6 +532,7 @@ struct TTxState {
         case TxMoveTableIndex:
         case TxAlterSequence:
         case TxAlterReplication:
+        case TxAlterBlobDepot:
             return false;
         case TxInvalid:
             Y_VERIFY_DEBUG("UNREACHEBLE");

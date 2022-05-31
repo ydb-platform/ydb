@@ -313,6 +313,9 @@ enum EServiceKikimr {
 
     // Replication
     REPLICATION_CONTROLLER = 1200;
+
+    // Blob depot
+    BLOB_DEPOT = 1300;
 };
 
 message TActivity {
@@ -888,5 +891,7 @@ message TActivity {
         TX_COLUMNSHARD_S3_ACTOR = 567;
         TX_COLUMNSHARD_EXPORT_ACTOR = 568;
         YQ_HEALTH_ACTOR = 569;
+        BLOB_DEPOT_ACTOR = 570;
+        BLOB_DEPOT_AGENT = 571;
     };
 };

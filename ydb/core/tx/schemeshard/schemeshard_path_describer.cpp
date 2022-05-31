@@ -734,6 +734,11 @@ void TPathDescriber::DescribeReplication(TPathId pathId, TPathElement::TPtr path
     Self->DescribeReplication(pathId, pathEl->Name, *Result->Record.MutablePathDescription()->MutableReplicationDescription());
 }
 
+void TPathDescriber::DescribeBlobDepot(const TPath& path) {
+    Y_VERIFY(path->IsBlobDepot());
+    Self->DescribeBlobDepot(path->PathId, path->Name, *Result->Record.MutablePathDescription()->MutableBlobDepotDescription());
+}
+
 THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe(const TActorContext& ctx) {
     TPathId pathId = Params.HasPathId() ? TPathId(Params.GetSchemeshardId(), Params.GetPathId()) : InvalidPathId;
     TString pathStr = Params.GetPath();
@@ -860,6 +865,9 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             break;
         case NKikimrSchemeOp::EPathTypeReplication:
             DescribeReplication(path.Base()->PathId, path.Base());
+            break;
+        case NKikimrSchemeOp::EPathTypeBlobDepot:
+            DescribeBlobDepot(path);
             break;
         case NKikimrSchemeOp::EPathTypeInvalid:
             Y_UNREACHABLE();
@@ -1105,6 +1113,15 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
             desc.SetControllerId(ui64(shardInfo.TabletID));
         }
     }
+}
+
+void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name, NKikimrSchemeOp::TBlobDepotDescription& desc) {
+    auto it = BlobDepots.find(pathId);
+    Y_VERIFY(it != BlobDepots.end());
+    desc = it->second->Description;
+    desc.SetName(name);
+    PathIdFromPathId(pathId, desc.MutablePathId());
+    desc.SetVersion(it->second->AlterVersion);
 }
 
 void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries) {

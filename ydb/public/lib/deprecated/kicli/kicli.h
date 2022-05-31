@@ -579,6 +579,7 @@ public:
         OlapTable,
         Sequence,
         Replication,
+        BlobDepot,
     };
 
     TSchemaObject(TSchemaObject&&) = default;

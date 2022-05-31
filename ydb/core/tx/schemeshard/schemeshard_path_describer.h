@@ -42,6 +42,7 @@ class TPathDescriber {
     void DescribeKesus(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeSequence(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeReplication(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeBlobDepot(const TPath& path);
 
 public:
     explicit TPathDescriber(TSchemeShard* self, NKikimrSchemeOp::TDescribePath&& params)

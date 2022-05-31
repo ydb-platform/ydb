@@ -143,6 +143,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
         case NKikimrSchemeOp::ESchemeOpDropReplication:
+        case NKikimrSchemeOp::ESchemeOpDropBlobDepot:
             return *modifyScheme.MutableDrop()->MutableName();
 
         case NKikimrSchemeOp::ESchemeOpAlterTable:
@@ -307,6 +308,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
             return *modifyScheme.MutableReplication()->MutableName();
+
+        case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
+        case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
+            return *modifyScheme.MutableBlobDepot()->MutableName();
         }
     }
 
@@ -546,6 +551,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterColumnTable:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
         case NKikimrSchemeOp::ESchemeOpAlterReplication:
+        case NKikimrSchemeOp::ESchemeOpAlterBlobDepot:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
@@ -563,7 +569,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpDropColumnStore:
         case NKikimrSchemeOp::ESchemeOpDropColumnTable:
         case NKikimrSchemeOp::ESchemeOpDropSequence:
-        case NKikimrSchemeOp::ESchemeOpDropReplication: {
+        case NKikimrSchemeOp::ESchemeOpDropReplication:
+        case NKikimrSchemeOp::ESchemeOpDropBlobDepot: {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequiredAccess = NACLib::EAccessRights::RemoveSchema;
@@ -620,6 +627,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpCreateSolomonVolume:
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpCreateReplication:
+        case NKikimrSchemeOp::ESchemeOpCreateBlobDepot:
         {
             auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
             toResolve.Path = workingDir;

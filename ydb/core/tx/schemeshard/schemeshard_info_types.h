@@ -994,6 +994,10 @@ struct TShardInfo {
     static TShardInfo ReplicationControllerInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::ReplicationController);
     }
+
+    static TShardInfo BlobDepotInfo(TTxId txId, TPathId pathId) {
+        return TShardInfo(txId, pathId, ETabletType::BlobDepot);
+    }
 };
 
 struct TPersQueueGroupInfo : TSimpleRefCount<TPersQueueGroupInfo> {
@@ -2261,6 +2265,31 @@ struct TReplicationInfo : public TSimpleRefCount<TReplicationInfo> {
     ui64 AlterVersion = 0;
     TReplicationInfo::TPtr AlterData = nullptr;
     NKikimrSchemeOp::TReplicationDescription Description;
+};
+
+struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
+    using TPtr = TIntrusivePtr<TBlobDepotInfo>;
+
+    TBlobDepotInfo(ui64 alterVersion)
+        : AlterVersion(alterVersion)
+    {}
+
+    TBlobDepotInfo(ui64 alterVersion, const NKikimrSchemeOp::TBlobDepotDescription& desc)
+        : AlterVersion(alterVersion)
+    {
+        Description.CopyFrom(desc);
+    }
+
+    TPtr CreateNextVersion() {
+        Y_VERIFY(!AlterData);
+        AlterData = MakeIntrusive<TBlobDepotInfo>(*this);
+        ++AlterData->AlterVersion;
+        return AlterData;
+    }
+
+    ui64 AlterVersion = 0;
+    TPtr AlterData = nullptr;
+    NKikimrSchemeOp::TBlobDepotDescription Description;
 };
 
 struct TPublicationInfo {

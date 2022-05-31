@@ -32,6 +32,8 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/alloc.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/base.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/bind_channel_storage_pool.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/protos/blob_depot_config.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_controller.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/protos/blobstorage_disk.proto

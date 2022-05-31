@@ -1253,6 +1253,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateCdcStream:
     case TTxState::TxCreateSequence:
     case TTxState::TxCreateReplication:
+    case TTxState::TxCreateBlobDepot:
         return TPathElement::EPathState::EPathStateCreate;
     case TTxState::TxAlterPQGroup:
     case TTxState::TxAlterTable:
@@ -1277,6 +1278,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropCdcStreamAtTable:
     case TTxState::TxAlterSequence:
     case TTxState::TxAlterReplication:
+    case TTxState::TxAlterBlobDepot:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:
@@ -1294,6 +1296,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropCdcStream:
     case TTxState::TxDropSequence:
     case TTxState::TxDropReplication:
+    case TTxState::TxDropBlobDepot:
         return TPathElement::EPathState::EPathStateDrop;
     case TTxState::TxBackup:
         return TPathElement::EPathState::EPathStateBackup;
@@ -3076,6 +3079,20 @@ void TSchemeShard::PersistReplicationAlterRemove(NIceDb::TNiceDb& db, TPathId pa
     db.Table<Schema::ReplicationsAlterData>().Key(pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistBlobDepot(NIceDb::TNiceDb& db, TPathId pathId, const TBlobDepotInfo& blobDepotInfo) {
+    Y_VERIFY(IsLocalId(pathId));
+
+    TString description;
+    const bool success = blobDepotInfo.Description.SerializeToString(&description);
+    Y_VERIFY(success);
+
+    using T = Schema::BlobDepots;
+    db.Table<T>().Key(pathId.LocalPathId).Update(
+        NIceDb::TUpdate<T::AlterVersion>(blobDepotInfo.AlterVersion),
+        NIceDb::TUpdate<T::Description>(description)
+    );
+}
+
 void TSchemeShard::PersistKesusInfo(NIceDb::TNiceDb& db, TPathId pathId, const TKesusInfo::TPtr kesus)
 {
     TString config;
@@ -3608,6 +3625,16 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetReplicationVersion();
                 break;
             }
+            case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
+                if (const auto it = BlobDepots.find(pathId); it != BlobDepots.end()) {
+                    const ui64 version = it->second->AlterVersion;
+                    result.SetBlobDepotVersion(version);
+                    generalVersion += version;
+                } else {
+                    Y_FAIL_S("BlobDepot for path " << pathId << " not found");
+                }
+                break;
+
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid: {
                 Y_UNREACHABLE();
             }
@@ -3988,6 +4015,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NKesus::TEvKesus::TEvSetConfigResult, Handle);
         HFuncTraced(TEvPersQueue::TEvDropTabletReply, Handle);
         HFuncTraced(TEvPersQueue::TEvUpdateConfigResponse, Handle);
+        HFuncTraced(TEvBlobDepot::TEvApplyConfigResult, Handle);
 
         //pipes mgs
         HFuncTraced(TEvTabletPipe::TEvClientConnected, Handle);
@@ -4328,6 +4356,9 @@ void TSchemeShard::UncountNode(TPathElement::TPtr node) {
     case TPathElement::EPathType::EPathTypeReplication:
         TabletCounters->Simple()[COUNTER_REPLICATION_COUNT].Sub(1);
         break;
+    case TPathElement::EPathType::EPathTypeBlobDepot:
+        TabletCounters->Simple()[COUNTER_BLOB_DEPOT_COUNT].Sub(1);
+        break;
     case TPathElement::EPathType::EPathTypeInvalid:
         Y_FAIL("imposible path type");
     }
@@ -4412,6 +4443,8 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             // any references to them, e.g. all shards have been deleted
             // and all operations have been completed.
             break;
+        case TPathElement::EPathType::EPathTypeBlobDepot:
+            Y_FAIL("not implemented");
         default:
             // not all path types support removal
             break;
@@ -4875,6 +4908,25 @@ void TSchemeShard::Handle(TEvPersQueue::TEvUpdateConfigResponse::TPtr &ev, const
     }
 
     Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TActorContext& ctx) {
+    const TTxId txId(ev->Get()->Record.GetTxId());
+    const TTabletId tabletId(ev->Get()->Record.GetTabletId());
+    if (const auto it = Operations.find(txId); it == Operations.end()) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+           "Got TEvBlobDepot::TEvApplyConfigResult"
+           << " for unknown txId " << txId
+           << " message " << ev->Get()->Record.ShortDebugString());
+    } else if (const TSubTxId partId = it->second->FindRelatedPartByTabletId(tabletId, ctx); partId == InvalidSubTxId) {
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+           "Got TEvBlobDepot::TEvApplyConfigResult but partId is unknown"
+               << ", for txId: " << txId
+               << ", tabletId: " << tabletId
+               << ", at schemeshard: " << TabletID());
+    } else {
+        Execute(CreateTxOperationReply(TOperationId(txId, partId), ev), ctx);
+    }
 }
 
 void TSchemeShard::Handle(TEvColumnShard::TEvProposeTransactionResult::TPtr &ev, const TActorContext &ctx) {

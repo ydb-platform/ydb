@@ -351,6 +351,7 @@ public:
             case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
             case NKikimrSchemeOp::EPathType::EPathTypeSequence:
             case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+            case NKikimrSchemeOp::EPathType::EPathTypeBlobDepot:
                 Y_FAIL("UNIMPLEMENTED");
             case NKikimrSchemeOp::EPathType::EPathTypeInvalid:
                 Y_UNREACHABLE();

@@ -1,0 +1,13 @@
+import "ydb/core/protos/blob_depot_config.proto";
+
+package NKikimrBlobDepot;
+
+message TEvApplyConfig {
+    optional uint64 TxId = 1;
+    optional NKikimrBlobDepot.TBlobDepotConfig Config = 2;
+}
+
+message TEvApplyConfigResult {
+    optional uint64 TabletId = 1;
+    optional uint64 TxId = 2;
+}

@@ -210,6 +210,7 @@ namespace {
             entry.CdcStreamInfo.Drop();
             entry.SequenceInfo.Drop();
             entry.ReplicationInfo.Drop();
+            entry.BlobDepotInfo.Drop();
         }
 
         static void SetErrorAndClear(TResolveContext* context, TResolve::TEntry& entry) {
@@ -709,6 +710,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             CdcStreamInfo.Drop();
             SequenceInfo.Drop();
             ReplicationInfo.Drop();
+            BlobDepotInfo.Drop();
         }
 
         void FillTableInfo(const NKikimrSchemeOp::TPathDescription& pathDesc) {
@@ -1119,6 +1121,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(CdcStreamInfo);
             DESCRIPTION_PART(SequenceInfo);
             DESCRIPTION_PART(ReplicationInfo);
+            DESCRIPTION_PART(BlobDepotInfo);
 
             #undef DESCRIPTION_PART
 
@@ -1419,6 +1422,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 Kind = TNavigate::KindReplication;
                 FillInfo(Kind, ReplicationInfo, std::move(*pathDesc.MutableReplicationDescription()));
                 break;
+            case NKikimrSchemeOp::EPathTypeBlobDepot:
+                Kind = TNavigate::KindBlobDepot;
+                FillInfo(Kind, BlobDepotInfo, std::move(*pathDesc.MutableBlobDepotDescription()));
+                break;
             case NKikimrSchemeOp::EPathTypeInvalid:
                 Y_VERIFY_DEBUG(false, "Invalid path type");
                 break;
@@ -1472,6 +1479,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         break;
                     case NKikimrSchemeOp::EPathTypeReplication:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindReplication);
+                        break;
+                    case NKikimrSchemeOp::EPathTypeBlobDepot:
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindBlobDepot);
                         break;
                     case NKikimrSchemeOp::EPathTypeTableIndex:
                     case NKikimrSchemeOp::EPathTypeInvalid:
@@ -1680,6 +1690,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.CdcStreamInfo = CdcStreamInfo;
             entry.SequenceInfo = SequenceInfo;
             entry.ReplicationInfo = ReplicationInfo;
+            entry.BlobDepotInfo = BlobDepotInfo;
         }
 
         bool CheckColumns(TResolveContext* context, TResolve::TEntry& entry,
@@ -1942,6 +1953,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // Replication specific
         TIntrusivePtr<TNavigate::TReplicationInfo> ReplicationInfo;
+
+        // BlobDepot specific
+        TIntrusivePtr<TNavigate::TBlobDepotInfo> BlobDepotInfo;
 
     }; // TCacheItem
 

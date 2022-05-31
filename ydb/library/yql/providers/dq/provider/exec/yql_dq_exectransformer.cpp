@@ -477,7 +477,9 @@ private:
         bool* untrustedUdfFlag,
         int* level,
         TUploadList* uploadList,
-        const TResult& result, TExprContext& ctx, bool hasGraphParams) const
+        const TResult& result, TExprContext& ctx,
+        bool hasGraphParams,
+        bool enableLocalRun) const
     {
         auto input = Build<TDqPhyStage>(ctx, result.Pos())
             .Inputs()
@@ -554,7 +556,7 @@ private:
             }
         }
 
-        bool localRun = !State->DqGateway || (!*untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams);
+        const bool localRun = enableLocalRun && (!State->DqGateway || (!*untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams));
         bool fallbackFlag = BuildUploadList(uploadList, localRun, explorer, typeEnv, files);
 
         if (fallbackFlag) {
@@ -650,19 +652,10 @@ private:
             bool untrustedUdfFlag;
             int level;
             TUploadList uploadList;
-            auto lambdaResult = GetLambda(&lambda, &untrustedUdfFlag, &level, &uploadList, result, ctx, hasGraphParams);
-            if (lambdaResult.first.Level == TStatus::Error) {
-                if (State->Settings->FallbackPolicy.Get().GetOrElse("default") == "never" || State->TypeCtx->ForceDq) {
-                    return SyncError();
-                }
-                return Fallback();
-            }
-            if (lambdaResult.first.Level != TStatus::Ok) {
-                return lambdaResult;
-            }
+
+            bool enableLocalRun = true;
 
             THashMap<ui32, ui32> allPublicIds;
-            bool hasStageError = false;
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
                 const TExprBase expr(node);
                 if (expr.Maybe<TResFill>()) {
@@ -672,22 +665,7 @@ private:
                 }
                 return true;
             });
-
-            if (hasStageError) {
-                return SyncError();
-            }
-
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(allPublicIds);
-
-            auto executionPlanner = THolder<IDqsExecutionPlanner>(new TDqsSingleExecutionPlanner(lambda, NActors::TActorId(), NActors::TActorId(1, 0, 1, 0), State->FunctionRegistry, result.Input().Ref().GetTypeAnn()));
-            auto& tasks = executionPlanner->GetTasks();
-            Yql::DqsProto::TTaskMeta taskMeta;
-            tasks[0].MutableMeta()->UnpackTo(&taskMeta);
-            for (const auto& file : uploadList) {
-                *taskMeta.AddFiles() = file;
-            }
-            tasks[0].MutableMeta()->PackFrom(taskMeta);
-
             bool enableFullResultWrite = settings->EnableFullResultWrite.Get().GetOrElse(false);
             if (enableFullResultWrite) {
                 const auto type = result.Input().Ref().GetTypeAnn();
@@ -700,21 +678,65 @@ private:
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
-
             NThreading::TFuture<IDqGateway::TResult> future;
-            // bool executeUdfLocallyIfPossible ?
-            bool localRun = !State->DqGateway || (!untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams);
-            if (localRun) {
-                auto result = TLocalExecutor(State).Execute(ctx.GetPosition(input->Pos()), lambda, columns, secureParams, fillSettings);
-                if (enableFullResultWrite && result.Success() && result.Truncated) {
-                    localRun = false;
-                } else {
-                    future = NThreading::MakeFuture<IDqGateway::TResult>(std::move(result));
+            bool localRun = false;
+
+            // try to prepare lambda with localRun 'on' and 'off'
+            for (int i = 0; i < 2 && !future.Initialized(); i++) {
+                uploadList.clear();
+
+                auto lambdaResult = GetLambda(
+                    &lambda,
+                    &untrustedUdfFlag,
+                    &level,
+                    &uploadList,
+                    result,
+                    ctx,
+                    hasGraphParams,
+                    enableLocalRun);
+
+                if (lambdaResult.first.Level == TStatus::Error) {
+                    if (State->Settings->FallbackPolicy.Get().GetOrElse("default") == "never"
+                        || State->TypeCtx->ForceDq)
+                    {
+                        return SyncError();
+                    }
+                    return Fallback();
                 }
-            }
-            if (!localRun) {
-                future = State->DqGateway->ExecutePlan(State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
-                    settings, progressWriter, ModulesMapping, fillSettings.Discard);
+                if (lambdaResult.first.Level != TStatus::Ok) {
+                    return lambdaResult;
+                }
+
+                auto executionPlanner = THolder<IDqsExecutionPlanner>(
+                    new TDqsSingleExecutionPlanner(
+                        lambda, NActors::TActorId(),
+                        NActors::TActorId(1, 0, 1, 0), State->FunctionRegistry,
+                        result.Input().Ref().GetTypeAnn()));
+                auto& tasks = executionPlanner->GetTasks();
+                Yql::DqsProto::TTaskMeta taskMeta;
+                tasks[0].MutableMeta()->UnpackTo(&taskMeta);
+                for (const auto& file : uploadList) {
+                    *taskMeta.AddFiles() = file;
+                }
+                tasks[0].MutableMeta()->PackFrom(taskMeta);
+
+                // bool executeUdfLocallyIfPossible ?
+                localRun = enableLocalRun
+                    && (!State->DqGateway
+                        || (!untrustedUdfFlag && !State->TypeCtx->ForceDq && !hasGraphParams));
+                if (localRun) {
+                    auto result = TLocalExecutor(State).Execute(
+                        ctx.GetPosition(input->Pos()), lambda, columns, secureParams, fillSettings);
+                    if (enableFullResultWrite && result.Success() && result.Truncated) {
+                        enableLocalRun = false; continue;
+                    } else {
+                        future = NThreading::MakeFuture<IDqGateway::TResult>(std::move(result));
+                    }
+                } else {
+                    future = State->DqGateway->ExecutePlan(
+                        State->SessionId, *executionPlanner.Get(), columns, secureParams, graphParams,
+                        settings, progressWriter, ModulesMapping, fillSettings.Discard);
+                }
             }
 
             if (State->Metrics) {
@@ -722,6 +744,8 @@ private:
                     ? "InMemory"
                     : "Remote");
             }
+
+            YQL_ENSURE(future.Initialized());
 
             FlushStatisticsToState();
 
@@ -781,7 +805,7 @@ private:
                 const bool truncated = res.Truncated;
                 const ui64 rowsCount = res.RowsCount;
 
-               if (truncated && item.IsList()) {
+                if (truncated && item.IsList()) {
                     ui64 bytes = 0;
                     ui64 rows = 0;
                     writer.OnBeginList();

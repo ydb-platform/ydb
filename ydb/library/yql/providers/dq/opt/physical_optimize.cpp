@@ -21,6 +21,8 @@ public:
         : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
         , Config(config)
     {
+        const bool enablePrecompute = Config->_EnablePrecompute.Get().GetOrElse(false);
+
 #define HNDL(name) "DqsPhy-"#name, Hndl(&TDqsPhysicalOptProposalTransformer::name)
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
         AddHandler(0, &TDqReadWrap::Match, HNDL(BuildStageWithReadWrap));
@@ -42,7 +44,7 @@ public:
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
-        if (Config->_EnablePrecompute.Get().GetOrElse(false)) {
+        if (enablePrecompute) {
             AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
             AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
             AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
@@ -62,7 +64,7 @@ public:
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
-        if (Config->_EnablePrecompute.Get().GetOrElse(false)) {
+        if (enablePrecompute) {
             AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
             AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
         }

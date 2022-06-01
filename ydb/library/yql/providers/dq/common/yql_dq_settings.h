@@ -65,6 +65,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> EnableFullResultWrite;
     NCommon::TConfSetting<bool, false> _OneGraphPerQuery;
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
+    NCommon::TConfSetting<bool, false> _EnablePrecompute;
 
     NCommon::TConfSetting<TString, false> WorkerFilter;
 

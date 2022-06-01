@@ -877,6 +877,10 @@ private:
         attr->SetValue(queryTimeoutMs);
 
         attr = dqSettings.Add();
+        attr->SetName("_EnablePrecompute");
+        attr->SetValue("0"); // TODO: enable together with removing TEmptyGateway
+
+        attr = dqSettings.Add();
         attr->SetName("_LiteralTimeout");
         attr->SetValue(queryTimeoutMs);
 

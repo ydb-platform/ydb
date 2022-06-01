@@ -135,6 +135,7 @@ namespace NYql::NDqs {
         TExprBase expr(DqExprRoot);
         auto result = expr.Maybe<TDqCnResult>();
         auto query = expr.Maybe<TDqQuery>();
+        auto value = expr.Maybe<TDqPhyPrecompute>();
         const auto maxTasksPerOperation = settings->MaxTasksPerOperation.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerOperation);
 
         YQL_CLOG(DEBUG, ProviderDq) << "Execution Plan " << NCommon::ExprToPrettyString(ExprContext, *DqExprRoot);
@@ -223,8 +224,15 @@ namespace NYql::NDqs {
             YQL_ENSURE(!stageInfo.Tasks.empty());
         }
 
+        TMaybeNode<TDqPhyStage> finalStage;
         if (result) {
-            auto& resultStageInfo = TasksGraph.GetStageInfo(result.Cast().Output().Stage().Cast<TDqPhyStage>());
+            finalStage = result.Cast().Output().Stage().Maybe<TDqPhyStage>();
+        } else if (value) {
+            finalStage = value.Cast().Connection().Output().Stage().Maybe<TDqPhyStage>();
+        }
+
+        if (finalStage) {
+            auto& resultStageInfo = TasksGraph.GetStageInfo(finalStage.Cast());
             YQL_ENSURE(resultStageInfo.Tasks.size() == 1);
             auto& resultTask = TasksGraph.GetTask(resultStageInfo.Tasks[0]);
             YQL_ENSURE(resultTask.Outputs.size() == 1);

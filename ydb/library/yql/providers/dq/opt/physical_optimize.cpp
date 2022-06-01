@@ -17,8 +17,9 @@ using namespace NYql::NNodes;
 
 class TDqsPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
-    TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx)
+    TDqsPhysicalOptProposalTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config)
         : TOptimizeTransformerBase(typeCtx, NLog::EComponent::ProviderDq, {})
+        , Config(config)
     {
 #define HNDL(name) "DqsPhy-"#name, Hndl(&TDqsPhysicalOptProposalTransformer::name)
         AddHandler(0, &TDqSourceWrap::Match, HNDL(BuildStageWithSourceWrap));
@@ -41,10 +42,13 @@ public:
         AddHandler(0, &TCoAssumeSorted::Match, HNDL(BuildSortStage<false>));
         AddHandler(0, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<false>));
         AddHandler(0, &TCoLMap::Match, HNDL(PushLMapToStage<false>));
-#if 0
-        AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
-        AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
-#endif
+        if (Config->_EnablePrecompute.Get().GetOrElse(false)) {
+            AddHandler(0, &TCoHasItems::Match, HNDL(BuildHasItems));
+            AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<false>));
+            AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
+            AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
+            AddHandler(0, &TDqStage::Match, HNDL(PrecomputeToInput));
+        }
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
         AddHandler(1, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<true>));
@@ -58,6 +62,10 @@ public:
         AddHandler(1, &TCoAssumeSorted::Match, HNDL(BuildSortStage<true>));
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
+        if (Config->_EnablePrecompute.Get().GetOrElse(false)) {
+            AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
+            AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
+        }
 #undef HNDL
 
         SetGlobal(1u);
@@ -296,10 +304,62 @@ protected:
     TMaybeNode<TExprBase> BuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx, const TGetParents& getParents) {
         return DqBuildScalarPrecompute(node, ctx, optCtx, *getParents(), IsGlobal);
     }
+
+    TMaybeNode<TExprBase> BuildPrecompute(TExprBase node, TExprContext& ctx) {
+        return DqBuildPrecompute(node, ctx);
+    }
+
+    TMaybeNode<TExprBase> PrecomputeToInput(TExprBase node, TExprContext& ctx) {
+        auto stage = node.Cast<TDqStage>();
+
+        TExprNode::TListType innerPrecomputes = FindNodes(stage.Program().Ptr(),
+            [](const TExprNode::TPtr& node) {
+                return !TDqReadWrapBase::Match(node.Get()) && !TDqPhyPrecompute::Match(node.Get());
+            },
+            [](const TExprNode::TPtr& node) {
+                return TDqPhyPrecompute::Match(node.Get());
+            }
+        );
+
+        if (innerPrecomputes.empty()) {
+            return node;
+        }
+
+        TVector<TExprNode::TPtr> newInputs;
+        TVector<TExprNode::TPtr> newArgs;
+        TNodeOnNodeOwnedMap replaces;
+
+        for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
+            newInputs.push_back(stage.Inputs().Item(i).Ptr());
+            auto arg = stage.Program().Args().Arg(i).Raw();
+            newArgs.push_back(ctx.NewArgument(arg->Pos(), arg->Content()));
+            replaces[arg] = newArgs.back();
+        }
+
+        for (auto& precompute: innerPrecomputes) {
+            newInputs.push_back(precompute);
+            newArgs.push_back(ctx.NewArgument(precompute->Pos(), TStringBuilder() << "_dq_precompute_" << newArgs.size()));
+            replaces[precompute.Get()] = newArgs.back();
+        }
+
+        return Build<TDqStage>(ctx, stage.Pos())
+            .Inputs()
+                .Add(newInputs)
+            .Build()
+            .Program()
+                .Args(newArgs)
+                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), replaces))
+            .Build()
+            .Settings().Build()
+            .Done();
+    }
+
+private:
+    TDqConfiguration::TPtr Config;
 };
 
-THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx) {
-    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx));
+THolder<IGraphTransformer> CreateDqsPhyOptTransformer(TTypeAnnotationContext* typeCtx, const TDqConfiguration::TPtr& config) {
+    return THolder(new TDqsPhysicalOptProposalTransformer(typeCtx, config));
 }
 
 } // NYql::NDqs

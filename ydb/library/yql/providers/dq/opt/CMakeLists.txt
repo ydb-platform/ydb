@@ -14,11 +14,19 @@ target_compile_options(providers-dq-opt PRIVATE
 target_link_libraries(providers-dq-opt PUBLIC
   contrib-libs-cxxsupp
   yutil
+  providers-dq-expr_nodes
+  providers-common-mkql
+  providers-common-codec
+  providers-common-transform
   yql-utils-log
   yql-dq-opt
   yql-dq-type_ann
-  providers-common-transform
-  providers-dq-expr_nodes
+  library-yql-core
+  yql-core-peephole_opt
+  yql-core-type_ann
+  library-yql-minikql
+  yql-minikql-computation
+  cpp-yson-node
 )
 target_sources(providers-dq-opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/opt/dqs_opt.cpp

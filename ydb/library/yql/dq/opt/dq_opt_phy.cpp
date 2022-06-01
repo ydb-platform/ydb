@@ -254,6 +254,9 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
     {
         TNodeOnNodeOwnedMap precomputesInsideLambda;
         VisitExpr(newProgram, [&precomputesInsideLambda](const TExprNode::TPtr& node) {
+            if (node->IsCallable() && node->Content().StartsWith("DqRead")) {
+                return false;
+            }
             if (TDqPhyPrecompute::Match(node.Get())) {
                 precomputesInsideLambda[node.Get()] = node;
                 return false;

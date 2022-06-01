@@ -39,13 +39,13 @@ TString FromCells(const TConstArrayRef<TCell>& cells, const TVector<std::pair<TS
 
 struct TContext {
     const IColumnResolver& ColumnResolver;
-    THashMap<ui32, TString> Sources;
+    mutable THashMap<ui32, TString> Sources;
 
     explicit TContext(const IColumnResolver& columnResolver)
         : ColumnResolver(columnResolver)
     {}
 
-    std::string GetName(ui32 columnId) {
+    std::string GetName(ui32 columnId) const {
         TString name = ColumnResolver.GetColumnName(columnId, false);
         if (name.Empty()) {
             name = ToString(columnId);
@@ -56,14 +56,13 @@ struct TContext {
     }
 };
 
-NArrow::TAssign MakeFunction(TContext& info, const std::string& name,
+NArrow::TAssign MakeFunction(const TContext& info, const std::string& name,
                             const NKikimrSSA::TProgram::TAssignment::TFunction& func) {
     using TId = NKikimrSSA::TProgram::TAssignment;
     using EOperation = NArrow::EOperation;
     using TAssign = NArrow::TAssign;
 
-    auto& args = func.GetArguments();
-    TVector<std::string> arguments;
+    std::vector<std::string> arguments;
     for (auto& col : func.GetArguments()) {
         ui32 columnId = col.GetId();
         arguments.push_back(info.GetName(columnId));
@@ -71,66 +70,48 @@ NArrow::TAssign MakeFunction(TContext& info, const std::string& name,
 
     switch (func.GetId()) {
         case TId::FUNC_CMP_EQUAL:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Equal, std::move(arguments));
         case TId::FUNC_CMP_NOT_EQUAL:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::NotEqual, std::move(arguments));
         case TId::FUNC_CMP_LESS:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Less, std::move(arguments));
         case TId::FUNC_CMP_LESS_EQUAL:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::LessEqual, std::move(arguments));
         case TId::FUNC_CMP_GREATER:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Greater, std::move(arguments));
         case TId::FUNC_CMP_GREATER_EQUAL:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::GreaterEqual, std::move(arguments));
         case TId::FUNC_IS_NULL:
-            Y_VERIFY(args.size() == 1);
             return TAssign(name, EOperation::IsNull, std::move(arguments));
         case TId::FUNC_STR_LENGTH:
-            Y_VERIFY(args.size() == 1);
             return TAssign(name, EOperation::BinaryLength, std::move(arguments));
         case TId::FUNC_STR_MATCH:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::MatchSubstring, std::move(arguments));
         case TId::FUNC_BINARY_NOT:
-            Y_VERIFY(args.size() == 1);
             return TAssign(name, EOperation::Invert, std::move(arguments));
         case TId::FUNC_BINARY_AND:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::And, std::move(arguments));
         case TId::FUNC_BINARY_OR:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Or, std::move(arguments));
         case TId::FUNC_BINARY_XOR:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Xor, std::move(arguments));
         case TId::FUNC_MATH_ADD:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Add, std::move(arguments));
         case TId::FUNC_MATH_SUBTRACT:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Subtract, std::move(arguments));
         case TId::FUNC_MATH_MULTIPLY:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Multiply, std::move(arguments));
         case TId::FUNC_MATH_DIVIDE:
-            Y_VERIFY(args.size() == 2);
             return TAssign(name, EOperation::Divide, std::move(arguments));
         case TId::FUNC_CAST_TO_INT32:
         {
-            Y_VERIFY(args.size() == 1); // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
+            // TODO: support CAST with OrDefault/OrNull logic (second argument is default value)
             auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
             castOpts->to_type = std::make_shared<arrow::Int32Type>();
             return TAssign(name, EOperation::CastInt32, std::move(arguments), castOpts);
         }
         case TId::FUNC_CAST_TO_TIMESTAMP:
         {
-            Y_VERIFY(args.size() == 1);
             auto castOpts = std::make_shared<arrow::compute::CastOptions>(false);
             castOpts->to_type = std::make_shared<arrow::TimestampType>(arrow::TimeUnit::MICRO);
             return TAssign(name, EOperation::CastTimestamp, std::move(arguments), castOpts);
@@ -149,11 +130,12 @@ NArrow::TAssign MakeFunction(TContext& info, const std::string& name,
         case TId::FUNC_UNSPECIFIED:
             break;
     }
-    Y_VERIFY(false); // unexpected
+    return TAssign(name, EOperation::Unspecified, std::move(arguments));
 }
 
 NArrow::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram::TConstant& constant) {
     using TId = NKikimrSSA::TProgram::TConstant;
+    using EOperation = NArrow::EOperation;
     using TAssign = NArrow::TAssign;
 
     switch (constant.GetValueCase()) {
@@ -182,9 +164,40 @@ NArrow::TAssign MakeConstant(const std::string& name, const NKikimrSSA::TProgram
             return TAssign(name, std::string(str.data(), str.size()));
         }
         case TId::VALUE_NOT_SET:
-            Y_VERIFY(false); // unexpected
             break;
     }
+    return TAssign(name, EOperation::Unspecified, {});
+}
+
+NArrow::TAggregateAssign MakeAggregate(const TContext& info, const std::string& name,
+                                       const NKikimrSSA::TProgram::TAggregateAssignment::TAggregateFunction& func)
+{
+    using TId = NKikimrSSA::TProgram::TAggregateAssignment;
+    using EAggregate = NArrow::EAggregate;
+    using TAggregateAssign = NArrow::TAggregateAssign;
+
+    if (func.ArgumentsSize() == 1) {
+        std::string argument = info.GetName(func.GetArguments()[0].GetId());
+
+        switch (func.GetId()) {
+            case TId::AGG_ANY:
+                return TAggregateAssign(name, EAggregate::Any, std::move(argument));
+            case TId::AGG_COUNT:
+                return TAggregateAssign(name, EAggregate::Count, std::move(argument));
+            case TId::AGG_MIN:
+                return TAggregateAssign(name, EAggregate::Min, std::move(argument));
+            case TId::AGG_MAX:
+                return TAggregateAssign(name, EAggregate::Max, std::move(argument));
+            case TId::AGG_SUM:
+                return TAggregateAssign(name, EAggregate::Sum, std::move(argument));
+            case TId::AGG_AVG:
+                return TAggregateAssign(name, EAggregate::Avg, std::move(argument));
+
+            case TId::AGG_UNSPECIFIED:
+                break;
+        }
+    }
+    return TAggregateAssign(name, EAggregate::Unspecified, {});
 }
 
 NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::TProgram::TParameter& parameter,
@@ -194,7 +207,7 @@ NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::
 
     auto parameterName = parameter.GetName();
     auto column = parameterValues->GetColumnByName(parameterName);
-
+#if 0
     Y_VERIFY(
         column,
         "No parameter %s in serialized parameters.", parameterName.c_str()
@@ -203,11 +216,15 @@ NArrow::TAssign MaterializeParameter(const std::string& name, const NKikimrSSA::
         column->length() == 1,
         "Incorrect values count in parameter array"
     );
-
+#else
+    if (!column || column->length() != 1) {
+        return TAssign(name, NArrow::EOperation::Unspecified, {});
+    }
+#endif
     return TAssign(name, *column->GetScalar(0));
 }
 
-void ExtractAssign(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign,
+bool ExtractAssign(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TAssignment& assign,
     const std::shared_ptr<arrow::RecordBatch>& parameterValues)
 {
     using TId = NKikimrSSA::TProgram::TAssignment;
@@ -218,36 +235,87 @@ void ExtractAssign(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA:
     switch (assign.GetExpressionCase()) {
         case TId::kFunction:
         {
-            step.Assignes.emplace_back(MakeFunction(info, columnName, assign.GetFunction()));
+            auto func = MakeFunction(info, columnName, assign.GetFunction());
+            if (!func.IsOk()) {
+                return false;
+            }
+            step.Assignes.emplace_back(std::move(func));
             break;
         }
         case TId::kConstant:
         {
-            step.Assignes.emplace_back(MakeConstant(columnName, assign.GetConstant()));
+            auto cnst = MakeConstant(columnName, assign.GetConstant());
+            if (!cnst.IsConstant()) {
+                return false;
+            }
+            step.Assignes.emplace_back(std::move(cnst));
             break;
         }
         case TId::kParameter:
         {
-            step.Assignes.emplace_back(MaterializeParameter(columnName, assign.GetParameter(), parameterValues));
+            auto param = MaterializeParameter(columnName, assign.GetParameter(), parameterValues);
+            if (!param.IsConstant()) {
+                return false;
+            }
+            step.Assignes.emplace_back(std::move(param));
             break;
         }
         case TId::kExternalFunction:
         case TId::kNull:
         case TId::EXPRESSION_NOT_SET:
-            Y_VERIFY(false); // not implemented
-            break;
+            return false;
     }
+    return true;
 }
 
-void ExtractFilter(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TFilter& filter) {
+bool ExtractFilter(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TFilter& filter) {
     ui32 columnId = filter.GetPredicate().GetId();
+    if (!columnId) {
+        return false;
+    }
     step.Filters.push_back(info.GetName(columnId));
+    return true;
 }
 
-void ExtractProjection(TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TProjection& projection) {
+bool ExtractProjection(const TContext& info, NArrow::TProgramStep& step,
+                       const NKikimrSSA::TProgram::TProjection& projection) {
+    step.Projection.reserve(projection.ColumnsSize());
     for (auto& col : projection.GetColumns()) {
         step.Projection.push_back(info.GetName(col.GetId()));
     }
+    return true;
+}
+
+bool ExtractGroupBy(const TContext& info, NArrow::TProgramStep& step, const NKikimrSSA::TProgram::TGroupBy& groupBy) {
+    if (!groupBy.AggregatesSize()) {
+        return false;
+    }
+#if 1 // TODO
+    if (groupBy.KeyColumnsSize()) {
+        return false;
+    }
+#endif
+
+    // It adds implicit projection with aggregates and keys. Remove non aggregated columns.
+    step.Projection.reserve(groupBy.KeyColumnsSize() + groupBy.AggregatesSize());
+    for (auto& col : groupBy.GetKeyColumns()) {
+        step.Projection.push_back(info.GetName(col.GetId()));
+    }
+
+    step.GroupBy.reserve(groupBy.AggregatesSize());
+    for (auto& agg : groupBy.GetAggregates()) {
+        auto& resColumn = agg.GetColumn();
+        TString columnName = ToString(resColumn.GetId());
+
+        auto func = MakeAggregate(info, columnName, agg.GetFunction());
+        if (!func.IsOk()) {
+            return false;
+        }
+        step.GroupBy.push_back(std::move(func));
+        step.Projection.push_back(columnName);
+    }
+
+    return true;
 }
 
 }
@@ -314,22 +382,31 @@ bool TReadDescription::AddProgram(const IColumnResolver& columnResolver, const N
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign:
-                ExtractAssign(info, *step, cmd.GetAssign(), ProgramParameters);
+                if (!ExtractAssign(info, *step, cmd.GetAssign(), ProgramParameters)) {
+                    return false;
+                }
                 break;
             case TId::kFilter:
-                ExtractFilter(info, *step, cmd.GetFilter());
+                if (!ExtractFilter(info, *step, cmd.GetFilter())) {
+                    return false;
+                }
                 break;
             case TId::kProjection:
-                ExtractProjection(info, *step, cmd.GetProjection());
+                if (!ExtractProjection(info, *step, cmd.GetProjection())) {
+                    return false;
+                }
                 Program.push_back(step);
                 step = std::make_shared<NArrow::TProgramStep>();
                 break;
             case TId::kGroupBy:
-                // TODO
-                return false; // not implemented
-            case TId::LINE_NOT_SET:
-                Y_VERIFY(false);
+                if (!ExtractGroupBy(info, *step, cmd.GetGroupBy())) {
+                    return false;
+                }
+                Program.push_back(step);
+                step = std::make_shared<NArrow::TProgramStep>();
                 break;
+            case TId::LINE_NOT_SET:
+                return false;
         }
     }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/exec.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_aggregate.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/types.h>
 
@@ -83,20 +84,32 @@ enum class EOperation {
     RoundToExp2
 };
 
+enum class EAggregate {
+    Unspecified = 0,
+    Any = 1,
+    Count = 2,
+    Min = 3,
+    Max = 4,
+    Sum = 5,
+    Avg = 6,
+};
+
 const char * GetFunctionName(EOperation op);
+const char * GetFunctionName(EAggregate op);
+EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
 class TAssign {
 public:
     TAssign(const std::string& name, EOperation op, std::vector<std::string>&& args)
         : Name(name)
-        , Operation(op)
+        , Operation(ValidateOperation(op, args.size()))
         , Arguments(std::move(args))
         , FuncOpts(nullptr)
     {}
 
     TAssign(const std::string& name, EOperation op, std::vector<std::string>&& args, std::shared_ptr<arrow::compute::FunctionOptions> funcOpts)
         : Name(name)
-        , Operation(op)
+        , Operation(ValidateOperation(op, args.size()))
         , Arguments(std::move(args))
         , FuncOpts(funcOpts)
     {}
@@ -165,6 +178,7 @@ public:
     {}
 
     bool IsConstant() const { return Operation == EOperation::Constant; }
+    bool IsOk() const { return Operation != EOperation::Unspecified; }
     EOperation GetOperation() const { return Operation; }
     const std::vector<std::string>& GetArguments() const { return Arguments; }
     std::shared_ptr<arrow::Scalar> GetConstant() const { return Constant; }
@@ -179,6 +193,31 @@ private:
     std::shared_ptr<arrow::compute::FunctionOptions> FuncOpts;
 };
 
+class TAggregateAssign {
+public:
+    TAggregateAssign(const std::string& name, EAggregate op, std::string&& arg)
+        : Name(name)
+        , Operation(op)
+        , Arguments({std::move(arg)})
+    {
+        if (arg.empty()) {
+            op = EAggregate::Unspecified;
+        }
+    }
+
+    bool IsOk() const { return Operation != EAggregate::Unspecified; }
+    EAggregate GetOperation() const { return Operation; }
+    const std::vector<std::string>& GetArguments() const { return Arguments; }
+    const std::string& GetName() const { return Name; }
+    const arrow::compute::ScalarAggregateOptions& GetAggregateOptions() const { return ScalarOpts; }
+
+private:
+    std::string Name;
+    EAggregate Operation{EAggregate::Unspecified};
+    std::vector<std::string> Arguments;
+    arrow::compute::ScalarAggregateOptions ScalarOpts; // TODO: make correct options
+};
+
 /// Group of commands that finishes with projection. Steps add locality for columns definition.
 ///
 /// In step we have non-decreasing count of columns (line to line) till projection. So columns are either source
@@ -191,8 +230,8 @@ private:
 struct TProgramStep {
     std::vector<TAssign> Assignes;
     std::vector<std::string> Filters; // List of filter columns. Implicit "Filter by (f1 AND f2 AND .. AND fn)"
+    std::vector<TAggregateAssign> GroupBy;
     std::vector<std::string> Projection; // Step's result columns (remove others)
-    // TODO: group by
 
     struct TDatumBatch {
         std::shared_ptr<arrow::Schema> fields;
@@ -207,6 +246,7 @@ struct TProgramStep {
     void Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
 
     void ApplyAssignes(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
+    void ApplyAggregates(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
     void ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const;
     void ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
     void ApplyProjection(std::shared_ptr<TDatumBatch>& batch) const;

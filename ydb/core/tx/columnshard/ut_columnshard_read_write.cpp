@@ -883,10 +883,19 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
 }
 
 // SELECT some(timestamp), some(saved_at) FROM t
-NKikimrSSA::TProgram MakeSelectAggregates(TAggAssignment::EAggregateFunction aggId = TAggAssignment::AGG_ANY) {
+//
+// FIXME:
+// NotImplemented: Function any has no kernel matching input types (array[timestamp[us]])
+// NotImplemented: Function any has no kernel matching input types (array[string])
+// NotImplemented: Function min_max has no kernel matching input types (array[timestamp[us]])
+// NotImplemented: Function min_max has no kernel matching input types (array[string])
+//
+NKikimrSSA::TProgram MakeSelectAggregates(TAggAssignment::EAggregateFunction aggId = TAggAssignment::AGG_ANY,
+                                          std::vector<ui32> columnIds = {1, 9})
+{
     NKikimrSSA::TProgram ssa;
 
-    std::vector<ui32> columnIds = {1, 9};
+
     ui32 tmpColumnId = 100;
 
     auto* line1 = ssa.AddCommand();
@@ -1070,7 +1079,7 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
     std::vector<TString> programs;
 
     {
-        NKikimrSSA::TProgram ssa = MakeSelectAggregates(TAggAssignment::AGG_ANY);
+        NKikimrSSA::TProgram ssa = MakeSelectAggregates(TAggAssignment::AGG_COUNT);
         TString serialized;
         UNIT_ASSERT(ssa.SerializeToString(&serialized));
         NKikimrSSA::TOlapProgram program;
@@ -1081,7 +1090,7 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
     }
 
     {
-        NKikimrSSA::TProgram ssa = MakeSelectAggregates(TAggAssignment::AGG_COUNT);
+        NKikimrSSA::TProgram ssa = MakeSelectAggregates(TAggAssignment::AGG_MIN, {5, 5});
         TString serialized;
         UNIT_ASSERT(ssa.SerializeToString(&serialized));
         NKikimrSSA::TOlapProgram program;
@@ -1108,7 +1117,7 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
         auto& resRead = Proto(result);
         UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
         UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
-#if 0 // TODO
+
         {
             UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
             UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
@@ -1123,9 +1132,7 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
 
             UNIT_ASSERT(CheckColumns(readData[0], meta, {"100", "101"}, 1));
         }
-#else
-        UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::ERROR);
-#endif
+
         ++i;
     }
 }

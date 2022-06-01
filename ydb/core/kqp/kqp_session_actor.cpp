@@ -295,8 +295,8 @@ public:
         if (ShutdownState && ShutdownState->SoftTimeoutReached()) {
             // we reached the soft timeout, so at this point we don't allow to accept new queries for session.
             LOG_N(TKqpRequestInfo("", SessionId)
-                    << "System shutdown requested: soft timeout reached, no queries can be accepted. Closing session.");
-            ReplyQueryError(requestInfo, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
+                << "System shutdown requested: soft timeout reached, no queries can be accepted. Closing session.");
+            ReplyProcessError(ev->Sender, proxyRequestId, Ydb::StatusIds::BAD_SESSION, "Session is under shutdown");
             FinalCleanup();
             return;
         }
@@ -1439,6 +1439,17 @@ public:
         Cleanup(IsFatalError(record->GetYdbStatus()));
     }
 
+    void ReplyProcessError(const TActorId& sender, ui64 proxyRequestId, Ydb::StatusIds::StatusCode ydbStatus,
+            const TString& message)
+    {
+        LOG_W(TKqpRequestInfo("", SessionId) << "Reply process error, msg: " << message);
+
+        auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
+
+        //AddTrailingInfo(response->Record);
+        Send(sender, response.Release(), 0, proxyRequestId);
+    }
+
     void ReplyBusy(TEvKqp::TEvQueryRequest::TPtr& ev) {
 
         auto& event = ev->Get()->Record;
@@ -1450,13 +1461,7 @@ public:
             ? Ydb::StatusIds::SESSION_BUSY
             : Ydb::StatusIds::PRECONDITION_FAILED;
 
-        TString message = "Pending previous query completion";
-        LOG_W(requestInfo << " " << message);
-
-        auto response = TEvKqp::TEvProcessResponse::Error(busyStatus, message);
-
-        //AddTrailingInfo(response->Record);
-        Send(ev->Sender, response.Release(), 0, proxyRequestId);
+        ReplyProcessError(ev->Sender, proxyRequestId, busyStatus, "Pending previous query completion");
     }
 
     static bool IsFatalError(const Ydb::StatusIds::StatusCode status) {

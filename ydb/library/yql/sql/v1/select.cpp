@@ -2694,9 +2694,10 @@ public:
     {
         TNodePtr select(AstNode("select"));
         if (skip) {
-            select = Y("Skip", select, skip);
+            select = Y("Skip", select, Y("Coalesce", skip, Y("Uint64", Q("0"))));
         }
-        Add("let", "select", Y("Take", select, take));
+        static const TString uiMax = ::ToString(std::numeric_limits<ui64>::max());
+        Add("let", "select", Y("Take", select, Y("Coalesce", take, Y("Uint64", Q(uiMax)))));
     }
 
     TPtr DoClone() const final {

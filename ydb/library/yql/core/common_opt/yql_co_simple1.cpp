@@ -3814,6 +3814,9 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 auto res = ctx.NewCallable(node->Tail().Pos(), GetEmptyCollectionName(node->GetTypeAnn()), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
                 res = KeepConstraints(res, *node, ctx);
                 return KeepColumnOrder(res, *node, ctx, *optCtx.Types);
+            } else if (value == std::numeric_limits<ui64>::max()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content();
+                return node->HeadPtr();
             }
         }
 

@@ -15,6 +15,7 @@ target_link_libraries(blobstorage-vdisk-synclog PUBLIC
   cpp-actors-interconnect
   library-cpp-blockcodecs
   library-cpp-codecs
+  cpp-containers-intrusive_avl_tree
   monlib-service-pages
   ydb-core-base
   core-blobstorage-base

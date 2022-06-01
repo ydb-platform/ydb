@@ -26,6 +26,7 @@ target_sources(cpp-monlib-metrics PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_consumer.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_type.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/metric_value.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/summary_collector.cpp
   ${CMAKE_SOURCE_DIR}/library/cpp/monlib/metrics/summary_snapshot.cpp
 )
 generate_enum_serilization(cpp-monlib-metrics

@@ -1157,7 +1157,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto childOrder = optCtx.Types->LookupColumnOrder(*setItem);
         YQL_ENSURE(*childOrder);
         columnOrders.push_back(*childOrder);
-        if (GetSetting(setItem->Tail(), "ext_types") && !subLink) {
+        if (GetSetting(setItem->Tail(), "final_ext_types") && !subLink) {
             return node;
         }
 

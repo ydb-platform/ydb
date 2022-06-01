@@ -230,6 +230,10 @@ namespace {
             return node;
         }
 
+        if (ctx.Settings.VisitChecker && !ctx.Settings.VisitChecker(*node)) {
+            return node;
+        }
+
         const auto it = ctx.Memoization.find(node.Get());
         if (it != ctx.Memoization.cend()) {
             changed = changed || bool(it->second);

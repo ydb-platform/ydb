@@ -80,6 +80,7 @@ public:
         ev->Record.MutableRequest()->SetQuery(script);
         ev->Record.MutableRequest()->SetKeepSession(false);
         ev->Record.MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats()));
+        ev->Record.MutableRequest()->SetCollectStats(req->collect_stats());
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }

@@ -75,6 +75,44 @@ NDqProto::TDqTableAggrStats* GetOrCreateTableAggrStats(NDqProto::TDqStageStats* 
 
 } // anonymous namespace
 
+NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode) {
+    switch (mode) {
+        // Always collect basic stats for system views / request unit computation.
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
+            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            // TODO: Use DQ_STATS_MODE_PROFILE for STATS_COLLECTION_PROFILE mode (KIKIMR-15020)
+            return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+        default:
+            return NYql::NDqProto::DQ_STATS_MODE_NONE;
+    }
+}
+
+NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode) {
+    switch (mode) {
+        // Collect only minimal required stats to improve datashard performance.
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+            return NYql::NDqProto::DQ_STATS_MODE_NONE;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
+            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            // TODO: Use DQ_STATS_MODE_PROFILE for STATS_COLLECTION_PROFILE mode (KIKIMR-15020)
+            return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+        default:
+            return NYql::NDqProto::DQ_STATS_MODE_NONE;
+    }
+}
+
+bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode) {
+    return statsMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+}
+
+bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode) {
+    Y_UNUSED(statsMode);
+    return false;
+}
+
 void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProto::TDqComputeActorStats&& stats) {
 //    Cerr << (TStringBuilder() << "::AddComputeActorStats " << stats.DebugString() << Endl);
 
@@ -103,7 +141,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
         }
     }
 
-    if (StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE) {
+    if (CollectFullStats(StatsMode)) {
         for (auto& task : stats.GetTasks()) {
             auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
@@ -177,7 +215,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         }
     }
 
-    if (StatsMode == NDqProto::DQ_STATS_MODE_PROFILE) {
+    if (CollectFullStats(StatsMode)) {
         for (auto& task : *stats.MutableTasks()) {
             auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
@@ -242,7 +280,7 @@ void TQueryExecutionStats::Finish() {
     ExtraStats.SetAffectedShards(AffectedShards.size());
     Result->MutableExtra()->PackFrom(ExtraStats);
 
-    if (StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+    if (CollectFullStats(StatsMode)) {
         Result->SetExecuterCpuTimeUs(ExecuterCpuTime.MicroSeconds());
 
         Result->SetStartTimeMs(StartTs.MilliSeconds());

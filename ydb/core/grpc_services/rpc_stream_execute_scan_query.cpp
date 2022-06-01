@@ -153,13 +153,13 @@ bool FillKqpRequest(const Ydb::Experimental::ExecuteStreamQueryRequest& req, NKi
     switch (req.profile_mode()) {
         case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_PROFILE_MODE_UNSPECIFIED:
         case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_NONE:
-            kqpRequest.MutableRequest()->SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_NONE);
+            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE);
             break;
         case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_BASIC:
-            kqpRequest.MutableRequest()->SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_BASIC);
+            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
             break;
         case Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_FULL:
-            kqpRequest.MutableRequest()->SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
+            kqpRequest.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
             break;
         default:
             YQL_ENSURE(false, "Unknown profile_mode "
@@ -180,6 +180,7 @@ bool FillKqpRequest(const Ydb::Table::ExecuteScanQueryRequest& req, NKikimrKqp::
         case Ydb::Table::ExecuteScanQueryRequest::MODE_EXEC:
             kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
             kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats()));
+            kqpRequest.MutableRequest()->SetCollectStats(req.collect_stats());
             break;
         case Ydb::Table::ExecuteScanQueryRequest::MODE_EXPLAIN:
             kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);

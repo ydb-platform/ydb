@@ -1144,7 +1144,8 @@ private:
         }
     }
 
-    void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx, const TMaybe<ui64> lockTxId)
+    void ExecuteDatashardTransaction(ui64 shardId, NKikimrTxDataShard::TKqpTransaction& kqpTx,
+        const TMaybe<ui64> lockTxId)
     {
         TShardState shardState;
         shardState.State = ImmediateTx ? TShardState::EState::Executing : TShardState::EState::Preparing;
@@ -1156,7 +1157,7 @@ private:
             kqpTx.MutableRuntimeSettings()->SetTimeoutMs(timeout.MilliSeconds());
         }
         kqpTx.MutableRuntimeSettings()->SetExecType(NDqProto::TComputeRuntimeSettings::DATA);
-        kqpTx.MutableRuntimeSettings()->SetStatsMode(Request.StatsMode);
+        kqpTx.MutableRuntimeSettings()->SetStatsMode(GetDqStatsModeShard(Request.StatsMode));
 
         kqpTx.MutableRuntimeSettings()->SetUseLLVM(false);
         kqpTx.MutableRuntimeSettings()->SetUseSpilling(false);
@@ -1225,7 +1226,7 @@ private:
         //settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::DataQuery;
         settings.ExtraMemoryAllocationPool = NRm::EKqpMemoryPool::Unspecified;
         settings.FailOnUndelivery = true;
-        settings.StatsMode = Request.StatsMode;
+        settings.StatsMode = GetDqStatsMode(Request.StatsMode);
         settings.UseLLVM = false;
         settings.UseSpilling = false;
 
@@ -1650,7 +1651,7 @@ private:
             Stats->ResultRows = response.GetResult().ResultsSize();
             Stats->Finish();
 
-            if (Request.StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+            if (CollectFullStats(Request.StatsMode)) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
                     auto planWithStats = AddExecStatsToTxPlan(tx->GetPlan(), response.GetResult().GetStats());

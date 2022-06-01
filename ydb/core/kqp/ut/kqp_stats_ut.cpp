@@ -300,6 +300,33 @@ Y_UNIT_TEST_QUAD(RequestUnitForSuccessExplicitPrepare, UseNewEngine, UseSessionA
     UNIT_ASSERT(result.GetConsumedRu() > 1);
 }
 
+Y_UNIT_TEST_QUAD(RequestUnitForExecute, UseNewEngine, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseNewEngine && UseSessionActor);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    auto query = Q1_(R"(
+        SELECT COUNT(*) FROM TwoShard;
+    )");
+
+    auto settings = TExecDataQuerySettings()
+        .KeepInQueryCache(true)
+        .ReportCostInfo(true);
+
+    // Cached/uncached executions
+    for (ui32 i = 0; i < 2; ++i) {
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        Cerr << "Consumed units: " << result.GetConsumedRu() << Endl;
+        UNIT_ASSERT(result.GetConsumedRu() > 1);
+
+        auto ru = result.GetResponseMetadata().find(NYdb::YDB_CONSUMED_UNITS_HEADER);
+        UNIT_ASSERT(ru != result.GetResponseMetadata().end());
+        UNIT_ASSERT(atoi(ru->second.c_str()) > 1);
+    }
+}
+
 } // suite
 
 } // namespace NKqp

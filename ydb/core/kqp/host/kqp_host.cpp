@@ -840,7 +840,7 @@ public:
                 bool useScanQuery = ShouldUseScanQuery(dataQuery, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
-                querySettings.StatsMode = GetStatsMode(settings.StatsMode);
+                querySettings.CollectStats = GetStatsMode(settings.StatsMode);
 
                 TFuture<TQueryResult> future;
                 switch (queryType) {
@@ -2247,14 +2247,14 @@ private:
 
 } // namespace
 
-NDqProto::EDqStatsMode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
+Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
     switch (statsMode) {
         case NYql::EKikimrStatsMode::Basic:
-            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
-        case NYql::EKikimrStatsMode::Profile:
-            return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+        case NYql::EKikimrStatsMode::Full:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
         default:
-            return NYql::NDqProto::DQ_STATS_MODE_NONE;
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     }
 }
 

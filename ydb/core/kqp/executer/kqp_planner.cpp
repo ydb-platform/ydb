@@ -1,3 +1,4 @@
+#include "kqp_executer_stats.h"
 #include "kqp_planner.h"
 #include "kqp_planner_strategy.h"
 #include "kqp_shards_resolver.h"
@@ -23,8 +24,9 @@ constexpr ui32 MEMORY_ESTIMATION_OVERFLOW = 2;
 
 TKqpPlanner::TKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
-    const TString& database, const TMaybe<TString>& userToken, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
-    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
+    const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
+    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
     : TxId(txId)
     , ExecuterId(executer)
     , Tasks(std::move(tasks))
@@ -262,7 +264,7 @@ THolder<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::PrepareKqpNodeRequest(
     }
 
     ev->Record.MutableRuntimeSettings()->SetExecType(NDqProto::TComputeRuntimeSettings::SCAN);
-    ev->Record.MutableRuntimeSettings()->SetStatsMode(StatsMode);
+    ev->Record.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
     ev->Record.MutableRuntimeSettings()->SetUseLLVM(withLLVM);
     ev->Record.MutableRuntimeSettings()->SetUseSpilling(WithSpilling);
 
@@ -318,8 +320,9 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
-    const TString& database, const TMaybe<TString>& token, TInstant deadline, const NYql::NDqProto::EDqStatsMode& statsMode,
-    bool disableLlvmForUdfStages, bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
+    const TString& database, const TMaybe<TString>& token, TInstant deadline,
+    const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
+    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath)
 {
     return new TKqpPlanner(txId, executer, std::move(tasks), std::move(scanTasks), snapshot,
         database, token, deadline, statsMode, disableLlvmForUdfStages, enableLlvm, withSpilling, rlPath);

@@ -1677,7 +1677,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
@@ -1711,7 +1711,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
@@ -1751,7 +1751,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
@@ -1811,7 +1811,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());

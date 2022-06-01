@@ -91,6 +91,7 @@ namespace {
         kqpRequest.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         kqpRequest.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING);
         kqpRequest.MutableRequest()->SetStatsMode(GetKqpStatsMode(req.collect_stats()));
+        kqpRequest.MutableRequest()->SetCollectStats(req.collect_stats());
         kqpRequest.MutableRequest()->SetKeepSession(false);
         kqpRequest.MutableRequest()->SetQuery(script);
 

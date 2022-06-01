@@ -97,14 +97,16 @@ struct TKqpCleanupCtx {
     TInstant Start = TInstant::Now();
 };
 
-EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest, EKikimrStatsMode minMode) {
-    switch (queryRequest.GetStatsMode()) {
-        case NYql::NDqProto::DQ_STATS_MODE_BASIC:
+EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) {
+    switch (queryRequest.GetCollectStats()) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+            return EKikimrStatsMode::None;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
             return EKikimrStatsMode::Basic;
-        case NYql::NDqProto::DQ_STATS_MODE_PROFILE:
-            return EKikimrStatsMode::Profile;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            return EKikimrStatsMode::Full;
         default:
-            return std::max(EKikimrStatsMode::None, minMode);
+            return EKikimrStatsMode::None;
     }
 }
 
@@ -709,7 +711,7 @@ public:
                 request.CancelAfter = cancelAt - now;
             }
 
-            EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request, EKikimrStatsMode::Basic);
+            EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
             request.StatsMode = GetStatsMode(statsMode);
 
             request.Snapshot = queryState->TxCtx->GetSnapshot();
@@ -735,7 +737,7 @@ public:
             request.Timeout = TDuration::MilliSeconds(1);
         }
         request.MaxComputeActors = Config->_KqpMaxComputeActors.Get().GetRef();
-        EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request, EKikimrStatsMode::Basic);
+        EKikimrStatsMode statsMode = GetStatsModeInt(queryState->Request);
         request.StatsMode = GetStatsMode(statsMode);
         request.DisableLlvmForUdfStages = Config->DisableLlvmForUdfStages();
         request.LlvmEnabled = Config->GetEnableLlvm() != EOptionalFlag::Disabled;
@@ -1254,7 +1256,7 @@ public:
             );
         }
 
-        bool reportStats = (GetStatsModeInt(queryRequest, EKikimrStatsMode::None) != EKikimrStatsMode::None);
+        bool reportStats = (GetStatsModeInt(queryRequest) != EKikimrStatsMode::None);
         if (reportStats) {
             FillQueryProfile(*stats, *response);
             response->SetQueryPlan(SerializeAnalyzePlan(*stats));

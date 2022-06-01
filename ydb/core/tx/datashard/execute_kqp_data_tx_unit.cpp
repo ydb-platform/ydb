@@ -187,10 +187,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());
         auto statsMode = kqpTx.GetRuntimeSettings().GetStatsMode();
-        if (statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {
-            KqpFillTxStats(DataShard, dataTx->GetCounters(), *op->Result());
-            KqpFillStats(DataShard, tasksRunner, computeCtx, statsMode, *op->Result());
-        }
+        KqpFillStats(DataShard, tasksRunner, computeCtx, statsMode, *op->Result());
     } catch (const TMemoryLimitExceededException&) {
         txc.NotEnoughMemory();
 

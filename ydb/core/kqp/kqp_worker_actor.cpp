@@ -76,7 +76,6 @@ struct TKqpQueryState {
     TMaybe<NKikimrKqp::TRlPath> RlPath;
 };
 
-
 struct TKqpCleanupState {
     bool Final = false;
     TInstant Start;
@@ -84,16 +83,24 @@ struct TKqpCleanupState {
 };
 
 EKikimrStatsMode GetStatsMode(const NKikimrKqp::TQueryRequest& queryRequest, EKikimrStatsMode minMode) {
-    if (queryRequest.GetProfile()) {
-        // TODO: Deprecate, StatsMode is the new way to enable stats.
-        return EKikimrStatsMode::Profile;
+    if (queryRequest.HasCollectStats()) {
+        switch (queryRequest.GetCollectStats()) {
+            case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
+                return EKikimrStatsMode::None;
+            case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
+                return EKikimrStatsMode::Basic;
+            case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+                return EKikimrStatsMode::Full;
+            default:
+                return EKikimrStatsMode::None;
+        }
     }
 
     switch (queryRequest.GetStatsMode()) {
         case NYql::NDqProto::DQ_STATS_MODE_BASIC:
             return EKikimrStatsMode::Basic;
         case NYql::NDqProto::DQ_STATS_MODE_PROFILE:
-            return EKikimrStatsMode::Profile;
+            return EKikimrStatsMode::Full;
         default:
             return std::max(EKikimrStatsMode::None, minMode);
     }
@@ -1657,11 +1664,7 @@ private:
         }
 
         bool reportStats = (GetStatsMode(queryRequest, EKikimrStatsMode::None) != EKikimrStatsMode::None);
-
         if (reportStats) {
-            // TODO: For compatibility with old rpc handlers, deprecate.
-            FillQueryProfile(stats, *record.MutableResponse());
-
             record.MutableResponse()->MutableQueryStats()->Swap(&stats);
             record.MutableResponse()->SetQueryPlan(queryResult.QueryPlan);
         }

@@ -29,8 +29,8 @@ MAX_PARTS = 10000
 # The maximum file size you can upload via S3 per request.
 # See: http://docs.aws.amazon.com/AmazonS3/latest/dev/UploadingObjects.html
 # and: http://docs.aws.amazon.com/AmazonS3/latest/dev/qfacts.html
-MAX_SINGLE_UPLOAD_SIZE = 5 * (1024 ** 3)
-MIN_UPLOAD_CHUNKSIZE = 5 * (1024 ** 2)
+MAX_SINGLE_UPLOAD_SIZE = 5 * (1024**3)
+MIN_UPLOAD_CHUNKSIZE = 5 * (1024**2)
 logger = logging.getLogger(__name__)
 
 

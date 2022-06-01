@@ -1146,8 +1146,8 @@ class TestAdjustChunksize(unittest.TestCase):
         self.adjuster = ChunksizeAdjuster()
 
     def test_valid_chunksize(self):
-        chunksize = 7 * (1024 ** 2)
-        file_size = 8 * (1024 ** 2)
+        chunksize = 7 * (1024**2)
+        file_size = 8 * (1024**2)
         new_size = self.adjuster.adjust_chunksize(chunksize, file_size)
         self.assertEqual(new_size, chunksize)
 
@@ -1164,17 +1164,17 @@ class TestAdjustChunksize(unittest.TestCase):
         self.assertEqual(new_size, MAX_SINGLE_UPLOAD_SIZE)
 
     def test_chunksize_too_small(self):
-        chunksize = 7 * (1024 ** 2)
-        file_size = 5 * (1024 ** 4)
+        chunksize = 7 * (1024**2)
+        file_size = 5 * (1024**4)
         # If we try to upload a 5TB file, we'll need to use 896MB part
         # sizes.
         new_size = self.adjuster.adjust_chunksize(chunksize, file_size)
-        self.assertEqual(new_size, 896 * (1024 ** 2))
+        self.assertEqual(new_size, 896 * (1024**2))
         num_parts = file_size / new_size
         self.assertLessEqual(num_parts, MAX_PARTS)
 
     def test_unknown_file_size_with_valid_chunksize(self):
-        chunksize = 7 * (1024 ** 2)
+        chunksize = 7 * (1024**2)
         new_size = self.adjuster.adjust_chunksize(chunksize)
         self.assertEqual(new_size, chunksize)
 

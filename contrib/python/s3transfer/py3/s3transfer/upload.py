@@ -790,7 +790,7 @@ class UploadPartTask(Task):
                 UploadId=upload_id,
                 PartNumber=part_number,
                 Body=body,
-                **extra_args
+                **extra_args,
             )
         etag = response['ETag']
         part_metadata = {'ETag': etag, 'PartNumber': part_number}

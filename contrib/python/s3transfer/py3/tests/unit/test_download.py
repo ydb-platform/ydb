@@ -576,7 +576,7 @@ class TestGetObjectTask(BaseTaskTest):
         self.stream = BytesIO(self.content)
         self.fileobj = WriteCollector()
         self.osutil = OSUtils()
-        self.io_chunksize = 64 * (1024 ** 2)
+        self.io_chunksize = 64 * (1024**2)
         self.task_cls = GetObjectTask
         self.download_output_manager = DownloadSeekableOutputManager(
             self.osutil, self.transfer_coordinator, self.io_executor

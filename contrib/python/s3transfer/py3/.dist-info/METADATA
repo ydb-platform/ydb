@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: s3transfer
-Version: 0.5.2
+Version: 0.6.0
 Summary: An Amazon S3 Transfer Manager
 Home-page: https://github.com/boto/s3transfer
 Author: Amazon Web Services
@@ -13,12 +13,11 @@ Classifier: Natural Language :: English
 Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Programming Language :: Python
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
-Requires-Python: >= 3.6
+Requires-Python: >= 3.7
 License-File: LICENSE.txt
 License-File: NOTICE.txt
 Requires-Dist: botocore (<2.0a.0,>=1.12.36)

@@ -2289,6 +2289,8 @@ struct TBlobDepotInfo : TSimpleRefCount<TBlobDepotInfo> {
 
     ui64 AlterVersion = 0;
     TPtr AlterData = nullptr;
+    TShardIdx BlobDepotShardIdx = InvalidShardIdx;
+    TTabletId BlobDepotTabletId = InvalidTabletId;
     NKikimrSchemeOp::TBlobDepotDescription Description;
 };
 

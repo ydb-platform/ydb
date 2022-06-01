@@ -22,6 +22,7 @@ target_link_libraries(core-mind-bscontroller PUBLIC
   core-sys_view-common
   ydb-core-tablet
   ydb-core-tablet_flat
+  core-tx-tx_proxy
 )
 target_sources(core-mind-bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/bsc.cpp
@@ -56,4 +57,5 @@ target_sources(core-mind-bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/update_group_latencies.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/update_last_seen_ready.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/update_seen_operational.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/virtual_group.cpp
 )

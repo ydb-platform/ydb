@@ -63,7 +63,9 @@ namespace NKikimr::NSchemeShard {
 
                     for (auto& shard : txState->Shards) {
                         auto shardIdx = shard.Idx;
+                        blobDepotInfo->BlobDepotShardIdx = shard.Idx;
                         auto tabletId = context.SS->ShardInfos[shardIdx].TabletID;
+                        blobDepotInfo->BlobDepotTabletId = tabletId;
                         Y_VERIFY(shard.TabletType == ETabletType::BlobDepot);
                         auto event = std::make_unique<TEvBlobDepot::TEvApplyConfig>(static_cast<ui64>(OperationId.GetTxId()));
                         context.OnComplete.BindMsgToPipe(OperationId, tabletId, shardIdx, event.release());
@@ -344,6 +346,7 @@ namespace NKikimr::NSchemeShard {
                     TShardInfo::BlobDepotInfo(OperationId.GetTxId(), pathId).WithBindedChannels(channelBindings));
                 context.SS->TabletCounters->Simple()[COUNTER_BLOB_DEPOT_SHARD_COUNT].Add(1);
                 txState.Shards.emplace_back(shardIdx, ETabletType::BlobDepot, TTxState::CreateParts);
+                blobDepot->BlobDepotShardIdx = shardIdx;
 
                 if (parentPath->HasActiveChanges()) {
                     TTxId parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;

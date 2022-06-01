@@ -68,6 +68,7 @@ public:
                 return false;
             if (state.IsValid()) {
                 Self->NextGroupID = state.GetValue<T::NextGroupID>();
+                Self->NextVirtualGroupId = state.GetValueOrDefault<T::NextVirtualGroupId>();
                 Self->NextStoragePoolId = state.GetValue<T::NextStoragePoolId>();
                 Self->NextOperationLogIndex = state.GetValueOrDefault<T::NextOperationLogIndex>(1);
                 Self->DefaultMaxSlots = state.GetValue<T::DefaultMaxSlots>();
@@ -165,7 +166,8 @@ public:
         Self->OwnerIdIdxToGroup.clear();
         Self->IndexGroupSpeciesToGroup.clear();
         {
-            auto groups = db.Table<Schema::Group>().Range().Select();
+            using T = Schema::Group;
+            auto groups = db.Table<T>().Range().Select();
             if (!groups.IsReady())
                 return false;
             while (!groups.EndOfSet()) {
@@ -178,24 +180,44 @@ public:
                 Y_VERIFY(geomIt != geometry.end());
 
                 TGroupInfo& group = Self->AddGroup(groups.GetKey(),
-                                                   groups.GetValue<Schema::Group::Generation>(),
-                                                   groups.GetValue<Schema::Group::Owner>(),
-                                                   groups.GetValue<Schema::Group::ErasureSpecies>(),
-                                                   groups.GetValue<Schema::Group::DesiredPDiskCategory>(),
-                                                   groups.GetValueOrDefault<Schema::Group::DesiredVDiskCategory>(NKikimrBlobStorage::TVDiskKind::Default),
-                                                   groups.GetValueOrDefault<Schema::Group::EncryptionMode>(),
-                                                   groups.GetValueOrDefault<Schema::Group::LifeCyclePhase>(),
-                                                   groups.GetValueOrDefault<Schema::Group::MainKeyId>(nullptr),
-                                                   groups.GetValueOrDefault<Schema::Group::EncryptedGroupKey>(nullptr),
-                                                   groups.GetValueOrDefault<Schema::Group::GroupKeyNonce>(),
-                                                   groups.GetValueOrDefault<Schema::Group::MainKeyVersion>(),
-                                                   groups.GetValueOrDefault<Schema::Group::Down>(),
-                                                   groups.GetValueOrDefault<Schema::Group::SeenOperational>(),
+                                                   groups.GetValue<T::Generation>(),
+                                                   groups.GetValue<T::Owner>(),
+                                                   groups.GetValue<T::ErasureSpecies>(),
+                                                   groups.GetValue<T::DesiredPDiskCategory>(),
+                                                   groups.GetValueOrDefault<T::DesiredVDiskCategory>(NKikimrBlobStorage::TVDiskKind::Default),
+                                                   groups.GetValueOrDefault<T::EncryptionMode>(),
+                                                   groups.GetValueOrDefault<T::LifeCyclePhase>(),
+                                                   groups.GetValueOrDefault<T::MainKeyId>(nullptr),
+                                                   groups.GetValueOrDefault<T::EncryptedGroupKey>(nullptr),
+                                                   groups.GetValueOrDefault<T::GroupKeyNonce>(),
+                                                   groups.GetValueOrDefault<T::MainKeyVersion>(),
+                                                   groups.GetValueOrDefault<T::Down>(),
+                                                   groups.GetValueOrDefault<T::SeenOperational>(),
                                                    storagePoolId,
                                                    std::get<0>(geomIt->second),
                                                    std::get<1>(geomIt->second),
                                                    std::get<2>(geomIt->second));
-                Self->OwnerIdIdxToGroup.emplace(groups.GetValue<Schema::Group::Owner>(), groups.GetKey());
+
+                group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
+#define OPTIONAL(NAME) \
+                if (groups.HaveValue<T::NAME>()) { \
+                    group.NAME = groups.GetValue<T::NAME>(); \
+                }
+
+                OPTIONAL(VirtualGroupPool)
+                OPTIONAL(VirtualGroupState)
+                OPTIONAL(ParentDir)
+                OPTIONAL(Name)
+                OPTIONAL(SchemeshardId)
+                OPTIONAL(BlobDepotConfig)
+                OPTIONAL(TxId)
+                OPTIONAL(PathId)
+                OPTIONAL(BlobDepotId)
+                OPTIONAL(ErrorReason)
+
+#undef OPTIONAL
+
+                Self->OwnerIdIdxToGroup.emplace(groups.GetValue<T::Owner>(), groups.GetKey());
                 Self->IndexGroupSpeciesToGroup[group.GetGroupSpecies()].push_back(group.ID);
                 if (!groups.Next())
                     return false;
@@ -207,7 +229,8 @@ public:
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
-                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)) {
+                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)
+                || !NTableAdapter::FetchTable<Schema::VirtualGroupPool>(db, Self, Self->VirtualGroupPools)) {
             return false;
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {

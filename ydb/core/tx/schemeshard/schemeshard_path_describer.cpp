@@ -1122,6 +1122,7 @@ void TSchemeShard::DescribeBlobDepot(const TPathId& pathId, const TString& name,
     desc.SetName(name);
     PathIdFromPathId(pathId, desc.MutablePathId());
     desc.SetVersion(it->second->AlterVersion);
+    desc.SetTabletId(static_cast<ui64>(it->second->BlobDepotTabletId));
 }
 
 void TSchemeShard::FillTableBoundaries(const TTableInfo::TPtr tableInfo, google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TSplitBoundary>& boundaries) {

@@ -186,6 +186,7 @@ message TGroupInfo {
     optional NActorsInterconnect.TScopeId AcceptedScope = 12; // some kind of ACL for scopes; empty = no restrictions
     optional string StoragePoolName = 13;
     optional EPDiskType DeviceType = 14;
+    optional uint64 BlobDepotId = 15; // if filled, then this is virtual group
 }
 
 message TEvVPatchStart {

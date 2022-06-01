@@ -190,6 +190,10 @@ namespace NKikimr::NBsController {
             ////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
             void ApplyGroupCreated(const TGroupId& /*groupId*/, const TGroupInfo &groupInfo) {
+                if (groupInfo.VirtualGroupState && *groupInfo.VirtualGroupState != NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                    return; // do not report virtual groups that are not properly created yet
+                }
+
                 // create ordered map of VDisk entries for group
                 THashSet<TNodeId> nodes;
                 for (const TVSlotInfo *vslot : groupInfo.VDisksInGroup) {
@@ -326,6 +330,7 @@ namespace NKikimr::NBsController {
             MakeTableMerger<Schema::Box>(&Boxes, &state.Boxes.Get(), this)(txc);
             MakeTableMerger<Schema::BoxStoragePool>(&StoragePools, &state.StoragePools.Get(), this)(txc);
             MakeTableMerger<Schema::Node>(&Nodes, &state.Nodes.Get(), this)(txc);
+            MakeTableMerger<Schema::VirtualGroupPool>(&VirtualGroupPools, &state.VirtualGroupPools.Get(), this)(txc);
 
             // apply overlay maps to their respective tables
             state.PDisks.ApplyToTable(this, txc);
@@ -384,6 +389,7 @@ namespace NKikimr::NBsController {
             CommitScrubUpdates(state, txc);
             CommitStoragePoolStatUpdates(state);
             CommitSysViewUpdates(state);
+            CommitVirtualGroupUpdates(state);
 
             // remove deleted vslots from VSlotReadyTimestampQ
             for (auto&& [base, overlay] : state.VSlots.Diff()) {
@@ -537,6 +543,9 @@ namespace NKikimr::NBsController {
         void TBlobStorageController::TConfigState::ApplyConfigUpdates() {
             for (auto& msg : Outbox) {
                 TActivationContext::Send(msg.release());
+            }
+            for (auto& fn : Callbacks) {
+                fn();
             }
         }
 

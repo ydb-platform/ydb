@@ -3,6 +3,7 @@ syntax = "proto3";
 import "ydb/core/protos/blobstorage_disk.proto";
 import "ydb/core/protos/blobstorage_disk_color.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
+import "ydb/core/protos/blob_depot_config.proto";
 import "library/cpp/actors/protos/interconnect.proto";
 
 package NKikimrBlobStorage;
@@ -13,6 +14,21 @@ enum EPDiskType {
     SSD = 1; // solid state drives (SSD)
     NVME = 2; // PCIe-connected solid state drives (NVMe SSD)
     UNKNOWN_TYPE = 3; // used if device type is unknown or if group consists of different PDisk device types
+}
+
+// Virtual group life cycle state
+enum EVirtualGroupState {
+    CREATED = 0; // just created
+    WAIT_SCHEMESHARD_CREATE = 1; // waiting for path to be created
+    CREATE_FAILED = 2; // error while creating VirtualGroup
+    WORKING = 3; // operational
+    WAIT_SCHEMESHARD_DELETE = 4; // waiting for path to be deleted
+}
+
+enum EGroupDecommitStatus {
+    NONE = 0; // no decomission
+    STARTING = 1; // decomission was asked
+    NO_WRITES_QUORUM_OBTAINED = 2;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -438,6 +454,23 @@ message TUpdateSettings {
     repeated bool EnableGroupLayoutSanitizer = 10;
 }
 
+message TBoxStoragePoolId {
+    uint64 BoxId = 1;
+    uint64 StoragePoolId = 2;
+}
+
+message TAllocateVirtualGroup {
+    string VirtualGroupPool = 1;
+    uint64 ItemConfigGeneration = 2;
+    oneof StoragePool {
+        string StoragePoolName = 3;
+        TBoxStoragePoolId StoragePoolId = 4;
+    }
+    string ParentDir = 5;
+    repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 6;
+    repeated uint32 DecommitGroups = 7;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -474,6 +507,7 @@ message TConfigRequest {
             TMigrateToSerial MigrateToSerial = 35;
             TSetPDiskSpaceMarginPromille SetPDiskSpaceMarginPromille = 37;
             TUpdateSettings UpdateSettings = 38;
+            TAllocateVirtualGroup AllocateVirtualGroup = 39;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

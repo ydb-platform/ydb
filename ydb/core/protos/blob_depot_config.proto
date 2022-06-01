@@ -13,5 +13,5 @@ enum EOperationMode {
 message TBlobDepotConfig {
     optional EOperationMode OperationMode = 1; // can't be changed after tablet is created
     repeated TChannelProfile ChannelProfiles = 2;
-    repeated uint32 DecomittingGroups = 3;
+    repeated uint32 DecommittingGroups = 3;
 }

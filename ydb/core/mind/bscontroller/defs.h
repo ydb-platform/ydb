@@ -29,6 +29,8 @@
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
 #include <ydb/core/tablet/tablet_metrics.h>
 #include <ydb/core/tablet/tablet_responsiveness_pinger.h>
+#include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/util/pb.h>
 #include <ydb/core/util/format.h>
 #include <ydb/core/util/stlog.h>

@@ -494,12 +494,27 @@ public:
         bool PersistedDown = false; // the value stored in the database
         bool SeenOperational = false;
 
+        Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::EGroupDecommitStatus::NONE;
+        TMaybe<Table::VirtualGroupPool::Type> VirtualGroupPool;
+        TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
+        TMaybe<Table::ParentDir::Type> ParentDir;
+        TMaybe<Table::Name::Type> Name;
+        TMaybe<Table::SchemeshardId::Type> SchemeshardId;
+        TMaybe<Table::BlobDepotConfig::Type> BlobDepotConfig;
+        TMaybe<Table::TxId::Type> TxId;
+        TMaybe<Table::PathId::Type> PathId;
+        TMaybe<Table::BlobDepotId::Type> BlobDepotId;
+        TMaybe<Table::ErrorReason::Type> ErrorReason;
+        bool CommitInProgress = false;
+
         bool Down = false; // is group are down right now (not selectable)
         TVector<TIndirectReferable<TVSlotInfo>::TPtr> VDisksInGroup;
         TGroupLatencyStats LatencyStats;
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
         bool ContentChanged = false;
+
+        TActorId VirtualGroupSetupMachineId;
 
         // group's geometry; it doesn't ever change since the group is created
         const ui32 NumFailRealms = 0;
@@ -541,7 +556,18 @@ public:
                     Table::EncryptedGroupKey,
                     Table::GroupKeyNonce,
                     Table::MainKeyVersion,
-                    Table::SeenOperational
+                    Table::SeenOperational,
+                    Table::DecommitStatus,
+                    Table::VirtualGroupPool,
+                    Table::VirtualGroupState,
+                    Table::ParentDir,
+                    Table::Name,
+                    Table::SchemeshardId,
+                    Table::BlobDepotConfig,
+                    Table::TxId,
+                    Table::PathId,
+                    Table::BlobDepotId,
+                    Table::ErrorReason
                 > adapter(
                     &TGroupInfo::Generation,
                     &TGroupInfo::Owner,
@@ -554,7 +580,18 @@ public:
                     &TGroupInfo::EncryptedGroupKey,
                     &TGroupInfo::GroupKeyNonce,
                     &TGroupInfo::MainKeyVersion,
-                    &TGroupInfo::SeenOperational
+                    &TGroupInfo::SeenOperational,
+                    &TGroupInfo::DecommitStatus,
+                    &TGroupInfo::VirtualGroupPool,
+                    &TGroupInfo::VirtualGroupState,
+                    &TGroupInfo::ParentDir,
+                    &TGroupInfo::Name,
+                    &TGroupInfo::SchemeshardId,
+                    &TGroupInfo::BlobDepotConfig,
+                    &TGroupInfo::TxId,
+                    &TGroupInfo::PathId,
+                    &TGroupInfo::BlobDepotId,
+                    &TGroupInfo::ErrorReason
                 );
             callback(&adapter);
         }
@@ -1259,6 +1296,28 @@ public:
         void OnClone(const THolder<TDriveSerialInfo>&) {}
     };
 
+    struct TVirtualGroupPool {
+        using Table = Schema::VirtualGroupPool;
+
+        TMaybe<Table::Generation::Type> Generation;
+
+        TVirtualGroupPool() = default;
+        TVirtualGroupPool(const TVirtualGroupPool&) = default;
+
+        template<typename T>
+        static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
+            static TTableAdapter<Table, TVirtualGroupPool,
+                    Table::Generation
+                > adapter(
+                    &TVirtualGroupPool::Generation
+                );
+            callback(&adapter);
+        }
+
+        void OnCommit() {}
+        void OnClone(const THolder<TVirtualGroupPool>&) {}
+    };
+
     struct THostRecord {
         TNodeId NodeId;
         TNodeLocation Location;
@@ -1330,11 +1389,13 @@ private:
     TVSlots VSlots; // ordering is important
     TPDisks PDisks; // ordering is important
     TMap<TSerial, THolder<TDriveSerialInfo>> DrivesSerials;
+    TMap<Schema::VirtualGroupPool::TKey::Type, TVirtualGroupPool> VirtualGroupPools;
     TGroups GroupMap;
     THashMap<TGroupId, TGroupInfo*> GroupLookup;
     TMap<TGroupSpecies, TVector<TGroupId>> IndexGroupSpeciesToGroup;
     TMap<TNodeId, TNodeInfo> Nodes;
     Schema::Group::ID::Type NextGroupID = 0;
+    Schema::Group::ID::Type NextVirtualGroupId = 0;
     Schema::State::NextStoragePoolId::Type NextStoragePoolId = 0;
     ui32 DefaultMaxSlots = 0;
     ui32 PDiskSpaceMarginPromille = 0;
@@ -1546,6 +1607,11 @@ private:
         }
         for (TActorId *ptr : {&SelfHealId, &StatProcessorActorId, &SystemViewsCollectorId}) {
             if (const TActorId actorId = std::exchange(*ptr, {})) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+            }
+        }
+        for (const auto& [id, info] : GroupMap) {
+            if (const auto& actorId = info->VirtualGroupSetupMachineId) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
             }
         }
@@ -1877,6 +1943,12 @@ public:
         UpdateSystemViews();
         UpdateSelfHealCounters();
         SignalTabletActive(TActivationContext::AsActorContext());
+
+        for (const auto& [id, info] : GroupMap) {
+            if (info->VirtualGroupState) {
+                StartVirtualGroupSetupMachine(info.Get());
+            }
+        }
     }
 
     void UpdatePDisksCounters() {
@@ -1913,6 +1985,15 @@ public:
         counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_REMOVED].Set(numRemoved);
         counters[NBlobStorageController::COUNTER_DRIVE_SERIAL_ERROR].Set(numError);
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    // VIRTUAL GROUP MANAGEMENT
+
+    class TVirtualGroupSetupMachine;
+
+    void CommitVirtualGroupUpdates(TConfigState& state);
+
+    void StartVirtualGroupSetupMachine(TGroupInfo *group);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // VSLOT READINESS EVALUATION

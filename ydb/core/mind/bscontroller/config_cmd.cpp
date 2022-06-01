@@ -299,33 +299,45 @@ namespace NKikimr::NBsController {
                         state.ExecuteStep(cmd.Get ## NAME(), status); \
                         fitPDisks = FP; \
                         fitGroups = FG; \
-                        break;
+                        return;
 
-                    HANDLE_COMMAND(DefineHostConfig,    true,  false)
-                    HANDLE_COMMAND(ReadHostConfig,      false, false)
-                    HANDLE_COMMAND(DeleteHostConfig,    false, false)
-                    HANDLE_COMMAND(DefineBox,           true,  false)
-                    HANDLE_COMMAND(ReadBox,             false, false)
-                    HANDLE_COMMAND(DeleteBox,           true,  false)
-                    HANDLE_COMMAND(DefineStoragePool,   false, true )
-                    HANDLE_COMMAND(ReadStoragePool,     false, false)
-                    HANDLE_COMMAND(DeleteStoragePool,   false, false)
-                    HANDLE_COMMAND(UpdateDriveStatus,   false, true )
-                    HANDLE_COMMAND(ReadDriveStatus,     false, false)
-                    HANDLE_COMMAND(ProposeStoragePools, false, false)
-                    HANDLE_COMMAND(QueryBaseConfig,     false, false)
-                    HANDLE_COMMAND(ReassignGroupDisk,   false, true )
-                    HANDLE_COMMAND(MergeBoxes,          false, false)
-                    HANDLE_COMMAND(MoveGroups,          false, false)
-                    HANDLE_COMMAND(DropDonorDisk,       false, false)
-                    HANDLE_COMMAND(AddDriveSerial,      true,  false)
-                    HANDLE_COMMAND(RemoveDriveSerial,   true,  false)
-                    HANDLE_COMMAND(ForgetDriveSerial,   false, false)
-                    HANDLE_COMMAND(MigrateToSerial,     false, false)
+                    HANDLE_COMMAND(DefineHostConfig,     true,  false)
+                    HANDLE_COMMAND(ReadHostConfig,       false, false)
+                    HANDLE_COMMAND(DeleteHostConfig,     false, false)
+                    HANDLE_COMMAND(DefineBox,            true,  false)
+                    HANDLE_COMMAND(ReadBox,              false, false)
+                    HANDLE_COMMAND(DeleteBox,            true,  false)
+                    HANDLE_COMMAND(DefineStoragePool,    false, true )
+                    HANDLE_COMMAND(ReadStoragePool,      false, false)
+                    HANDLE_COMMAND(DeleteStoragePool,    false, false)
+                    HANDLE_COMMAND(UpdateDriveStatus,    false, true )
+                    HANDLE_COMMAND(ReadDriveStatus,      false, false)
+                    HANDLE_COMMAND(ProposeStoragePools,  false, false)
+                    HANDLE_COMMAND(QueryBaseConfig,      false, false)
+                    HANDLE_COMMAND(ReassignGroupDisk,    false, true )
+                    HANDLE_COMMAND(MergeBoxes,           false, false)
+                    HANDLE_COMMAND(MoveGroups,           false, false)
+                    HANDLE_COMMAND(DropDonorDisk,        false, false)
+                    HANDLE_COMMAND(AddDriveSerial,       true,  false)
+                    HANDLE_COMMAND(RemoveDriveSerial,    true,  false)
+                    HANDLE_COMMAND(ForgetDriveSerial,    false, false)
+                    HANDLE_COMMAND(MigrateToSerial,      false, false)
+                    HANDLE_COMMAND(AllocateVirtualGroup, false, false)
 
-                    default:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kDeclareIntent:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kReadIntent:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableSelfHeal:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kEnableDonorMode:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetScrubPeriodicity:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskSpaceMarginPromille:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kUpdateSettings:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::COMMAND_NOT_SET:
                         throw TExError() << "unsupported command";
                 }
+
+                Y_FAIL();
             }
 
             void Complete(const TActorContext&) override {

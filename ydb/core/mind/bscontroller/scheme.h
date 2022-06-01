@@ -61,11 +61,25 @@ struct Schema : NIceDb::Schema {
         struct MainKeyVersion : Column<12, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct Down : Column<13, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EGroupDecommitStatus; };
+
+        // VirtualGroup management code
+        struct VirtualGroupPool  : Column<101, NScheme::NTypeIds::Utf8>   {}; // VG pool identifier
+        struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
+        struct ParentDir         : Column<103, NScheme::NTypeIds::Utf8>   {}; // scheme directory containing blob depot being created
+        struct Name              : Column<104, NScheme::NTypeIds::Utf8>   {}; // name of the blob depot
+        struct SchemeshardId     : Column<105, NScheme::NTypeIds::Uint64> {}; // enclosing Schemeshard tablet id
+        struct BlobDepotConfig   : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
+        struct TxId              : Column<107, NScheme::NTypeIds::Uint64> {}; // TxId for pending scheme operation
+        struct PathId            : Column<108, NScheme::NTypeIds::Uint64> {}; // path id for created path
+        struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
+        struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational>;
+              SeenOperational, DecommitStatus, VirtualGroupPool, VirtualGroupState, ParentDir, Name, SchemeshardId,
+              BlobDepotConfig, TxId, PathId, BlobDepotId, ErrorReason>;
     };
 
     struct State : Table<1> {
@@ -87,12 +101,13 @@ struct Schema : NIceDb::Schema {
         struct MaxScrubbedDisksAtOnce : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = Max<ui32>(); }; // no limit
         struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
         struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
+        struct NextVirtualGroupId : Column<19, Group::ID::ColumnType> { static constexpr Type Default = 0; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
               PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
-              GroupLayoutSanitizer>;
+              GroupLayoutSanitizer, NextVirtualGroupId>;
     };
 
     struct VSlot : Table<5> {
@@ -374,6 +389,14 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig>;
     };
 
+    struct VirtualGroupPool : Table<130> {
+        struct Id : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Generation : Column<2, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<Id>;
+        using TColumns = TableColumns<Id, Generation>;
+    };
+
     using TTables = SchemaTables<
                                 Node,
                                 PDisk,
@@ -396,7 +419,8 @@ struct Schema : NIceDb::Schema {
                                 MigrationPlan,
                                 MigrationEntry,
                                 ScrubState,
-                                DriveSerial
+                                DriveSerial,
+                                VirtualGroupPool
                                 >;
 
     using TSettings = SchemaSettings<

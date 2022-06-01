@@ -54,11 +54,13 @@ namespace NKikimr {
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
             TOverlayMap<TSerial, TDriveSerialInfo> DrivesSerials;
+            TCowHolder<TMap<Schema::VirtualGroupPool::TKey::Type, TVirtualGroupPool>> VirtualGroupPools;
             TCowHolder<TMap<TNodeId, TNodeInfo>> Nodes;
             TOverlayMap<TVSlotId, TVSlotInfo> VSlots;
             TOverlayMap<TGroupId, TGroupInfo> Groups;
             TCowHolder<TMap<TGroupSpecies, TVector<TGroupId>>> IndexGroupSpeciesToGroup;
             TCowHolder<Schema::Group::ID::Type> NextGroupId;
+            TCowHolder<Schema::Group::ID::Type> NextVirtualGroupId;
             TCowHolder<Schema::State::NextStoragePoolId::Type> NextStoragePoolId;
 
             // helper classes
@@ -82,6 +84,9 @@ namespace NKikimr {
 
             // outgoing messages
             std::deque<std::unique_ptr<IEventHandle>> Outbox;
+
+            // deferred callbacks
+            std::deque<std::function<void()>> Callbacks;
 
             // when the config cmd received
             const TInstant Timestamp;
@@ -110,11 +115,13 @@ namespace NKikimr {
                 , StoragePoolGroups(&controller.StoragePoolGroups)
                 , PDisks(controller.PDisks)
                 , DrivesSerials(controller.DrivesSerials)
+                , VirtualGroupPools(&controller.VirtualGroupPools)
                 , Nodes(&controller.Nodes)
                 , VSlots(controller.VSlots)
                 , Groups(controller.GroupMap)
                 , IndexGroupSpeciesToGroup(&controller.IndexGroupSpeciesToGroup)
                 , NextGroupId(&controller.NextGroupID)
+                , NextVirtualGroupId(&controller.NextVirtualGroupId)
                 , NextStoragePoolId(&controller.NextStoragePoolId)
                 , HostRecords(hostRecords)
                 , Timestamp(timestamp)
@@ -137,11 +144,13 @@ namespace NKikimr {
                 StoragePoolGroups.Commit();
                 PDisks.Commit();
                 DrivesSerials.Commit();
+                VirtualGroupPools.Commit();
                 Nodes.Commit();
                 VSlots.Commit();
                 Groups.Commit();
                 IndexGroupSpeciesToGroup.Commit();
                 NextGroupId.Commit();
+                NextVirtualGroupId.Commit();
                 NextStoragePoolId.Commit();
                 SerialManagementStage.Commit();
             }
@@ -156,7 +165,8 @@ namespace NKikimr {
                 return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
                     StoragePoolGroups.Changed() || PDisks.Changed() || DrivesSerials.Changed() || Nodes.Changed() ||
                     VSlots.Changed() || Groups.Changed() || IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() ||
-                    NextStoragePoolId.Changed() || SerialManagementStage.Changed();
+                    NextStoragePoolId.Changed() || SerialManagementStage.Changed() || VirtualGroupPools.Changed() ||
+                    NextVirtualGroupId.Changed();
             }
 
             bool NormalizeHostKey(NKikimrBlobStorage::THostKey *host) const {
@@ -246,6 +256,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
         };
 
     } // NBsController

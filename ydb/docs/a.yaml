@@ -1,0 +1,40 @@
+title: Deploy docs
+# slug вашего сервиса в ABC. Его можно узнать из url страницы
+# вашего сервиса в ABC, например для адреса
+# https://abc.yandex-team.ru/services/market/, market - это slug
+service: kikimr
+
+ci:
+  secret: sec-01g3rbfrx24zvmxgqq6yb0ye1b # id секрета, созданного на шаге 1
+  runtime:
+    # Sandbox-группа (https://sandbox.yandex-team.ru/admin/groups),
+    # в которую должен входить ваш робот
+    # Создать группу можно по инструкции https://docs.yandex-team.ru/sandbox/groups
+    sandbox:
+      owner: YDB-DOCS-CI
+      # Настройки уведомлений при падении сборки (https://docs.yandex-team.ru/ci/runtime)
+      notifications:
+        - statuses: FAILURE
+          transport: email # доступные транспорты: telegram, email, jabber, q
+          # логины сотрудников, Sandbox-группы, рассылки (рассылки только для email уведомлений) и др.
+          recipients: YDB-DOCS-CI
+
+  actions:
+    # определение экшена, который будет вызван при пулл-реквесте,
+    # затрагивающим вашу документацию
+    docs:
+      title: Deploy docs
+      flow: deploy-pr-docs
+      triggers:
+        - on: pr
+
+  flows:
+    deploy-pr-docs:
+      jobs:
+        deploy:
+          title: Deploy docs
+          task: common/docs/deploy
+          input:
+            targets: kikimr/docs/ru/docs_oss # путь до вашего проекта от корня Аркадии
+            arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
+            notify: true # отставлять комментарий к ПР с ссылкой на выложенную документацию

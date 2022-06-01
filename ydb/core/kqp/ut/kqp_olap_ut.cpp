@@ -912,26 +912,34 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         )");
         auto selectQuery = TString(R"(
             --!syntax_v1
-            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp`;
+            SELECT `timestamp` FROM `/Root/olapStore/olapTable` ORDER BY `timestamp` LIMIT 4;
         )");
 
         auto it = tableClient.StreamExecuteScanQuery(selectQuery, scanSettings).GetValueSync();
         auto result = CollectStreamResult(it);
 
-        NJson::TJsonValue plan, node, reverse, limit;
+        NJson::TJsonValue plan, node, reverse, limit, pushedLimit;
         NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+        Cerr << *result.PlanJson << Endl;
+        Cerr << result.QueryStats->query_plan() << Endl;
+        Cerr << result.QueryStats->query_ast() << Endl;
 
-        node = FindPlanNodeByKv(plan, "Node Type", "TableFullScan");
+        node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "false");
         UNIT_ASSERT(!reverse.IsDefined());
+        pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+        UNIT_ASSERT(pushedLimit.IsDefined());
 
         // Check that Reverse flag is set in query plan
         it = tableClient.StreamExecuteScanQuery(selectQueryWithSort, scanSettings).GetValueSync();
         result = CollectStreamResult(it);
 
         NJson::ReadJsonTree(*result.PlanJson, &plan, true);
+        Cerr << "==============================" << Endl;
         Cerr << *result.PlanJson << Endl;
+        Cerr << result.QueryStats->query_plan() << Endl;
+        Cerr << result.QueryStats->query_ast() << Endl;
 
         node = FindPlanNodeByKv(plan, "Node Type", "Limit-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
@@ -939,6 +947,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT(reverse.IsDefined());
         limit = FindPlanNodeByKv(node, "Limit", "4");
         UNIT_ASSERT(limit.IsDefined());
+        pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
+        UNIT_ASSERT(pushedLimit.IsDefined());
 
         // Run actual request in case explain did not execute anything
         it = tableClient.StreamExecuteScanQuery(selectQueryWithSort).GetValueSync();

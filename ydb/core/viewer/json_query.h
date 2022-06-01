@@ -6,6 +6,7 @@
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/json/json_value.h>
 #include <library/cpp/json/json_reader.h>
+#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/kqp/kqp.h>
 #include <ydb/core/kqp/executer/kqp_executer.h>
@@ -269,21 +270,28 @@ private:
                 out << json.Str() << "}";
             }
         } else {
-            out << "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\nConnection: Close\r\n\r\n";
+            out << "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nConnection: Close\r\n\r\n";
+            NJson::TJsonValue response;
+            NJson::TJsonValue& jsonIssues = response["issues"];
 
-            TStringBuilder err;
             for (const auto& queryIssue : record.GetResponse().GetQueryIssues()) {
-                if (!err.empty()) {
-                    err << '\n';
-                }
-                if (queryIssue.has_position()) {
-                    err << queryIssue.position().row() << ':' << queryIssue.position().column() << ' ';
-                }
-                err << queryIssue.message();
+                NJson::TJsonValue& issue = jsonIssues.AppendValue({});
+                NProtobufJson::Proto2Json(queryIssue, issue);
             }
-            out << err;
-
-            out << "\r\n";
+            const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues = &(record.GetResponse().GetQueryIssues());
+            while (protoIssues->size() > 0 && (*protoIssues)[0].issuesSize() > 0) {
+                protoIssues = &((*protoIssues)[0].issues());
+            }
+            if (protoIssues->size() > 0) {
+                TStringBuilder err;
+                const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
+                if (issue.has_position()) {
+                    err << issue.position().row() << ':' << issue.position().column() << ' ';
+                }
+                err << issue.message();
+                response["error"] = err;
+            }
+            out << NJson::WriteJson(response, false);
         }
 
         ReplyAndDie(out, ctx);

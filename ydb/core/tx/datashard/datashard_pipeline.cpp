@@ -907,10 +907,10 @@ void TPipeline::CompleteTx(const TOperation::TPtr op, TTransactionContext& txc, 
         auto &pr = *DelayedAcks.begin();
 
         LOG_NOTICE(ctx, NKikimrServices::TX_DATASHARD,
-                   "Send outdated delayed readset ack for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
+                   "Will send outdated delayed readset ack for %" PRIu64 ":%" PRIu64 " at %" PRIu64,
                    pr.first.Step, pr.first.TxId, Self->TabletID());
 
-        ctx.Send(pr.second.Release());
+        op->AddDelayedAck(std::move(pr.second));
         DelayedAcks.erase(DelayedAcks.begin());
     }
 

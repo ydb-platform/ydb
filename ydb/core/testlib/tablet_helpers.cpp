@@ -575,7 +575,8 @@ namespace NKikimr {
     TActorId ResolveTablet(TTestActorRuntime &runtime, ui64 tabletId, ui32 nodeIndex, bool sysTablet) {
         auto sender = runtime.AllocateEdgeActor(nodeIndex);
         runtime.Send(new IEventHandle(MakeTabletResolverID(), sender,
-            new TEvTabletResolver::TEvForward(tabletId, nullptr)));
+            new TEvTabletResolver::TEvForward(tabletId, nullptr)),
+            nodeIndex, true);
         auto ev = runtime.GrabEdgeEventRethrow<TEvTabletResolver::TEvForwardResult>(sender);
         Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "Failed to resolve tablet %" PRIu64, tabletId);
         if (sysTablet) {

@@ -1196,7 +1196,7 @@ namespace NTypeAnnImpl {
             }
             for (auto& field: type->Cast<TStructExprType>()->GetItems()) {
                 auto itemType = field->GetItemType();
-                if (optional && itemType->GetKind() != ETypeAnnotationKind::Optional && itemType->GetKind() != ETypeAnnotationKind::Null) {
+                if (optional && !itemType->IsOptionalOrNull()) {
                     itemType = ctx.Expr.MakeType<TOptionalExprType>(itemType);
                 }
                 auto newField = ctx.Expr.MakeType<TItemExprType>(
@@ -10895,7 +10895,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         for (const auto& x : itemType->Cast<TStructExprType>()->GetItems()) {
-            if (x->GetItemType()->GetKind() != ETypeAnnotationKind::Optional) {
+            if (!x->GetItemType()->IsOptionalOrNull()) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()), TStringBuilder() << "Expected all columns to be optional. Non optional column: " << x->GetName()));
                 return IGraphTransformer::TStatus::Error;
             }

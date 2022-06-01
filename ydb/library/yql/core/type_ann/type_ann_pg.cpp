@@ -1901,7 +1901,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                 const auto optionName = option->Head().Content();
                 if (optionName == "ext_types" || optionName == "final_ext_types") {
-                    if (pass != 4) {
+                    if (pass != 2) {
                         continue;
                     }
 

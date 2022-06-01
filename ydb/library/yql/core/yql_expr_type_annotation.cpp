@@ -973,6 +973,15 @@ NUdf::TCastResultOptions CastResult(const TDataExprType* source, const TDataExpr
 }
 
 template <bool Strong>
+NUdf::TCastResultOptions CastResult(const TPgExprType* source, const TPgExprType* target) {
+    if (source->GetId() != target->GetId()) {
+        return NUdf::ECastOptions::Impossible;
+    }
+
+    return NUdf::ECastOptions::Complete;
+}
+
+template <bool Strong>
 NUdf::TCastResultOptions ReduceCastResult(NUdf::TCastResultOptions result);
 
 template <>
@@ -1133,6 +1142,19 @@ ECompareOptions Join(ECompareOptions state, ECompareOptions item) {
 ECompareOptions CanCompare(const TDataExprType* left, const TDataExprType* right) {
     return NUdf::IsComparable(left->GetSlot(), right->GetSlot()) ?
         ECompareOptions::Comparable : ECompareOptions::Uncomparable;
+}
+
+template <bool Equality>
+ECompareOptions CanCompare(const TPgExprType* left, const TPgExprType* right) {
+    if (left->GetId() != right->GetId()) {
+        return ECompareOptions::Uncomparable;
+    }
+
+    if (Equality) {
+        return left->IsEquatable() ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
+    } else {
+        return left->IsComparable() ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
+    }
 }
 
 template <bool Equality>
@@ -1499,6 +1521,8 @@ NUdf::TCastResultOptions CastResult(const TTypeAnnotationNode* source, const TTy
                 return CastResult<Strong>(source->Cast<TVariantExprType>(), target->Cast<TVariantExprType>());
             case ETypeAnnotationKind::Data:
                 return CastResult<Strong>(source->Cast<TDataExprType>(), target->Cast<TDataExprType>());
+            case ETypeAnnotationKind::Pg:
+                return CastResult<Strong>(source->Cast<TPgExprType>(), target->Cast<TPgExprType>());
             case ETypeAnnotationKind::Stream:
                 return CastResult<Strong>(source->Cast<TStreamExprType>(), target->Cast<TStreamExprType>());
             case ETypeAnnotationKind::Flow:
@@ -1560,6 +1584,8 @@ ECompareOptions CanCompare(const TTypeAnnotationNode* left, const TTypeAnnotatio
                 return CanCompare<Equality>(left->Cast<TTaggedExprType>(), right->Cast<TTaggedExprType>());
             case ETypeAnnotationKind::Data:
                 return CanCompare(left->Cast<TDataExprType>(), right->Cast<TDataExprType>());
+            case ETypeAnnotationKind::Pg:
+                return CanCompare<Equality>(left->Cast<TPgExprType>(), right->Cast<TPgExprType>());
             default: break;
         }
     } else if (lKind == ETypeAnnotationKind::Null || rKind == ETypeAnnotationKind::Null) {
@@ -1590,6 +1616,7 @@ const TTypeAnnotationNode* DryType(const TTypeAnnotationNode* type, bool& hasOpt
             case ETypeAnnotationKind::Optional:
                 hasOptional = true;
                 return DryType(type->Cast<TOptionalExprType>()->GetItemType(), hasOptional, ctx);
+            case ETypeAnnotationKind::Pg:
             case ETypeAnnotationKind::Data:
             case ETypeAnnotationKind::Void:
             case ETypeAnnotationKind::EmptyList:

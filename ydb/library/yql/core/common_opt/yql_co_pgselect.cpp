@@ -20,127 +20,467 @@ TNodeMap<ui32> GatherSubLinks(const TExprNode::TPtr& lambda) {
     return subLinks;
 }
 
+TSet<TString> ExtractExternalColumns(const TExprNode& select) {
+    TSet<TString> res;
+    const auto& option = select.Head();
+    auto setItems = GetSetting(option, "set_items");
+    YQL_ENSURE(setItems);
+    for (const auto& s : setItems->Tail().Children()) {
+        YQL_ENSURE(s->IsCallable("PgSetItem"));
+        auto extTypes = GetSetting(s->Head(), "final_ext_types");
+        YQL_ENSURE(extTypes);
+        for (const auto& input : extTypes->Tail().Children()) {
+            auto type = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            for (const auto& i : type->GetItems()) {
+                res.insert(TString(i->GetName()));
+            }
+        }
+    }
+
+    return res;
+}
+
+TExprNode::TPtr JoinColumns(TPositionHandle pos, const TExprNode::TPtr& list1, const TExprNode::TPtr& list2,
+    TExprNode::TPtr leftJoinColumns, TExprContext& ctx) {
+    auto join = ctx.Builder(pos)
+        .Callable("EquiJoin")
+            .List(0)
+                .Add(0, list1)
+                .Atom(1, "a")
+            .Seal()
+            .List(1)
+                .Add(0, list2)
+                .Atom(1, "b")
+            .Seal()
+            .List(2)
+                .Atom(0, leftJoinColumns ? "Left" : "Cross")
+                .Atom(1, "a")
+                .Atom(2, "b")
+                .List(3)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                        if (leftJoinColumns) {
+                            for (ui32 i = 0; i < leftJoinColumns->ChildrenSize(); ++i) {
+                                parent.Atom(2 * i, "a");
+                                parent.Add(2* i + 1, leftJoinColumns->ChildPtr(i));
+                            }
+                        }
+
+                        return parent;
+                    })
+                .Seal()
+                .List(4)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                        if (leftJoinColumns) {
+                            for (ui32 i = 0; i < leftJoinColumns->ChildrenSize(); ++i) {
+                                parent.Atom(2 * i, "b");
+                                parent.Atom(2 * i + 1, TString("_yql_join_sublink_") + leftJoinColumns->Child(i)->Content() );
+                            }
+                        }
+
+                        return parent;
+                    })
+                .Seal()
+                .List(5)
+                .Seal()
+            .Seal()
+            .List(3)
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, join)
+            .Lambda(1)
+                .Param("row")
+                .Callable("DivePrefixMembers")
+                    .Arg(0, "row")
+                    .List(1)
+                        .Atom(0, "a.")
+                        .Atom(1, "b.")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& lambda,
     const TNodeMap<ui32>& subLinks, TExprContext& ctx, TOptimizeContext& optCtx) {
     Y_UNUSED(pos);
+    ui32 sublinkColumnIndex = 0;
+    auto newList = list;
     auto newLambda = lambda;
     auto originalRow = lambda->Head().HeadPtr();
+    TNodeOnNodeOwnedMap deepClones;
     auto status = OptimizeExpr(newLambda, newLambda, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         auto it = subLinks.find(node.Get());
         if (it != subLinks.end()) {
             auto linkType = node->Head().Content();
-            auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, nullptr);
-            if (linkType == "exists") {
-                return ctx.Builder(node->Pos())
-                    .Callable("ToPg")
-                        .Callable(0, ">")
-                            .Callable(0, "Length")
-                                .Callable(0, "Take")
-                                    .Add(0, select)
-                                    .Callable(1, "Uint64")
-                                        .Atom(0, "1")
+            TSet<TString> extColumns = ExtractExternalColumns(node->Tail());
+            if (extColumns.empty()) {
+                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, nullptr);
+                if (linkType == "exists") {
+                    return ctx.Builder(node->Pos())
+                        .Callable("ToPg")
+                            .Callable(0, ">")
+                                .Callable(0, "Length")
+                                    .Callable(0, "Take")
+                                        .Add(0, select)
+                                        .Callable(1, "Uint64")
+                                            .Atom(0, "1")
+                                        .Seal()
                                     .Seal()
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, "0")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "expr") {
+                    auto take2 = ctx.Builder(node->Pos())
+                        .Callable("Take")
+                            .Add(0, select)
+                            .Callable(1, "Uint64")
+                                .Atom(0, "2")
+                            .Seal()
+                        .Seal()
+                        .Build();
+
+                    return ctx.Builder(node->Pos())
+                        .Callable("Ensure")
+                            .Callable(0, "SingleMember")
+                                .Callable(0, "ToOptional")
+                                    .Add(0, take2)
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "<=")
+                                .Callable(0, "Length")
+                                    .Add(0, take2)
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, "1")
+                                .Seal()
+                            .Seal()
+                            .Callable(2, "String")
+                                .Atom(0, "More than one row returned by a subquery used as an expression")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "any" || linkType == "all") {
+                    auto testArg = ctx.NewArgument(node->Pos(), "linkRow");
+                    auto value = ctx.Builder(node->Pos())
+                        .Callable("SingleMember")
+                            .Add(0, testArg)
+                        .Seal()
+                        .Build();
+
+                    auto testArgs = ctx.NewArguments(node->Pos(), { testArg });
+                    auto testRoot = ctx.ReplaceNodes(node->Child(3)->TailPtr(), {
+                        {node->Child(3)->Head().Child(0), originalRow},
+                        {node->Child(3)->Head().Child(1), value},
+                        });
+
+                    if (linkType == "all") {
+                        testRoot = ctx.Builder(node->Pos())
+                            .Callable("PgNot")
+                                .Add(0, testRoot)
+                            .Seal()
+                            .Build();
+                    }
+
+                    testRoot = ctx.Builder(node->Pos())
+                        .Callable("Coalesce")
+                            .Callable(0, "FromPg")
+                                .Add(0, testRoot)
+                            .Seal()
+                            .Callable(1, "Bool")
+                                .Atom(0, "0")
+                            .Seal()
+                        .Seal()
+                        .Build();
+
+                    auto testLambda = ctx.NewLambda(node->Pos(), std::move(testArgs), std::move(testRoot));
+
+                    auto filtered = ctx.Builder(node->Pos())
+                        .Callable("Filter")
+                            .Add(0, select)
+                            .Add(1, testLambda)
+                        .Seal()
+                        .Build();
+
+                    auto take1 = ctx.Builder(node->Pos())
+                        .Callable("Take")
+                            .Add(0, filtered)
+                            .Callable(1, "Uint64")
+                                .Atom(0, "1")
+                            .Seal()
+                        .Seal()
+                        .Build();
+
+                    return ctx.Builder(node->Pos())
+                        .Callable("ToPg")
+                            .Callable(0, "==")
+                                .Callable(0, "Length")
+                                    .Add(0, take1)
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, (linkType == "any") ? "1" : "0")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
+            } else {
+                auto colList = ctx.Builder(node->Pos())
+                    .List()
+                        .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
+                            ui32 i = 0;
+                            for (const auto& c : extColumns) {
+                                parent.Atom(i++, c);
+                            }
+
+                            return parent;
+                        })
+                    .Seal()
+                    .Build();
+
+                auto outerList = ctx.Builder(node->Pos())
+                    .Callable("ExtractMembers")
+                        .Add(0, list)
+                        .Add(1, colList)
+                    .Seal()
+                    .Build();
+
+                auto uniqueOuterList = ctx.Builder(node->Pos())
+                    .Callable("Aggregate")
+                        .Add(0, list)
+                        .Add(1, colList)
+                        .List(2)
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, uniqueOuterList);
+
+                auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yql");
+                YQL_ENSURE(exportsPtr);
+                const auto& exports = exportsPtr->Symbols();
+
+                auto selectTypeNode = ctx.Builder(node->Pos())
+                    .Callable("TypeOf")
+                        .Add(0, select)
+                    .Seal()
+                    .Build();
+
+                TExprNode::TPtr countAllTraits;
+                TExprNode::TPtr someTraits;
+                TExprNode::TPtr countIfTraits;
+                for (ui32 factoryIndex = 0; factoryIndex < 3; ++factoryIndex)
+                {
+                    TStringBuf name;
+                    switch (factoryIndex) {
+                    case 0:
+                        if (linkType != "exists" && linkType != "expr") {
+                            continue;
+                        }
+
+                        name = "count_all_traits_factory";
+                        break;
+                    case 1:
+                        if (linkType != "expr") {
+                            continue;
+                        }
+
+                        name = "some_traits_factory";
+                        break;
+                    case 2:
+                        if (linkType != "any" && linkType != "all") {
+                            continue;
+                        }
+
+                        name = "count_if_traits_factory";
+                        break;
+                    }
+
+                    const auto ex = exports.find(name);
+                    YQL_ENSURE(exports.cend() != ex);
+                    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+                    auto arg = ctx.NewArgument(node->Pos(), "row");
+                    auto arguments = ctx.NewArguments(node->Pos(), { arg });
+                    TExprNode::TPtr root;
+                    switch (factoryIndex) {
+                    case 0:
+                        root = arg;
+                        break;
+                    case 1:
+                        root = ctx.NewCallable(node->Pos(), "SingleMember", {
+                            ctx.NewCallable(node->Pos(), "RemoveSystemMembers", { arg }) });
+                        break;
+                    case 2: {
+                        auto value = ctx.NewCallable(node->Pos(), "SingleMember", {
+                            ctx.NewCallable(node->Pos(), "RemoveSystemMembers", { arg }) });
+
+                        auto testRoot = ctx.ReplaceNodes(node->Child(3)->TailPtr(), {
+                            {node->Child(3)->Head().Child(0), originalRow},
+                            {node->Child(3)->Head().Child(1), value},
+                            });
+
+                        if (linkType == "all") {
+                            testRoot = ctx.Builder(node->Pos())
+                                .Callable("PgNot")
+                                    .Add(0, testRoot)
+                                .Seal()
+                                .Build();
+                        }
+
+                        root = ctx.NewCallable(node->Pos(), "FromPg", { testRoot });
+                        break;
+                    }
+                    }
+
+                    auto extractor = ctx.NewLambda(node->Pos(), std::move(arguments), std::move(root));
+
+                    auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
+                        {lambda->Head().Child(0), selectTypeNode},
+                        {lambda->Head().Child(1), extractor}
+                    });
+
+                    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+                    auto status = ExpandApply(traits, traits, ctx);
+                    YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+                    switch (factoryIndex) {
+                    case 0:
+                        countAllTraits = traits;
+                        break;
+                    case 1:
+                        someTraits = traits;
+                        break;
+                    case 2:
+                        countIfTraits = traits;
+                        break;
+                    }
+                }
+
+                auto columnName = "_yql_sublink_" + ToString(sublinkColumnIndex++);
+                TExprNode::TListType aggregateItems;
+                if (linkType == "exists") {
+                    aggregateItems.push_back(ctx.Builder(node->Pos())
+                        .List()
+                            .Atom(0, columnName)
+                            .Add(1, countAllTraits)
+                        .Seal()
+                        .Build());
+                } else if (linkType == "expr") {
+                    aggregateItems.push_back(ctx.Builder(node->Pos())
+                        .List()
+                            .Atom(0, columnName + "_count")
+                            .Add(1, countAllTraits)
+                        .Seal()
+                        .Build());
+                    aggregateItems.push_back(ctx.Builder(node->Pos())
+                        .List()
+                            .Atom(0, columnName + "_value")
+                            .Add(1, someTraits)
+                        .Seal()
+                        .Build());
+                } else if (linkType == "any" || linkType == "all") {
+                    aggregateItems.push_back(ctx.Builder(node->Pos())
+                        .List()
+                            .Atom(0, columnName)
+                            .Add(1, countIfTraits)
+                        .Seal()
+                        .Build());
+                }
+
+                auto aggregates = ctx.NewList(node->Pos(), std::move(aggregateItems));
+                auto groupedSublink = ctx.Builder(node->Pos())
+                    .Callable("Aggregate")
+                        .Add(0, select)
+                        .List(1)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                for (ui32 i = 0; i < colList->ChildrenSize(); ++i) {
+                                    parent.Atom(i, TString("_yql_join_sublink_") + colList->Child(i)->Content());
+                                }
+
+                                return parent;
+                            })
+                        .Seal()
+                        .Add(2, aggregates)
+                    .Seal()
+                    .Build();
+
+                newList = JoinColumns(pos, newList, groupedSublink, colList, ctx);
+
+                if (linkType == "exists") {
+                    return ctx.Builder(node->Pos())
+                        .Callable(">")
+                            .Callable(0, "Member")
+                                .Add(0, originalRow)
+                                .Atom(1, columnName)
+                            .Seal()
+                            .Callable(1, "Uint64")
+                                .Atom(0, "0")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "expr") {
+                    return ctx.Builder(node->Pos())
+                        .Callable("Ensure")
+                            .Callable(0, "Member")
+                                .Add(0, originalRow)
+                                .Atom(1, columnName + "_value")
+                            .Seal()
+                            .Callable(1, "<=")
+                                .Callable(0, "Coalesce")
+                                    .Callable(0, "Member")
+                                        .Add(0, originalRow)
+                                        .Atom(1, columnName + "_count")
+                                    .Seal()
+                                    .Callable(1, "Uint64")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, "1")
+                                .Seal()
+                            .Seal()
+                            .Callable(2, "String")
+                                .Atom(0, "More than one row returned by a subquery used as an expression")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "any") {
+                    return ctx.Builder(node->Pos())
+                        .Callable(">")
+                            .Callable(0, "Member")
+                                .Add(0, originalRow)
+                                .Atom(1, columnName)
+                            .Seal()
+                            .Callable(1, "Uint64")
+                                .Atom(0, "0")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                } else if (linkType == "all") {
+                    return ctx.Builder(node->Pos())
+                        .Callable("==")
+                            .Callable(0, "Coalesce")
+                                .Callable(0, "Member")
+                                    .Add(0, originalRow)
+                                    .Atom(1, columnName)
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, "0")
                                 .Seal()
                             .Seal()
                             .Callable(1, "Uint64")
                                 .Atom(0, "0")
                             .Seal()
                         .Seal()
-                    .Seal()
-                    .Build();
-            } else if (linkType == "expr") {
-                auto take2 = ctx.Builder(node->Pos())
-                    .Callable("Take")
-                        .Add(0, select)
-                        .Callable(1, "Uint64")
-                            .Atom(0, "2")
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                return ctx.Builder(node->Pos())
-                    .Callable("Ensure")
-                        .Callable(0, "SingleMember")
-                            .Callable(0, "ToOptional")
-                                .Add(0, take2)
-                            .Seal()
-                        .Seal()
-                        .Callable(1, "<=")
-                            .Callable(0, "Length")
-                                .Add(0, take2)
-                            .Seal()
-                            .Callable(1, "Uint64")
-                                .Atom(0, "1")
-                            .Seal()
-                        .Seal()
-                        .Callable(2, "String")
-                            .Atom(0, "More than one row returned by a subquery used as an expression")
-                        .Seal()
-                    .Seal()
-                    .Build();
-            } else if (linkType == "any" || linkType == "all") {
-                auto testArg = ctx.NewArgument(node->Pos(), "linkRow");
-                auto value = ctx.Builder(node->Pos())
-                    .Callable("SingleMember")
-                        .Add(0, testArg)
-                    .Seal()
-                    .Build();
-
-                auto testArgs = ctx.NewArguments(node->Pos(), { testArg });
-                auto testRoot = ctx.ReplaceNodes(node->Child(3)->TailPtr(), {
-                    {node->Child(3)->Head().Child(0), originalRow},
-                    {node->Child(3)->Head().Child(1), value},
-                    });
-
-                if (linkType == "all") {
-                    testRoot = ctx.Builder(node->Pos())
-                        .Callable("PgNot")
-                            .Add(0, testRoot)
-                        .Seal()
                         .Build();
                 }
-
-                testRoot = ctx.Builder(node->Pos())
-                    .Callable("Coalesce")
-                        .Callable(0, "FromPg")
-                            .Add(0, testRoot)
-                        .Seal()
-                        .Callable(1, "Bool")
-                            .Atom(0, "0")
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                auto testLambda = ctx.NewLambda(node->Pos(), std::move(testArgs), std::move(testRoot));
-
-                auto filtered = ctx.Builder(node->Pos())
-                    .Callable("Filter")
-                        .Add(0, select)
-                        .Add(1, testLambda)
-                    .Seal()
-                    .Build();
-
-                auto take1 = ctx.Builder(node->Pos())
-                    .Callable("Take")
-                        .Add(0, filtered)
-                        .Callable(1, "Uint64")
-                            .Atom(0, "1")
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                return ctx.Builder(node->Pos())
-                    .Callable("ToPg")
-                        .Callable(0, "==")
-                            .Callable(0, "Length")
-                                .Add(0, take1)
-                            .Seal()
-                            .Callable(1, "Uint64")
-                                .Atom(0, (linkType == "any") ? "1" : "0")
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
             }
 
             return node;
@@ -151,7 +491,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
 
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
     return {
-        list,
+        newList,
         newLambda
     };
 }
@@ -1140,8 +1480,41 @@ TExprNode::TPtr BuildLimit(TPositionHandle pos, const TExprNode::TPtr& limit, co
         .Build();
 }
 
+TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& lambda, const TExprNode::TPtr& finalExtTypes, TExprContext& ctx) {
+    return ctx.Builder(lambda->Pos())
+        .Lambda()
+            .Param("row")
+            .Callable("FlattenMembers")
+                .List(0)
+                    .Atom(0, "")
+                    .Apply(1, lambda)
+                        .With(0, "row")
+                    .Seal()
+                .Seal()
+                .List(1)
+                    .Atom(0, "_yql_join_sublink_")
+                    .Callable(1, "SelectMembers")
+                        .Arg(0, "row")
+                        .List(1)
+                            .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                ui32 i = 0;
+                                for (const auto& x : finalExtTypes->Children()) {
+                                    for (const auto& col : x->Tail().Children()) {
+                                        parent.Atom(i++, col->Content());
+                                    }
+                                }
+
+                                return parent;
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx, bool subLink, const TExprNode::TPtr& outer) {
-    Y_UNUSED(outer);
     auto setItems = GetSetting(node->Head(), "set_items");
     auto order = optCtx.Types->LookupColumnOrder(*node);
     YQL_ENSURE(order);
@@ -1157,7 +1530,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto childOrder = optCtx.Types->LookupColumnOrder(*setItem);
         YQL_ENSURE(*childOrder);
         columnOrders.push_back(*childOrder);
-        if (GetSetting(setItem->Tail(), "final_ext_types") && !subLink) {
+        auto finalExtTypes = GetSetting(setItem->Tail(), "final_ext_types");
+        if (finalExtTypes && !subLink) {
             return node;
         }
 
@@ -1203,6 +1577,10 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 projectionLambda = BuildProjectionLambda(node->Pos(), result, ctx);
             }
 
+            if (outer) {
+                list = JoinColumns(node->Pos(), list, outer, nullptr, ctx);
+            }
+
             if (filter) {
                 list = BuildFilter(node->Pos(), list, filter, ctx, optCtx);
             }
@@ -1215,6 +1593,10 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             list = BuildWindows(node->Pos(), list, window, projectionLambda, ctx, optCtx);
+            if (finalExtTypes) {
+                projectionLambda = AddExtColumns(projectionLambda, finalExtTypes->TailPtr(), ctx);
+            }
+
             list = ctx.Builder(node->Pos())
                 .Callable("Map")
                     .Add(0, list)
@@ -1247,6 +1629,10 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 
     if (limit) {
         list = BuildLimit(node->Pos(), limit, list, ctx);
+    }
+
+    if (subLink) {
+        return list;
     }
 
     return ctx.Builder(node->Pos())

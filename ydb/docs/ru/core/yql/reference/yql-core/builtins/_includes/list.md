@@ -15,6 +15,11 @@ SELECT ListCreate(Tuple<String,Double?>);
 SELECT ListCreate(OptionalType(DataType("String")));
 ```
 
+**Сигнатура**
+```
+ListCreate(T)->List<T>
+```
+
 ## AsList и AsListStrict {#aslist}
 
 Сконструировать список из одного или более аргументов. Типы аргументов должны быть совместимы в случае `AsList` и строго совпадать в случае `AsListStrict`.
@@ -24,37 +29,62 @@ SELECT ListCreate(OptionalType(DataType("String")));
 SELECT AsList(1, 2, 3, 4, 5);
 ```
 
+**Сигнатура**
+```
+AsList(T..)->List<T>
+```
+
 ## ListLength {#listlength}
 
 Количество элементов в списке.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT ListLength(list_column) FROM my_table;
 ```
 {% endif %}
+
+**Сигнатура**
+```
+ListLength(List<T>)->Uint64
+ListLength(List<T>?)->Uint64?
+```
+
 ## ListHasItems
 
 Проверка того, что список содержит хотя бы один элемент.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT ListHasItems(list_column) FROM my_table;
 ```
 {% endif %}
 
+**Сигнатура**
+```
+ListHasItems(List<T>)->Bool
+ListHasItems(List<T>?)->Bool?
+```
+
 ## ListCollect {#listcollect}
 
-Преобразовать ленивый список (строится, например, функциями [ListFilter](#listfilter), [ListMap](#listmap), [ListFlatMap](#listflatmap)) в энергичный. В отличие от ленивого списка, в котором каждый повторный проход заново вычисляет его содержимое, в энергичном списке содержимое списка строится сразу ценой большего потребления памяти.
+Преобразовать ленивый список (строится, например, функциями [ListFilter](#listmap), [ListMap](#listmap), [ListFlatMap](#listmap)) в энергичный. В отличие от ленивого списка, в котором каждый повторный проход заново вычисляет его содержимое, в энергичном списке содержимое списка строится сразу ценой большего потребления памяти.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT ListCollect(list_column) FROM my_table;
 ```
 {% endif %}
+
+**Сигнатура**
+```
+ListCollect(LazyList<T>)->List<T>
+ListCollect(LazyList<T>?)->List<T>?
+```
+
 ## ListSort, ListSortAsc и ListSortDesc {#listsort}
 
 Отсортировать список. По умолчанию выполняется сортировка по возрастанию (`ListSort` — алиас к `ListSortAsc`).
@@ -89,6 +119,15 @@ SELECT ListSort($list, ($x) -> {
 
 {% endnote %}
 
+**Сигнатура**
+```
+ListSort(List<T>)->List<T>
+ListSort(List<T>?)->List<T>?
+
+ListSort(List<T>, (T)->U)->List<T>
+ListSort(List<T>?, (T)->U)->List<T>?
+```
+
 ## ListExtend и ListExtendStrict {#listextend}
 
 Последовательно соединить списки (конкатенация списков). В качестве аргументов могут быть списки, опциональные списки и `NULL`.
@@ -107,6 +146,20 @@ SELECT ListExtend(
 ```
 {% endif %}
 
+```yql
+$l1 = AsList("a", "b");
+$l2 = AsList("b", "c");
+$l3 = AsList("d", "e");
+
+SELECT ListExtend($l1, $l2, $l3);  -- ["a","b","b","c","d","e"]
+```
+
+**Сигнатура**
+```
+ListExtend(List<T>..)->List<T>
+ListExtend(List<T>?..)->List<T>?
+```
+
 ## ListUnionAll {#listunionall}
 
 Последовательно соединить списки структур (конкатенация списков). В выходном списке структур будет присутствовать поле, если оно есть хотя бы в одном исходном списке, при этом в случае отсутствия такого поля в каком-либо списке оно дополняется как NULL. В случае, когда поле присутствует в двух и более списках, поле в результате приводит в общий тип.
@@ -123,6 +176,25 @@ SELECT ListUnionAll(
 ) FROM my_table;
 ```
 {% endif %}
+
+```yql
+$l1 = AsList(
+    <|value:1|>,
+    <|value:2|>
+);
+$l2 = AsList(
+    <|key:"a"|>,
+    <|key:"b"|>
+);
+SELECT ListUnionAll($l1, $l2);  -- result: [("value":1),("value":2),("key":"a"),("key":"b")]
+                                -- schema: List<Struct<key : String?, value : Int32?>>
+```
+
+**Сигнатура**
+```
+ListUnionAll(List<Struct<..>>, List<Struct<..>>..)->List<Struct<..>>
+ListUnionAll(List<Struct<..>>?, List<Struct<..>>?..)->List<Struct<..>>?
+```
 
 ## ListZip и ListZipAll {#listzip}
 
@@ -141,27 +213,56 @@ FROM my_table;
 ```
 {% endif %}
 
+```yql
+$l1 = AsList("a", "b");
+$l2 = AsList(1, 2, 3);
+
+SELECT ListZip($l1, $l2);  -- [("a",1),("b",2)]
+SELECT ListZipAll($l1, $l2);  -- [("a",1),("b",2),(null,3)]
+```
+
+**Сигнатура**
+```
+ListZip(List<T1>, List<T2>)->List<Tuple<T1, T2>>
+ListZip(List<T1>?, List<T2>?)->List<Tuple<T1, T2>>?
+
+ListZipAll(List<T1>, List<T2>)->List<Tuple<T1?, T2?>>
+ListZipAll(List<T1>?, List<T2>?)->List<Tuple<T1?, T2?>>?
+```
+
 ## ListEnumerate {#listenumerate}
 
 Построить список пар (Tuple), содержащих номер элемента и сам элемент (`List<Tuple<Uint64,list_element_type>>`).
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT ListEnumerate(list_column) FROM my_table;
 ```
 {% endif %}
 
+**Сигнатура**
+```
+ListEnumerate(List<T>)->List<Tuple<Uint64, T>>
+ListEnumerate(List<T>?)->List<Tuple<Uint64, T>>?
+```
+
 ## ListReverse {#listreverse}
 
 Развернуть список.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT ListReverse(list_column) FROM my_table;
 ```
 {% endif %}
+
+**Сигнатура**
+```
+ListReverse(List<T>)->List<T>
+ListReverse(List<T>?)->List<T>?
+```
 
 ## ListSkip {#listskip}
 
@@ -178,6 +279,18 @@ FROM my_table;
 ```
 {% endif %}
 
+```yql
+$l1 = AsList(1, 2, 3, 4, 5);
+
+SELECT ListSkip($l1, 2);  -- [3,4,5]
+```
+
+**Сигнатура**
+```
+ListSkip(List<T>, Uint64)->List<T>
+ListSkip(List<T>?, Uint64)->List<T>?
+```
+
 ## ListTake {#listtake}
 
 Возвращает копию списка, состоящую из ограниченного числа элементов второго списка.
@@ -191,6 +304,18 @@ SELECT ListTake(list_column, 3) FROM my_table;
 ```
 {% endif %}
 
+```yql
+$l1 = AsList(1, 2, 3, 4, 5);
+
+SELECT ListTake($l1, 2);  -- [1,2]
+```
+
+**Сигнатура**
+```
+ListTake(List<T>, Uint64)->List<T>
+ListTake(List<T>?, Uint64)->List<T>?
+```
+
 ## ListIndexOf {#listindexof}
 
 Ищет элемент с указанным значением в списке и при первом обнаружении возвращает его индекс. Отсчет индексов начинается с 0, а в случае отсутствия элемента возвращается `NULL`.
@@ -203,6 +328,18 @@ SELECT
 FROM my_table;
 ```
 {% endif %}
+
+```yql
+$l1 = AsList(1, 2, 3, 4, 5);
+
+SELECT ListIndexOf($l1, 2);  -- 1
+```
+
+**Сигнатура**
+```
+ListIndexOf(List<T>, T)->Uint64?
+ListIndexOf(List<T>?, T)->Uint64?
+```
 
 ## ListMap, ListFlatMap и ListFilter {#listmap}
 
@@ -226,21 +363,49 @@ FROM my_table;
     * `Module::Function` - С++ UDF;
 {% if feature_udf_noncpp %} 
     * [Python UDF](../../udf/python.md), [JavaScript UDF](../../udf/javascript.md) или любое другое вызываемое значение;
+{% endif %}
 
 Если исходный список является опциональным, то таким же является и выходной список.
 
 **Примеры**
 {% if feature_column_container_type %}
 ``` yql
-$callable = Python::test(Callable<(Int64)->Bool>, "def test(i): return i % 2");
 SELECT
     ListMap(list_column, ($x) -> { RETURN $x > 2; }),
-    ListFlatMap(list_column, My::Udf),
-    ListFilter(list_column, $callable)
+    ListFlatMap(list_column, My::Udf)
 FROM my_table;
 ```
 {% endif %}
-{% endif %}
+
+```yql
+$list = AsList("a", "b", "c");
+
+$filter = ($x) -> {
+    RETURN $x == "b";
+};
+
+SELECT ListFilter($list, $filter);  -- ["b"]
+```
+
+```yql
+$list = AsList(1,2,3,4);
+$callable = Python::test(Callable<(Int64)->Bool>, "def test(i): return i % 2");
+SELECT ListFilter($list, $callable);  -- [1,3]
+```
+
+**Сигнатура**
+```
+ListMap(List<T>, (T)->U)->List<U>
+ListMap(List<T>?, (T)->U)->List<U>?
+
+ListFlatMap(List<T>, (T)->List<U>)->List<U>
+ListFlatMap(List<T>?, (T)->List<U>)->List<U>?
+ListFlatMap(List<T>, (T)->U?)->List<U>
+ListFlatMap(List<T>?, (T)->U?)->List<U>?
+
+ListFilter(List<T>, (T)->Bool)->List<T>
+ListFilter(List<T>?, (T)->Bool)->List<T>?
+```
 
 ## ListNotNull {#listnotnull}
 
@@ -252,6 +417,12 @@ FROM my_table;
 ``` yql
 SELECT ListNotNull([1,2]),   -- [1,2]
     ListNotNull([3,null,4]); -- [3,4]
+```
+
+**Сигнатура**
+```
+ListNotNull(List<T?>)->List<T>
+ListNotNull(List<T?>?)->List<T>?
 ```
 
 ## ListFlatten {#listflatten}
@@ -266,18 +437,30 @@ SELECT ListFlatten([[1,2],[3,4]]),   -- [1,2,3,4]
     ListFlatten([null,[3,4],[5,6]]); -- [3,4,5,6]
 ```
 
+**Сигнатура**
+```
+ListFlatten(List<List<T>?>)->List<T>
+ListFlatten(List<List<T>?>?)->List<T>?
+```
+
 ## ListUniq {#listuniq}
 
 Возвращает копию списка, в котором оставлен только уникальный набор элементов.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT
     ListUniq(list_column)
 FROM my_table;
 ```
 {% endif %}
+
+**Сигнатура**
+```
+ListUniq(List<T>)->List<T>
+ListUniq(List<T>?)->List<T>?
+```
 
 ## ListAny и ListAll {#listany}
 
@@ -288,8 +471,8 @@ FROM my_table;
 
 В противном случае возвращает false.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT
     ListAll(bool_column),
@@ -297,6 +480,14 @@ SELECT
 FROM my_table;
 ```
 {% endif %}
+
+**Сигнатура**
+```
+ListAny(List<Bool>)->Bool
+ListAny(List<Bool>?)->Bool?
+ListAll(List<Bool>)->Bool
+ListAll(List<Bool>?)->Bool?
+```
 
 ## ListHas {#listhas}
 
@@ -311,12 +502,25 @@ FROM my_table;
 ```
 {% endif %}
 
+```yql
+$l1 = AsList(1, 2, 3, 4, 5);
+
+SELECT ListHas($l1, 2);  -- true
+SELECT ListHas($l1, 6);  -- false
+```
+
+**Сигнатура**
+```
+ListHas(List<T>, T)->Bool
+ListHas(List<T>?, T)->Bool?
+```
+
 ## ListHead, ListLast {#listheadlast}
 
 Возвращают первый и последний элемент списка.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT
     ListHead(numeric_list_column) AS head,
@@ -325,12 +529,20 @@ FROM my_table;
 ```
 {% endif %}
 
+**Сигнатура**
+```
+ListHead(List<T>)->T?
+ListHead(List<T>?)->T?
+ListLast(List<T>)->T?
+ListLast(List<T>?)->T?
+```
+
 ## ListMin, ListMax, ListSum и ListAvg {#listminy}
 
 Применяет соответствующую агрегатную функцию ко всем элементам списка числовых значений.
 
-**Примеры**
 {% if feature_column_container_type %}
+**Примеры**
 ``` yql
 SELECT
     ListMax(numeric_list_column) AS max,
@@ -340,6 +552,12 @@ SELECT
 FROM my_table;
 ```
 {% endif %}
+
+**Сигнатура**
+```
+ListMin(List<T>)->T?
+ListMin(List<T>?)->T?
+```
 
 ## ListFold, ListFold1 {#listfold}
 
@@ -366,6 +584,15 @@ SELECT
     ListFold([], 3, $y) AS fold_empty,                 -- 3
     ListFold1($l, $z, $y) AS fold1,                    -- 17
     ListFold1([], $z, $y) AS fold1_empty;              -- Null
+```
+
+**Сигнатура**
+```
+ListFold(List<T>, U, (T, U)->U)->U
+ListFold(List<T>?, U, (T, U)->U)->U?
+
+ListFold1(List<T>, (T)->U, (T, U)->U)->U?
+ListFold1(List<T>?, (T)->U, (T, U)->U)->U?
 ```
 
 ## ListFoldMap, ListFold1Map {#listfoldmap}
@@ -395,6 +622,15 @@ SELECT
     ListFold1Map($l, $t, $x);              -- [2, 12, 49, 28]
 ```
 
+**Сигнатура**
+```
+ListFoldMap(List<T>, S, (T, S)->Tuple<U,S>)->List<U>
+ListFoldMap(List<T>?, S, (T, S)->Tuple<U,S>)->List<U>?
+
+ListFold1Map(List<T>, (T)->Tuple<U,S>, (T, S)->Tuple<U,S>)->List<U>
+ListFold1Map(List<T>?, (T)->Tuple<U,S>, (T, S)->Tuple<U,S>)->List<U>?
+```
+
 ## ListFromRange {#listfromrange}
 
 Генерация последовательности чисел с указанным шагом. Аналог `xrange` в Python 2, но дополнительно с поддержкой чисел с плавающей точкой.
@@ -421,6 +657,15 @@ SELECT
     ListFromRange(2, 1, -0.5); -- [2.0, 1.5]
 ```
 
+``` yql
+SELECT ListFromRange(Datetime("2022-05-23T15:30:00Z"), Datetime("2022-05-30T15:30:00Z"), Unwrap(DateTime::IntervalFromDays(1)));
+```
+
+**Сигнатура**
+```
+ListFromRange(T, T)->LazyList<T> -- T - числовой тип или тип, представляющий дату/время
+```
+
 ## ListReplicate {#listreplicate}
 
 Создает список из нескольких копий указанного значения.
@@ -433,6 +678,11 @@ SELECT
 **Примеры**
 ``` yql
 SELECT ListReplicate(true, 3); -- [true, true, true]
+```
+
+**Сигнатура**
+```
+ListReplicate(T, Uint64)->List<T>
 ```
 
 ## ListConcat {#listconcat}
@@ -450,6 +700,22 @@ FROM my_table;
 ```
 {% endif %}
 
+```yql
+$l1 = AsList("h", "e", "l", "l", "o");
+
+SELECT ListConcat($l1);  -- "hello"
+SELECT ListConcat($l1, " ");  -- "h e l l o"
+```
+
+**Сигнатура**
+```
+ListConcat(List<String>)->String?
+ListConcat(List<String>?)->String?
+
+ListConcat(List<String>, String)->String?
+ListConcat(List<String>?, String)->String?
+```
+
 ## ListExtract {#listextract}
 
 По списку структур возвращает список содержащихся в них полей с указанным именем.
@@ -462,6 +728,20 @@ SELECT
 FROM my_table;
 ```
 {% endif %}
+
+```sql
+$l = AsList(
+    <|key:"a", value:1|>,
+    <|key:"b", value:2|>
+);
+SELECT ListExtract($l, "key");  -- ["a", "b"]
+```
+
+**Сигнатура**
+```
+ListExtract(List<Struct<..>>, String)->List<T>
+ListExtract(List<Struct<..>>?, String)->List<T>?
+```
 
 ## ListTakeWhile, ListSkipWhile {#listtakewhile}
 
@@ -489,6 +769,12 @@ SELECT
     ListSkipWhileInclusive($data, ($x) -> {return $x <= 3}); -- [1, 2, 7]
 ```
 
+**Сигнатура**
+```
+ListTakeWhile(List<T>, (T)->Bool)->List<T>
+ListTakeWhile(List<T>?, (T)->Bool)->List<T>?
+```
+
 ## ListAggregate {#listaggregate}
 
 Применить [фабрику агрегационных функций](../basic.md#aggregationfactory) для переданного списка.
@@ -500,10 +786,15 @@ SELECT
 1. Список;
 2. [Фабрика агрегационных функций](../basic.md#aggregationfactory).
 
-
 **Примеры**
 ``` yql
 SELECT ListAggregate(AsList(1, 2, 3), AggregationFactory("Sum")); -- 6
+```
+
+**Сигнатура**
+```
+ListAggregate(List<T>, AggregationFactory)->T
+ListAggregate(List<T>?, AggregationFactory)->T?
 ```
 
 ## ToDict и ToMultiDict {#todict}
@@ -526,6 +817,17 @@ FROM my_table;
 ```
 {% endif %}
 
+```yql
+$l = AsList(("a",1), ("b", 2), ("a", 3));
+SELECT ToDict($l);  -- {"a": 1,"b": 2}
+```
+
+**Сигнатура**
+```
+ToDict(List<Tuple<K,V>>)->Dict<K,V>
+ToDict(List<Tuple<K,V>>?)->Dict<K,V>?
+```
+
 ## ToSet {#toset}
 Преобразует список в словарь, в котором ключи являются уникальными элементами этого списка, а значения отсутствуют и имеют тип `Void`. Для списка `List<T>` тип результата будет `Dict<T, Void>`.
 Также поддерживается опциональный список, что приводит к опциональному словарю в результате.
@@ -540,3 +842,14 @@ SELECT
 FROM my_table;
 ```
 {% endif %}
+
+```yql
+$l = AsList(1,1,2,2,3);
+SELECT ToSet($l);  -- {1,2,3}
+```
+
+**Сигнатура**
+```
+ToSet(List<T>)->Set<T>
+ToSet(List<T>?)->Set<T>?
+```

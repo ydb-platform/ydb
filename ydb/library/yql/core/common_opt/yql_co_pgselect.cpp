@@ -105,15 +105,17 @@ TExprNode::TPtr JoinColumns(TPositionHandle pos, const TExprNode::TPtr& list1, c
         .Build();
 }
 
-std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& lambda,
-    const TNodeMap<ui32>& subLinks, TExprContext& ctx, TOptimizeContext& optCtx) {
-    Y_UNUSED(pos);
+std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
+    const TExprNode::TPtr& list, const TExprNode::TPtr& lambda,
+    const TNodeMap<ui32>& subLinks, const TExprNode::TPtr& joins, TExprContext& ctx, TOptimizeContext& optCtx) {
     ui32 sublinkColumnIndex = 0;
     auto newList = list;
-    auto newLambda = lambda;
     auto originalRow = lambda->Head().HeadPtr();
+    auto arg = ctx.NewArgument(pos, "row");
+    auto arguments = ctx.NewArguments(pos, { arg });
+    auto root = lambda->TailPtr();
     TNodeOnNodeOwnedMap deepClones;
-    auto status = OptimizeExpr(newLambda, newLambda, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    auto status = OptimizeExpr(root, root, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         auto it = subLinks.find(node.Get());
         if (it != subLinks.end()) {
             auto linkType = node->Head().Content();
@@ -248,14 +250,14 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
 
                 auto outerList = ctx.Builder(node->Pos())
                     .Callable("ExtractMembers")
-                        .Add(0, list)
+                        .Add(0, joins)
                         .Add(1, colList)
                     .Seal()
                     .Build();
 
                 auto uniqueOuterList = ctx.Builder(node->Pos())
                     .Callable("Aggregate")
-                        .Add(0, list)
+                        .Add(0, outerList)
                         .Add(1, colList)
                         .List(2)
                         .Seal()
@@ -415,13 +417,20 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
 
                 if (linkType == "exists") {
                     return ctx.Builder(node->Pos())
-                        .Callable(">")
-                            .Callable(0, "Member")
-                                .Add(0, originalRow)
-                                .Atom(1, columnName)
-                            .Seal()
-                            .Callable(1, "Uint64")
-                                .Atom(0, "0")
+                        .Callable("ToPg")
+                            .Callable(0, ">")
+                                .Callable(0, "Coalesce")
+                                    .Callable(0, "Member")
+                                        .Add(0, originalRow)
+                                        .Atom(1, columnName)
+                                    .Seal()
+                                    .Callable(1, "Uint64")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, "0")
+                                .Seal()
                             .Seal()
                         .Seal()
                         .Build();
@@ -453,20 +462,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                         .Build();
                 } else if (linkType == "any") {
                     return ctx.Builder(node->Pos())
-                        .Callable(">")
-                            .Callable(0, "Member")
-                                .Add(0, originalRow)
-                                .Atom(1, columnName)
-                            .Seal()
-                            .Callable(1, "Uint64")
-                                .Atom(0, "0")
-                            .Seal()
-                        .Seal()
-                        .Build();
-                } else if (linkType == "all") {
-                    return ctx.Builder(node->Pos())
-                        .Callable("==")
-                            .Callable(0, "Coalesce")
+                        .Callable("ToPg")
+                            .Callable(0, ">")
                                 .Callable(0, "Member")
                                     .Add(0, originalRow)
                                     .Atom(1, columnName)
@@ -475,8 +472,24 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                                     .Atom(0, "0")
                                 .Seal()
                             .Seal()
-                            .Callable(1, "Uint64")
-                                .Atom(0, "0")
+                        .Seal()
+                        .Build();
+                } else if (linkType == "all") {
+                    return ctx.Builder(node->Pos())
+                        .Callable("ToPg")
+                            .Callable(0, "==")
+                                .Callable(0, "Coalesce")
+                                    .Callable(0, "Member")
+                                        .Add(0, originalRow)
+                                        .Atom(1, columnName)
+                                    .Seal()
+                                    .Callable(1, "Uint64")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                                .Callable(1, "Uint64")
+                                    .Atom(0, "0")
+                                .Seal()
                             .Seal()
                         .Seal()
                         .Build();
@@ -489,6 +502,8 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
         return node;
     }, ctx, TOptimizeExprSettings(optCtx.Types));
 
+    root = ctx.ReplaceNode(std::move(root), *originalRow, arg);
+    auto newLambda = ctx.NewLambda(pos, std::move(arguments), std::move(root));
     YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
     return {
         newList,
@@ -497,10 +512,10 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
 }
 
 TExprNode::TPtr BuildFilter(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& filter, TExprContext& ctx, TOptimizeContext& optCtx) {
-    TExprNode::TPtr actualList = list, actualFilter = filter->Tail().TailPtr();
-    auto subLinks = GatherSubLinks(actualFilter);
+    TExprNode::TPtr actualList = list, actualFilter = filter;
+    auto subLinks = GatherSubLinks(filter);
     if (!subLinks.empty()) {
-        std::tie(actualList, actualFilter) = RewriteSubLinks(filter->Pos(), actualList, actualFilter, subLinks, ctx, optCtx);
+        std::tie(actualList, actualFilter) = RewriteSubLinks(filter->Pos(), list, filter, subLinks, list, ctx, optCtx);
     }
 
     return ctx.Builder(pos)
@@ -593,24 +608,23 @@ TExprNode::TPtr BuildValues(TPositionHandle pos, const TExprNode::TPtr& values, 
 }
 
 std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildOneRow(TPositionHandle pos, const TExprNode::TPtr& result, TExprContext& ctx) {
+    auto arg = ctx.NewArgument(pos, "row");
+    auto arguments = ctx.NewArguments(pos, { arg });
+
     TExprNode::TListType rowItems;
     for (const auto& x : result->Tail().Children()) {
-        rowItems.push_back(ctx.NewList(x->Pos(), { x->HeadPtr(), x->Tail().TailPtr() }));
+        auto value = ctx.ReplaceNode(x->Tail().TailPtr(), x->Tail().Head().Head(), arg);
+        rowItems.push_back(ctx.NewList(x->Pos(), { x->HeadPtr(), value }));
     }
 
     auto row = ctx.NewCallable(pos, "AsStruct", std::move(rowItems));
+    auto projectionLambda = ctx.NewLambda(pos, std::move(arguments), std::move(row));
+
     auto list = ctx.Builder(pos)
         .Callable("AsList")
             .Callable(0, "AsStruct")
             .Seal()
         .Seal()
-        .Build();
-
-    auto projectionLambda = ctx.Builder(pos)
-        .Lambda()
-            .Param("row")
-            .Set(row)
-            .Seal()
         .Build();
 
     return { list, projectionLambda };
@@ -624,6 +638,21 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
         auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         for (auto item : type->GetItems()) {
             usedColumns.insert(std::make_pair(TString(item->GetName()), std::make_pair(Max<ui32>(), TString())));
+        }
+
+        auto subLinks = GatherSubLinks(x->TailPtr());
+        for (const auto& s : subLinks) {
+            auto extColumns = ExtractExternalColumns(s.first->Tail());
+            for (const auto& c : extColumns) {
+                usedColumns.insert(std::make_pair(c, std::make_pair(Max<ui32>(), TString())));
+            }
+
+            if (!s.first->Child(2)->IsCallable("Void")) {
+                auto type = s.first->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                for (auto item : type->GetItems()) {
+                    usedColumns.insert(std::make_pair(TString(item->GetName()), std::make_pair(Max<ui32>(), TString())));
+                }
+            }
         }
     }
 
@@ -849,7 +878,7 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
             TExprNode::TPtr filteredCartesian;
             if (joinType != "cross") {
-                filteredCartesian = BuildFilter(pos, cartesian, join, ctx, optCtx);
+                filteredCartesian = BuildFilter(pos, cartesian, join->Tail().TailPtr(), ctx, optCtx);
             }
 
             if (joinType == "cross") {
@@ -1581,8 +1610,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 list = JoinColumns(node->Pos(), list, outer, nullptr, ctx);
             }
 
+            auto joins = list;
             if (filter) {
-                list = BuildFilter(node->Pos(), list, filter, ctx, optCtx);
+                list = BuildFilter(node->Pos(), list, filter->Tail().TailPtr(), ctx, optCtx);
             }
 
             TAggs aggs;
@@ -1593,6 +1623,12 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             list = BuildWindows(node->Pos(), list, window, projectionLambda, ctx, optCtx);
+            auto projectionSubLinks = GatherSubLinks(projectionLambda);
+            if (!projectionSubLinks.empty()) {
+                std::tie(list, projectionLambda) = RewriteSubLinks(projectionLambda->Pos(), list, projectionLambda,
+                    projectionSubLinks, joins, ctx, optCtx);
+            }
+
             if (finalExtTypes) {
                 projectionLambda = AddExtColumns(projectionLambda, finalExtTypes->TailPtr(), ctx);
             }

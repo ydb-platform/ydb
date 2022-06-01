@@ -1462,7 +1462,8 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
 }
 
 bool ScanColumnsForSublinks(bool& needRebuildSubLinks, const TNodeSet& sublinks,
-    TInputs& inputs, const THashSet<TString>& possibleAliases, bool& hasColumnRef, THashSet<TString>& refs, TExtContext& ctx) {
+    TInputs& inputs, const THashSet<TString>& possibleAliases, bool& hasColumnRef, THashSet<TString>& refs,
+    THashMap<TString, THashSet<TString>>* qualifiedRefs, TExtContext& ctx) {
     needRebuildSubLinks = false;
     for (const auto& s : sublinks) {
         if (s->Child(1)->IsCallable("Void")) {
@@ -1473,7 +1474,7 @@ bool ScanColumnsForSublinks(bool& needRebuildSubLinks, const TNodeSet& sublinks,
         if (!testRowLambda.IsCallable("Void")) {
             YQL_ENSURE(testRowLambda.IsLambda());
             if (!ScanColumns(testRowLambda.TailPtr(), inputs, possibleAliases, nullptr, hasColumnRef,
-                refs, nullptr, ctx)) {
+                refs, qualifiedRefs, ctx)) {
                 return false;
             }
         }
@@ -2000,8 +2001,17 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         THashMap<TString, THashSet<TString>> qualifiedRefs;
                         if (column->Child(1)->IsCallable("Void")) {
                             // no effective type yet, scan lambda body
+                            TNodeSet sublinks;
+                            ScanSublinks(column->Tail().TailPtr(), sublinks);
+
                             if (!ScanColumns(column->Tail().TailPtr(), joinInputs, possibleAliases, &hasStar, hasColumnRef,
                                 refs, &qualifiedRefs, ctx)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
+
+                            bool needRebuildSubLinks;
+                            if (!ScanColumnsForSublinks(needRebuildSubLinks, sublinks, joinInputs, possibleAliases,
+                                hasColumnRef, refs, &qualifiedRefs, ctx)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -2013,23 +2023,37 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                     return IGraphTransformer::TStatus::Error;
                                 }
 
-                                auto expandedColumns = column->HeadPtr();
                                 auto typeNode = ExpandType(column->Pos(), *effectiveType, ctx.Expr);
 
-                                auto argNode = ctx.Expr.NewArgument(column->Pos(), "row");
-                                auto arguments = ctx.Expr.NewArguments(column->Pos(), { argNode });
-                                TExprNode::TPtr newRoot;
-                                auto status = RebuildLambdaColumns(column->Tail().TailPtr(), argNode, newRoot, joinInputs, &expandedColumns, ctx);
-                                if (status == IGraphTransformer::TStatus::Error) {
-                                    return IGraphTransformer::TStatus::Error;
+                                auto newColumnChildren = column->ChildrenList();
+                                if (needRebuildSubLinks) {
+                                    auto arguments = ctx.Expr.NewArguments(column->Pos(), { });
+
+                                    TExprNode::TPtr newRoot;
+                                    auto status = RebuildSubLinks(column->Tail().TailPtr(), newRoot, sublinks, joinInputs, typeNode, ctx);
+                                    if (status == IGraphTransformer::TStatus::Error) {
+                                        return IGraphTransformer::TStatus::Error;
+                                    }
+
+                                    auto newLambda = ctx.Expr.NewLambda(column->Pos(), std::move(arguments), std::move(newRoot));
+                                    newColumnChildren[2] = newLambda;
+                                } else {
+                                    auto argNode = ctx.Expr.NewArgument(column->Pos(), "row");
+                                    auto arguments = ctx.Expr.NewArguments(column->Pos(), { argNode });
+                                    auto expandedColumns = column->HeadPtr();
+
+                                    TExprNode::TPtr newRoot;
+                                    auto status = RebuildLambdaColumns(column->Tail().TailPtr(), argNode, newRoot, joinInputs, &expandedColumns, ctx);
+                                    if (status == IGraphTransformer::TStatus::Error) {
+                                        return IGraphTransformer::TStatus::Error;
+                                    }
+
+                                    auto newLambda = ctx.Expr.NewLambda(column->Pos(), std::move(arguments), std::move(newRoot));
+                                    newColumnChildren[0] = expandedColumns;
+                                    newColumnChildren[1] = typeNode;
+                                    newColumnChildren[2] = newLambda;
                                 }
 
-                                auto newLambda = ctx.Expr.NewLambda(column->Pos(), std::move(arguments), std::move(newRoot));
-
-                                auto newColumnChildren = column->ChildrenList();
-                                newColumnChildren[0] = expandedColumns;
-                                newColumnChildren[1] = typeNode;
-                                newColumnChildren[2] = newLambda;
                                 auto newColumn = ctx.Expr.NewCallable(column->Pos(), "PgResultItem", std::move(newColumnChildren));
                                 newResult.push_back(newColumn);
                             }
@@ -2221,7 +2245,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
 
                         bool needRebuildSubLinks;
-                        if (!ScanColumnsForSublinks(needRebuildSubLinks, sublinks, joinInputs, possibleAliases, hasColumnRef, refs, ctx)) {
+                        if (!ScanColumnsForSublinks(needRebuildSubLinks, sublinks, joinInputs, possibleAliases, hasColumnRef,
+                            refs, nullptr, ctx)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 

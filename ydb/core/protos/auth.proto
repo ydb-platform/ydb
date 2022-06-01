@@ -15,8 +15,8 @@ message TAuthConfig {
     optional uint64 GrpcErrorLifeTime = 18 [default = 10000]; // ms
     optional bool UseBlackBox = 20 [default = true];
     optional bool UseAccessService = 21 [default = false];
-    optional bool CacheAccessServiceAuthentication = 22 [default = true];
-    optional bool CacheAccessServiceAuthorization = 23 [default = true];
+    optional bool CacheAccessServiceAuthentication = 22 [default = false];
+    optional bool CacheAccessServiceAuthorization = 23 [default = false];
     optional bool UseStaff = 25 [default = true];
     optional bool UseUserAccountService = 26 [default = false];
     optional bool UseServiceAccountService = 27 [default = false];

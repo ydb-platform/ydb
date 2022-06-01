@@ -4,22 +4,18 @@
 namespace NKikimr::NSQS {
 using namespace NActors;
 using namespace NJson;
-using namespace NYdb;
+using namespace NKikimr;
 
 constexpr TDuration DEFAULT_RETRY_TIMEOUT = TDuration::Seconds(10);
-constexpr TDuration SHORT_RETRY_TIMEOUT = TDuration::Seconds(2);
-constexpr TDuration DEFAULT_QUERY_TIMEOUT = TDuration::Seconds(30);
 
 TSearchEventsProcessor::TSearchEventsProcessor(
         const TString& root, const TDuration& reindexInterval, const TDuration& rescanInterval,
-        const TSimpleSharedPtr<NTable::TTableClient>& tableClient,
-        IEventsWriterWrapper::TPtr eventsWriter,
-        bool waitForWake
+        const TString& database, IEventsWriterWrapper::TPtr eventsWriter, bool waitForWake
 )
         : RescanInterval(rescanInterval)
         , ReindexInterval(reindexInterval)
-        , TableClient(tableClient)
         , EventsWriter(eventsWriter)
+        , Database(database)
         , WaitForWake(waitForWake)
 {
     InitQueries(root);
@@ -61,62 +57,62 @@ TSearchEventsProcessor::~TSearchEventsProcessor() {
 
 void TSearchEventsProcessor::Bootstrap(const TActorContext& ctx) {
     Become(&TSearchEventsProcessor::StateFunc);
+    State = EState::QueuesListingExecute;
     if (!WaitForWake)
-        ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(StartQueuesListingTag));
+        ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup());
 }
 
-STFUNC(TSearchEventsProcessor::StateFunc) {
-    switch (ev->GetTypeRewrite()) {
-        HFunc(TEvWakeup, HandleWakeup);
+void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr&, const TActorContext& ctx) {
+    switch (State) {
+        case EState::Stopping:
+            return;
+        case EState::QueuesListingExecute:
+            return StartQueuesListing(ctx);
+        case EState::CleanupExecute:
+            return RunEventsCleanup(ctx);
         default:
             Y_FAIL();
-    };
+    }
 }
 
-void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr& ev, const TActorContext& ctx) {
-    if (Stopping)
+void TSearchEventsProcessor::HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record.GetRef();
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        LOG_ERROR_S(ctx, NKikimrServices::SQS,
+                    "YC Search events processor: Got error trying to perform request: " << record);
+        HandleFailure(ctx);
         return;
-    switch (ev->Get()->Tag) {
-        case StartQueuesListingTag:
-            StartQueuesListing(ctx);
-            break;
-        case QueuesListSessionStartedTag:
-            OnQueuesListSessionReady(ctx);
-            break;
-        case QueuesListPreparedTag:
-            OnQueuesListPrepared(ctx);
-            break;
-         case QueuesListQueryCompleteTag:
-            OnQueuesListQueryComplete(ctx);
-            break;
-        case RunEventsListingTag:
-            RunEventsListing(ctx);
-            break;
-        case EventsListingDoneTag:
-            OnEventsListingDone(ctx);
-            break;
-        case StartCleanupTag:
-            StartCleanupSession(ctx);
-            break;
-        case CleanupSessionReadyTag:
-            OnCleanupSessionReady(ctx);
-            break;
-        case CleanupTxReadyTag:
-            OnCleanupTxReady(ctx);
-            break;
-        case CleanupPreparedTag:
-            OnCleanupPrepared(ctx);
-            break;
-        case CleanupQueryCompleteTag:
-            OnCleanupQueryComplete(ctx);
-            break;
-        case CleanupTxCommittedTag:
-            OnCleanupTxCommitted(ctx);
-            break;
-        case StopAllTag:
-            Stopping = true;
-            EventsWriter->Close();
-            break;
+    }
+    switch (State) {
+        case EState::QueuesListingExecute:
+            return OnQueuesListQueryComplete(ev, ctx);
+        case EState::EventsListingExecute:
+            return OnEventsListingDone(ev, ctx);
+        case EState::CleanupExecute:
+            return OnCleanupQueryComplete(ctx);
+        case EState::Stopping:
+            return StopSession(ctx);
+        default:
+            Y_FAIL();
+    }
+}
+
+void TSearchEventsProcessor::HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    LOG_ERROR_S(ctx, NKikimrServices::SQS, "YC Search events processor: failed to list ymq events: " << record);
+    HandleFailure(ctx);
+}
+
+void TSearchEventsProcessor::HandleFailure(const TActorContext& ctx) {
+    StopSession(ctx);
+    switch (State) {
+        case EState::EventsListingExecute:
+            State = EState::QueuesListingExecute;
+        case EState::QueuesListingExecute:
+        case EState::CleanupExecute:
+            return ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup());
+        case EState::Stopping:
+            return;
         default:
             Y_FAIL();
     }
@@ -124,106 +120,83 @@ void TSearchEventsProcessor::HandleWakeup(TEvWakeup::TPtr& ev, const TActorConte
 
 void TSearchEventsProcessor::StartQueuesListing(const TActorContext& ctx) {
     LastQueuesKey = {};
-    StartSession(QueuesListSessionStartedTag, ctx);
+    StopSession(ctx);
+    ExistingQueues.clear();
+    RunQueuesListQuery(ctx);
 }
 
-void TSearchEventsProcessor::OnQueuesListSessionReady(const TActorContext &ctx) {
-    if (!SessionStarted(ctx)) {
-        return ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(StartQueuesListingTag));
-    }
-    PrepareDataQuery(SelectQueuesQuery, QueuesListPreparedTag, ctx);
+void TSearchEventsProcessor::RunQueuesListQuery(const TActorContext& ctx) {
+    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto* request = ev->Record.MutableRequest();
+
+    request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    request->SetKeepSession(false);
+    request->SetPreparedQuery(SelectQueuesQuery);
+
+    NClient::TParameters params;
+    params["$Account"] = LastQueuesKey.Account;
+    params["$QueueName"] = LastQueuesKey.QueueName;
+
+    RunQuery(SelectQueuesQuery, &params, true, ctx);
 }
 
-void TSearchEventsProcessor::OnQueuesListPrepared(const TActorContext &ctx) {
-    if (!QueryPrepared(ctx)) {
-        return ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(StartQueuesListingTag));
-    }
-    RunQueuesListQuery(ctx, true);
-}
+void TSearchEventsProcessor::OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev,
+                                                       const TActorContext& ctx) {
 
-void TSearchEventsProcessor::RunQueuesListQuery(const TActorContext& ctx, bool initial) {
-    if (initial) {
-        ExistingQueues.clear();
-    }
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(PreparedQuery.Defined());
+    auto& response = ev->Get()->Record.GetRef().GetResponse();
 
-    auto builder = PreparedQuery.Get()->GetParamsBuilder();
-    {
-        auto &param = builder.AddParam("$Account");
-        param.Utf8(LastQueuesKey.Account);
-        param.Build();
-    }
-    {
-        auto &param = builder.AddParam("$QueueName");
-        param.Utf8(LastQueuesKey.QueueName);
-        param.Build();
-    }
-    RunPrepared(builder.Build(), QueuesListQueryCompleteTag, ctx);
-}
-
-void TSearchEventsProcessor::OnQueuesListQueryComplete(const TActorContext& ctx) {
-    if (!QueryComplete(ctx)) {
-        return ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(StartQueuesListingTag));
-    }
-
-    const auto& result = QueryResult.Get()->GetResultSet(0);
-
-    TResultSetParser parser(result);
-    while (parser.TryNextRow()) {
-        TString queueName = *parser.ColumnParser("QueueName").GetOptionalUtf8();
-        TString cloudId = *parser.ColumnParser("Account").GetOptionalUtf8();
-        TString customName = *parser.ColumnParser("CustomQueueName").GetOptionalUtf8();
-        ui64 createTs = *parser.ColumnParser("CreatedTimestamp").GetOptionalUint64();
-        TString folderId = *parser.ColumnParser("FolderId").GetOptionalUtf8();
+    Y_VERIFY(response.GetResults().size() == 1);
+    TString queueName, cloudId;
+    const auto& rr = response.GetResults(0).GetValue().GetStruct(0);
+    // "SELECT Account, QueueName, CustomQueueName, CreatedTimestamp, FolderId"
+    for (const auto& row : rr.GetList()) {
+        cloudId = row.GetStruct(0).GetOptional().GetText();
+        queueName = row.GetStruct(1).GetOptional().GetText();
+        auto customName = row.GetStruct(2).GetOptional().GetText();
+        auto createTs = row.GetStruct(3).GetOptional().GetUint64();
+        auto folderId = row.GetStruct(4).GetOptional().GetText();
         auto insResult = ExistingQueues.insert(std::make_pair(
                 queueName, TQueueEvent{EQueueEventType::Existed, createTs, customName, cloudId, folderId}
         ));
         Y_VERIFY(insResult.second);
-        LastQueuesKey.QueueName = queueName;
-        LastQueuesKey.Account = cloudId;
     }
-    if (result.Truncated()) {
-        RunQueuesListQuery(ctx, false);
+    if (SessionId.empty()) {
+        SessionId = response.GetSessionId();
     } else {
-        Send(ctx.SelfID, new TEvWakeup(RunEventsListingTag));
+        Y_VERIFY(SessionId == response.GetSessionId());
+    }
+
+    LastQueuesKey.QueueName = queueName;
+    LastQueuesKey.Account = cloudId;
+
+    if (rr.ListSize() > 0) {
+        RunQueuesListQuery(ctx);
+    } else {
+        StopSession(ctx);
+        State = EState::EventsListingExecute;
+        RunEventsListing(ctx);
     }
 }
 
 void TSearchEventsProcessor::RunEventsListing(const TActorContext& ctx) {
-    QueryResult = Nothing();
-    Status = TableClient->RetryOperation<NTable::TDataQueryResult>([this, query = SelectEventsQuery](NTable::TSession session) {
-        auto tx = NTable::TTxControl::BeginTx().CommitTx();
-        return session.ExecuteDataQuery(
-                query, tx, NTable::TExecDataQuerySettings().ClientTimeout(DEFAULT_QUERY_TIMEOUT)
-            ).Apply([this](const auto& future) mutable {
-                QueryResult = future.GetValue();
-                return future;
-        });
-    });
-    Apply(&Status, EventsListingDoneTag, ctx);
+    RunQuery(SelectEventsQuery, nullptr, true, ctx);
 }
 
-void TSearchEventsProcessor::OnEventsListingDone(const TActorContext& ctx) {
-    auto& status = Status.GetValue();
-    if (!status.IsSuccess()) {
-        Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(RunEventsListingTag));
-        return;
-    }
-
-    Y_VERIFY(QueryResult.Defined());
-    Y_VERIFY(QueryResult.Get()->GetResultSets().size() == 1);
-    const auto& result = QueryResult.Get()->GetResultSet(0);
-    TResultSetParser parser(result);
+void TSearchEventsProcessor::OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     QueuesEvents.clear();
+    const auto& record = ev->Get()->Record.GetRef();
+    Y_VERIFY(record.GetResponse().GetResults().size() == 1);
+    const auto& rr = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
 
-    while (parser.TryNextRow()) {
-        TString cloudId = *parser.ColumnParser("Account").GetOptionalUtf8();
-        TString queueName = *parser.ColumnParser("QueueName").GetOptionalUtf8();
-        ui64 evType = *parser.ColumnParser("EventType").GetOptionalUint64();
-        TString customName = *parser.ColumnParser("CustomQueueName").GetOptionalUtf8();
-        TString folderId = *parser.ColumnParser("FolderId").GetOptionalUtf8();
-        ui64 timestamp = *parser.ColumnParser("EventTimestamp").GetOptionalUint64();
+    for (const auto& row : rr.GetList()) {
+        // "SELECT Account, QueueName, EventType, CustomQueueName, EventTimestamp, FolderId
+        auto cloudId = row.GetStruct(0).GetOptional().GetText();
+        auto queueName = row.GetStruct(1).GetOptional().GetText();
+        auto evType = row.GetStruct(2).GetOptional().GetUint64();
+        auto customName = row.GetStruct(3).GetOptional().GetText();
+        auto timestamp = row.GetStruct(4).GetOptional().GetUint64();
+        auto folderId = row.GetStruct(5).GetOptional().GetText();
         auto& qEvents = QueuesEvents[queueName];
         auto insResult = qEvents.insert(std::make_pair(
                 timestamp, TQueueEvent{EQueueEventType(evType), timestamp, customName, cloudId, folderId}
@@ -233,68 +206,28 @@ void TSearchEventsProcessor::OnEventsListingDone(const TActorContext& ctx) {
     ProcessEventsQueue(ctx);
 }
 
-void TSearchEventsProcessor::StartCleanupSession(const TActorContext& ctx) {
-    StartSession(CleanupSessionReadyTag, ctx);
-}
-
-void TSearchEventsProcessor::OnCleanupSessionReady(const TActorContext &ctx) {
-    if (!SessionStarted(ctx)) {
-        return ctx.Schedule(SHORT_RETRY_TIMEOUT, new TEvWakeup(StartCleanupTag));
-    }
-    StartTx(CleanupTxReadyTag, ctx);
-}
-
-void TSearchEventsProcessor::OnCleanupTxReady(const TActorContext &ctx) {
-    if (!TxStarted(ctx)) {
-        return ctx.Schedule(SHORT_RETRY_TIMEOUT, new TEvWakeup(StartCleanupTag));
-    }
-    PrepareDataQuery(DeleteEventQuery, CleanupPreparedTag, ctx);
-}
-
-void TSearchEventsProcessor::OnCleanupPrepared(const TActorContext &ctx) {
-    if (!QueryPrepared(ctx)) {
-        return ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(StartCleanupTag));
-    }
-    RunEventsCleanup(ctx);
-}
-
 void TSearchEventsProcessor::RunEventsCleanup(const TActorContext& ctx) {
-    Y_VERIFY(PreparedQuery.Defined());
-    Y_VERIFY(CurrentTx.Defined());
+    State = EState::CleanupExecute;
 
-    auto builder = PreparedQuery.Get()->GetParamsBuilder();
-    auto &param = builder.AddParam("$Events");
-    param.BeginList();
+    NClient::TParameters params;
+    auto param = params["$Events"];
     for (const auto&[qName, events] : QueuesEvents) {
         for (const auto&[_, event]: events) {
-            param.AddListItem().BeginStruct().AddMember("Account").Utf8(event.CloudId)
-                                             .AddMember("QueueName").Utf8(qName)
-                                             .AddMember("EventType").Uint64(static_cast<ui64>(event.Type))
-                                             .EndStruct();
-
+            auto item = param.AddListItem();
+            item["Account"] = event.CloudId;
+            item["QueueName"] = qName;
+            item["EventType"] = static_cast<ui64>(event.Type);
         }
     }
-    param.EndList().Build();
-    RunPrepared(builder.Build(), CleanupQueryCompleteTag, ctx);
+    RunQuery(DeleteEventQuery, &params, false, ctx);
 }
 
 void TSearchEventsProcessor::OnCleanupQueryComplete(const TActorContext& ctx) {
-    if (!QueryComplete(ctx)) {
-        return ctx.Schedule(SHORT_RETRY_TIMEOUT, new TEvWakeup(StartCleanupTag));
-    }
-    CommitTx(CleanupTxCommittedTag, ctx);
-}
-
-void TSearchEventsProcessor::OnCleanupTxCommitted(const TActorContext &ctx) {
-    if (!TxCommitted(ctx)) {
-        return ctx.Schedule(DEFAULT_RETRY_TIMEOUT, new TEvWakeup(StartCleanupTag));
-    }
     QueuesEvents.clear();
     ProcessReindexIfRequired(ctx);
 }
 
 void TSearchEventsProcessor::ProcessEventsQueue(const TActorContext& ctx) {
-
     for (const auto& [qName, events] : QueuesEvents) {
         for (const auto& [ts, event]: events) {
             auto existsIter = ExistingQueues.find(qName);
@@ -315,7 +248,8 @@ void TSearchEventsProcessor::ProcessEventsQueue(const TActorContext& ctx) {
         }
     }
     if (!QueuesEvents.empty()) {
-        Send(ctx.SelfID, new TEvWakeup(StartCleanupTag));
+        State = EState::CleanupExecute;
+        RunEventsCleanup(ctx);
     } else {
         ProcessReindexIfRequired(ctx);
     }
@@ -346,7 +280,8 @@ void TSearchEventsProcessor::ProcessReindexResult(const TActorContext &ctx) {
 }
 
 void TSearchEventsProcessor::WaitNextCycle(const TActorContext &ctx) {
-    ctx.Schedule(RescanInterval, new TEvWakeup(StartQueuesListingTag));
+    State = EState::QueuesListingExecute;
+    ctx.Schedule(RescanInterval, new TEvWakeup());
 }
 
 ui64 TSearchEventsProcessor::GetReindexCount() const {
@@ -357,99 +292,47 @@ NActors::TActorSystem* TSearchEventsProcessor::GetActorSystem() {
     return TActivationContext::ActorSystem();
 }
 
-void TSearchEventsProcessor::StartSession(ui32 evTag, const TActorContext &ctx) {
-    Session = Nothing();
-    CurrentTx = Nothing();
-    PreparedQuery = Nothing();
-    QueryResult = Nothing();
-    SessionFuture = TableClient->GetSession();
-    Apply(&SessionFuture, evTag, ctx);
-}
-
-void TSearchEventsProcessor::PrepareDataQuery(const TString& query, ui32 evTag, const TActorContext& ctx) {
-    Y_VERIFY(Session.Defined());
-    PreparedQuery = Nothing();
-    QueryResult = Nothing();
-    PrepQueryFuture = Session.Get()->PrepareDataQuery(query);
-    Apply(&PrepQueryFuture, evTag, ctx);
-}
-
-void TSearchEventsProcessor::StartTx(ui32 evTag, const TActorContext &ctx) {
-    Y_VERIFY(Session.Defined());
-    CurrentTx = Nothing();
-    TxFuture = Session.Get()->BeginTransaction();
-    Apply(&TxFuture, evTag, ctx);
-}
-
-void TSearchEventsProcessor::CommitTx(ui32 evTag, const TActorContext &ctx) {
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(CurrentTx.Defined());
-    CommitTxFuture = CurrentTx.Get()->Commit();
-    Apply(&CommitTxFuture, evTag, ctx);
-}
-
-void TSearchEventsProcessor::RunPrepared(NYdb::TParams&& params, ui32 evTag, const TActorContext& ctx) {
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(PreparedQuery.Defined());
-    QueryResult = Nothing();
-    NTable::TTxControl txControl = CurrentTx.Defined() ? NTable::TTxControl::Tx(*CurrentTx)
-                                                       : NTable::TTxControl::BeginTx().CommitTx();
-    QueryResultFuture = PreparedQuery.Get()->Execute(txControl, std::forward<NYdb::TParams>(params));
-    Apply(&QueryResultFuture, evTag, ctx);
-}
-
-bool TSearchEventsProcessor::SessionStarted(const TActorContext&) {
-    Y_VERIFY(SessionFuture.HasValue());
-    auto& value = SessionFuture.GetValueSync();
-    if (!value.IsSuccess())
-        return false;
-    Session = value.GetSession();
-    return true;
-}
-
-bool TSearchEventsProcessor::TxStarted(const TActorContext&) {
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(TxFuture.HasValue());
-    auto& value = TxFuture.GetValueSync();
-    if (!value.IsSuccess())
-        return false;
-    CurrentTx = value.GetTransaction();
-    return true;
-}
-bool TSearchEventsProcessor::TxCommitted(const TActorContext&) {
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(CurrentTx.Defined());
-    Y_VERIFY(CommitTxFuture.HasValue());
-    auto& value = CommitTxFuture.GetValueSync();
-    if (!value.IsSuccess())
-        return false;
-    CurrentTx = Nothing();
-    return true;
-}
-
-bool TSearchEventsProcessor::QueryPrepared(const TActorContext&) {
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(PrepQueryFuture.HasValue());
-    auto& value = PrepQueryFuture.GetValueSync();
-    if (!value.IsSuccess()) {
-        return false;
+void TSearchEventsProcessor::StopSession(const TActorContext& ctx) {
+    if (!SessionId.empty()) {
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        ev->Record.MutableRequest()->SetSessionId(SessionId);
+        Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        SessionId = TString();
     }
-    PreparedQuery = value.GetQuery();
-    return true;
-}
-bool TSearchEventsProcessor::QueryComplete(const TActorContext&) {
-    Y_VERIFY(Session.Defined());
-    Y_VERIFY(QueryResultFuture.HasValue());
-    QueryResult = QueryResultFuture.GetValueSync();
-    if (!QueryResult.Get()->IsSuccess()) {
-        return false;
-    }
-    return true;
 }
 
+void TSearchEventsProcessor::RunQuery(const TString& query, NKikimr::NClient::TParameters* params, bool readonly,
+                                      const TActorContext& ctx) {
+    auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+    auto* request = ev->Record.MutableRequest();
+
+    request->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+    request->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+    request->SetKeepSession(State == EState::QueuesListingExecute);
+    request->SetQuery(query);
+
+    if (!SessionId.empty()) {
+        request->SetSessionId(SessionId);
+    }
+    if (!Database.empty())
+        request->SetDatabase(Database);
+
+    request->MutableQueryCachePolicy()->set_keep_in_cache(true);
+
+    if (readonly) {
+        request->MutableTxControl()->mutable_begin_tx()->mutable_stale_read_only();
+    } else {
+        request->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    }
+    request->MutableTxControl()->set_commit_tx(true);
+    if (params != nullptr) {
+        request->MutableParameters()->Swap(params);
+    }
+    Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+
+}
 
 void TSearchEventsProcessor::SaveQueueEvent(
-
         const TString& queueName, const TQueueEvent& event, const TActorContext& ctx
 ) {
     auto tsIsoString = TInstant::MilliSeconds(event.Timestamp).ToIsoStringLocal();
@@ -481,6 +364,10 @@ void TSearchEventsProcessor::SaveQueueEvent(
     writer.CloseMap();
     writer.Flush();
     SendJson(ss.Str(), ctx);
+}
+
+void TSearchEventsProcessor::HandlePoisonPill(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    Die(ctx);
 }
 
 void IEventsWriterWrapper::Close() {

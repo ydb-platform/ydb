@@ -2,6 +2,9 @@
 
 #include "events.h"
 #include <ydb/core/ymq/base/events_writer_iface.h>
+#include <ydb/core/kqp/kqp.h>
+#include <ydb/public/lib/deprecated/kicli/kicli.h>
+
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
@@ -21,7 +24,7 @@ friend class TIndexProcesorTests;
 public:
 
     TSearchEventsProcessor(const TString& root, const TDuration& reindexInterval, const TDuration& rescanInterval,
-                           const TSimpleSharedPtr<NYdb::NTable::TTableClient>& tableClient,
+                           const TString& database,
                            IEventsWriterWrapper::TPtr eventsWriter,
                            bool waitForWake = false);
 
@@ -36,23 +39,14 @@ private:
     TDuration RescanInterval;
     TDuration ReindexInterval;
     TInstant LastReindex = TInstant::Zero();
-    TSimpleSharedPtr<NYdb::NTable::TTableClient> TableClient;
     IEventsWriterWrapper::TPtr EventsWriter;
 
-    NYdb::TAsyncStatus Status;
-    NYdb::NTable::TAsyncCreateSessionResult SessionFuture;
-    NYdb::NTable::TAsyncBeginTransactionResult TxFuture;
-    NYdb::NTable::TAsyncCommitTransactionResult CommitTxFuture;
-    NYdb::NTable::TAsyncPrepareQueryResult PrepQueryFuture;
-    NYdb::NTable::TAsyncDataQueryResult QueryResultFuture;
+    TString Database;
 
-    TMaybe<NYdb::NTable::TSession> Session;
-    TMaybe<NYdb::NTable::TDataQuery> PreparedQuery;
-    TMaybe<NYdb::NTable::TTransaction> CurrentTx;
-    TMaybe<NYdb::NTable::TDataQueryResult> QueryResult;
+    TString SessionId;
+
 
     bool WaitForWake = false;
-    bool Stopping = false;
     enum class EQueueEventType {
         Deleted = 0,
         Created = 1,
@@ -76,73 +70,56 @@ private:
 
     TAtomicCounter ReindexComplete = 0;
 
-    STATEFN(StateFunc);
+    STRICT_STFUNC(StateFunc,
+          HFunc(NActors::TEvents::TEvWakeup, HandleWakeup);
+          HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleQueryResponse);
+          HFunc(NKqp::TEvKqp::TEvProcessResponse, HandleProcessResponse);
+          HFunc(TEvents::TEvPoisonPill, HandlePoisonPill);
+          IgnoreFunc(NKqp::TEvKqp::TEvCloseSessionResponse);
+    )
+
+    void HandleQueryResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+    void HandleProcessResponse(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx);
+
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev, const TActorContext& ctx);
 
+    void HandleFailure(const TActorContext& ctx);
+
     void StartQueuesListing(const TActorContext& ctx);
-    void OnQueuesListSessionReady(const TActorContext& ctx);
-    void OnQueuesListPrepared(const TActorContext& ctx);
-    void RunQueuesListQuery(const TActorContext& ctx, bool initial = false);
-    void OnQueuesListQueryComplete(const TActorContext& ctx);
+    void RunQueuesListQuery(const TActorContext& ctx);
+    void OnQueuesListQueryComplete(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
 
     void RunEventsListing(const TActorContext& ctx);
-    void OnEventsListingDone(const TActorContext& ctx);
-    void StartCleanupSession(const TActorContext& ctx);
-    void OnCleanupSessionReady(const TActorContext& ctx);
-    void OnCleanupTxReady(const TActorContext& ctx);
-    void OnCleanupPrepared(const TActorContext& ctx);
+    void OnEventsListingDone(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void RunEventsCleanup(const TActorContext& ctx);
     void OnCleanupQueryComplete(const TActorContext&ctx);
-    void OnCleanupTxCommitted(const TActorContext&ctx);
+
+    void RunQuery(const TString& query, NKikimr::NClient::TParameters* params, bool readonly,
+                  const TActorContext& ctx);
 
     void ProcessEventsQueue(const TActorContext& ctx);
     void ProcessReindexIfRequired(const TActorContext& ctx);
     void ProcessReindexResult(const TActorContext& ctx);
     void WaitNextCycle(const TActorContext& ctx);
 
+    void HandlePoisonPill(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
 
-    void StartSession(ui32 evTag, const TActorContext& ctx);
-    void PrepareDataQuery(const TString& query, ui32 evTag, const TActorContext& ctx);
-    void StartTx(ui32 evTag, const TActorContext& ctx);
-    void CommitTx(ui32 evTag, const TActorContext& ctx);
-    void RunPrepared(NYdb::TParams&& params, ui32 evTag, const TActorContext& ctx);
-    bool SessionStarted(const TActorContext& ctx);
-    bool QueryPrepared(const TActorContext& ctx);
-    bool QueryComplete(const TActorContext& ctx);
-    bool TxStarted(const TActorContext& ctx);
-    bool TxCommitted(const TActorContext& ctx);
+    void StopSession(const TActorContext& ctx);
 
-
-    template<class TFutureType>
-    void Apply(TFutureType* future, ui32 evTag, const TActorContext& ctx) {
-        future->Subscribe(
-                [evTag, as = GetActorSystem(), selfId = ctx.SelfID](const auto&)
-                {as->Send(selfId, new TEvWakeup(evTag));}
-        );
-    }
     void InitQueries(const TString& root);
     void SaveQueueEvent(const TString& queueName, const TQueueEvent& event, const TActorContext& ctx);
     void SendJson(const TString& json, const TActorContext &ctx);
     static NActors::TActorSystem* GetActorSystem();
 
 
-    constexpr static ui32 StartQueuesListingTag = 1;
-    constexpr static ui32 QueuesListSessionStartedTag = 2;
-    constexpr static ui32 QueuesListPreparedTag = 3;
-    constexpr static ui32 QueuesListQueryCompleteTag = 4;
-
-    constexpr static ui32 RunEventsListingTag = 10;
-    constexpr static ui32 EventsListingDoneTag = 11;
-
-    constexpr static ui32 StartCleanupTag = 20;
-    constexpr static ui32 CleanupSessionReadyTag = 21;
-    constexpr static ui32 CleanupTxReadyTag = 22;
-    constexpr static ui32 CleanupPreparedTag = 23;
-    constexpr static ui32 CleanupQueryCompleteTag = 24;
-    constexpr static ui32 CleanupTxCommittedTag = 25;
-
-    constexpr static ui32 StopAllTag = 99;
-
+    enum class EState {
+        Initial,
+        QueuesListingExecute,
+        EventsListingExecute,
+        CleanupExecute,
+        Stopping
+    };
+    EState State = EState::Initial;
 
 };
 } // namespace NKikimr::NSQS

@@ -31,7 +31,7 @@ inline TActorId MakeSqsMeteringServiceID() {
     return TActorId(0, TStringBuf("SQS_METER"));
 }
 
-IActor* CreateSqsService(TMaybe<ui32> ydbPort = Nothing());
+IActor* CreateSqsService();
 IActor* CreateSqsProxyService();
 IActor* CreateSqsAccessService(const TString& address, const TString& pathToRootCA);
 IActor* CreateSqsFolderService(const TString& address, const TString& pathToRootCA);

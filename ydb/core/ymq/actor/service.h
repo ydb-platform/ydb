@@ -22,7 +22,7 @@ class TSqsService
     : public TActorBootstrapped<TSqsService>
 {
 public:
-    TSqsService(const TMaybe<ui32>& ydbPort);
+    TSqsService();
     ~TSqsService();
 
     void Bootstrap();
@@ -161,8 +161,7 @@ private:
 
 
     struct TYcSearchEventsConfig {
-        THolder<NYdb::TDriver> Driver;
-        ui32 GrpcPort = 0;
+        TString Database;
         bool Enabled = false;
         bool TenantMode = false;
         TDuration ReindexInterval = TDuration::Hours(4);

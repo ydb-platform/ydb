@@ -51,6 +51,7 @@ target_link_libraries(core-ymq-actor PUBLIC
   public-lib-value
   client-ydb_types-credentials
   library-yql-minikql
+  lib-deprecated-client
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-ymq-actor PRIVATE

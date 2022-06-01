@@ -46,6 +46,17 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpLookup& lookup, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
 
+// Returns the list of ColumnShards that can store rows from the specified range
+// NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range
+// partitioned and multiple ColumnShards store data from the same key range
+THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+
+THashMap<ui64, TShardInfo> PrunePartitions(TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);
+
 THashMap<ui64, TShardInfo> PruneEffectPartitions(const TKqpTableKeys& tableKeys,
     const NKqpProto::TKqpPhyOpUpsertRows& effect, const TStageInfo& stageInfo,
     const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv);

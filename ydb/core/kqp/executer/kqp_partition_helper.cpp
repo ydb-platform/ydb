@@ -557,6 +557,54 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     return shardInfoMap;
 }
 
+
+THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
+    YQL_ENSURE(table);
+    YQL_ENSURE(table->TableKind == ETableKind::Olap);
+    YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
+
+    const auto& keyColumnTypes = table->KeyColumnTypes;
+    auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
+
+    THashMap<ui64, TShardInfo> shardInfoMap;
+
+    if (ranges.empty())
+        return shardInfoMap;
+
+    for (const auto& partition :  stageInfo.Meta.ShardKey->Partitions) {
+        auto& shardInfo = shardInfoMap[partition.ShardId];
+
+        YQL_ENSURE(!shardInfo.KeyReadRanges);
+        shardInfo.KeyReadRanges.ConstructInPlace();
+        shardInfo.KeyReadRanges->CopyFrom(ranges);
+    }
+
+    return shardInfoMap;
+}
+
+THashMap<ui64, TShardInfo> PrunePartitions(TKqpTableKeys& tableKeys,
+    const NKqpProto::TKqpPhyTableOperation& operation, const TStageInfo& stageInfo,
+    const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
+{
+    switch (operation.GetTypeCase()) {
+        case NKqpProto::TKqpPhyTableOperation::kReadRanges:
+            return PrunePartitions(tableKeys, operation.GetReadRanges(), stageInfo, holderFactory, typeEnv);
+        case NKqpProto::TKqpPhyTableOperation::kReadRange:
+            return PrunePartitions(tableKeys, operation.GetReadRange(), stageInfo, holderFactory, typeEnv);
+        case NKqpProto::TKqpPhyTableOperation::kLookup:
+            return PrunePartitions(tableKeys, operation.GetLookup(), stageInfo, holderFactory, typeEnv);
+        case NKqpProto::TKqpPhyTableOperation::kReadOlapRange:
+            return PrunePartitions(tableKeys, operation.GetReadOlapRange(), stageInfo, holderFactory, typeEnv);
+        default:
+            YQL_ENSURE(false, "Unexpected table scan operation: " << static_cast<ui32>(operation.GetTypeCase()));
+            break;
+    }
+}
+
 namespace {
 
 using namespace NMiniKQL;

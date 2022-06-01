@@ -431,22 +431,7 @@ private:
             Y_VERIFY_DEBUG(stageInfo.Meta.TablePath == op.GetTable().GetPath());
 
             auto columns = BuildKqpColumns(op, table);
-            THashMap<ui64, TShardInfo> partitions;
-
-            switch (op.GetTypeCase()) {
-                case NKqpProto::TKqpPhyTableOperation::kReadRanges:
-                    partitions = PrunePartitions(TableKeys, op.GetReadRanges(), stageInfo, holderFactory, typeEnv);
-                    break;
-                case NKqpProto::TKqpPhyTableOperation::kReadRange:
-                    partitions = PrunePartitions(TableKeys, op.GetReadRange(), stageInfo, holderFactory, typeEnv);
-                    break;
-                case NKqpProto::TKqpPhyTableOperation::kLookup:
-                    partitions = PrunePartitions(TableKeys, op.GetLookup(), stageInfo, holderFactory, typeEnv);
-                    break;
-                default:
-                    YQL_ENSURE(false, "Unexpected table scan operation: " << (ui32) op.GetTypeCase());
-                    break;
-            }
+            THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
 
             bool reverse = false;
             ui64 itemsLimit = 0;
@@ -547,33 +532,6 @@ private:
         }
     }
 
-    // Returns the list of ColumnShards that can store rows from the specified range
-    // NOTE: Unlike OLTP tables that store data in DataShards, data in OLAP tables is not range
-    // partitioned and multiple ColumnShards store data from the same key range
-    THashMap<ui64, TShardInfo> ListColumnshadsForRange(const TKqpTableKeys& tableKeys,
-        const NKqpProto::TKqpPhyOpReadOlapRanges& readRanges, const TStageInfo& stageInfo,
-        const NMiniKQL::THolderFactory& holderFactory, const NMiniKQL::TTypeEnvironment& typeEnv)
-    {
-        const auto* table = tableKeys.FindTablePtr(stageInfo.Meta.TableId);
-        YQL_ENSURE(table);
-        YQL_ENSURE(table->TableKind == ETableKind::Olap);
-        YQL_ENSURE(stageInfo.Meta.TableKind == ETableKind::Olap);
-
-        const auto& keyColumnTypes = table->KeyColumnTypes;
-        auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
-
-        THashMap<ui64, TShardInfo> shardInfoMap;
-        for (const auto& partition :  stageInfo.Meta.ShardKey->Partitions) {
-            auto& shardInfo = shardInfoMap[partition.ShardId];
-
-            YQL_ENSURE(!shardInfo.KeyReadRanges);
-            shardInfo.KeyReadRanges.ConstructInPlace();
-            shardInfo.KeyReadRanges->CopyFrom(ranges);
-        }
-
-        return shardInfoMap;
-    }
-
     // Creates scan tasks for reading OLAP table range
     void BuildColumnshardScanTasks(TStageInfo& stageInfo, const NMiniKQL::THolderFactory& holderFactory,
         const NMiniKQL::TTypeEnvironment& typeEnv)
@@ -603,7 +561,7 @@ private:
 
             const auto& readRange = op.GetReadOlapRange();
 
-            auto allShards = ListColumnshadsForRange(TableKeys, readRange, stageInfo, holderFactory, typeEnv);
+            auto allShards = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
 
             bool reverse = readRange.GetReverse();
             ui64 itemsLimit = 0;

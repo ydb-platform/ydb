@@ -20,6 +20,12 @@ NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTran
 namespace NYql {
 namespace NCommon {
 
+TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
+    Y_UNUSED(value);
+    Y_UNUSED(pgTypeId);
+    throw yexception() << "PG types are not supported";
+}
+
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions) {
     Y_UNUSED(writer);
@@ -33,6 +39,13 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* 
     Y_UNUSED(buf);
     Y_UNUSED(type);
     Y_UNUSED(value);
+    throw yexception() << "PG types are not supported";
+}
+
+NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(NKikimr::NMiniKQL::TPgType* type, char cmd, TInputBuf& buf) {
+    Y_UNUSED(type);
+    Y_UNUSED(cmd);
+    Y_UNUSED(buf);
     throw yexception() << "PG types are not supported";
 }
 

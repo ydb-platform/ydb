@@ -1595,15 +1595,13 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
     }
 }
 
-void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
-    const TVector<ui32>* structPositions) {
+TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
     if (!value) {
-        writer.OnNull();
-        return;
+        return "null";
     }
 
     TString ret;
-    switch (type->GetTypeId()) {
+    switch (pgTypeId) {
     case BOOLOID:
         ret = DatumGetBool(ScalarDatumFromPod(value)) ? "true" : "false";
         break;
@@ -1636,7 +1634,7 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     }
     default:
         TPAllocScope call;
-        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        const auto& typeInfo = NPg::LookupType(pgTypeId);
         auto outFuncId = typeInfo.OutFuncId;
         if (typeInfo.TypeId == typeInfo.ArrayTypeId) {
             outFuncId = NPg::LookupProc("array_out", { 0 }).ProcId;
@@ -1667,10 +1665,20 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
         ret = str;
     }
 
-    writer.OnStringScalar(ret);
+    return ret;
 }
 
-NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
+void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
+    const TVector<ui32>* structPositions) {
+    if (!value) {
+        writer.OnNull();
+        return;
+    }
+
+    writer.OnStringScalar(PgValueToString(value, type->GetTypeId()));
+}
+
+NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInputBuf& buf) {
     using namespace NYson::NDetail;
     if (cmd == EntitySymbol) {
         return NUdf::TUnboxedValuePod();
@@ -1758,6 +1766,77 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         auto x = finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
         Y_ENSURE(stringInfo.cursor == stringInfo.len);
+        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+    }
+}
+
+NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
+    using namespace NYson::NDetail;
+    if (cmd == EntitySymbol) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    CHECK_EXPECTED(cmd, StringMarker);
+    auto s = buf.ReadYtString();
+    switch (type->GetTypeId()) {
+    case BOOLOID: {
+        return ScalarDatumToPod(BoolGetDatum(FromString<bool>(s)));
+    }
+    case INT2OID: {
+        return ScalarDatumToPod(Int16GetDatum(FromString<i16>(s)));
+    }
+    case INT4OID: {
+        return ScalarDatumToPod(Int32GetDatum(FromString<i32>(s)));
+    }
+    case INT8OID: {
+        return ScalarDatumToPod(Int64GetDatum(FromString<i64>(s)));
+    }
+    case FLOAT4OID: {
+        return ScalarDatumToPod(Float4GetDatum(FromString<float>(s)));
+    }
+    case FLOAT8OID: {
+        return ScalarDatumToPod(Float8GetDatum(FromString<double>(s)));
+    }
+    case BYTEAOID:
+    case VARCHAROID:
+    case TEXTOID: {
+        auto ret = MakeVar(s);
+        return PointerDatumToPod((Datum)ret);
+    }
+    case CSTRINGOID: {
+        auto ret = MakeCString(s);
+        return PointerDatumToPod((Datum)ret);
+    }
+    default:
+        TString str{s};
+
+        TPAllocScope call;
+        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        auto typeIOParam = MakeTypeIOParam(typeInfo);
+        auto inFuncId = typeInfo.InFuncId;
+        if (typeInfo.TypeId == typeInfo.ArrayTypeId) {
+            inFuncId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
+        }
+
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(inFuncId);
+        fmgr_info(inFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)str.c_str(), false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
+
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
         return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
     }
 }

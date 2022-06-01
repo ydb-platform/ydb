@@ -1243,7 +1243,7 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
 
     case TType::EKind::Pg: {
         auto pgType = static_cast<TPgType*>(type);
-        return ReadYsonValuePg(pgType, cmd, buf);
+        return isTableFormat ? ReadYsonValueInTableFormatPg(pgType, cmd, buf) : ReadYsonValuePg(pgType, cmd, buf);
     }
 
     default:
@@ -2417,6 +2417,27 @@ TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikim
             ValueToExprLiteral(baseType, value, ctx, pos),
             ctx.NewAtom(pos, taggedType->GetTag()),
         });
+    }
+
+    case ETypeAnnotationKind::Pg: {
+        auto pgType = type->Cast<TPgExprType>();
+        if (!value) {
+            return ctx.NewCallable(pos, "PgCast", {
+                ctx.NewCallable(pos, "Utf8", {
+                    ctx.NewAtom(pos, "null")
+                }),
+                ctx.NewCallable(pos, "PgType", {
+                    ctx.NewAtom(pos, pgType->GetName())
+                })
+            });
+        } else {
+            return ctx.NewCallable(pos, "PgConst", {
+                ctx.NewAtom(pos, PgValueToString(value, pgType->GetId())),
+                ctx.NewCallable(pos, "PgType", {
+                    ctx.NewAtom(pos, pgType->GetName())
+                })
+            });
+        }
     }
 
     default:

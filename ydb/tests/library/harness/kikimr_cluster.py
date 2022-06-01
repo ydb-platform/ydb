@@ -8,6 +8,7 @@ import pprint
 from concurrent import futures
 
 import ydb.tests.library.common.yatest_common as yatest_common
+import ydb
 
 from . import param_constants
 from .kikimr_runner import KiKiMR, KikimrExternalNode
@@ -245,24 +246,27 @@ class ExternalKiKiMRCluster(KiKiMRClusterInterface):
     def _get_node(self, host, grpc_port):
         nodes = self._slots if self._slots else self.nodes
         for node in nodes.values():
-            if node.host == host and str(node.grpc_port) == grpc_port:
+            if node.host == host and str(node.grpc_port) == str(grpc_port):
                 return node
         logger.error('Cant find node with host {} and grpc_port {}'.format(host, grpc_port))
 
     def get_active_tenant_nodes(self, tenant_name):
+        node_to_connect_to = self.nodes[1]
+        dc = ydb.DriverConfig('%s:%d' % (node_to_connect_to.host, node_to_connect_to.grpc_port), tenant_name)
+        resolver = ydb.DiscoveryEndpointsResolver(dc)
         for try_num in range(5):
-            ds_result = self._run_discovery_command(tenant_name)
-            if not len(ds_result) or ds_result[:2] != 'OK':
+            resolve_result = resolver.resolve()
+            if resolve_result is None:
+                logger.error('Got None result from DiscoveryEndpointsResolver')
+                time.sleep(1)
                 continue
-            lines = ds_result.splitlines()
+            endpoints = resolve_result.endpoints
+            logger.info(
+                'DiscoveryEndpointsResolver returned {} nodes: {}'.format(len(endpoints), endpoints)
+            )
             nodes = []
-            for line_num in range(1, len(lines)):
-                # 'grpc://ydb-ru-testing-vla-0000.search.yandex.net:31010 [VLA]'
-                line = lines[line_num]
-                words = line.split(':')
-                host = words[1][2:]
-                port = words[2].split(' ')[0]
-                node = self._get_node(host, port)
+            for endpoint in endpoints:
+                node = self._get_node(endpoint.address, endpoint.port)
                 if node is not None:
                     nodes.append(node)
             return nodes

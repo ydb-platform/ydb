@@ -7,6 +7,7 @@ docs-viewer:
   # no-index: true # Remove this after the public release
   langs: ['en','ru']
   themes: ['light']
+  metrika: 88962303
 
   github-url-prefix: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
   

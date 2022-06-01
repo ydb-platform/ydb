@@ -142,50 +142,58 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     ui64 writeId = record.GetWriteId();
     TString dedupId = record.GetDedupId();
 
-    bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !IsTableWritable(tableId)
-        || ev->Get()->PutStatus == NKikimrProto::ERROR;
+    bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !IsTableWritable(tableId);
+    bool errorReturned = (ev->Get()->PutStatus != NKikimrProto::OK) && (ev->Get()->PutStatus != NKikimrProto::UNKNOWN);
+    bool isOutOfSpace = IsAnyChannelYellowStop();
 
-    if (error) {
+    if (error || errorReturned) {
         LOG_S_WARN("Write (fail) " << data.size() << " bytes at tablet " << TabletID());
 
         IncCounter(COUNTER_WRITE_FAIL);
 
+        auto errCode = NKikimrTxColumnShard::EResultStatus::ERROR;
+        if (errorReturned) {
+            if (ev->Get()->PutStatus == NKikimrProto::TIMEOUT) {
+                errCode = NKikimrTxColumnShard::EResultStatus::TIMEOUT;
+            }
+            --WritesInFly; // write failed
+        }
+
         auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
-            TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::ERROR);
-        ctx.Send(ev->Get()->GetSource(), result.release());
-
-    } else if (InsertTable->IsOverloaded(tableId) || ShardOverloaded()) {
-        LOG_S_INFO("Write (overload) " << data.size() << " bytes for table " << tableId << " at tablet " << TabletID());
-
-        IncCounter(COUNTER_WRITE_FAIL);
-
-        auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
-            TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+            TabletID(), metaShard, writeId, tableId, dedupId, errCode);
         ctx.Send(ev->Get()->GetSource(), result.release());
 
     } else if (ev->Get()->BlobId.IsValid()) {
         LOG_S_DEBUG("Write (record) " << data.size() << " bytes at tablet " << TabletID());
 
+        --WritesInFly; // write successed
         Execute(new TTxWrite(this, ev), ctx);
-    } else {
-        if (IsAnyChannelYellowStop()) {
-            LOG_S_ERROR("Write (out of disk space) at tablet " << TabletID());
+    } else if (isOutOfSpace || InsertTable->IsOverloaded(tableId) || ShardOverloaded()) {
+        IncCounter(COUNTER_WRITE_FAIL);
 
+        if (isOutOfSpace) {
             IncCounter(COUNTER_OUT_OF_SPACE);
-            IncCounter(COUNTER_WRITE_FAIL);
-
-            auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
-                TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
-            ctx.Send(ev->Get()->GetSource(), result.release());
+            LOG_S_ERROR("Write (out of disk space) at tablet " << TabletID());
         } else {
-            LOG_S_DEBUG("Write (blob) " << data.size() << " bytes at tablet " << TabletID());
-
-            ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
-
-            ctx.Register(CreateWriteActor(TabletID(), PrimaryIndex->GetIndexInfo(), ctx.SelfID,
-                BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
+            IncCounter(COUNTER_WRITE_OVERLOAD);
+            LOG_S_INFO("Write (overload) " << data.size() << " bytes for table " << tableId
+                << " at tablet " << TabletID());
         }
+
+        auto result = std::make_unique<TEvColumnShard::TEvWriteResult>(
+            TabletID(), metaShard, writeId, tableId, dedupId, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+        ctx.Send(ev->Get()->GetSource(), result.release());
+    } else {
+        LOG_S_DEBUG("Write (blob) " << data.size() << " bytes at tablet " << TabletID());
+
+        ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
+
+        ++WritesInFly; // write started
+        ctx.Register(CreateWriteActor(TabletID(), PrimaryIndex->GetIndexInfo(), ctx.SelfID,
+            BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
     }
+
+    SetCounter(COUNTER_WRITES_IN_FLY, WritesInFly);
 }
 
 }

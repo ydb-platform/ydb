@@ -48,6 +48,7 @@ enum ESimpleCounters {
     COUNTER_EVICTED_ROWS = 38                               [(CounterOpts) = {Name: "Index/EvictedRows"}];
     COUNTER_EVICTED_BYTES = 39                              [(CounterOpts) = {Name: "Index/EvictedBytes"}];
     COUNTER_EVICTED_RAW_BYTES = 40                          [(CounterOpts) = {Name: "Index/EvictedBytesRaw"}];
+    COUNTER_WRITES_IN_FLY = 41                              [(CounterOpts) = {Name: "WritesInFly"}];
 }
 
 enum ECumulativeCounters {
@@ -122,6 +123,7 @@ enum ECumulativeCounters {
     COUNTER_EXPORT_FAIL = 68                                [(CounterOpts) = {Name: "ExportFail"}];
     COUNTER_FORGET_SUCCESS = 69                             [(CounterOpts) = {Name: "ForgetSuccess"}];
     COUNTER_FORGET_FAIL = 70                                [(CounterOpts) = {Name: "ForgetFail"}];
+    COUNTER_WRITE_OVERLOAD = 71                             [(CounterOpts) = {Name: "WriteOverload"}];
 }
 
 enum EPercentileCounters {

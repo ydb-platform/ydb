@@ -45,13 +45,15 @@ struct TSettings {
     TControlWrapper CacheDataAfterCompaction;
     TControlWrapper MaxSmallBlobSize;
     TControlWrapper OverloadTxInFly;
+    TControlWrapper OverloadWritesInFly;
 
     TSettings()
         : BlobWriteGrouppingEnabled(1, 0, 1)
         , CacheDataAfterIndexing(1, 0, 1)
         , CacheDataAfterCompaction(1, 0, 1)
         , MaxSmallBlobSize(0, 0, 8000000)
-        , OverloadTxInFly(1000, 10, 10000)
+        , OverloadTxInFly(1000, 0, 10000)
+        , OverloadWritesInFly(1000, 0, 10000)
     {}
 
     void RegisterControls(TControlBoard& icb) {
@@ -60,6 +62,7 @@ struct TSettings {
         icb.RegisterSharedControl(CacheDataAfterCompaction, "ColumnShardControls.CacheDataAfterCompaction");
         icb.RegisterSharedControl(MaxSmallBlobSize, "ColumnShardControls.MaxSmallBlobSize");
         icb.RegisterSharedControl(OverloadTxInFly, "ColumnShardControls.OverloadTxInFly");
+        icb.RegisterSharedControl(OverloadWritesInFly, "ColumnShardControls.OverloadWritesInFly");
     }
 };
 
@@ -343,6 +346,7 @@ private:
     ui64 LastPlannedTxId = 0;
     ui64 LastCompactedGranule = 0;
     ui64 LastExportNo = 0;
+    ui64 WritesInFly = 0;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
@@ -403,7 +407,13 @@ private:
     ui64 GetOutdatedStep() const;
     ui64 GetAllowedStep() const;
     bool HaveOutdatedTxs() const;
-    bool ShardOverloaded() const { return Executor()->GetStats().TxInFly > (ui64)Settings.OverloadTxInFly; }
+
+    bool ShardOverloaded() const {
+        ui64 txLimit = Settings.OverloadTxInFly;
+        ui64 writesLimit = Settings.OverloadWritesInFly;
+        return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
+           (writesLimit && WritesInFly > writesLimit);
+    }
 
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);

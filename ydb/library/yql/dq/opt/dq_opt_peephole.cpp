@@ -236,9 +236,12 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
         const auto keyTypeRight = itemTypeRight->FindItemType(rightKeyColumnNodes[i]->Content());
         bool optKey = false;
         keyTypes[i] = JoinDryKeyType(keyTypeLeft, keyTypeRight, optKey, ctx);
-        keyTypesLeft[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
-        if (!keyTypes[i])
+        if (!keyTypes[i]) {
             keyTypes.clear();
+            keyTypesLeft.clear();
+            break;
+        }
+        keyTypesLeft[i] = optKey ? ctx.MakeType<TOptionalExprType>(keyTypes[i]) : keyTypes[i];
     }
 
     auto leftInput = ctx.NewCallable(mapJoin.LeftInput().Pos(), "ToFlow", {mapJoin.LeftInput().Ptr()});
@@ -253,7 +256,7 @@ TExprBase DqPeepholeRewriteMapJoin(const TExprBase& node, TExprContext& ctx) {
         return TExprBase(ctx.Builder(pos)
             .Callable("Map")
                 .Add(0, std::move(leftInput))
-                .Lambda(0)
+                .Lambda(1)
                     .Param("row")
                     .Callable("AsStruct")
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {

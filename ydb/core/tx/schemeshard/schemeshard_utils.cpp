@@ -410,9 +410,9 @@ NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
     if (indexTableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
         result.MutablePartitioningPolicy()->CopyFrom(indexTableDesc.GetPartitionConfig().GetPartitioningPolicy());
     } else {
-        result.MutablePartitioningPolicy()->SetSizeToSplit((ui64)1 << 27);
-        //result.MutablePartitioningPolicy()->SetMinPartitionsCount(1); do not auto merge
-        result.MutablePartitioningPolicy()->SetMaxPartitionsCount(100);
+        result.MutablePartitioningPolicy()->SetSizeToSplit(2_GB);
+        result.MutablePartitioningPolicy()->SetMinPartitionsCount(1);
+        result.MutablePartitioningPolicy()->SetMaxPartitionsCount(5000);
     }
     if (baseTablePartitionConfig.HasPipelineConfig()) {
         result.MutablePipelineConfig()->CopyFrom(baseTablePartitionConfig.GetPipelineConfig());

@@ -632,13 +632,18 @@ std::tuple<TExprNode::TPtr, TExprNode::TPtr> BuildOneRow(TPositionHandle pos, co
 
 using TUsedColumns = TMap<TString, std::pair<ui32, TString>>;
 
-TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::TPtr& joinOps) {
+void AddColumnsFromType(const TTypeAnnotationNode* type, TUsedColumns& columns) {
+    auto structType = type->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+    for (auto item : structType->GetItems()) {
+        columns.insert(std::make_pair(TString(item->GetName()), std::make_pair(Max<ui32>(), TString())));
+    }
+}
+
+TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::TPtr& joinOps,
+    const TExprNode::TPtr& filter, const TExprNode::TPtr& having) {
     TUsedColumns usedColumns;
     for (const auto& x : result->Tail().Children()) {
-        auto type = x->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-        for (auto item : type->GetItems()) {
-            usedColumns.insert(std::make_pair(TString(item->GetName()), std::make_pair(Max<ui32>(), TString())));
-        }
+        AddColumnsFromType(x->Child(1)->GetTypeAnn(), usedColumns);
 
         auto subLinks = GatherSubLinks(x->TailPtr());
         for (const auto& s : subLinks) {
@@ -648,10 +653,7 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
             }
 
             if (!s.first->Child(2)->IsCallable("Void")) {
-                auto type = s.first->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                for (auto item : type->GetItems()) {
-                    usedColumns.insert(std::make_pair(TString(item->GetName()), std::make_pair(Max<ui32>(), TString())));
-                }
+                AddColumnsFromType(s.first->Child(2)->GetTypeAnn(), usedColumns);
             }
         }
     }
@@ -662,12 +664,17 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
             if (joinType != "cross") {
-                auto type = join->Tail().Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-                for (auto item : type->GetItems()) {
-                    usedColumns.insert(std::make_pair(TString(item->GetName()), std::make_pair(Max<ui32>(), TString())));
-                }
+                AddColumnsFromType(join->Tail().Child(0)->GetTypeAnn(), usedColumns);
             }
         }
+    }
+
+    if (filter) {
+        AddColumnsFromType(filter->Tail().Head().GetTypeAnn(), usedColumns);
+    }
+
+    if (having) {
+        AddColumnsFromType(having->Tail().Head().GetTypeAnn(), usedColumns);
     }
 
     return usedColumns;
@@ -1584,7 +1591,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 std::tie(list, projectionLambda) = BuildOneRow(node->Pos(), result, ctx);
             } else {
                 // extract all used columns
-                auto usedColumns = GatherUsedColumns(result, joinOps);
+                auto usedColumns = GatherUsedColumns(result, joinOps, filter, having);
 
                 // fill index of input for each column
                 FillInputIndices(from, usedColumns, optCtx);

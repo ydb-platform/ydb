@@ -44,14 +44,17 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SkipNullKeysSettingName = "SkipNullKeys";
     static constexpr TStringBuf ItemsLimitSettingName = "ItemsLimit";
     static constexpr TStringBuf ReverseSettingName = "Reverse";
+    static constexpr TStringBuf SortedSettingName = "Sorted";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     bool Reverse = false;
+    bool Sorted = false;
 
     void AddSkipNullKey(const TString& key);
     void SetItemsLimit(const TExprNode::TPtr& expr) { ItemsLimit = expr; }
     void SetReverse() { Reverse = true; }
+    void SetSorted() { Sorted = true; }
 
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableBase& node);
     static TKqpReadTableSettings Parse(const NNodes::TKqlReadTableRangesBase& node);

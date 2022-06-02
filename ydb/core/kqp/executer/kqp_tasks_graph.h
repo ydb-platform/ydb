@@ -123,6 +123,7 @@ struct TTaskMeta {
     struct TReadInfo {
         ui64 ItemsLimit = 0;
         bool Reverse = false;
+        bool Sorted = false;
         TKqpOlapProgram OlapProgram;
     };
 

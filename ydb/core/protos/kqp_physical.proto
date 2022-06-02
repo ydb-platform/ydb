@@ -143,6 +143,9 @@ message TKqpPhyOpReadOlapRanges {
      * it is done a bit later in executor, so we need separate field for parameter names.
      */
     repeated string OlapProgramParameterNames = 5;
+    // Sorted sign which indicates that read operation should return a sorted data out of the
+    // dedicated actors or we can relax constraints here and return unsorted data.
+    bool Sorted = 6;
 }
 
 message TKqpPhyOpReadRanges {

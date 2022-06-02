@@ -462,6 +462,7 @@ private:
 
             bool reverse = false;
             ui64 itemsLimit = 0;
+            bool sortedScanFlag = true;
             TString itemsLimitParamName;
             NDqProto::TData itemsLimitBytes;
             NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
@@ -477,6 +478,7 @@ private:
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
                                                    op.GetReadRange().GetSkipNullKeys().end());
             } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
+                sortedScanFlag = op.GetReadOlapRange().GetSorted();
                 reverse = op.GetReadOlapRange().GetReverse();
                 ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
                     itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
@@ -731,6 +733,7 @@ private:
                 if (!task.Meta.Reads->empty()) {
                     protoTaskMeta.SetReverse(task.Meta.ReadInfo.Reverse);
                     protoTaskMeta.SetItemsLimit(task.Meta.ReadInfo.ItemsLimit);
+                    protoTaskMeta.SetSorted(task.Meta.ReadInfo.Sorted);
 
                     if (tableInfo.TableKind == ETableKind::Olap) {
                         auto* olapProgram = protoTaskMeta.MutableOlapProgram();

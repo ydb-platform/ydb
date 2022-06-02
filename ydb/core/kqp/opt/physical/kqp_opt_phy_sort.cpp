@@ -119,11 +119,8 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         }
     }
 
+    bool olapTable = tableDesc.Metadata->Kind == EKikimrTableKind::Olap;
     if (direction == SortDirectionReverse) {
-//        if (!config.AllowReverseRange()) {
-//            return node;
-//        }
-        bool olapTable = tableDesc.Metadata->Kind == EKikimrTableKind::Olap;
         if (!olapTable && kqpCtx.IsScanQuery()) {
             return node;
         }
@@ -135,8 +132,15 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         }
 
         settings.SetReverse();
+        settings.SetSorted();
 
         input = BuildReadNode(input.Pos(), ctx, input, settings);
+    } else if (SortDirectionForward) {
+        if (olapTable) {
+            auto settings = GetReadTableSettings(input, isReadTableRanges);
+            settings.SetSorted();
+            input = BuildReadNode(input.Pos(), ctx, input, settings);
+        }
     }
 
     if (maybeFlatmap) {

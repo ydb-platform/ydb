@@ -213,6 +213,7 @@ message TKqpTransaction {
          reserved 8; // optional bytes ProcessProgram = 8;
          optional EScanDataFormat DataFormat = 9;
          optional NKikimrSSA.TOlapProgram OlapProgram = 10; // Currently only for OLAP tables
+         optional bool Sorted = 11;
     }
 
     optional EKqpTransactionType Type = 1;

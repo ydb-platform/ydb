@@ -145,6 +145,8 @@ TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
         } else if (name == TKqpReadTableSettings::ReverseSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
             settings.Reverse = true;
+        } else if (name == TKqpReadTableSettings::SortedSettingName) {
+            YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }
@@ -198,6 +200,14 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
                     .Build(ReverseSettingName)
+                .Done());
+    }
+
+    if (Sorted) {
+        settings.emplace_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name()
+                    .Build(SortedSettingName)
                 .Done());
     }
 

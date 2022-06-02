@@ -268,6 +268,10 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
         }
     }
 
+    if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
+        readProto.SetSorted(settings.Sorted);
+    }
+
     readProto.SetReverse(settings.Reverse);
 }
 

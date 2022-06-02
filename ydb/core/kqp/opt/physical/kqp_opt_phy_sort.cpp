@@ -135,7 +135,7 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
         settings.SetSorted();
 
         input = BuildReadNode(input.Pos(), ctx, input, settings);
-    } else if (SortDirectionForward) {
+    } else if (direction == SortDirectionForward) {
         if (olapTable) {
             auto settings = GetReadTableSettings(input, isReadTableRanges);
             settings.SetSorted();

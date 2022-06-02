@@ -16,8 +16,10 @@ target_link_libraries(yql-dq-type_ann PUBLIC
   yutil
   library-yql-ast
   library-yql-core
+  yql-core-type_ann
   yql-dq-expr_nodes
   yql-dq-proto
+  providers-common-provider
 )
 target_sources(yql-dq-type_ann PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/dq/type_ann/dq_type_ann.cpp

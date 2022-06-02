@@ -18,6 +18,9 @@ target_link_libraries(ydb-library-yql-dq-actors-compute-ut PUBLIC
   cpp-testing-unittest_main
   dq-actors-compute
   cpp-testing-unittest
+  yql-dq-actors
+  udf-service-stub
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-library-yql-dq-actors-compute-ut PRIVATE
   -Wl,-no_deduplicate

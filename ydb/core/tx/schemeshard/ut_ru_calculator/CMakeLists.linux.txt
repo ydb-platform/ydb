@@ -22,6 +22,9 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_ru_calculator PUBLIC
   cpp-testing-unittest_main
   core-tx-schemeshard
   cpp-testing-unittest
+  core-tx-tx_proxy
+  udf-service-stub
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-tx-schemeshard-ut_ru_calculator PRIVATE
   -ldl

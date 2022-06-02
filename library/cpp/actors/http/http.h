@@ -193,7 +193,7 @@ public:
         Error,
     };
 
-    static constexpr size_t MaxMethodSize = 6;
+    static constexpr size_t MaxMethodSize = 8;
     static constexpr size_t MaxURLSize = 1024;
     static constexpr size_t MaxProtocolSize = 4;
     static constexpr size_t MaxVersionSize = 4;

@@ -91,7 +91,7 @@ public:
                         CollectorForGroupForChannel.begin());
             }
             if (CollectorForGroupForChannel.empty()) {
-                ctx.Send(KeyValueActorId, new TEvKeyValue::TEvEraseCollect());
+                ctx.Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC());
                 Die(ctx);
                 return;
             }

@@ -129,7 +129,7 @@ Y_UNIT_TEST(TestKeyValueCollectorEmpty) {
     }
 
     TAutoPtr<IEventHandle> handle;
-    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvEraseCollect>(handle);
+    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);
     UNIT_ASSERT(eraseCollect);
 }
 
@@ -165,7 +165,7 @@ Y_UNIT_TEST(TestKeyValueCollectorSingle) {
     UNIT_ASSERT(erased == 1);
 
     TAutoPtr<IEventHandle> handle;
-    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvEraseCollect>(handle);
+    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);
     UNIT_ASSERT(eraseCollect);
 }
 
@@ -221,7 +221,7 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
     UNIT_ASSERT(erased == 8);
 
     TAutoPtr<IEventHandle> handle;
-    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvEraseCollect>(handle);
+    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);
     UNIT_ASSERT(eraseCollect);
 }
 

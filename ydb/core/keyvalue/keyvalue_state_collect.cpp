@@ -48,6 +48,50 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     StartCollectingIfPossible(ctx);
 }
 
+
+void TKeyValueState::UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool updateTrash, bool updateState) {
+    if (IsDamaged) {
+        return;
+    }
+    Y_VERIFY(CollectOperation);
+
+    ui64 collectGeneration = CollectOperation->Header.GetCollectGeneration();
+    ui64 collectStep = CollectOperation->Header.GetCollectStep();
+
+    if (updateTrash) {
+        ui64 storedCollectGeneration = StoredState.GetCollectGeneration();
+        ui64 storedCollectStep = StoredState.GetCollectStep();
+
+        for (TLogoBlobID &id: CollectOperation->DoNotKeep) {
+            THelpers::DbEraseTrash(id, db, ctx);
+            ui32 num = Trash.erase(id);
+            Y_VERIFY(num == 1);
+            CountTrashCollected(id.BlobSize());
+        }
+
+        // remove trash entries that were not marked as 'Keep' before, but which are automatically deleted by this barrier
+        // to prevent them from being added to 'DoNotKeep' list after
+        for (auto it = Trash.begin(); it != Trash.end(); ) {
+            THelpers::TGenerationStep trashGenStep = THelpers::GenerationStep(*it);
+            bool afterStoredSoftBarrier = trashGenStep > THelpers::TGenerationStep(storedCollectGeneration, storedCollectStep);
+            bool beforeSoftBarrier = trashGenStep <= THelpers::TGenerationStep(collectGeneration, collectStep);
+            if (afterStoredSoftBarrier && beforeSoftBarrier) {
+                CountTrashCollected(it->BlobSize());
+                THelpers::DbEraseTrash(*it, db, ctx);
+                it = Trash.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
+    if (updateState) {
+        StoredState.SetCollectGeneration(collectGeneration);
+        StoredState.SetCollectStep(collectStep);
+        THelpers::DbUpdateState(StoredState, db, ctx);
+    }
+}
+
 void TKeyValueState::StoreCollectExecute(ISimpleDb &db, const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "StoreCollectExecute KeyValue# " << TabletId
             << " IsDamaged# " << IsDamaged << " Marker# KV62");
@@ -66,30 +110,7 @@ void TKeyValueState::StoreCollectExecute(ISimpleDb &db, const TActorContext &ctx
         CollectOperation->DoNotKeep,
         db, ctx);
 
-    // We don't need to keep the trash list anymore
-    for (TLogoBlobID &id: CollectOperation->DoNotKeep) {
-        THelpers::DbEraseTrash(id, db, ctx);
-        const ui32 num = Trash.erase(id);
-        Y_VERIFY(num == 1);
-        CountTrashCollected(id.BlobSize());
-    }
-
-    // remove trash entries that were not marked as 'Keep' before, but which are automatically deleted by this barrier
-    // to prevent them from being added to 'DoNotKeep' list after
-    for (auto it = Trash.begin(); it != Trash.end(); ) {
-        const THelpers::TGenerationStep trashGenStep = THelpers::GenerationStep(*it);
-        ui64 storedCollectGeneration = StoredState.GetCollectGeneration();
-        ui64 storedCollectStep = StoredState.GetCollectStep();
-        const bool a = trashGenStep > THelpers::TGenerationStep(storedCollectGeneration, storedCollectStep);
-        const bool b = trashGenStep <= THelpers::TGenerationStep(collectGen, collectStep);
-        if (a && b) {
-            CountTrashCollected(it->BlobSize());
-            THelpers::DbEraseTrash(*it, db, ctx);
-            it = Trash.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    UpdateGC(db, ctx, true, false);
 }
 
 void TKeyValueState::StoreCollectComplete(const TActorContext &ctx) {
@@ -102,22 +123,30 @@ void TKeyValueState::EraseCollectExecute(ISimpleDb &db, const TActorContext &ctx
     if (IsDamaged) {
         return;
     }
-    Y_VERIFY(CollectOperation.Get());
+    Y_VERIFY(CollectOperation);
     // Erase the collect operation
     THelpers::DbEraseCollect(db, ctx);
     // Update the state
-    StoredState.SetCollectGeneration(CollectOperation->Header.GetCollectGeneration());
-    StoredState.SetCollectStep(CollectOperation->Header.GetCollectStep());
-    THelpers::DbUpdateState(StoredState, db, ctx);
+    UpdateGC(db, ctx, false, true);
 }
 
 void TKeyValueState::EraseCollectComplete(const TActorContext &ctx) {
-    Y_UNUSED(ctx);
-    Y_VERIFY(CollectOperation.Get());
+    Y_VERIFY(CollectOperation);
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
 
     // Start new collect operation if needed
+    PrepareCollectIfNeeded(ctx);
+}
+
+void TKeyValueState::CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) {
+    UpdateGC(db, ctx, true, true);
+}
+
+void TKeyValueState::CompleteGCComplete(const TActorContext &ctx) {
+    Y_VERIFY(CollectOperation);
+    CollectOperation.Reset(nullptr);
+    IsCollectEventSent = false;
     PrepareCollectIfNeeded(ctx);
 }
 
@@ -128,6 +157,15 @@ void TKeyValueState::SendStoreCollect(const TActorContext &ctx, const THelpers::
     std::tie(generation, step) = genStep;
     CollectOperation.Reset(new TCollectOperation(generation, step, std::move(keep), std::move(doNotKeep)));
     ctx.Send(KeyValueActorId, new TEvKeyValue::TEvStoreCollect());
+}
+
+void TKeyValueState::StartGC(const TActorContext &ctx, const THelpers::TGenerationStep &genStep,
+        TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep)
+{
+    ui32 generation, step;
+    std::tie(generation, step) = genStep;
+    CollectOperation.Reset(new TCollectOperation(generation, step, std::move(keep), std::move(doNotKeep)));
+    ctx.Send(KeyValueActorId, new TEvKeyValue::TEvCollect());
 }
 
 void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
@@ -188,7 +226,7 @@ void TKeyValueState::StartCollectingIfPossible(const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "StartCollectingIfPossible KeyValue# " << TabletId
             << "Flags Keep.Size# " << keep.size() << " DoNotKeep.Size# " << doNotKeep.size() << " Marker# KV65");
 
-    SendStoreCollect(ctx, collectGenStep, keep, doNotKeep);
+    StartGC(ctx, collectGenStep, keep, doNotKeep);
 }
 
 ui64 TKeyValueState::OnEvCollect(const TActorContext &ctx) {
@@ -212,6 +250,10 @@ void TKeyValueState::OnEvCollectDone(ui64 perGenerationCounterStepSize, const TA
 
 void TKeyValueState::OnEvEraseCollect(const TActorContext &ctx) {
     Y_UNUSED(ctx);
+    CountLatencyBsCollect();
+}
+
+void TKeyValueState::OnEvCompleteGC() {
     CountLatencyBsCollect();
 }
 

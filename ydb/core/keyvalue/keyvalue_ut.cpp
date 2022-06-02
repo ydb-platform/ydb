@@ -989,13 +989,13 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
     tc.Prepare(INITIAL_TEST_DISPATCH_NAME, setup, activeZone);
     ExecuteWrite(tc, {{"key", "value"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     tc.Runtime->Send(new IEventHandle(*tabletActor, *tabletActor, new TKikimrEvents::TEvPoisonPill));
+    TestLog("After the first death");
     ExecuteWrite(tc, {{"key1", "value1"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteWrite(tc, {{"key2", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteRead(tc, "key", "value", 0, 0, 0);
+    TestLog("Before delete range");
     ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TKikimrEvents::TEvPoisonPill::EventType);
-    tc.Runtime->DispatchEvents(options);
+    TestLog("After delete range");
     ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
     ExecuteRead(tc, "key1", "value1", 0, 0, 0);
 }
@@ -1050,10 +1050,6 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
     ExecuteWrite(tc, {{"key2", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteRead(tc, "key", "value", 0, 0, 0);
     ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TKikimrEvents::TEvPoisonPill::EventType);
-    TestLog("First dispatch");
-    tc.Runtime->DispatchEvents(options);
     ExecuteWrite(tc, {{"key3", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
 
 
@@ -1079,7 +1075,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEventsWithSlowI
 
     TestLog("Third dispatch ", collectStep);
     UNIT_ASSERT_VALUES_EQUAL(collectStep, 2);
- 
+
     ExecuteWrite(tc, {{"key4", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteWrite(tc, {{"key5", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
     ExecuteWrite(tc, {{"key6", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
@@ -2066,7 +2062,7 @@ Y_UNIT_TEST(TestRenameWorks) {
 }
 
 
-Y_UNIT_TEST(TestRenameWorksewApi) {
+Y_UNIT_TEST(TestRenameWorksNewApi) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
         return tc.InitialEventsFilter.Prepare();

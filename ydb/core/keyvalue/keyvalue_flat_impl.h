@@ -204,69 +204,48 @@ protected:
         }
     };
 
-    struct TTxStoreCollect : public NTabletFlatExecutor::ITransaction {
+    using TExecuteMethod = void (TKeyValueState::*)(ISimpleDb &db, const TActorContext &ctx);
+    using TCompleteMethod = void (TKeyValueState::*)(const TActorContext &ctx);
+
+    template <typename TDerived, TExecuteMethod ExecuteMethod, TCompleteMethod CompleteMethod>
+    struct TTxUniversal : NTabletFlatExecutor::ITransaction {
         TKeyValueFlat *Self;
 
-        TTxStoreCollect(TKeyValueFlat *keyValueFlat)
+        TTxUniversal(TKeyValueFlat *keyValueFlat)
             : Self(keyValueFlat)
         {}
 
         bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxStoreCollect Execute");
+            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << ' ' << TDerived::Name << " Execute");
             TSimpleDbFlat db(txc.DB);
-            Self->State.StoreCollectExecute(db, ctx);
+            (Self->State.*ExecuteMethod)(db, ctx);
             return true;
         }
 
         void Complete(const TActorContext &ctx) override {
             LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
-                    << " TTxStoreCollect Complete");
-            Self->State.StoreCollectComplete(ctx);
+                    << ' ' << TDerived::Name << " Complete");
+            (Self->State.*CompleteMethod)(ctx);
         }
     };
 
-    struct TTxEraseCollect : public NTabletFlatExecutor::ITransaction {
-        TKeyValueFlat *Self;
+#ifdef KV_SIMPLE_TX
+#error "KV_SIMPLE_TX already exist"
+#else
+#define KV_SIMPLE_TX(name) \
+    struct TTx ## name : public TTxUniversal<TTx ## name, \
+            &TKeyValueState:: name ## Execute, \
+            &TKeyValueState:: name ## Complete> \
+    { \
+        static constexpr auto Name = "TTx" #name; \
+        using TTxUniversal::TTxUniversal; \
+    }
+#endif
 
-        TTxEraseCollect(TKeyValueFlat *keyValueFlat)
-            : Self(keyValueFlat)
-        {}
-
-        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxEraseCollect Execute");
-            TSimpleDbFlat db(txc.DB);
-            Self->State.EraseCollectExecute(db, ctx);
-            return true;
-        }
-
-        void Complete(const TActorContext &ctx) override {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
-                    << " TTxEraseCollect Complete");
-            Self->State.EraseCollectComplete(ctx);
-        }
-    };
-
-
-    struct TTxRegisterInitialGCCompletion : public NTabletFlatExecutor::ITransaction {
-        TKeyValueFlat *Self;
-
-        TTxRegisterInitialGCCompletion(TKeyValueFlat *keyValueFlat)
-            : Self(keyValueFlat)
-        {}
-
-        bool Execute(NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) override {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << txc.Tablet << " TTxRegisterInitialGCCompletion Execute");
-            TSimpleDbFlat db(txc.DB);
-            Self->State.RegisterInitialGCCompletionExecute(db, ctx);
-            return true;
-        }
-
-        void Complete(const TActorContext &ctx) override {
-            LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << Self->TabletID()
-                    << " TTxRegisterInitialGCCompletion Complete");
-            Self->State.RegisterInitialGCCompletionComplete(ctx);
-        }
-    };
+    KV_SIMPLE_TX(StoreCollect);
+    KV_SIMPLE_TX(EraseCollect);
+    KV_SIMPLE_TX(RegisterInitialGCCompletion);
+    KV_SIMPLE_TX(CompleteGC);
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -330,6 +309,13 @@ protected:
                 << " Handle TEvEraseCollect " << ev->Get()->ToString());
         State.OnEvEraseCollect(ctx);
         Execute(new TTxEraseCollect(this), ctx);
+    }
+
+    void Handle(TEvKeyValue::TEvCompleteGC::TPtr &ev, const TActorContext &ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                << " Handle TEvCompleteGC " << ev->Get()->ToString());
+        State.OnEvCompleteGC();
+        Execute(new TTxCompleteGC(this), ctx);
     }
 
     void Handle(TEvKeyValue::TEvCollect::TPtr &ev, const TActorContext &ctx) {
@@ -522,6 +508,7 @@ public:
             hFunc(TEvKeyValue::TEvAcquireLock, Handle);
 
             HFunc(TEvKeyValue::TEvEraseCollect, Handle);
+            HFunc(TEvKeyValue::TEvCompleteGC, Handle);
             HFunc(TEvKeyValue::TEvCollect, Handle);
             HFunc(TEvKeyValue::TEvStoreCollect, Handle);
             HFunc(TEvKeyValue::TEvRequest, Handle);

@@ -23,6 +23,7 @@ struct TEvKeyValue {
         EvPeriodicRefresh,
         EvReportWriteLatency,
         EvUpdateWeights,
+        EvCompleteGC,
 
         EvRead = EvRequest + 16,
         EvReadRange,
@@ -192,6 +193,10 @@ struct TEvKeyValue {
 
     struct TEvPeriodicRefresh : public TEventLocal<TEvPeriodicRefresh, EvPeriodicRefresh> {
         TEvPeriodicRefresh() { }
+    };
+
+    struct TEvCompleteGC : public TEventLocal<TEvCompleteGC, EvCompleteGC> {
+        TEvCompleteGC() { }
     };
 };
 

@@ -6,11 +6,11 @@ Simulates a warehouse of an online store: creates multi-product orders, gets a l
 
 This load test runs 5 types of load:
 
-* [getCustomerHistory](#getCustomerHistory) reads the specified number of orders for the customer with id = 10000. This creates a workload to read the same rows from different threads.
-* [getRandomCustomerHistory](#getRandomCustomerHistory) reads the specified number of orders made by a randomly selected customer. A load that reads data from different threads is created.
-* [insertRandomOrder](#insertRandomOrder) creates a random order. For example, a customer has created an order of 2 products, but hasn't yet paid for it, hence the quantities in stock aren't decreased for the products. The database writes the data about the order and products. The read/write load is created (the INSERT checks for an existing entry before inserting the data).
-* [submitRandomOrder](#submitRandomOrder) creates and processes a randomly generated order. For example, a customer has created and paid an order of 2 products. The data about the order and products is written to the database, product availability is checked and quantities in stock are decreased. A mixed data load is created.
-* [submitSameOrder](#submitSameOrder): Creates orders with the same set of products. For example, all customers buy the same set of products (a newly released phone and a charger). This creates a workload of competing updates of the same rows in the table.
+* [user-hist](#getCustomerHistory) reads the specified number of orders for the customer with id = 10000. This creates a workload to read the same rows from different threads.
+* [rand-user-hist](#getRandomCustomerHistory) reads the specified number of orders made by a randomly selected customer. A load that reads data from different threads is created.
+* [add-rand-order](#insertRandomOrder) creates a random order. For example, a customer has created an order of 2 products, but hasn't yet paid for it, hence the quantities in stock aren't decreased for the products. The database writes the data about the order and products. The read/write load is created (the INSERT checks for an existing entry before inserting the data).
+* [put-rand-order](#submitRandomOrder) creates and processes a randomly generated order. For example, a customer has created and paid an order of 2 products. The data about the order and products is written to the database, product availability is checked and quantities in stock are decreased. A mixed data load is created.
+* [put-same-order](#submitSameOrder): Creates orders with the same set of products. For example, all customers buy the same set of products (a newly released phone and a charger). This creates a workload of competing updates of the same rows in the table.
 
 ## Load test initialization
 
@@ -93,7 +93,7 @@ See the description of the command to run the data load:
 | `--cancel-after` | - | [Timeout for canceling an operation in milliseconds](../../../../../best_practices/timeouts.md). |
 | `--window` | - | Statistics collection window in seconds. Default: 1. |
 
-## getCustomerHistory load{#getCustomerHistory}
+## user-hist load{#getCustomerHistory}
 
 This type of load reads the specified number of orders for the customer with id = 10000.
 
@@ -112,19 +112,19 @@ SELECT id, customer, created FROM orders view ix_cust
 To run this type of load, execute the command:
 
 ```bash
-{{ ydb-cli }} workload stock run getCustomerHistory [global workload options...] [specific workload options...]
+{{ ydb-cli }} workload stock run user-hist [global workload options...] [specific workload options...]
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
 * `specific workload options`: [Parameters of a specific type of load](#customer_history_options)
 
-### Parameters for getCustomerHistory {#customer_history_options}
+### Parameters for user-hist {#customer_history_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
 | `--limit <value>` | `-l <value>` | The required number of orders. Default value: 10. |
 
-## getRandomCustomerHistory load{#getRandomCustomerHistory}
+## rand-user-hist load{#getRandomCustomerHistory}
 
 This type of load reads the specified number of orders from randomly selected customers.
 
@@ -143,19 +143,19 @@ SELECT id, customer, created FROM orders view ix_cust
 To run this type of load, execute the command:
 
 ```bash
-{{ ydb-cli }} workload stock run getRandomCustomerHistory [global workload options...] [specific workload options...]
+{{ ydb-cli }} workload stock run rand-user-hist [global workload options...] [specific workload options...]
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
 * `specific workload options`: [Parameters of a specific type of load](#random_customer_history_options)
 
-### Parameters for getRandomCustomerHistory {#random_customer_history_options}
+### Parameters for rand-user-hist {#random_customer_history_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
-## insertRandomOrder load{#insertRandomOrder}
+## add-rand-order load{#insertRandomOrder}
 
 This type of load creates a randomly generated order. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution.
 
@@ -176,19 +176,19 @@ UPSERT INTO `orderLines`(id_order, product, quantity)
 To run this type of load, execute the command:
 
 ```bash
-{{ ydb-cli }} workload stock run insertRandomOrder [global workload options...] [specific workload options...]
+{{ ydb-cli }} workload stock run add-rand-order [global workload options...] [specific workload options...]
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
 * `specific workload options`: [Parameters of a specific type of load](#insert_random_order_options)
 
-### Parameters for insertRandomOrder {#insert_random_order_options}
+### Parameters for add-rand-order {#insert_random_order_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
 | `--products <value>` | `-p <value>` | Number of products in the test. The default value is 100. |
 
-## submitRandomOrder load {#submitRandomOrder}
+## put-rand-order load {#submitRandomOrder}
 
 This type of load creates a randomly generated order and processes it. The order includes several different products, 1 item per product. The number of products in the order is generated randomly based on an exponential distribution. Order processing consists in decreasing the number of ordered products in stock.
 
@@ -233,19 +233,19 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 To run this type of load, execute the command:
 
 ```bash
-{{ ydb-cli }} workload stock run submitRandomOrder [global workload options...] [specific workload options...]
+{{ ydb-cli }} workload stock run put-rand-order [global workload options...] [specific workload options...]
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
 * `specific workload options`: [Parameters of a specific type of load](#submit_random_order_options)
 
-### Parameters for submitRandomOrder {#submit_random_order_options}
+### Parameters for put-rand-order {#submit_random_order_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
 | `--products <value>` | `-p <value>` | Number of products in the test. The default value is 100. |
 
-## submitSameOrder load{#submitSameOrder}
+## put-same-order load{#submitSameOrder}
 
 This type of load creates an order with the same set of products and processes it. Order processing consists in decreasing the number of ordered products in stock.
 
@@ -290,13 +290,13 @@ SELECT * FROM $newq AS q WHERE q.quantity < 0
 To run this type of load, execute the command:
 
 ```bash
-{{ ydb-cli }} workload stock run submitSameOrder [global workload options...] [specific workload options...]
+{{ ydb-cli }} workload stock run put-same-order [global workload options...] [specific workload options...]
 ```
 
 * `global workload options`: The [global options for all types of load](#global_workload_options).
 * `specific workload options`: [Parameters of a specific type of load](#submit_same_order_options)
 
-### Parameters for submitSameOrder {#submit_same_order_options}
+### Parameters for put-same-order {#submit_same_order_options}
 
 | Parameter name | Short name | Parameter description |
 | --- | --- | --- |
@@ -304,10 +304,10 @@ To run this type of load, execute the command:
 
 ## Examples of running the loads
 
-* Run the load `insertRandomOrder` for 5 seconds across 10 threads with 1000 products.
+* Run the load `add-rand-order` for 5 seconds across 10 threads with 1000 products.
 
 ```bash
-{{ ydb-cli }} workload stock run insertRandomOrder -s 5 -t 10 -p 1000
+{{ ydb-cli }} workload stock run add-rand-order -s 5 -t 10 -p 1000
 ```
 
 Possible result:
@@ -324,10 +324,10 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 779       155.8 0       0       62      89      108     157
 ```
 
-* Run the `submitSameOrder` load for 5 seconds across 5 threads with 2 products per order, printing out only final results.
+* Run the `put-same-order` load for 5 seconds across 5 threads with 2 products per order, printing out only final results.
 
 ```bash
-{{ ydb-cli }} workload stock run submitSameOrder -s 5 -t 5 -p 1000 --quiet
+{{ ydb-cli }} workload stock run put-same-order -s 5 -t 5 -p 1000 --quiet
 ```
 
 Possible result:
@@ -337,10 +337,10 @@ Txs     Txs/Sec Retries Errors  p50(ms) p95(ms) p99(ms) pMax(ms)
 16          3.2 67      3       855     1407    1799    1799
 ```
 
-* Run the `getRandomCustomerHistory` load for 5 seconds across 100 threads, printing out time for each time window.
+* Run the `rand-user-hist` load for 5 seconds across 100 threads, printing out time for each time window.
 
 ```bash
-{{ ydb-cli }} workload stock run getRandomCustomerHistory -s 5 -t 10 --print-timestamp
+{{ ydb-cli }} workload stock run rand-user-hist -s 5 -t 10 --print-timestamp
 ```
 
 Possible result:

@@ -106,7 +106,7 @@ TCommandStockRun::TCommandStockRun()
 }
 
 TCommandStockRunInsertRandomOrder::TCommandStockRunInsertRandomOrder()
-    : TWorkloadCommand("insertRandomOrder", {}, "Inserts orders with random ID")
+    : TWorkloadCommand("add-rand-order", {}, "Inserts orders with random ID without their processing")
     , ProductCount(0)
 {}
 
@@ -140,7 +140,7 @@ int TCommandStockRunInsertRandomOrder::Run(TConfig& config) {
 }
 
 TCommandStockRunSubmitRandomOrder::TCommandStockRunSubmitRandomOrder()
-    : TWorkloadCommand("submitRandomOrder", {}, "Submit random orders")
+    : TWorkloadCommand("put-rand-order", {}, "Submit random orders with processing")
     , ProductCount(0)
 {}
 
@@ -174,7 +174,7 @@ int TCommandStockRunSubmitRandomOrder::Run(TConfig& config) {
 }
 
 TCommandStockRunSubmitSameOrder::TCommandStockRunSubmitSameOrder()
-    : TWorkloadCommand("submitSameOrder", {}, "Submit orders with same products")
+    : TWorkloadCommand("put-same-order", {}, "Submit orders with same products with processing")
     , ProductCount(0)
 {}
 
@@ -208,7 +208,7 @@ int TCommandStockRunSubmitSameOrder::Run(TConfig& config) {
 }
 
 TCommandStockRunGetRandomCustomerHistory::TCommandStockRunGetRandomCustomerHistory()
-    : TWorkloadCommand("getRandomCustomerHistory", {}, "Selects orders of random customer")
+    : TWorkloadCommand("rand-user-hist", {}, "Selects orders of random customer")
     , Limit(0)
 {}
 
@@ -242,7 +242,7 @@ int TCommandStockRunGetRandomCustomerHistory::Run(TConfig& config) {
 }
 
 TCommandStockRunGetCustomerHistory::TCommandStockRunGetCustomerHistory()
-    : TWorkloadCommand("getCustomerHistory", {}, "Selects orders of 10000th customer")
+    : TWorkloadCommand("user-hist", {}, "Selects orders of 10000th customer")
     , Limit(0)
 {}
 

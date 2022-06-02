@@ -33,7 +33,10 @@ namespace NMonitoring {
         TStringPoolBuilder& Build();
 
         TStringBuf Get(ui32 index) const {
-            Y_ENSURE(IsBuilt_, "Pool must be sorted first");
+            if (RequiresSorting_) {
+                Y_ENSURE(IsBuilt_, "Pool must be sorted first");
+            }
+
             return StrVector_.at(index).first;
         }
 
@@ -43,7 +46,8 @@ namespace NMonitoring {
 
         template <typename TConsumer>
         void ForEach(TConsumer&& c) {
-            Y_ENSURE(IsBuilt_, "Pool must be sorted first");
+            Y_ENSURE(IsBuilt_, "Pool must be built first");
+
             for (const auto& value : StrVector_) {
                 c(value.first, value.second->Index, value.second->Frequency);
             }

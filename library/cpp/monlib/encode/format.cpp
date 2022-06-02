@@ -49,7 +49,7 @@ namespace NMonitoring {
         EFormat result{EFormat::UNKNOWN};
 
         for (const auto& it : StringSplitter(value).Split(',').SkipEmpty()) {
-            TStringBuf token = StripString(it.Token());
+            TStringBuf token = StripString(it.Token()).Before(';');
 
             result = FormatFromHttpMedia(token);
             if (result != EFormat::UNKNOWN) {

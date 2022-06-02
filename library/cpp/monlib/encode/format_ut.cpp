@@ -61,6 +61,10 @@ Y_UNIT_TEST_SUITE(TFormatTest) {
         UNIT_ASSERT_EQUAL(
             FormatFromAcceptHeader("text/plain"),
             EFormat::PROMETHEUS);
+
+        UNIT_ASSERT_EQUAL(
+            FormatFromAcceptHeader("application/openmetrics-text;version=0.0.1;q=0.75,text/plain;version=0.0.4"),
+            EFormat::PROMETHEUS);
     }
 
     Y_UNIT_TEST(FormatToStrFromStr) {

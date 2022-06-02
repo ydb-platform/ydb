@@ -2,6 +2,7 @@
 #include "prometheus_model.h"
 
 #include <library/cpp/monlib/encode/encoder_state.h>
+#include <library/cpp/monlib/encode/buffered/string_pool.h>
 #include <library/cpp/monlib/metrics/labels.h>
 #include <library/cpp/monlib/metrics/metric_value.h>
 
@@ -311,6 +312,16 @@ namespace NMonitoring {
                 }
             }
 
+            void OnLabel(ui32 name, ui32 value) override {
+                OnLabel(LabelNamesPool_.Get(name), LabelValuesPool_.Get(value));
+            }
+
+            std::pair<ui32, ui32> PrepareLabel(TStringBuf name, TStringBuf value) override {
+                auto nameLabel = LabelNamesPool_.PutIfAbsent(name);
+                auto valueLabel = LabelValuesPool_.PutIfAbsent(value);
+                return std::make_pair(nameLabel->Index, valueLabel->Index);
+            }
+
             void OnDouble(TInstant time, double value) override {
                 State_.Expect(TEncoderState::EState::METRIC);
                 MetricState_.Time = time;
@@ -403,6 +414,9 @@ namespace NMonitoring {
             TInstant CommonTime_ = TInstant::Zero();
             TLabels CommonLabels_;
             TMetricState MetricState_;
+
+            TStringPoolBuilder LabelNamesPool_;
+            TStringPoolBuilder LabelValuesPool_;
         };
     }
 

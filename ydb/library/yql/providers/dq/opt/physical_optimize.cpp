@@ -50,6 +50,8 @@ public:
             AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<false>));
             AddHandler(0, &TDqPrecompute::Match, HNDL(BuildPrecompute));
             AddHandler(0, &TDqStage::Match, HNDL(PrecomputeToInput));
+            AddHandler(0, &TCoTake::Match, HNDL(PropagatePrecomuteTake<false>));
+            AddHandler(0, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<false>));
         }
 
         AddHandler(1, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<true>));
@@ -65,8 +67,10 @@ public:
         AddHandler(1, &TCoOrderedLMap::Match, HNDL(PushOrderedLMapToStage<true>));
         AddHandler(1, &TCoLMap::Match, HNDL(PushLMapToStage<true>));
         if (enablePrecompute) {
-            AddHandler(0, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
-            AddHandler(0, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
+            AddHandler(1, &TCoToOptional::Match, HNDL(BuildScalarPrecompute<true>));
+            AddHandler(1, &TCoHead::Match, HNDL(BuildScalarPrecompute<true>));
+            AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
+            AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
         }
 #undef HNDL
 
@@ -312,48 +316,21 @@ protected:
     }
 
     TMaybeNode<TExprBase> PrecomputeToInput(TExprBase node, TExprContext& ctx) {
-        auto stage = node.Cast<TDqStage>();
+        return DqPrecomputeToInput(node, ctx);
+    }
 
-        TExprNode::TListType innerPrecomputes = FindNodes(stage.Program().Ptr(),
-            [](const TExprNode::TPtr& node) {
-                return !TDqReadWrapBase::Match(node.Get()) && !TDqPhyPrecompute::Match(node.Get());
-            },
-            [](const TExprNode::TPtr& node) {
-                return TDqPhyPrecompute::Match(node.Get());
-            }
-        );
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PropagatePrecomuteTake(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        return DqPropagatePrecomuteTake(node, ctx, optCtx, *getParents(), IsGlobal);
+    }
 
-        if (innerPrecomputes.empty()) {
-            return node;
-        }
-
-        TVector<TExprNode::TPtr> newInputs;
-        TVector<TExprNode::TPtr> newArgs;
-        TNodeOnNodeOwnedMap replaces;
-
-        for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
-            newInputs.push_back(stage.Inputs().Item(i).Ptr());
-            auto arg = stage.Program().Args().Arg(i).Raw();
-            newArgs.push_back(ctx.NewArgument(arg->Pos(), arg->Content()));
-            replaces[arg] = newArgs.back();
-        }
-
-        for (auto& precompute: innerPrecomputes) {
-            newInputs.push_back(precompute);
-            newArgs.push_back(ctx.NewArgument(precompute->Pos(), TStringBuilder() << "_dq_precompute_" << newArgs.size()));
-            replaces[precompute.Get()] = newArgs.back();
-        }
-
-        return Build<TDqStage>(ctx, stage.Pos())
-            .Inputs()
-                .Add(newInputs)
-            .Build()
-            .Program()
-                .Args(newArgs)
-                .Body(ctx.ReplaceNodes(stage.Program().Body().Ptr(), replaces))
-            .Build()
-            .Settings().Build()
-            .Done();
+    template <bool IsGlobal>
+    TMaybeNode<TExprBase> PropagatePrecomuteFlatmap(TExprBase node, TExprContext& ctx,
+        IOptimizationContext& optCtx, const TGetParents& getParents)
+    {
+        return DqPropagatePrecomuteFlatmap(node, ctx, optCtx, *getParents(), IsGlobal);
     }
 
 private:

@@ -250,52 +250,20 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
     TVector<TCoArgument> newArgs = PrepareArgumentsReplacement(TCoLambda(newProgram).Args(), lambdaInputs, ctx, inputArgReplaces);
     TVector<TExprBase> inputNodes;
 
-    // if lambda contains precomputes -> move them to the stage inputs
-    {
-        TNodeOnNodeOwnedMap precomputesInsideLambda;
-        VisitExpr(newProgram, [&precomputesInsideLambda](const TExprNode::TPtr& node) {
-            if (node->IsCallable() && node->Content().StartsWith("DqRead")) {
-                return false;
-            }
-            if (TDqPhyPrecompute::Match(node.Get())) {
-                precomputesInsideLambda[node.Get()] = node;
-                return false;
-            }
-            return true;
-        });
-
-        YQL_CLOG(TRACE, CoreDq) << "lambda with " << precomputesInsideLambda.size() << " precomputes and "
-            << lambdaInputs.size() << " inputs";
-
-        auto prevInputs = stage.Inputs();
-
-        inputNodes.reserve(newArgs.size() + precomputesInsideLambda.size());
-        inputNodes.insert(inputNodes.end(), prevInputs.begin(), prevInputs.end());
-        inputNodes.insert(inputNodes.end(), lambdaInputs.begin(), lambdaInputs.end());
-
-        for (auto [raw, ptr]: precomputesInsideLambda) {
-            auto it = std::find_if(prevInputs.begin(), prevInputs.end(), [raw=raw](auto x) { return x.Raw() == raw; });
-            if (it != prevInputs.end()) {
-                ui64 inputIndex = std::distance(prevInputs.begin(), it);
-                inputArgReplaces[raw] = newArgs[inputIndex].Ptr();
-            } else {
-                inputNodes.emplace_back(TExprBase(ptr));
-                newArgs.emplace_back(TCoArgument(ctx.NewArgument(raw->Pos(), "precompute")));
-                inputArgReplaces[raw] = newArgs.back().Ptr();
-            }
-        }
-    }
+    inputNodes.reserve(newArgs.size());
+    inputNodes.insert(inputNodes.end(), stage.Inputs().begin(), stage.Inputs().end());
+    inputNodes.insert(inputNodes.end(), lambdaInputs.begin(), lambdaInputs.end());
 
     YQL_ENSURE(newArgs.size() == inputNodes.size(), "" << newArgs.size() << " != " << inputNodes.size());
 
     auto newStage = Build<TDqStage>(ctx, stage.Pos())
             .Inputs()
                 .Add(inputNodes)
-                .Build()
+            .Build()
             .Program()
                 .Args(newArgs)
                 .Body(ctx.ReplaceNodes(newProgram->TailPtr(), inputArgReplaces))
-                .Build()
+            .Build()
             .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
             .Done();
 
@@ -1755,6 +1723,136 @@ TExprBase DqBuildJoin(const TExprBase& node, TExprContext& ctx, IOptimizationCon
     // TODO: We can push MapJoin to existing stage for data query, if it doesn't have table reads. This
     //       requires some additional knowledge, probably with use of constraints.
     return DqBuildPhyJoin(join, pushLeftStage, ctx, optCtx);
+}
+
+TExprBase DqPrecomputeToInput(const TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqStageBase>()) {
+        return node;
+    }
+
+    auto stage = node.Cast<TDqStageBase>();
+
+    TExprNode::TListType innerPrecomputes = FindNodes(stage.Program().Ptr(),
+        [](const TExprNode::TPtr& node) {
+            return ETypeAnnotationKind::World != node->GetTypeAnn()->GetKind() && !TDqPhyPrecompute::Match(node.Get());
+        },
+        [](const TExprNode::TPtr& node) {
+            return TDqPhyPrecompute::Match(node.Get());
+        }
+    );
+
+    if (innerPrecomputes.empty()) {
+        return node;
+    }
+
+    TExprNode::TListType newInputs;
+    TExprNode::TListType newArgs;
+    TNodeOnNodeOwnedMap replaces;
+
+    for (ui64 i = 0; i < stage.Inputs().Size(); ++i) {
+        newInputs.push_back(stage.Inputs().Item(i).Ptr());
+        auto arg = stage.Program().Args().Arg(i).Raw();
+        newArgs.push_back(ctx.NewArgument(arg->Pos(), arg->Content()));
+        replaces[arg] = newArgs.back();
+    }
+
+    for (auto& precompute: innerPrecomputes) {
+        newInputs.push_back(precompute);
+        newArgs.push_back(ctx.NewArgument(precompute->Pos(), TStringBuilder() << "_dq_precompute_" << newArgs.size()));
+        replaces[precompute.Get()] = newArgs.back();
+    }
+
+    TExprNode::TListType children = stage.Ref().ChildrenList();
+    children[TDqStageBase::idx_Inputs] = ctx.NewList(stage.Inputs().Pos(), std::move(newInputs));
+    children[TDqStageBase::idx_Program] = ctx.NewLambda(stage.Program().Pos(),
+        ctx.NewArguments(stage.Program().Args().Pos(), std::move(newArgs)),
+        ctx.ReplaceNodes(stage.Program().Body().Ptr(), replaces));
+
+    return TExprBase(ctx.ChangeChildren(stage.Ref(), std::move(children)));
+}
+
+TExprBase DqPropagatePrecomuteTake(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoTake>().Input().Maybe<TDqPhyPrecompute>()) {
+        return node;
+    }
+
+    auto take = node.Cast<TCoTake>();
+    auto precompute = take.Input().Cast<TDqPhyPrecompute>();
+
+    if (!IsSingleConsumerConnection(precompute.Connection(), parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!CanPushDqExpr(take.Count(), precompute.Connection())) {
+        return node;
+    }
+
+    auto takeLambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"list_stream"})
+        .Body<TCoMap>()
+            .Input("list_stream")
+            .Lambda()
+                .Args({"list"})
+                .Body<TCoTake>()
+                    .Input("list")
+                    .Count(take.Count())
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(precompute.Connection(), takeLambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+
+    return Build<TDqPhyPrecompute>(ctx, node.Pos())
+        .Connection(result.Cast())
+        .Done();
+}
+
+TExprBase DqPropagatePrecomuteFlatmap(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
+    if (!node.Maybe<TCoFlatMap>().Input().Maybe<TDqPhyPrecompute>()) {
+        return node;
+    }
+
+    auto flatmap = node.Cast<TCoFlatMap>();
+    auto precompute = flatmap.Input().Cast<TDqPhyPrecompute>();
+
+    if (!IsSingleConsumerConnection(precompute.Connection(), parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
+
+    if (!CanPushDqExpr(flatmap.Lambda(), precompute.Connection())) {
+        return node;
+    }
+
+    auto flatmapLambda = Build<TCoLambda>(ctx, node.Pos())
+        .Args({"list_stream"})
+        .Body<TCoMap>()
+            .Input("list_stream")
+            .Lambda()
+                .Args({"list"})
+                .Body<TCoFlatMap>()
+                    .Input("list")
+                    .Lambda(flatmap.Lambda())
+                    .Build()
+                .Build()
+            .Build()
+        .Done();
+
+    auto result = DqPushLambdaToStageUnionAll(precompute.Connection(), flatmapLambda, {}, ctx, optCtx);
+    if (!result) {
+        return node;
+    }
+
+    return Build<TDqPhyPrecompute>(ctx, node.Pos())
+        .Connection(result.Cast())
+        .Done();
 }
 
 } // namespace NYql::NDq

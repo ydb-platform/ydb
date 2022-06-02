@@ -71,7 +71,8 @@ namespace NKikimr {
                 CounterGroup = group->GetSubgroup("component", "lfalloc_profile");
             }
 
-            void Update() override {
+            void Update(TDuration interval) override {
+                Y_UNUSED(interval);
 #ifdef PROFILE_MEMORY_ALLOCATIONS
                 int maxTag = 0;
                 int numSizes = 0;
@@ -266,7 +267,8 @@ namespace NKikimr {
                 CounterGroup = group->GetSubgroup("component", "ytalloc_profile");
             }
 
-            void Update() override {
+            void Update(TDuration interval) override {
+                Y_UNUSED(interval);
 #ifdef PROFILE_MEMORY_ALLOCATIONS
                 using namespace NYT::NYTAlloc;
 
@@ -367,7 +369,8 @@ namespace NKikimr {
         };
 
         struct TFakeAllocMonitor: public IAllocMonitor {
-            void Update() override {
+            void Update(TDuration interval) override {
+                Y_UNUSED(interval);
             }
 
             void Dump(IOutputStream& out, const TString& relPath) override {
@@ -483,7 +486,7 @@ namespace NKikimr {
             }
 
             void HandleWakeup(const TActorContext& ctx) noexcept {
-                AllocMonitor->Update();
+                AllocMonitor->Update(Interval);
                 LogMemoryStatsIfNeeded(ctx);
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
             }

@@ -213,6 +213,7 @@ public:
         Functions["Aggregate"] = &TCallableConstraintTransformer::AggregateWrap;
         Functions["Fold"] = &TCallableConstraintTransformer::FoldWrap;
         Functions["Fold1"] = &TCallableConstraintTransformer::FoldWrap;
+        Functions["WithContext"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
     }
 
     TMaybe<IGraphTransformer::TStatus> ProcessCore(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

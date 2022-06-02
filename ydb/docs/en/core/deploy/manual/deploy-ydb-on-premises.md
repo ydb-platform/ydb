@@ -74,10 +74,8 @@ curl https://binaries.ydb.tech/ydbd-main-linux-amd64.tar.gz | tar -xz
 Create directories to run:
 
 ```bash
-mkdir -p /opt/ydb
-chown ydb:ydb /opt/ydb
-mkdir /opt/ydb/bin
-mkdir /opt/ydb/cfg
+sudo mkdir -p /opt/ydb/bin /opt/ydb/cfg /opt/ydb/lib
+sudo chown -R ydb:ydb /opt/ydb
 ```
 
 3. Copy the binary file, libraries, and configuration file to the appropriate directories:

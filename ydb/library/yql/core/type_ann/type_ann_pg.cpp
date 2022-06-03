@@ -1337,7 +1337,9 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
             for (auto& x : inputs) {
                 if (x.External) {
                     for (const auto& i : x.Type->GetItems()) {
-                        x.UsedExternalColumns.insert(TString(i->GetName()));
+                        if (!i->GetName().StartsWith("_yql_")) {
+                            x.UsedExternalColumns.insert(TString(i->GetName()));
+                        }
                     }
                 }
             }

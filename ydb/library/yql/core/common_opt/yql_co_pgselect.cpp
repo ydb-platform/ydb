@@ -639,23 +639,26 @@ void AddColumnsFromType(const TTypeAnnotationNode* type, TUsedColumns& columns) 
     }
 }
 
+void AddColumnsFromSublinks(const TNodeMap<ui32>& subLinks, TUsedColumns& columns) {
+    for (const auto& s : subLinks) {
+        auto extColumns = ExtractExternalColumns(s.first->Tail());
+        for (const auto& c : extColumns) {
+            columns.insert(std::make_pair(c, std::make_pair(Max<ui32>(), TString())));
+        }
+
+        if (!s.first->Child(2)->IsCallable("Void")) {
+            AddColumnsFromType(s.first->Child(2)->GetTypeAnn(), columns);
+        }
+    }
+}
+
 TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::TPtr& joinOps,
     const TExprNode::TPtr& filter, const TExprNode::TPtr& having) {
     TUsedColumns usedColumns;
     for (const auto& x : result->Tail().Children()) {
         AddColumnsFromType(x->Child(1)->GetTypeAnn(), usedColumns);
-
         auto subLinks = GatherSubLinks(x->TailPtr());
-        for (const auto& s : subLinks) {
-            auto extColumns = ExtractExternalColumns(s.first->Tail());
-            for (const auto& c : extColumns) {
-                usedColumns.insert(std::make_pair(c, std::make_pair(Max<ui32>(), TString())));
-            }
-
-            if (!s.first->Child(2)->IsCallable("Void")) {
-                AddColumnsFromType(s.first->Child(2)->GetTypeAnn(), usedColumns);
-            }
-        }
+        AddColumnsFromSublinks(subLinks, usedColumns);
     }
 
     for (ui32 groupNo = 0; groupNo < joinOps->Tail().ChildrenSize(); ++groupNo) {
@@ -671,10 +674,14 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
 
     if (filter) {
         AddColumnsFromType(filter->Tail().Head().GetTypeAnn(), usedColumns);
+        auto subLinks = GatherSubLinks(filter->Tail().TailPtr());
+        AddColumnsFromSublinks(subLinks, usedColumns);
     }
 
     if (having) {
         AddColumnsFromType(having->Tail().Head().GetTypeAnn(), usedColumns);
+        auto subLinks = GatherSubLinks(having->Tail().TailPtr());
+        AddColumnsFromSublinks(subLinks, usedColumns);
     }
 
     return usedColumns;
@@ -1046,6 +1053,10 @@ std::tuple<TAggs, TNodeMap<ui32>> GatherAggregations(const TExprNode::TPtr& proj
     TNodeMap<ui32> aggId;
 
     VisitExpr(projectionLambda->TailPtr(), [&](const TExprNode::TPtr& node) {
+        if (node->IsCallable("PgSubLink")) {
+            return false;
+        }
+
         if (node->IsCallable("PgAgg") || node->IsCallable("PgAggAll")) {
             aggId[node.Get()] = aggs.size();
             aggs.push_back({ node, projectionLambda->Head().HeadPtr() });
@@ -1057,6 +1068,10 @@ std::tuple<TAggs, TNodeMap<ui32>> GatherAggregations(const TExprNode::TPtr& proj
     if (having) {
         auto havingLambda = having->Tail().TailPtr();
         VisitExpr(having->Tail().TailPtr(), [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("PgSubLink")) {
+                return false;
+            }
+
             if (node->IsCallable("PgAgg") || node->IsCallable("PgAggAll")) {
                 aggId[node.Get()] = aggs.size();
                 aggs.push_back({ node, havingLambda->Head().HeadPtr() });

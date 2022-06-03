@@ -314,7 +314,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
             auto verifier = jwt::verify()
                 .allow_algorithm(jwt::algorithm::ps256(key->PublicKey));
             if (Audience) {
-                verifier.with_audience({Audience});
+                verifier.with_audience(std::set<std::string>({Audience}));
             }
             verifier.verify(decoded_token);
             response.User = decoded_token.get_subject();

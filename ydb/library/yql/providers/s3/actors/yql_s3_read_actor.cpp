@@ -30,6 +30,7 @@
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
@@ -329,7 +330,9 @@ public:
 private:
     void Run() final try {
         TReadBufferFromStream buffer(this);
-        NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
+        const auto decompress(MakeDecompressor(buffer, ReadSpec->Compression));
+        YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " <<ReadSpec->Compression << " compression.");
+        NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
 
         while (auto block = stream.read())
             Send(SourceActorId, new TEvPrivate::TEvNextBlock(block));
@@ -653,14 +656,16 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
             readSpec->Compression = it->second;
 
 #define SUPPORTED_FLAGS(xx) \
-        xx(skip_unknown_fields) \
-        xx(import_nested_json) \
-        xx(with_names_use_header) \
-        xx(null_as_default) \
+        xx(skip_unknown_fields, true) \
+        xx(import_nested_json, true) \
+        xx(with_names_use_header, true) \
+        xx(null_as_default, true) \
 
-#define SET_FLAG(flag) \
+#define SET_FLAG(flag, def) \
         if (const auto it = settings.find(#flag); settings.cend() != it) \
-            readSpec->Settings.flag = FromString<bool>(it->second);
+            readSpec->Settings.flag = FromString<bool>(it->second); \
+        else \
+            readSpec->Settings.flag = def;
 
         SUPPORTED_FLAGS(SET_FLAG)
 

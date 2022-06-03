@@ -7,31 +7,23 @@
 
 
 
-add_library(providers-s3-actors)
-target_compile_options(providers-s3-actors PRIVATE
+add_library(providers-s3-compressors)
+target_compile_options(providers-s3-compressors PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
-target_include_directories(providers-s3-actors PRIVATE
+target_include_directories(providers-s3-compressors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
 )
-target_link_libraries(providers-s3-actors PUBLIC
+target_link_libraries(providers-s3-compressors PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-fmt
   libs-poco-Util
-  yql-minikql-computation
-  common-token_accessor-client
-  common-schema-mkql
-  yql-public-types
-  dq-actors-compute
-  providers-common-http_gateway
-  providers-s3-proto
-  providers-s3-compressors
-  clickhouse_client_udf
+  contrib-libs-lz4
 )
-target_sources(providers-s3-actors PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_read_actor.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/actors/yql_s3_source_factory.cpp
+target_sources(providers-s3-compressors PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/lz4io.cpp
 )

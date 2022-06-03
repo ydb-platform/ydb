@@ -423,9 +423,16 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         }
 
         auto content = setting->Head().Content();
-        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-            TStringBuilder() << "Unexpected setting " << content << " in aggregate function " << name));
-        return IGraphTransformer::TStatus::Error;
+        if (content == "distinct") {
+            if (overWindow) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "distinct over window is not supported"));
+                return IGraphTransformer::TStatus::Error;
+            }
+        } else {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                TStringBuilder() << "Unexpected setting " << content << " in aggregate function " << name));
+            return IGraphTransformer::TStatus::Error;
+        }
     }
 
     TVector<ui32> argTypes;

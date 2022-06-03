@@ -177,6 +177,12 @@ AWS_IO_API int aws_socket_connect(
 AWS_IO_API int aws_socket_bind(struct aws_socket *socket, const struct aws_socket_endpoint *local_endpoint);
 
 /**
+ * Get the local address which the socket is bound to.
+ * Raises an error if no address is bound.
+ */
+AWS_IO_API int aws_socket_get_bound_address(const struct aws_socket *socket, struct aws_socket_endpoint *out_address);
+
+/**
  * TCP, LOCAL and VSOCK only. Sets up the socket to listen on the address bound to in `aws_socket_bind()`.
  */
 AWS_IO_API int aws_socket_listen(struct aws_socket *socket, int backlog_size);

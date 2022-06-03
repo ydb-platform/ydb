@@ -111,7 +111,7 @@ public:
         , CredentialsProviderFactory(std::move(credentialsProviderFactory))
         , SourceParams(std::move(sourceParams))
         , ReadParams(std::move(readParams))
-        , StartingMessageTimestamp(TInstant::Now())
+        , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
     {
         Y_UNUSED(HolderFactory);
@@ -310,6 +310,11 @@ private:
 
                 LWPROBE(PqReadDataReceived, TString(TStringBuilder() << Self.TxId), Self.SourceParams.GetTopicPath(), data);
                 SRC_LOG_T("Data received: " << message.DebugString(true));
+
+                if (message.GetWriteTime() < Self.StartingMessageTimestamp) {
+                    SRC_LOG_D("Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << message.GetWriteTime());
+                    continue;
+                }
 
                 Batch.emplace_back(NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size())));
                 UsedSpace += data.Size();

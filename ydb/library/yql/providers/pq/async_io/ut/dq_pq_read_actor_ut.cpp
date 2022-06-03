@@ -20,6 +20,21 @@ Y_UNIT_TEST_SUITE(TDqPqReadActorTest) {
         UNIT_ASSERT_EQUAL(result, data);
     }
 
+    Y_UNIT_TEST_F(TestReadFromTopicFromNow, TPqIoTestFixture) {
+        const TString topicName = "ReadFromTopicFromNow";
+
+        const std::vector<TString> oldData = { "-4", "-3", "-2", "-1", "0" };
+        PQWrite(oldData, topicName);
+
+        InitSource(topicName);
+
+        const std::vector<TString> data = { "1", "2", "3", "4" };
+        PQWrite(data, topicName);
+
+        auto result = SourceReadUntil<TString>(UVParser, 4);
+        UNIT_ASSERT_EQUAL(result, data);
+    }
+
     Y_UNIT_TEST_F(ReadWithFreeSpace, TPqIoTestFixture) {
         const TString topicName = "ReadWithFreeSpace";
         InitSource(topicName);

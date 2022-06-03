@@ -278,18 +278,14 @@ private:
                 NJson::TJsonValue& issue = jsonIssues.AppendValue({});
                 NProtobufJson::Proto2Json(queryIssue, issue);
             }
+            // find first deepest error
             const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues = &(record.GetResponse().GetQueryIssues());
             while (protoIssues->size() > 0 && (*protoIssues)[0].issuesSize() > 0) {
                 protoIssues = &((*protoIssues)[0].issues());
             }
             if (protoIssues->size() > 0) {
-                TStringBuilder err;
                 const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
-                if (issue.has_position()) {
-                    err << issue.position().row() << ':' << issue.position().column() << ' ';
-                }
-                err << issue.message();
-                response["error"] = err;
+                NProtobufJson::Proto2Json(issue, response["error"]);
             }
             out << NJson::WriteJson(response, false);
         }

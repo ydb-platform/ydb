@@ -140,7 +140,7 @@ public:
     // Right! or worlds are written to syncList
     virtual bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) = 0;
     virtual bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) = 0;
-    virtual bool GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) = 0;
+    virtual bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) = 0;
     virtual bool CanEvaluate(const TExprNode& node) = 0;
     virtual void UndoEvaluationChanges() = 0;
     virtual TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) = 0;

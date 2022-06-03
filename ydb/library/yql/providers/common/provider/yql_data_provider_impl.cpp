@@ -205,7 +205,7 @@ bool TDataProviderBase::CanPullResult(const TExprNode& node, TSyncMap& syncList,
     return false;
 }
 
-bool TDataProviderBase::GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) {
+bool TDataProviderBase::GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) {
     root = nullptr;
     Y_UNUSED(node);
     return false;

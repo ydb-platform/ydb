@@ -439,7 +439,7 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                                 continue;
                             }
 
-                            if (!p->GetExecWorld(*x.first, calcWorldRoot)) {
+                            if (!p->GetExecWorld(x.first, calcWorldRoot)) {
                                 canExec = false;
                                 break;
                             }
@@ -472,12 +472,12 @@ IGraphTransformer::TStatus EvaluateExpression(const TExprNode::TPtr& input, TExp
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Only pure expressions are supported"));
                 return IGraphTransformer::TStatus::Error;
             }
+        }
 
-            if (!calcWorldRoot) {
-                calcWorldRoot = ctx.NewWorld(input->Pos());
-                calcWorldRoot->SetTypeAnn(ctx.MakeType<TUnitExprType>());
-                calcWorldRoot->SetState(TExprNode::EState::ConstrComplete);
-            }
+        if (!calcWorldRoot) {
+            calcWorldRoot = ctx.NewWorld(input->Pos());
+            calcWorldRoot->SetTypeAnn(ctx.MakeType<TUnitExprType>());
+            calcWorldRoot->SetState(TExprNode::EState::ConstrComplete);
         }
 
         return IGraphTransformer::TStatus::Ok;

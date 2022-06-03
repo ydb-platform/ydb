@@ -64,7 +64,7 @@ public:
     bool IsPersistent(const TExprNode& node) override;
     bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override;
     bool CanPullResult(const TExprNode& node, TSyncMap& syncList, bool& canRef) override;
-    bool GetExecWorld(const TExprNode& node, TExprNode::TPtr& root) override;
+    bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override;
     bool CanEvaluate(const TExprNode& node) override;
     void UndoEvaluationChanges() override;
     TExprNode::TPtr CleanupWorld(const TExprNode::TPtr& node, TExprContext& ctx) override;

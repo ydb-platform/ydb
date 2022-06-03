@@ -58,6 +58,55 @@ public:
         return *ConfigurationTransformer;
     }
 
+    bool CanBuildResult(const TExprNode& node, TSyncMap& syncList) override {
+        if (!node.IsComplete()) {
+            return false;
+        }
+
+        bool canBuild = true;
+        VisitExpr(node, [&canBuild] (const TExprNode& n) {
+            if (!canBuild) {
+                return false;
+            }
+            if (TDqConnection::Match(&n) || TDqPhyPrecompute::Match(&n)) {
+                // Don't go deeper
+                return false;
+            }
+            if (!n.IsComposable()) {
+                canBuild = false;
+                return false;
+            }
+            return true;
+        });
+
+        if (canBuild) {
+            for (const auto& child : node.ChildrenList()) {
+                VisitExpr(child, [&syncList] (const TExprNode::TPtr& item) {
+                    if (ETypeAnnotationKind::World == item->GetTypeAnn()->GetKind()) {
+                        syncList.emplace(item, syncList.size());
+                        return false;
+                    }
+                    return true;
+                });
+            }
+        }
+
+        return canBuild;
+    }
+
+    bool GetExecWorld(const TExprNode::TPtr& node, TExprNode::TPtr& root) override {
+        if (ETypeAnnotationKind::World == node->GetTypeAnn()->GetKind() && !root) {
+            root = node;
+            return true;
+        }
+        root = nullptr;
+        return false;
+    }
+
+    bool CanEvaluate(const TExprNode& node) override {
+        return TDqConnection::Match(&node) || TDqPhyPrecompute::Match(&node);
+    }
+
     TExprNode::TPtr OptimizePull(const TExprNode::TPtr& node, const TFillSettings& fillSettings, TExprContext& ctx,
         IOptimizationContext& optCtx) override
     {

@@ -52,7 +52,7 @@ IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode
 
 IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     bool isResolved = input->Content().StartsWith("PgResolvedCall");
-    if (!EnsureMinArgsCount(*input, isResolved ? 2 : 1, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, isResolved ? 3 : 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -68,9 +68,29 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
         }
     }
 
+    if (!EnsureTuple(*input->Child(isResolved ? 2 : 1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& setting : input->Child(isResolved ? 2 : 1)->Children()) {
+        if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto content = setting->Head().Content();
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Unexpected setting " << content << " in function " << name));
+
+        return IGraphTransformer::TStatus::Error;
+    }
+
     TVector<ui32> argTypes;
     bool needRetype = false;
-    for (ui32 i = isResolved ? 2 : 1; i < input->ChildrenSize(); ++i) {
+    for (ui32 i = isResolved ? 3 : 2; i < input->ChildrenSize(); ++i) {
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
@@ -305,7 +325,7 @@ IGraphTransformer::TStatus PgOpWrapper(const TExprNode::TPtr& input, TExprNode::
 
 IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
-    if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, 3, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -320,23 +340,40 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (!EnsureTuple(*input->Child(2), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& setting : input->Child(2)->Children()) {
+        if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto content = setting->Head().Content();
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Unexpected setting " << content << " in window function " << name));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     if (name == "lead" || name == "lag") {
-        if (input->ChildrenSize() != 3) {
+        if (input->ChildrenSize() != 4) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Expected one argument in " << name << " function"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto arg = input->Child(2)->GetTypeAnn();
-        if (arg->GetKind() == ETypeAnnotationKind::Null ||
-            arg->GetKind() == ETypeAnnotationKind::Optional ||
-            arg->GetKind() == ETypeAnnotationKind::Pg) {
+        auto arg = input->Child(3)->GetTypeAnn();
+        if (arg->IsOptionalOrNull()) {
             input->SetTypeAnn(arg);
         } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(arg));
         }
     } else if (name == "row_number") {
-        if (input->ChildrenSize() != 2) {
+        if (input->ChildrenSize() != 3) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 "Expected no arguments in row_number function"));
             return IGraphTransformer::TStatus::Error;
@@ -355,7 +392,7 @@ IGraphTransformer::TStatus PgWindowCallWrapper(const TExprNode::TPtr& input, TEx
 IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
     Y_UNUSED(output);
     bool overWindow = (input->Content() == "PgAggWindowCall");
-    if (!EnsureMinArgsCount(*input, overWindow ? 2 : 1, ctx.Expr)) {
+    if (!EnsureMinArgsCount(*input, overWindow ? 3 : 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -372,9 +409,28 @@ IGraphTransformer::TStatus PgAggWrapper(const TExprNode::TPtr& input, TExprNode:
         }
     }
 
+    if (!EnsureTuple(*input->Child(overWindow ? 2 : 1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    for (const auto& setting : input->Child(overWindow ? 2 : 1)->Children()) {
+        if (!EnsureTupleMinSize(*setting, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureAtom(setting->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto content = setting->Head().Content();
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Unexpected setting " << content << " in aggregate function " << name));
+        return IGraphTransformer::TStatus::Error;
+    }
+
     TVector<ui32> argTypes;
     bool needRetype = false;
-    for (ui32 i = overWindow ? 2 : 1; i < input->ChildrenSize(); ++i) {
+    for (ui32 i = overWindow ? 3 : 2; i < input->ChildrenSize(); ++i) {
         auto type = input->Child(i)->GetTypeAnn();
         ui32 argType;
         bool convertToPg;
@@ -1012,7 +1068,9 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
             .Callable("PgResolvedCallCtx")
                 .Atom(0, NPg::LookupProc(aggDesc.FinalFuncId).Name)
                 .Atom(1, ToString(aggDesc.FinalFuncId))
-                .Arg(2, "state")
+                .List(2)
+                .Seal()
+                .Arg(3, "state")
             .Seal()
             .Seal()
             .Build();
@@ -1052,8 +1110,10 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                 .Callable("PgResolvedCallCtx")
                     .Atom(0, transFuncDesc.Name)
                     .Atom(1, ToString(aggDesc.TransFuncId))
-                    .Add(2, initValue)
-                    .Apply(3, lambda)
+                    .List(2)
+                    .Seal()
+                    .Add(3, initValue)
+                    .Apply(4, lambda)
                         .With(0, "row")
                     .Seal()
                 .Seal()
@@ -1068,11 +1128,13 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                     .Callable(0, "PgResolvedCallCtx")
                         .Atom(0, transFuncDesc.Name)
                         .Atom(1, ToString(aggDesc.TransFuncId))
-                        .Callable(2, "Coalesce")
+                        .List(2)
+                        .Seal()
+                        .Callable(3, "Coalesce")
                             .Arg(0, "state")
                             .Add(1, initValue)
                         .Seal()
-                        .Apply(3, lambda)
+                        .Apply(4, lambda)
                             .With(0, "row")
                         .Seal()
                     .Seal()
@@ -1118,8 +1180,10 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                         .Callable(0, "PgResolvedCallCtx")
                             .Atom(0, transFuncDesc.Name)
                             .Atom(1, ToString(aggDesc.TransFuncId))
-                            .Arg(2, "state")
-                            .Apply(3, lambda)
+                            .List(2)
+                            .Seal()
+                            .Arg(3, "state")
+                            .Apply(4, lambda)
                                 .With(0, "row")
                             .Seal()
                         .Seal()
@@ -1161,7 +1225,9 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                 .Callable("PgResolvedCallCtx")
                     .Atom(0, serializeFuncDesc.Name)
                     .Atom(1, ToString(aggDesc.SerializeFuncId))
-                    .Arg(2, "state")
+                    .List(2)
+                    .Seal()
+                    .Arg(3, "state")
                 .Seal()
             .Seal()
             .Build();
@@ -1175,8 +1241,10 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                 .Callable("PgResolvedCallCtx")
                     .Atom(0, deserializeFuncDesc.Name)
                     .Atom(1, ToString(aggDesc.DeserializeFuncId))
-                    .Arg(2, "state")
-                    .Callable(3, "PgInternal0")
+                    .List(2)
+                    .Seal()
+                    .Arg(3, "state")
+                    .Callable(4, "PgInternal0")
                     .Seal()
                 .Seal()
             .Seal()
@@ -1198,8 +1266,10 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                             .Callable(0, "PgResolvedCallCtx")
                                 .Atom(0, combineFuncDesc.Name)
                                 .Atom(1, ToString(aggDesc.CombineFuncId))
-                                .Arg(2, "state1")
-                                .Arg(3, "state2")
+                                .List(2)
+                                .Seal()
+                                .Arg(3, "state1")
+                                .Arg(4, "state2")
                             .Seal()
                             .Arg(1, "state1")
                         .Seal()
@@ -1215,8 +1285,10 @@ IGraphTransformer::TStatus PgAggregationTraitsWrapper(const TExprNode::TPtr& inp
                     .Callable("PgResolvedCallCtx")
                         .Atom(0, combineFuncDesc.Name)
                         .Atom(1, ToString(aggDesc.CombineFuncId))
-                        .Arg(2, "state1")
-                        .Arg(3, "state2")
+                        .List(2)
+                        .Seal()
+                        .Arg(3, "state1")
+                        .Arg(4, "state2")
                     .Seal()
                 .Seal()
                 .Build();
@@ -3053,7 +3125,9 @@ IGraphTransformer::TStatus PgTypeModWrapper(const TExprNode::TPtr& input, TExprN
     output = ctx.Expr.Builder(input->Pos())
         .Callable("PgCall")
             .Atom(0, NPg::LookupProc(typeDesc.TypeModInFuncId, { 0 }).Name)
-            .Add(1, arr)
+            .List(1)
+            .Seal()
+            .Add(2, arr)
         .Seal()
         .Build();
 

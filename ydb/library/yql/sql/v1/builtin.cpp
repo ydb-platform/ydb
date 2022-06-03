@@ -739,6 +739,7 @@ public:
         }
 
         Args[0] = BuildQuotedAtom(Args[0]->GetPos(), Args[0]->GetLiteralValue());
+        Args.insert(Args.begin() + 1, Q(Y()));
         return TCallNode::DoInit(ctx, src);
     }
 

@@ -1057,7 +1057,7 @@ std::tuple<TAggs, TNodeMap<ui32>> GatherAggregations(const TExprNode::TPtr& proj
             return false;
         }
 
-        if (node->IsCallable("PgAgg") || node->IsCallable("PgAggAll")) {
+        if (node->IsCallable("PgAgg")) {
             aggId[node.Get()] = aggs.size();
             aggs.push_back({ node, projectionLambda->Head().HeadPtr() });
         }
@@ -1072,7 +1072,7 @@ std::tuple<TAggs, TNodeMap<ui32>> GatherAggregations(const TExprNode::TPtr& proj
                 return false;
             }
 
-            if (node->IsCallable("PgAgg") || node->IsCallable("PgAggAll")) {
+            if (node->IsCallable("PgAgg")) {
                 aggId[node.Get()] = aggs.size();
                 aggs.push_back({ node, havingLambda->Head().HeadPtr() });
             }
@@ -1091,7 +1091,7 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow,
     auto arguments = ctx.NewArguments(pos, { arg });
     auto func = agg.first->Head().Content();
     TExprNode::TListType aggFuncArgs;
-    for (ui32 j = onWindow ? 2 : 1; j < agg.first->ChildrenSize(); ++j) {
+    for (ui32 j = onWindow ? 3 : 2; j < agg.first->ChildrenSize(); ++j) {
         aggFuncArgs.push_back(ctx.ReplaceNode(agg.first->ChildPtr(j), *agg.second, arg));
     }
 

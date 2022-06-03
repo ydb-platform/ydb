@@ -2257,8 +2257,8 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         auto name = node.Head().Content();
         auto id = FromString<ui32>(node.Child(1)->Content());
         std::vector<TRuntimeNode> args;
-        args.reserve(node.ChildrenSize() - 2);
-        for (ui32 i = 2; i < node.ChildrenSize(); ++i) {
+        args.reserve(node.ChildrenSize() - 3);
+        for (ui32 i = 3; i < node.ChildrenSize(); ++i) {
             args.push_back(MkqlBuildExpr(*node.Child(i), ctx));
         }
 

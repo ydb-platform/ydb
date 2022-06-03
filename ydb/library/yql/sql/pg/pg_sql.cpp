@@ -1343,11 +1343,6 @@ public:
             return nullptr;
         }
 
-        if (value->agg_distinct) {
-            AddError("FuncCall: unsupported agg_distinct");
-            return nullptr;
-        }
-
         if (value->func_variadic) {
             AddError("FuncCall: unsupported func_variadic");
             return nullptr;
@@ -1436,6 +1431,17 @@ public:
             args.push_back(window);
         }
 
+        TVector<TAstNode*> callSettings;
+        if (value->agg_distinct) {
+            if (!isAggregateFunc) {
+                AddError("FuncCall: agg_distinct must be set only for aggregate functions");
+                return nullptr;
+            }
+
+            callSettings.push_back(QL(QA("distinct")));
+        }
+
+        args.push_back(QVL(callSettings.data(), callSettings.size()));
         if (value->agg_star) {
             if (name != "count") {
                 AddError("FuncCall: * is expected only in count function");
@@ -1553,7 +1559,7 @@ public:
                         args.push_back(L(A("PgConst"), QAX(s), L(A("PgType"), QA("cstring"))));
                     }
 
-                    typeMod = L(A("PgCall"), QA(procDesc.Name), VL(args.data(), args.size()));
+                    typeMod = L(A("PgCall"), QA(procDesc.Name), QL(), VL(args.data(), args.size()));
                 }
 
                 return L(A("PgCast"), input, L(A("PgType"), QAX(finalType)), typeMod);

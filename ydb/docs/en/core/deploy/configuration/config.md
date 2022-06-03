@@ -24,7 +24,7 @@ host_configs:
 The `host_config_id` attribute sets a numeric template identifier. The `drive` attribute contains a collection of attached disks descriptions. Each  description contains two attributes:
 
 - `path` : Path to a mounted block device, for instance `/dev/disk/by-partlabel/ydb_disk_ssd_01`
-- `type` : Device physical media type: `ssd`, `nvme` или `rot` (rotational - HDD)
+- `type` : Device physical media type: `ssd`, `nvme` or `rot` (rotational - HDD)
 
 **Examples**
 
@@ -76,7 +76,7 @@ Such section is already included in the configuration example files supplied wit
 
 This group contains a list of cluster static nodes where storage processes are running, and sets its attributes:
 
-- Numeric node identified
+- Numeric node identifier
 - DNS hostname and port where connection over IP network can be estalished
 - [Host configuration template](#host-configs) identifier 
 - Placement in a particular rack and availability zone
@@ -89,8 +89,8 @@ hosts:
 - host: <DNS hostname>
   host_config_id: <numeric host configuration template identifier>
   port: <port> # 19001 by default
-  location:
-    unit: <string representing a server serial number>
+  walle_location:
+    body: <string representing a server serial number>
     data_center: <string representing an availability zone identifier>
     rack: <string representing a rack identifier>
 - host: <DNS hostname>
@@ -105,16 +105,16 @@ hosts:
   host_config_id: 1
   node_id: 1
   port: 19001
-  location:
-    unit: '1'
+  walle_location:
+    body: '1'
     data_center: '1'
     rack: '1'
 - host: hostname2
   host_config_id: 1
   node_id: 2
   port: 19001
-  location:
-    unit: '1'
+  walle_location:
+    body: '1'
     data_center: '1'
     rack: '1'
 ```
@@ -125,77 +125,214 @@ The whole section `hosts` content is generated automatically when using YDB Kube
 
 ## domains_config - Cluster domain {#domains-config}
 
-Specify the domain name, storage types, the numbers of the hosts that will be included in `StateStorage`, and the `nto_select` parameter.
-In the storage configuration, specify the type of storage and the type of storage fault tolerance (`erasure`), which will be used to initialize the database storage.
-You should also specify what types of disks this storage type will correspond to. The following models of storage fault tolerance are available:
+This sections contains root domain configuration for the YDB cluster, including Blob Storage and State Storage configurations.
 
-* The `block-4-2` configuration assumes deployment in 8 fail domains (by default, fail domains are racks) and can withstand a failure of no more than 2 fail domains.
-* The `mirror-3-dc` configuration assumes deployment in 3 data centers, each of which has 3 fault tolerance domains and can withstand a failure of one data center and one more fault tolerance domain (rack).
-* The `none` configuration doesn't provide fault tolerance but is convenient for functional testing.
-
-The `StateStorage` fault tolerance is defined by the `nto_select` parameter. The `StateStorage` configuration is fault-tolerant if any subset of `nto_select` servers that are part of `StateStorage` is fault-tolerant.
-`StateStorage` remains available if most hosts are available for any subset of `nto_select` servers that are part of `StateStorage`.
-
-For example, if a cluster uses the `block-4-2` fault tolerance model for its storage, to make `StateStorage` fault-tolerant, set the `nto_select` parameter to 5 and place the hosts in 5 different availability domains.
-If the cluster uses the `mirror-3-dc` fault tolerance model, to make `StateStorage` fault-tolerant, set the `nto_select` parameter to 9 and place the hosts in 3 data centers with 3 availability domains in each of them.
-
-{% note warning %}
-
-Make sure the NToSelect value is odd. For the proper operation of `StateStorage`, make sure that most of the NToSelect replicas are available for an arbitrary set of NToSelect hosts in `StateStorage`.
-
-{% endnote %}
-
-For example, you can use the following configuration for functional testing on a single server:
-
-```bash
+**Syntax**
+``` yaml
 domains_config:
   domain:
-  - name: Root
-    storage_pool_types:
-    - kind: ssd
-      pool_config:
-        box_id: 1
-        erasure_species: none
-        kind: ssd
-        pdisk_filter:
-        - property:
-          - type: SSD
-        vdisk_kind: Default
-  state_storage:
-  - ring:
-      node:
-      - 1
-      nto_select: 1
-    ssid: 1
+  - name: <root domain name>
+    storage_pool_types: <Blob Storage configuration>
+  state_storage: <State Storage configuration>
 ```
 
-In this case, a domain is named `Root` and storage of the `SSD` type is created in it. This type of storage corresponds to disks with the `type` parameter set to `SSD`.
-The `erasure_species: none` line in the parameter indicates that storage is created without fault tolerance.
+There can be only one root domain in a cluster, named as specified in the `domains_config.domain.name` attribute. Default configurations use the `Root` domain name.
 
-If a cluster is located in three availability zones with 3 servers available in each of them, it may have the following configuration:
+### Blob Storage configuration {#domains-blob}
 
-```bash
-domains_config:
-  domain:
-  - name: global
-    storage_pool_types:
-    - kind: ssd
-      pool_config:
-        box_id: 1
-        erasure_species: mirror-3-dc
-        kind: ssd
-        pdisk_filter:
-        - property:
-          - type: SSD
-        vdisk_kind: Default
-  state_storage:
-  - ring:
-      node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-      nto_select: 9
-    ssid: 1
+This sections defines one or more storage pool types available in the cluster for data in the databases, with the following configuration options:
+
+- Storage pool name
+- Device properties (e.g. type of disks)
+- Data encryption (on/off)
+- Fault tolerance mode
+
+There are three fault tolerance modes currently supported:
+
+|Mode name|Storage<br>overhead|Min number<br>of nodes|Description|
+|---------|-|-----------|-|
+| none | 1 | 1 | No data redundancy, any hardware fault leads to the unavailability of the storage pool. This mode may be useful for functional testing. |
+| block-4-2 | 1.5 | 8 | [Erasure coding](https://en.wikipedia.org/wiki/Erasure_code) is applied with 2 redundancy blocks added to 4 chunks of original data. Storage nodes are assigned to at least 8 fail domains (usually racks). Storage pool is available when any of 2 domains are lost, writing all 6 parts of data to the remaining domains. This mode is applicable for storage pools within a single availability zone (usually a data center). |
+| mirror-3-dc | 3 | 9 | Data is replicated in 3 availability zones using 3 fail domains (usually racks) inside each zone. Storage pool is available upon a failure of any availability zone and one failure domain in any of the remaining zones. |
+
+Storage overhead shown above is for the fault tolerance factor only. When planning capacity, additional significant factors must be considered, including fragmentation and slot granularity.
+
+**Syntax**
+
+``` yaml
+  storage_pool_types:
+  - kind: <storage pool name>
+    pool_config:
+      box_id: 1
+      encryption: <optional, set to 1 for data encryption at rest>
+      erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
+      kind: <storage pool name - assign the same value as above>
+      pdisk_filter:
+      - property:
+        - type: <device type to match host_configs.drive.type>
+      vdisk_kind: Default
+  - kind: <storage pool name>
+  ...
 ```
 
-In this case, a domain is named `global` and storage of the `SSD` type is also created in it. The `erasure_species: mirror-3-dc` line indicates that storage is created with the `mirror-3-dc` fault tolerance model. `StateStorage` will include 9 servers with the `nto_select` parameter set to 9.
+
+Each database in a cluster is assigned to at least one of available storage pools, chosen in a database creation operation. Pool kind names among those assigned can be referred to in a `DATA` parameter when defining column families in a [`CREATE TABLE`](../../yql/reference/syntax/create_table.md#column-family)/[`ALTER TABLE`](../../yql/reference/syntax/alter_table.md#column-family) YQL statement.
+
+### State Storage configuration {#domains-state}
+
+State Storage is an independent in-memory storage for volatile data which is being used in YDB internal processes. It keeps full data replicas across a set of assigned nodes. 
+
+State Storage usually does not require scaling for performance, so number of nodes should be as small as possible yet fault tolerant.
+
+State Storage availability is crucial for a YDB cluster, as it affects all databases regardless of the underlying Blob Storage pools. To ensure State Storage fault tolerance, the nodes must be selected in a way which guarantees a majority of working nodes in case of any expected failure. You may use the following guidelines to choose nodes for State Storage:
+
+|Cluster type|Min number<br>of nodes|Choice guidelines|
+|---------|-----------------------|-----------------|
+|Fault-intolerant|1|Choose any single node of the cluster's Blob Storage.|
+|Single availability zone|5|Choose five nodes in different fail domains of a block-4-2 Blob Storage pool to guarantee that 3 working nodes making up the majority (of 5) remain on any of two domains failure.|
+|Geodistributed|9|Choose three nodes in different fail domains inside every of three availability zones of a mirror-3-dc Blob Storage pool to guarantee that 5 working nodes making up the majority (of 9) remain on failure of any availability zone + a fail domain.|
+
+When deploying State Storage on a cluster which employs number of storage pools with possible mix of fault tolerance modes, consider increasing number of nodes to scatter across various storage pools, as unavailability of State Storage leads to unavailability of the whole cluster.
+
+**Syntax**
+``` yaml
+state_storage:
+- ring:
+    node: <array of State Storage nodes>
+    nto_select: <number of data replicas in State Storage>
+  ssid: 1
+```
+
+Each State Storage client (for instance, a DataShard tablet) use `nto_select` nodes to replicate its data in State Storage. If State Storage contains more nodes than `nto_select`, different nodes can be used for different clients, so make sure that any subset of `nto_select` nodes within State Storage satisfy the fault tolerance criteria.
+
+Use odd values for `nto_select`, as using even ones won't add to fault tolerance comparing to the nearest lesser odd value.
+
+### Examples {#domains-examples}
+
+{% list tabs %}
+
+- Block-4-2
+
+  ``` yaml
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: block-4-2
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3, 4, 5, 6, 7, 8]
+        nto_select: 5
+      ssid: 1
+
+- Mirror-3-dc
+
+  ``` yaml
+  domains_config:
+    domain:
+    - name: global
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: mirror-3-dc
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+        nto_select: 9
+      ssid: 1
+  ```
+
+- None
+
+  ``` yaml
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: 1
+          erasure_species: none
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - type: SSD
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node:
+        - 1
+        nto_select: 1
+      ssid: 1
+  ```
+
+- Multiple pools
+
+  ``` yaml
+  domains_config:
+    domain:
+    - name: Root
+      storage_pool_types:
+      - kind: ssd
+        pool_config:
+          box_id: '1'
+          erasure_species: block-4-2
+          kind: ssd
+          pdisk_filter:
+          - property:
+            - {type: SSD}
+          vdisk_kind: Default
+      - kind: rot
+        pool_config:
+          box_id: '1'
+          erasure_species: block-4-2
+          kind: rot
+          pdisk_filter:
+          - property:
+            - {type: ROT}
+          vdisk_kind: Default
+      - kind: rotencrypted
+        pool_config:
+          box_id: '1'
+          encryption_mode: 1
+          erasure_species: block-4-2
+          kind: rotencrypted
+          pdisk_filter:
+          - property:
+            - {type: ROT}
+          vdisk_kind: Default
+      - kind: ssdencrypted
+        pool_config:
+          box_id: '1'
+          encryption_mode: 1
+          erasure_species: block-4-2
+          kind: ssdencrypted
+          pdisk_filter:
+          - property:
+            - {type: SSD}
+          vdisk_kind: Default
+    state_storage:
+    - ring:
+        node: [1, 16, 31, 46, 61, 76, 91, 106]
+        nto_select: 5
+      ssid: 1
+  ```
+
+{% endlist %}
 
 ## actor_system_config - Actor system {#actor-system}
 

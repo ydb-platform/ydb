@@ -471,6 +471,7 @@ protected:
         }
 
         this->PassAway();
+        MemoryQuota = nullptr;
     }
 
     void Terminate(bool success, const TString& message) {

@@ -1,17 +1,11 @@
 #include "lz4io.h"
 
-#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
-#include <util/stream/output.h>
-#include <util/stream/input.h>
-#include <util/string/builder.h>
 
 #include <contrib/libs/lz4/lz4.h>
 #include <contrib/libs/lz4/lz4hc.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
-#include <ydb/library/yql/public/udf/udf_allocator.h>
-#include <ydb/library/yql/public/udf/udf_terminator.h>
 
 namespace NYql {
 

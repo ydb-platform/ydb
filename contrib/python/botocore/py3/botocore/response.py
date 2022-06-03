@@ -124,6 +124,12 @@ class StreamingBody(IOBase):
             return current_chunk
         raise StopIteration()
 
+    def __enter__(self):
+        return self._raw_stream
+
+    def __exit__(self, type, value, traceback):
+        self._raw_stream.close()
+
     next = __next__
 
     def iter_lines(self, chunk_size=_DEFAULT_CHUNK_SIZE, keepends=False):

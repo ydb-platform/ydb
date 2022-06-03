@@ -493,8 +493,13 @@ private:
         ProcessOutputsState.Inflight --;
         ProcessOutputsState.HasDataToSend |= !sinkInfo.Finished;
 
-        auto guard = BindAllocator();
-        sinkInfo.AsyncOutput->SendData(std::move(batch), size, std::move(checkpoint), finished);
+        {
+            auto guard = BindAllocator();
+            NKikimr::NMiniKQL::TUnboxedValueVector data = std::move(batch);
+            sinkInfo.AsyncOutput->SendData(std::move(data), size, std::move(checkpoint), finished);
+        }
+
+        Y_VERIFY(batch.empty());
         CA_LOG_D("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
         CA_LOG_D("Drain sink " << outputIndex

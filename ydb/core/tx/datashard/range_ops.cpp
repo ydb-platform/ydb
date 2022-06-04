@@ -211,6 +211,18 @@ TString NKikimr::DebugPrintRange(TConstArrayRef<NScheme::TTypeId> types, const N
             << (range.InclusiveTo ? "]" : ")");
 }
 
+TString NKikimr::DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types,
+  const TSmallVec<TSerializedTableRange>& ranges, const NScheme::TTypeRegistry& typeRegistry)
+{
+    auto out = TStringBuilder();
+    for (auto& range: ranges) {
+      out << DebugPrintRange(types, range.ToTableRange(), typeRegistry);
+      out << " ";
+    }
+
+    return out;
+}
+
 TString NKikimr::DebugPrintPoint(TConstArrayRef<NScheme::TTypeId> types, const TConstArrayRef<TCell> &point, const NScheme::TTypeRegistry& typeRegistry) {
     Y_VERIFY(types.size() >= point.size());
     TDbTupleRef pointRef(types.data(), point.data(), point.size());

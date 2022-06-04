@@ -27,28 +27,13 @@ namespace {
 
 using namespace NYql;
 using namespace NYql::NDq;
+using namespace NKikimr::NKqp::NComputeActor;
 
 bool IsDebugLogEnabled(const TActorSystem* actorSystem, NActors::NLog::EComponent component) {
     auto* settings = actorSystem->LoggerSettings();
     return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, component);
 }
 
-TString DebugPrintRanges(TConstArrayRef<NScheme::TTypeId> types,
-  const TSmallVec<TSerializedTableRange>& ranges)
-{
-    auto typeRegistry = AppData()->TypeRegistry;
-    auto out = TStringBuilder();
-
-    for (auto& range: ranges) {
-      out << DebugPrintRange(types, range.ToTableRange(), *typeRegistry);
-      out << " ";
-    }
-
-    return out;
-}
-
-static constexpr TDuration MIN_RETRY_DELAY = TDuration::MilliSeconds(250);
-static constexpr TDuration MAX_RETRY_DELAY = TDuration::Seconds(2);
 static constexpr ui64 MAX_SHARD_RETRIES = 5; // retry after: 0, 250, 500, 1000, 2000
 static constexpr ui64 MAX_TOTAL_SHARD_RETRIES = 20;
 static constexpr ui64 MAX_SHARD_RESOLVES = 3;
@@ -254,7 +239,7 @@ private:
         auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
 
         CA_LOG_D("Got EvScanInitActor from " << scanActorId << ", gen: " << msg.GetGeneration()
-            << ", state: " << ToString(state.State) << ", stateGen: " << state.Generation);
+            << ", state: " << EShardStateToString(state.State) << ", stateGen: " << state.Generation);
 
         switch (state.State) {
             case EShardState::Starting: {
@@ -334,7 +319,7 @@ private:
     void ProcessScanData() {
         Y_VERIFY_DEBUG(ScanData);
         Y_VERIFY_DEBUG(!Shards.empty());
-        Y_VERIFY(PendingScanData);
+        Y_VERIFY(!PendingScanData.empty());
 
         auto& ev = PendingScanData.front().first;
 
@@ -716,8 +701,6 @@ private:
     }
 
 private:
-    struct TShardState;
-
     void StartTableScan() {
         YQL_ENSURE(!Shards.empty());
 
@@ -729,7 +712,7 @@ private:
         state.ActorId = {};
 
         CA_LOG_D("StartTableScan: '" << ScanData->TablePath << "', shardId: " << state.TabletId << ", gen: " << state.Generation
-            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state)));
+            << ", ranges: " << DebugPrintRanges(KeyColumnTypes, state.GetScanRanges(KeyColumnTypes, LastKey), *AppData()->TypeRegistry));
 
         SendStartScanRequest(state, state.Generation);
     }
@@ -754,7 +737,7 @@ private:
         }
         ev->Record.MutableSkipNullKeys()->CopyFrom(Meta.GetSkipNullKeys());
 
-        auto ranges = GetScanRanges(state);
+        auto ranges = state.GetScanRanges(KeyColumnTypes, LastKey);
         auto protoRanges = ev->Record.MutableRanges();
         protoRanges->Reserve(ranges.size());
 
@@ -794,7 +777,7 @@ private:
 
         CA_LOG_D("Send EvKqpScan to shardId: " << state.TabletId << ", tablePath: " << ScanData->TablePath
             << ", gen: " << gen << ", subscribe: " << (!subscribed)
-            << ", range: " << DebugPrintRanges(KeyColumnTypes, GetScanRanges(state)));
+            << ", range: " << DebugPrintRanges(KeyColumnTypes, ranges, *AppData()->TypeRegistry));
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvForward(ev.Release(), state.TabletId, !subscribed),
             IEventHandle::FlagTrackDelivery);
@@ -873,47 +856,6 @@ private:
             std::move(onSendAllowed), std::move(onSendTimeout), TActivationContext::AsActorContext());
 
         CA_LOG_D("Launch rate limiter actor: " << rlActor);
-    }
-
-    const TSmallVec<TSerializedTableRange> GetScanRanges(const TShardState& state) const {
-        // No any data read previously, return all ranges
-        if (!LastKey.DataSize()) {
-            return state.Ranges;
-        }
-
-        // Form new vector. Skip ranges already read.
-        TVector<TSerializedTableRange> ranges;
-        ranges.reserve(state.Ranges.size());
-
-        YQL_ENSURE(KeyColumnTypes.size() == LastKey.size(), "Key columns size != last key");
-
-        for (auto rangeIt = state.Ranges.begin(); rangeIt != state.Ranges.end(); ++rangeIt) {
-            int cmp = ComparePointAndRange(LastKey, rangeIt->ToTableRange(), KeyColumnTypes, KeyColumnTypes);
-
-            YQL_ENSURE(cmp >= 0, "Missed intersection of LastKey and range.");
-
-            if (cmp > 0) {
-                continue;
-            }
-
-            // It is range, where read was interrupted. Restart operation from last read key.
-            ranges.emplace_back(std::move(TSerializedTableRange(
-                TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
-                )));
-
-            // And push all others
-            ranges.insert(ranges.end(), ++rangeIt, state.Ranges.end());
-            break;
-        }
-
-        return ranges;
-    }
-
-    TString PrintLastKey() const {
-        if (LastKey.empty()) {
-            return "<none>";
-        }
-        return DebugPrintPoint(KeyColumnTypes, LastKey, *AppData()->TypeRegistry);
     }
 
     void TerminateExpiredScan(const TActorId& actorId, TStringBuf msg) {
@@ -1038,102 +980,25 @@ private:
         TBase::PassAway();
     }
 
+    TString PrintLastKey() const {
+        if (LastKey.empty()) {
+            return "<none>";
+        }
+        return DebugPrintPoint(KeyColumnTypes, LastKey, *AppData()->TypeRegistry);
+    }
+
 private:
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrKqp::TKqpSnapshot Snapshot;
     TIntrusivePtr<TKqpCounters> Counters;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
     TVector<NScheme::TTypeId> KeyColumnTypes;
-
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
-
     TOwnedCellVec LastKey;
-    TDeque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;
-
-    enum class EShardState {
-        Initial,
-        Starting,
-        Running,
-        PostRunning, //We already recieve all data, we has not processed it yet.
-        Resolving,
-    };
-
-    static std::string_view ToString(EShardState state) {
-        switch (state) {
-            case EShardState::Initial: return "Initial"sv;
-            case EShardState::Starting: return "Starting"sv;
-            case EShardState::Running: return "Running"sv;
-            case EShardState::Resolving: return "Resolving"sv;
-            case EShardState::PostRunning: return "PostRunning"sv;
-        }
-    }
-
-    // scan over datashards
-    struct TShardState {
-        ui64 TabletId;
-        TSmallVec<TSerializedTableRange> Ranges;
-
-        EShardState State = EShardState::Initial;
-        ui32 Generation = 0;
-        bool SubscribedOnTablet = false;
-
-        ui32 RetryAttempt = 0;
-        ui32 TotalRetries = 0;
-        bool AllowInstantRetry = true;
-        TDuration LastRetryDelay;
-        TActorId RetryTimer;
-
-        ui32 ResolveAttempt = 0;
-
-        TActorId ActorId;
-
-        explicit TShardState(ui64 tabletId)
-            : TabletId(tabletId) {}
-
-        TDuration CalcRetryDelay() {
-            if (std::exchange(AllowInstantRetry, false)) {
-                return TDuration::Zero();
-            }
-
-            if (LastRetryDelay) {
-                LastRetryDelay = Min(LastRetryDelay * 2, MAX_RETRY_DELAY);
-            } else {
-                LastRetryDelay = MIN_RETRY_DELAY;
-            }
-            return LastRetryDelay;
-        }
-
-        void ResetRetry() {
-            RetryAttempt = 0;
-            AllowInstantRetry = true;
-            LastRetryDelay = {};
-            if (RetryTimer) {
-                TlsActivationContext->Send(new IEventHandle(RetryTimer, RetryTimer, new TEvents::TEvPoison));
-                RetryTimer = {};
-            }
-            ResolveAttempt = 0;
-        }
-
-        TString ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
-            TStringBuilder sb;
-            sb << "TShardState{ TabletId: " << TabletId << ", State: " << TKqpScanComputeActor::ToString(State)
-               << ", Gen: " << Generation << ", Ranges: [";
-            for (size_t i = 0; i < Ranges.size(); ++i) {
-                sb << "#" << i << ": " << DebugPrintRange(keyTypes, Ranges[i].ToTableRange(), *AppData()->TypeRegistry);
-                if (i + 1 != Ranges.size()) {
-                    sb << ", ";
-                }
-            }
-            sb << "], "
-               << ", RetryAttempt: " << RetryAttempt << ", TotalRetries: " << TotalRetries
-               << ", ResolveAttempt: " << ResolveAttempt << ", ActorId: " << ActorId << " }";
-            return sb;
-        }
-    };
-    TDeque<TShardState> Shards; // always work with head
-
+    std::deque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;
+    std::deque<TShardState> Shards;
     ui32 LastGeneration = 0;
-    TSet<ui64> AffectedShards;
+    std::set<ui64> AffectedShards;
     THashSet<ui32> TrackingNodes;
 };
 

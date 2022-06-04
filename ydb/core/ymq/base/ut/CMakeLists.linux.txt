@@ -1,0 +1,49 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_executable(ydb-core-ymq-base-ut)
+target_link_libraries(ydb-core-ymq-base-ut PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-lfalloc
+  library-cpp-cpuid_check
+  cpp-testing-unittest_main
+  ydb-core-base
+  core-ymq-base
+)
+target_link_options(ydb-core-ymq-base-ut PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lpthread
+  -lrt
+  -ldl
+)
+target_sources(ydb-core-ymq-base-ut PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/action_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/counters_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/dlq_helpers_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/helpers_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/secure_protobuf_printer_ut.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/ut/queue_attributes_ut.cpp
+)
+add_test(
+  NAME
+  ydb-core-ymq-base-ut
+  COMMAND
+  ydb-core-ymq-base-ut
+  --print-before-suite
+  --print-before-test
+  --fork-tests
+  --print-times
+  --show-fails
+)
+vcs_info(ydb-core-ymq-base-ut)

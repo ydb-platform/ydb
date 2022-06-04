@@ -19,6 +19,7 @@ import hmac
 import json
 import logging
 import time
+from collections.abc import Mapping
 from email.utils import formatdate
 from hashlib import sha1, sha256
 from operator import itemgetter
@@ -245,10 +246,11 @@ class SigV4Auth(BaseSigner):
     def _canonical_query_string_params(self, params):
         # [(key, value), (key2, value2)]
         key_val_pairs = []
-        for key in params:
-            value = str(params[key])
+        if isinstance(params, Mapping):
+            params = params.items()
+        for key, value in params:
             key_val_pairs.append(
-                (quote(key, safe='-_.~'), quote(value, safe='-_.~'))
+                (quote(key, safe='-_.~'), quote(str(value), safe='-_.~'))
             )
         sorted_key_vals = []
         # Sort by the URI-encoded key names, and in the case of

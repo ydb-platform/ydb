@@ -657,7 +657,8 @@ class InstanceMetadataFetcher(IMDSFetcher):
             refresh_interval = self._config.get(
                 "ec2_credential_refresh_window", 60 * 10
             )
-            refresh_interval_with_jitter = refresh_interval + random.randint(120, 600)
+            jitter = random.randint(120, 600)  # Between 2 to 10 minutes
+            refresh_interval_with_jitter = refresh_interval + jitter
             current_time = datetime.datetime.utcnow()
             refresh_offset = datetime.timedelta(
                 seconds=refresh_interval_with_jitter

@@ -13,6 +13,7 @@
 # language governing permissions and limitations under the License.
 import functools
 import logging
+from collections.abc import Mapping
 
 import urllib3.util
 from urllib3.connection import HTTPConnection, VerifiedHTTPSConnection
@@ -367,7 +368,11 @@ class AWSRequestPreparer:
         if original.params:
             url_parts = urlparse(url)
             delim = '&' if url_parts.query else '?'
-            params = urlencode(list(original.params.items()), doseq=True)
+            if isinstance(original.params, Mapping):
+                params_to_encode = list(original.params.items())
+            else:
+                params_to_encode = original.params
+            params = urlencode(params_to_encode, doseq=True)
             url = delim.join((url, params))
         return url
 

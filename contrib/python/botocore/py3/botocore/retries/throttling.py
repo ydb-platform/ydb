@@ -21,7 +21,8 @@ class CubicCalculator:
         self._last_fail = start_time
 
     def _calculate_zero_point(self):
-        k = ((self._w_max * (1 - self._beta)) / self._scale_constant) ** (1 / 3.0)
+        scaled_value = (self._w_max * (1 - self._beta)) / self._scale_constant
+        k = scaled_value ** (1 / 3.0)
         return k
 
     def success_received(self, timestamp):

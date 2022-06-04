@@ -23,6 +23,7 @@ import os
 import re
 import uuid
 import warnings
+from io import BytesIO
 
 import botocore
 import botocore.auth
@@ -35,7 +36,6 @@ from botocore.compat import (
     get_md5,
     json,
     quote,
-    six,
     unquote,
     unquote_str,
     urlsplit,
@@ -226,9 +226,9 @@ def decode_console_output(parsed, **kwargs):
             # We're using 'replace' for errors because it is
             # possible that console output contains non string
             # chars we can't utf-8 decode.
-            value = base64.b64decode(six.b(parsed['Output'])).decode(
-                'utf-8', 'replace'
-            )
+            value = base64.b64decode(
+                bytes(parsed['Output'], 'latin-1')
+            ).decode('utf-8', 'replace')
             parsed['Output'] = value
         except (ValueError, TypeError, AttributeError):
             logger.debug('Error decoding base64', exc_info=True)
@@ -685,7 +685,7 @@ def add_glacier_checksums(params, **kwargs):
         # so we can use the util functions to calculate the
         # checksums which assume file like objects.  Note that
         # we're not actually changing the body in the request_dict.
-        body = six.BytesIO(body)
+        body = BytesIO(body)
     starting_position = body.tell()
     if 'x-amz-content-sha256' not in headers:
         headers['x-amz-content-sha256'] = utils.calculate_sha256(
@@ -861,9 +861,9 @@ def _decode_list_object(top_level_keys, nested_keys, parsed, context):
 def convert_body_to_file_like_object(params, **kwargs):
     if 'Body' in params:
         if isinstance(params['Body'], str):
-            params['Body'] = six.BytesIO(ensure_bytes(params['Body']))
+            params['Body'] = BytesIO(ensure_bytes(params['Body']))
         elif isinstance(params['Body'], bytes):
-            params['Body'] = six.BytesIO(params['Body'])
+            params['Body'] = BytesIO(params['Body'])
 
 
 def _add_parameter_aliases(handler_list):

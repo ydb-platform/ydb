@@ -123,7 +123,7 @@ public:
         HostRecords = std::move(msg->HostRecords);
         GroupReserveMin = msg->GroupReserveMin;
         GroupReservePart = msg->GroupReservePart;
-        GenerateStorageStats();
+//        GenerateStorageStats();
     }
 
     template<typename TDest, typename TSrc, typename TDeleted, typename TIndex>

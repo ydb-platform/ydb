@@ -134,7 +134,7 @@ private:
             }
         }
 
-                TAutoPtr<TEvCms::TEvPermissionRequest> request = new TEvCms::TEvPermissionRequest;
+        TAutoPtr<TEvCms::TEvPermissionRequest> request = new TEvCms::TEvPermissionRequest;
         request->Record.SetUser(WALLE_CMS_USER);
         request->Record.SetSchedule(true);
         request->Record.SetDryRun(task.GetDryRun());

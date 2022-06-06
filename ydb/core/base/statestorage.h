@@ -25,6 +25,7 @@ struct TEvStateStorage {
         EvResolveSchemeBoard, // subset (by hash)
         EvListSchemeBoard, // all
         EvUpdateGroupConfig,
+        EvListStateStorage,
 
         // replies (local, from proxy)
         EvInfo = EvLookup + 512,
@@ -33,6 +34,7 @@ struct TEvStateStorage {
         EvResponseReplicasDumps,
         EvDeleteResult,
         EvListSchemeBoardResult,
+        EvListStateStorageResult,
 
         // replicas interface
         EvReplicaLookup = EvLock + 2 * 512,
@@ -373,6 +375,8 @@ struct TEvStateStorage {
     struct TEvReplicaBoardInfo;
     struct TEvListSchemeBoard;
     struct TEvListSchemeBoardResult;
+    struct TEvListStateStorage;
+    struct TEvListStateStorageResult;
     struct TEvUpdateGroupConfig;
     struct TEvReplicaProbeSubscribe;
     struct TEvReplicaProbeUnsubscribe;

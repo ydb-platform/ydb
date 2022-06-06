@@ -342,8 +342,6 @@ static void SetupServices(TTestActorRuntime &runtime,
     }
 
     for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-        SetupStateStorage(runtime, nodeIndex);
-
         TString staticConfig("AvailabilityDomains: 0 "
                              "PDisks { NodeID: $Node1 PDiskID: 0 PDiskGuid: 1 Path: \"pdisk0.dat\" }"
                              "VDisks { VDiskID { GroupID: 0 GroupGeneration: 1 Ring: 0 Domain: 0 VDisk: 0 }"
@@ -437,11 +435,9 @@ static void SetupServices(TTestActorRuntime &runtime,
 
 } // anonymous namespace
 
-TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
-                         ui32 pdisks,
-                         const TNodeTenantsMap &tenants)
-    : TTestBasicRuntime(nodeCount, false)
-    , CmsId(MakeCmsID(0))
+TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options) 
+        : TTestBasicRuntime(options.NodeCount, false)
+        , CmsId(MakeCmsID(0)) 
 {
     TFakeNodeWhiteboardService::Config.MutableResponse()->SetSuccess(true);
     TFakeNodeWhiteboardService::Config.MutableResponse()->ClearStatus();
@@ -449,7 +445,7 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
     status.SetSuccess(true);
     auto *config = status.MutableBaseConfig();
 
-    GenerateExtendedInfo(*this, config, pdisks, 4, tenants);
+    GenerateExtendedInfo(*this, config, options.VDisks, 4, options.Tenants);
 
     // Set observer to pass fake base blobstorage config.
     auto redirectConfigRequest = [](TTestActorRuntimeBase&,
@@ -467,7 +463,15 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
     TMallocInfo mallocInfo = MallocInfo();
     mallocInfo.SetParam("FillMemoryOnAllocation", "false");
     SetupLogging();
-    SetupServices(*this, tenants);
+
+    for (ui32 nodeIndex = 0; nodeIndex < GetNodeCount(); ++nodeIndex) {
+        if (options.NRings > 1) {
+            SetupCustomStateStorage(*this, options.NToSelect, options.NRings, options.RingSize, 0);
+        } else {
+            SetupStateStorage(*this, nodeIndex);
+        }
+    }
+    SetupServices(*this, options.Tenants);
 
     Sender = AllocateEdgeActor();
 
@@ -477,10 +481,28 @@ TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
     SetCmsConfig(cmsConfig);
 }
 
+
+TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
+                         ui32 vdisks,
+                         const TNodeTenantsMap &tenants)
+    : TCmsTestEnv(TTestEnvOpts(nodeCount, vdisks, tenants))
+{
+}
+
 TCmsTestEnv::TCmsTestEnv(ui32 nodeCount,
                          const TNodeTenantsMap &tenants)
-    : TCmsTestEnv(nodeCount, 0, tenants)
+    : TCmsTestEnv(TTestEnvOpts(nodeCount, 0, tenants))
 {
+}
+
+TIntrusiveConstPtr<NKikimr::TStateStorageInfo> TCmsTestEnv::GetStateStorageInfo() {
+    ui32 StateStorageGroup = 0;
+    const TActorId proxy = MakeStateStorageProxyID(StateStorageGroup);
+    Send(new IEventHandle(proxy, Sender, new TEvStateStorage::TEvListStateStorage()));
+
+    auto reply = GrabEdgeEventRethrow<TEvStateStorage::TEvListStateStorageResult>(Sender);
+    const auto &rec = reply->Get()->Info;
+    return rec;
 }
 
 void TCmsTestEnv::SetupLogging()

@@ -420,12 +420,22 @@ public:
         return true;
     }
 
+    TSerializedTableRange InfiniteRange(ui32 columns) {
+        TVector<TCell> vec(columns, TCell());
+        TArrayRef<TCell> cells(vec);
+        return TSerializedTableRange(TSerializedCellVec::Serialize(cells), "", true, false);
+    }
+
     void InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo::TPtr& buildInfo) {
         TTableInfo::TPtr table = Self->Tables.at(buildInfo->TablePathId);
+
+        auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
+        const TSerializedTableRange infiniteRange = InfiniteRange(tableColumns.Keys.size());
+
         for (const auto& x: table->GetPartitions()) {
             Y_VERIFY(Self->ShardInfos.contains(x.ShardIdx));
 
-            buildInfo->Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus());
+            buildInfo->Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus(infiniteRange, ""));
             Self->PersistBuildIndexUploadInitiate(db, buildInfo, x.ShardIdx);
         }
     }
@@ -662,7 +672,7 @@ public:
             }
 
             if (record.HasLastKeyAck()) {
-                {
+                if (shardStatus.LastKeyAck) {
                     //check that all LastKeyAcks are monotonously increase
                     TTableInfo::TPtr tableInfo = Self->Tables.at(buildInfo->TablePathId);
                     TVector<ui16> keyTypes;

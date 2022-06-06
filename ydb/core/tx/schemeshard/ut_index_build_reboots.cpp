@@ -9,6 +9,8 @@ using namespace NSchemeShardUT_Private;
 static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 index) {
     TString writeQuery = Sprintf(R"(
         (
+            (let keyNull   '( '('key   (Null) ) ) )
+            (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
             (let key0   '( '('key   (Uint32 '%u ) ) ) )
             (let row0   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
             (let key1   '( '('key   (Uint32 '%u ) ) ) )
@@ -31,6 +33,7 @@ static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 
             (let row9   '( '('index (Uint32 '%u ) )  '('value (Utf8 'aaaa) ) ) )
 
             (return (AsList
+                        (UpdateRow '__user__Table keyNull row0)
                         (UpdateRow '__user__Table key0 row0)
                         (UpdateRow '__user__Table key1 row1)
                         (UpdateRow '__user__Table key2 row2)
@@ -45,6 +48,7 @@ static void WriteRows(TTestActorRuntime& runtime, ui64 tabletId, ui32 key, ui32 
             )
         )
     )",
+         1000*index + 0,
          1000*key + 0, 1000*index + 0,
          1000*key + 1, 1000*index + 1,
          1000*key + 2, 1000*index + 2,
@@ -84,6 +88,26 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 for (ui32 delta = 0; delta < 2; ++delta) {
                     WriteRows(runtime, TTestTxConfig::FakeHiveTablets, 1 + delta, 100 + delta);
                 }
+
+                // Check src shard has the lead key as null
+                {
+                    NKikimrMiniKQL::TResult result;
+                    TString err;
+                    ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, R"(
+                    (
+                        (let range '('('key (Null) (Void))))
+                        (let columns '('key 'index))
+                        (let result (SelectRange '__user__Table range columns '()))
+                        (return (AsList (SetResult 'Result result)))
+                    )
+                    )", result, err);
+
+                    UNIT_ASSERT_VALUES_EQUAL_C(status, static_cast<ui32>(NKikimrProto::OK), err);
+                    UNIT_ASSERT_VALUES_EQUAL(err, "");
+
+                    //                                   V -- here the null key
+                    NKqp::CompareYson(R"([[[[[["101000"];#];[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                }
             }
 
             AsyncBuilIndex(runtime,  ++t.TxId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/dir/Table", "index1", {"index"});
@@ -120,7 +144,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 TString err;
                 ui32 status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets+2, R"(
                 (
-                    (let range '( '('index (Uint32 '0) (Void) )  '('key (Uint32 '0) (Void) )))
+                    (let range '( '('index (Null) (Void))  '('key (Null) (Void))))
                     (let columns '('key 'index) )
                     (let result (SelectRange '__user__indexImplTable range columns '()))
                     (return (AsList (SetResult 'Result result) ))
@@ -130,7 +154,8 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, err);
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
 
-                NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
+                // record with null is there ->                                                                                                                                                                                                                                  V -- here is the null
+                NKqp::CompareYson(R"([[[[[["100000"];["1000"]];[["100001"];["1001"]];[["100002"];["1002"]];[["100003"];["1003"]];[["100004"];["1004"]];[["100005"];["1005"]];[["100006"];["1006"]];[["100007"];["1007"]];[["100008"];["1008"]];[["100009"];["1009"]];[["101000"];#];[["101000"];["2000"]];[["101001"];["2001"]];[["101002"];["2002"]];[["101003"];["2003"]];[["101004"];["2004"]];[["101005"];["2005"]];[["101006"];["2006"]];[["101007"];["2007"]];[["101008"];["2008"]];[["101009"];["2009"]]];%false]]])", result);
             }
         });
     }
@@ -200,7 +225,7 @@ Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
                 UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::OK, err);
                 UNIT_ASSERT_VALUES_EQUAL(err, "");
 
-                NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
+                NKqp::CompareYson(R"([[[[[["100000"];["1000"];["aaaa"]];[["100001"];["1001"];["aaaa"]];[["100002"];["1002"];["aaaa"]];[["100003"];["1003"];["aaaa"]];[["100004"];["1004"];["aaaa"]];[["100005"];["1005"];["aaaa"]];[["100006"];["1006"];["aaaa"]];[["100007"];["1007"];["aaaa"]];[["100008"];["1008"];["aaaa"]];[["100009"];["1009"];["aaaa"]];[["101000"];#;["aaaa"]];[["101000"];["2000"];["aaaa"]];[["101001"];["2001"];["aaaa"]];[["101002"];["2002"];["aaaa"]];[["101003"];["2003"];["aaaa"]];[["101004"];["2004"];["aaaa"]];[["101005"];["2005"];["aaaa"]];[["101006"];["2006"];["aaaa"]];[["101007"];["2007"];["aaaa"]];[["101008"];["2008"];["aaaa"]];[["101009"];["2009"];["aaaa"]]];%false]]])", result);
             }
         });
     }

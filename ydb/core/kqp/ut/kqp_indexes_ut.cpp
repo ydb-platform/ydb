@@ -1463,6 +1463,240 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
     }
 
+    Y_UNIT_TEST_QUAD(UpsertWithNullKeysSimple, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({ setting });
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::String)
+                .AddNullableColumn("IndexColumn", EPrimitiveType::String)
+                .AddNullableColumn("Value", EPrimitiveType::String);
+            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key"});
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexColumn, Value) VALUES
+                ("Primary 1", "Secondary 1", "Value 1"),
+                (Null,        "Secondary 2", "Value 2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query1,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        {
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ TIndexDescription("IndexName", {"IndexColumn"}) });
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/TestTable` VIEW IndexName WHERE IndexColumn = 'Secondary 2';
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value 2\"]]]");
+        }
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName/indexImplTable");
+            const TString expected =
+                R"([[["Secondary 1"];["Primary 1"]];)"
+                R"([["Secondary 2"];#]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+        {
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexColumn, Value) VALUES
+                ("Primary 3", "Secondary 3", "Value 3"),
+                (Null,        "Secondary 4", "Value 4");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query1,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        {
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/TestTable` VIEW IndexName WHERE IndexColumn = 'Secondary 4';
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value 4\"]]]");
+        }
+        {
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName/indexImplTable");
+            const TString expected =
+                R"([[["Secondary 1"];["Primary 1"]];)"
+                R"([["Secondary 3"];["Primary 3"]];)"
+                R"([["Secondary 4"];#]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+    }
+
+    Y_UNIT_TEST_QUAD(UpsertWithNullKeysComplex, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            // Create table with 1 index
+            auto tableBuilder = db.GetTableBuilder();
+            tableBuilder
+                .AddNullableColumn("Key", EPrimitiveType::String)
+                .AddNullableColumn("IndexColumn1", EPrimitiveType::String)
+                .AddNullableColumn("IndexColumn2", EPrimitiveType::String)
+                .AddNullableColumn("Value", EPrimitiveType::String);
+            tableBuilder.SetPrimaryKeyColumns(TVector<TString>{"Key", "IndexColumn1", "IndexColumn2"});
+            tableBuilder.AddSecondaryIndex("IndexName1", TVector<TString>{"IndexColumn1"});
+            auto result = session.CreateTable("/Root/TestTable", tableBuilder.Build()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            // Upsert rows including one with PK starting with Null
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexColumn1, IndexColumn2, Value) VALUES
+                ("Primary 1", "Secondary1 1", "Secondary2 1", "Value 1"),
+                (Null,       "Secondary1 2", "Secondary2 2", "Value 2");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                                 query1,
+                                 TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                          .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        {
+            // Read row with PK starting with Null by index1
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/TestTable` VIEW IndexName1 WHERE IndexColumn1 = 'Secondary1 2';
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value 2\"]]]");
+        }
+        {
+            // Both rows should be in index1 table
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName1/indexImplTable");
+            const TString expected =
+                R"([[["Secondary1 1"];["Primary 1"];["Secondary2 1"]];)"
+                R"([["Secondary1 2"];#;["Secondary2 2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+        {
+            // Add second index with alter
+            TAlterTableSettings alterSettings;
+            alterSettings.AppendAddIndexes({ TIndexDescription("IndexName2", {"IndexColumn2"}) });
+            auto result = session.AlterTable("/Root/TestTable", alterSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+        {
+            // Read row with PK starting with Null by index2
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/TestTable` VIEW IndexName2 WHERE IndexColumn2 = 'Secondary2 2';
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value 2\"]]]");
+        }
+        {
+            // Both rows should also be in index2 table
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName2/indexImplTable");
+            const TString expected =
+                R"([[["Secondary2 1"];["Primary 1"];["Secondary1 1"]];)"
+                R"([["Secondary2 2"];#;["Secondary1 2"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+        {
+            // Upsert more rows including one with PK starting with Null
+            const TString query1(Q_(R"(
+                UPSERT INTO `/Root/TestTable` (Key, IndexColumn1, IndexColumn2, Value) VALUES
+                ("Primary 3", "Secondary1 3", "Secondary2 3", "Value 3"),
+                (Null,       "Secondary1 4", "Secondary2 4", "Value 4");
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query1,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+        }
+        {
+            // Read recently added row with PK starting with Null by index2
+            const TString query(Q1_(R"(
+                SELECT Value FROM `/Root/TestTable` VIEW IndexName2 WHERE IndexColumn2 = 'Secondary2 4';
+            )"));
+
+            auto result = session.ExecuteDataQuery(
+                query,
+                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+                .ExtractValueSync();
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[[[\"Value 4\"]]]");
+        }
+        {
+            // All 4 rows should be in index1 table
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName1/indexImplTable");
+            const TString expected =
+                R"([[["Secondary1 1"];["Primary 1"];["Secondary2 1"]];)"
+                R"([["Secondary1 2"];#;["Secondary2 2"]];)"
+                R"([["Secondary1 3"];["Primary 3"];["Secondary2 3"]];)"
+                R"([["Secondary1 4"];#;["Secondary2 4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+        {
+            // All 4 rows should also be in index2 table
+            const auto& yson = ReadTablePartToYson(session, "/Root/TestTable/IndexName2/indexImplTable");
+            const TString expected =
+                R"([[["Secondary2 1"];["Primary 1"];["Secondary1 1"]];)"
+                R"([["Secondary2 2"];#;["Secondary1 2"]];)"
+                R"([["Secondary2 3"];["Primary 3"];["Secondary1 3"]];)"
+                R"([["Secondary2 4"];#;["Secondary1 4"]]])";
+            UNIT_ASSERT_VALUES_EQUAL(yson, expected);
+        }
+
+    }
+
     Y_UNIT_TEST_TWIN(KeyIndex, WithMvcc) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()

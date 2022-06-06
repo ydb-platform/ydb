@@ -5,16 +5,18 @@
 namespace NKikimr {
 
 Y_UNIT_TEST_SUITE(RangeOps) {
-    TString MakeValue(ui64 value) {
-        TRawTypeValue raw(&value, sizeof(value), NScheme::NTypeIds::Uint64);
-        TCell cell(&raw);
-        TVector<TCell> vec = {cell};
+    TString MakePoint(TVector<std::optional<ui64>> values) {
+        TVector<TCell> vec;
+        for (const auto& val: values) {
+            TCell cell = val ? TCell::Make<ui64>(val.value()) : TCell();
+            vec.push_back(cell);
+        }
         TArrayRef<TCell> cells(vec);
         return TSerializedCellVec::Serialize(cells);
     }
-    TString MakeLeftInf() {
-        TCell cell;
-        TVector<TCell> vec = {cell};
+
+    TString MakeLeftInf(ui32 cellsCount = 1) {
+        TVector<TCell> vec = TVector(cellsCount, TCell());
         TArrayRef<TCell> cells(vec);
         return TSerializedCellVec::Serialize(cells);
     }
@@ -55,25 +57,100 @@ Y_UNIT_TEST_SUITE(RangeOps) {
         typeRegistry->CalculateMetadataEtag();
 
         const TVector<NKikimr::NScheme::TTypeId> valueType = {NScheme::NTypeIds::Uint64};
+        const TVector<NKikimr::NScheme::TTypeId> pairType = {NScheme::NTypeIds::Uint64, NScheme::NTypeIds::Uint64};
 
         const auto emptyRange = MakeRange(
-            MakeValue(20), true,
-            MakeValue(10), true
+            MakePoint({20}), true,
+            MakePoint({10}), true
             );
+
+        {
+            //=================
+            //(-inf;        +inf)
+            //----[bbbbbbbb]------- // range with lead null
+
+            auto first = MakeRange(
+                MakeLeftInf(pairType.size()), true,
+                MakeRightInf(), false
+                );
+
+            Cerr << "first " << DebugPrintRange(pairType, first.ToTableRange(), *typeRegistry);
+            Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
+
+            auto second = MakeRange(
+                MakePoint({std::nullopt, 1}), true,
+                MakePoint({20, 20}), true
+                );
+
+            Cerr << " second " << DebugPrintRange(pairType, second.ToTableRange(), *typeRegistry);
+
+            auto range = Intersect(pairType, first.ToTableRange(), second.ToTableRange());
+            Cerr << " result " << DebugPrintRange(pairType, range, *typeRegistry);
+
+            auto correct = MakeRange(
+                MakePoint({std::nullopt, 1}), true,
+                MakePoint({20, 20}), true
+                );
+
+            Cerr << " correct " << DebugPrintRange(pairType, correct.ToTableRange(), *typeRegistry);
+
+            CheckRange(pairType, correct.ToTableRange(), range);
+            Cerr << Endl;
+        }
+
+        {
+            // test for KIKIMR-14517
+            //=================
+            //------(-inf;    +inf) // -inf is wrongly set up as {null} instead of {null, null}
+            //----[bbbbbbbb]------- // range with lead null
+
+            // here is a mistake: MakeLeftInf(valueType.size()) is set up as {null}
+            // but -inf shoud be set up as {null, null}
+            // however  MakePoint({std::nullopt, 1}) is {null, 1}
+            // as a resul {null} = {null, +inf} > {null, 1} > {null, null}
+
+            auto first = MakeRange(
+                MakeLeftInf(valueType.size()), true,
+                MakeRightInf(), false
+                );
+
+            Cerr << "first " << DebugPrintRange(pairType, first.ToTableRange(), *typeRegistry);
+            Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
+
+            auto second = MakeRange(
+                MakePoint({std::nullopt, 1}), true,
+                MakePoint({20, 20}), true
+                );
+
+            Cerr << " second " << DebugPrintRange(pairType, second.ToTableRange(), *typeRegistry);
+
+            auto range = Intersect(pairType, first.ToTableRange(), second.ToTableRange());
+            Cerr << " result " << DebugPrintRange(pairType, range, *typeRegistry);
+
+            auto correct = MakeRange(
+                MakePoint({std::nullopt}), true, // {null} = {null, +inf} > {null, 1} > {null, null}, so there is {null} instead {null, 1}
+                MakePoint({20, 20}), true
+                );
+
+            Cerr << " correct " << DebugPrintRange(pairType, correct.ToTableRange(), *typeRegistry);
+
+            CheckRange(pairType, correct.ToTableRange(), range);
+            Cerr << Endl;
+        }
 
         {
             //=================
             //-----------[aaa]---
             //----[bbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(5), true
+                MakePoint({1}), true,
+                MakePoint({5}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -89,14 +166,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----------[aaa]---
             //----[bbbbbb]-------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), true
+                MakePoint({1}), true,
+                MakePoint({10}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -104,8 +181,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(10), true
+                MakePoint({10}), true,
+                MakePoint({10}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -120,14 +197,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----------[aaa]---
             //----[bbbbbbbb]-----
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(15), true
+                MakePoint({1}), true,
+                MakePoint({15}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -135,8 +212,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(15), true
+                MakePoint({10}), true,
+                MakePoint({15}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -150,14 +227,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----------[aaa]---
             //----[bbbbbbbbbb]---
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), true
+                MakePoint({1}), true,
+                MakePoint({20}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -165,8 +242,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -180,14 +257,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //---------[aaa]----
             //--[bbbbbbbbbbbbb]-
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(30), true
+                MakePoint({1}), true,
+                MakePoint({30}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -195,8 +272,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -211,14 +288,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //----[aaaaaa]----------
             //----[]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(10), true,
-                MakeValue(10), true
+                MakePoint({10}), true,
+                MakePoint({10}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -226,8 +303,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(10), true
+                MakePoint({10}), true,
+                MakePoint({10}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -241,14 +318,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //----[aaaaaa]----------
             //----[bbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(10), true,
-                MakeValue(15), true
+                MakePoint({10}), true,
+                MakePoint({15}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -256,8 +333,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(15), true
+                MakePoint({10}), true,
+                MakePoint({15}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -272,14 +349,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //----[aaaaaa]----------
             //----[bbbbbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -287,8 +364,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -303,14 +380,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //----[aaaaaa]----------
             //----[bbbbbbbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(10), true,
-                MakeValue(30), true
+                MakePoint({10}), true,
+                MakePoint({30}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -318,8 +395,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -333,14 +410,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----[aaaaaaa]----------
             //-------[bbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(15), true,
-                MakeValue(17), true
+                MakePoint({15}), true,
+                MakePoint({17}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -348,8 +425,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(15), true,
-                MakeValue(17), true
+                MakePoint({15}), true,
+                MakePoint({17}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -363,14 +440,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----[aaaaaaa]----------
             //-------[bbbbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(15), true,
-                MakeValue(20), true
+                MakePoint({15}), true,
+                MakePoint({20}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -378,8 +455,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(15), true,
-                MakeValue(20), true
+                MakePoint({15}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -393,14 +470,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----[aaaaaaa]----------
             //-------[bbbbbbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(15), true,
-                MakeValue(30), true
+                MakePoint({15}), true,
+                MakePoint({30}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -408,8 +485,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(15), true,
-                MakeValue(20), true
+                MakePoint({15}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -423,14 +500,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----[aaa]----------
             //---------[]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(20), true,
-                MakeValue(20), true
+                MakePoint({20}), true,
+                MakePoint({20}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -438,8 +515,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(20), true,
-                MakeValue(20), true
+                MakePoint({20}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -453,14 +530,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----[aaa]----------
             //---------[bbb]----------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(20), true,
-                MakeValue(30), true
+                MakePoint({20}), true,
+                MakePoint({30}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -468,8 +545,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(20), true,
-                MakeValue(20), true
+                MakePoint({20}), true,
+                MakePoint({20}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -483,14 +560,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----[aaa]----------
             //------------[bbb]---
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(25), true,
-                MakeValue(30), true
+                MakePoint({25}), true,
+                MakePoint({30}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -507,14 +584,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----------(aaa]---
             //----[bbbbbb]-------
             auto first = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), true
+                MakePoint({10}), false,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), true
+                MakePoint({1}), true,
+                MakePoint({10}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -531,14 +608,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----------[aaa]---
             //----[bbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), true
+                MakePoint({10}), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), false
+                MakePoint({1}), true,
+                MakePoint({10}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -555,14 +632,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-----------(aaa]---
             //----[bbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), true
+                MakePoint({10}), false,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), false
+                MakePoint({1}), true,
+                MakePoint({10}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -579,14 +656,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //---------(aaa]---
             //----[bbbbbb]-------
             auto first = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), true
+                MakePoint({10}), false,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(15), true
+                MakePoint({1}), true,
+                MakePoint({15}), true
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -594,8 +671,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), false,
-                MakeValue(15), true
+                MakePoint({10}), false,
+                MakePoint({15}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -609,14 +686,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //---------(aaa]---
             //----[bbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), true
+                MakePoint({10}), false,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(15), false
+                MakePoint({1}), true,
+                MakePoint({15}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -624,8 +701,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), false,
-                MakeValue(15), false
+                MakePoint({10}), false,
+                MakePoint({15}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -639,14 +716,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //---------(aaa]---
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), true
+                MakePoint({10}), false,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -654,8 +731,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), false
+                MakePoint({10}), false,
+                MakePoint({20}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -669,14 +746,14 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //---------(aaa)---
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), false
+                MakePoint({10}), false,
+                MakePoint({20}), false
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -684,8 +761,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), false
+                MakePoint({10}), false,
+                MakePoint({20}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -699,15 +776,15 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //(-inf;        +inf)
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeLeftInf(), true,
+                MakeLeftInf(valueType.size()), true,
                 MakeRightInf(), false
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
             Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -715,8 +792,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -730,15 +807,15 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-------[aaaaa  +inf)
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), true,
+                MakePoint({10}), true,
                 MakeRightInf(), false
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
             Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -746,8 +823,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), true,
-                MakeValue(20), false
+                MakePoint({10}), true,
+                MakePoint({20}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -761,15 +838,15 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //--------(aaaaa  +inf)
             //----[bbb)-------
             auto first = MakeRange(
-                MakeValue(10), false,
+                MakePoint({10}), false,
                 MakeRightInf(), false
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
             Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), false
+                MakePoint({1}), true,
+                MakePoint({10}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -786,15 +863,15 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //-------(aaaaa  +inf)
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeValue(10), false,
+                MakePoint({10}), false,
                 MakeRightInf(), false
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
             Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -802,8 +879,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(10), false,
-                MakeValue(20), false
+                MakePoint({10}), false,
+                MakePoint({20}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -817,15 +894,15 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //(-inf;  aaa]------
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeLeftInf(), true,
-                MakeValue(10), true
+                MakeLeftInf(valueType.size()), true,
+                MakePoint({10}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
             Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(20), false
+                MakePoint({1}), true,
+                MakePoint({20}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -833,8 +910,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), true
+                MakePoint({1}), true,
+                MakePoint({10}), true
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);
@@ -848,15 +925,15 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             //(-inf;       aaa]------
             //----[bbbbbbbb)-------
             auto first = MakeRange(
-                MakeLeftInf(), true,
-                MakeValue(20), true
+                MakeLeftInf(valueType.size()), true,
+                MakePoint({20}), true
                 );
             Cerr << "first " << DebugPrintRange(valueType, first.ToTableRange(), *typeRegistry);
             Y_ASSERT(!first.ToTableRange().IsEmptyRange(valueType));
 
             auto second = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), false
+                MakePoint({1}), true,
+                MakePoint({10}), false
                 );
             Cerr << " second " << DebugPrintRange(valueType, second.ToTableRange(), *typeRegistry);
 
@@ -864,8 +941,8 @@ Y_UNIT_TEST_SUITE(RangeOps) {
             Cerr << " result " << DebugPrintRange(valueType, range, *typeRegistry);
 
             auto correct = MakeRange(
-                MakeValue(1), true,
-                MakeValue(10), false
+                MakePoint({1}), true,
+                MakePoint({10}), false
                 );
 
             Cerr << " correct " << DebugPrintRange(valueType, correct.ToTableRange(), *typeRegistry);

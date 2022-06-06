@@ -265,27 +265,18 @@ void TColumnShard::UpdateBlobMangerCounters() {
     IncCounter(COUNTER_SMALL_BLOB_DELETE_BYTES, counters.SmallBlobsBytesDeleted);
 }
 
-void TColumnShard::UpdateInsertTableCounters(bool updateCommitted) {
-    using TCounters = NOlap::TInsertTable::TCounters;
-
-    TCounters prepared = InsertTable->GetCountersPrepared();
-    TCounters committed;
+void TColumnShard::UpdateInsertTableCounters() {
+    auto& prepared = InsertTable->GetCountersPrepared();
+    auto& committed = InsertTable->GetCountersCommitted();
 
     SetCounter(COUNTER_PREPARED_RECORDS, prepared.Rows);
     SetCounter(COUNTER_PREPARED_BYTES, prepared.Bytes);
+    SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
+    SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
 
-    if (updateCommitted) {
-        committed = InsertTable->GetCountersCommitted();
-        SetCounter(COUNTER_COMMITTED_RECORDS, committed.Rows);
-        SetCounter(COUNTER_COMMITTED_BYTES, committed.Bytes);
-
-        LOG_S_DEBUG("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
-            << " records, committed: " << committed.Bytes << " in " << committed.Rows
-            << " records at tablet " << TabletID());
-    } else {
-        LOG_S_DEBUG("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
-            << " records at tablet " << TabletID());
-    }
+    LOG_S_DEBUG("InsertTable. Prepared: " << prepared.Bytes << " in " << prepared.Rows
+        << " records, committed: " << committed.Bytes << " in " << committed.Rows
+        << " records at tablet " << TabletID());
 }
 
 void TColumnShard::UpdateIndexCounters() {

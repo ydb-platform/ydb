@@ -387,7 +387,7 @@ private:
     std::unique_ptr<TEvPrivate::TEvWriteIndex> SetupCleanup();
 
     void UpdateBlobMangerCounters();
-    void UpdateInsertTableCounters(bool updateCommitted = true);
+    void UpdateInsertTableCounters();
     void UpdateIndexCounters();
     void UpdateResourceMetrics(const TUsage& usage);
 

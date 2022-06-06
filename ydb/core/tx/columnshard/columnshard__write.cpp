@@ -66,8 +66,7 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
             Y_VERIFY(logoBlobId.BlobSize() == data.size());
             NBlobCache::AddRangeToCache(NBlobCache::TBlobRange(logoBlobId, 0, data.size()), data);
 
-            bool committedChanged = !allAborted.empty();
-            Self->UpdateInsertTableCounters(committedChanged);
+            Self->UpdateInsertTableCounters();
 
             ui64 blobsWritten = Ev->Get()->BlobBatch.GetBlobCount();
             ui64 bytesWritten = Ev->Get()->BlobBatch.GetTotalSize();

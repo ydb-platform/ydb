@@ -40,7 +40,8 @@ public:
             && rec.GetAction() != "repair-bmc"
             && rec.GetAction() != "repair-overheat"
             && rec.GetAction() != "repair-capping"
-            && rec.GetAction() != "deactivate") {
+            && rec.GetAction() != "deactivate"
+            && rec.GetAction() != "temporary-unreachable") {
             ReplyWithErrorAndDie(TStatus::WRONG_REQUEST, "Unsupported action", ctx);
             return;
         }
@@ -179,6 +180,9 @@ private:
                 action.SetType(TAction::SHUTDOWN_HOST);
                 action.SetDuration(TDuration::Max().GetValue());
             } else if (task.GetAction() == "repair-capping") {
+                action.SetType(TAction::SHUTDOWN_HOST);
+                action.SetDuration(TDuration::Max().GetValue());
+            } else if (task.GetAction() == "temporary-unreachable") {
                 action.SetType(TAction::SHUTDOWN_HOST);
                 action.SetDuration(TDuration::Max().GetValue());
             } else

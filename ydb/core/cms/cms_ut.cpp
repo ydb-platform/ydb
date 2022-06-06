@@ -693,6 +693,17 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         env.CheckWalleCreateTask("task-9", "reboot", false, TStatus::DISALLOW,
                                  env.GetNodeId(0), env.GetNodeId(1));
         env.CheckWalleListTasks(0);
+
+        // Create task for switchs maintenance
+        env.CheckWalleCreateTask("task-10", "temporary-unreachable", false, TStatus::ALLOW,
+                                 env.GetNodeId(1));
+        // Wait 30 minutes till timeout
+        env.AdvanceCurrentTime(TDuration::Minutes(30));
+        env.CheckWalleCheckTask("task-10", TStatus::ALLOW, env.GetNodeId(1));
+        // Remove Task
+        env.CheckWalleRemoveTask("task-10");
+        // Check tasks list
+        env.CheckWalleListTasks(0);
     }
 
     Y_UNIT_TEST(WalleTasksWithNodeLimit)

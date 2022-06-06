@@ -208,14 +208,18 @@ struct TRequestAlterPQ {
         auto req = request->Record.MutableMetaRequest()->MutableCmdChangeTopic();
         req->SetTopic(Topic);
         req->SetNumPartitions(NumParts);
+
         if (CacheSize) {
-            auto config = req->MutableConfig();
+            auto* config = req->MutableConfig();
+            config->SetTopicName(Topic);
             config->SetCacheSize(CacheSize);
         }
         if (FillPartitionConfig) {
-            req->MutableConfig()->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
+            auto* config = req->MutableConfig();
+            config->SetTopicName(Topic);
+            config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
             if (MirrorFrom) {
-                req->MutableConfig()->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(MirrorFrom.value());
+                config->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(MirrorFrom.value());
             }
         }
         return request;

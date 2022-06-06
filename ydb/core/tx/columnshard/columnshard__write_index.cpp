@@ -40,6 +40,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                 Self->InsertTable->EraseCommitted(dbWrap, cmtd);
                 Self->BlobManager->DeleteBlob(cmtd.BlobId, blobManagerDb);
             }
+            if (!changes->DataToIndex.empty()) {
+                Self->UpdateInsertTableCounters();
+            }
 
             const auto& switchedPortions = changes->SwitchedPortions;
             Self->IncCounter(COUNTER_PORTIONS_DEACTIVATED, switchedPortions.size());
@@ -121,7 +124,6 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
                 Self->BlobManager->SaveBlobBatch(std::move(Ev->Get()->BlobBatch), blobManagerDb);
             }
 
-            Self->UpdateInsertTableCounters();
             Self->UpdateIndexCounters();
         } else {
             LOG_S_INFO("TTxWriteIndex (" << changes->TypeString()

@@ -122,7 +122,8 @@ public:
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
     std::vector<TCommittedBlob> Read(ui64 pathId, ui64 plan, ui64 txId) const;
     bool Load(IDbWrapper& dbTable, const TInstant& loadTime);
-    void GetCounters(TCounters& prepared, TCounters& committed) const;
+    TCounters GetCountersPrepared() const;
+    TCounters GetCountersCommitted() const;
 
     size_t InsertedSize() const { return Inserted.size(); }
     const THashMap<ui64, TSet<TInsertedData>>& GetCommitted() const { return CommittedByPathId; }

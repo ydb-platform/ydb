@@ -39,7 +39,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     if (!Self->InsertTable->Load(dbTable, AppData(ctx)->TimeProvider->Now())) {
         return false;
     }
-    Self->UpdateInsertTableCounters();
 
     NIceDb::TNiceDb db(txc.DB);
 

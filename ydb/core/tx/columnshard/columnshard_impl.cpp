@@ -221,15 +221,17 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLong
     LongTxWritesByUniqueId[longTxId.UniqueId] = &lw;
 }
 
-void TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
+bool TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
         ui64 prepared = lw->PreparedTxId;
         if (!prepared || txId == prepared) {
             Schema::EraseLongTxWrite(db, writeId);
             LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
             LongTxWrites.erase(writeId);
+            return true;
         }
     }
+    return false;
 }
 
 bool TColumnShard::RemoveTx(NTable::TDatabase& database, ui64 txId) {

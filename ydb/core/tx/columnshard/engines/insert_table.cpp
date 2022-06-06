@@ -77,7 +77,7 @@ void TInsertTable::Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWr
     }
 }
 
-THashSet<TWriteId> TInsertTable::AbortOld(IDbWrapper& dbTable, const TInstant& now) {
+THashSet<TWriteId> TInsertTable::OldWritesToAbort(const TInstant& now) const {
     // TODO: This protection does not save us from real flooder activity.
     // This cleanup is for seldom aborts caused by rare reasons. So there's a temporary simple O(N) here
     // keeping in mind we need a smarter cleanup logic here not a better algo.
@@ -92,10 +92,6 @@ THashSet<TWriteId> TInsertTable::AbortOld(IDbWrapper& dbTable, const TInstant& n
         if (data.DirtyTime && data.DirtyTime < timeBorder) {
             toAbort.insert(writeId);
         }
-    }
-
-    if (!toAbort.empty()) {
-        Abort(dbTable, 0, toAbort);
     }
     return toAbort;
 }

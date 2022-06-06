@@ -115,7 +115,7 @@ public:
     bool Insert(IDbWrapper& dbTable, TInsertedData&& data);
     TCounters Commit(IDbWrapper& dbTable, ui64 planStep, ui64 txId, ui64 metaShard, const THashSet<TWriteId>& writeIds);
     void Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWriteId>& writeIds);
-    THashSet<TWriteId> AbortOld(IDbWrapper& dbTable, const TInstant& now);
+    THashSet<TWriteId> OldWritesToAbort(const TInstant& now) const;
     THashSet<TWriteId> DropPath(IDbWrapper& dbTable, ui64 pathId);
     void EraseCommitted(IDbWrapper& dbTable, const TInsertedData& key);
     void EraseAborted(IDbWrapper& dbTable, const TInsertedData& key);
@@ -135,7 +135,7 @@ private:
     THashMap<ui64, TSet<TInsertedData>> CommittedByPathId;
     THashMap<TWriteId, TInsertedData> Aborted;
     THashSet<ui64> PathsOverloaded;
-    TInstant LastCleanup;
+    mutable TInstant LastCleanup;
     TCounters StatsPrepared;
     TCounters StatsCommitted;
 };

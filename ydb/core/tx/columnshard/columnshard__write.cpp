@@ -48,12 +48,21 @@ bool TTxWrite::Execute(TTransactionContext& txc, const TActorContext&) {
         NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
         ok = Self->InsertTable->Insert(dbTable, NOlap::TInsertedData(metaShard, writeId, tableId, dedupId, logoBlobId, metaStr, time));
         if (ok) {
-            auto newAborted = Self->InsertTable->AbortOld(dbTable, time);
-            for (auto& writeId : newAborted) {
-                Self->RemoveLongTxWrite(db, writeId);
+            auto writesToAbort = Self->InsertTable->OldWritesToAbort(time);
+            std::vector<TWriteId> failedAborts;
+            for (auto& writeId : writesToAbort) {
+                if (!Self->RemoveLongTxWrite(db, writeId)) {
+                    failedAborts.push_back(writeId);
+                }
+            }
+            for (auto& writeId : failedAborts) {
+                writesToAbort.erase(writeId);
+            }
+            if (!writesToAbort.empty()) {
+                Self->InsertTable->Abort(dbTable, {}, writesToAbort);
             }
 
-            // TODO: It leads to write+erase for new aborted rows. AbortOld() inserts rows, EraseAborted() erases them.
+            // TODO: It leads to write+erase for aborted rows. Abort() inserts rows, EraseAborted() erases them.
             // It's not optimal but correct.
             TBlobManagerDb blobManagerDb(txc.DB);
             auto allAborted = Self->InsertTable->GetAborted(); // copy (src is modified in cycle)

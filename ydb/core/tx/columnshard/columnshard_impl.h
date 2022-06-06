@@ -357,7 +357,7 @@ private:
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);
     void AddLongTxWrite(TWriteId writeId, ui64 txId);
     void LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLongTxId& longTxId);
-    void RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
+    bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
     bool RemoveTx(NTable::TDatabase& database, ui64 txId);
 
     void EnqueueProgressTx();

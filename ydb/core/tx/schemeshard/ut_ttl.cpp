@@ -830,7 +830,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         const auto sender = runtime.AllocateEdgeActor();
         runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, new TEvTablet::TEvGetCounters);
         auto ev = runtime.GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>(sender);
-    
+
         UNIT_ASSERT(ev);
         return ev->Get()->Record;
     }
@@ -899,7 +899,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         runtime.UpdateCurrentTime(TInstant::Now());
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 0);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 0}, {"inf", 0}});
 
         // create
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -917,17 +917,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after create
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 0}, {"inf", 1}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 0}, {"inf", 1}});
 
         // after erase
         WaitForCondErase(runtime);
         WaitForStats(runtime, 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 1}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
         // after a little more time
         runtime.AdvanceCurrentTime(TDuration::Minutes(20));
         WaitForStats(runtime, 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 1}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 1}, {"inf", 0}});
 
         // copy table
         TestCopyTable(runtime, ++txId, "/MyRoot", "TTLEnabledTableCopy", "/MyRoot/TTLEnabledTable");
@@ -935,13 +935,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after copy
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 2}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 2}, {"inf", 0}});
 
         // after erase
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
 
         // alter (disable ttl)
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -955,7 +955,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after alter
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 1}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
         // drop
         TestDropTable(runtime, ++txId, "/MyRoot", "TTLEnabledTableCopy");
@@ -963,7 +963,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after drop
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 0);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 0}, {"inf", 0}});
 
         // alter (enable ttl)
         TestAlterTable(runtime, ++txId, "/MyRoot", R"(
@@ -978,12 +978,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
 
         // just after alter
         CheckSimpleCounter(runtime, "SchemeShard/TTLEnabledTables", 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 1}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 1}, {"1800", 0}, {"inf", 0}});
 
         // after a little more time
         runtime.AdvanceCurrentTime(TDuration::Minutes(20));
         WaitForStats(runtime, 1);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 0}, {"900", 1}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 0}, {"1800", 1}, {"inf", 0}});
 
         // split
         TestSplitTable(runtime, ++txId, "/MyRoot/TTLEnabledTable", Sprintf(R"(
@@ -1000,7 +1000,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTTLTests) {
         runtime.AdvanceCurrentTime(TDuration::Hours(1));
         WaitForCondErase(runtime);
         WaitForStats(runtime, 2);
-        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"0", 2}, {"900", 0}, {"inf", 0}});
+        CheckPercentileCounter(runtime, "SchemeShard/NumShardsByTtlLag", {{"900", 2}, {"1800", 0}, {"inf", 0}});
     }
 }
 

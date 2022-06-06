@@ -46,7 +46,7 @@ void ValidateRangeBound(const TTupleType* tupleType, const NDataShard::TUserTabl
     MKQL_ENSURE_S(tupleType);
     MKQL_ENSURE_S(tupleType->GetElementsCount() == tableInfo.KeyColumnIds.size() + 1);
 
-    for (ui32 i = 0; i < tupleType->GetElementsCount(); ++i) {
+    for (ui32 i = 0; i < tableInfo.KeyColumnIds.size(); ++i) {
         auto& columnInfo = computeCtx.GetKeyColumnInfo(tableInfo, i);
         auto elementType = tupleType->GetElementType(i);
         ValidateKeyType(AS_TYPE(TOptionalType, elementType)->GetItemType(), columnInfo.Type);

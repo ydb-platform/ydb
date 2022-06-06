@@ -1405,52 +1405,71 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
         }
 
         std::vector<TString> predicates = {
-            "Key1 < 2",
-            "Key1 > 1",
-            "Key1 = 1",
-            "Key1 = 1 AND Key2 > 0",
-            "Key1 >= 1 AND Key2 > 8",
-            "Key1 >= 1 AND Key2 = 20",
-            "Key1 >= 8 AND Key2 >= 20",
-            "Key1 < 2 AND Key2 < 80",
-            "Key1 <= 8 AND Key2 < 80",
-            "Key1 <= 9 AND Key2 <= 200",
-            "Key1 > 4 AND Key2 > 40 AND Key3 > \"SomeString\"",
-            "Key1 >= 4000 AND Key2 >= 4 AND Key3 >= \"SomeString3\"",
-            "Key2 > 80",
-            "Key2 < 90",
-            "Key2 <= 20 AND Key3 <= \"SomeString3\"",
+            "Key1 < $key_upper_bound",
+            "Key1 > $key_lower_bound",
+            "Key1 = $key",
+            "Key1 = $key AND Key2 > $key_lower_bound",
+            "Key1 >= $key_lower_bound AND Key2 > $key_lower_bound",
+            "Key1 >= $key_lower_bound AND Key2 = $key",
+            "Key1 >= $key_lower_bound AND Key2 >= $key_lower_bound",
+            "Key1 < $key_upper_bound AND Key2 < $key_upper_bound",
+            "Key1 <= $key_upper_bound AND Key2 < $key_upper_bound",
+            "Key1 <= $key_upper_bound AND Key2 <= $key_upper_bound",
+            "Key1 > $key_lower_bound AND Key2 > $key_lower_bound AND Key3 > $string_key_lower_bound",
+            "Key1 >= $key_lower_bound AND Key2 >= $key_lower_bound AND Key3 >= $string_key_lower_bound",
+            "Key2 > $key_lower_bound",
+            "Key2 < $key_upper_bound",
+            "Key2 <= $key_upper_bound AND Key3 <= $string_key_upper_bound",
             "Key1 IS NULL",
             "Key2 IS NULL",
             "Key1 IS NOT NULL",
-            "Key1 > 1 AND Key2 IS NULL",
-            "Key1 > 1 OR Key2 IS NULL",
-            "Key1 >= 1 OR Key2 IS NOT NULL",
-            "Key1 < 9 OR Key3 IS NOT NULL",
-            "Key1 < 9 OR Key3 IS NULL",
-            "Value = 200",
-            "(Key1 <= 10) OR (Key1 > 2 AND Key1 < 5) OR (Key1 >= 8)",
+            "Key1 > $key_upper_bound AND Key2 IS NULL",
+            "Key1 > $key_upper_bound OR Key2 IS NULL",
+            "Key1 >= $key_lower_bound OR Key2 IS NOT NULL",
+            "Key1 < $key_upper_bound OR Key3 IS NOT NULL",
+            "Key1 < $key_upper_bound OR Key3 IS NULL",
+            "Value = $key",
+            "(Key1 <= $key_upper_bound) OR (Key1 > $key_lower_bound AND Key1 < $key) OR (Key1 >= $key_lower_bound)",
             "Key1 < NULL"
         };
+
+        auto params = TParamsBuilder()
+            .AddParam("$key_upper_bound").OptionalUint32(1).Build()
+            .AddParam("$key_lower_bound").OptionalUint32(2).Build()
+            .AddParam("$key").OptionalUint32(3).Build()
+            .AddParam("$string_key_upper_bound").OptionalString("SomeString1").Build()
+            .AddParam("$string_key_lower_bound").OptionalString("SomeString2").Build()
+            .Build();
+
+        TString useSyntaxV1 = R"(
+            --!syntax_v1
+        )";
 
         TString enablePredicateExtractor = R"(
             PRAGMA Kikimr.OptEnablePredicateExtract = "true";
         )";
 
-        TString query = R"(
-            PRAGMA kikimr.UseNewEngine = "true";
-            SELECT * FROM [/Root/TestTable] WHERE <PREDICATE> ORDER BY `Value`;
-        )";
-
         for (const auto& predicate : predicates) {
+            TString query = R"(
+                PRAGMA kikimr.UseNewEngine = "true";
+
+                DECLARE $key_upper_bound AS Uint32?;
+                DECLARE $key_lower_bound AS Uint32?;
+                DECLARE $key AS Uint32?;
+                DECLARE $string_key_upper_bound AS String?;
+                DECLARE $string_key_lower_bound AS String?;
+
+                SELECT * FROM `/Root/TestTable` WHERE <PREDICATE> ORDER BY `Value`;
+            )";
+
             SubstGlobal(query, "<PREDICATE>", predicate);
-            auto expectedResult = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx())
+            auto expectedResult = session.ExecuteDataQuery(useSyntaxV1 + query, TTxControl::BeginTx().CommitTx(), params)
                 .ExtractValueSync();
             UNIT_ASSERT_C(expectedResult.IsSuccess(), expectedResult.GetIssues().ToString());
             const auto expectedYson = FormatResultSetYson(expectedResult.GetResultSet(0));
 
-            auto result = session.ExecuteDataQuery(enablePredicateExtractor + query,
-                TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+            auto result = session.ExecuteDataQuery(useSyntaxV1 + enablePredicateExtractor + query,
+                TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson(expectedYson, FormatResultSetYson(result.GetResultSet(0)));

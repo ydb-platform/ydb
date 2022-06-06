@@ -12,6 +12,8 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/tuples.h>
 
+#include <util/string/split.h>
+
 using namespace NActors;
 
 namespace NKikimr {
@@ -41,20 +43,8 @@ public:
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
-        TString branch = GetTag();
-        if (branch.empty()) {
-            branch = GetBranch();
-        }
-        auto pos = branch.rfind('/');
-        if (pos != TString::npos) { // only the part after the last slash is used
-            branch = branch.substr(pos + 1);
-        }
-        TString version = GetProgramCommitId();
+        auto version = GetProgramRevision();
         if (!version.empty()) {
-            if (version.size() > 7) { // we limit the version size to 7 characters (the same way as in Arcanum)
-                version = version.substr(0, 7);
-            }
-            version = branch + '.' + version;
             SystemStateInfo.SetVersion(version);
             auto versionCounter = GetServiceCounters(AppData(ctx)->Counters, "utils")->GetSubgroup("revision", version);
             *versionCounter->GetCounter("version", false) = 1;
@@ -83,6 +73,46 @@ protected:
     static ui64 GetDifference(PropertyType a, PropertyType b) {
         return static_cast<ui64>(std::abs(static_cast<std::make_signed_t<PropertyType>>(b) -
                                           static_cast<std::make_signed_t<PropertyType>>(a)));
+    }
+
+    static TString GetProgramRevision() {
+        TString version = GetTag();
+        if (version.empty()) {
+            version = GetBranch();
+        }
+
+        if (!version.empty() && version.StartsWith("tags/releases/")) {
+            TVector<TString> parts = StringSplitter(version).Split('/');
+            auto rIt = parts.rbegin();
+            if (rIt == parts.rend())
+                return {};
+
+            version = *rIt;
+            rIt++;
+
+            if (rIt != parts.rend() && !rIt->empty()) {
+                version = (*rIt) + '-' + version;
+            }
+
+            return version;
+        }
+
+        version = GetBranch();
+        auto pos = version.rfind('/');
+        if (pos != TString::npos) {
+            version = version.substr(pos + 1);
+        }
+
+        TString commitId = GetProgramCommitId();
+        if (!commitId.empty()) {
+            if (commitId.size() > 7) {
+                commitId = commitId.substr(0, 7);
+            }
+
+            version = version + '.' + commitId;
+        }
+
+        return version;
     }
 
     static ui64 GetDifference(double a, double b) {

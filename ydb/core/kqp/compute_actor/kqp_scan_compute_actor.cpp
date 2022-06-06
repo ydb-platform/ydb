@@ -279,6 +279,7 @@ private:
         Y_VERIFY_DEBUG(!Shards.empty());
 
         auto& msg = *ev->Get();
+
         auto& state = Shards.front();
 
         switch (state.State) {
@@ -316,12 +317,12 @@ private:
         }
     }
 
-    void ProcessScanData() {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
-        Y_VERIFY(!PendingScanData.empty());
+    void ProcessPendingScanDataItem() {
 
         auto& ev = PendingScanData.front().first;
+        auto& state = Shards.front();
+
+        auto& msg = *ev->Get();
 
         TDuration latency;
         if (PendingScanData.front().second != TInstant::Zero()) {
@@ -329,6 +330,81 @@ private:
             Counters->ScanQueryRateLimitLatency->Collect(latency.MilliSeconds());
         }
 
+        YQL_ENSURE(state.ActorId == ev->Sender, "expected: " << state.ActorId << ", got: " << ev->Sender);
+
+        LastKey = std::move(msg.LastKey);
+        ui64 bytes = 0;
+        ui64 rowsCount = 0;
+        {
+            auto guard = TaskRunner->BindAllocator();
+            switch (msg.GetDataFormat()) {
+                case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
+                case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: {
+                    if (!msg.Rows.empty()) {
+                        bytes = ScanData->AddRows(msg.Rows, state.TabletId, TaskRunner->GetHolderFactory());
+                        rowsCount = msg.Rows.size();
+                    }
+                    break;
+                }
+                case NKikimrTxDataShard::EScanDataFormat::ARROW: {
+                    if (msg.ArrowBatch != nullptr) {
+                        bytes = ScanData->AddRows(*msg.ArrowBatch, state.TabletId, TaskRunner->GetHolderFactory());
+                        rowsCount = msg.ArrowBatch->num_rows();
+                    }
+                    break;
+                }
+            }
+        }
+
+
+        CA_LOG_D("Got EvScanData, rows: " << rowsCount << ", bytes: " << bytes << ", finished: " << msg.Finished
+                << ", from: " << ev->Sender << ", shards remain: " << Shards.size()
+                << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimitter");
+
+        if (rowsCount == 0 && !msg.Finished && state.State != EShardState::PostRunning) {
+            ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
+                ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
+                : 0ul;
+            SendScanDataAck(state, freeSpace);
+        }
+
+        if (msg.Finished) {
+            CA_LOG_D("Tablet " << state.TabletId << " scan finished, unlink");
+            Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(state.TabletId));
+
+            Shards.pop_front();
+
+            if (!Shards.empty()) {
+                CA_LOG_D("Starting next scan");
+                StartTableScan();
+            } else {
+                CA_LOG_D("Finish scans");
+                ScanData->Finish();
+
+                if (ScanData->BasicStats) {
+                    ScanData->BasicStats->AffectedShards = AffectedShards.size();
+                }
+            }
+        }
+
+        if (Y_UNLIKELY(ScanData->ProfileStats)) {
+            ScanData->ProfileStats->Messages++;
+            ScanData->ProfileStats->ScanCpuTime += msg.CpuTime;
+            ScanData->ProfileStats->ScanWaitTime += msg.WaitTime;
+            if (msg.PageFault) {
+                ScanData->ProfileStats->PageFaults += msg.PageFaults;
+                ScanData->ProfileStats->MessagesByPageFault++;
+            }
+        }
+
+    }
+
+    void ProcessScanData() {
+        Y_VERIFY_DEBUG(ScanData);
+        Y_VERIFY_DEBUG(!Shards.empty());
+        Y_VERIFY(!PendingScanData.empty());
+
+        auto& ev = PendingScanData.front().first;
         auto& msg = *ev->Get();
         auto& state = Shards.front();
 
@@ -336,75 +412,8 @@ private:
             case EShardState::Running:
             case EShardState::PostRunning: {
                 if (state.Generation == msg.Generation) {
-                    YQL_ENSURE(state.ActorId == ev->Sender, "expected: " << state.ActorId << ", got: " << ev->Sender);
-
-                    LastKey = std::move(msg.LastKey);
-
-                    ui64 bytes = 0;
-                    ui64 rowsCount = 0;
-                    {
-                        auto guard = TaskRunner->BindAllocator();
-                        switch (msg.GetDataFormat()) {
-                            case NKikimrTxDataShard::EScanDataFormat::CELLVEC:
-                            case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED: {
-                                if (!msg.Rows.empty()) {
-                                    bytes = ScanData->AddRows(msg.Rows, state.TabletId, TaskRunner->GetHolderFactory());
-                                    rowsCount = msg.Rows.size();
-                                }
-                                break;
-                            }
-                            case NKikimrTxDataShard::EScanDataFormat::ARROW: {
-                                if (msg.ArrowBatch != nullptr) {
-                                    bytes = ScanData->AddRows(*msg.ArrowBatch, state.TabletId, TaskRunner->GetHolderFactory());
-                                    rowsCount = msg.ArrowBatch->num_rows();
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    CA_LOG_D("Got EvScanData, rows: " << rowsCount << ", bytes: " << bytes << ", finished: " << msg.Finished
-                        << ", from: " << ev->Sender << ", shards remain: " << Shards.size()
-                        << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimitter");
-
-                    if (rowsCount == 0 && !msg.Finished && state.State != EShardState::PostRunning) {
-                        ui64 freeSpace = GetMemoryLimits().ScanBufferSize > ScanData->GetStoredBytes()
-                            ? GetMemoryLimits().ScanBufferSize - ScanData->GetStoredBytes()
-                            : 0ul;
-                        SendScanDataAck(state, freeSpace);
-                    }
-
-                    if (msg.Finished) {
-                        CA_LOG_D("Tablet " << state.TabletId << " scan finished, unlink");
-                        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(state.TabletId));
-
-                        Shards.pop_front();
-
-                        if (!Shards.empty()) {
-                            CA_LOG_D("Starting next scan");
-                            StartTableScan();
-                        } else {
-                            CA_LOG_D("Finish scans");
-                            ScanData->Finish();
-
-                            if (ScanData->BasicStats) {
-                                ScanData->BasicStats->AffectedShards = AffectedShards.size();
-                            }
-                        }
-                    }
-
-                    if (Y_UNLIKELY(ScanData->ProfileStats)) {
-                        ScanData->ProfileStats->Messages++;
-                        ScanData->ProfileStats->ScanCpuTime += msg.CpuTime;
-                        ScanData->ProfileStats->ScanWaitTime += msg.WaitTime;
-                        if (msg.PageFault) {
-                            ScanData->ProfileStats->PageFaults += msg.PageFaults;
-                            ScanData->ProfileStats->MessagesByPageFault++;
-                        }
-                    }
-
+                    ProcessPendingScanDataItem();
                     DoExecute();
-
                 } else if (state.Generation > msg.Generation) {
                     TerminateExpiredScan(ev->Sender, "Cancel expired scan");
                 } else {
@@ -900,9 +909,6 @@ private:
             << ", attempt #" << state.ResolveAttempt);
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
-        // Avoid setting DomainOwnerId to reduce possible races with schemeshard migration
-        // TODO: request->DatabaseName = ...;
-        // TODO: request->UserToken = ...;
         request->ResultSet.emplace_back(std::move(keyDesc));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(ScanData->TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -999,7 +1005,7 @@ private:
     std::deque<TShardState> Shards;
     ui32 LastGeneration = 0;
     std::set<ui64> AffectedShards;
-    THashSet<ui32> TrackingNodes;
+    std::set<ui32> TrackingNodes;
 };
 
 } // anonymous namespace

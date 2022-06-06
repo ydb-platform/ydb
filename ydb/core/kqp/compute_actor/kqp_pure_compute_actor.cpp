@@ -89,9 +89,8 @@ public:
         }
 
         TSmallVec<NMiniKQL::TKqpScanComputeContext::TColumn> columns;
-        TSerializedTableRange* rangeRef = nullptr;
 
-        TSerializedTableRange coveringRange;
+        TVector<TSerializedTableRange> ranges;
         if (Meta) {
             YQL_ENSURE(ComputeCtx.GetTableScans().empty());
 
@@ -107,30 +106,16 @@ public:
             }
 
             const auto& protoRanges = Meta->GetReads()[0].GetKeyRanges();
-            if (protoRanges.size() == 1) {
-                coveringRange.Load(protoRanges[0]);
-                if (!protoRanges[0].HasTo()) {
-                    coveringRange.To = coveringRange.From;
-                    coveringRange.FromInclusive = coveringRange.ToInclusive = true;
-                }
-            } else {
-                // TODO: FIX IT, verify here?
-                auto from = TSerializedTableRange(*protoRanges.begin());
-                auto to = TSerializedTableRange(*protoRanges.rbegin());
-                coveringRange.From = from.From;
-                coveringRange.FromInclusive = from.FromInclusive;
-                coveringRange.To = protoRanges.rbegin()->HasTo() ? to.To : to.From;
-                coveringRange.ToInclusive = protoRanges.rbegin()->HasTo() ? to.ToInclusive : true;
+            for (auto& range : protoRanges) {
+                ranges.emplace_back(range);
             }
-
-            rangeRef = &coveringRange;
         }
 
         if (ScanData) {
             ScanData->TaskId = GetTask().GetId();
             ScanData->TableReader = CreateKqpTableReader(*ScanData);
 
-            auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, rangeRef->ToTableRange(), columns);
+            auto scanActor = NSysView::CreateSystemViewScan(SelfId(), 0, ScanData->TableId, ranges, columns);
 
             if (!scanActor) {
                 InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder()

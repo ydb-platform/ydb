@@ -395,6 +395,15 @@ void TransformerStatsToYson(const TString& name, const IGraphTransformer::TStati
     writer.OnEndMap();
 }
 
+TString TransformerStatsToYson(const IGraphTransformer::TStatistics& stats, NYson::EYsonFormat format) {
+    TStringStream out;
+    NYson::TYsonWriter writer(&out, format);
+
+    TransformerStatsToYson("", stats, writer);
+
+    return out.Str();
+}
+
 bool FillUsedFilesImpl(
     const TExprNode& node,
     TUserDataTable& files,

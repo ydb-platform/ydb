@@ -519,26 +519,28 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
 
-    ui64 tabletId = self->TabletID();
-    TraceMessage = Sprintf("Shard %" PRIu64 ", txid %" PRIu64, tabletId, stepTxId.second);
+    auto tabletId = self->TabletID();
+    auto txId = stepTxId.second;
     const TActorSystem* actorSystem = ctx.ExecutorThread.ActorSystem;
-    EngineSettings->LogErrorWriter = [actorSystem, this](const TString& message) {
-        LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE, TraceMessage
-            << ", engine error: " << message);
+    EngineSettings->LogErrorWriter = [actorSystem, tabletId, txId](const TString& message) {
+        LOG_ERROR_S(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
+            "Shard %" << tabletId << ", txid %" <<txId << ", engine error: " << message);
     };
 
     if (ctx.LoggerSettings()->Satisfies(NLog::PRI_DEBUG, NKikimrServices::MINIKQL_ENGINE, stepTxId.second)) {
         EngineSettings->BacktraceWriter =
-            [actorSystem, this](const char * operation, ui32 line, const TBackTrace* backtrace)
+            [actorSystem, tabletId, txId](const char * operation, ui32 line, const TBackTrace* backtrace)
             {
-                LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE, "%s, %s (%" PRIu32 ")\n%s",
-                    TraceMessage.data(), operation, line, backtrace ? backtrace->PrintToString().data() : "");
+                LOG_DEBUG(*actorSystem, NKikimrServices::MINIKQL_ENGINE,
+                    "Shard %" PRIu64 ", txid %, %s (%" PRIu32 ")\n%s",
+                    tabletId, txId, operation, line,
+                    backtrace ? backtrace->PrintToString().data() : "");
             };
     }
 
-    KqpLogFunc = [actorSystem, this](const TStringBuf& message) {
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, TraceMessage
-            << ": " << message);
+    KqpLogFunc = [actorSystem, tabletId, txId](const TStringBuf& message) {
+        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER,
+            "Shard %" << tabletId << ", txid %" << txId << ": " << message);
     };
 
     ComputeCtx = MakeHolder<TKqpDatashardComputeContext>(self, *EngineHost, now);

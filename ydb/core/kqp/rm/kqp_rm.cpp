@@ -611,7 +611,10 @@ private:
     }
 
     void HandleWork(TEvPrivate::TEvPublishResources::TPtr&) {
-        WbState.PublishScheduledAt.reset();
+        with_lock (Lock) {
+            PublishScheduledAt.reset();
+        }
+
         PublishResourceUsage("batching");
     }
 
@@ -754,8 +757,14 @@ private:
                 if (WbState.LastPublishTime) {
                     str << "Last publish time: " << *WbState.LastPublishTime << Endl;
                 }
-                if (WbState.PublishScheduledAt) {
-                    str << "Next publish time: " << *WbState.PublishScheduledAt << Endl;
+
+                std::optional<TInstant> publishScheduledAt;
+                with_lock (Lock) {
+                    publishScheduledAt = PublishScheduledAt;
+                }
+
+                if (publishScheduledAt) {
+                    str << "Next publish time: " << *publishScheduledAt << Endl;
                 }
 
                 str << Endl << "Transactions:" << Endl;
@@ -804,24 +813,38 @@ private:
     }
 
     void FireResourcesPublishing() {
+        with_lock (Lock) {
+            if (PublishScheduledAt) {
+                return;
+            }
+        }
+
         ActorSystem->Send(SelfId(), new TEvPrivate::TEvSchedulePublishResources);
     }
 
     void PublishResourceUsage(TStringBuf reason) {
-        if (WbState.PublishScheduledAt) {
-            return;
-        }
-
         TDuration publishInterval;
+        std::optional<TInstant> publishScheduledAt;
+
         with_lock (Lock) {
             publishInterval = TDuration::Seconds(Config.GetPublishStatisticsIntervalSec());
+            publishScheduledAt = PublishScheduledAt;
+        }
+
+        if (publishScheduledAt) {
+            return;
         }
 
         auto now = ActorSystem->Timestamp();
         if (publishInterval && WbState.LastPublishTime && now - *WbState.LastPublishTime < publishInterval) {
-            WbState.PublishScheduledAt = *WbState.LastPublishTime + publishInterval;
-            Schedule(*WbState.PublishScheduledAt - now, new TEvPrivate::TEvPublishResources);
-            LOG_D("Schedule publish at " << *WbState.PublishScheduledAt << ", after " << (*WbState.PublishScheduledAt - now));
+            publishScheduledAt = *WbState.LastPublishTime + publishInterval;
+
+            with_lock (Lock) {
+                PublishScheduledAt = publishScheduledAt;
+            }
+
+            Schedule(*publishScheduledAt - now, new TEvPrivate::TEvPublishResources);
+            LOG_D("Schedule publish at " << *publishScheduledAt << ", after " << (*publishScheduledAt - now));
             return;
         }
 
@@ -883,6 +906,9 @@ private:
     std::array<TTxStatesBucket, BucketsCount> Buckets;
     std::atomic<ui64> LastResourceBrokerTaskId = 0;
 
+    // schedule info (guarded by Lock)
+    std::optional<TInstant> PublishScheduledAt;
+
     // Whiteboard specific fields
     struct TWhiteBoardState {
         TString Tenant;
@@ -890,7 +916,6 @@ private:
         ui32 StateStorageGroupId = std::numeric_limits<ui32>::max();
         TActorId BoardPublisherActorId;
         std::optional<TInstant> LastPublishTime;
-        std::optional<TInstant> PublishScheduledAt;
     };
     TWhiteBoardState WbState;
 };

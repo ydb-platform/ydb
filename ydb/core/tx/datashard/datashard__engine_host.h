@@ -84,7 +84,6 @@ public:
 
         Engine.Reset();
         EngineHost.Reset();
-        TraceMessage.clear();
     }
 
     const TValidationInfo& TxInfo() const { return Info; }
@@ -110,7 +109,6 @@ private:
     TValidationInfo Info;
     TEngineHostCounters EngineHostCounters;
     ui64 LockTxId;
-    TString TraceMessage;
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;

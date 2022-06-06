@@ -155,6 +155,7 @@ private:
     }
 
     static bool AreAllStagesKqpPure(const TVector<TDqPhyStage>& stages) {
+        // TODO: Avoid lambda analysis here, use sources/sinks for table interaction.
         return std::all_of(stages.begin(), stages.end(), [](const auto& x) { return IsKqpPureLambda(x.Program()); });
     }
 

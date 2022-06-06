@@ -499,7 +499,7 @@ private:
         }
 
         auto query = kqlQuery->Ptr();
-        YQL_CLOG(INFO, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
+        YQL_CLOG(DEBUG, ProviderKqp) << "Initial KQL query: " << KqpExprToPrettyString(*query, ctx);
 
         TransformCtx->Reset();
         TransformCtx->Settings = NKikimrKqp::TKqlSettings();
@@ -512,7 +512,9 @@ private:
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
-        YQL_CLOG(INFO, ProviderKqp) << "Optimized KQL query: " << KqpExprToPrettyString(*optimizedQuery, ctx);
+        YQL_CLOG(TRACE, ProviderKqp) << "PhysicalOptimizeTransformer: "
+            << TransformerStatsToYson(PhysicalOptimizeTransformer->GetStatistics());
+        YQL_CLOG(DEBUG, ProviderKqp) << "Optimized KQL query: " << KqpExprToPrettyString(*optimizedQuery, ctx);
 
         BuildQueryCtx->Reset();
         PhysicalBuildQueryTransformer->Rewind();
@@ -523,6 +525,9 @@ private:
             return MakeKikimrResultHolder(ResultFromErrors<IKqpHost::TQueryResult>(ctx.IssueManager.GetIssues()));
         }
 
+        YQL_CLOG(TRACE, ProviderKqp) << "PhysicalBuildQueryTransformer: "
+            << TransformerStatsToYson(PhysicalBuildQueryTransformer->GetStatistics());
+
         PhysicalPeepholeTransformer->Rewind();
         auto transformedQuery = builtQuery;
         status = InstantTransform(*PhysicalPeepholeTransformer, transformedQuery, ctx);
@@ -532,7 +537,9 @@ private:
                 ctx.IssueManager.GetIssues()));
         }
 
-        YQL_CLOG(INFO, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*builtQuery, ctx);
+        YQL_CLOG(TRACE, ProviderKqp) << "PhysicalPeepholeTransformer: "
+            << TransformerStatsToYson(PhysicalPeepholeTransformer->GetStatistics());
+        YQL_CLOG(DEBUG, ProviderKqp) << "Physical KQL query: " << KqpExprToPrettyString(*builtQuery, ctx);
 
         auto& preparedQuery = *TransformCtx->QueryCtx->PreparingQuery;
         TKqpPhysicalQuery physicalQuery(transformedQuery);

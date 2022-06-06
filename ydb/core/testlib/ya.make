@@ -22,13 +22,6 @@ SRCS(
     tenant_runtime.h
     test_client.cpp
     test_client.h
-    service_mocks/access_service_mock.h
-    service_mocks/datastreams_service_mock.h
-    service_mocks/iam_token_service_mock.h
-    service_mocks/user_account_service_mock.h
-    service_mocks/database_service_mock.h
-    service_mocks/folder_service_mock.h
-    service_mocks/service_account_service_mock.h
 )
 
 PEERDIR(
@@ -119,5 +112,4 @@ END()
 RECURSE(
     actors
     basics
-    service_mocks
 )

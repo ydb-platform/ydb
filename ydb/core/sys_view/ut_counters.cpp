@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
 
                 bool isGood = true;
 
-                auto tabletGroup = databaseGroup->GetSubgroup("host", "")->GetSubgroup("group", "tablets");
+                auto tabletGroup = databaseGroup->GetSubgroup("host", "");
                 auto datashardGroup = tabletGroup->GetSubgroup("type", "DataShard");
                 {
                     auto executorGroup = datashardGroup->GetSubgroup("category", "executor");
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(DbCounters) {
 
             for (ui32 nodeId = 0; nodeId < env.GetServer().GetRuntime()->GetNodeCount(); ++nodeId) {
                 auto counters = env.GetServer().GetRuntime()->GetAppData(nodeId).Counters;
-                auto dbGroup = GetServiceCounters(counters, "db", false);
+                auto dbGroup = GetServiceCounters(counters, "tablets_serverless", false);
 
                 auto databaseGroup1 = dbGroup->FindSubgroup("database", "/Root/Database1");
                 if (databaseGroup1) {

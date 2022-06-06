@@ -586,7 +586,7 @@ TKqpDbCounters::TKqpDbCounters(const NMonitoring::TDynamicCounterPtr& externalGr
     const NMonitoring::TDynamicCounterPtr& internalGroup)
 {
     Counters = internalGroup;
-    KqpGroup = Counters->GetSubgroup("group", "kqp");
+    KqpGroup = Counters;
     YdbGroup = externalGroup;
     QueryReplayGroup = KqpGroup->GetSubgroup("subsystem", "unified_agent_query_replay");
 

@@ -236,20 +236,31 @@ TIntrusivePtr<IDbCounters> TSysViewProcessor::CreateCountersForService(
 {
     TIntrusivePtr<IDbCounters> result;
     switch (service) {
-    case NKikimrSysView::KQP:
-        result = MakeIntrusive<NKqp::TKqpDbCounters>(ExternalGroup, InternalGroup);
-        break;
-    case NKikimrSysView::TABLETS: {
-        THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
-        result = CreateTabletDbCounters(ExternalGroup, InternalGroup, std::move(executorCounters));
+    case NKikimrSysView::KQP: {
+        auto group = InternalGroups["kqp_serverless"];
+        Y_VERIFY(group);
+        result = MakeIntrusive<NKqp::TKqpDbCounters>(ExternalGroup, group);
         break;
     }
-    case NKikimrSysView::GRPC:
-        result = NGRpcService::CreateGRpcDbCounters(ExternalGroup, InternalGroup);
+    case NKikimrSysView::TABLETS: {
+        auto group = InternalGroups["tablets_serverless"];
+        Y_VERIFY(group);
+        THolder<TTabletCountersBase> executorCounters(new NTabletFlatExecutor::TExecutorCounters);
+        result = CreateTabletDbCounters(ExternalGroup, group, std::move(executorCounters));
         break;
-    case NKikimrSysView::GRPC_PROXY:
-        result = NGRpcService::CreateGRpcProxyDbCounters(ExternalGroup, InternalGroup);
+    }
+    case NKikimrSysView::GRPC: {
+        auto group = InternalGroups["grpc_serverless"];
+        Y_VERIFY(group);
+        result = NGRpcService::CreateGRpcDbCounters(ExternalGroup, group);
         break;
+    }
+    case NKikimrSysView::GRPC_PROXY: {
+        auto group = InternalGroups["grpc_serverless"];
+        Y_VERIFY(group);
+        result = NGRpcService::CreateGRpcProxyDbCounters(ExternalGroup, group);
+        break;
+    }
     default:
         break;
     }
@@ -278,9 +289,11 @@ void TSysViewProcessor::AttachInternalCounters() {
         return;
     }
 
-    GetServiceCounters(AppData()->Counters, "db", false)
-        ->GetSubgroup("database", Database)
-        ->RegisterSubgroup("host", "", InternalGroup);
+    for (const auto& [name, group] : InternalGroups) {
+        GetServiceCounters(AppData()->Counters, name, false)
+            ->GetSubgroup("database", Database)
+            ->RegisterSubgroup("host", "", group);
+    }
 }
 
 void TSysViewProcessor::DetachExternalCounters() {
@@ -297,8 +310,10 @@ void TSysViewProcessor::DetachInternalCounters() {
         return;
     }
 
-    GetServiceCounters(AppData()->Counters, "db", false)
-        ->RemoveSubgroup("database", Database);
+    for (const auto& [name, group] : InternalGroups) {
+        GetServiceCounters(AppData()->Counters, name, false)
+            ->RemoveSubgroup("database", Database);
+    }
 }
 
 void TSysViewProcessor::Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev) {

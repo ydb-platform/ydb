@@ -1558,7 +1558,7 @@ public:
         TTabletCountersForDb(NMonitoring::TDynamicCounterPtr externalGroup,
             NMonitoring::TDynamicCounterPtr internalGroup,
             THolder<TTabletCountersBase> executorCounters)
-            : SolomonCounters(internalGroup->GetSubgroup("group", "tablets"))
+            : SolomonCounters(internalGroup)
             , ExecutorCounters(std::move(executorCounters))
             , AllTypes(SolomonCounters.Get(), "type", "all")
         {

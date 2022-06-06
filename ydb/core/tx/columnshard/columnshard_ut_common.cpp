@@ -67,7 +67,7 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard, ui64 writeId, ui64 tableId,
                const TString& data, std::shared_ptr<arrow::Schema> schema) {
-    const TString dedupId = "0";
+    const TString dedupId = ToString(writeId);
     auto write = std::make_unique<TEvColumnShard::TEvWrite>(sender, metaShard, writeId, tableId, dedupId, data);
     if (schema) {
         write->SetArrowSchema(NArrow::SerializeSchema(*schema));
@@ -131,20 +131,25 @@ void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 metaShard,
     UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::PREPARED);
 }
 
-void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds) {
     auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep, 0, TTestTxConfig::TxTablet0);
-    auto tx = plan->Record.AddTransactions();
-    tx->SetTxId(txId);
-    ActorIdToProto(sender, tx->MutableAckTo());
+    for (ui64 txId : txIds) {
+        auto tx = plan->Record.AddTransactions();
+        tx->SetTxId(txId);
+        ActorIdToProto(sender, tx->MutableAckTo());
+    }
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     TAutoPtr<IEventHandle> handle;
-    auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
-    UNIT_ASSERT(event);
 
-    auto& res = Proto(event);
-    UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
-    UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    for (ui32 i = 0; i < txIds.size(); ++i) {
+        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
+        UNIT_ASSERT(event);
+
+        auto& res = Proto(event);
+        UNIT_ASSERT(txIds.count(res.GetTxId()));
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    }
 }
 
 TVector<TCell> MakeTestCells(const TVector<TTypeId>& types, ui32 value, TVector<TString>& mem) {

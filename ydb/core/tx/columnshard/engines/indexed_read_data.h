@@ -81,7 +81,7 @@ struct TReadMetadata : public TReadMetadataBase, public std::enable_shared_from_
     ui64 PlanStep = 0;
     ui64 TxId = 0;
     std::shared_ptr<TSelectInfo> SelectInfo;
-    TVector<TUnifiedBlobId> CommittedBlobs;
+    std::vector<TCommittedBlob> CommittedBlobs;
     std::shared_ptr<TReadStats> ReadStats;
 
     TReadMetadata(const TIndexInfo& info)
@@ -196,15 +196,15 @@ public:
     /// @returns batches and corresponding last keys in correct order (i.e. sorted by by PK)
     TVector<TPartialReadResult> GetReadyResults(const int64_t maxRowsInBatch);
 
-    void AddNotIndexed(ui32 batchNo, TString serializedBach) {
+    void AddNotIndexed(ui32 batchNo, TString serializedBach, ui64 planStep, ui64 txId) {
         Y_VERIFY(batchNo < NotIndexed.size());
         if (!NotIndexed[batchNo]) {
             ++ReadyNotIndexed;
         }
-        NotIndexed[batchNo] = MakeNotIndexedBatch(serializedBach);
+        NotIndexed[batchNo] = MakeNotIndexedBatch(serializedBach, planStep, txId);
     }
 
-    void AddIndexedColumn(const TBlobRange& blobRange, const TString& column);
+    void AddIndexed(const TBlobRange& blobRange, const TString& column);
     size_t NumPortions() const { return PortionBatch.size(); }
     bool HasIndexRead() const { return WaitIndexed.size() || Indexed.size(); }
 
@@ -244,11 +244,11 @@ private:
         return PortionGranule.find(portion)->second;
     }
 
-    std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(const TString& blob) const;
+    std::shared_ptr<arrow::RecordBatch> MakeNotIndexedBatch(const TString& blob, ui64 planStep, ui64 txId) const;
     std::shared_ptr<arrow::RecordBatch> AssembleIndexedBatch(ui32 batchNo);
     void UpdateGranuleWaits(ui32 batchNo);
     THashMap<ui64, std::shared_ptr<arrow::RecordBatch>> SplitByGranules(
-        const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) const;
+        std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const;
     TVector<std::vector<std::shared_ptr<arrow::RecordBatch>>> ReadyToOut();
     TVector<TPartialReadResult> MakeResult(
         TVector<std::vector<std::shared_ptr<arrow::RecordBatch>>>&& granules,

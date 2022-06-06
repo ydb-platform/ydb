@@ -155,19 +155,18 @@ bool TInsertTable::Load(IDbWrapper& dbTable, const TInstant& loadTime) {
     return dbTable.Load(Inserted, CommittedByPathId, Aborted, loadTime);
 }
 
-/// @note It must be stable
-TVector<TUnifiedBlobId> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId) const {
+std::vector<TCommittedBlob> TInsertTable::Read(ui64 pathId, ui64 plan, ui64 txId) const {
     const auto* committed = CommittedByPathId.FindPtr(pathId);
-
-    if (!committed)
+    if (!committed) {
         return {};
+    }
 
-    TVector<TUnifiedBlobId> ret;
-    ret.reserve(committed->size() / 2);
+    std::vector<TCommittedBlob> ret;
+    ret.reserve(committed->size());
 
     for (auto& data : *committed) {
         if (snapLessOrEqual(data.ShardOrPlan, data.WriteTxId, plan, txId)) {
-            ret.push_back(data.BlobId);
+            ret.emplace_back(TCommittedBlob{data.BlobId, data.ShardOrPlan, data.WriteTxId});
         }
     }
 

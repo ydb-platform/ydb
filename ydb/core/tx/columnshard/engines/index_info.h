@@ -197,7 +197,8 @@ struct TIndexInfo : public NTable::TScheme::TTableSchema {
     std::shared_ptr<NArrow::TSortDescription> SortReplaceDescription() const;
 
     static bool IsSpecialColumn(const arrow::Field& field);
-    static std::vector<std::shared_ptr<arrow::Array>> MakeSpecialColumns(const TInsertedData& blob, ui64 size);
+    static std::shared_ptr<arrow::RecordBatch> AddSpecialColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                                 ui64 platStep, ui64 txId);
 
     void SetDefaultCompression(const TCompression& compression) { DefaultCompression = compression; }
     const TCompression& GetDefaultCompression() const { return DefaultCompression; }

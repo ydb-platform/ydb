@@ -46,10 +46,13 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 
 #if 1 // Optimization [remove portion's dups]
     if (batches.size() == 1) {
-        Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(batches[0], description->ReplaceKey));
-        std::vector<std::shared_ptr<arrow::RecordBatch>> out;
-        SliceBatch(batches[0], maxRowsInBatch, out);
-        return out;
+        if (NArrow::IsSortedAndUnique(batches[0], description->ReplaceKey)) {
+            std::vector<std::shared_ptr<arrow::RecordBatch>> out;
+            SliceBatch(batches[0], maxRowsInBatch, out);
+            return out;
+        } else {
+            return NArrow::MergeSortedBatches(batches, description, size);
+        }
     }
 #endif
 
@@ -98,10 +101,11 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> SpecialMergeSorted(const std::v
 
         // The core of optimization: do not merge slice if it's alone in its key range
         if (slices.size() == 1) {
-            Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(slices[0], description->ReplaceKey));
-            // Split big batch into smaller batches if needed
-            SliceBatch(slices[0], maxRowsInBatch, out);
-            continue;
+            if (NArrow::IsSortedAndUnique(slices[0], description->ReplaceKey)) {
+                // Split big batch into smaller batches if needed
+                SliceBatch(slices[0], maxRowsInBatch, out);
+                continue;
+            }
         }
 
         auto merged = NArrow::MergeSortedBatches(slices, description, maxRowsInBatch);
@@ -218,7 +222,7 @@ THashMap<TBlobRange, ui64> TIndexedReadData::InitRead(ui32 inputBatch, bool inGr
     return out;
 }
 
-void TIndexedReadData::AddIndexedColumn(const TBlobRange& blobRange, const TString& column) {
+void TIndexedReadData::AddIndexed(const TBlobRange& blobRange, const TString& column) {
     Y_VERIFY(IndexedBlobs.count(blobRange));
     ui32 batchNo = IndexedBlobs[blobRange];
     if (!WaitIndexed.count(batchNo)) {
@@ -265,11 +269,14 @@ void TIndexedReadData::UpdateGranuleWaits(ui32 batchNo) {
 }
 
 std::shared_ptr<arrow::RecordBatch>
-TIndexedReadData::MakeNotIndexedBatch(const TString& blob) const {
+TIndexedReadData::MakeNotIndexedBatch(const TString& blob, ui64 planStep, ui64 txId) const {
     auto batch = NArrow::DeserializeBatch(blob, ReadMetadata->BlobSchema);
+    Y_VERIFY(batch);
 
-    /// @note It adds special columns (planStep, txId) with NULL values
-    batch = NArrow::ExtractColumns(batch, ReadMetadata->LoadSchema, true);
+    batch = TIndexInfo::AddSpecialColumns(batch, planStep, txId);
+    Y_VERIFY(batch);
+
+    batch = NArrow::ExtractColumns(batch, ReadMetadata->LoadSchema);
     Y_VERIFY(batch);
 
     { // Apply predicate
@@ -310,7 +317,7 @@ TVector<TPartialReadResult> TIndexedReadData::GetReadyResults(const int64_t maxR
     // First time extract OutNotIndexed data
     if (NotIndexed.size()) {
         /// @note not indexed data could contain data out of indexed granules
-        OutNotIndexed = SplitByGranules(NotIndexed);
+        OutNotIndexed = SplitByGranules(std::move(NotIndexed));
         NotIndexed.clear();
         ReadyNotIndexed = 0;
     }
@@ -424,27 +431,30 @@ TVector<std::vector<std::shared_ptr<arrow::RecordBatch>>> TIndexedReadData::Read
 }
 
 THashMap<ui64, std::shared_ptr<arrow::RecordBatch>>
-TIndexedReadData::SplitByGranules(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) const {
+TIndexedReadData::SplitByGranules(std::vector<std::shared_ptr<arrow::RecordBatch>>&& batches) const {
     Y_VERIFY(ReadMetadata->IsSorted());
     Y_VERIFY(IndexInfo().GetSortingKey());
 
-    // Reorder source for "last stream's equal wins" in MergingSorted stream.
-    std::vector<std::shared_ptr<arrow::RecordBatch>> reorderedBatches;
-    reorderedBatches.reserve(batches.size());
-    for (auto it = batches.rbegin(); it != batches.rend(); ++it) {
-        // batch could be empty cause of prefiltration
-        if ((*it)->num_rows()) {
-            reorderedBatches.push_back(*it);
+    { // remove empty batches
+        size_t dst = 0;
+        for (size_t src = 0; src < batches.size(); ++src) {
+            if (batches[src]->num_rows()) {
+                if (dst != src) {
+                    batches[dst] = batches[src];
+                }
+                ++dst;
+            }
         }
+        batches.resize(dst);
     }
 
-    if (reorderedBatches.empty()) {
+    if (batches.empty()) {
         return {};
     }
 
     // We could merge data here only if backpressure limits committed data size. KIKIMR-12520
     auto& indexInfo = IndexInfo();
-    auto merged = NArrow::CombineSortedBatches(reorderedBatches, indexInfo.SortReplaceDescription());
+    auto merged = NArrow::CombineSortedBatches(batches, indexInfo.SortReplaceDescription());
     Y_VERIFY(merged);
     Y_VERIFY_DEBUG(NArrow::IsSortedAndUnique(merged, indexInfo.GetReplaceKey()));
 

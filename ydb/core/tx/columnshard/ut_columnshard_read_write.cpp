@@ -218,6 +218,66 @@ void TestWriteImpl(const TVector<std::pair<TString, TTypeId>>& ydbSchema) {
     UNIT_ASSERT(!ok);
 }
 
+// TODO: Improve test. It does not catch KIKIMR-14890
+void TestWriteReadDup() {
+    TTestBasicRuntime runtime;
+    TTester::Setup(runtime);
+
+    TActorId sender = runtime.AllocateEdgeActor();
+    CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+    TDispatchOptions options;
+    options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+    runtime.DispatchEvents(options);
+
+    //
+
+    ui64 metaShard = TTestTxConfig::TxTablet1;
+    ui64 writeId = 0;
+    ui64 tableId = 1;
+
+    auto ydbSchema = TTestSchema::YdbSchema();
+    SetupSchema(runtime, sender, tableId, ydbSchema);
+
+    constexpr ui32 numRows = 10;
+    std::pair<ui64, ui64> portion = {10, 10 + numRows};
+    auto testData = MakeTestBlob(portion, ydbSchema);
+    TAutoPtr<IEventHandle> handle;
+
+    ui64 txId = 0;
+    ui64 initPlanStep = 100;
+    for (ui64 planStep = initPlanStep; planStep < initPlanStep + 50; ++planStep) {
+        TSet<ui64> txIds;
+        for (ui32 i = 0; i <= 5; ++i) {
+            UNIT_ASSERT(WriteData(runtime, sender, metaShard, ++writeId, tableId, testData));
+            ProposeCommit(runtime, sender, metaShard, ++txId, {writeId});
+            txIds.insert(txId);
+        }
+        PlanCommit(runtime, sender, planStep, txIds);
+
+        // read
+        if (planStep != initPlanStep) {
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender,
+                        new TEvColumnShard::TEvRead(sender, metaShard, planStep-1, Max<ui64>(), tableId));
+            auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvReadResult>(handle);
+            UNIT_ASSERT(event);
+
+            auto& resRead = Proto(event);
+            UNIT_ASSERT_EQUAL(resRead.GetOrigin(), TTestTxConfig::TxTablet0);
+            UNIT_ASSERT_EQUAL(resRead.GetTxInitiator(), metaShard);
+            UNIT_ASSERT_EQUAL(resRead.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+            UNIT_ASSERT_EQUAL(resRead.GetBatch(), 0);
+            UNIT_ASSERT_EQUAL(resRead.GetFinished(), true);
+            UNIT_ASSERT(resRead.GetData().size() > 0);
+
+            auto data = resRead.GetData();
+            auto meta = resRead.GetMeta();
+            UNIT_ASSERT(CheckColumns(data, meta, TTestSchema::ExtractNames(ydbSchema), numRows));
+            UNIT_ASSERT(DataHas(TVector<TString>{data}, meta.GetSchema(), portion, true));
+        }
+    }
+}
+
 void TestWriteReadImpl(bool reboots, const TVector<std::pair<TString, TTypeId>>& ydbSchema = TTestSchema::YdbSchema(),
                        TString codec = "") {
     TTestBasicRuntime runtime;
@@ -867,6 +927,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
     Y_UNIT_TEST(WriteExoticTypes) {
         TestWriteImpl(TTestSchema::YdbExoticSchema());
+    }
+
+    Y_UNIT_TEST(WriteReadDuplicate) {
+        TestWriteReadDup();
     }
 
     Y_UNIT_TEST(WriteRead) {

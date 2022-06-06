@@ -42,14 +42,15 @@ public:
                 return; // ignore duplicate parts
             }
             WaitIndexed.erase(event.BlobRange);
-            IndexedData.AddIndexedColumn(event.BlobRange, event.Data);
+            IndexedData.AddIndexed(event.BlobRange, event.Data);
         } else if (CommittedBlobs.count(blobId)) {
-            if (!WaitCommitted.count(blobId)) {
-                return; // ignore duplicate parts
+            auto cmt = WaitCommitted.extract(NOlap::TCommittedBlob{blobId, 0, 0});
+            if (cmt.empty()) {
+                return; // ignore duplicates
             }
-            ui32 batchNo = WaitCommitted[blobId];
-            WaitCommitted.erase(blobId);
-            IndexedData.AddNotIndexed(batchNo, event.Data);
+            const NOlap::TCommittedBlob& cmtBlob = cmt.key();
+            ui32 batchNo = cmt.mapped();
+            IndexedData.AddNotIndexed(batchNo, event.Data, cmtBlob.PlanStep, cmtBlob.TxId);
         } else {
             LOG_S_ERROR("TEvReadBlobRangeResult returned unexpected blob at tablet "
                 << TabletId << " (read)");
@@ -137,9 +138,9 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         ui32 notIndexed = 0;
         for (size_t i = 0; i < ReadMetadata->CommittedBlobs.size(); ++i, ++notIndexed) {
-            const TUnifiedBlobId& blobId = ReadMetadata->CommittedBlobs[i];
-            CommittedBlobs.emplace(blobId);
-            WaitCommitted.emplace(blobId, notIndexed);
+            const auto& cmtBlob = ReadMetadata->CommittedBlobs[i];
+            CommittedBlobs.emplace(cmtBlob.BlobId);
+            WaitCommitted.emplace(cmtBlob, notIndexed);
         }
 
         IndexedBlobs = IndexedData.InitRead(notIndexed);
@@ -166,7 +167,8 @@ public:
             ctx.Send(SelfId(), new TEvents::TEvPoisonPill());
         } else {
             // TODO: Keep inflight
-            for (auto& [blobId, batchNo] : WaitCommitted) {
+            for (auto& [cmtBlob, batchNo] : WaitCommitted) {
+                auto& blobId = cmtBlob.BlobId;
                 SendReadRequest(ctx, NBlobCache::TBlobRange(blobId, 0, blobId.BlobSize()));
             }
             for (auto& [blobRange, granule] : IndexedBlobs) {
@@ -212,7 +214,7 @@ private:
     THashMap<NBlobCache::TBlobRange, ui64> IndexedBlobs;
     THashSet<TUnifiedBlobId> CommittedBlobs;
     THashSet<NBlobCache::TBlobRange> WaitIndexed;
-    THashMap<TUnifiedBlobId, ui32> WaitCommitted;
+    std::unordered_map<NOlap::TCommittedBlob, ui32, THash<NOlap::TCommittedBlob>> WaitCommitted;
     ui32 ReturnedBatchNo;
     mutable TString SerializedSchema;
 

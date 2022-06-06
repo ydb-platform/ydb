@@ -210,6 +210,11 @@ private:
                     skipCheckConnectRigths = true;
                 }
             }
+            if (databaseName.empty()) {
+                Counters->IncDatabaseUnavailableCounter();
+                requestBaseCtx->ReplyUnauthenticated("Empty database name");
+                return;
+            }
             auto it = Databases.find(databaseName);
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
                 database = &it->second;
@@ -320,6 +325,8 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
     InitializeGRpcProxyDbCountersRegistry(ctx.ActorSystem());
 
     RootDatabase = DatabaseFromDomain();
+    Y_VERIFY(!RootDatabase.empty());
+
     TDatabaseInfo& database = Databases[RootDatabase];
     database.DatabaseType = TDatabaseInfo::TDatabaseType::Root;
     database.State = NKikimrTenantPool::EState::TENANT_OK;

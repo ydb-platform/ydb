@@ -37,7 +37,6 @@ namespace NKikimr {
         const std::shared_ptr<TDefragCtx> &dCtx,
         const TVDiskID &selfVDiskId,
         const TActorId &notifyId,
-        THullDsSnap &&fullSnap,
         std::vector<TDefragRecord> &&recs);
 
 } // NKikimr

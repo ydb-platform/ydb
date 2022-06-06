@@ -24,7 +24,7 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
     }
     log << Endl;
 
-    std::function<bool(ui32, IEventHandle&)> filterFunction;
+    std::function<bool(ui32, std::unique_ptr<IEventHandle>&)> filterFunction;
     auto prepareRuntime = [&](TTestActorSystem& runtime) {
         runtime.FilterFunction = filterFunction;
         runtime.LogStream = &log;
@@ -206,9 +206,9 @@ TString DoTestCase(TBlobStorageGroupType::EErasureSpecies erasure, const std::ve
         }
     }
 
-    filterFunction = [&](ui32 nodeId, IEventHandle& ev) {
-        if (ev.Type == TEvBlobStorage::EvVGet && states[ev.Recipient.NodeId() - 1] == EState::OFFLINE) {
-            env.Runtime->Send(ev.ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected).Release(), nodeId);
+    filterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->Type == TEvBlobStorage::EvVGet && states[ev->Recipient.NodeId() - 1] == EState::OFFLINE) {
+            env.Runtime->Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected).Release(), nodeId);
             return false;
         }
         return true;

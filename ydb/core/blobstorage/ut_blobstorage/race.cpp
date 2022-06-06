@@ -159,8 +159,8 @@ void RunGroupReconfigurationRaceTest(TBlobStorageGroupType type) {
     runtime->SetLogPriority(NActorsServices::TEST, NLog::PRI_DEBUG);
 
     ui32 partCounter = 0;
-    runtime->FilterFunction = [&](ui32 /*nodeId*/, IEventHandle& ev) {
-        if (ev.Recipient == MakeBlobStorageNodeWardenID(partitionedNode) && partCounter++) {
+    runtime->FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->Recipient == MakeBlobStorageNodeWardenID(partitionedNode) && partCounter++) {
             // keep the first message
             return false;
         }

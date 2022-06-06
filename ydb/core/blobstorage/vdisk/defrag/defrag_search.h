@@ -8,6 +8,11 @@
 
 namespace NKikimr {
 
+    namespace NDefrag {
+        static constexpr TDuration MaxSnapshotHoldDuration = TDuration::Seconds(30);
+        static constexpr TDuration WorkQuantum = TDuration::MilliSeconds(10);
+    }
+
     struct THugeBlobRecord {
         TDiskPart Part;
         TLogoBlobID Id;
@@ -314,19 +319,16 @@ namespace NKikimr {
         using TLevelSegment = ::NKikimr::TLevelSegment<TKeyLogoBlob, TMemRecLogoBlob>;
         using TLevelSstPtr = typename TLevelSegment::TLevelSstPtr;
 
-        THullDsSnap FullSnap;
         TChunksToDefrag ChunksToDefrag;
         std::unordered_set<ui32> Chunks; // chunks to defrag (i.e. move all data from these chunks)
         std::vector<TDefragRecord> RecsToRewrite;
-        TDuration MaxTime;
-        std::function<void()> Yield;
-        ui64 EndTime;
-        ui32 Count;
+        std::optional<TLogoBlobID> NextId;
+        const TBlobStorageGroupType GType;
 
     public:
-        TDefragQuantumFindRecords(THullDsSnap&& fullSnap, TChunksToDefrag&& chunksToDefrag)
-            : FullSnap(std::move(fullSnap))
-            , ChunksToDefrag(std::move(chunksToDefrag))
+        TDefragQuantumFindRecords(TChunksToDefrag&& chunksToDefrag, TBlobStorageGroupType gtype)
+            : ChunksToDefrag(std::move(chunksToDefrag))
+            , GType(gtype)
         {
             for (const auto& chunk : ChunksToDefrag.Chunks) {
                 Chunks.insert(chunk.ChunkId);
@@ -336,28 +338,50 @@ namespace NKikimr {
             RecsToRewrite.reserve(ChunksToDefrag.EstimatedSlotsCount);
         }
 
-        template<typename T>
-        void Scan(TDuration maxTime, T&& yield) {
-            MaxTime = maxTime;
-            Yield = yield;
-            EndTime = GetCycleCountFast() + DurationToCycles(MaxTime);
-            Count = 0;
-            TraverseDbWithoutMerge(FullSnap.HullCtx, this, FullSnap.LogoBlobsSnap);
+        bool Scan(TDuration quota, THullDsSnap fullSnap) {
+            // create iterator and set it up to point to next blob of interest
+            TLogoBlobsSnapshot::TForwardIterator iter(fullSnap.HullCtx, &fullSnap.LogoBlobsSnap);
+            if (NextId) {
+                iter.Seek(*NextId);
+            } else {
+                iter.SeekToFirst();
+            }
+
+            // calculate timestamp to finish scanning
+            const ui64 endTime = GetCycleCountFast() + DurationToCycles(quota);
+            for (ui32 count = 0; iter.Valid(); iter.Next()) {
+                if (++count % 1024 == 0 && GetCycleCountFast() >= endTime) {
+                    break;
+                }
+                iter.PutToMerger(this);
+            }
+
+            if (iter.Valid()) {
+                NextId.emplace(iter.GetCurKey().LogoBlobID());
+            }
+            return iter.Valid();
         }
 
-        void UpdateFresh(const char* /*segName*/, const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
+        void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope* /*data*/, const TKeyLogoBlob& key, ui64 /*lsn*/) {
             Update(key, memRec, nullptr);
         }
 
-        void UpdateLevel(const TLevelSstPtr& p, const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec) {
-            Update(key, memRec, p.SstPtr->GetOutbound());
+        void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob& key, ui64 /*circaLsn*/) {
+            Update(key, memRec, outbound);
         }
 
+        static constexpr bool HaveToMergeData() { return false; }
+
+        std::vector<TDefragRecord> GetRecordsToRewrite() {
+            return std::move(RecsToRewrite);
+        }
+
+    private:
         void Update(const TKeyLogoBlob& key, const TMemRecLogoBlob& memRec, const TDiskPart *outbound) {
             TDiskDataExtractor extr;
             if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
                 memRec.GetDiskData(&extr, outbound);
-                const NMatrix::TVectorType local = memRec.GetIngress().LocalParts(FullSnap.HullCtx->VCtx->Top->GType);
+                const NMatrix::TVectorType local = memRec.GetIngress().LocalParts(GType);
                 ui8 partIdx = local.FirstPosition();
                 for (const TDiskPart *p = extr.Begin; p != extr.End; ++p, partIdx = local.NextPosition(partIdx)) {
                     Y_VERIFY(partIdx != local.GetSize());
@@ -373,20 +397,6 @@ namespace NKikimr {
                     }
                 }
             }
-            if (++Count % 1024 == 0 && GetCycleCountFast() >= EndTime) {
-                Yield();
-                EndTime = GetCycleCountFast() + DurationToCycles(MaxTime);
-            }
-        }
-
-        void Finish() {}
-
-        THullDsSnap RetrieveSnapshot() {
-            return std::move(FullSnap);
-        }
-
-        std::vector<TDefragRecord> GetRecordsToRewrite() {
-            return std::move(RecsToRewrite);
         }
     };
 

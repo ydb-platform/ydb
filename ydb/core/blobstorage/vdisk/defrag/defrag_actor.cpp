@@ -105,7 +105,7 @@ namespace NKikimr {
             void Handle(TEvTakeHullSnapshotResult::TPtr ev) {
                 TDefragCalcStat calcStat(std::move(ev->Get()->Snap), DCtx->HugeBlobCtx);
                 std::unique_ptr<IEventBase> res;
-                if (calcStat.Scan(TDuration::Seconds(30))) {
+                if (calcStat.Scan(NDefrag::MaxSnapshotHoldDuration)) {
                     STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD05, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan timed out"));
                 } else {
                     const ui32 totalChunks = calcStat.GetTotalChunks();

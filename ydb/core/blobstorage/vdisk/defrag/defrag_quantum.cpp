@@ -44,7 +44,11 @@ namespace NKikimr {
                 Y_VERIFY(*ChunksToDefrag);
             } else {
                 TDefragQuantumFindChunks findChunks(GetSnapshot(), DCtx->HugeBlobCtx);
-                while (findChunks.Scan(TDuration::MilliSeconds(10))) {
+                const ui64 endTime = GetCycleCountFast() + DurationToCycles(NDefrag::MaxSnapshotHoldDuration);
+                while (findChunks.Scan(NDefrag::WorkQuantum)) {
+                    if (GetCycleCountFast() >= endTime) {
+                        return (void)Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));
+                    }
                     Yield();
                 }
                 ChunksToDefrag.emplace(findChunks.GetChunksToDefrag(DCtx->MaxChunksToDefrag));
@@ -54,31 +58,22 @@ namespace NKikimr {
                 stat.FreedChunks = ChunksToDefrag->Chunks;
                 stat.Eof = stat.FoundChunksToDefrag < DCtx->MaxChunksToDefrag;
 
-                LockChunks(*ChunksToDefrag);
+                auto lockedChunks = LockChunks(*ChunksToDefrag);
 
-                THPTimer timer;
-                TDefragQuantumFindRecords findRecords(GetSnapshot(), std::move(*ChunksToDefrag));
-                findRecords.Scan(TDuration::MilliSeconds(10), std::bind(&TDefragQuantum::Yield, this));
-                if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::Seconds(30)) {
-                    STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD06, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan too long"),
-                        (Duration, duration));
+                TDefragQuantumFindRecords findRecords(std::move(*ChunksToDefrag), DCtx->VCtx->Top->GType);
+                while (findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot())) {
+                    Yield();
                 }
 
                 const TActorId rewriterActorId = Register(CreateDefragRewriter(DCtx, SelfVDiskId, SelfActorId,
-                    findRecords.RetrieveSnapshot(), findRecords.GetRecordsToRewrite()));
+                    findRecords.GetRecordsToRewrite()));
                 THolder<TEvDefragRewritten::THandle> ev;
                 try {
                     ev = WaitForSpecificEvent<TEvDefragRewritten>();
-                } catch (const TPoisonPillException& ex) {
+                } catch (const TPoisonPillException&) {
                     Send(new IEventHandle(TEvents::TSystem::Poison, 0, rewriterActorId, {}, nullptr, 0));
                     throw;
                 }
-
-                if (auto duration = TDuration::Seconds(timer.Passed()); duration >= TDuration::Seconds(30)) {
-                    STLOG(PRI_ERROR, BS_VDISK_DEFRAG, BSVDD07, VDISKP(DCtx->VCtx->VDiskLogPrefix, "scan + rewrite too long"),
-                        (Duration, duration));
-                }
-
                 stat.RewrittenRecs = ev->Get()->RewrittenRecs;
                 stat.RewrittenBytes = ev->Get()->RewrittenBytes;
 
@@ -101,9 +96,10 @@ namespace NKikimr {
             WaitForSpecificEvent([](IEventHandle& ev) { return ev.Type == EvResume; });
         }
 
-        void LockChunks(const TChunksToDefrag& chunks) {
+        TDefragChunks LockChunks(const TChunksToDefrag& chunks) {
             Send(DCtx->HugeKeeperId, new TEvHugeLockChunks(chunks.Chunks));
-            WaitForSpecificEvent<TEvHugeLockChunksResult>();
+            auto res = WaitForSpecificEvent<TEvHugeLockChunksResult>();
+            return res->Get()->LockedChunks;
         }
 
         void Compact() {

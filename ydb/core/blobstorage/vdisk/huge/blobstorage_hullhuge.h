@@ -158,6 +158,15 @@ namespace NKikimr {
         }
     };
 
+    class TEvHugeUnlockChunks : public TEventLocal<TEvHugeUnlockChunks, TEvBlobStorage::EvHugeUnlockChunks> {
+    public:
+        TDefragChunks Chunks;
+
+        TEvHugeUnlockChunks(TDefragChunks chunks)
+            : Chunks(std::move(chunks))
+        {}
+    };
+
     ////////////////////////////////////////////////////////////////////////////
     // TEvHugeLockChunksResult
     ////////////////////////////////////////////////////////////////////////////

@@ -1,4 +1,5 @@
 #include "defrag_rewriter.h"
+#include <ydb/core/blobstorage/vdisk/skeleton/blobstorage_takedbsnap.h>
 
 namespace NKikimr {
 
@@ -13,11 +14,46 @@ namespace NKikimr {
         const TVDiskID SelfVDiskId;
         const TActorId NotifyId;
         // we can rewrite data while we are holding snapshot for data being read
-        THullDsSnap FullSnap;
+        std::optional<THullDsSnap> FullSnap;
         std::vector<TDefragRecord> Recs;
         size_t RecToReadIdx = 0;
         size_t RewrittenRecsCounter = 0;
         size_t RewrittenBytes = 0;
+
+        struct TCheckLocationMerger {
+            TDefragRecord& Rec;
+            TBlobStorageGroupType GType;
+            bool Found = false;
+
+            TCheckLocationMerger(TDefragRecord& rec, TBlobStorageGroupType gtype)
+                : Rec(rec)
+                , GType(gtype)
+            {}
+                    
+            void AddFromFresh(const TMemRecLogoBlob& memRec, const TRope*, const TKeyLogoBlob&, ui64) {
+                Process(memRec, nullptr);
+            }
+
+            void AddFromSegment(const TMemRecLogoBlob& memRec, const TDiskPart *outbound, const TKeyLogoBlob&, ui64) {
+                Process(memRec, outbound);
+            }
+
+            static constexpr bool HaveToMergeData() { return false; }
+
+            void Process(const TMemRecLogoBlob& memRec, const TDiskPart *outbound) {
+                TDiskDataExtractor extr;
+                if (memRec.GetType() == TBlobType::HugeBlob || memRec.GetType() == TBlobType::ManyHugeBlobs) {
+                    memRec.GetDiskData(&extr, outbound);
+                    const NMatrix::TVectorType local = memRec.GetIngress().LocalParts(GType);
+                    ui8 partIdx = local.FirstPosition();
+                    for (const TDiskPart *p = extr.Begin; p != extr.End; ++p, partIdx = local.NextPosition(partIdx)) {
+                        if (*p == Rec.OldDiskPart && partIdx + 1 == Rec.LogoBlobId.PartId()) {
+                            Found = true;
+                        }
+                    }
+                }
+            }
+        };
 
         void Bootstrap(const TActorContext &ctx) {
             SendNextRead(ctx);
@@ -26,19 +62,44 @@ namespace NKikimr {
 
         void SendNextRead(const TActorContext &ctx) {
             if (RecToReadIdx < Recs.size()) {
-                const TDiskPart &p = Recs[RecToReadIdx].OldDiskPart;
-                auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
-                    DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
-                ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
-                DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
-                RewrittenBytes += p.Size;
+                ctx.Send(DCtx->SkeletonId, new TEvTakeHullSnapshot(false));
             } else if (RewrittenRecsCounter == Recs.size()) {
                 ctx.Send(NotifyId, new TEvDefragRewritten(RewrittenRecsCounter, RewrittenBytes));
                 Die(ctx);
             }
         }
 
+        void Handle(TEvTakeHullSnapshotResult::TPtr ev, const TActorContext& ctx) {
+            FullSnap.emplace(std::move(ev->Get()->Snap));
+            FullSnap->BlocksSnap.Destroy();
+            FullSnap->BarriersSnap.Destroy();
+
+            TLogoBlobsSnapshot::TForwardIterator iter(FullSnap->HullCtx, &FullSnap->LogoBlobsSnap);
+            auto& rec = Recs[RecToReadIdx];
+            const TLogoBlobID id = rec.LogoBlobId;
+            iter.Seek(id.FullID());
+            if (iter.Valid() && iter.GetCurKey().LogoBlobID() == id.FullID()) {
+                TCheckLocationMerger merger(rec, DCtx->VCtx->Top->GType);
+                iter.PutToMerger(&merger);
+                if (merger.Found) {
+                    const TDiskPart& p = rec.OldDiskPart;
+                    auto msg = std::make_unique<NPDisk::TEvChunkRead>(DCtx->PDiskCtx->Dsk->Owner,
+                        DCtx->PDiskCtx->Dsk->OwnerRound, p.ChunkIdx, p.Offset, p.Size, NPriRead::HullComp, nullptr);
+                    ctx.Send(DCtx->PDiskCtx->PDiskId, msg.release());
+                    DCtx->DefragMonGroup.DefragBytesRewritten() += p.Size;
+                    RewrittenBytes += p.Size;
+                    return;
+                }
+            }
+
+            ++RecToReadIdx;
+            ++RewrittenRecsCounter;
+            SendNextRead(ctx);
+        }
+
         void Handle(NPDisk::TEvChunkReadResult::TPtr ev, const TActorContext& ctx) {
+            FullSnap.reset();
+
             // FIXME: handle read errors gracefully
             CHECK_PDISK_RESPONSE(DCtx->VCtx, ev, ctx);
 
@@ -84,6 +145,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateFunc,
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
+            HFunc(TEvTakeHullSnapshotResult, Handle)
             HFunc(NPDisk::TEvChunkReadResult, Handle)
             HFunc(TEvBlobStorage::TEvVPutResult, Handle)
         )
@@ -99,18 +161,14 @@ namespace NKikimr {
                 const std::shared_ptr<TDefragCtx> &dCtx,
                 const TVDiskID &selfVDiskId,
                 const TActorId &notifyId,
-                THullDsSnap &&fullSnap,
                 std::vector<TDefragRecord> &&recs)
             : TActorBootstrapped<TDefragRewriter>()
             , DCtx(dCtx)
             , SelfVDiskId(selfVDiskId)
             , NotifyId(notifyId)
-            , FullSnap(std::move(fullSnap))
             , Recs(std::move(recs))
         {}
     };
-
-
 
     ////////////////////////////////////////////////////////////////////////////
     // VDISK DEFRAG REWRITER
@@ -120,9 +178,8 @@ namespace NKikimr {
             const std::shared_ptr<TDefragCtx> &dCtx,
             const TVDiskID &selfVDiskId,
             const TActorId &notifyId,
-            THullDsSnap &&fullSnap,
             std::vector<TDefragRecord> &&recs) {
-        return new TDefragRewriter(dCtx, selfVDiskId, notifyId, std::move(fullSnap), std::move(recs));
+        return new TDefragRewriter(dCtx, selfVDiskId, notifyId, std::move(recs));
     }
 
 } // NKikimr

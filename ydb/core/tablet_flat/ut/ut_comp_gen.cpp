@@ -485,6 +485,328 @@ Y_UNIT_TEST_SUITE(TGenCompaction) {
         UNIT_ASSERT_VALUES_EQUAL(strategy.GetLastFinishedForcedCompactionTs(), TInstant::Seconds(60));
     }
 
+    Y_UNIT_TEST(ForcedCompactionByUnreachableMvccData) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+        ui64 performedCompactions = 0;
+
+        // Initialize the schema
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+
+            TCompactionPolicy policy;
+            policy.DroppedRowsPercentToCompact = 50;
+            policy.Generations.emplace_back(10 * 1024 * 1024, 2, 10, 100 * 1024 * 1024, "compact_gen1", true);
+            policy.Generations.emplace_back(100 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen2", true);
+            policy.Generations.emplace_back(200 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen3", true);
+            for (auto& gen : policy.Generations) {
+                gen.ExtraCompactionPercent = 0;
+                gen.ExtraCompactionMinSize = 0;
+                gen.ExtraCompactionExpPercent = 0;
+                gen.ExtraCompactionExpMaxSize = 0;
+            }
+            backend.DB.Alter().SetCompactionPolicy(Table, policy);
+
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        strategy.Start({ });
+
+        // Insert some rows at v1
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < 16; ++key) {
+                db.Table<Schema::Data>().Key(key).UpdateV<Schema::Data::Value>(TRowVersion(1, 1), 42);
+            }
+            backend.Commit();
+        }
+
+        backend.SimpleMemCompaction(&strategy);
+
+        // Delete all rows at v2
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < 16; ++key) {
+                db.Table<Schema::Data>().Key(key).DeleteV(TRowVersion(2, 2));
+            }
+            backend.Commit();
+        }
+
+        backend.SimpleMemCompaction(&strategy);
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 2u);
+
+        // We expect a forced compaction to be pending right now
+        UNIT_ASSERT(!strategy.AllowForcedCompaction());
+        UNIT_ASSERT(broker.HasPending());
+
+        // Finish forced compactions
+        while (broker.HasPending()) {
+            UNIT_ASSERT(broker.RunPending());
+            if (backend.StartedCompactions.empty())
+                continue;
+
+            UNIT_ASSERT_C(performedCompactions++ < 100, "too many compactions");
+            auto result = backend.RunCompaction();
+            auto changes = strategy.CompactionFinished(
+                    result.CompactionId, std::move(result.Params), std::move(result.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+        }
+
+        // Everything should be compacted to a single part (erased data still visible)
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 1u);
+
+        // Delete all versions from minimum up to almost v2
+        {
+            backend.Begin();
+            backend.DB.RemoveRowVersions(Schema::Data::TableId, TRowVersion::Min(), TRowVersion(2, 1));
+            backend.Commit();
+        }
+
+        // Notify strategy about removed row versions change
+        strategy.ReflectRemovedRowVersions();
+
+        // Nothing should be pending at this time, because all data is still visible
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        UNIT_ASSERT(!broker.HasPending());
+
+        // Delete all versions from almost v2 up to v2
+        {
+            backend.Begin();
+            backend.DB.RemoveRowVersions(Schema::Data::TableId, TRowVersion(2, 1), TRowVersion(2, 2));
+            backend.Commit();
+        }
+
+        // Notify strategy about removed row versions change
+        strategy.ReflectRemovedRowVersions();
+
+        // We expect a forced compaction to be pending right now
+        UNIT_ASSERT(!strategy.AllowForcedCompaction());
+        UNIT_ASSERT(broker.HasPending());
+
+        // Finish forced compactions
+        while (broker.HasPending()) {
+            UNIT_ASSERT(broker.RunPending());
+            if (backend.StartedCompactions.empty())
+                continue;
+
+            UNIT_ASSERT_C(performedCompactions++ < 100, "too many compactions");
+            auto result = backend.RunCompaction();
+            auto changes = strategy.CompactionFinished(
+                    result.CompactionId, std::move(result.Params), std::move(result.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+        }
+
+        // Table should become completely empty
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 0u);
+    }
+
+    Y_UNIT_TEST(ForcedCompactionByUnreachableMvccDataRestart) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+        ui64 performedCompactions = 0;
+
+        // Initialize the schema
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+
+            TCompactionPolicy policy;
+            policy.DroppedRowsPercentToCompact = 50;
+            policy.Generations.emplace_back(10 * 1024 * 1024, 2, 10, 100 * 1024 * 1024, "compact_gen1", true);
+            policy.Generations.emplace_back(100 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen2", true);
+            policy.Generations.emplace_back(200 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen3", true);
+            for (auto& gen : policy.Generations) {
+                gen.ExtraCompactionPercent = 0;
+                gen.ExtraCompactionMinSize = 0;
+                gen.ExtraCompactionExpPercent = 0;
+                gen.ExtraCompactionExpMaxSize = 0;
+            }
+            backend.DB.Alter().SetCompactionPolicy(Table, policy);
+
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        strategy.Start({ });
+
+        // Insert some rows at v1
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < 16; ++key) {
+                db.Table<Schema::Data>().Key(key).UpdateV<Schema::Data::Value>(TRowVersion(1, 1), 42);
+            }
+            backend.Commit();
+        }
+
+        // Delete all rows at v2
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < 16; ++key) {
+                db.Table<Schema::Data>().Key(key).DeleteV(TRowVersion(2, 2));
+            }
+            backend.Commit();
+        }
+
+        backend.SimpleMemCompaction(&strategy);
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 1u);
+
+        // We expect nothing to be pending right now
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        UNIT_ASSERT(!broker.HasPending());
+
+        strategy.Stop();
+
+        // Delete all versions from minimum up to v2
+        {
+            backend.Begin();
+            backend.DB.RemoveRowVersions(Schema::Data::TableId, TRowVersion::Min(), TRowVersion(2, 2));
+            backend.Commit();
+        }
+
+        // Start a new strategy
+        TGenCompactionStrategy strategy2(Table, &backend, &broker, &time, "suffix");
+        strategy2.Start({ });
+
+        // We expect a forced compaction to be pending right now
+        UNIT_ASSERT(!strategy2.AllowForcedCompaction());
+        UNIT_ASSERT(broker.HasPending());
+
+        // Finish forced compactions
+        while (broker.HasPending()) {
+            UNIT_ASSERT(broker.RunPending());
+            if (backend.StartedCompactions.empty())
+                continue;
+
+            UNIT_ASSERT_C(performedCompactions++ < 100, "too many compactions");
+            auto result = backend.RunCompaction();
+            auto changes = strategy2.CompactionFinished(
+                    result.CompactionId, std::move(result.Params), std::move(result.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+        }
+
+        // Table should become completely empty
+        UNIT_ASSERT(strategy2.AllowForcedCompaction());
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 0u);
+    }
+
+    Y_UNIT_TEST(ForcedCompactionByUnreachableMvccDataBorrowed) {
+        TSimpleBackend backend;
+        TSimpleBroker broker;
+        TSimpleLogger logger;
+        TSimpleTime time;
+        ui64 performedCompactions = 0;
+
+        // Initialize the schema
+        {
+            auto db = backend.Begin();
+            db.Materialize<Schema>();
+
+            TCompactionPolicy policy;
+            policy.DroppedRowsPercentToCompact = 50;
+            policy.Generations.emplace_back(10 * 1024 * 1024, 2, 10, 100 * 1024 * 1024, "compact_gen1", true);
+            policy.Generations.emplace_back(100 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen2", true);
+            policy.Generations.emplace_back(200 * 1024 * 1024, 2, 10, 200 * 1024 * 1024, "compact_gen3", true);
+            for (auto& gen : policy.Generations) {
+                gen.ExtraCompactionPercent = 0;
+                gen.ExtraCompactionMinSize = 0;
+                gen.ExtraCompactionExpPercent = 0;
+                gen.ExtraCompactionExpMaxSize = 0;
+            }
+            backend.DB.Alter().SetCompactionPolicy(Table, policy);
+
+            backend.Commit();
+        }
+
+        TGenCompactionStrategy strategy(Table, &backend, &broker, &time, "suffix");
+        strategy.Start({ });
+
+        // Insert some rows at v1
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < 16; ++key) {
+                db.Table<Schema::Data>().Key(key).UpdateV<Schema::Data::Value>(TRowVersion(1, 1), 42);
+            }
+            backend.Commit();
+        }
+
+        // Delete all rows at v2
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 0; key < 16; ++key) {
+                db.Table<Schema::Data>().Key(key).DeleteV(TRowVersion(2, 2));
+            }
+            backend.Commit();
+        }
+
+        backend.SimpleMemCompaction(&strategy);
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 1u);
+
+        // We expect nothing to be pending right now
+        UNIT_ASSERT(strategy.AllowForcedCompaction());
+        UNIT_ASSERT(!broker.HasPending());
+
+        strategy.Stop();
+
+        // Delete all versions from minimum up to v2
+        {
+            backend.Begin();
+            backend.DB.RemoveRowVersions(Schema::Data::TableId, TRowVersion::Min(), TRowVersion(2, 2));
+            backend.Commit();
+        }
+
+        // Change tablet id so all data would be treated as borrowed
+        backend.TabletId++;
+
+        // Start a new strategy
+        TGenCompactionStrategy strategy2(Table, &backend, &broker, &time, "suffix");
+        strategy2.Start({ });
+
+        // We expect nothing to be pending right now
+        UNIT_ASSERT(strategy2.AllowForcedCompaction());
+        UNIT_ASSERT(!broker.HasPending());
+
+        // Insert a single row at v3
+        {
+            auto db = backend.Begin();
+            for (ui64 key = 16; key < 17; ++key) {
+                db.Table<Schema::Data>().Key(key).UpdateV<Schema::Data::Value>(TRowVersion(3, 3), 42);
+            }
+            backend.Commit();
+        }
+
+        backend.SimpleMemCompaction(&strategy2);
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 2u);
+
+        // We expect a forced compaction to be pending right now
+        UNIT_ASSERT(!strategy2.AllowForcedCompaction());
+        UNIT_ASSERT(broker.HasPending());
+
+        // Finish forced compactions
+        while (broker.HasPending()) {
+            UNIT_ASSERT(broker.RunPending());
+            if (backend.StartedCompactions.empty())
+                continue;
+
+            UNIT_ASSERT_C(performedCompactions++ < 100, "too many compactions");
+            auto result = backend.RunCompaction();
+            auto changes = strategy2.CompactionFinished(
+                    result.CompactionId, std::move(result.Params), std::move(result.Result));
+            backend.ApplyChanges(Table, std::move(changes));
+        }
+
+        // Table should be left with a single sst
+        UNIT_ASSERT(strategy2.AllowForcedCompaction());
+        UNIT_ASSERT_VALUES_EQUAL(backend.TableParts(Table).size(), 1u);
+    }
+
 };
 
 } // NCompGen

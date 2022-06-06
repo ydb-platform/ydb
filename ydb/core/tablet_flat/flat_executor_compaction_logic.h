@@ -218,6 +218,7 @@ public:
     TFinishedCompactionInfo GetFinishedCompactionInfo(ui32 table);
 
     TReflectSchemeChangesResult ReflectSchemeChanges();
+    void ReflectRemovedRowVersions(ui32 table);
     void UpdateInMemStatsStep(ui32 table, ui32 steps, ui64 size);
     void CheckInMemStats(ui32 table);
     void UpdateLogUsage(TArrayRef<const NRedo::TUsage>);

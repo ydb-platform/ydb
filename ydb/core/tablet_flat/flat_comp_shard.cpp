@@ -1009,6 +1009,10 @@ namespace NCompShard {
         CheckCompactions();
     }
 
+    void TShardedCompactionStrategy::ReflectRemovedRowVersions() {
+        // nothing
+    }
+
     void TShardedCompactionStrategy::UpdateCompactions() {
         CheckCompactions();
     }

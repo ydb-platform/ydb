@@ -4,6 +4,7 @@
 #include "test_writer.h"
 
 #include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/core/tablet_flat/flat_table_subset.h>
 #include <ydb/core/tablet_flat/flat_scan_feed.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
@@ -45,6 +46,11 @@ namespace NTest {
             , Env(env ? env : new TTestEnv)
         {
 
+        }
+
+        TCompaction& WithRemovedRowVersions(const TRowVersionRanges& ranges) {
+            RemovedRowVersions = ranges.Snapshot();
+            return *this;
         }
 
         TPartEggs Do(TIntrusiveConstPtr<TMemTable> table)
@@ -164,6 +170,10 @@ namespace NTest {
 
         EScan Feed(const TRow &row, TRowVersion &rowVersion) noexcept override
         {
+            if (RemovedRowVersions) {
+                rowVersion = RemovedRowVersions.AdjustDown(rowVersion);
+            }
+
             Writer->AddKeyVersion(row, rowVersion);
 
             return Failed = 0, EScan::Feed;
@@ -194,6 +204,7 @@ namespace NTest {
         TAutoPtr<IPages> Env;
         TVector<ui32> Tags;
         TAutoPtr<TPartWriter> Writer;
+        TRowVersionRanges::TSnapshot RemovedRowVersions;
     };
 
 }

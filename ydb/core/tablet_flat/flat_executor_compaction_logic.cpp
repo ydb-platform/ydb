@@ -266,6 +266,14 @@ TReflectSchemeChangesResult TCompactionLogic::ReflectSchemeChanges()
     return result;
 }
 
+void TCompactionLogic::ReflectRemovedRowVersions(ui32 table)
+{
+    auto *tableInfo = State->Tables.FindPtr(table);
+    if (tableInfo) {
+        tableInfo->Strategy->ReflectRemovedRowVersions();
+    }
+}
+
 THolder<NTable::ICompactionStrategy> TCompactionLogic::CreateStrategy(
         ui32 tableId,
         NKikimrSchemeOp::ECompactionStrategy strategy)

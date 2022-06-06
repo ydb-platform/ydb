@@ -254,6 +254,14 @@ namespace NTable {
         virtual void ReflectSchema() = 0;
 
         /**
+         * Called after the table changes its removed row versions
+         *
+         * Strategy should use this opportunity to reclaculate its garbage
+         * estimation and schedule compactions to free up space.
+         */
+        virtual void ReflectRemovedRowVersions() = 0;
+
+        /**
          * Called periodically so strategy has a chance to re-evaluate its
          * current situation (e.g. update pending task priorities).
          */

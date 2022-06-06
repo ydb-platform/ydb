@@ -41,6 +41,7 @@ namespace NCompGen {
         ui64 GetBackingSize(ui64 ownerTabletId) override;
         ui64 BeginMemCompaction(TTaskId taskId, TSnapEdge edge, ui64 forcedCompactionId) override;
         bool ScheduleBorrowedCompaction() override;
+        void AllowBorrowedGarbageCompaction() override;
         ui64 GetLastFinishedForcedCompactionId() const override { return FinishedForcedGenCompactionId; }
         TInstant GetLastFinishedForcedCompactionTs() const override { return FinishedForcedGenCompactionTs; }
         TCompactionChanges CompactionFinished(
@@ -279,6 +280,8 @@ namespace NCompGen {
         TStats Stats;
         THashMap<ui64, TStats> StatsPerTablet;
         NPage::TGarbageStatsAgg GarbageStatsAgg;
+
+        bool CompactBorrowedGarbageAllowed = false;
     };
 
 }

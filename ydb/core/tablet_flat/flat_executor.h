@@ -628,6 +628,8 @@ public:
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
 
+    void AllowBorrowedGarbageCompaction(ui32 tableId) override;
+
     void FollowerAttached() override;
     void FollowerSyncComplete() override;
     void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) override;

@@ -376,6 +376,15 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Switched to work state "
          << DatashardStateName(State) << " tabletId " << TabletID());
 
+    if (State == TShardState::Ready && DstSplitDescription) {
+        // This shard was created as a result of split/merge (and not e.g. copy table)
+        // Signal executor that it should compact borrowed garbage even if this
+        // shard has no private data.
+        for (const auto& pr : TableInfos) {
+            Executor()->AllowBorrowedGarbageCompaction(pr.second->LocalTid);
+        }
+    }
+
     // Cleanup any removed snapshots from the previous generation
     Execute(new TTxCleanupRemovedSnapshots(this), ctx);
 

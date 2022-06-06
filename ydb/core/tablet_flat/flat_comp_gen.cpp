@@ -1412,7 +1412,10 @@ bool TGenCompactionStrategy::MaybeAutoStartForceCompaction() {
     // belongs to our own tablet, i.e. not borrowed. This is so we don't
     // compact borrowed data mid-merge, which might cause epochs to become
     // out of sync across generations.
-    if (Generations && ForcedState == EForcedState::None && StatsPerTablet.contains(Backend->OwnerTabletId())) {
+    if (Generations &&
+        ForcedState == EForcedState::None &&
+        (CompactBorrowedGarbageAllowed || StatsPerTablet.contains(Backend->OwnerTabletId())))
+    {
         bool startForcedCompaction = NeedToStartForceCompaction();
         if (startForcedCompaction) {
             ForcedState = EForcedState::Pending;
@@ -1422,6 +1425,13 @@ bool TGenCompactionStrategy::MaybeAutoStartForceCompaction() {
     }
 
     return false;
+}
+
+void TGenCompactionStrategy::AllowBorrowedGarbageCompaction() {
+    if (!CompactBorrowedGarbageAllowed) {
+        CompactBorrowedGarbageAllowed = true;
+        ReflectRemovedRowVersions();
+    }
 }
 
 }

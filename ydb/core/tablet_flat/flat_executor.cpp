@@ -3708,6 +3708,12 @@ bool TExecutor::CompactTables() {
     }
 }
 
+void TExecutor::AllowBorrowedGarbageCompaction(ui32 tableId) {
+    if (CompactionLogic) {
+        return CompactionLogic->AllowBorrowedGarbageCompaction(tableId);
+    }
+}
+
 STFUNC(TExecutor::StateInit) {
     Y_UNUSED(ev);
     Y_UNUSED(ctx);

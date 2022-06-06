@@ -312,6 +312,14 @@ namespace NTable {
             return false;
         }
 
+        /**
+         * Called to signal it's ok to compact borrowed garbage
+         * even if there's no private tablet data
+         */
+        virtual void AllowBorrowedGarbageCompaction() {
+            // nothing
+        }
+
         virtual ui64 GetLastFinishedForcedCompactionId() const = 0;
 
         virtual TInstant GetLastFinishedForcedCompactionTs() const = 0;

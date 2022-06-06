@@ -5,6 +5,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+// don't change order!
 #define FLAT_EXECUTOR_SIMPLE_COUNTERS_MAP(XX) \
     XX(DB_TX_IN_FLY, "ExecutorTxInFly") \
     XX(LOG_REDO_COUNT, "LogRedoItems") \
@@ -62,6 +63,7 @@ namespace NTabletFlatExecutor {
     XX(CONSUMED_MEMORY, "ConsumedMemory") \
     XX(COMPACTION_READ_IN_FLY, "CompactionReadInFly") \
 
+// don't change order!
 #define FLAT_EXECUTOR_CUMULATIVE_COUNTERS_MAP(XX) \
     XX(LOG_COMMITS, "LogCommits") \
     XX(LOG_WRITTEN, "LogWritten") \
@@ -112,6 +114,7 @@ namespace NTabletFlatExecutor {
     XX(COMPACTION_READ_LOAD_BYTES, "CompactionReadLoadBytes") \
     XX(COMPACTION_READ_LOAD_PAGES, "CompactionReadLoadPages") \
 
+// don't change order!
 #define FLAT_EXECUTOR_PERCENTILE_COUNTERS_MAP(XX) \
     XX(TX_PERCENTILE_LATENCY_RO, "TxRoLatency") \
     XX(TX_PERCENTILE_LATENCY_RW, "TxRwLatency") \

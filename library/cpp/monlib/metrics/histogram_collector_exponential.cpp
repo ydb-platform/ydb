@@ -22,7 +22,7 @@ namespace NMonitoring {
         {
         }
 
-        void Collect(double value, ui32 count) override {
+        void Collect(double value, ui64 count) override {
             ui32 index = Max<ui32>();
             if (value <= MinValue_) {
                 index = 0;

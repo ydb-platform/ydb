@@ -14,7 +14,7 @@ namespace NMonitoring {
         /**
          * Store {@code count} times given {@code value} in this collector.
          */
-        virtual void Collect(double value, ui32 count) = 0;
+        virtual void Collect(double value, ui64 count) = 0;
 
         /**
          * Store given {@code value} in this collector.

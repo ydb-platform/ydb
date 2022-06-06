@@ -63,15 +63,15 @@ using TCountersVector = TVector<NMonitoring::TDynamicCounters::TCounterPtr>;
 
 struct THistogramCounter {
     TVector<TTabletPercentileCounter::TRangeDef> Ranges;
-    TVector<NMonitoring::TDynamicCounters::TCounterPtr> Values;
+    TCountersVector Values;
     NMonitoring::THistogramPtr Histogram;
 
     THistogramCounter(
         const TVector<TTabletPercentileCounter::TRangeDef>& ranges,
-        TVector<NMonitoring::TDynamicCounters::TCounterPtr>&& values,
+        TCountersVector&& values,
         NMonitoring::THistogramPtr histogram)
         : Ranges(ranges)
-        , Values(values)
+        , Values(std::move(values))
         , Histogram(histogram)
     {
         Y_VERIFY(!Ranges.empty() && Ranges.size() == Values.size());
@@ -102,8 +102,14 @@ public:
         : CounterGroup(counterGroup)
     {}
 
+    void Reserve(size_t hint) {
+        CountersByTabletID.reserve(hint);
+        ChangedCounters.reserve(hint);
+        MaxSimpleCounters.reserve(hint);
+    }
+
     void AddSimpleCounter(const char* name, THolder<THistogramCounter> percentileAggregate = THolder<THistogramCounter>()) {
-        auto fnAddCounter = [this](const char* name, TVector<NMonitoring::TDynamicCounters::TCounterPtr>& container) {
+        auto fnAddCounter = [this](const char* name, TCountersVector& container) {
             auto counter = CounterGroup->GetCounter(name, false);
             container.push_back(counter);
         };
@@ -146,14 +152,15 @@ public:
     void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, TTabletTypes::EType tabletType) {
         Y_VERIFY(counterIndex < CountersByTabletID.size(),
             "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-        auto it = CountersByTabletID[counterIndex].find(tabletID);
+        TCountersByTabletIDMap::insert_ctx insertCtx;
+        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
         if (it != CountersByTabletID[counterIndex].end()) {
             if (it->second != value) {
                 ChangedCounters[counterIndex] = true;
                 it->second = value;
             }
         } else {
-            CountersByTabletID[counterIndex].insert(std::make_pair(tabletID, value));
+            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, value), insertCtx);
             ChangedCounters[counterIndex] = true;
         }
     }
@@ -161,8 +168,8 @@ public:
     void ForgetTablet(ui64 tabletId) {
         for (ui32 idx : xrange(CountersByTabletID.size())) {
             auto &counters = CountersByTabletID[idx];
-            counters.erase(tabletId);
-            ChangedCounters[idx] = true;
+            if (counters.erase(tabletId) != 0)
+                ChangedCounters[idx] = true;
         }
     }
 
@@ -219,8 +226,14 @@ public:
         : CounterGroup(counterGroup)
     {}
 
+    void Reserve(size_t hint) {
+        CountersByTabletID.reserve(hint);
+        ChangedCounters.reserve(hint);
+        MaxCumulativeCounters.reserve(hint);
+    }
+
     void AddCumulativeCounter(const char* name, THolder<THistogramCounter> percentileAggregate = THolder<THistogramCounter>()) {
-        auto fnAddCounter = [this](const char* name, TVector<NMonitoring::TDynamicCounters::TCounterPtr>& container) {
+        auto fnAddCounter = [this](const char* name, TCountersVector& container) {
             auto counter = CounterGroup->GetCounter(name, false);
             container.push_back(counter);
         };
@@ -248,14 +261,15 @@ public:
 
     void SetValue(ui64 tabletID, ui32 counterIndex, ui64 value, TTabletTypes::EType tabletType) {
         Y_VERIFY(counterIndex < CountersByTabletID.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-        auto it = CountersByTabletID[counterIndex].find(tabletID);
+        TCountersByTabletIDMap::insert_ctx insertCtx;
+        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
         if (it != CountersByTabletID[counterIndex].end()) {
             if (it->second != value) {
                 ChangedCounters[counterIndex] = true;
                 it->second = value;
             }
         } else {
-            CountersByTabletID[counterIndex].insert(std::make_pair(tabletID, value));
+            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, value), insertCtx);
             ChangedCounters[counterIndex] = true;
         }
     }
@@ -263,8 +277,8 @@ public:
     void ForgetTablet(ui64 tabletId) {
         for (ui32 idx : xrange(CountersByTabletID.size())) {
             auto &counters = CountersByTabletID[idx];
-            counters.erase(tabletId);
-            ChangedCounters[idx] = true;
+            if (counters.erase(tabletId) != 0)
+                ChangedCounters[idx] = true;
         }
     }
 
@@ -308,6 +322,235 @@ private:
 
         *MaxCumulativeCounters[idx].Get() = maxVal;
     }
+};
+
+class TAggregatedHistogramCounters {
+public:
+    //
+
+    TAggregatedHistogramCounters(NMonitoring::TDynamicCounterPtr counterGroup)
+        : CounterGroup(counterGroup)
+    {}
+
+    void Reserve(size_t hint) {
+        PercentileCounters.reserve(hint);
+        Histograms.reserve(hint);
+        IsDerivative.reserve(hint);
+        ShiftedBucketBounds.reserve(hint);
+        CountersByTabletID.reserve(hint);
+    }
+
+    void AddCounter(
+        const char* name,
+        const NKikimr::TTabletPercentileCounter& percentileCounter,
+        THashMap<TString, THolder<THistogramCounter>>& histogramAggregates)
+    {
+        // old style
+        PercentileCounters.push_back(TCountersVector());
+        auto& rangeCounters = PercentileCounters.back();
+
+        TStringBuf counterName(name);
+        TStringBuf simpleCounterName = GetHistogramAggregateSimpleName(counterName);
+        bool histogramAggregate = !simpleCounterName.empty();
+        bool isDerivative = !histogramAggregate && !percentileCounter.GetIntegral();
+        IsDerivative.push_back(isDerivative);
+
+        auto rangeCount = percentileCounter.GetRangeCount();
+        Y_VERIFY_DEBUG(rangeCount > 0);
+
+        for (ui32 r = 0; r < rangeCount; ++r) {
+            const char* rangeName = percentileCounter.GetRangeName(r);
+            auto subgroup = CounterGroup->GetSubgroup("range", rangeName);
+            auto counter = subgroup->GetCounter(name, isDerivative);
+            rangeCounters.push_back(counter);
+        }
+
+        // Note that:
+        // 1. PercentileCounters always start from 0 range
+        // 2. Ranges in PercentileCounters are left inclusive, i.e. for ranges 0, 1, 2 buckets will be
+        // [0; 1), [1; 2), [2; +inf);
+        // 3. In monitoring's histogram buckets are right inclusive and can be negative, i.e. for ranges 0, 1, 2
+        // buckets will be: (-inf; 0], (0; 1], (1; 2], (2; +inf).
+        // 4. Currently we shift PercentileCounters ranges so that original ranges 0, 1, 2 become 1, 2:
+        // (-inf; 1], (1; 2], (2; +inf). This is because values in proto are lower bounds
+
+        // new style
+        NMonitoring::TBucketBounds bucketBounds;
+        for (ui32 r = 1; r < rangeCount; ++r) {
+            bucketBounds.push_back(percentileCounter.GetRangeBound(r));
+        }
+
+        // since we shift we need hack for hists with single bucket (though they are meaningless anyway),
+        // hist will be (-inf; range0], (range0; +inf).
+        if (bucketBounds.empty()) {
+            bucketBounds.push_back(percentileCounter.GetRangeBound(0));
+        }
+
+        auto histogram = CounterGroup->GetHistogram(
+            name, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative);
+
+        if (histogramAggregate) {
+            // either simple or cumulative aggregate will handle this histogram,
+            // it is a special case for hists name HIST(name), which have corresponding
+            // simple or cumulative counter updated by tablet (tablet doesn't update hist itself,
+            // hist is updated here by aggregated values)
+            histogramAggregates.emplace(simpleCounterName, new THistogramCounter(
+                percentileCounter.GetRanges(), std::move(rangeCounters), histogram));
+
+            // we need this hack to access PercentileCounters by index easily skipping
+            // hists we moved to simple/cumulative aggregates
+            TCountersVector().swap(rangeCounters);
+            ShiftedBucketBounds.emplace_back();
+        } else {
+            // note that this bound in histogram is implicit
+            bucketBounds.push_back(Max<NMonitoring::TBucketBound>());
+            ShiftedBucketBounds.emplace_back(std::move(bucketBounds));
+        }
+
+        // note that in case of histogramAggregate it will contain reference
+        // on the histogram updated outside
+        Histograms.push_back(histogram);
+
+        CountersByTabletID.emplace_back(TCountersByTabletIDMap());
+    }
+
+    void SetValue(
+        ui64 tabletID,
+        ui32 counterIndex,
+        const NKikimr::TTabletPercentileCounter& percentileCounter,
+        const char* name,
+        TTabletTypes::EType tabletType)
+    {
+        Y_VERIFY(counterIndex < CountersByTabletID.size(),
+            "inconsistent counters for tablet type %s, counter %s",
+            TTabletTypes::TypeToStr(tabletType),
+            name);
+
+        Y_VERIFY(counterIndex < PercentileCounters.size(),
+            "inconsistent counters for tablet type %s, counter %s",
+            TTabletTypes::TypeToStr(tabletType),
+            name);
+
+        auto& percentileRanges = PercentileCounters[counterIndex];
+
+        // see comment in AddCounter() related to histogramAggregate
+        if (percentileRanges.empty())
+            return;
+
+        // just sanity check, normally should not happen
+        const auto rangeCount = percentileCounter.GetRangeCount();
+        if (rangeCount == 0)
+            return;
+
+        Y_VERIFY(rangeCount <= percentileRanges.size(),
+            "inconsistent counters for tablet type %s, counter %s",
+            TTabletTypes::TypeToStr(tabletType),
+            name);
+
+        if (IsDerivative[counterIndex]) {
+            AddValues(counterIndex, percentileCounter);
+            return;
+        }
+
+        // integral histogram
+
+        TValuesVec newValues;
+        newValues.reserve(rangeCount);
+        for (auto i: xrange(rangeCount))
+            newValues.push_back(percentileCounter.GetRangeValue(i));
+
+        TCountersByTabletIDMap::insert_ctx insertCtx;
+        auto it = CountersByTabletID[counterIndex].find(tabletID, insertCtx);
+        if (it != CountersByTabletID[counterIndex].end()) {
+            auto& oldValues = it->second;
+            if (newValues != oldValues) {
+                SubValues(counterIndex, oldValues);
+                AddValues(counterIndex, newValues);
+            }
+            oldValues.swap(newValues);
+        } else {
+            AddValues(counterIndex, newValues);
+            CountersByTabletID[counterIndex].insert_direct(std::make_pair(tabletID, std::move(newValues)), insertCtx);
+        }
+    }
+
+    void ForgetTablet(ui64 tabletId) {
+        for (auto idx : xrange(CountersByTabletID.size())) {
+            auto &tabletToCounters = CountersByTabletID[idx];
+            auto it = tabletToCounters.find(tabletId);
+            if (it == tabletToCounters.end())
+                continue;
+
+            auto values = std::move(it->second);
+            tabletToCounters.erase(it);
+
+            if (IsDerivative[idx])
+                continue;
+
+            SubValues(idx, values);
+        }
+    }
+
+    NMonitoring::THistogramPtr GetHistogram(size_t i) {
+        Y_VERIFY(i < Histograms.size());
+        return Histograms[i];
+    }
+
+private:
+    using TValuesVec = TVector<ui64>;
+
+    void SubValues(size_t counterIndex, const TValuesVec& values) {
+        auto& percentileRanges = PercentileCounters[counterIndex];
+        auto& histogram = Histograms[counterIndex];
+        auto snapshot = histogram->Snapshot();
+        histogram->Reset();
+        for (auto i: xrange(values.size())) {
+            Y_VERIFY_DEBUG(static_cast<ui64>(*percentileRanges[i]) >= values[i]);
+            *percentileRanges[i] -= values[i];
+
+            ui64 oldValue = snapshot->Value(i);
+            ui64 negValue = 0UL - values[i];
+            ui64 newValue = oldValue + negValue;
+            histogram->Collect(ShiftedBucketBounds[counterIndex][i], newValue);
+        }
+    }
+
+    void AddValues(size_t counterIndex, const TValuesVec& values) {
+        auto& percentileRanges = PercentileCounters[counterIndex];
+        auto& histogram = Histograms[counterIndex];
+        for (auto i: xrange(values.size())) {
+            *percentileRanges[i] += values[i];
+            histogram->Collect(ShiftedBucketBounds[counterIndex][i], values[i]);
+        }
+    }
+
+    void AddValues(size_t counterIndex, const NKikimr::TTabletPercentileCounter& percentileCounter) {
+        auto& percentileRanges = PercentileCounters[counterIndex];
+        auto& histogram = Histograms[counterIndex];
+        for (auto i: xrange(percentileCounter.GetRangeCount())) {
+            auto value = percentileCounter.GetRangeValue(i);
+            *percentileRanges[i] += value;
+            histogram->Collect(ShiftedBucketBounds[counterIndex][i], value);
+        }
+    }
+
+private:
+    NMonitoring::TDynamicCounterPtr CounterGroup;
+
+    // monitoring counters holders, updated only during recalculation
+    TVector<TCountersVector> PercentileCounters;    // old style (ranges)
+    TVector<NMonitoring::THistogramPtr> Histograms; // new style (bins)
+    TVector<bool> IsDerivative;
+
+    // per percentile counter bounds. Note the shift: index0 is range1,
+    // hence array size is 1 less than original ranges count
+    TVector<NMonitoring::TBucketBounds> ShiftedBucketBounds;
+
+    // tabletId -> values
+    using TCountersByTabletIDMap = THashMap<ui64, TValuesVec>;
+
+    // counter values (not "real" monitoring counters)
+    TVector<TCountersByTabletIDMap> CountersByTabletID; // each index is map from tablet to counter value
 };
 
 struct TTabletLabeledCountersResponseContext {
@@ -472,7 +715,7 @@ public:
     //
     TTabletMon(NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
-        , AllTypes(Counters.Get(), "type", "all", true)
+        , AllTypes(Counters.Get(), "type", "all")
         , IsFollower(isFollower)
         , DbWatcherActorId(dbWatcherActorId)
     {
@@ -703,12 +946,12 @@ private:
     class TTabletCountersForTabletType {
     public:
         //
-        TTabletCountersForTabletType(NMonitoring::TDynamicCounters* owner, const char* category, const char* name, bool doAggregateSimpleCountrers)
+        TTabletCountersForTabletType(NMonitoring::TDynamicCounters* owner, const char* category, const char* name)
             : TabletCountersSection(owner->GetSubgroup(category, name))
             , TabletExecutorCountersSection(TabletCountersSection->GetSubgroup("category", "executor"))
             , TabletAppCountersSection(TabletCountersSection->GetSubgroup("category", "app"))
-            , TabletExecutorCounters(TabletExecutorCountersSection, doAggregateSimpleCountrers)
-            , TabletAppCounters(TabletAppCountersSection, doAggregateSimpleCountrers)
+            , TabletExecutorCounters(TabletExecutorCountersSection)
+            , TabletAppCounters(TabletAppCountersSection)
         {}
 
         void Apply(ui64 tabletID,
@@ -801,12 +1044,11 @@ private:
             //
             bool IsInitialized;
 
-            TSolomonCounters(NMonitoring::TDynamicCounterPtr counterGroup, bool doAggregateCounters)
+            TSolomonCounters(NMonitoring::TDynamicCounterPtr counterGroup)
                 : IsInitialized(false)
-                , DoAggregateSimpleCounters(doAggregateCounters)
                 , AggregatedSimpleCounters(counterGroup)
-                , DoAggregateCumulativeCounters(doAggregateCounters)
                 , AggregatedCumulativeCounters(counterGroup)
+                , AggregatedHistogramCounters(counterGroup)
                 , CounterGroup(counterGroup)
             {}
 
@@ -818,83 +1060,52 @@ private:
 
                     // percentile counters
                     FullSizePercentile = counters->Percentile().Size();
+                    AggregatedHistogramCounters.Reserve(FullSizePercentile);
                     for (ui32 i = 0; i < FullSizePercentile; ++i) {
                         if (!counters->PercentileCounterName(i)) {
                             DeprecatedPercentile.insert(i);
                             continue;
                         }
 
-                        // old style
-                        PercentileCounters.push_back(TVector<NMonitoring::TDynamicCounters::TCounterPtr>());
-                        auto counterRBeginIter = PercentileCounters.rbegin();
-
                         auto& percentileCounter = counters->Percentile()[i];
                         const char* percentileCounterName = counters->PercentileCounterName(i);
-                        TStringBuf counterName(percentileCounterName);
-                        TStringBuf simpleCounterName = GetHistogramAggregateSimpleName(counterName);
-                        bool histogramAggregate = !simpleCounterName.empty();
-
-                        bool isDerivative = !histogramAggregate && !percentileCounter.GetIntegral();
-
-                        auto rangeCount = percentileCounter.GetRangeCount();
-                        for (ui32 r = 0; r < rangeCount; ++r) {
-                            const char* rangeName = percentileCounter.GetRangeName(r);
-                            auto subgroup = CounterGroup->GetSubgroup("range", rangeName);
-                            auto counter = subgroup->GetCounter(percentileCounterName, isDerivative);
-                            counterRBeginIter->push_back(counter);
-                        }
-
-                        // new style
-                        NMonitoring::TBucketBounds bucketBounds;
-                        for (ui32 r = 1; r < rangeCount; ++r) { // values in proto are lower bounds, thus shift
-                            bucketBounds.push_back(percentileCounter.GetRangeBound(r));
-                        }
-                        auto histogram = CounterGroup->GetHistogram(
-                            percentileCounterName, NMonitoring::ExplicitHistogram(bucketBounds), isDerivative);
-                        Histograms.push_back(histogram);
-
-                        if (histogramAggregate) {
-                            histogramAggregates.emplace(simpleCounterName, new THistogramCounter(
-                                percentileCounter.GetRanges(), std::move(*counterRBeginIter), histogram));
-                        }
+                        AggregatedHistogramCounters.AddCounter(
+                            percentileCounterName,
+                            percentileCounter,
+                            histogramAggregates);
                     }
 
                     // simple counters
                     FullSizeSimple = counters->Simple().Size();
+                    AggregatedSimpleCounters.Reserve(FullSizeSimple);
                     for (ui32 i = 0; i < FullSizeSimple; ++i) {
                         const char* name = counters->SimpleCounterName(i);
                         if (!name) {
                             DeprecatedSimple.insert(i);
                             continue;
                         }
-                        if (DoAggregateSimpleCounters) {
-                            auto itHistogramAggregate = histogramAggregates.find(name);
-                            if (itHistogramAggregate != histogramAggregates.end()) {
-                                AggregatedSimpleCounters.AddSimpleCounter(name, std::move(itHistogramAggregate->second));
-                            } else {
-                                AggregatedSimpleCounters.AddSimpleCounter(name);
-                            }
+                        auto itHistogramAggregate = histogramAggregates.find(name);
+                        if (itHistogramAggregate != histogramAggregates.end()) {
+                            AggregatedSimpleCounters.AddSimpleCounter(name, std::move(itHistogramAggregate->second));
                         } else {
-                            auto counter = CounterGroup->GetCounter(name, false);
-                            SimpleCounters.push_back(counter);
+                            AggregatedSimpleCounters.AddSimpleCounter(name);
                         }
                     }
 
                     // cumulative counters
                     FullSizeCumulative = counters->Cumulative().Size();
+                    AggregatedCumulativeCounters.Reserve(FullSizeSimple);
                     for (ui32 i = 0; i < FullSizeCumulative; ++i) {
                         const char* name = counters->CumulativeCounterName(i);
                         if (!name) {
                             DeprecatedCumulative.insert(i);
                             continue;
                         }
-                        if (DoAggregateCumulativeCounters) {
-                            auto itHistogramAggregate = histogramAggregates.find(name);
-                            if (itHistogramAggregate != histogramAggregates.end()) {
-                                AggregatedCumulativeCounters.AddCumulativeCounter(name, std::move(itHistogramAggregate->second));
-                            } else {
-                                AggregatedCumulativeCounters.AddCumulativeCounter(name);
-                            }
+                        auto itHistogramAggregate = histogramAggregates.find(name);
+                        if (itHistogramAggregate != histogramAggregates.end()) {
+                            AggregatedCumulativeCounters.AddCumulativeCounter(name, std::move(itHistogramAggregate->second));
+                        } else {
+                            AggregatedCumulativeCounters.AddCumulativeCounter(name);
                         }
                         auto counter = CounterGroup->GetCounter(name, true);
                         CumulativeCounters.push_back(counter);
@@ -926,12 +1137,7 @@ private:
                     }
                     const ui32 offset = nextSimpleOffset++;
                     const ui64 value = counters->Simple()[i].Get();
-                    if (DoAggregateSimpleCounters) {
-                        AggregatedSimpleCounters.SetValue(tabletID, offset, value, tabletType);
-                    } else {
-                        Y_VERIFY(offset < SimpleCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-                        *SimpleCounters[offset] = value;
-                    }
+                    AggregatedSimpleCounters.SetValue(tabletID, offset, value, tabletType);
                 }
 
                 // cumulative counters
@@ -942,11 +1148,9 @@ private:
                     }
                     const ui32 offset = nextCumulativeOffset++;
                     const ui64 valueDiff = counters->Cumulative()[i].Get();
-                    if (DoAggregateCumulativeCounters) {
-                        if (diff) {
-                            const ui64 diffValue = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
-                            AggregatedCumulativeCounters.SetValue(tabletID, offset, diffValue, tabletType);
-                        }
+                    if (diff) {
+                        const ui64 diffValue = valueDiff * 1000000 / diff.MicroSeconds(); // differentiate value to per second rate
+                        AggregatedCumulativeCounters.SetValue(tabletID, offset, diffValue, tabletType);
                     }
                     Y_VERIFY(offset < CumulativeCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
                     *CumulativeCounters[offset] += valueDiff;
@@ -960,78 +1164,33 @@ private:
                     }
 
                     const ui32 offset = nextPercentileOffset++;
-                    Y_VERIFY(offset < PercentileCounters.size(), "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-
-                    auto &pcx = PercentileCounters[offset];
-                    if (pcx.empty()) {
-                        continue;
-                    }
-
-                    auto&& percentileCounter = counters->Percentile()[i];
-                    auto rangeCount = percentileCounter.GetRangeCount();
-                    Y_VERIFY(rangeCount <= pcx.size(),
-                        "inconsistent counters for tablet type %s", TTabletTypes::TypeToStr(tabletType));
-
-                    for (ui32 r = 0; r < rangeCount; ++r) {
-                        if (percentileCounter.GetIntegral()) {
-                            *pcx[r] = percentileCounter.GetRangeValue(r);
-                        } else {
-                            *pcx[r] += percentileCounter.GetRangeValue(r);
-                        }
-                    }
-
-                    if (rangeCount < 2) {
-                        continue;
-                    }
-
-                    auto& histogram = Histograms[offset];
-                    if (percentileCounter.GetIntegral()) {
-                        histogram->Reset();
-                    }
-                    for (ui32 r = 0; r < rangeCount - 1; ++r) {
-                        histogram->Collect(
-                            (NMonitoring::TBucketBound)percentileCounter.GetRangeBound(r + 1),
-                            percentileCounter.GetRangeValue(r));
-                    }
-                    histogram->Collect(
-                        Max<NMonitoring::TBucketBound>(),
-                        percentileCounter.GetRangeValue(rangeCount - 1));
+                    AggregatedHistogramCounters.SetValue(
+                        tabletID,
+                        offset,
+                        counters->Percentile()[i],
+                        counters->PercentileCounterName(i),
+                        tabletType);
                 }
             }
 
             void Forget(ui64 tabletId) {
                 Y_VERIFY(IsInitialized);
 
-                if (DoAggregateSimpleCounters || DoAggregateCumulativeCounters) {
-                    if (DoAggregateSimpleCounters) {
-                        AggregatedSimpleCounters.ForgetTablet(tabletId);
-                    }
-                    if (DoAggregateCumulativeCounters) {
-                        AggregatedCumulativeCounters.ForgetTablet(tabletId);
-                        LastAggregateUpdateTime.erase(tabletId);
-                    }
-                } else {
-                    for (auto &x : SimpleCounters)
-                        x = 0;
-                }
+                AggregatedSimpleCounters.ForgetTablet(tabletId);
+                AggregatedCumulativeCounters.ForgetTablet(tabletId);
+                AggregatedHistogramCounters.ForgetTablet(tabletId);
+                LastAggregateUpdateTime.erase(tabletId);
             }
 
             void RecalcAll() {
-                if (DoAggregateSimpleCounters) {
-                    AggregatedSimpleCounters.RecalcAll();
-                }
-                if (DoAggregateCumulativeCounters) {
-                    AggregatedCumulativeCounters.RecalcAll();
-                }
+                AggregatedSimpleCounters.RecalcAll();
+                AggregatedCumulativeCounters.RecalcAll();
             }
 
             template <bool IsSaving>
             void Convert(NKikimrSysView::TDbCounters& sumCounters,
                 NKikimrSysView::TDbCounters& maxCounters)
             {
-                if (!DoAggregateSimpleCounters || !DoAggregateCumulativeCounters) {
-                    return;
-                }
                 // simple counters
                 auto* simpleSum = sumCounters.MutableSimple();
                 auto* simpleMax = maxCounters.MutableSimple();
@@ -1095,7 +1254,7 @@ private:
                     }
                     auto* buckets = (*histogramSum)[i].MutableBuckets();
                     const ui32 offset = nextPercentileOffset++;
-                    auto& histogram = Histograms[offset];
+                    auto histogram = AggregatedHistogramCounters.GetHistogram(offset);
                     auto snapshot = histogram->Snapshot();
                     auto count = snapshot->Count();
                     buckets->Resize(count, 0);
@@ -1132,17 +1291,14 @@ private:
             ui32 FullSizePercentile = 0;
             THashSet<ui32> DeprecatedPercentile;
             //
-            bool DoAggregateSimpleCounters;
-            TCountersVector SimpleCounters;
             TAggregatedSimpleCounters AggregatedSimpleCounters;
 
-            bool DoAggregateCumulativeCounters;
             TCountersVector CumulativeCounters;
             TAggregatedCumulativeCounters AggregatedCumulativeCounters;
-            THashMap<ui64, TInstant> LastAggregateUpdateTime;
 
-            TVector<TCountersVector> PercentileCounters; // old style
-            TVector<NMonitoring::THistogramPtr> Histograms; // new style
+            TAggregatedHistogramCounters AggregatedHistogramCounters;
+
+            THashMap<ui64, TInstant> LastAggregateUpdateTime;
 
             NMonitoring::TDynamicCounterPtr CounterGroup;
         };
@@ -1179,7 +1335,7 @@ private:
         if (!typeCounters) {
             TString tabletTypeStr = TTabletTypes::TypeToStr(tabletType);
             typeCounters = new TTabletCountersForTabletType(
-                counters.Get(), "type", tabletTypeStr.data(), true);
+                counters.Get(), "type", tabletTypeStr.data());
             countersByTabletType.emplace(tabletType, typeCounters);
         }
         return typeCounters;
@@ -1410,7 +1566,7 @@ public:
     public:
         TTabletCountersForDb()
             : SolomonCounters(new NMonitoring::TDynamicCounters)
-            , AllTypes(SolomonCounters.Get(), "type", "all", true)
+            , AllTypes(SolomonCounters.Get(), "type", "all")
         {}
 
         TTabletCountersForDb(NMonitoring::TDynamicCounterPtr externalGroup,
@@ -1418,7 +1574,7 @@ public:
             THolder<TTabletCountersBase> executorCounters)
             : SolomonCounters(internalGroup->GetSubgroup("group", "tablets"))
             , ExecutorCounters(std::move(executorCounters))
-            , AllTypes(SolomonCounters.Get(), "type", "all", true)
+            , AllTypes(SolomonCounters.Get(), "type", "all")
         {
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(externalGroup);
         }

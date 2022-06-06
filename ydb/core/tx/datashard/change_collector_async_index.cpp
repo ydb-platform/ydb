@@ -142,7 +142,7 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
         }
 
         if (generateUpdates) {
-            bool needUpdate = false;
+            bool needUpdate = !generateDeletions || rop == ERowOp::Reset;
 
             for (const auto tag : index.KeyColumnIds) {
                 if (updatedTagToPos.contains(tag)) {
@@ -153,7 +153,6 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     const auto& column = userTable->Columns.at(tag);
 
                     if (rop == ERowOp::Reset && !column.IsKey) {
-                        needUpdate = true;
                         FillKeyWithNull(tag, column.Type);
                     } else {
                         Y_VERIFY(tagToPos.contains(tag));
@@ -171,7 +170,6 @@ bool TAsyncIndexChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
                     needUpdate = true;
                     FillDataFromUpdate(tag, updatedTagToPos.at(tag), updates);
                 } else if (rop == ERowOp::Reset) {
-                    needUpdate = true;
                     Y_VERIFY(userTable->Columns.contains(tag));
                     FillDataWithNull(tag, userTable->Columns.at(tag).Type);
                 }

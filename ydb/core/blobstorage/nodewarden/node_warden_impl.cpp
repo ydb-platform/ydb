@@ -56,7 +56,13 @@ void TNodeWarden::Bootstrap() {
     WhiteboardId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(LocalNodeId);
 
     Become(&TThis::StateOnline, TDuration::Seconds(10), new TEvPrivate::TEvSendDiskMetrics());
-    Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
+
+    const auto& dyn = AppData()->DynamicNameserviceConfig;
+    ui32 maxStaticNodeId = dyn ? dyn->MaxStaticNodeId : Max<ui32>();
+    bool checkNodeDrives = (LocalNodeId <= maxStaticNodeId);
+    if (checkNodeDrives) {
+        Schedule(TDuration::Seconds(10), new TEvPrivate::TEvUpdateNodeDrives());
+    }
 
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(BLOBSTORAGE_PROVIDER));
 

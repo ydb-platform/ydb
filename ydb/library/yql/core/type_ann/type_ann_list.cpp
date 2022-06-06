@@ -1964,51 +1964,143 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!(EnsureDataType(input->Head(), ctx.Expr) && EnsureDataType(*input->Child(1U), ctx.Expr))) {
-            return IGraphTransformer::TStatus::Error;
+        TVector<ui32> nonNullNodes;
+        for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+            if (input->Child(i)->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Null) {
+                nonNullNodes.push_back(i);
+            }
+        }
+        switch (nonNullNodes.size()) {
+        case 0U:
+            output = ctx.Expr.Builder(input->Pos()).Callable("Null").Seal().Build();
+            return IGraphTransformer::TStatus::Repeat;
+        case 1U: {
+            bool _itemIsOpt = false;
+            const TDataExprType* itemType = nullptr;
+            if (!EnsureDataOrOptionalOfData(*input->Child(nonNullNodes[0]),
+                                            _itemIsOpt, itemType, ctx.Expr))
+            {
+                return IGraphTransformer::TStatus::Error;
+            }
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("Nothing")
+                    .Callable(0U, "OptionalType")
+                        .Callable(0U, "ListType")
+                            .Add(0U, ExpandType(input->Pos(), *itemType, ctx.Expr))
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        case 2U: {
+            if (input->ChildrenSize() == 2U) {
+                break;
+            }
+            bool _itemIsOpt = false;
+            const TDataExprType* _itemType = nullptr;
+            const auto idx1 = nonNullNodes[0], idx2 = nonNullNodes[1];
+            if (!EnsureDataOrOptionalOfData(*input->Child(idx1), _itemIsOpt, _itemType, ctx.Expr))
+            {
+                return IGraphTransformer::TStatus::Error;
+            }
+            if (!EnsureDataOrOptionalOfData(*input->Child(idx2), _itemIsOpt, _itemType, ctx.Expr))
+            {
+                return IGraphTransformer::TStatus::Error;
+            }
+            const TTypeAnnotationNode* commonType = nullptr;
+            const auto status = SilentInferCommonType(input->ChildRef(idx1), input->ChildRef(idx2),
+                                                      ctx.Expr, commonType);
+            if (ETypeAnnotationKind::Optional == commonType->GetKind()) {
+                commonType = commonType->Cast<TOptionalExprType>()->GetItemType();
+            }
+            if (IGraphTransformer::TStatus::Ok != status) {
+                if (IGraphTransformer::TStatus::Error == status) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                             TStringBuilder() << "Uncompatible types: " <<
+                                             *input->Child(idx1)->GetTypeAnn() << " and "<<
+                                             *input->Child(idx2)->GetTypeAnn()));
+                }
+                return status;
+            }
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("Nothing")
+                    .Callable(0U, "OptionalType")
+                        .Callable(0U, "ListType")
+                            .Add(0U, ExpandType(input->Pos(), *commonType, ctx.Expr))
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+        default:
+            break;
         }
 
         const auto stepType = input->ChildrenSize() == 2U ? nullptr : input->Tail().GetTypeAnn();
-        if (stepType && !EnsureDataType(input->Tail().Pos(), *stepType, ctx.Expr)) {
+        bool beginIsOpt = false, endIsOpt = false, stepIsOpt = false;
+        const TDataExprType* _itemType = nullptr;
+        const TDataExprType* stepItemType = nullptr;
+
+        if (!EnsureDataOrOptionalOfData(*input->Child(0U), beginIsOpt, _itemType, ctx.Expr)
+            || !EnsureDataOrOptionalOfData(*input->Child(1U), endIsOpt, _itemType, ctx.Expr))
+        {
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (stepType && !EnsureDataOrOptionalOfData(*input->Child(2U), stepIsOpt,
+                                                    stepItemType, ctx.Expr))
+        {
             return IGraphTransformer::TStatus::Error;
         }
 
         const TTypeAnnotationNode* commonType = nullptr;
-        if (stepType && IsDataTypeFloat(stepType->Cast<TDataExprType>()->GetSlot())) {
-            commonType  = stepType;
-            if (const auto status = TrySilentConvertTo(input->ChildRef(0U), *stepType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
+        if (stepType && IsDataTypeFloat(stepItemType->GetSlot())) {
+            commonType = ((beginIsOpt || endIsOpt) && !stepIsOpt)
+                ? ctx.Expr.MakeType<TOptionalExprType>(stepType) : stepType;
+            if (const auto status = TrySilentConvertTo(input->ChildRef(0U), *commonType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
                 if (IGraphTransformer::TStatus::Error == status) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(0U)->Pos()), TStringBuilder() << "Impossible silent convert bound of type " <<
-                        *input->Child(0U)->GetTypeAnn() << " into " << *stepType));
+                        *input->Child(0U)->GetTypeAnn() << " into " << *commonType));
                 }
                 return status;
             }
-            if (const auto status = TrySilentConvertTo(input->ChildRef(1U), *stepType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
+            if (const auto status = TrySilentConvertTo(input->ChildRef(1U), *commonType, ctx.Expr); IGraphTransformer::TStatus::Ok != status) {
                 if (IGraphTransformer::TStatus::Error == status) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Child(1U)->Pos()), TStringBuilder() << "Impossible silent convert bound of type " <<
-                        *input->Child(1U)->GetTypeAnn() << " into " << *stepType));
+                        *input->Child(1U)->GetTypeAnn() << " into " << *commonType));
                 }
                 return status;
             }
-        } else if (const auto status = SilentInferCommonType(input->ChildRef(0U), input->ChildRef(1U), ctx.Expr, commonType); IGraphTransformer::TStatus::Ok != status) {
-            if (IGraphTransformer::TStatus::Error == status) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Uncompatible types of bounds " <<
-                    *input->Child(0U)->GetTypeAnn() << " and " << *input->Child(1U)->GetTypeAnn()));
+        } else {
+            const auto status = SilentInferCommonType(input->ChildRef(0U), input->ChildRef(1U),
+                                                      ctx.Expr, commonType);
+            if (IGraphTransformer::TStatus::Ok != status) {
+                if (IGraphTransformer::TStatus::Error == status) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                             TStringBuilder() << "Uncompatible types of bounds " <<
+                                             *input->Child(0U)->GetTypeAnn() << " and " <<
+                                             *input->Child(1U)->GetTypeAnn()));
+                }
+                return status;
             }
-            return status;
+            if (stepIsOpt && ETypeAnnotationKind::Optional != commonType->GetKind()) {
+                commonType = ctx.Expr.MakeType<TOptionalExprType>(commonType);
+            }
         }
 
-        const auto slot = commonType->Cast<TDataExprType>()->GetSlot();
+        const bool commonIsOpt = ETypeAnnotationKind::Optional == commonType->GetKind();
+        const auto commonItemType = commonIsOpt
+            ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType;
+        const auto slot = commonItemType->Cast<TDataExprType>()->GetSlot();
         if (!(IsDataTypeDateOrTzDateOrInterval(slot) || IsDataTypeNumeric(slot))) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "Expected type of bounds is numeric or datetime, but got " << *commonType));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot) ? EDataSlot::Interval : MakeSigned(slot); stepType) {
-            if (const auto requredStepType = slot == stepSlot ? commonType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepType, *requredStepType)) {
+        if (const auto stepSlot = IsDataTypeDateOrTzDateOrInterval(slot) ? EDataSlot::Interval : MakeSigned(slot); stepItemType) {
+            if (const auto requredStepType = slot == stepSlot ? commonItemType : ctx.Expr.MakeType<TDataExprType>(stepSlot); !IsSameAnnotation(*stepItemType, *requredStepType)) {
                 if (const auto status = TrySilentConvertTo(input->ChildRef(2U), *requredStepType, ctx.Expr); IGraphTransformer::TStatus::Repeat == status)
                     return status;
-                else if (IGraphTransformer::TStatus::Error == status && !EnsureSpecificDataType(input->Tail().Pos(), *stepType, stepSlot, ctx.Expr))
+                else if (IGraphTransformer::TStatus::Error == status && !EnsureSpecificDataType(input->Tail().Pos(), *stepItemType, stepSlot, ctx.Expr))
                     return status;
             }
         } else {
@@ -2030,6 +2122,71 @@ namespace {
             auto newChildren = input->ChildrenList();
             newChildren.emplace_back(ctx.Expr.NewCallable(input->Pos(), NKikimr::NUdf::GetDataTypeInfo(stepSlot).Name, {std::move(value)}));
             output = ctx.Expr.ChangeChildren(*input, std::move(newChildren));
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (commonIsOpt) {
+            const auto defVal = ctx.Expr.Builder(input->Pos())
+                .Callable("Nothing")
+                    .Callable(0U, "OptionalType")
+                        .Callable(0U, "ListType")
+                            .Add(0U, ExpandType(input->Pos(), *commonItemType, ctx.Expr))
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+            const auto lambda = ctx.Expr.Builder(input->Pos())
+                .Lambda()
+                    .Do([&] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        if (beginIsOpt) {
+                            parent.Param("begin");
+                        }
+                        if (endIsOpt) {
+                            parent.Param("end");
+                        }
+                        if (stepIsOpt) {
+                            parent.Param("step");
+                        }
+                        return parent;
+                    })
+                    .Callable("Just")
+                        .Callable(0U, input->Content())
+                            .Do([&] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                                if (beginIsOpt) {
+                                    parent.Arg(0U, "begin");
+                                } else {
+                                    parent.Add(0U, input->ChildPtr(0U));
+                                }
+                                if (endIsOpt) {
+                                    parent.Arg(1U, "end");
+                                } else {
+                                    parent.Add(1U, input->ChildPtr(1U));
+                                }
+                                if (stepIsOpt) {
+                                    return parent.Arg(2U, "step");
+                                } else {
+                                    return parent.Add(2U, input->ChildPtr(2U));
+                                }
+                            })
+                        .Seal()
+                    .Seal()
+                .Seal().Build();
+            output = ctx.Expr.Builder(input->Pos())
+                .Callable("IfPresent")
+                    .Do([&] (TExprNodeBuilder& parent) -> TExprNodeBuilder& {
+                        ui32 cnt = 0;
+                        if (beginIsOpt) {
+                            parent.Add(cnt++, input->ChildPtr(0U));
+                        }
+                        if (endIsOpt) {
+                            parent.Add(cnt++, input->ChildPtr(1U));
+                        }
+                        if (stepIsOpt) {
+                            parent.Add(cnt++, input->ChildPtr(2U));
+                        }
+                        parent.Add(cnt++, lambda);
+                        return parent.Add(cnt++, defVal);
+                    })
+                .Seal().Build();
             return IGraphTransformer::TStatus::Repeat;
         }
 

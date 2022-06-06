@@ -1554,6 +1554,7 @@ private:
     void OnActivateExecutor(const TActorContext&) override;
 
     bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
+    void ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender);
 
     void RenderResourceValues(IOutputStream& out, const TResourceRawValues& current);
     void RenderHeader(IOutputStream& out);

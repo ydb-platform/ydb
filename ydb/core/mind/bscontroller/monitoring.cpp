@@ -730,11 +730,122 @@ public:
     )
 };
 
+void TBlobStorageController::ProcessPostQuery(const NActorsProto::TRemoteHttpInfo& query, TActorId sender) {
+    THttpHeaders headers;
+    for (const auto& header : query.GetHeaders()) {
+        headers.AddHeader(header.GetName(), header.GetValue());
+    }
+
+    TCgiParameters params;
+    for (const auto& param : query.GetQueryParams()) {
+        params.emplace(param.GetKey(), param.GetValue());
+    }
+    for (const auto& param : query.GetPostParams()) {
+        params.emplace(param.GetKey(), param.GetValue());
+    }
+
+    auto sendResponse = [&](TString message, TString contentType, TString content) {
+        Send(sender, new NMon::TEvRemoteBinaryInfoRes(TStringBuilder() << "HTTP/1.1 " << message << "\r\n"
+            "Content-Type: " << contentType << "\r\n"
+            "\r\n" << content));
+    };
+
+    if (params.count("exec")) {
+        auto request = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
+        auto *record = request->Record.MutableRequest();
+
+        TString contentType;
+        if (const auto *header = headers.FindHeader("Content-Type")) {
+            TStringBuf value = header->Value();
+            contentType = value.NextTok(';');
+        }
+        bool success = false;
+        if (contentType == "application/x-protobuf-text") {
+            NProtoBuf::TextFormat::Parser parser;
+            success = parser.ParseFromString(query.GetPostContent(), record);
+        } else if (contentType == "application/x-protobuf") {
+            success = record->ParseFromString(query.GetPostContent());
+        } else if (contentType == "application/json") {
+            const auto status = google::protobuf::util::JsonStringToMessage(query.GetPostContent(), record);
+            success = status.ok();
+        } else {
+            return sendResponse("400 Bad request", "text/plain", "unsupported Content-Type header value");
+        }
+        if (!success) {
+            return sendResponse("400 Bad request", "text/plain", "failed to parse request");
+        }
+
+        TString accept = "application/x-protobuf-text";
+        if (const auto *header = headers.FindHeader("Accept")) {
+            accept = header->Value();
+            if (accept == "*/*") {
+                accept = "application/x-protobuf-text";
+            }
+            if (accept != "application/x-protobuf-text" && accept != "application/x-protobuf" && accept != "application/json") {
+                return sendResponse("400 Bad request", "text/plain", "unsupported Accept header value");
+            }
+        }
+
+        if (request) {
+            class TQueryExecActor : public TActor<TQueryExecActor> {
+                const TActorId Sender;
+                const TString Accept;
+
+            public:
+                TQueryExecActor(const TActorId& sender, const TString& accept)
+                    : TActor(&TThis::StateFunc)
+                    , Sender(sender)
+                    , Accept(accept)
+                {}
+
+                STRICT_STFUNC(StateFunc,
+                    hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle)
+                )
+
+                void Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
+                    const auto& response = ev->Get()->Record.GetResponse();
+
+                    TStringStream s;
+                    s << "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: " << Accept << "\r\n"
+                        "\r\n";
+
+                    TString data;
+
+                    if (Accept == "application/x-protobuf-text") {
+                        NProtoBuf::TextFormat::Printer p;
+                        p.SetSingleLineMode(true);
+                        p.PrintToString(response, &data);
+                    } else if (Accept == "application/x-protobuf") {
+                        const bool success = response.SerializeToString(&data);
+                        Y_VERIFY(success);
+                    } else if (Accept == "application/json") {
+                        google::protobuf::util::MessageToJsonString(response, &data);
+                    } else {
+                        Y_FAIL();
+                    }
+                    s << data;
+
+                    Send(Sender, new NMon::TEvRemoteBinaryInfoRes(s.Str()));
+                    PassAway();
+                }
+            };
+
+            const TActorId& processorId = Register(new TQueryExecActor(sender, accept));
+            TActivationContext::Send(new IEventHandle(SelfId(), processorId, request.release()));
+        }
+    }
+}
+
 bool TBlobStorageController::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) {
     if (!Executor() || !Executor()->GetStats().IsActive) {
         return false;
     }
     if (!ev) {
+        return true;
+    }
+    if (const auto& ext = ev->Get()->ExtendedQuery; ext && ext->GetMethod() == HTTP_METHOD_POST) {
+        ProcessPostQuery(*ext, ev->Sender);
         return true;
     }
 

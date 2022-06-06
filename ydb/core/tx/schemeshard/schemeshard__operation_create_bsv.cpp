@@ -89,7 +89,7 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
                     ui64 shardsToCreate,
                     TOperationContext& context)
 {
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     volumePath->CreateTxId = operationId.GetTxId();
     volumePath->LastTxId = operationId.GetTxId();
@@ -382,7 +382,7 @@ public:
 
         const TTxState& txState = PrepareChanges(OperationId, parentPath.Base(), dstPath.Base(), volume, acl, partitionChannelsBinding, volumeChannelsBinding, shardsToCreate, context);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         ++parentPath.Base()->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
         context.SS->ClearDescribePathCaches(parentPath.Base());

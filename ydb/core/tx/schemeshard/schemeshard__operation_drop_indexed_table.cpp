@@ -83,7 +83,7 @@ public:
         Y_VERIFY(txState->TxType == TTxState::TxDropTableIndex);
         Y_VERIFY(txState->State == TTxState::Propose);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
@@ -149,7 +149,7 @@ public:
 
         Y_VERIFY(ActivePathId == ev->Get()->PathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
         return true;
     }
@@ -174,7 +174,7 @@ public:
                         DebugHint() << " ProgressState"
                                     << ", no renaming has been detected for this operation");
 
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
             return true;
         }
@@ -216,7 +216,7 @@ public:
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -378,6 +378,7 @@ public:
 
         Y_VERIFY(context.SS->Indexes.contains(index.Base()->PathId));
 
+        auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, index.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 

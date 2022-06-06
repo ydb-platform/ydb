@@ -153,7 +153,7 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         pathEl->LastTxId = OperationId.GetTxId();
         pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;

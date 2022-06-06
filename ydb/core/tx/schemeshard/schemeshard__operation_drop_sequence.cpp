@@ -75,7 +75,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, txState->TargetPathId);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -164,7 +164,7 @@ public:
                    "no parent with id: " <<  path->ParentPathId << " for node with id: " << path->PathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
@@ -368,7 +368,7 @@ public:
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         for (const auto& shardIdxProto : sequenceInfo->Sharding.GetSequenceShards()) {
             TShardIdx shardIdx = FromProto(shardIdxProto);

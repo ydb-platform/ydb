@@ -78,7 +78,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
         Y_VERIFY(pathes.size() == 1);
@@ -233,7 +233,7 @@ public:
         txState.MinStep = TStepId(1);
         txState.State = TTxState::Propose;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(context.SS->SubDomains.contains(path.Base()->PathId));
         auto subDomain = context.SS->SubDomains.at(path.Base()->PathId);

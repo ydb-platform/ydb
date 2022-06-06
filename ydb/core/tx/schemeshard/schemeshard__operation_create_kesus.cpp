@@ -25,7 +25,7 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
                     const TChannelsBindings& tabletChannels,
                     TOperationContext& context)
 {
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     item->CreateTxId = operationId.GetTxId();
     item->LastTxId = operationId.GetTxId();
@@ -116,7 +116,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -208,7 +208,7 @@ public:
         TKesusInfo::TPtr kesus = context.SS->KesusInfos.at(pathId);
         Y_VERIFY_S(kesus, "kesus is null. PathId: " << pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -422,7 +422,7 @@ public:
 
         const TTxState& txState = PrepareChanges(OperationId, parentPath.Base(), dstPath.Base(), kesus, acl, kesusChannelsBindings, context);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         ++parentPath.Base()->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
         context.SS->ClearDescribePathCaches(parentPath.Base());

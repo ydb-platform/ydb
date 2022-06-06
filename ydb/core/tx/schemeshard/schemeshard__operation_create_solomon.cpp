@@ -129,7 +129,7 @@ public:
             solomonPartition->TabletId = tabletId;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         return true;
     }
@@ -169,19 +169,12 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        auto parentDir = context.SS->PathsById.at(path->ParentPathId);
-        ++parentDir->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentDir);
-        context.SS->ClearDescribePathCaches(parentDir);
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentDir->PathId);
-
-        context.SS->ClearDescribePathCaches(path);
-        context.OnComplete.PublishToSchemeBoard(OperationId, pathId);
+        IncParentDirAlterVersionWithRepublish(OperationId, TPath::Init(pathId, context.SS), context);
 
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
@@ -403,7 +396,7 @@ public:
             adoptedShards[TTabletId(portion.GetTabletId())] = TAdoptedShard{portion.GetOwnerId(), TLocalShardIdx(portion.GetShardIdx())};
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         for (const auto& part: solomonVolume->Partitions) {
             TShardIdx shardIdx = part.first;
@@ -442,15 +435,7 @@ public:
         context.SS->PersistUpdateNextPathId(db);
         context.SS->PersistUpdateNextShardIdx(db);
 
-        ++parentPath.Base()->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
-        context.SS->ClearDescribePathCaches(parentPath.Base());
-        context.OnComplete.PublishToSchemeBoard(OperationId, parentPath.Base()->PathId);
-
-        context.SS->ClearDescribePathCaches(newSolomon);
-        context.OnComplete.PublishToSchemeBoard(OperationId, newSolomon->PathId);
-
-
+        IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
 
         Y_VERIFY(shardsToCreate == txState.Shards.size());
         dstPath.DomainInfo()->IncPathsInside();

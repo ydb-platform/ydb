@@ -77,7 +77,7 @@ struct TBackup {
         backupInfo.ShardStatuses = std::move(txState.ShardStatuses);
         backupInfo.DataTotalSize = txState.DataTotalSize;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistCompletedBackup(db, opId.GetTxId(), txState, backupInfo);
     }
 
@@ -87,12 +87,12 @@ struct TBackup {
 
         table->BackupSettings = tx.GetBackup();
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistBackupSettings(db, pathId, table->BackupSettings);
     }
 
     static void PersistDone(const TPathId& pathId, TOperationContext& context) {
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistBackupDone(db, pathId);
     }
 

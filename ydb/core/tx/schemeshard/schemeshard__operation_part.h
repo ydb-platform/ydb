@@ -77,14 +77,70 @@ namespace NSchemeShard {
 class TSchemeShard;
 
 struct TOperationContext {
+public:
     TSchemeShard* SS;
-    NTabletFlatExecutor::TTransactionContext& Txc;
     const TActorContext& Ctx;
     TSideEffects& OnComplete;
     TMemoryChanges& MemChanges;
     TStorageChanges& DbChanges;
+
     TAutoPtr<NACLib::TUserToken> UserToken = nullptr;
     bool IsAllowedPrivateTables = false;
+
+private:
+    NTabletFlatExecutor::TTransactionContext& Txc;
+    bool ProtectDB = false;
+    bool DirectAccessGranted = false;
+
+public:
+    TOperationContext(
+            TSchemeShard* ss,
+            NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx,
+            TSideEffects& onComplete, TMemoryChanges& memChanges, TStorageChanges& dbChange)
+        : SS(ss)
+        , Ctx(ctx)
+        , OnComplete(onComplete)
+        , MemChanges(memChanges)
+        , DbChanges(dbChange)
+        , Txc(txc)
+    {}
+
+    NTable::TDatabase& GetDB() {
+        Y_VERIFY_S(ProtectDB == false,
+                 "there is attempt to write to the DB when it is protected,"
+                 " in that case all writes slould be done over TStorageChanges"
+                 " in order to maintain revert the changes");
+        DirectAccessGranted = true;
+        return GetTxc().DB;
+    }
+
+    NTabletFlatExecutor::TTransactionContext& GetTxc() const {
+        return Txc;
+    }
+
+    bool IsUndoChangesSafe() const {
+        return !DirectAccessGranted;
+    }
+
+    class TDbGuard {
+        bool PrevVal;
+        bool& Protect;
+    public:
+        TDbGuard(TOperationContext& ctx)
+            : PrevVal(ctx.ProtectDB)
+            , Protect(ctx.ProtectDB)
+        {
+            Protect = true;
+        }
+
+        ~TDbGuard() {
+            Protect = PrevVal;
+        }
+    };
+
+    TDbGuard DbGuard() {
+        return TDbGuard(*this);
+     }
 };
 
 using TProposeRequest = NKikimr::NSchemeShard::TEvSchemeShard::TEvModifySchemeTransaction;

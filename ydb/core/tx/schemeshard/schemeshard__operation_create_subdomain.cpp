@@ -284,7 +284,7 @@ public:
         newNode->UserAttrs->AlterData = userAttrs;
         newNode->DirAlterVersion = 1;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->PersistPath(db, newNode->PathId);
         context.SS->ApplyAndPersistUserAttrs(db, newNode->PathId);

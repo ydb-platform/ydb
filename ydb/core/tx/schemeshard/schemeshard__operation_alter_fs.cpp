@@ -69,7 +69,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -162,7 +162,7 @@ public:
         path->PathState = TPathElement::EPathState::EPathStateNoChanges;
         path->StepCreated = step;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistCreateStep(db, pathId, step);
 
         fs->FinishAlter();
@@ -448,7 +448,7 @@ TTxState& TAlterFileStore::PrepareChanges(
     const TChannelsBindings& channelBindings,
     TOperationContext& context)
 {
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     item->LastTxId = operationId.GetTxId();
     item->PathState = TPathElement::EPathState::EPathStateAlter;

@@ -56,7 +56,7 @@ public:
         Y_VERIFY(context.SS->CdcStreams.contains(pathId));
         auto stream = context.SS->CdcStreams.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -228,6 +228,7 @@ public:
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_VERIFY(stream);
 
+        auto guard = context.DbGuard();
         const auto pathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);

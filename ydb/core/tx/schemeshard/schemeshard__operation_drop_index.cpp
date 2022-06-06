@@ -176,7 +176,7 @@ public:
         Y_VERIFY(context.SS->Tables.contains(pathId));
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         table->AlterVersion += 1;
         context.SS->PersistTableAlterVersion(db, pathId, table);
@@ -378,6 +378,7 @@ public:
 
         Y_VERIFY(!context.SS->FindTx(OperationId));
 
+        auto guard = context.DbGuard();
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
 

@@ -177,18 +177,27 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 //context.OnComplete.ActivateTx(pathOpId) ///TODO maybe it is good idea
             } else {
 
-
-
                 if (!operation->Parts.empty()) {
                     LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                                 "Abort operation: IgniteOperation fail to propose a part"
                                     << ", opId: " << pathOpId
                                     << ", at schemeshard:  " << selfId
-                                    << ", already assepted parts: " << operation->Parts.size()
+                                    << ", already accepted parts: " << operation->Parts.size()
                                     << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
                                     << ", with reason: " << response->Record.GetReason()
                                     << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
                 }
+
+                Y_VERIFY_S(context.IsUndoChangesSafe(),
+                           "Operation is aborted and all changes should be reverted"
+                               << ", but context.IsUndoChangesSafe is false, which means some direct writes have been done"
+                               << ", opId: " << pathOpId
+                               << ", at schemeshard:  " << selfId
+                               << ", already accepted parts: " << operation->Parts.size()
+                               << ", propose result status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus())
+                               << ", with reason: " << response->Record.GetReason()
+                               << ", tx message: " << GetRecordForPrint(record).ShortDebugString());
+
 
                 context.OnComplete = {}; // recreate
                 context.DbChanges = {};
@@ -198,7 +207,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
                 }
 
                 context.MemChanges.UnDo(context.SS);
-                context.OnComplete.ApplyOnExecute(context.SS, context.Txc, context.Ctx);
+                context.OnComplete.ApplyOnExecute(context.SS, context.GetTxc(), context.Ctx);
                 Operations.erase(operation->GetTxId());
                 return std::move(response);
             }
@@ -489,7 +498,7 @@ TString JoinPath(const TString& workingDir, const TString& name) {
                << name;
 }
 
-TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context) {
+TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& tx, TOperationContext& context) {
     TConsumeQuotaResult result;
 
     // Internal operations never consume quota
@@ -533,7 +542,7 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
     }
 
     // Even if operation fails later we want to persist updated/consumed quotas
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetTxc().DB); // write quotas directly in db even if operation fails
     context.SS->PersistSubDomainSchemeQuotas(db, domainId, *domainInfo);
     return result;
 }

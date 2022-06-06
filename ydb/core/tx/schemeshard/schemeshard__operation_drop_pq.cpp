@@ -59,7 +59,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeleteParts);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -108,7 +108,7 @@ public:
         txState->UpdateShardsInProgress(TTxState::DropParts);
 
         if (!haveWork) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeleteParts);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -150,7 +150,7 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
         context.OnComplete.ActivateTx(OperationId);
         return true;
@@ -192,7 +192,7 @@ public:
         auto path = context.SS->PathsById.at(pathId);
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         Y_VERIFY(!path->Dropped());
         path->SetDropped(step, OperationId.GetTxId());
@@ -472,7 +472,7 @@ public:
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         SetPQShards(pqGroup, txState, context);
         SetPQBalancer(pqGroup, txState, context);
 

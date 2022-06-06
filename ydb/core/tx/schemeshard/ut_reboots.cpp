@@ -43,6 +43,44 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
         });
     }
 
+    Y_UNIT_TEST(CreateTableWithIntermediateDirsAndRejectInSolomon) {
+        const TString validScheme = R"(
+            Name: "Valid/x/y/z"
+            PartitionCount: 2
+        )";
+        const TString invalidScheme = R"(
+            Name: "Invalid/a/b/c"
+            PartitionCount: 2
+            ChannelProfileId: 30
+        )";
+
+        const auto validStatus = NKikimrScheme::StatusAccepted;
+        const auto invalidStatus = NKikimrScheme::StatusInvalidParameter;
+
+        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+            TestCreateSolomon(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+        });
+    }
+
+    Y_UNIT_TEST(CreateTableWithIntermediateDirsAndRejectInTable) {
+        const TString validScheme = R"(
+            Name: "Valid/x/y/z/table_name"
+            Columns { Name: "RowId" Type: "Uint64" }
+            KeyColumnNames: ["RowId"]
+        )";
+        const TString invalidScheme = R"(
+            Name: "Invalid/a/b/c/table_name"
+            Columns { Name: "RowId" Type: "Uint64" }
+            KeyColumnNames: ["RowId_Invalid"]
+        )";
+        const auto validStatus = NKikimrScheme::StatusAccepted;
+        const auto invalidStatus = NKikimrScheme::StatusSchemeError;
+
+        CreateWithIntermediateDirs([&](TTestActorRuntime& runtime, ui64 txId, const TString& root, bool valid) {
+            TestCreateTable(runtime, txId, root, valid ? validScheme : invalidScheme, {valid ? validStatus : invalidStatus});
+        });
+    }
+
     Y_UNIT_TEST(CreateKesusWithIntermediateDirs) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
@@ -144,7 +182,7 @@ Y_UNIT_TEST_SUITE(IntermediateDirsReboots) {
     Y_UNIT_TEST(CreateWithIntermediateDirs) {
         const TString validScheme = R"(
             Name: "Valid/x/y/z"
-            PartitionsCount: 0
+            PartitionsCount: 1
         )";
         const TString invalidScheme = R"(
             Name: "Invalid/wr0ng n@me"

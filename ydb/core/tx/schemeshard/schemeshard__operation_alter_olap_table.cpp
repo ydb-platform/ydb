@@ -272,7 +272,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TOlapTableInfo::TPtr tableInfo = context.SS->OlapTables[pathId];
         Y_VERIFY(tableInfo);
@@ -548,7 +548,7 @@ public:
         Y_VERIFY(storeInfo->OlapTables.contains(path->PathId));
         storeInfo->OlapTablesUnderOperation.insert(path->PathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterOlapTable, path->PathId);
         txState.State = TTxState::ConfigureParts;

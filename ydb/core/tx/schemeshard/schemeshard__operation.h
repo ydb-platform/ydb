@@ -64,7 +64,7 @@ struct TOperation: TSimpleRefCount<TOperation> {
 
     TTxId GetTxId() const { return TxId; }
 
-    static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, const TOperationContext& context);
+    static TConsumeQuotaResult ConsumeQuota(const TTxTransaction& tx, TOperationContext& context);
 
     static TSplitTransactionsResult SplitIntoTransactions(const TTxTransaction& tx, const TOperationContext& context);
 

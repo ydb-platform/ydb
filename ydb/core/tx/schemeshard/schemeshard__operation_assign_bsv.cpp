@@ -87,7 +87,7 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         volume->MountToken = mountToken;
         ++volume->TokenVersion;

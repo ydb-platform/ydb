@@ -71,7 +71,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -163,7 +163,7 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
         path->StepCreated = step;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistCreateStep(db, pathId, step);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
@@ -443,7 +443,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         storeChannelBindings,
         context);
 
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
     ++parentPath.Base()->DirAlterVersion;
     context.SS->PersistPathDirAlterVersion(db, parentPath.Base());
     context.SS->ClearDescribePathCaches(parentPath.Base());
@@ -497,7 +497,7 @@ TTxState& TCreateFileStore::PrepareChanges(
     const TChannelsBindings& tabletChannels,
     TOperationContext& context)
 {
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     fsPath->CreateTxId = operationId.GetTxId();
     fsPath->LastTxId = operationId.GetTxId();

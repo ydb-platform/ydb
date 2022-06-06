@@ -201,7 +201,7 @@ public:
             TOperationContext& context)
     {
         TPathElement::TPtr item = path.Base();
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         item->LastTxId = operationId.GetTxId();
         item->PathState = TPathElement::EPathState::EPathStateAlter;

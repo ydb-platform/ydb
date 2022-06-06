@@ -34,7 +34,7 @@ bool CollectProposeTxResults(
         return false;
     }
 
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     TTxState& txState = *context.SS->FindTx(operationId);
 
@@ -175,7 +175,7 @@ bool NTableState::CollectSchemaChanged(
     if (txState.ShardsInProgress.empty()) {
         AckAllSchemaChanges(operationId, txState, context);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, operationId, TTxState::Done);
         return true;
     }
@@ -233,7 +233,7 @@ bool NTableState::CheckPartitioningChangedForTableModification(TTxState &txState
 void NTableState::UpdatePartitioningForTableModification(TOperationId operationId, TTxState &txState, TOperationContext &context) {
     Y_VERIFY(!txState.TxShardsListFinalized, "Rebuilding the list of shards must not happen twice");
 
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     THashSet<TShardIdx> prevAlterCreateParts;
 
@@ -377,7 +377,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
     auto srcTableInfo = context.SS->Tables.at(txState.SourcePathId);
     auto dstTableInfo = context.SS->Tables.at(txState.TargetPathId);
 
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     // Erase previous partitioning as we are going to generate new one
     context.SS->DeleteTablePartitioning(db, txState.TargetPathId, dstTableInfo);
@@ -504,7 +504,7 @@ TSet<ui32> AllIncomingEvents() {
 }
 
 void NForceDrop::CollectShards(const THashSet<TPathId>& pathes, TOperationId operationId, TTxState *txState, TOperationContext &context) {
-    NIceDb::TNiceDb db(context.Txc.DB);
+    NIceDb::TNiceDb db(context.GetDB());
 
     auto shards = context.SS->CollectAllShards(pathes);
     for (auto shardIdx: shards) {
@@ -543,23 +543,30 @@ void NForceDrop::ValidateNoTrasactionOnPathes(TOperationId operationId, const TH
     }
 }
 
-void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext &context) {
-    NIceDb::TNiceDb db(context.Txc.DB);
-
+void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete) {
     auto parent = path.Parent();
     if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {
         ++parent.Base()->DirAlterVersion;
-        context.SS->PersistPathDirAlterVersion(db, parent.Base());
     }
 
     if (parent.IsActive()) {
-        context.SS->ClearDescribePathCaches(parent.Base());
-        context.OnComplete.PublishToSchemeBoard(opId, parent->PathId);
+        ss->ClearDescribePathCaches(parent.Base());
+        onComplete.PublishToSchemeBoard(opId, parent->PathId);
     }
 
     if (path.IsActive()) {
-        context.SS->ClearDescribePathCaches(path.Base());
-        context.OnComplete.PublishToSchemeBoard(opId, path->PathId);
+        ss->ClearDescribePathCaches(path.Base());
+        onComplete.PublishToSchemeBoard(opId, path->PathId);
+    }
+}
+
+void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext &context) {
+    IncParentDirAlterVersionWithRepublishSafeWithUndo(opId, path, context.SS, context.OnComplete);
+
+    auto parent = path.Parent();
+    if (parent.Base()->IsDirectory() || parent.Base()->IsDomainRoot()) {
+        NIceDb::TNiceDb db(context.GetDB());
+        context.SS->PersistPathDirAlterVersion(db, parent.Base());
     }
 }
 

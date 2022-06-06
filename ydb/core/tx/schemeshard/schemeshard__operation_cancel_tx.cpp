@@ -54,7 +54,7 @@ public:
             return proposeResult;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         /* Let's abort at the final stage of the transaction */
         txState.Cancel = true;

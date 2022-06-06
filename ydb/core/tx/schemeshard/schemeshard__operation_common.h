@@ -10,6 +10,7 @@ namespace NSchemeShard {
 
 TSet<ui32> AllIncomingEvents();
 
+void IncParentDirAlterVersionWithRepublishSafeWithUndo(const TOperationId& opId, const TPath& path, TSchemeShard* ss, TSideEffects& onComplete);
 void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath& path, TOperationContext& context);
 
 namespace NTableState {
@@ -91,7 +92,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         txState->ClearShardsInProgress();
         for (TTxState::TShardOperation& shard : txState->Shards) {
@@ -157,7 +158,7 @@ public:
 
         const auto& record = ev->Get()->Record;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTabletId tabletId = TTabletId(record.GetTenantSchemeShard());
         auto status = record.GetStatus();
@@ -213,7 +214,7 @@ public:
 
         const auto& record = ev->Get()->Record;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTabletId tabletId = TTabletId(record.GetOnTabletId());
         auto status = record.GetStatus();
@@ -269,7 +270,7 @@ public:
         txState->ClearShardsInProgress();
 
         if (txState->Shards.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -401,7 +402,7 @@ public:
         Y_VERIFY(context.SS->PathsById.contains(pathId));
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -484,7 +485,7 @@ public:
                     DebugHint() << " HandleReply TEvAdoptTablet"
                     << ", message% " << DebugReply(ev));
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         const TString& explain = ev->Get()->Record.GetExplain();
         TTabletId tabletId = TTabletId(ev->Get()->Record.GetTabletID()); // global id from hive
@@ -551,7 +552,7 @@ public:
                     DebugHint() << " HandleReply TEvCreateTabletReply"
                     << ", message: " << DebugReply(ev));
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto shardIdx = TShardIdx(ev->Get()->Record.GetOwner(),
                                   TLocalShardIdx(ev->Get()->Record.GetOwnerIdx()));
@@ -812,7 +813,7 @@ public:
                         DebugHint() << " ProgressState"
                                     << " no shards to create, do next state");
 
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
             return true;
         }
@@ -957,7 +958,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             return true;
         }
@@ -1159,7 +1160,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -1258,7 +1259,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, idx);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -1366,7 +1367,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -1569,7 +1570,7 @@ public:
 
         table->AlterVersion += 1;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistTableAlterVersion(db, pathId, table);
 
         context.SS->ClearDescribePathCaches(path);

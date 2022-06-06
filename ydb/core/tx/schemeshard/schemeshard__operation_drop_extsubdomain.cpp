@@ -40,7 +40,7 @@ public:
             context.OnComplete.DeleteShard(shard.Idx);
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::Done);
         return true;
     }
@@ -95,7 +95,7 @@ public:
         TTabletId hive = TTabletId(record.GetOrigin());
         context.OnComplete.UnbindMsgFromPipe(OperationId, hive, TPipeMessageId(0, 0));
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
 
         return true;
@@ -119,7 +119,7 @@ public:
         TTabletId tenantSchemeshard = domainInfo->GetTenantSchemeShardID();
 
         if (!tenantSchemeshard) { // ext_subdomain was't altered at all, and there has't been added tenantSchemeshard
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeletePrivateShards);
             return true;
         }
@@ -168,7 +168,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
         context.SS->DropPathes(pathes, step, OperationId.GetTxId(), db, context.Ctx);
@@ -332,7 +332,7 @@ public:
         txState.State = TTxState::Waiting;
         txState.MinStep = TStepId(1);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto relatedTx = context.SS->GetRelatedTransactions({path.Base()->PathId}, context.Ctx);
 

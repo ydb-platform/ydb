@@ -82,7 +82,7 @@ struct TRestore {
         restoreInfo.ShardStatuses = std::move(txState.ShardStatuses);
         restoreInfo.DataTotalSize = txState.DataTotalSize;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistCompletedRestore(db, opId.GetTxId(), txState, restoreInfo);
     }
 
@@ -93,14 +93,14 @@ struct TRestore {
         TTableInfo::TPtr table = context.SS->Tables.at(pathId);
         table->RestoreSettings = restore;
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         db.Table<Schema::RestoreTasks>()
             .Key(pathId.OwnerId, pathId.LocalPathId)
             .Update(NIceDb::TUpdate<Schema::RestoreTasks::Task>(restore.SerializeAsString()));
     }
 
     static void PersistDone(const TPathId& pathId, TOperationContext& context) {
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         db.Table<Schema::RestoreTasks>()
             .Key(pathId.OwnerId, pathId.LocalPathId)
             .Delete();

@@ -77,7 +77,7 @@ public:
         context.OnComplete.UnbindMsgFromPipe(OperationId, tabletId, txState->TargetPathId);
 
         if (txState->ShardsInProgress.empty()) {
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::Propose);
             context.OnComplete.ActivateTx(OperationId);
             return true;
@@ -203,7 +203,7 @@ public:
         TSequenceInfo::TPtr alterData = sequenceInfo->AlterData;
         Y_VERIFY(alterData);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
@@ -481,7 +481,7 @@ public:
             p->SetLocalId(ui64(sequenceShard.GetLocalId()));
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->ChangeTxState(db, OperationId, txState.State);
         context.OnComplete.ActivateTx(OperationId);

@@ -79,7 +79,7 @@ public:
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         auto pathes = context.SS->ListSubThee(pathId, context.Ctx);
         Y_VERIFY(pathes.size() == 1);
@@ -234,7 +234,7 @@ public:
 
         auto solomon = context.SS->SolomonVolumes.at(path.Base()->PathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         for (auto& part : solomon->Partitions) {
             auto shardIdx = part.first;

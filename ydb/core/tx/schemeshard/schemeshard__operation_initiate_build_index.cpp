@@ -176,7 +176,7 @@ public:
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState->TxType == TTxState::TxInitializeBuildIndex);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->SnapshotsStepIds[OperationId.GetTxId()] = step;
         context.SS->PersistSnapshotStepId(db, OperationId.GetTxId(), step);
 
@@ -254,7 +254,7 @@ public:
         }
 
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         context.SS->ChangeTxState(db, OperationId, TTxState::ConfigureParts);
 
@@ -426,7 +426,7 @@ public:
             return result;
         }
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         pathEl->LastTxId = OperationId.GetTxId();
         pathEl->PathState = NKikimrSchemeOp::EPathState::EPathStateAlter;

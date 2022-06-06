@@ -64,7 +64,7 @@ public:
         Y_VERIFY(srcPath.IsResolved());
         TTableInfo::TPtr srcTable = context.SS->Tables.at(srcPath->PathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         // txState catches table shards
         if (!txState->Shards) {
@@ -205,7 +205,7 @@ public:
         auto srcPath = TPath::Init(txState->SourcePathId, context.SS);
         auto dstPath = TPath::Init(txState->TargetPathId, context.SS);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
@@ -327,7 +327,7 @@ public:
 
         Y_VERIFY(ActivePathId == ev->Get()->PathId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
         return true;
     }
@@ -351,7 +351,7 @@ public:
                         DebugHint() << " ProgressState"
                                     << ", no renaming has been detected for this operation");
 
-            NIceDb::TNiceDb db(context.Txc.DB);
+            NIceDb::TNiceDb db(context.GetDB());
             context.SS->ChangeTxState(db, OperationId, TTxState::DeletePathBarrier);
             return true;
         }
@@ -406,7 +406,7 @@ public:
                                << ", msg: " << ev->Get()->ToString()
                                << ", at tablet" << ssId);
 
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
@@ -488,7 +488,7 @@ public:
                                << ", at schemeshard: " << ssId);
 
         // clear resources on src
-        NIceDb::TNiceDb db(context.Txc.DB);
+        NIceDb::TNiceDb db(context.GetDB());
         TPathElement::TPtr srcPath = context.SS->PathsById.at(txState->SourcePathId);
         context.OnComplete.ReleasePathState(OperationId, srcPath->PathId, TPathElement::EPathState::EPathStateNotExist);
 
@@ -713,6 +713,7 @@ public:
             return result;
         }
 
+        auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, dstParent.Base()->PathId);
@@ -747,8 +748,8 @@ public:
         srcPath->PathState = TPathElement::EPathState::EPathStateMoving;
         srcPath->LastTxId = OperationId.GetTxId();
 
-        IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);
-        IncParentDirAlterVersionWithRepublish(OperationId, srcPath, context);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
+        IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);
 
         // wait splits
         TTableInfo::TPtr tableSrc = context.SS->Tables.at(srcPath.Base()->PathId);

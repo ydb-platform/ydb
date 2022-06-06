@@ -223,7 +223,8 @@ void TColumnShard::LoadLongTxWrite(TWriteId writeId, const NLongTxService::TLong
 
 void TColumnShard::RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId) {
     if (auto* lw = LongTxWrites.FindPtr(writeId)) {
-        if (!txId || lw->PreparedTxId == txId) {
+        ui64 prepared = lw->PreparedTxId;
+        if (!prepared || txId == prepared) {
             Schema::EraseLongTxWrite(db, writeId);
             LongTxWritesByUniqueId.erase(lw->LongTxId.UniqueId);
             LongTxWrites.erase(writeId);

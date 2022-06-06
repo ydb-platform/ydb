@@ -5124,10 +5124,16 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                 return (notMatch && isMatch) ? isMatch->ApplyUnaryOp(Ctx, pos, "Not") : isMatch;
             }
             case TRule_cond_expr::kAltCondExpr2: {
+                //   | NOT? IN COMPACT? in_expr
                 auto altInExpr = cond.GetAlt_cond_expr2();
                 const bool notIn = altInExpr.HasBlock1();
                 auto hints = BuildTuple(pos, {});
-                if (altInExpr.HasBlock3()) {
+                bool isCompact = altInExpr.HasBlock3();
+                if (!isCompact) {
+                    auto sqlHints = Ctx.PullHintForToken(Ctx.TokenPosition(altInExpr.GetToken2()));
+                    isCompact = AnyOf(sqlHints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
+                }
+                if (isCompact) {
                     Ctx.IncrementMonCounter("sql_features", "IsCompactHint");
                     auto sizeHint = BuildTuple(pos, { BuildQuotedAtom(pos, "isCompact", NYql::TNodeFlags::Default) });
                     hints = BuildTuple(pos, { sizeHint });
@@ -7023,6 +7029,10 @@ TWindowSpecificationPtr TSqlTranslation::WindowSpecification(const TRule_window_
         */
         auto& partitionClause = rule.GetBlock2().GetRule_window_partition_clause1();
         winSpecPtr->IsCompact = partitionClause.HasBlock2();
+        if (!winSpecPtr->IsCompact) {
+            auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(partitionClause.GetToken1()));
+            winSpecPtr->IsCompact = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
+        }
         TColumnRefScope scope(Ctx, EColumnRefState::Allow);
         if (!NamedExprList(partitionClause.GetRule_named_expr_list4(), winSpecPtr->Partitions)) {
             return {};
@@ -7146,7 +7156,12 @@ bool TSqlTranslation::OrderByClause(const TRule_order_by_clause& node, TVector<T
 }
 
 bool TGroupByClause::Build(const TRule_group_by_clause& node, bool stream) {
+    // group_by_clause: GROUP COMPACT? BY opt_set_quantifier grouping_element_list;
     CompactGroupBy = node.HasBlock2();
+    if (!CompactGroupBy) {
+        auto hints = Ctx.PullHintForToken(Ctx.TokenPosition(node.GetToken1()));
+        CompactGroupBy = AnyOf(hints, [](const NSQLTranslation::TSQLHint& hint) { return to_lower(hint.Name) == "compact"; });
+    }
     TPosition distinctPos;
     if (IsDistinctOptSet(node.GetRule_opt_set_quantifier4(), distinctPos)) {
         Ctx.Error(distinctPos) << "DISTINCT is not supported in GROUP BY clause yet!";

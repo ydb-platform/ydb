@@ -20,6 +20,7 @@
 namespace NKikimr::NSQS {
 
 struct TUserCounters;
+struct TFolderCounters;
 struct TQueueCounters;
 struct THttpCounters;
 struct TCloudAuthCounters;
@@ -508,6 +509,7 @@ struct TUserCounters : public TAtomicRefCount<TUserCounters> {
     }
 
     TIntrusivePtr<TQueueCounters> CreateQueueCounters(const TString& queueName, const TString& folderId, bool insertCounters);
+    TIntrusivePtr<TFolderCounters> CreateFolderCounters(const TString& folderId, bool insertCounters);
 
     void RemoveCounters();
 
@@ -552,6 +554,23 @@ private:
     TIntrusivePtr<TUserCounters> AggregatedParent;
     TIntrusivePtr<TQueueCounters> AggregatedQueueCounters;
     bool IsAggregatedCounters;
+};
+
+struct TFolderCounters : public TAtomicRefCount<TFolderCounters> {
+    TLazyCachedCounter total_count; // Total queues in folder.
+
+    TFolderCounters(const TUserCounters* userCounters, const TString& folderId, bool insertCounters);
+
+    void InitCounters();
+    void InsertCounters();
+
+private:
+    TIntrusivePtrCntrCouple UserCounters; // User tree in core subsystem
+    TIntrusivePtrCntrCouple FolderCounters; // Folder tree in core subsystem
+
+    const TString FolderId;
+    bool Inited = false;
+
 };
 
 // Queue counters in SQS core subsystem.

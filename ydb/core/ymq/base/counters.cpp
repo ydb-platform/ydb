@@ -377,7 +377,10 @@ ELaziness Lazy(const NKikimrConfig::TSqsConfig& cfg) {
 #define INIT_COUNTERS_COUPLE_WITH_NAMES(rootCounters, sqsCounter, ymqCounter, sqsName, ymqName, expiring, valueType, lazy, aggr)     \
     sqsCounter.Init(rootCounters.SqsCounters, expiring, valueType, sqsName, lazy);                                                   \
     if (rootCounters.YmqCounters && !aggr) {                                                                                         \
-        ymqCounter.Init(rootCounters.YmqCounters, expiring, valueType, DEFAULT_YMQ_COUNTER_NAME, ymqName, ELaziness::OnStart);       \
+        ymqCounter.Init(                                                                                                             \
+            rootCounters.YmqCounters, ELifetime::Expiring, valueType, DEFAULT_YMQ_COUNTER_NAME, ymqName,                             \
+            ELaziness::OnStart                                                                                                       \
+        );                                                                                                                           \
     }
 
 #define INIT_COUNTER(rootCounters, variable, expiring, valueType, lazy) \
@@ -389,7 +392,7 @@ ELaziness Lazy(const NKikimrConfig::TSqsConfig& cfg) {
 #define INIT_HISTOGRAMS_COUPLE_WITH_NAMES(rootCounters, sqsHistogram, ymqHistogram, sqsName, ymqName, expiring, sqsBuckets, ymqBuckets, lazy, aggr) \
     sqsHistogram.Init(rootCounters.SqsCounters, expiring, sqsBuckets, sqsName, lazy);                                                               \
     if (rootCounters.YmqCounters && !aggr) {                                                                                                        \
-        ymqHistogram.Init(rootCounters.YmqCounters, expiring, ymqBuckets, DEFAULT_YMQ_COUNTER_NAME, ymqName, lazy);                                 \
+        ymqHistogram.Init(rootCounters.YmqCounters, ELifetime::Expiring, ymqBuckets, DEFAULT_YMQ_COUNTER_NAME, ymqName, lazy);                      \
     }
 
 #define INIT_HISTOGRAMS_COUPLE_WITH_BUCKETS(rootCounters, sqsHistogram, ymqHistogram, expiring, sqsBuckets, ymqBuckets, lazy, aggr) \
@@ -425,10 +428,10 @@ void TYmqActionCounters::Init(
     SubGroup = rootCounters->GetSubgroup(labelName, methodName);
     INIT_COUNTER_WITH_NAME_AND_LABEL(
             SubGroup, Success, DEFAULT_YMQ_COUNTER_NAME, TStringBuilder() << namePrefix << "requests_count_per_second",
-            lifetime,EValueType::Derivative, ELaziness::OnStart);
+            lifetime, EValueType::Derivative, ELaziness::OnStart);
     INIT_COUNTER_WITH_NAME_AND_LABEL(
             SubGroup, Errors, DEFAULT_YMQ_COUNTER_NAME, TStringBuilder() << namePrefix << "errors_count_per_second",
-            lifetime,EValueType::Derivative, ELaziness::OnStart
+            lifetime, EValueType::Derivative, ELaziness::OnStart
     );
     // ! - No inflight counter
 
@@ -511,6 +514,49 @@ void TAPIStatusesCounters::SetAggregatedParent(TAPIStatusesCounters* parent) {
     }
     OkCounter.SetAggregatedParent(parent ? &parent->OkCounter : nullptr);
     UnknownCounter.SetAggregatedParent(parent ? &parent->UnknownCounter : nullptr);
+}
+
+TFolderCounters::TFolderCounters(const TUserCounters* userCounters, const TString& folderId, bool insertCounters)
+    : UserCounters(userCounters->UserCounters)
+    , FolderId(folderId)
+{
+    if (insertCounters) {
+        FolderCounters = GetFolderCounters(UserCounters, folderId);
+    } else {
+        FolderCounters = {new NMonitoring::TDynamicCounters(), new NMonitoring::TDynamicCounters()};
+    }
+    //InitCounters();
+}
+
+void TFolderCounters::InitCounters() {
+    if (Inited) {
+        return;
+    }
+    Inited = true;
+
+    InsertCounters();
+    if (UserCounters.YmqCounters) {
+        total_count.Init(
+            FolderCounters.YmqCounters, ELifetime::Expiring, EValueType::Absolute, DEFAULT_COUNTER_NAME,
+            "queue.total_count",
+            ELaziness::OnStart
+        );
+    }
+}
+
+
+void TFolderCounters::InsertCounters() {
+
+    if (UserCounters.Defined()) {
+        if (!UserCounters.SqsCounters->FindSubgroup(FOLDER_LABEL, FolderId)) {
+            FolderCounters.SqsCounters->ResetCounters();
+            UserCounters.SqsCounters->RegisterSubgroup(FOLDER_LABEL, FolderId, FolderCounters.SqsCounters);
+        }
+        if (UserCounters.YmqCounters && !UserCounters.YmqCounters->FindSubgroup(FOLDER_LABEL, FolderId)) {
+            FolderCounters.YmqCounters->ResetCounters();
+            UserCounters.YmqCounters->RegisterSubgroup(FOLDER_LABEL, FolderId, FolderCounters.YmqCounters);
+        }
+    }
 }
 
 TQueueCounters::TQueueCounters(const NKikimrConfig::TSqsConfig& cfg,
@@ -788,6 +834,10 @@ void TUserCounters::TDetailedCounters::Init(const TIntrusivePtrCntrCouple& userC
 void TUserCounters::TDetailedCounters::SetAggregatedParent(TUserCounters::TDetailedCounters* parent) {
     TransactionCounters->SetAggregatedParent(parent ? parent->TransactionCounters : nullptr);
     UserDetailedCountersDescriptor.SetAggregatedParent(this, parent);
+}
+
+TIntrusivePtr<TFolderCounters> TUserCounters::CreateFolderCounters(const TString& folderId, bool insertCounters) {
+    return new TFolderCounters(this, folderId, insertCounters);
 }
 
 TIntrusivePtr<TQueueCounters> TUserCounters::CreateQueueCounters(const TString& queueName, const TString& folderId, bool insertCounters) {

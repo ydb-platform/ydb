@@ -155,9 +155,9 @@ void TProxyActor::HandleWakeup(TEvWakeup::TPtr&) {
         if (queueCountersCouple.SqsCounters) {
             queueCountersCouple.SqsCounters->GetCounter("RequestTimeouts", true)->Inc();
         }
-        if (queueCountersCouple.YmqCounters) {
-            queueCountersCouple.YmqCounters->GetCounter("request_timeouts_count_per_second", true)->Inc();
-        }
+//        if (queueCountersCouple.YmqCounters) {
+//            queueCountersCouple.YmqCounters->GetCounter("request_timeouts_count_per_second", true)->Inc();
+//        }
     }
 
     SendErrorAndDie(NErrors::TIMEOUT);

@@ -718,7 +718,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 } else {
                     TYandexQueryInitializer::SetIcPort(node.second.second);
                     icCommon->TechnicalSelfHostName = node.second.Host;
-                    TString address = "::"; //bind ipv6 interfaces by default
+                    TString address;
                     if (node.second.first)
                         address = node.second.first;
                     auto listener = new TInterconnectListenerTCP(
@@ -738,7 +738,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 auto &info = Config.GetDynamicNodeConfig().GetNodeInfo();
                 icCommon->TechnicalSelfHostName = info.GetHost();
 
-                TString address = "::"; //bind ipv6 interfaces by default
+                TString address;
                 if (info.GetAddress()) {
                     address = info.GetAddress();
                 }

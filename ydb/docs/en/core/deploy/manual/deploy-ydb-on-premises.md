@@ -229,7 +229,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  /opt/ydbd/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml \
+  /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml \
   --tenant /Root/testdb --node-broker node1.ydb.tech:2135 --node-broker node2.ydb.tech:2135 --node-broker node3.ydb.tech:2135
   ```
 

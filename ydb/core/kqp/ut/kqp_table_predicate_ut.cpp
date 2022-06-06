@@ -1504,6 +1504,66 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
             .ExpectedReads = 1,
         });
     }
+
+    Y_UNIT_TEST(Like) {
+        TKikimrSettings kikimrSettings;
+        TKikimrRunner kikimr(kikimrSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto res = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Utf8,
+                    Value Utf8,
+                    PRIMARY KEY (Key)
+                );
+            )").GetValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+            auto result = session.ExecuteDataQuery(R"(
+                REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
+                    ('SomeString1', '100'),
+                    ('SomeString2', '200'),
+                    ('SomeString3', '300'),
+                    ('SomeString4', '400'),
+                    ('SomeString5', '500'),
+                    ('SomeString6', '600'),
+                    ('SomeString7', '700'),
+                    ('SomeString8', '800');
+            )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        auto explainAndCheckRange = [&session](const auto& query) {
+            auto result = session.ExplainDataQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            NJson::TJsonValue plan;
+            UNIT_ASSERT(NJson::ReadJsonTree(result.GetPlan(), &plan));
+
+            UNIT_ASSERT_VALUES_EQUAL(plan["tables"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["name"], "/Root/TestTable");
+            UNIT_ASSERT_VALUES_EQUAL(plan["tables"][0]["reads"].GetArray().size(), 1);
+            auto& read = plan["tables"][0]["reads"][0];
+            UNIT_ASSERT_VALUES_EQUAL(read["type"], "Scan");
+            UNIT_ASSERT_VALUES_EQUAL(read["scan_by"].GetArray().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(read["scan_by"][0], "Key [\"SomeString\", \"SomeStrinh\")");
+        };
+
+        const TString useSyntaxV1 = R"(
+            --!syntax_v1
+        )";
+
+        const TString query = R"(
+            PRAGMA Kikimr.UseNewEngine = 'false';
+            SELECT * FROM `/Root/TestTable` WHERE Key like "SomeString%";
+        )";
+
+        explainAndCheckRange(query);
+        explainAndCheckRange(useSyntaxV1 + query);
+    }
 }
 
 } // namespace NKqp

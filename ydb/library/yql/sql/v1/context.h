@@ -258,6 +258,7 @@ namespace NSQLTranslationV1 {
         THashMap<TString, ui32> PackageVersions;
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
+        bool EmitStartsWith = true;
     };
 
     class TColumnRefScope {

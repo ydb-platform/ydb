@@ -69,6 +69,7 @@ PEERDIR(
     ydb/core/kqp/ut/common
     ydb/public/sdk/cpp/client/draft
     ydb/public/sdk/cpp/client/ydb_proto
+    ydb/library/yql/udfs/common/re2
 )
 
 YQL_LAST_ABI_VERSION()

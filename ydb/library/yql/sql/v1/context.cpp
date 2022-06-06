@@ -53,6 +53,7 @@ THashMap<TStringBuf, TPragmaField> CTX_PRAGMA_FIELDS = {
     {"CoalesceJoinKeysOnQualifiedAll", &TContext::CoalesceJoinKeysOnQualifiedAll},
     {"UnorderedSubqueries", &TContext::UnorderedSubqueries},
     {"FlexibleTypes", &TContext::FlexibleTypes},
+    {"EmitStartsWith", &TContext::EmitStartsWith},
 };
 
 typedef TMaybe<bool> TContext::*TPragmaMaybeField;

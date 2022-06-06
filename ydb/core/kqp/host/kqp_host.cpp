@@ -1445,6 +1445,7 @@ private:
                 settings.PathPrefix = tablePathPrefix;
             }
             settings.EndOfQueryCommit = sqlAutoCommit;
+            settings.Flags.insert("DisableEmitStartsWith");
 
             ui16 actualSyntaxVersion = 0;
             astRes = NSQLTranslation::SqlToYql(query, settings, nullptr, &actualSyntaxVersion);

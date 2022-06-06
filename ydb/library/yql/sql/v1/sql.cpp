@@ -21,6 +21,8 @@
 
 #include <library/cpp/charset/ci_string.h>
 
+#include <ydb/library/yql/utils/utf8.h>
+
 #include <google/protobuf/repeated_field.h>
 
 #include <util/charset/wide.h>
@@ -4944,8 +4946,26 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                             if (!(hasPattern || suffix.empty())) {
                                 isMatch = BuildBinaryOp(Ctx, pos, "==", res, BuildLiteralRawString(pos, suffix, isUtf8));
                             } else if (!prefix.empty()) {
-                                const auto& lowerBoundOp = BuildBinaryOp(Ctx, pos, "StartsWith", res, BuildLiteralRawString(pos, prefix, isUtf8));
-                                isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch);
+                                if (Ctx.EmitStartsWith) {
+                                    const auto& lowerBoundOp = BuildBinaryOp(Ctx, pos, "StartsWith", res, BuildLiteralRawString(pos, prefix, isUtf8));
+                                    isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch);
+                                } else {
+                                    const auto& lowerBoundOp = BuildBinaryOp(Ctx, pos, ">=", res, BuildLiteralRawString(pos, prefix, isUtf8));
+                                    auto upperBound = isUtf8 ? NextValidUtf8(prefix) : NextLexicographicString(prefix);
+
+                                    if (upperBound) {
+                                        const auto& between = BuildBinaryOp(
+                                            Ctx,
+                                            pos,
+                                            "And",
+                                            lowerBoundOp,
+                                            BuildBinaryOp(Ctx, pos, "<", res, BuildLiteralRawString(pos, TString(*upperBound), isUtf8))
+                                        );
+                                        isMatch = BuildBinaryOp(Ctx, pos, "And", between, isMatch);
+                                    } else {
+                                        isMatch = BuildBinaryOp(Ctx, pos, "And", lowerBoundOp, isMatch);
+                                    }
+                                }
                             }
                         }
                     }

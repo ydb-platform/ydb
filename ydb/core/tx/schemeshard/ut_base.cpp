@@ -1781,8 +1781,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
                             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
                             NLs::IndexKeys({"value1"})});
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValue1/indexImplTable"),
-                           {NLs::Finished});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValue1/indexImplTable", true, true),
+                           {NLs::Finished,
+                            NLs::MaxPartitionsCountEqual(5000),
+                            NLs::SizeToSplitEqual(2<<30)}); // 2G
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/DirA/Table1/UserDefinedIndexByValues"),
                            {NLs::Finished,
                             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
@@ -9946,8 +9948,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathExist,
                             NLs::PathVersionEqual(4),
                             NLs::PartitionCount(1),
-                            NLs::MinPartitionsCountEqual(0),
-                            NLs::MaxPartitionsCountEqual(100)});
+                            NLs::MinPartitionsCountEqual(1),
+                            NLs::MaxPartitionsCountEqual(5000)});
 
 
         TestSplitTable(runtime, ++txId, "/MyRoot/table/indexByValue/indexImplTable", R"(
@@ -9968,8 +9970,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                            {NLs::PathExist,
                             NLs::PathVersionEqual(5),
                             NLs::PartitionCount(3),
-                            NLs::MinPartitionsCountEqual(0),
-                            NLs::MaxPartitionsCountEqual(100)});
+                            NLs::MinPartitionsCountEqual(1),
+                            NLs::MaxPartitionsCountEqual(5000)});
 
         // request without token
         TestAlterTable(runtime, ++txId, "/MyRoot/table/indexByValue/", R"(
@@ -10073,7 +10075,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             NLs::PathVersionOneOf({8}),
                             NLs::PartitionCount(1),
                             NLs::MinPartitionsCountEqual(1),
-                            NLs::MaxPartitionsCountEqual(100)});
+                            NLs::MaxPartitionsCountEqual(5000),
+                            NLs::SizeToSplitEqual(100500)});
     }
 
     template <typename TCreateFn, typename TDropFn>

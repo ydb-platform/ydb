@@ -269,12 +269,10 @@ static TString GetEndpoint(const NKikimrConfig::TSqsConfig& config) {
     }
 }
 
-TSqsService::TSqsService(const TMaybe<ui32>& ydbPort) {
-    if (ydbPort.Defined()) {
-        YcSearchEventsConfig.GrpcPort = *ydbPort;
-    }
+TSqsService::TSqsService() {
     DebugInfo->SqsServiceActorPtr = this;
 }
+
 TSqsService::~TSqsService() {
     DebugInfo->SqsServiceActorPtr = nullptr;
 }
@@ -309,26 +307,21 @@ void TSqsService::Bootstrap() {
     RequestSqsUsersList();
     RequestSqsQueuesList();
 
-    if (Cfg().HasYcSearchEventsConfig() && YcSearchEventsConfig.GrpcPort) {
+    if (Cfg().HasYcSearchEventsConfig()) {
         auto& ycSearchCfg = Cfg().GetYcSearchEventsConfig();
         YcSearchEventsConfig.Enabled = ycSearchCfg.GetEnableYcSearch();
 
         YcSearchEventsConfig.ReindexInterval = TDuration::Seconds(ycSearchCfg.GetReindexIntervalSeconds());
         YcSearchEventsConfig.RescanInterval = TDuration::Seconds(ycSearchCfg.GetRescanIntervalSeconds());
 
-        auto driverConfig = NYdb::TDriverConfig().SetEndpoint(
-                TStringBuilder() << "localhost:" << YcSearchEventsConfig.GrpcPort);
         if (ycSearchCfg.HasTenantMode() && ycSearchCfg.GetTenantMode()) {
-            driverConfig.SetDatabase(Cfg().GetRoot());
+            YcSearchEventsConfig.Database = Cfg().GetRoot();
             YcSearchEventsConfig.TenantMode = true;
         }
 
         auto factory = AppData()->SqsAuthFactory;
         Y_VERIFY(factory);
 
-        driverConfig.SetCredentialsProviderFactory(factory->CreateCredentialsProviderFactory(Cfg()));
-
-        YcSearchEventsConfig.Driver = MakeHolder<NYdb::TDriver>(driverConfig);
         MakeAndRegisterYcEventsProcessor();
     }
 }
@@ -1307,17 +1300,13 @@ void TSqsService::MakeAndRegisterYcEventsProcessor() {
     Y_VERIFY(factory);
     Register(new TSearchEventsProcessor(
             root, YcSearchEventsConfig.ReindexInterval, YcSearchEventsConfig.RescanInterval,
-            MakeSimpleShared<NYdb::NTable::TTableClient>(*YcSearchEventsConfig.Driver),
+            YcSearchEventsConfig.Database,
             factory->CreateEventsWriter(Cfg(), GetSqsServiceCounters(AppData()->Counters, "yc_unified_agent"))
     ));
 }
-//
-//IActor* CreateSqsService(const TYcSearchEventsConfig& ycSearchEventsConfig) {
-//    return new TSqsService(ycSearchEventsConfig);
-//}
 
-IActor* CreateSqsService(TMaybe<ui32> ydbPort) {
-    return new TSqsService(ydbPort);
+IActor* CreateSqsService() {
+    return new TSqsService();
 }
 
 } // namespace NKikimr::NSQS

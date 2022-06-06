@@ -90,6 +90,7 @@ PEERDIR(
     ydb/public/lib/value
     ydb/public/sdk/cpp/client/ydb_types/credentials
     ydb/library/yql/minikql
+    ydb/public/lib/deprecated/client
 )
 
 YQL_LAST_ABI_VERSION()

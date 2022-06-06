@@ -2094,11 +2094,8 @@ TSqsServiceInitializer::TSqsServiceInitializer(const TKikimrRunConfig& runConfig
 
 void TSqsServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
     if (Config.GetSqsConfig().GetEnableSqs()) {
-        ui32 grpcPort = 0;
-        if (Config.HasGRpcConfig())
-            grpcPort = Config.GetGRpcConfig().GetPort();
         {
-            IActor* actor = NSQS::CreateSqsService(grpcPort);
+            IActor* actor = NSQS::CreateSqsService();
             setup->LocalServices.emplace_back(
                 NSQS::MakeSqsServiceID(NodeId),
                 TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));

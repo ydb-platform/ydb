@@ -194,8 +194,10 @@ bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapP
         read.ProgramParameters = NArrow::DeserializeBatch(olapProgram.GetParameters(), schema);
     }
 
-    read.AddProgram(columnResolver, program);
-
+    if (!read.AddProgram(columnResolver, program)) {
+        ErrorDescription = TStringBuilder() << "Wrong olap program";
+        return false;
+    }
     return true;
 }
 

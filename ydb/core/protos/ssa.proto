@@ -84,12 +84,29 @@ message TProgram {
     message TAggregateAssignment {
         enum EAggregateFunction {
             AGG_UNSPECIFIED = 0;
-            // TODO
+            AGG_ANY = 1;
+            AGG_COUNT = 2;
+            //AGG_MIN = 3;
+            //AGG_MAX = 4;
+            //AGG_SUM = 5;
+            //AGG_AVG = 6;
+            //AGG_VAR = 7;
+            //AGG_COVAR = 8;
+            //AGG_STDDEV = 9;
+            //AGG_CORR = 10;
+            //AGG_ARG_MIN = 11;
+            //AGG_ARG_MAX = 12;
+            //AGG_COUNT_DISTINCT = 13;
+            //AGG_QUANTILES = 14;
+            //AGG_TOP_COUNT = 15;
+            //AGG_TOP_SUM = 16;
         }
 
         message TAggregateFunction {
             optional uint32 Id = 1; // EAggregateFunction
             repeated TColumn Arguments = 2;
+            optional string Variant = 3; // i.e. POP/SAMP for AGG_VAR, AGG_COVAR, AGG_STDDEV
+            // TODO: Parameters, i.e. N for topK(N)(arg)
         }
 
         optional TColumn Column = 1;

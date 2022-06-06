@@ -60,9 +60,8 @@ public:
         auto ready = IndexedData.GetReadyResults(Max<i64>());
         size_t next = 1;
         for (auto it = ready.begin(); it != ready.end(); ++it, ++next) {
-            TString data = NArrow::SerializeBatchNoCompression(it->ResultBatch);
             bool lastOne = Finished() && (next == ready.size());
-            SendResult(ctx, data, lastOne);
+            SendResult(ctx, it->ResultBatch, lastOne);
         }
 
         DieFinished(ctx);
@@ -81,10 +80,15 @@ public:
         SendResult(ctx, {}, true, status);
     }
 
-    void SendResult(const TActorContext& ctx, TString data, bool finished = false,
+    void SendResult(const TActorContext& ctx, const std::shared_ptr<arrow::RecordBatch>& batch, bool finished = false,
                     NKikimrTxColumnShard::EResultStatus status = NKikimrTxColumnShard::EResultStatus::SUCCESS) {
         auto chunkEvent = std::make_unique<TEvColumnShard::TEvReadResult>(*Result);
         auto& proto = Proto(chunkEvent.get());
+
+        TString data;
+        if (batch) {
+            data = NArrow::SerializeBatchNoCompression(batch);
+        }
 
         if (status == NKikimrTxColumnShard::EResultStatus::SUCCESS) {
             Y_VERIFY(!data.empty());
@@ -98,7 +102,7 @@ public:
 
         auto metadata = proto.MutableMeta();
         metadata->SetFormat(NKikimrTxColumnShard::FORMAT_ARROW);
-        metadata->SetSchema(GetSerializedSchema());
+        metadata->SetSchema(GetSerializedSchema(batch));
         if (finished) {
             auto stats = ReadMetadata->ReadStats;
             auto* proto = metadata->MutableReadStats();
@@ -218,12 +222,19 @@ private:
     ui32 ReturnedBatchNo;
     mutable TString SerializedSchema;
 
-    TString GetSerializedSchema() const {
-        if (!SerializedSchema.empty()) {
+    TString GetSerializedSchema(const std::shared_ptr<arrow::RecordBatch>& batch) const {
+        Y_VERIFY(ReadMetadata->ResultSchema);
+
+        // TODO: make real ResultSchema with SSA effects
+        if (ReadMetadata->ResultSchema->Equals(batch->schema())) {
+            if (!SerializedSchema.empty()) {
+                return SerializedSchema;
+            }
+            SerializedSchema = NArrow::SerializeSchema(*ReadMetadata->ResultSchema);
             return SerializedSchema;
         }
-        SerializedSchema = NArrow::SerializeSchema(*ReadMetadata->ResultSchema);
-        return SerializedSchema;
+
+        return NArrow::SerializeSchema(*batch->schema());
     }
 };
 

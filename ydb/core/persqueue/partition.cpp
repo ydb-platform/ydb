@@ -428,6 +428,9 @@ void TPartition::FillReadFromTimestamps(const NKikimrPQ::TPQTabletConfig& config
             userInfo.UserActs.push_back(event.Release());
             userInfo.Session = "";
             userInfo.Offset = 0;
+            if (userInfo.Important) {
+                userInfo.Offset = StartOffset;
+            }
             userInfo.Step = userInfo.Generation = 0;
         }
         hasReadRule.erase(consumer);
@@ -2848,7 +2851,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
                 << " user " << user << " readTimeStamp for offset " << userInfo.Offset << " initiated " << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset << " ReadingTimestamp " << ReadingTimestamp);
 
     if (ReadingTimestamp) {
-        UpdateUserInfoTimestamp.push_back(user);
+        UpdateUserInfoTimestamp.push_back(std::make_pair(user, userInfo.ReadRuleGeneration));
         return;
     }
     if (userInfo.Offset < (i64)StartOffset) {
@@ -2882,7 +2885,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     ReadingForUserReadRuleGeneration = userInfo.ReadRuleGeneration;
 
     for (const auto& user : UpdateUserInfoTimestamp) {
-        Y_VERIFY(user != ReadingForUser);
+        Y_VERIFY(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration);
     }
     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                 << " user " << user << " send read request for offset " << userInfo.Offset << " initiated " << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset << " ReadingTimestamp " << ReadingTimestamp);
@@ -2910,6 +2913,12 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage.GetIfExists(ReadingForUser);
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
+        LOG_INFO_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "Topic '" << TopicName << "' partition " << Partition
+                << " user " << ReadingForUser << " readTimeStamp for other generation or no client info at all"
+        );
+
         ProcessTimestampRead(ctx);
         return;
     }
@@ -2942,7 +2951,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
                 userInfo->ReadCreateTimestamp = userInfo->CreateTimestamp;
             }
         } else {
-            UpdateUserInfoTimestamp.push_back(ReadingForUser);
+            UpdateUserInfoTimestamp.push_back(std::make_pair(ReadingForUser, ReadingForUserReadRuleGeneration));
             userInfo->ReadScheduled = true;
         }
         Counters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_ERROR].Increment(1);
@@ -2956,10 +2965,11 @@ void TPartition::ProcessTimestampRead(const TActorContext& ctx) {
     ReadingForOffset = 0;
     ReadingForUserReadRuleGeneration = 0;
     while (!ReadingTimestamp && !UpdateUserInfoTimestamp.empty()) {
-        TString user = UpdateUserInfoTimestamp.front();
+        TString user = UpdateUserInfoTimestamp.front().first;
+        ui64 readRuleGeneration = UpdateUserInfoTimestamp.front().second;
         UpdateUserInfoTimestamp.pop_front();
         auto userInfo = UsersInfoStorage.GetIfExists(user);
-        if (!userInfo || !userInfo->ReadScheduled)
+        if (!userInfo || !userInfo->ReadScheduled || userInfo->ReadRuleGeneration != readRuleGeneration)
             continue;
         userInfo->ReadScheduled = false;
         if (userInfo->Offset == (i64)EndOffset)
@@ -2980,14 +2990,12 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx)
         return;
     }
     Y_VERIFY(userInfo->ReadScheduled);
-    userInfo->ReadScheduled = false;
     Y_VERIFY(ReadingForUser != "");
 
     LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
                 << " user " << ReadingForUser << " readTimeStamp error: " << ev->Get()->Error);
 
-    UpdateUserInfoTimestamp.push_back(ReadingForUser);
-    userInfo->ReadScheduled = true;
+    UpdateUserInfoTimestamp.push_back(std::make_pair(ReadingForUser, ReadingForUserReadRuleGeneration));
 
     ProcessTimestampRead(ctx);
 }
@@ -3460,6 +3468,10 @@ void TPartition::HandleSetOffsetResponse(NKikimrClient::TResponse& response, con
         userInfo->Session = "";
         userInfo->Generation = userInfo->Step = 0;
         userInfo->Offset = 0;
+        userInfo->ReadScheduled = false;
+        if (userInfo->Important) {
+            userInfo->Offset = StartOffset;
+        }
     } else {
         if (setSession || dropSession) {
             offset = userInfo->Offset;

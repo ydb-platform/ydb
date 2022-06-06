@@ -313,7 +313,7 @@ public:
 
     bool HandleError(TEvPQ::TEvError *ev, const TActorContext& ctx)
     {
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
                    "Answer error topic: '" << TopicName << "'" <<
                    " partition: " << Partition <<
                    " messageNo: " << MessageNo <<

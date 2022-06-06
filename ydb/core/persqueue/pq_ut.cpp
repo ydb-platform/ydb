@@ -2058,6 +2058,39 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
 }
 
+
+
+Y_UNIT_TEST(TestWriteTimeLag) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+
+    tc.Runtime->SetScheduledLimit(150);
+    tc.Runtime->SetDispatchTimeout(TDuration::Seconds(1));
+    tc.Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+
+    PQTabletPrepare(20000000, 1_TB, 0, {{"aaa", false}}, tc);
+
+    TVector<std::pair<ui64, TString>> data{{1,TString(1024*1024, 'a')}};
+    for (ui32 i = 0; i < 20; ++i) {
+        CmdWrite(0, TStringBuilder() << "sourceid" << i, data, tc);
+    }
+
+    // After restart all caches are empty.
+    RestartTablet(tc);
+
+    PQTabletPrepare(20000000, 1_TB, 0, {{"aaa", false}, {"important", true}, {"another", true}}, tc);
+    PQTabletPrepare(20000000, 1_TB, 0, {{"aaa", false}, {"another1", true}, {"important", true}}, tc);
+    PQTabletPrepare(20000000, 1_TB, 0, {{"aaa", false}, {"another1", true}, {"important", true}, {"another", false}}, tc);
+
+    CmdGetOffset(0, "important", 12, tc, -1, 0);
+
+    CmdGetOffset(0, "another1", 12, tc, -1, 0);
+    CmdGetOffset(0, "another", 0, tc, -1, 0);
+    CmdGetOffset(0, "aaa", 0, tc, -1, 0);
+}
+
+
 void CheckEventSequence(TTestContext& tc, std::function<void()> scenario, std::deque<ui32> expectedEvents) {
     tc.Runtime->SetObserverFunc([&expectedEvents](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
         if (!expectedEvents.empty() && ev->Type == expectedEvents.front()) {

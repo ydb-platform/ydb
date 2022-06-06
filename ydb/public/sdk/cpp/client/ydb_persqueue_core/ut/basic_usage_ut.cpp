@@ -410,5 +410,73 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         }
         writer->Close();
     }
+
+    class TBrokenCredentialsProvider : public ICredentialsProvider {
+    public:
+        TBrokenCredentialsProvider() {}
+        virtual ~TBrokenCredentialsProvider() {}
+        TStringType GetAuthInfo() const {
+            ythrow yexception() << "exception during creation";
+            return "";
+        }
+        bool IsValid() const { return true; }
+    };
+
+    class TBrokenCredentialsProviderFactory : public ICredentialsProviderFactory {
+    public:
+        TBrokenCredentialsProviderFactory() {}
+
+        virtual ~TBrokenCredentialsProviderFactory() {}
+        virtual TCredentialsProviderPtr CreateProvider() const {
+            return std::make_shared<TBrokenCredentialsProvider>();
+        }
+
+        virtual TStringType GetClientIdentity() const {
+            return "abacaba";
+        }
+    };
+
+    Y_UNIT_TEST(BrokenCredentialsProvider) {
+
+        std::shared_ptr<ICredentialsProviderFactory> brokenCredentialsProviderFactory;
+        brokenCredentialsProviderFactory.reset(new TBrokenCredentialsProviderFactory{});
+        auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
+        auto client = TPersQueueClient(setup->GetDriver(), TPersQueueClientSettings().CredentialsProviderFactory(brokenCredentialsProviderFactory));
+        auto settings = setup->GetReadSessionSettings();
+        settings.DisableClusterDiscovery(true)
+                .RetryPolicy(IRetryPolicy::GetNoRetryPolicy());
+        std::shared_ptr<IReadSession> readSession = client.CreateReadSession(settings);
+
+        Cerr << "Get event on client\n";
+        auto event = *readSession->GetEvent(true);
+        std::visit(TOverloaded {
+                [&](TReadSessionEvent::TDataReceivedEvent&) {
+                    UNIT_ASSERT(false);
+                },
+                [&](TReadSessionEvent::TCommitAcknowledgementEvent&) {
+                    UNIT_ASSERT(false);
+                },
+                [&](TReadSessionEvent::TCreatePartitionStreamEvent& event) {
+                    UNIT_ASSERT(false);
+                    event.Confirm();
+                },
+                [&](TReadSessionEvent::TDestroyPartitionStreamEvent& event) {
+                    UNIT_ASSERT(false);
+                    event.Confirm();
+                },
+                [&](TReadSessionEvent::TPartitionStreamStatusEvent&) {
+                    UNIT_FAIL("Test does not support lock sessions yet");
+                },
+                [&](TReadSessionEvent::TPartitionStreamClosedEvent&) {
+                    UNIT_FAIL("Test does not support lock sessions yet");
+                },
+                [&](TSessionClosedEvent& event) {
+                    Cerr << "Got close event: " << event.DebugString();
+                }
+
+            }, event);
+
+    }
+
 }
 } // namespace NYdb::NPersQueue::NTests

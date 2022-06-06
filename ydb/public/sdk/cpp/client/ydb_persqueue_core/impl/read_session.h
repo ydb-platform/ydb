@@ -62,7 +62,9 @@ public:
     void DeferAbortSession(const IErrorHandler::TPtr& errorHandler, EStatus statusCode, const TString& message);
     void DeferAbortSession(const IErrorHandler::TPtr& errorHandler, TPlainStatus&& status);
     void DeferReconnection(std::shared_ptr<TSingleClusterReadSessionImpl> session, const IErrorHandler::TPtr& errorHandler, TPlainStatus&& status);
+    void DeferStartSession(std::shared_ptr<TSingleClusterReadSessionImpl> session);
     void DeferSignalWaiter(TWaiter&& waiter);
+
 
 private:
     void DoActions();
@@ -72,6 +74,7 @@ private:
     void AbortSession();
     void Reconnect();
     void SignalWaiters();
+    void StartSessions();
 
 private:
     // Read.
@@ -92,6 +95,10 @@ private:
     // Reconnection.
     std::shared_ptr<TSingleClusterReadSessionImpl> Session;
     TPlainStatus ReconnectionStatus;
+
+    // Session to start
+    std::vector<std::shared_ptr<TSingleClusterReadSessionImpl>> Sessions;
+
 };
 
 class TDataDecompressionInfo {
@@ -1083,7 +1090,7 @@ private:
     void OnClusterDiscovery(const TStatus& status, const Ydb::PersQueue::ClusterDiscovery::DiscoverClustersResult& result);
     void ProceedWithoutClusterDiscovery();
     void RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions& deferred);
-    void CreateClusterSessionsImpl();
+    void CreateClusterSessionsImpl(TDeferredActions& deferred);
 
 
     // Shutdown.

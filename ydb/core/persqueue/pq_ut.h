@@ -209,7 +209,7 @@ struct TFinalizer {
 // SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::pair<TString, bool>>& users, TTestContext& tc, int partitions = 2, ui32 lw = 6*1024*1024, bool localDC = true, ui64 ts = 0, ui64 sidMaxCount = 0, ui32 specVersion = 0) {
+void PQTabletPrepare(ui32 mcip, ui64 msip, i32 deleteTime, const TVector<std::pair<TString, bool>>& users, TTestContext& tc, int partitions = 2, ui32 lw = 6_MB, bool localDC = true, ui64 ts = 0, ui64 sidMaxCount = 0, ui32 specVersion = 0, i32 storageLimitBytes = 0) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     if (specVersion) {
@@ -236,7 +236,11 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, ui32 deleteTime, const TVector<std::p
             auto config = tabletConfig->MutablePartitionConfig();
             config->SetMaxCountInPartition(mcip);
             config->SetMaxSizeInPartition(msip);
-            config->SetLifetimeSeconds(deleteTime);
+            if (storageLimitBytes > 0) {
+                config->SetStorageLimitBytes(storageLimitBytes);
+            } else {
+                config->SetLifetimeSeconds(deleteTime);
+            }
             config->SetSourceIdLifetimeSeconds(1*60*60);
             if (sidMaxCount > 0)
                 config->SetSourceIdMaxCounts(sidMaxCount);
@@ -355,7 +359,8 @@ void PQGetPartInfo(ui64 startOffset, ui64 endOffset, TTestContext& tc) {
             result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(handle);
             UNIT_ASSERT(result);
 
-            if (result->Record.PartResultSize() == 0 || result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+            if (result->Record.PartResultSize() == 0 ||
+                result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
                 tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
                 retriesLeft = 3;
                 continue;
@@ -645,13 +650,17 @@ void CmdWrite(const ui32 partition, const TString& sourceId, const TVector<std::
             }
 
             if (error) {
-                UNIT_ASSERT(result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL ||
-                            result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST || result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE);
+                UNIT_ASSERT(
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_IS_FULL ||
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST ||
+                    result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE
+                );
                 break;
             } else {
-                UNIT_ASSERT_EQUAL(result->Record.GetErrorCode(), NPersQueue::NErrorCode::OK);
+                Cerr << result->Record.GetErrorReason();
+                UNIT_ASSERT_VALUES_EQUAL((ui32)result->Record.GetErrorCode(), (ui32)NPersQueue::NErrorCode::OK);
             }
-            UNIT_ASSERT(result->Record.GetPartitionResponse().CmdWriteResultSize() == data.size());
+            UNIT_ASSERT_VALUES_EQUAL(result->Record.GetPartitionResponse().CmdWriteResultSize(), data.size());
 
             for (ui32 i = 0; i < data.size(); ++i) {
                 UNIT_ASSERT(result->Record.GetPartitionResponse().GetCmdWriteResult(i).HasAlreadyWritten());

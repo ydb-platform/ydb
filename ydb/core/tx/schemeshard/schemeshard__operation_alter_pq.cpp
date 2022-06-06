@@ -539,12 +539,23 @@ public:
             return result;
         }
 
-        ui64 newThroughput = ((ui64)(newTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond())) * (alterData->TotalGroupCount);
-        ui64 oldThroughput = ((ui64)(tabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond())) * (pqGroup->TotalGroupCount);
-        ui64 newStorage = newThroughput * newTabletConfig.GetPartitionConfig().GetLifetimeSeconds();
-        ui64 oldStorage = oldThroughput * tabletConfig.GetPartitionConfig().GetLifetimeSeconds();
+        auto getStorageLimit = [](auto &config, ui64 throughput) {
+            if (config.GetPartitionConfig().HasStorageLimitBytes()) {
+                return config.GetPartitionConfig().GetStorageLimitBytes();
+            } else {
+                return throughput * config.GetPartitionConfig().GetLifetimeSeconds();
+            }
+        };
 
-        ui64 storageToReserve = newStorage > oldStorage ? newStorage - oldStorage : 0;
+        const ui64 throughput = ((ui64)(newTabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond())) *
+                             (alterData->TotalGroupCount);
+        const ui64 oldThroughput = ((ui64)(tabletConfig.GetPartitionConfig().GetWriteSpeedInBytesPerSecond())) *
+                             (pqGroup->TotalGroupCount);
+
+        const ui64 storage = getStorageLimit(newTabletConfig, throughput);
+        const ui64 oldStorage = getStorageLimit(tabletConfig, oldThroughput);
+
+        const ui64 storageToReserve = storage > oldStorage ? storage - oldStorage : 0;
 
         {
             TPath::TChecker checks = path.Check();
@@ -617,13 +628,13 @@ public:
 
         path.DomainInfo()->AddInternalShards(txState);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
-        path.DomainInfo()->UpdatePQReservedStorage(oldStorage, newStorage);
+        path.DomainInfo()->UpdatePQReservedStorage(oldStorage, storage);
 
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(newThroughput);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Add(throughput);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_THROUGHPUT].Sub(oldThroughput);
 
-        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(newStorage);
+        context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Add(storage);
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_RESERVED_STORAGE].Sub(oldStorage);
 
         context.SS->TabletCounters->Simple()[COUNTER_STREAM_SHARDS_COUNT].Add(partitionsToCreate);

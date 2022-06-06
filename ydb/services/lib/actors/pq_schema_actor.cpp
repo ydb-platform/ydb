@@ -11,13 +11,11 @@
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-#define DEFAULT_PARTITION_SPEED 1048576 // 1Mb
-
-    constexpr i32 MAX_READ_RULES_COUNT = 3000;
-
     constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
-    static const i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD = 16*24*60*60*1000;
-
+    constexpr i64 DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS =
+        TDuration::Days(16).MilliSeconds();
+    constexpr ui64 DEFAULT_PARTITION_SPEED = 1_MB;
+    constexpr i32 MAX_READ_RULES_COUNT = 3000;
     constexpr i32 MAX_SUPPORTED_CODECS_COUNT = 100;
 
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx) {
@@ -300,18 +298,44 @@ namespace NKikimr::NGRpcProxy::V1 {
         partConfig->SetMaxSizeInPartition(settings.max_partition_storage_size() ? settings.max_partition_storage_size() : Max<i64>());
         partConfig->SetMaxCountInPartition(Max<i32>());
 
-        if (settings.retention_period_ms() <= 0) {
-            error = TStringBuilder() << "retention_period_ms must be positive, provided " << settings.retention_period_ms();
-            return Ydb::StatusIds::BAD_REQUEST;
+        switch (settings.retention_case()) {
+            case Ydb::PersQueue::V1::TopicSettings::kRetentionPeriodMs: {
+                if (settings.retention_period_ms() <= 0) {
+                    error = TStringBuilder() << "retention_period_ms must be positive, provided " <<
+                        settings.retention_period_ms();
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+                partConfig->SetLifetimeSeconds(Max(settings.retention_period_ms() / 1000ll, 1ll));
+            }
+            break;
+
+            case Ydb::PersQueue::V1::TopicSettings::kRetentionStorageBytes: {
+                if (settings.retention_storage_bytes() <= 0) {
+                    error = TStringBuilder() << "retention_storage_bytes must be positive, provided " <<
+                        settings.retention_storage_bytes();
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+                partConfig->SetStorageLimitBytes(settings.retention_storage_bytes());
+            }
+            break;
+
+            default: {
+                error = TStringBuilder() << "retention_storage_bytes or retention_period_ms should be set";
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
         }
-        partConfig->SetLifetimeSeconds(settings.retention_period_ms() > 999 ? settings.retention_period_ms() / 1000 : 1);
 
         if (settings.message_group_seqno_retention_period_ms() > 0 && settings.message_group_seqno_retention_period_ms() < settings.retention_period_ms()) {
             error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be more then retention_period_ms (provided " << settings.retention_period_ms() << ")";
             return Ydb::StatusIds::BAD_REQUEST;
         }
-        if (settings.message_group_seqno_retention_period_ms() > DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD) {
-            error = TStringBuilder() << "message_group_seqno_retention_period_ms (provided " << settings.message_group_seqno_retention_period_ms() << ") must be less then default limit for database " << DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD;
+        if (settings.message_group_seqno_retention_period_ms() >
+            DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS) {
+            error = TStringBuilder() <<
+                "message_group_seqno_retention_period_ms (provided " <<
+                settings.message_group_seqno_retention_period_ms() <<
+                ") must be less then default limit for database " <<
+                DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS;
             return Ydb::StatusIds::BAD_REQUEST;
         }
         if (settings.message_group_seqno_retention_period_ms() < 0) {

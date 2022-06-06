@@ -158,7 +158,7 @@ private:
     void HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx);
-    bool DropOldStuff(TEvKeyValue::TEvRequest* request, bool hasWrites, const TActorContext& ctx);
+    bool CleanUp(TEvKeyValue::TEvRequest* request, bool hasWrites, const TActorContext& ctx);
 
     //will fill sourceIds, request and NewHead
     //returns true if head is compacted
@@ -371,7 +371,7 @@ private:
         };
     }
 
-    bool DropOldData(TEvKeyValue::TEvRequest *request, bool hasWrites, const TActorContext& ctx);
+    bool CleanUpBlobs(TEvKeyValue::TEvRequest *request, bool hasWrites, const TActorContext& ctx);
     std::pair<TKey, ui32> Compact(const TKey& key, const ui32 size, bool headCleared);
 
     void HandleWrites(const TActorContext& ctx);

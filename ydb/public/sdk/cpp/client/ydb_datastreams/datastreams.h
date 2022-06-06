@@ -96,7 +96,8 @@ namespace NYdb::NDataStreams::V1 {
 
     struct TCreateStreamSettings : public NYdb::TOperationRequestSettings<TCreateStreamSettings> {
         FLUENT_SETTING(ui32, ShardCount);
-        FLUENT_SETTING(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_OPTIONAL(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_OPTIONAL(ui32, RetentionStorageMegabytes);
         FLUENT_SETTING(ui64, WriteQuotaKbPerSec);
     };
     struct TListStreamsSettings : public NYdb::TOperationRequestSettings<TListStreamsSettings> {
@@ -138,7 +139,8 @@ namespace NYdb::NDataStreams::V1 {
     };
     struct TUpdateStreamSettings : public NYdb::TOperationRequestSettings<TUpdateStreamSettings> {
         FLUENT_SETTING(ui32, TargetShardCount);
-        FLUENT_SETTING(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_OPTIONAL(ui32, RetentionPeriodHours);
+        FLUENT_SETTING_OPTIONAL(ui32, RetentionStorageMegabytes);
         FLUENT_SETTING(ui64, WriteQuotaKbPerSec);
     };
     struct TPutRecordSettings : public NYdb::TOperationRequestSettings<TPutRecordSettings> {};

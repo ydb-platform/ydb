@@ -7,27 +7,28 @@ OWNER(
 )
 
 SRCS(
-    cluster_tracker.cpp
+    actor_persqueue_client_iface.h
     blob.cpp
+    cluster_tracker.cpp
     event_helpers.cpp
     header.cpp
-    percentile_counter.cpp
-    pq.cpp
-    pq_database.cpp
-    pq_impl.cpp
-    sourceid.cpp
+    metering_sink.cpp
     mirrorer.cpp
     mirrorer.h
     ownerinfo.cpp
     partition.cpp
+    percentile_counter.cpp
+    pq.cpp
+    pq_database.cpp
+    pq_impl.cpp
     pq_l2_cache.cpp
     read_balancer.cpp
     read_speed_limiter.cpp
+    sourceid.cpp
     subscriber.cpp
     type_codecs_defs.cpp
     user_info.cpp
     write_meta.cpp
-    actor_persqueue_client_iface.h
 )
 
 GENERATE_ENUM_SERIALIZATION(sourceid.h)

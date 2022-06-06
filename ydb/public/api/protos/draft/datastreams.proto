@@ -259,10 +259,14 @@ message CreateStreamRequest {
     string stream_name = 2;
     // Shards count for a new stream
     int32 shard_count = 3;
-
     // Datastreams extension. Allow to set retention and write quota upon stream creation
     int32 write_quota_kb_per_sec = 4;
-    int32 retention_period_hours = 5;
+    oneof retention {
+        // Retention period in hours
+        int32 retention_period_hours = 5;
+        // Retention storage in megabytes
+        int32 retention_storage_megabytes = 6;
+    }
 }
 
 message CreateStreamResponse {
@@ -361,8 +365,12 @@ message UpdateStreamRequest {
     int32 write_quota_kb_per_sec = 3;
     // New number of shards
     int32 target_shard_count = 4;
-    // Retention period in hours
-    int32 retention_period_hours = 5;
+    oneof retention {
+        // Retention period in hours
+        int32 retention_period_hours = 5;
+        // Retention storage in megabytes
+        int32 retention_storage_megabytes = 6;
+    }
 }
 
 message UpdateStreamResponse {

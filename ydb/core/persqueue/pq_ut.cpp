@@ -1474,6 +1474,75 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
 
 
 
+Y_UNIT_TEST(TestTimeRetention) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(100);
+
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = PlainOrSoSlow(true, false);
+
+        TString s{32, 'c'};
+        ui32 pp = 8 + 4 + 2 + 9;
+        for (ui32 i = 0; i < 10; ++i) {
+            data.push_back({i + 1, s.substr(pp)});
+        }
+        PQTabletPrepare(1000, 100_MB, TDuration::Seconds(1000).Seconds(), {}, tc, 2, 100);
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true);
+        CmdWrite(0, "sourceid1", data, tc, false);
+        CmdWrite(0, "sourceid2", data, tc, false);
+        PQGetPartInfo(0, 30, tc);
+
+        PQTabletPrepare(1000, 100_MB, TDuration::Seconds(0).Seconds(), {}, tc, 2, 100);
+        CmdWrite(0, "sourceid3", data, tc, false);
+        CmdWrite(0, "sourceid4", data, tc, false);
+        CmdWrite(0, "sourceid5", data, tc, false);
+        PQGetPartInfo(50, 60, tc);
+    });
+}
+
+
+
+Y_UNIT_TEST(TestStorageRetention) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
+        TFinalizer finalizer(tc);
+        activeZone = false;
+        tc.Prepare(dispatchName, setup, activeZone);
+
+        tc.Runtime->SetScheduledLimit(100);
+
+        TVector<std::pair<ui64, TString>> data;
+        activeZone = PlainOrSoSlow(true, false);
+
+        TString s{32, 'c'};
+        ui32 pp = 8 + 4 + 2 + 9;
+        for (ui32 i = 0; i < 10; ++i) {
+            data.push_back({i + 1, s.substr(pp)});
+        }
+        PQTabletPrepare(1000, 100_MB, 0, {}, tc, 2, 100, true, 0, 0, 0, 1_MB);
+        CmdWrite(0, "sourceid0", data, tc, false, {}, true); //now 1 blob
+        CmdWrite(0, "sourceid1", data, tc, false);
+        CmdWrite(0, "sourceid2", data, tc, false);
+        PQGetPartInfo(0, 30, tc);
+
+        PQTabletPrepare(1000, 100_MB, 0, {}, tc, 2, 50, true, 0, 0, 0, 160);
+        CmdWrite(0, "sourceid3", data, tc, false);
+        CmdWrite(0, "sourceid4", data, tc, false);
+        PQGetPartInfo(40, 50, tc);
+    });
+}
+
+
+
 Y_UNIT_TEST(TestPQPartialRead) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1778,7 +1847,7 @@ Y_UNIT_TEST(TestGetTimestamps) {
         CmdGetOffset(0, "user1", 5, tc, 5);
 
         CmdWrite(0, "sourceid2", data, tc, false, {}, false, "", -1,100);
-        CmdRead(0, 100, Max<i32>(), Max<i32>(), 4, false, tc, {100,101,102,103}); //all offsets will be putted in cache
+        CmdRead(0, 100, Max<i32>(), Max<i32>(), 4, false, tc, {100, 101, 102, 103}); // all offsets will be putted in cache
 
         //check offset inside gap
         CmdSetOffset(0, "user", 50, true, tc);
@@ -2136,5 +2205,5 @@ Y_UNIT_TEST(TestTabletRestoreEventsOrder) {
     });
 }
 
-} // TPQTest
+} // Y_UNIT_TEST_SUITE(TPQTest)
 } // NKikimr

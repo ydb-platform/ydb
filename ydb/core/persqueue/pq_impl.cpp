@@ -19,14 +19,13 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <util/string/escape.h>
 
-namespace NKikimr {
-namespace NPQ {
+namespace NKikimr::NPQ {
 
-const TString TMP_REQUEST_MARKER = "__TMP__REQUEST__MARKER__";
-const ui32 CACHE_SIZE = 100 << 20; //100mb per tablet by default
-const ui32 MAX_BYTES = 25 * 1024 * 1024;
-const TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
-static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10240;
+static constexpr TDuration TOTAL_TIMEOUT = TDuration::Seconds(120);
+static constexpr char TMP_REQUEST_MARKER[] = "__TMP__REQUEST__MARKER__";
+static constexpr ui32 CACHE_SIZE = 100_MB;
+static constexpr ui32 MAX_BYTES = 25_MB;
+static constexpr ui32 MAX_SOURCE_ID_LENGTH = 10_KB;
 
 struct TPartitionInfo {
     TPartitionInfo(const TActorId& actor, TMaybe<TPartitionKeyRange>&& keyRange,
@@ -579,22 +578,6 @@ void TPersQueue::ReplyError(const TActorContext& ctx, const ui64 responseCookie,
     );
 }
 
-void TPersQueue::FillMeteringParams(const TActorContext& ctx)
-{
-    Y_UNUSED(ctx);
-    ResourceId = Config.GetTopicPath();
-
-    TStringBuf buf = Config.GetTopicPath();
-    TStringBuf stream;
-    auto res = buf.AfterPrefix(Config.GetYdbDatabasePath() + "/", stream);
-    if (res) {
-        StreamName = stream;
-    } else {
-        StreamName = buf;
-    }
-
-}
-
 void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
 {
     THashSet<ui32> was;
@@ -611,13 +594,12 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         Y_VERIFY_S(was.contains(partition.GetPartitionId()), "New config is bad, missing partition " << partition.GetPartitionId());
     }
 
-    Y_VERIFY(ConfigInited && PartitionsInited == Partitions.size()); //in order to answer only after all parts are ready to work
+    // in order to answer only after all parts are ready to work
+    Y_VERIFY(ConfigInited && PartitionsInited == Partitions.size());
 
-    FlushMetrics(true, ctx);
+    MeteringSink.MayFlushForcibly(ctx.Now());
 
     Config = NewConfig;
-
-    FillMeteringParams(ctx);
 
     if (!Config.PartitionsSize()) {
         for (const auto partitionId : Config.GetPartitionIds()) {
@@ -646,6 +628,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         Y_VERIFY(TopicName == Config.GetTopicName(), "Changing topic name is not supported");
         ctx.Send(CacheActor, new TEvPQ::TEvChangeCacheConfig(cacheSize));
     }
+
+    InitializeMeteringSink(ctx);
 
     for (auto& p : Partitions) { //change config for already created partitions
         ctx.Send(p.second.Actor, new TEvPQ::TEvChangeConfig(TopicName, Config));
@@ -771,14 +755,10 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     }
     ConfigInited = true;
 
-    auto now = ctx.Now();
-    ShardsMetricsLastFlush = now;
-    RequestsMetricsLastFlush = now;
-
-    FillMeteringParams(ctx);
+    InitializeMeteringSink(ctx);
 
     Y_VERIFY(!NewConfigShouldBeApplied);
-    for ( auto& req : UpdateConfigRequests) {
+    for (auto& req : UpdateConfigRequests) {
         ProcessUpdateConfigRequest(req.first, req.second, ctx);
     }
     UpdateConfigRequests.clear();
@@ -786,7 +766,7 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     for (auto& req : HasDataRequests) {
         auto it = Partitions.find(req->Record.GetPartition());
         if (it != Partitions.end()) {
-            if (now.MilliSeconds() < req->Record.GetDeadline()) { //otherwise there is no need to send event - proxy will generate event itself
+            if (ctx.Now().MilliSeconds() < req->Record.GetDeadline()) { //otherwise there is no need to send event - proxy will generate event itself
                 ctx.Send(it->second.Actor, req.Release());
             }
         }
@@ -812,6 +792,43 @@ void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& 
         TabletState = NKikimrPQ::ENormal;
     } else {
         Y_FAIL("Unexpected state read status: %d", read.GetStatus());
+    }
+}
+
+void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
+    TStringBuf stream;
+    const auto streamName =
+        TStringBuf(Config.GetTopicPath()).AfterPrefix(Config.GetYdbDatabasePath() + "/", stream)
+        ? stream.data() : Config.GetTopicPath();
+    const auto streamPath = Config.GetTopicPath();
+
+    auto& pqConfig = AppData(ctx)->PQConfig;
+    if (pqConfig.HasBillingMeteringConfig() && pqConfig.GetBillingMeteringConfig().GetEnabled()) {
+        TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
+        ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
+            Config.GetPartitionConfig().GetLifetimeSeconds()};
+
+        if (Config.GetPartitionConfig().HasStorageLimitBytes()) {
+            storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
+            whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
+                                               EMeteringJson::ThroughputV1,
+                                               EMeteringJson::StorageV1};
+        }
+
+        MeteringSink.Create(ctx.Now(), {
+                .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
+                .TabletId       = ToString(TabletID()),
+                .YcCloudId      = Config.GetYcCloudId(),
+                .YcFolderId     = Config.GetYcFolderId(),
+                .YdbDatabaseId  = Config.GetYdbDatabaseId(),
+                .StreamName     = streamName,
+                .ResourceId     = streamPath,
+                .PartitionsSize = Config.PartitionsSize(),
+                .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
+                .ReservedSpace  = storageLimitBytes,
+                .ConsumersThroughput = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
+                                       Config.ReadRulesSize(),
+            }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));
     }
 }
 
@@ -1453,10 +1470,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                                     const NKikimrClient::TPersQueuePartitionRequest& req, const TActorContext& ctx)
 {
     Y_VERIFY(req.CmdWriteSize());
-    FlushMetrics(false, ctx); // To ensure hours' border;
-    if (req.HasPutUnitsSize()) {
-        CurrentPutUnitsQuantity += req.GetPutUnitsSize();
-    }
+    MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
+    MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1,
+                                  req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
 
     TVector <TEvPQ::TEvWrite::TMsg> msgs;
 
@@ -1464,19 +1480,21 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 
     if (!req.GetIsDirectWrite()) {
         if (!req.HasMessageNo()) {
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "MessageNo must be set for writes");
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                       "MessageNo must be set for writes");
             return;
         }
 
-
         if (!mirroredPartition && !req.HasOwnerCookie()) {
-            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "OwnerCookie must be set for writes");
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                       "OwnerCookie must be set for writes");
             return;
         }
     }
 
     if (req.HasCmdWriteOffset() && req.GetCmdWriteOffset() < 0) {
-        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, "CmdWriteOffset can't be negative");
+        ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
+                   "CmdWriteOffset can't be negative");
         return;
     }
 
@@ -1997,7 +2015,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
 
 void TPersQueue::HandleDie(const TActorContext& ctx)
 {
-    FlushMetrics(true, ctx);
+    MeteringSink.MayFlushForcibly(ctx.Now());
 
     for (const auto& p : Partitions) {
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
@@ -2044,16 +2062,7 @@ TPersQueue::TPersQueue(const TActorId& tablet, TTabletStorageInfo *info)
 
 void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
-    const TActorId nameserviceId = GetNameserviceActorId();
-    ctx.Send(nameserviceId, new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
-
-    auto& pqConfig = AppData(ctx)->PQConfig;
-    if (pqConfig.HasBillingMeteringConfig() && pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-        MeteringEnabled = true;
-        MetricsFlushInterval = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec());
-    } else {
-        MeteringEnabled = false;
-    }
+    ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(ctx.SelfID.NodeId()));
 }
 
 void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorContext& ctx)
@@ -2082,120 +2091,8 @@ void TPersQueue::HandleWakeup(const TActorContext& ctx) {
     for (auto& g : groups) {
         AggregateAndSendLabeledCountersFor(g, ctx);
     }
-    FlushMetrics(false, ctx);
+    MeteringSink.MayFlush(ctx.Now());
     ctx.Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup());
-}
-
-TString TPersQueue::GetMeteringJson(
-        const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
-        ui64 quantity, const TString& quantityUnit,
-        const TInstant& start, const TInstant& end, const TInstant& now
-) {
-    TStringStream output;
-    NJson::TJsonWriter writer(&output, false);
-
-    writer.OpenMap();
-
-    writer.Write("cloud_id", Config.GetYcCloudId());
-    writer.Write("folder_id", Config.GetYcFolderId());
-    writer.Write("resource_id", ResourceId);
-    writer.Write("id", TStringBuilder() << metricBillingId << "-" << Config.GetYdbDatabaseId() << "-" << TabletID() << "-" << start.MilliSeconds() << "-" << (++MeteringCounter));
-
-    writer.Write("schema", schemeName);
-
-    writer.OpenMap("tags");
-    for (const auto& [tag, value] : tags) {
-        writer.Write(tag, value);
-    }
-    writer.CloseMap(); // "tags"
-
-    writer.OpenMap("usage");
-    writer.Write("quantity", quantity);
-    writer.Write("unit", quantityUnit);
-    writer.Write("start", start.Seconds());
-    writer.Write("finish", end.Seconds());
-    writer.CloseMap(); // "usage"
-
-    writer.OpenMap("labels");
-    writer.Write("datastreams_stream_name", StreamName);
-    writer.Write("ydb_database", Config.GetYdbDatabaseId());
-    writer.CloseMap(); // "labels"
-
-    writer.Write("version", "v1");
-    writer.Write("source_id", ToString(TabletID()));
-    writer.Write("source_wt", now.Seconds());
-    writer.CloseMap();
-    writer.Flush();
-    output << Endl;
-    return output.Str();
-}
-
-void TPersQueue::FlushMetrics(bool force, const TActorContext &ctx) {
-    if (!MeteringEnabled) {
-        return;
-    }
-    if (Config.PartitionsSize() == 0)
-        return;
-    auto now = ctx.Now();
-    bool needFlushRequests = force, needFlushShards = force;
-
-    auto checkFlushInterval = [&](const TInstant& lastFlush, bool& flag) {
-        if ((now - lastFlush) >= MetricsFlushInterval) {
-            flag = true;
-        }
-    };
-    checkFlushInterval(RequestsMetricsLastFlush, needFlushRequests);
-    checkFlushInterval(ShardsMetricsLastFlush, needFlushShards);
-
-    auto requestsEndTime = now;
-    if (now.Hours() > RequestsMetricsLastFlush.Hours()) {
-        needFlushRequests = true;
-        // If we jump over a hour edge, report requests metrics for a previous hour;
-        requestsEndTime = TInstant::Hours(RequestsMetricsLastFlush.Hours() + 1);
-        Y_VERIFY(requestsEndTime < now);
-    } else {
-        Y_VERIFY(now.Hours() == RequestsMetricsLastFlush.Hours());
-    }
-
-    if (needFlushRequests) {
-        if (CurrentPutUnitsQuantity > 0) {
-            auto record = GetMeteringJson(
-                    "put_units", "yds.events.puts.v1", {}, CurrentPutUnitsQuantity, "put_events",
-                    RequestsMetricsLastFlush, requestsEndTime, now
-            );
-            NMetering::SendMeteringJson(ctx, record);
-        }
-        CurrentPutUnitsQuantity = 0;
-        RequestsMetricsLastFlush = now;
-    }
-    if (needFlushShards) {
-        ui64 writeQuota = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
-        ui64 reservedSpace = Config.GetPartitionConfig().GetLifetimeSeconds() * writeQuota;
-        ui64 consumersThroughput = Config.ReadRulesSize() * writeQuota;
-        ui64 numPartitions = Config.PartitionsSize();
-        THashMap<TString, ui64> tags = {
-                {"reserved_throughput_bps", writeQuota}, {"shard_enhanced_consumers_throughput", consumersThroughput},
-                {"reserved_storage_bytes", reservedSpace}
-        };
-        auto makeShardsMetricsJson = [&](TInstant& end) {
-            auto res =  GetMeteringJson(
-                    "reserved_resources", "yds.resources.reserved.v1", tags,
-                    numPartitions * (end - ShardsMetricsLastFlush).Seconds(), "second",
-                    ShardsMetricsLastFlush, end, now
-            );
-            ShardsMetricsLastFlush = end;
-            return res;
-        };
-        auto interval = TInstant::Hours(ShardsMetricsLastFlush.Hours() + 1);
-        while (interval < now) {
-            NMetering::SendMeteringJson(ctx, makeShardsMetricsJson(interval));
-            interval += TDuration::Hours(1);
-        }
-        if (ShardsMetricsLastFlush < now) {
-            NMetering::SendMeteringJson(ctx, makeShardsMetricsJson(now));
-        }
-        Y_VERIFY(ShardsMetricsLastFlush == now);
-    }
 }
 
 bool TPersQueue::HandleHook(STFUNC_SIG)
@@ -2229,5 +2126,4 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
     return true;
 }
 
-}// NPQ
-}// NKikimr
+} // namespace NKikimr::NPQ

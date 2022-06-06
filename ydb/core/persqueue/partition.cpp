@@ -1045,7 +1045,7 @@ void TPartition::HandleWakeup(const TActorContext& ctx) {
         WriteTimestampEstimate = now;
 
     THolder <TEvKeyValue::TEvRequest> request = MakeHolder<TEvKeyValue::TEvRequest>();
-    bool haveChanges = DropOldStuff(request.Get(), false, ctx);
+    bool haveChanges = CleanUp(request.Get(), false, ctx);
     if (DiskIsFull) {
         AddCheckDiskRequest(request.Get(), Config.GetPartitionConfig().GetNumChannels());
         haveChanges = true;
@@ -1080,29 +1080,30 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 
 }
 
-bool TPartition::DropOldStuff(TEvKeyValue::TEvRequest* request, bool hasWrites, const TActorContext& ctx) {
-    bool haveChanges = false;
-    if (DropOldData(request, hasWrites, ctx))
-        haveChanges = true;
-    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " << request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
-    if (SourceIdStorage.DropOldSourceIds(request, ctx.Now(), StartOffset, Partition, Config.GetPartitionConfig())) {
-        haveChanges = true;
+bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, bool hasWrites, const TActorContext& ctx) {
+    bool haveChanges = CleanUpBlobs(request, hasWrites, ctx);
+    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " <<
+              request->Record.CmdDeleteRangeSize() << " items to delete old stuff");
+
+    haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), StartOffset, Partition,
+                                                    Config.GetPartitionConfig());
+    if (haveChanges) {
         SourceIdStorage.MarkOwnersForDeletedSourceId(Owners);
     }
-    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " << request->Record.CmdDeleteRangeSize() << " items to delete all stuff");
+    LOG_DEBUG(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Have " <<
+              request->Record.CmdDeleteRangeSize() << " items to delete all stuff");
     LOG_TRACE(ctx, NKikimrServices::PERSQUEUE, TStringBuilder() << "Delete command " << request->ToString());
+
     return haveChanges;
 }
 
-
-bool TPartition::DropOldData(TEvKeyValue::TEvRequest *request, bool hasWrites, const TActorContext& ctx) {
-    if (StartOffset == EndOffset)
-        return false;
-    if (DataKeysBody.size() <= 1)
+bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, bool hasWrites, const TActorContext& ctx) {
+    if (StartOffset == EndOffset || DataKeysBody.size() <= 1)
         return false;
 
+    const auto& partConfig = Config.GetPartitionConfig();
     ui64 minOffset = EndOffset;
-    for (const auto& importantClientId : Config.GetPartitionConfig().GetImportantClientId()) {
+    for (const auto& importantClientId : partConfig.GetImportantClientId()) {
         TUserInfo* userInfo = UsersInfoStorage.GetIfExists(importantClientId);
         ui64 curOffset = StartOffset;
         if (userInfo && userInfo->Offset >= 0) //-1 means no offset
@@ -1113,29 +1114,48 @@ bool TPartition::DropOldData(TEvKeyValue::TEvRequest *request, bool hasWrites, c
     bool hasDrop = false;
     ui64 endOffset = StartOffset;
 
-    if (DataKeysBody.size() > 1) {
+    const std::optional<ui64> storageLimit = partConfig.HasStorageLimitBytes()
+        ? std::optional<ui64>{partConfig.GetStorageLimitBytes()} : std::nullopt;
+    const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
-        while (DataKeysBody.size() > 1 && ctx.Now() >= DataKeysBody.front().Timestamp + TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds())
-                && (minOffset > DataKeysBody[1].Key.GetOffset() || minOffset == DataKeysBody[1].Key.GetOffset() && DataKeysBody[1].Key.GetPartNo() == 0)) {//all offsets from blob[0] are readed, and don't delete last blob
+    if (DataKeysBody.size() > 1) {
+        auto retentionCondition = [&]() -> bool {
+            const auto bodySize = BodySize - DataKeysBody.front().Size;
+            const bool timeRetention = (ctx.Now() >= (DataKeysBody.front().Timestamp + lifetimeLimit));
+            return storageLimit.has_value()
+                ? ((bodySize >= *storageLimit) || timeRetention)
+                : timeRetention;
+        };
+
+        while (DataKeysBody.size() > 1 &&
+               retentionCondition() &&
+               (minOffset > DataKeysBody[1].Key.GetOffset() ||
+                (minOffset == DataKeysBody[1].Key.GetOffset() &&
+                 DataKeysBody[1].Key.GetPartNo() == 0))) { // all offsets from blob[0] are readed, and don't delete last blob
             BodySize -= DataKeysBody.front().Size;
 
             DataKeysBody.pop_front();
-            if (!GapOffsets.empty() && !DataKeysBody.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
+            if (!GapOffsets.empty() && DataKeysBody.front().Key.GetOffset() == GapOffsets.front().second) {
                 GapSize -= GapOffsets.front().second - GapOffsets.front().first;
                 GapOffsets.pop_front();
             }
             hasDrop = true;
         }
+
         Y_VERIFY(!DataKeysBody.empty());
 
         endOffset = DataKeysBody.front().Key.GetOffset();
-        if (DataKeysBody.front().Key.GetPartNo() > 0) ++endOffset;
-
+        if (DataKeysBody.front().Key.GetPartNo() > 0) {
+            ++endOffset;
+        }
     }
 
     TDataKey lastKey = HeadKeys.empty() ? DataKeysBody.back() : HeadKeys.back();
 
-    if (!hasWrites && ctx.Now() >= lastKey.Timestamp + TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) && minOffset == EndOffset && false) { // disable drop of all data
+    if (!hasWrites &&
+        ctx.Now() >= lastKey.Timestamp + lifetimeLimit &&
+        minOffset == EndOffset &&
+        false) { // disable drop of all data
         Y_VERIFY(!HeadKeys.empty() || !DataKeysBody.empty());
 
         Y_VERIFY(CompactedKeys.empty());
@@ -4602,7 +4622,7 @@ void TPartition::HandleWrites(const TActorContext& ctx)
     } else {
         haveData = ProcessWrites(request.Get(), ctx);
     }
-    bool haveDrop = DropOldStuff(request.Get(), haveData, ctx);
+    bool haveDrop = CleanUp(request.Get(), haveData, ctx);
 
     ProcessReserveRequests(ctx);
 

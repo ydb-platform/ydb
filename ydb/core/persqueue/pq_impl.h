@@ -1,6 +1,7 @@
 #pragma once
 
 #include "percentile_counter.h"
+#include "metering_sink.h"
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/tablet_pipe.h>
@@ -81,14 +82,7 @@ class TPersQueue : public NKeyValue::TKeyValueFlat {
     void ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
     void ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx);
 
-    void FillMeteringParams(const TActorContext& ctx);
-    TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName, const THashMap<TString, ui64>& tags,
-                         ui64 quantity, const TString& quantityUnit,
-                         const TInstant& start, const TInstant& end, const TInstant& now);
-
-    void FlushMetrics(bool force, const TActorContext& ctx);
-    void FlushRequests(bool force, const TActorContext& ctx);
-    void FlushShardData(bool force, const TActorContext& ctx);
+    void InitializeMeteringSink(const TActorContext& ctx);
 
     TMaybe<TEvPQ::TEvRegisterMessageGroup::TBody> MakeRegisterMessageGroup(
         const NKikimrClient::TPersQueuePartitionRequest::TCmdRegisterMessageGroup& cmd,
@@ -179,15 +173,7 @@ private:
 
     NMetrics::TResourceMetrics *ResourceMetrics;
 
-    bool MeteringEnabled = false;
-    TDuration MetricsFlushInterval;
-    TInstant ShardsMetricsLastFlush = TInstant::Zero();
-    TInstant RequestsMetricsLastFlush  = TInstant::Zero();
-    ui64 CurrentPutUnitsQuantity = 0;
-    TString ResourceId;
-    TString StreamName;
-
-    ui64 MeteringCounter = 0;
+    TMeteringSink MeteringSink;
 };
 
 

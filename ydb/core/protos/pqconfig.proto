@@ -182,7 +182,9 @@ message TMirrorPartitionConfig {
 message TPartitionConfig {
     optional int32 MaxCountInPartition = 1 [default = 10000000];
     optional int64 MaxSizeInPartition = 2 [default = 1099511627776];
-    optional int32 LifetimeSeconds = 3; //mandatory, must be set
+    optional int32 LifetimeSeconds = 3 [default = 604800]; //mandatory, must be set
+    optional uint64 StorageLimitBytes = 16;
+
     // List of ClientIds, for which we don't delete data until they are read by these clients
     repeated string ImportantClientId = 4; //can be empty
     optional uint32 LowWatermark = 5 [default = 6291456]; //6Mb, compact blobs if they at least this big.

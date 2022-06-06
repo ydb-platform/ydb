@@ -793,7 +793,7 @@ void ExecuteReadRange(TTestContext &tc,
 
 template <NKikimrKeyValue::Statuses::ReplyStatus ExpectedStatus = NKikimrKeyValue::Statuses::RSTATUS_OK>
 void ExecuteGetStatus(TTestContext &tc, const TDeque<ui32> &channels, ui64 lock_generation) {
-    TDesiredPair<TEvKeyValue::TEvGetStatus> dp;
+    TDesiredPair<TEvKeyValue::TEvGetStorageChannelStatus> dp;
     dp.Request.set_lock_generation(lock_generation);
     dp.Request.set_tablet_id(tc.TabletId);
     for (ui32 channel : channels) {
@@ -806,14 +806,14 @@ void ExecuteGetStatus(TTestContext &tc, const TDeque<ui32> &channels, ui64 lock_
             << " exp# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(ExpectedStatus)
             << " msg# " << dp.Response.msg());
     if constexpr (ExpectedStatus == NKikimrKeyValue::Statuses::RSTATUS_OK) {
-        for (auto &channel : dp.Response.channel()) {
+        for (auto &channel : dp.Response.storage_channel()) {
             UNIT_ASSERT(channel.status() == NKikimrKeyValue::Statuses::RSTATUS_OK);
         }
     }
 }
 
 void ExecuteObtainLock(TTestContext &tc, ui64 expectedLockGeneration) {
-    TDesiredPair<TEvKeyValue::TEvObtainLock> dp;
+    TDesiredPair<TEvKeyValue::TEvAcquireLock> dp;
     dp.Request.set_tablet_id(tc.TabletId);
     ExecuteEvent(dp, tc);
     UNIT_ASSERT_VALUES_EQUAL(dp.Response.lock_generation(), expectedLockGeneration);
@@ -917,7 +917,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
     TDispatchOptions options;
     options.FinalEvents.push_back(TKikimrEvents::TEvPoisonPill::EventType);
     tc.Runtime->DispatchEvents(options);
-    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NO_DATA>(tc, "key", "", 0, 0, 0);
+    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
     ExecuteRead(tc, "key1", "value1", 0, 0, 0);
 }
 
@@ -931,7 +931,7 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOkWithNewApi) {
         ExecuteWrite(tc, {{"key", "value"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
         ExecuteRead(tc, "key", "value", 0, 0, 0);
         ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NO_DATA>(tc, "key", "", 0, 0, 0);
+        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
     });
 }
 
@@ -1086,7 +1086,7 @@ Y_UNIT_TEST(TestInlineWriteReadDeleteWithRestartsThenResponseOkNewApi) {
         ExecuteWrite(tc, {{"key", "value"}}, 0, 1, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
         ExecuteRead(tc, "key", "value", 0, 0, 0);
         ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NO_DATA>(tc, "key", "", 0, 0, 0);
+        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
     });
 }
 
@@ -1362,8 +1362,8 @@ Y_UNIT_TEST(TestInlineWriteReadWithRestartsWithNotCorrectUTF8NewApi) {
         TKeyValuePair pair{TString("key1\0"), TString("value")};
         expectedPairs.push_back({TString("key1\\0"), TString()});
         ExecuteWrite(tc, {pair}, 0, 1, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-
-        ExecuteReadRange<NKikimrKeyValue::Statuses::RSTATUS_NO_DATA>(tc, "key0", EBorderKind::Include,
+        expectedPairs.clear();
+        ExecuteReadRange<NKikimrKeyValue::Statuses::RSTATUS_OK>(tc, "key0", EBorderKind::Include,
                 "key1", EBorderKind::Exclude, expectedPairs, 0, true, 0);
     });
 }
@@ -1413,7 +1413,7 @@ Y_UNIT_TEST(TestEmptyWriteReadDeleteWithRestartsThenResponseOkNewApi) {
 
         ExecuteReadRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, pairs, 0, true, 0);
         ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NO_DATA>(tc, "key", "", 0, 0, 0);
+        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
     });
 }
 
@@ -1462,7 +1462,7 @@ Y_UNIT_TEST(TestInlineEmptyWriteReadDeleteWithRestartsThenResponseOkNewApi) {
 
         ExecuteReadRange(tc, "", EBorderKind::Without, "", EBorderKind::Without, pairs, 0, true, 0);
         ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NO_DATA>(tc, "key", "", 0, 0, 0);
+        ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
     });
 }
 
@@ -2188,7 +2188,7 @@ Y_UNIT_TEST(TestObtainLockNewApi) {
     }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-        constexpr NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_ERROR;
+        constexpr NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION;
         ExecuteObtainLock(tc, 1);
 
         ExecuteGetStatus<status>(tc, {1, 2}, 0);

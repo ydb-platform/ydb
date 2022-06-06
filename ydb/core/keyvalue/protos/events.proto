@@ -26,9 +26,13 @@ message Statuses {
         RSTATUS_ERROR = 2;
         RSTATUS_TIMEOUT = 3;
         RSTATUS_INTERNAL_ERROR = 4;
-        RSTATUS_NO_DATA = 5;
+        RSTATUS_NOT_FOUND = 5;
         RSTATUS_OVERRUN = 6;
+        RSTATUS_WRONG_LOCK_GENERATION = 7;
     }
+}
+
+message StorageStatusFlags {
 }
 
 message Flags {
@@ -41,28 +45,34 @@ message Flags {
     bool disk_space_black = 7;
 }
 
-message Channel {
+message StorageChannel {
+    enum StatusFlag {
+        STATUS_FLAG_UNSPECIFIED = 0;
+        STATUS_FLAG_GREEN = 10;
+        STATUS_FLAG_YELLOW_STOP = 20;
+        STATUS_FLAG_ORANGE_OUT_SPACE = 30;
+    }
     Statuses.ReplyStatus status = 1;
     uint32 storage_channel = 2;
-    optional Flags status_flags = 3;
+    StatusFlag status_flag = 3;
 }
 
 message KVRange {
     oneof from_bound {
-        bytes from_key_inclusive = 1;
-        bytes from_key_exclusive = 2;
+        string from_key_inclusive = 1;
+        string from_key_exclusive = 2;
     }
 
     oneof to_bound {
-        bytes to_key_inclusive = 3;
-        bytes to_key_exclusive = 4;
+        string to_key_inclusive = 3;
+        string to_key_exclusive = 4;
     }
 }
 
 message ReadRequest {
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
-    bytes key = 3;
+    optional uint64 lock_generation = 2;
+    string key = 3;
     uint64 offset = 4;
     uint64 size = 5;
     uint64 cookie = 6;
@@ -72,18 +82,19 @@ message ReadRequest {
 }
 
 message ReadResult {
-    bytes requested_key = 1;
+    string requested_key = 1;
     uint64 requested_offset = 2;
     uint64 requested_size = 3;
     bytes value = 4;
     string msg = 5;
     Statuses.ReplyStatus status = 6;
     uint64 cookie = 7;
+    uint64 node_id = 8;
 }
 
 message ReadRangeRequest {
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
 
     KVRange range = 3;
 
@@ -96,7 +107,7 @@ message ReadRangeRequest {
 
 message ReadRangeResult {
     message KeyValuePair {
-        bytes key = 1;
+        string key = 1;
         bytes value = 2;
         uint32 value_size = 3;
 
@@ -109,23 +120,24 @@ message ReadRangeResult {
     string msg = 2;
     repeated KeyValuePair pair = 3;
     uint64 cookie = 4;
+    uint64 node_id = 5;
 }
 
 message ExecuteTransactionRequest {
     message Command {
         message Rename {
-            bytes old_key = 1;
-            bytes new_key = 2;
+            string old_key = 1;
+            string new_key = 2;
         }
         message Concat {
-            repeated bytes input_keys = 1;
-            bytes output_key = 2;
+            repeated string input_keys = 1;
+            string output_key = 2;
             bool keep_inputs = 3;
         }
         message CopyRange {
             KVRange range = 1;
-            bytes prefix_to_remove = 2;
-            bytes prefix_to_add = 3;
+            string prefix_to_remove = 2;
+            string prefix_to_add = 3;
         }
         message Write {
             enum Tactic {
@@ -133,7 +145,7 @@ message ExecuteTransactionRequest {
                 TACTIC_MAX_THROUGHPUT = 1;
                 TACTIC_MIN_LATENCY = 2;
             }
-            bytes key = 1;
+            string key = 1;
             bytes value = 2;
             uint32 storage_channel = 3;
             Priorities.Priority priority = 4;
@@ -153,38 +165,41 @@ message ExecuteTransactionRequest {
     }
 
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
     repeated Command commands = 3;
     uint64 cookie = 4;
     uint64 deadline_instant_ms = 5;
 }
 
 message ExecuteTransactionResult {
-    repeated Channel channel = 1;
+    repeated StorageChannel storage_channel = 1;
     Statuses.ReplyStatus status = 2;
     string msg = 3;
     uint64 cookie = 4;
+    uint64 node_id = 5;
 }
 
-message GetStatusRequest {
+message GetStorageChannelStatusRequest {
     uint64 tablet_id = 1;
-    uint64 lock_generation = 2;
+    optional uint64 lock_generation = 2;
     repeated uint32 storage_channel = 3;
     uint64 deadline_instant_ms = 4;
 }
 
-message GetStatusResult {
-    repeated Channel channel = 1;
+message GetStorageChannelStatusResult {
+    repeated StorageChannel storage_channel = 1;
     Statuses.ReplyStatus status = 2;
     string msg = 3;
+    uint64 node_id = 4;
 }
 
-message ObtainLockRequest {
+message AcquireLockRequest {
     uint64 tablet_id = 1;
     uint64 cookie = 2;
 }
 
-message ObtainLockResult {
+message AcquireLockResult {
     uint64 lock_generation = 1;
     uint64 cookie = 2;
+    uint64 node_id = 3;
 }

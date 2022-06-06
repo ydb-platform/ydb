@@ -5,6 +5,7 @@
 #include <util/string/cast.h>
 #include <util/string/builder.h>
 #include <util/stream/buffer.h>
+#include <util/stream/format.h>
 
 namespace NKikimr::NDyNumber {
 
@@ -124,6 +125,7 @@ TMaybe<TString> ParseDyNumberString(TStringBuf str) {
     auto nonZeroAfterDot = 0U;
     bool hasNonZeroAfterDot = false;
     auto zeroAfterDot = 0U;
+    auto tailZerosBeforeDot = 0U;
     i16 ePower = 0;
     auto tailZeros = 0U;
     TSmallVec<char> data;
@@ -150,7 +152,14 @@ TMaybe<TString> ParseDyNumberString(TStringBuf str) {
             return Nothing();
         if (!hasDot) {
             ++beforeDot;
-            data.emplace_back(c - '0');
+            if (isZero) {
+                ++tailZerosBeforeDot;
+            } else {
+                for (; tailZerosBeforeDot; --tailZerosBeforeDot) {
+                    data.emplace_back('\x00');
+                }
+                data.emplace_back(c - '0');
+            }
         } else {
             if (!isZero)
                 hasNonZeroAfterDot = true;
@@ -158,6 +167,9 @@ TMaybe<TString> ParseDyNumberString(TStringBuf str) {
                 if (isZero) {
                     ++tailZeros;
                 } else {
+                    for (; tailZerosBeforeDot; --tailZerosBeforeDot) {
+                        data.emplace_back('\x00');
+                    }
                     for (; tailZeros; --tailZeros) {
                         data.emplace_back('\x00');
                         ++nonZeroAfterDot;
@@ -198,6 +210,9 @@ TMaybe<TString> ParseDyNumberString(TStringBuf str) {
         for (auto i = 0U; i < data.size(); i += 2U)
             result.append((data[i]  << '\x04') | data[i + 1]);
     }
+
+    // Cerr << str << ": " << HexText(TStringBuf{result.c_str(), result.size()}) << Endl;
+
     return result;
 }
 

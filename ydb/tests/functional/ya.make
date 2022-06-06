@@ -5,6 +5,7 @@ RECURSE(
     blobstorage
     canonical
     cms_config_cache
+    dynumber
     encryption
     hive
     large_serializable

@@ -198,9 +198,15 @@ public:
             TRowVersion incompleteEdge(record.GetMvccIncompleteEdgeStep(), record.GetMvccIncompleteEdgeTxId());
             if (Self->GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
                 Self->GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
+            TRowVersion immediateWriteEdge(record.GetMvccImmediateWriteEdgeStep(), record.GetMvccImmediateWriteEdgeTxId());
+            if (Self->GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
+                Self->GetSnapshotManager().SetImmediateWriteEdge(immediateWriteEdge, txc);
             TRowVersion lowWatermark(record.GetMvccLowWatermarkStep(), record.GetMvccLowWatermarkTxId());
             if (Self->GetSnapshotManager().GetLowWatermark() < lowWatermark)
                 Self->GetSnapshotManager().SetLowWatermark(db, lowWatermark);
+            bool performedUnprotectedReads = record.GetMvccPerformedUnprotectedReads();
+            if (!Self->GetSnapshotManager().GetPerformedUnprotectedReads() && performedUnprotectedReads)
+                Self->GetSnapshotManager().SetPerformedUnprotectedReads(true, txc);
         }
 
         // Would be true for the first snapshot we receive, e.g. during a merge

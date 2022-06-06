@@ -79,10 +79,12 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
                                     : TRowVersion::Min();
         TRowVersion incompleteEdge = mvcc ? DataShard.GetSnapshotManager().GetIncompleteEdge()
                                      : TRowVersion::Min();
+        TRowVersion immediateWriteEdge = mvcc ? DataShard.GetSnapshotManager().GetImmediateWriteEdge()
+                                              : TRowVersion::Min();
         TRowVersion lowWatermark = mvcc ? DataShard.GetSnapshotManager().GetLowWatermark() :
                                    TRowVersion::Min();
 
-        if (minVersion || completeEdge || incompleteEdge || lowWatermark)
+        if (minVersion || completeEdge || incompleteEdge || immediateWriteEdge || lowWatermark)
             extended = true; // Must use an extended format
 
         if (extended) {
@@ -108,6 +110,11 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
             if (incompleteEdge) {
                 rs.SetMvccIncompleteEdgeStep(incompleteEdge.Step);
                 rs.SetMvccIncompleteEdgeTxId(incompleteEdge.TxId);
+            }
+
+            if (immediateWriteEdge) {
+                rs.SetMvccImmediateWriteEdgeStep(immediateWriteEdge.Step);
+                rs.SetMvccImmediateWriteEdgeTxId(immediateWriteEdge.TxId);
             }
 
             if (lowWatermark) {

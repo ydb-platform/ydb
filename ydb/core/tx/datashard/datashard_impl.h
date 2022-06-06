@@ -82,11 +82,15 @@ public:
     TSplitSnapshotContext(ui64 txId, TVector<ui32> &&tables,
                           TRowVersion completeEdge = TRowVersion::Min(),
                           TRowVersion incompleteEdge = TRowVersion::Min(),
-                          TRowVersion lowWatermark = TRowVersion::Min())
+                          TRowVersion immediateWriteEdge = TRowVersion::Min(),
+                          TRowVersion lowWatermark = TRowVersion::Min(),
+                          bool performedUnprotectedReads = false)
         : TxId(txId)
         , CompleteEdge(completeEdge)
         , IncompleteEdge(incompleteEdge)
+        , ImmediateWriteEdge(immediateWriteEdge)
         , LowWatermark(lowWatermark)
+        , PerformedUnprotectedReads(performedUnprotectedReads)
         , Tables(tables)
     {}
 
@@ -97,7 +101,9 @@ public:
     ui64 TxId;
     TRowVersion CompleteEdge;
     TRowVersion IncompleteEdge;
+    TRowVersion ImmediateWriteEdge;
     TRowVersion LowWatermark;
+    bool PerformedUnprotectedReads;
 
 private:
     TVector<ui32> Tables;

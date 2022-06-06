@@ -83,6 +83,9 @@ EExecutionStatus TReceiveSnapshotUnit::Execute(TOperation::TPtr op,
                     TRowVersion incompleteEdge(rs.GetMvccIncompleteEdgeStep(), rs.GetMvccIncompleteEdgeTxId());
                     if (DataShard.GetSnapshotManager().GetIncompleteEdge() < incompleteEdge)
                         DataShard.GetSnapshotManager().SetIncompleteEdge(db, incompleteEdge);
+                    TRowVersion immediateWriteEdge(rs.GetMvccImmediateWriteEdgeStep(), rs.GetMvccImmediateWriteEdgeTxId());
+                    if (DataShard.GetSnapshotManager().GetImmediateWriteEdge() < immediateWriteEdge)
+                        DataShard.GetSnapshotManager().SetImmediateWriteEdge(immediateWriteEdge, txc);
                     TRowVersion lowWatermark(rs.GetMvccLowWatermarkStep(), rs.GetMvccLowWatermarkTxId());
                     if (DataShard.GetSnapshotManager().GetLowWatermark() < lowWatermark)
                         DataShard.GetSnapshotManager().SetLowWatermark(db, lowWatermark);

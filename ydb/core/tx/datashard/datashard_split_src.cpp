@@ -178,7 +178,9 @@ public:
             snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot),
                                                     Self->GetSnapshotManager().GetCompleteEdge(),
                                                     Self->GetSnapshotManager().GetIncompleteEdge(),
-                                                    Self->GetSnapshotManager().GetLowWatermark());
+                                                    Self->GetSnapshotManager().GetImmediateWriteEdge(),
+                                                    Self->GetSnapshotManager().GetLowWatermark(),
+                                                    Self->GetSnapshotManager().GetPerformedUnprotectedReads());
         } else {
             snapContext = new TSplitSnapshotContext(opId, std::move(tablesToSnapshot));
         }
@@ -323,6 +325,9 @@ public:
                     snapshot->SetMvccCompleteEdgeTxId(SnapContext->CompleteEdge.TxId);
                     snapshot->SetMvccIncompleteEdgeStep(SnapContext->IncompleteEdge.Step);
                     snapshot->SetMvccIncompleteEdgeTxId(SnapContext->IncompleteEdge.TxId);
+                    snapshot->SetMvccImmediateWriteEdgeStep(SnapContext->ImmediateWriteEdge.Step);
+                    snapshot->SetMvccImmediateWriteEdgeTxId(SnapContext->ImmediateWriteEdge.TxId);
+                    snapshot->SetMvccPerformedUnprotectedReads(SnapContext->PerformedUnprotectedReads);
                 }
 
                 // Send info about existing persistent snapshots

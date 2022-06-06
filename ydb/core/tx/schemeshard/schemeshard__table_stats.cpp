@@ -239,18 +239,18 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
 
         if (lag) {
             Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+        } else {
+            Y_VERIFY_DEBUG(false);
         }
 
-        if (shardInfo.LastCondErase) {
-            const auto now = ctx.Now();
-            if (now >= shardInfo.LastCondErase) {
-                lag = now - shardInfo.LastCondErase;
-            } else {
-                lag = TDuration::Zero();
-            }
-
-            Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+        const auto now = ctx.Now();
+        if (now >= shardInfo.LastCondErase) {
+            lag = now - shardInfo.LastCondErase;
+        } else {
+            lag = TDuration::Zero();
         }
+
+        Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
     }
 
     TVector<TShardIdx> shardsToMerge;

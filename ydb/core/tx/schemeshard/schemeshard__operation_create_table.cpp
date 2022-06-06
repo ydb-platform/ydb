@@ -273,9 +273,18 @@ public:
         Y_VERIFY(table);
         table->AlterVersion = NEW_TABLE_ALTER_VERSION;
 
-        if (table->IsTTLEnabled()) {
+        if (table->IsTTLEnabled() && !context.SS->TTLEnabledTables.contains(pathId)) {
             context.SS->TTLEnabledTables[pathId] = table;
             context.SS->TabletCounters->Simple()[COUNTER_TTL_ENABLED_TABLE_COUNT].Add(1);
+
+            const auto now = context.Ctx.Now();
+            for (auto& shard : table->GetPartitions()) {
+                auto& lag = shard.LastCondEraseLag;
+                Y_VERIFY_DEBUG(!lag.Defined());
+
+                lag = now - shard.LastCondErase;
+                context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+            }
         }
         context.SS->PersistTableCreated(db, pathId);
 

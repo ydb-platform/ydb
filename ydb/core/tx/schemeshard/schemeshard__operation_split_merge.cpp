@@ -248,11 +248,20 @@ public:
             if (txShard.Operation == TTxState::TransferData)
                 allSrcShardIdxs.insert(txShard.Idx);
         }
+
         bool dstAdded = false;
+        const auto now = context.Ctx.Now();
         for (const auto& shard : tableInfo->GetPartitions()) {
             if (allSrcShardIdxs.contains(shard.ShardIdx)) {
-                if (dstAdded)
+                if (auto& lag = shard.LastCondEraseLag) {
+                    context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+                    lag.Clear();
+                }
+
+                if (dstAdded) {
                     continue;
+                }
+
                 for (const auto& txShard : txState->Shards) {
                     if (txShard.Operation != TTxState::CreateParts)
                         continue;
@@ -260,8 +269,18 @@ public:
                     // TODO: make sure dst are sorted by range end
                     Y_VERIFY(context.SS->ShardInfos.contains(txShard.Idx));
                     TTableShardInfo dst(txShard.Idx, txShard.RangeEnd);
+
+                    if (tableInfo->IsTTLEnabled()) {
+                        auto& lag = dst.LastCondEraseLag;
+                        Y_VERIFY_DEBUG(!lag.Defined());
+
+                        lag = now - dst.LastCondErase;
+                        context.SS->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
+                    }
+
                     newPartitioning.push_back(dst);
                 }
+
                 dstAdded = true;
             } else {
                 newPartitioning.push_back(shard);

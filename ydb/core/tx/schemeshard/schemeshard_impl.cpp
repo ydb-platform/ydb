@@ -3211,8 +3211,9 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::TablePartitionStats>().Key(pathId.OwnerId, pathId.LocalPathId, pNo).Delete();
 
         const auto& shardInfo = tableInfo->GetPartitions().at(pNo);
-        if (const auto& lag = shardInfo.LastCondEraseLag) {
+        if (auto& lag = shardInfo.LastCondEraseLag) {
             TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+            lag.Clear();
         }
     }
 

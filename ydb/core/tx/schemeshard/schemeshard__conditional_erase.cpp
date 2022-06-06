@@ -416,8 +416,11 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
         const auto& tableShardInfo = partitions.at(partitionIdx);
 
         const auto& lag = tableShardInfo.LastCondEraseLag;
+
         if (lag) {
             Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].DecrementFor(lag->Seconds());
+        } else {
+            Y_VERIFY_DEBUG(false);
         }
 
         const auto now = ctx.Now();

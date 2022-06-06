@@ -2036,7 +2036,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 partitions[id] = TTableShardInfo(datashardIdx, rangeEnd, lastCondErase, nextCondErase);
 
-                if (Self->TTLEnabledTables.contains(tableId) && partitions[id].LastCondErase) {
+                if (Self->TTLEnabledTables.contains(tableId)) {
                     auto& lag = partitions[id].LastCondEraseLag;
                     if (now >= partitions[id].LastCondErase) {
                         lag = now - partitions[id].LastCondErase;

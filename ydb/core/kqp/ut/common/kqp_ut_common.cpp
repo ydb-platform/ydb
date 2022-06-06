@@ -99,7 +99,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
 
     effectiveKqpSettings.insert(effectiveKqpSettings.end(), settings.KqpSettings.begin(), settings.KqpSettings.end());
 
-    ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort));
+    ServerSettings.Reset(MakeHolder<Tests::TServerSettings>(mbusPort, NKikimrProto::TAuthConfig(), settings.PQConfig));
     ServerSettings->SetDomainName(settings.DomainRoot);
     ServerSettings->SetKqpSettings(effectiveKqpSettings);
     ServerSettings->SetAppConfig(settings.AppConfig);

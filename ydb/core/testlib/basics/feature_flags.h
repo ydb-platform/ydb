@@ -34,6 +34,7 @@ public:
     FEATURE_FLAG_SETTER(EnableNotNullColumns)
     FEATURE_FLAG_SETTER(EnableTtlOnAsyncIndexedTables)
     FEATURE_FLAG_SETTER(EnableBulkUpsertToAsyncIndexedTables)
+    FEATURE_FLAG_SETTER(EnableChangefeeds)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

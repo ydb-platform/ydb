@@ -29,5 +29,21 @@ enum class EIndexType {
     Unknown = std::numeric_limits<int>::max()
 };
 
+enum class EChangefeedMode {
+    KeysOnly,
+    Updates,
+    NewImage,
+    OldImage,
+    NewAndOldImages,
+
+    Unknown = std::numeric_limits<int>::max()
+};
+
+enum class EChangefeedFormat {
+    Json,
+
+    Unknown = std::numeric_limits<int>::max()
+};
+
 } // namespace NTable
 } // namespace NYdb

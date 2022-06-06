@@ -32,6 +32,13 @@ bool FillIndexDescription(NKikimrSchemeOp::TIndexedTableCreationConfig& out,
     const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
 
 // out
+void FillChangefeedDescription(Ydb::Table::DescribeTableResult& out,
+    const NKikimrSchemeOp::TTableDescription& in);
+// in
+bool FillChangefeedDescription(NKikimrSchemeOp::TCdcStreamDescription& out,
+    const Ydb::Table::Changefeed& in, Ydb::StatusIds::StatusCode& status, TString& error);
+
+// out
 void FillTableStats(Ydb::Table::DescribeTableResult& out,
     const NKikimrSchemeOp::TPathDescription& in, bool withPartitionStatistic);
 

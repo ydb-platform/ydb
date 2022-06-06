@@ -693,6 +693,7 @@ message TFeatureFlags {
     optional bool EnableImplicitScanQueryInScripts = 61 [default = false];
     optional bool EnablePredicateExtractForScanQueries = 62 [default = false];
     optional bool AllowVDiskDefrag = 63 [default = true];
+    optional bool EnableChangefeeds = 65 [default = false];
 }
 
 

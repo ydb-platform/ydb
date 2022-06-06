@@ -115,6 +115,36 @@ static INode::TPtr CreateIndexDesc(const TIndexDescription& index, const INode& 
                   node.Q(node.Y(node.Q("dataColumns"), node.Q(dataColumns))));
 }
 
+static INode::TPtr CreateChangefeedDesc(const TChangefeedDescription& desc, const INode& node) {
+    auto settings = node.Y();
+    if (desc.Settings.Mode) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("mode"), desc.Settings.Mode)));
+    }
+    if (desc.Settings.Format) {
+        settings = node.L(settings, node.Q(node.Y(node.Q("format"), desc.Settings.Format)));
+    }
+    if (const auto& sink = desc.Settings.SinkSettings) {
+        switch (sink->index()) {
+            case 0: // local
+                settings = node.L(settings, node.Q(node.Y(node.Q("local"), node.Q(node.Y()))));
+                break;
+            default:
+                YQL_ENSURE(false, "Unexpected sink settings");
+        }
+    }
+
+    auto state = node.Y();
+    if (desc.Disable) {
+        state = node.Q("disable");
+    }
+
+    return node.Y(
+        node.Q(node.Y(node.Q("name"), BuildQuotedAtom(desc.Name.Pos, desc.Name.Name))),
+        node.Q(node.Y(node.Q("settings"), node.Q(settings))),
+        node.Q(node.Y(node.Q("state"), node.Q(state)))
+    );
+}
+
 class TPrepTableKeys: public ITableKeys {
 public:
     TPrepTableKeys(TPosition pos, const TString& service, const TDeferredAtom& cluster,
@@ -547,8 +577,12 @@ public:
             return false;
         }
 
-        if (!Params.PkColumns.empty() || !Params.PartitionByColumns.empty()
-            || !Params.OrderByColumns.empty() || !Params.Indexes.empty()) {
+        if (!Params.PkColumns.empty()
+            || !Params.PartitionByColumns.empty()
+            || !Params.OrderByColumns.empty()
+            || !Params.Indexes.empty()
+            || !Params.Changefeeds.empty())
+        {
             THashSet<TString> columnsSet;
             for (auto& col : Params.Columns) {
                 columnsSet.insert(col.Name);
@@ -576,7 +610,7 @@ public:
             THashSet<TString> indexNames;
             for (const auto& index : Params.Indexes) {
                 if (!indexNames.insert(index.Name.Name).second) {
-                    ctx.Error(index.Name.Pos) << "Index " << index.Name.Name << "must be defined once";
+                    ctx.Error(index.Name.Pos) << "Index " << index.Name.Name << " must be defined once";
                     return false;
                 }
 
@@ -592,6 +626,14 @@ public:
                         ctx.Error(dataColumn.Pos) << "Undefined column: " << dataColumn.Name;
                         return false;
                     }
+                }
+            }
+
+            THashSet<TString> cfNames;
+            for (const auto& cf : Params.Changefeeds) {
+                if (!cfNames.insert(cf.Name.Name).second) {
+                    ctx.Error(cf.Name.Pos) << "Changefeed " << cf.Name.Name << " must be defined once";
+                    return false;
                 }
             }
         }
@@ -667,6 +709,11 @@ public:
         for (const auto& index : Params.Indexes) {
             const auto& desc = CreateIndexDesc(index, *this);
             opts = L(opts, Q(Y(Q("index"), Q(desc))));
+        }
+
+        for (const auto& cf : Params.Changefeeds) {
+            const auto& desc = CreateChangefeedDesc(cf, *this);
+            opts = L(opts, Q(Y(Q("changefeed"), Q(desc))));
         }
 
         if (Params.ColumnFamilies) {
@@ -924,6 +971,21 @@ public:
             auto destination = ctx.GetPrefixedPath(Scoped->CurrService, Scoped->CurrCluster,
                                                    TDeferredAtom(Params.RenameTo->Pos, Params.RenameTo->Name));
             actions = L(actions, Q(Y(Q("renameTo"), destination)));
+        }
+
+        for (const auto& cf : Params.AddChangefeeds) {
+            const auto& desc = CreateChangefeedDesc(cf, *this);
+            actions = L(actions, Q(Y(Q("addChangefeed"), Q(desc))));
+        }
+
+        for (const auto& cf : Params.AlterChangefeeds) {
+            const auto& desc = CreateChangefeedDesc(cf, *this);
+            actions = L(actions, Q(Y(Q("alterChangefeed"), Q(desc))));
+        }
+
+        for (const auto& id : Params.DropChangefeeds) {
+            const auto name = BuildQuotedAtom(id.Pos, id.Name);
+            actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
         auto opts = Y();

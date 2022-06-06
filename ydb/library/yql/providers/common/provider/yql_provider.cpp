@@ -158,6 +158,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     TMaybeNode<TCoLambda> update;
     TVector<TCoNameValueTuple> other;
     TVector<TCoIndex> indexes;
+    TVector<TCoChangefeed> changefeeds;
     TMaybeNode<TExprList> columnFamilies;
     TVector<TCoNameValueTuple> tableSettings;
     TVector<TCoNameValueTuple> alterActions;
@@ -205,6 +206,23 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
                     }
                 }
                 indexes.push_back(index.Done());
+            } else if (name == "changefeed") {
+                YQL_ENSURE(tuple.Value().Maybe<TCoNameValueTupleList>());
+                auto cf = Build<TCoChangefeed>(ctx, node.Pos());
+                for (const auto& item : tuple.Value().Cast<TCoNameValueTupleList>()) {
+                    const auto& itemName = item.Name().Value();
+                    if (itemName == "name") {
+                        cf.Name(item.Value().Cast<TCoAtom>());
+                    } else if (itemName == "settings") {
+                        YQL_ENSURE(item.Value().Maybe<TCoNameValueTupleList>());
+                        cf.Settings(item.Value().Cast<TCoNameValueTupleList>());
+                    } else if (itemName == "state") {
+                        cf.State(item.Value().Cast<TCoAtom>());
+                    } else {
+                        YQL_ENSURE(false, "unknown changefeed item");
+                    }
+                }
+                changefeeds.push_back(cf.Done());
             } else if (name == "columnFamilies") {
                 YQL_ENSURE(tuple.Value().Maybe<TExprList>());
                 columnFamilies = tuple.Value().Cast<TExprList>();
@@ -232,6 +250,10 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
         .Add(indexes)
         .Done();
 
+    const auto& cfs = Build<TCoChangefeedList>(ctx, node.Pos())
+        .Add(changefeeds)
+        .Done();
+
     const auto& tableProfileSettings = Build<TCoNameValueTupleList>(ctx, node.Pos())
         .Add(tableSettings)
         .Done();
@@ -253,6 +275,7 @@ TWriteTableSettings ParseWriteTableSettings(TExprList node, TExprContext& ctx) {
     ret.Filter = filter;
     ret.Update = update;
     ret.Indexes = idx;
+    ret.Changefeeds = cfs;
     ret.ColumnFamilies = columnFamilies;
     ret.TableSettings = tableProfileSettings;
     ret.AlterActions = alterTableActions;

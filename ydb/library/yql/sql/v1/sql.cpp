@@ -627,6 +627,61 @@ static bool CreateTableIndex(const TRule_table_index& node, TTranslation& ctx, T
     return true;
 }
 
+static bool ChangefeedSettingsEntry(const TRule_changefeed_settings_entry& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
+    const auto id = IdEx(node.GetRule_an_id1(), ctx);
+    const TString value(ctx.Token(node.GetRule_changefeed_setting_value3().GetToken1()));
+
+    if (alter) {
+        // currently we don't support alter settings
+        ctx.Error() << to_upper(id.Name) << " alter is not supported";
+        return false;
+    }
+
+    if (to_lower(id.Name) == "sink_type") {
+        auto parsed = StringContent(ctx.Context(), ctx.Context().Pos(), value);
+        YQL_ENSURE(parsed.Defined());
+        if (to_lower(parsed->Content) == "local") {
+            settings.SinkSettings = TChangefeedSettings::TLocalSinkSettings();
+        } else {
+            ctx.Error() << "Unknown changefeed sink type: " << to_upper(parsed->Content);
+            return false;
+        }
+    } else if (to_lower(id.Name) == "mode") {
+        settings.Mode = BuildLiteralSmartString(ctx.Context(), value);
+    } else if (to_lower(id.Name) == "format") {
+        settings.Format = BuildLiteralSmartString(ctx.Context(), value);
+    } else {
+        ctx.Error() << "Unknown changefeed setting: " << id.Name;
+        return false;
+    }
+
+    return true;
+}
+
+static bool ChangefeedSettings(const TRule_changefeed_settings& node, TTranslation& ctx, TChangefeedSettings& settings, bool alter) {
+    if (!ChangefeedSettingsEntry(node.GetRule_changefeed_settings_entry1(), ctx, settings, alter)) {
+        return false;
+    }
+
+    for (auto& block : node.GetBlock2()) {
+        if (!ChangefeedSettingsEntry(block.GetRule_changefeed_settings_entry2(), ctx, settings, alter)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool CreateChangefeed(const TRule_changefeed& node, TTranslation& ctx, TVector<TChangefeedDescription>& changefeeds) {
+    changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
+
+    if (!ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false)) {
+        return false;
+    }
+
+    return true;
+}
+
 static std::pair<TString, TString> TableKeyImpl(const std::pair<bool, TString>& nameWithAt, TString view, TTranslation& ctx) {
     if (nameWithAt.first) {
         view = "@";
@@ -1875,6 +1930,15 @@ bool TSqlTranslation::CreateTableEntry(const TRule_create_table_entry& node, TCr
                 return false;
             }
             params.ColumnFamilies.push_back(family);
+            break;
+        }
+        case TRule_create_table_entry::kAltCreateTableEntry5:
+        {
+            // changefeed
+            auto& changefeed = node.GetAlt_create_table_entry5().GetRule_changefeed1();
+            if (!CreateChangefeed(changefeed, *this, params.Changefeeds)) {
+                return false;
+            }
             break;
         }
         default:
@@ -8097,6 +8161,9 @@ private:
     bool AlterTableAddIndex(const TRule_alter_table_add_index& node, TAlterTableParameters& params);
     void AlterTableDropIndex(const TRule_alter_table_drop_index& node, TAlterTableParameters& params);
     void AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params);
+    bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
+    bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
+    void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
 
@@ -8860,6 +8927,28 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableRenameTo(renameTo, params);
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction12: {
+        // ADD CHANGEFEED
+        const auto& rule = node.GetAlt_alter_table_action12().GetRule_alter_table_add_changefeed1();
+        if (!AlterTableAddChangefeed(rule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_action::kAltAlterTableAction13: {
+        // ALTER CHANGEFEED
+        const auto& rule = node.GetAlt_alter_table_action13().GetRule_alter_table_alter_changefeed1();
+        if (!AlterTableAlterChangefeed(rule, params)) {
+            return false;
+        }
+        break;
+    }
+    case TRule_alter_table_action::kAltAlterTableAction14: {
+        // DROP CHANGEFEED
+        const auto& rule = node.GetAlt_alter_table_action14().GetRule_alter_table_drop_changefeed1();
+        AlterTableDropChangefeed(rule, params);
+        break;
+    }
 
     default:
         AltNotImplemented("alter_table_action", node);
@@ -9004,6 +9093,41 @@ void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TA
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {
     params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
+}
+
+bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {
+    return CreateChangefeed(node.GetRule_changefeed2(), *this, params.AddChangefeeds);
+}
+
+bool TSqlQuery::AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params) {
+    params.AlterChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
+
+    const auto& alter = node.GetRule_changefeed_alter_settings4();
+    switch (alter.Alt_case()) {
+        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings1: {
+            // DISABLE
+            params.AlterChangefeeds.back().Disable = true;
+            break;
+        }
+        case TRule_changefeed_alter_settings::kAltChangefeedAlterSettings2: {
+            // SET
+            const auto& rule = alter.GetAlt_changefeed_alter_settings2().GetRule_changefeed_settings3();
+            if (!ChangefeedSettings(rule, *this, params.AlterChangefeeds.back().Settings, true)) {
+                return false;
+            }
+            break;
+        }
+
+        default:
+            AltNotImplemented("changefeed_alter_settings", alter);
+            return false;
+    }
+
+    return true;
+}
+
+void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params) {
+    params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
 }
 
 TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {

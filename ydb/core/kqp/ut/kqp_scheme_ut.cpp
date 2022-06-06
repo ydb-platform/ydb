@@ -3,6 +3,7 @@
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
+#include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
 namespace NKikimr {
@@ -2149,6 +2150,252 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto session = db.CreateSession().GetValueSync().GetSession();
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    static NKikimrPQ::TPQConfig DefaultPQConfig() {
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.AddClientServiceType()->SetName("data-streams");
+        return pqConfig;
+    }
+
+    static const char* ModeToString(EChangefeedMode mode) {
+        switch (mode) {
+        case EChangefeedMode::KeysOnly:
+            return "KEYS_ONLY";
+        case EChangefeedMode::Updates:
+            return "UPDATES";
+        case EChangefeedMode::NewImage:
+            return "NEW_IMAGE";
+        case EChangefeedMode::OldImage:
+            return "OLD_IMAGE";
+        case EChangefeedMode::NewAndOldImages:
+            return "NEW_AND_OLD_IMAGES";
+        case EChangefeedMode::Unknown:
+            UNIT_ASSERT(false);
+            return "";
+        }
+    }
+
+    static const char* FormatToString(EChangefeedFormat format) {
+        switch (format) {
+        case EChangefeedFormat::Json:
+            return "JSON";
+        case EChangefeedFormat::Unknown:
+            UNIT_ASSERT(false);
+            return "";
+        }
+    }
+
+    void AddChangefeed(EChangefeedMode mode, EChangefeedFormat format) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeeds(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = Sprintf(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = '%s', FORMAT = '%s'
+                );
+            )", ModeToString(mode), FormatToString(format));
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto describeResult = session.DescribeTable("/Root/table").GetValueSync();
+            UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+
+            const auto& changefeeds = describeResult.GetTableDescription().GetChangefeedDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(changefeeds.at(0), TChangefeedDescription("feed", mode, format));
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` DROP CHANGEFEED `feed`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AddChangefeed) {
+        for (auto mode : GetEnumAllValues<EChangefeedMode>()) {
+            if (mode == EChangefeedMode::Unknown) {
+                continue;
+            }
+
+            for (auto format : GetEnumAllValues<EChangefeedFormat>()) {
+                if (format == EChangefeedFormat::Unknown) {
+                    continue;
+                }
+
+                AddChangefeed(mode, format);
+            }
+        }
+    }
+
+    Y_UNIT_TEST(AddChangefeedWhenDisabled) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeeds(false));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNSUPPORTED, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(AddChangefeedNegative) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeeds(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'FOO', FORMAT = 'JSON'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'BAR'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` ADD CHANGEFEED `feed` WITH (
+                    MODE = 'KEYS_ONLY', FORMAT = 'JSON', BAZ = 'BAR'
+                );
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(DropChangefeedNegative) {
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetPQConfig(DefaultPQConfig())
+            .SetEnableChangefeeds(true));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` DROP CHANGEFEED `feed`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/table` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/table` DROP CHANGEFEED `feed`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
         }
     }
 }

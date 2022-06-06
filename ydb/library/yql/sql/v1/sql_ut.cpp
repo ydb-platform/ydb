@@ -218,6 +218,16 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("USE plato; SELECT ASYNC FROM ASYNC").IsOk());
     }
 
+    Y_UNIT_TEST(DisableKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE DISABLE (DISABLE Uint32, PRIMARY KEY (DISABLE));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT DISABLE FROM DISABLE").IsOk());
+    }
+
+    Y_UNIT_TEST(ChangefeedKeywordNotReservedForNames) {
+        UNIT_ASSERT(SqlToYql("USE plato; CREATE TABLE CHANGEFEED (CHANGEFEED Uint32, PRIMARY KEY (CHANGEFEED));").IsOk());
+        UNIT_ASSERT(SqlToYql("USE plato; SELECT CHANGEFEED FROM CHANGEFEED").IsOk());
+    }
+
     Y_UNIT_TEST(Jubilee) {
         NYql::TAstParseResult res = SqlToYql("USE plato; INSERT INTO Arcadia (r2000000) VALUES (\"2M GET!!!\");");
         UNIT_ASSERT(res.Root);
@@ -1415,6 +1425,31 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
     }
 
+    Y_UNIT_TEST(ChangefeedParseCorrect) {
+        auto res = SqlToYql(R"( USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (MODE = 'KEYS_ONLY', FORMAT = 'json')
+            );
+        )");
+        UNIT_ASSERT_C(res.Root, Err2Str(res));
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "Write") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("changefeed"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("mode"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("KEYS_ONLY"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("format"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("json"));
+            }
+        };
+
+        TWordCountHive elementStat = { {TString("Write"), 0} };
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["Write"]);
+    }
+
     Y_UNIT_TEST(CloneForAsTableWorksWithCube) {
         UNIT_ASSERT(SqlToYql("SELECT * FROM AS_TABLE([<|k1:1, k2:1|>]) GROUP BY CUBE(k1, k2);").IsOk());
     }
@@ -1584,6 +1619,20 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
     Y_UNIT_TEST(AlterTableSetTTLIsCorrect) {
         UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table SET (TTL = Interval(\"PT3H\") ON column)").IsOk());
+    }
+
+    Y_UNIT_TEST(AlterTableAddChangefeedIsCorrect) {
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ADD CHANGEFEED feed WITH (MODE = 'UPDATES', FORMAT = 'json')").IsOk());
+    }
+
+    Y_UNIT_TEST(AlterTableAlterChangefeedIsCorrect) {
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table ALTER CHANGEFEED feed DISABLE").IsOk());
+        ExpectFailWithError("USE plato; ALTER TABLE table ALTER CHANGEFEED feed SET (FORMAT = 'proto');",
+            "<main>:1:66: Error: FORMAT alter is not supported\n");
+    }
+
+    Y_UNIT_TEST(AlterTableDropChangefeedIsCorrect) {
+        UNIT_ASSERT(SqlToYql("USE plato; ALTER TABLE table DROP CHANGEFEED feed").IsOk());
     }
 
     Y_UNIT_TEST(AlterTableSetPartitioningIsCorrect) {
@@ -2954,6 +3003,32 @@ select FormatType($f());
         UNIT_ASSERT(!res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:26: Error: Literal of Interval type is expected for TTL\n"
                                           "<main>:4:26: Error: Invalid TTL settings\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedSink) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (SINK_TYPE = "S3", MODE = "KEYS_ONLY", FORMAT = "json")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:55: Error: Unknown changefeed sink type: S3\n");
+    }
+
+    Y_UNIT_TEST(InvalidChangefeedSettings) {
+        auto req = R"(
+            USE plato;
+            CREATE TABLE tableName (
+                Key Uint32, PRIMARY KEY (Key),
+                CHANGEFEED feedName WITH (SINK_TYPE = "local", FOO = "bar")
+            );
+        )";
+        auto res = SqlToYql(req);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:5:70: Error: Unknown changefeed setting: FOO\n");
     }
 
     Y_UNIT_TEST(ErrJoinWithGroupingSetsWithoutCorrelationName) {

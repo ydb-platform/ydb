@@ -18,6 +18,7 @@
 
 #include <array>
 #include <functional>
+#include <variant>
 
 namespace NSQLTranslationV1 {
     constexpr const size_t SQL_MAX_INLINE_SCRIPT_LEN = 24;
@@ -1105,6 +1106,27 @@ namespace NSQLTranslationV1 {
         TVector<TIdentifier> DataColumns;
     };
 
+    struct TChangefeedSettings {
+        struct TLocalSinkSettings {
+            // no special settings
+        };
+
+        TNodePtr Mode;
+        TNodePtr Format;
+        std::optional<std::variant<TLocalSinkSettings>> SinkSettings;
+    };
+
+    struct TChangefeedDescription {
+        TChangefeedDescription(const TIdentifier& name)
+            : Name(name)
+            , Disable(false)
+        {}
+
+        TIdentifier Name;
+        TChangefeedSettings Settings;
+        bool Disable;
+    };
+
     struct TCreateTableParameters {
         TVector<TColumnSchema> Columns;
         TVector<TIdentifier> PkColumns;
@@ -1112,6 +1134,7 @@ namespace NSQLTranslationV1 {
         TVector<std::pair<TIdentifier, bool>> OrderByColumns;
         TVector<TIndexDescription> Indexes;
         TVector<TFamilyEntry> ColumnFamilies;
+        TVector<TChangefeedDescription> Changefeeds;
         TTableSettings TableSettings;
     };
 
@@ -1125,16 +1148,19 @@ namespace NSQLTranslationV1 {
         TVector<TIndexDescription> AddIndexes;
         TVector<TIdentifier> DropIndexes;
         TMaybe<TIdentifier> RenameTo;
+        TVector<TChangefeedDescription> AddChangefeeds;
+        TVector<TChangefeedDescription> AlterChangefeeds;
+        TVector<TIdentifier> DropChangefeeds;
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
-                     && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
-                     && !TableSettings.IsSet()
-                     && AddIndexes.empty() && DropIndexes.empty()
-                     && !RenameTo.Defined();
+                && AddColumnFamilies.empty() && AlterColumnFamilies.empty()
+                && !TableSettings.IsSet()
+                && AddIndexes.empty() && DropIndexes.empty()
+                && !RenameTo.Defined()
+                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
         }
     };
-
 
     struct TRoleParameters {
         TMaybe<TDeferredAtom> Password;

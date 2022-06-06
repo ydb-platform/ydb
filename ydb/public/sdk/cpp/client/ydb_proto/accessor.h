@@ -41,6 +41,9 @@ public:
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndex& tableIndex);
     static NTable::TIndexDescription FromProto(const Ydb::Table::TableIndexDescription& tableIndexDesc);
 
+    static NTable::TChangefeedDescription FromProto(const Ydb::Table::Changefeed& changefeed);
+    static NTable::TChangefeedDescription FromProto(const Ydb::Table::ChangefeedDescription& changefeed);
+
     static Ydb::Table::ValueSinceUnixEpochModeSettings::Unit GetProto(NTable::TValueSinceUnixEpochModeSettings::EUnit value);
     static NTable::TValueSinceUnixEpochModeSettings::EUnit FromProto(Ydb::Table::ValueSinceUnixEpochModeSettings::Unit value);
 

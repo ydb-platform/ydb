@@ -659,6 +659,13 @@ private:
             meta->Indexes.push_back(indexDesc);
         }
 
+        for (const auto& changefeed : create.Changefeeds()) {
+            Y_UNUSED(changefeed);
+            ctx.AddError(TIssue(ctx.GetPosition(changefeed.Pos()), TStringBuilder()
+                << "Cannot create table with changefeed"));
+            return TStatus::Error;
+        }
+
         for (auto columnFamily : create.ColumnFamilies()) {
             if (auto maybeTupleList = columnFamily.Maybe<TCoNameValueTupleList>()) {
                 TColumnFamily family;
@@ -1008,8 +1015,11 @@ private:
                         << " Index: \"" << name << "\" does not exist"));
                     return TStatus::Error;
                 }
-            } else if (name != "addColumnFamilies" && name != "alterColumnFamilies"
-                    && name != "setTableSettings")
+            } else if (name != "addColumnFamilies"
+                    && name != "alterColumnFamilies"
+                    && name != "setTableSettings"
+                    && name != "addChangefeed"
+                    && name != "dropChangefeed")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));

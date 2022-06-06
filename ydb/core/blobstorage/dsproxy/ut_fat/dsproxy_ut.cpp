@@ -964,7 +964,7 @@ class TTestBlobStorageProxyBlock : public TTestBlobStorageProxy {
                 TEST_RESPONSE(MessagePutResult, BLOCKED, 0, "");
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 80:
             {
@@ -2334,13 +2334,13 @@ class TTestBlobStorageProxySimpleDiscover : public TTestBlobStorageProxy {
                 TEST_RESPONSE(MessagePutResult, OK, 0, "");
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 30:
                 TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 40:
                 TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
@@ -2372,7 +2372,7 @@ class TTestBlobStorageProxyDiscover : public TTestBlobStorageProxy {
                     "Unexpected " << (int)LastResponse.Message);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 10:
                 UNIT_ASSERT_EQUAL_C(LastResponse.Message, TResponseData::MessageDiscoverResult,
@@ -2380,7 +2380,7 @@ class TTestBlobStorageProxyDiscover : public TTestBlobStorageProxy {
 
                 if (LastResponse.Status != NKikimrProto::OK) {
                     VERBOSE_COUT("ReSending TEvDiscover (due to " << (int)LastResponse.Status << ")");
-                    ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                    ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                     TestStep -= 10;
                     break;
                 }
@@ -2388,14 +2388,14 @@ class TTestBlobStorageProxyDiscover : public TTestBlobStorageProxy {
                 TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 20:
                 UNIT_ASSERT_EQUAL_C(LastResponse.Message, TResponseData::MessageDiscoverResult,
                         "Unexpected message type# " << (int)LastResponse.Message);
                 if (LastResponse.Status != NKikimrProto::OK) {
                     VERBOSE_COUT("ReSending TEvDiscover (due to " << (int)LastResponse.Status << ")");
-                    ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                    ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                     TestStep -= 10;
                     break;
                 }
@@ -2426,13 +2426,13 @@ class TTestBlobStorageProxyDiscoverFail : public TTestBlobStorageProxy {
                     "Unexpected " << (int)LastResponse.Message);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 10:
                 TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 20:
                 TEST_RESPONSE(MessageDiscoverResult, ERROR, 0, "");
@@ -2462,13 +2462,13 @@ class TTestBlobStorageProxyDiscoverEmpty : public TTestBlobStorageProxy {
                     "Unexpected " << (int)LastResponse.Message);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 10:
                 TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 20:
                 TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
@@ -2498,13 +2498,13 @@ class TTestBlobStorageProxyDiscoverTimeout : public TTestBlobStorageProxy {
                     "Unexpected " << (int)LastResponse.Message);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 10:
                 TEST_RESPONSE(MessageDiscoverResult, TIMEOUT, 0, "");
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 20:
                 TEST_RESPONSE(MessageDiscoverResult, TIMEOUT, 0, "");
@@ -2693,14 +2693,14 @@ class TTestBlobStorageProxyLongTailDiscover : public TTestBlobStorageProxy {
                     "Unexpected " << (int)LastResponse.Message);
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 10:
                 TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
 
 
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 20:
                 TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
@@ -3056,7 +3056,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessagePutResult, OK, 0, "");
                 }
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 230:
                 if (Env->ShouldBeUndiscoverable) {
@@ -3065,7 +3065,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
                 VERBOSE_COUT("Sending TEvDiscover, read body = false, expecting OK");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, false, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, false, false, TInstant::Max(), 0, true));
                 break;
             case 240:
                 if (Env->ShouldBeUndiscoverable) {
@@ -3074,7 +3074,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting NODATA");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(2/*tabletId*/, 0, true, false, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(2/*tabletId*/, 0, true, false, TInstant::Max(), 0, true));
                 break;
             case 250:
                 if (Env->ShouldBeUndiscoverable) {
@@ -3083,7 +3083,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageDiscoverResult, NODATA, 0, "");
                 }
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting OK + data");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 260:
                 if (Env->ShouldBeUndiscoverable) {
@@ -3092,7 +3092,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, testData2);
                 }
                 VERBOSE_COUT("Sending TEvDiscover, read body = false, expecting OK");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, false, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(1, 0, false, true, TInstant::Max(), 0, true));
                 break;
             case 270:
                 if (Env->ShouldBeUndiscoverable) {
@@ -3101,7 +3101,7 @@ class TTestBlobStorageProxyBasic1 : public TTestBlobStorageProxy {
                     TEST_RESPONSE(MessageDiscoverResult, OK, 1, "");
                 }
                 VERBOSE_COUT("Sending TEvDiscover, read body = true, expecting NODATA");
-                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(2/*tabletId*/, 0, true, true, TInstant::Max(), 0));
+                ctx.Send(Proxy, new TEvBlobStorage::TEvDiscover(2/*tabletId*/, 0, true, true, TInstant::Max(), 0, true));
                 break;
             case 280:
             {

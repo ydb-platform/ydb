@@ -75,7 +75,7 @@ public:
     }
 
     void IssueDiscover() {
-        SendToProxy(TDuration::MilliSeconds(100), new TEvBlobStorage::TEvDiscover(TabletId, 0, false, false, TInstant::Max(), 0));
+        SendToProxy(TDuration::MilliSeconds(100), new TEvBlobStorage::TEvDiscover(TabletId, 0, false, false, TInstant::Max(), 0, true));
     }
 
     void Handle(TEvBlobStorage::TEvDiscoverResult::TPtr ev) {

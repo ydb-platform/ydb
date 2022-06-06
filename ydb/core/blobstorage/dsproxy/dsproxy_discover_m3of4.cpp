@@ -18,6 +18,7 @@ class TBlobStorageGroupMirror3of4DiscoverRequest
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
     const ui32 ForceBlockedGeneration;
+    const bool FromLeader;
 
 public:
     static const auto& ActiveCounter(const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon) {
@@ -43,6 +44,7 @@ public:
         , ReadBody(ev->ReadBody)
         , DiscoverBlockedGeneration(ev->DiscoverBlockedGeneration)
         , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , FromLeader(ev->FromLeader)
     {
         for (size_t i = 0; i < DiskState.size(); ++i) {
             TDiskState& disk = DiskState[i];
@@ -54,7 +56,7 @@ public:
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         ++*Mon->NodeMon->RestartDiscover;
         auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, MinGeneration, ReadBody,
-            DiscoverBlockedGeneration, Deadline, ForceBlockedGeneration);
+            DiscoverBlockedGeneration, Deadline, ForceBlockedGeneration, FromLeader);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -67,6 +69,7 @@ public:
             << " ReadBody# " << (ReadBody ? "true" : "false")
             << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false")
             << " ForceBlockedGeneration# " << ForceBlockedGeneration
+            << " FromLeader# " << (FromLeader ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
         Become(&TThis::StateFunc);

@@ -839,7 +839,7 @@ void TTablet::HandleStateStorageInfoLock(TEvStateStorage::TEvInfo::TPtr &ev) {
                     , StateStorageInfo.SignatureSz));
             }
 
-            Register(CreateTabletFindLastEntry(SelfId(), false, Info.Get(), 0));
+            Register(CreateTabletFindLastEntry(SelfId(), false, Info.Get(), 0, Leader));
             Become(&TThis::StateDiscover);
             ReportTabletStateChange(TTabletStateInfo::Discover);
         }

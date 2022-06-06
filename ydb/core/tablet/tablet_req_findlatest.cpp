@@ -17,6 +17,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
     const TActorId Owner;
     const bool ReadBody;
     const ui32 BlockedGeneration;
+    const bool Leader;
     TIntrusivePtr<TTabletStorageInfo> Info;
     const TTabletChannelInfo *ChannelInfo;
     ui64 CurrentHistoryIndex;
@@ -33,7 +34,7 @@ class TTabletReqFindLatestLogEntry : public TActorBootstrapped<TTabletReqFindLat
 
         const ui32 group = ChannelInfo->History[CurrentHistoryIndex].GroupID;
         const ui32 minGeneration = ChannelInfo->History[CurrentHistoryIndex].FromGeneration;
-        auto request = MakeHolder<TEvBlobStorage::TEvDiscover>(Info->TabletID, minGeneration, ReadBody, true, TInstant::Max(), BlockedGeneration);
+        auto request = MakeHolder<TEvBlobStorage::TEvDiscover>(Info->TabletID, minGeneration, ReadBody, true, TInstant::Max(), BlockedGeneration, Leader);
         SendToBSProxy(SelfId(), group, request.Release());
     }
 
@@ -72,10 +73,11 @@ public:
         return NKikimrServices::TActivity::TABLET_REQ_FIND_LATEST;
     }
 
-    TTabletReqFindLatestLogEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration)
+    TTabletReqFindLatestLogEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration, bool leader)
         : Owner(owner)
         , ReadBody(readBody)
         , BlockedGeneration(blockedGeneration)
+        , Leader(leader)
         , Info(info)
         , ChannelInfo(Info->ChannelInfo(0))
         , CurrentHistoryIndex(ChannelInfo->History.size())
@@ -96,8 +98,8 @@ public:
     }
 };
 
-IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration) {
-    return new TTabletReqFindLatestLogEntry(owner, readBody, info, blockedGeneration);
+IActor* CreateTabletFindLastEntry(const TActorId &owner, bool readBody, TTabletStorageInfo *info, ui32 blockedGeneration, bool leader) {
+    return new TTabletReqFindLatestLogEntry(owner, readBody, info, blockedGeneration, leader);
 }
 
 }

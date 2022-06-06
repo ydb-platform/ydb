@@ -490,7 +490,7 @@ public:
         }
 
         // discover previously written data
-        if (auto ev = Query<TEvBlobStorage::TEvDiscover>(TabletId, 0, true, false, TInstant::Max(), 0)) {
+        if (auto ev = Query<TEvBlobStorage::TEvDiscover>(TabletId, 0, true, false, TInstant::Max(), 0, true)) {
             Y_VERIFY(ev->Get()->Status == (Committed.empty() ? NKikimrProto::NODATA : NKikimrProto::OK));
             if (ev->Get()->Status == NKikimrProto::OK) {
                 Y_VERIFY(ev->Get()->Buffer == Committed.rbegin()->second);

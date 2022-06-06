@@ -1277,7 +1277,7 @@ Y_UNIT_TEST(TestGivenBlock42Put6PartsOnOneVDiskWhenDiscoverThenRecoverFirst) {
     const ui32 minGeneration = 0;
     // Send Discover
     runtime.Send(new IEventHandle(
-        proxy, sender, new TEvBlobStorage::TEvDiscover(tabletId, minGeneration, true, false, TInstant::Max(), 0)));
+        proxy, sender, new TEvBlobStorage::TEvDiscover(tabletId, minGeneration, true, false, TInstant::Max(), 0, true)));
 
     // Receive VGet
     TMap<TActorId, TGetRequest> lastRequest;

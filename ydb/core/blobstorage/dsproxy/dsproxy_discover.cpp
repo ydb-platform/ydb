@@ -292,6 +292,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     ui64 TotalRecieved = 0;
 
     const ui32 ForceBlockedGeneration;
+    const bool FromLeader;
 
     template<typename TPtr>
     void SendResult(TPtr& result) {
@@ -802,18 +803,22 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         << " GetBlockErrors# " << GetBlockErrors
                         << " VGetBlockedGen# " << VGetBlockedGen
                         << " Get.BlockedGeneration# " << msg->BlockedGeneration
+                        << " FromLeader# " << (FromLeader ? "true" : "false")
                         << " response status# NODATA, Reply with ERROR! "
                         << " looks like we have !!! LOST THE BLOB !!! id# " << response.Id.ToString();
 
                     R_LOG_ALERT_S("BSD18", str.Str());
-                    Sleep(TDuration::Seconds(1));
-                    str << " logacc# ";
-                    LogCtx.LogAcc.Output(str);
-                    str << " verboseNoData# ";
-                    str << msg->DebugInfo;
 
-                    Y_VERIFY(false, "%s", str.Str().data());
-                    // TODO: Remove the lines above
+                    if (FromLeader) {
+                        Sleep(TDuration::Seconds(1));
+
+                        str << " logacc# ";
+                        LogCtx.LogAcc.Output(str);
+                        str << " verboseNoData# ";
+                        str << msg->DebugInfo;
+
+                        Y_VERIFY(false, "%s", str.Str().data());
+                    }
 
                     IsGetDataDone = true;
                     if (IsGetBlockDone) {
@@ -868,7 +873,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         ++*Mon->NodeMon->RestartDiscover;
         auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, MinGeneration, ReadBody, DiscoverBlockedGeneration,
-            Deadline, ForceBlockedGeneration);
+            Deadline, ForceBlockedGeneration, FromLeader);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -902,6 +907,7 @@ public:
         , GroupResponseTracker(Info)
         , IsGetBlockDone(!DiscoverBlockedGeneration)
         , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , FromLeader(ev->FromLeader)
     {}
 
     void Bootstrap() {
@@ -912,6 +918,7 @@ public:
             << " MinGeneration# " << MinGeneration
             << " ReadBody# " << (ReadBody ? "true" : "false")
             << " Deadline# " << Deadline
+            << " FromLeader# " << (FromLeader ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
         const ui32 groupId = Info->GroupID;

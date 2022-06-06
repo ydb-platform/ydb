@@ -249,7 +249,7 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
         // Issue TEvDiscover
         void Bootstrap(const TActorContext& ctx) {
             NextWriteTimestamp = TAppData::TimeProvider->Now();
-            auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, Generation, false, true, TInstant::Max(), 0);
+            auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, Generation, false, true, TInstant::Max(), 0, true);
             LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " is bootstrapped, going to send "
                     << ev->ToString());
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {

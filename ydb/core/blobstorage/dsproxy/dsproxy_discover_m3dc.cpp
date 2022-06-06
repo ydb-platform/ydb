@@ -427,6 +427,7 @@ class TBlobStorageGroupMirror3dcDiscoverRequest : public TBlobStorageGroupReques
     const bool ReadBody;
     const bool DiscoverBlockedGeneration;
     const ui32 ForceBlockedGeneration;
+    const bool FromLeader;
 
     std::unique_ptr<TDiscoverWorker> Worker;
     TVector<std::unique_ptr<TEvBlobStorage::TEvVGet>> Msgs;
@@ -469,13 +470,14 @@ public:
         , ReadBody(ev->ReadBody)
         , DiscoverBlockedGeneration(ev->DiscoverBlockedGeneration)
         , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , FromLeader(ev->FromLeader)
         , GetBlockTracker(Info.Get())
     {}
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
         ++*Mon->NodeMon->RestartDiscover;
         auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, MinGeneration, ReadBody, DiscoverBlockedGeneration,
-            Deadline, ForceBlockedGeneration);
+            Deadline, ForceBlockedGeneration, FromLeader);
         ev->RestartCounter = counter;
         return ev;
     }
@@ -490,6 +492,7 @@ public:
             << " ReadBody# " << (ReadBody ? "true" : "false")
             << " DiscoverBlockedGeneration# " << (DiscoverBlockedGeneration ? "true" : "false")
             << " ForceBlockedGeneration# " << ForceBlockedGeneration
+            << " FromLeader# " << (FromLeader ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
         Worker = std::make_unique<TDiscoverWorker>(Info, TabletId, MinGeneration, ForceBlockedGeneration);

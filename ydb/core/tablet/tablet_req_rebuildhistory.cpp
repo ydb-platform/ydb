@@ -890,9 +890,9 @@ public:
         }
 
         if (FollowerCookie == 0)
-            Register(CreateTabletFindLastEntry(SelfId(), true, Info.Get(), BlockedGen));
+            Register(CreateTabletFindLastEntry(SelfId(), true, Info.Get(), BlockedGen, true));
         else
-            Register(CreateTabletFindLastEntry(SelfId(), true, Info.Get(), 0));
+            Register(CreateTabletFindLastEntry(SelfId(), true, Info.Get(), 0, false));
 
         Become(&TThis::StateWaitLatestEntry);
     }

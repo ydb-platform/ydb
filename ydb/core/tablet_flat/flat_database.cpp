@@ -386,6 +386,11 @@ TAutoPtr<TSubset> TDatabase::ScanSnapshot(ui32 table, TRowVersion snapshot)
     return Require(table)->ScanSnapshot(snapshot);
 }
 
+bool TDatabase::HasBorrowed(ui32 table, ui64 selfTabletId) const
+{
+    return Require(table)->HasBorrowed(selfTabletId);
+}
+
 TBundleSlicesMap TDatabase::LookupSlices(ui32 table, TArrayRef<const TLogoBlobID> bundles) const
 {
     return Require(table)->LookupSlices(bundles);

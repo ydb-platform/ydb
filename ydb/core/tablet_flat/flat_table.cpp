@@ -122,6 +122,23 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
     return subset;
 }
 
+bool TTable::HasBorrowed(ui64 selfTabletId) const noexcept
+{
+    for (const auto &it : TxStatus)
+        if (it.second->Label.TabletID() != selfTabletId)
+            return true;
+
+    for (auto &it: Flatten)
+        if (it.second->Label.TabletID() != selfTabletId)
+            return true;
+
+    for (auto &it: ColdParts)
+        if (it.second->Label.TabletID() != selfTabletId)
+            return true;
+
+    return false;
+}
+
 TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept
 {
     TAutoPtr<TSubset> subset = new TSubset(Epoch, Scheme);
@@ -915,16 +932,6 @@ TCompactionStats TTable::GetCompactionStats() const
     stats.MemRowCount = GetMemRowCount();
     stats.MemDataSize = GetMemSize();
     stats.MemDataWaste = GetMemWaste();
-
-    for (auto &it: ColdParts)
-        stats.PartOwners.insert(it.second->Label.TabletID());
-
-    for (auto &it: Flatten)
-        stats.PartOwners.insert(it.second->Label.TabletID());
-
-    for (auto &it: TxStatus)
-        stats.PartOwners.insert(it.second->Label.TabletID());
-
     stats.PartCount = Flatten.size() + ColdParts.size();
 
     return stats;

@@ -12,6 +12,9 @@ using namespace NSchemeShardUT_Private;
 
 namespace {
 
+constexpr TDuration DefaultTimeout = TDuration::Seconds(30);
+constexpr TDuration RetryDelay = TDuration::Seconds(1);
+
 using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::TUserTable>;
 
 TShardCompactionInfo MakeCompactionInfo(ui64 idx, ui64 ts, ui64 sh = 0, ui64 d = 0) {
@@ -70,6 +73,33 @@ TPathInfo GetPathInfo(
     return info;
 }
 
+void WriteData(
+    TTestActorRuntime &runtime,
+    const char* name,
+    ui64 fromKeyInclusive,
+    ui64 toKey,
+    ui64 tabletId = TTestTxConfig::FakeHiveTablets)
+{
+    auto fnWriteRow = [&] (ui64 tabletId, ui64 key, const char* tableName) {
+        TString writeQuery = Sprintf(R"(
+            (
+                (let key '( '('key (Uint64 '%lu)) ) )
+                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorld)) ) )
+                (return (AsList (UpdateRow '__user__%s key value) ))
+            )
+        )", key, tableName);
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+        UNIT_ASSERT_VALUES_EQUAL(err, "");
+        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+    };
+
+    for (ui64 key = fromKeyInclusive; key < toKey; ++key) {
+        fnWriteRow(tabletId, key, name);
+    }
+}
+
 void CreateTableWithData(
     TTestActorRuntime &runtime,
     TTestEnv& env,
@@ -86,27 +116,50 @@ void CreateTableWithData(
             Columns { Name: "value" Type: "Utf8"}
             KeyColumnNames: ["key"]
             UniformPartitionsCount: %d
-        )____", name, shardsCount));
+            PartitionConfig {
+                PartitioningPolicy {
+                    MinPartitionsCount: %d
+                    MaxPartitionsCount: %d
+                }
+            }
+        )____", name, shardsCount, shardsCount, shardsCount));
     env.TestWaitNotification(runtime, txId, schemeshardId);
 
-    auto fnWriteRow = [&] (ui64 tabletId, ui64 key, const char* tableName) {
-        TString writeQuery = Sprintf(R"(
-            (
-                (let key '( '('key (Uint64 '%lu)) ) )
-                (let value '('('value (Utf8 'MostMeaninglessValueInTheWorld)) ) )
-                (return (AsList (UpdateRow '__user__%s key value) ))
-            )
-        )", key, tableName);
-        NKikimrMiniKQL::TResult result;
-        TString err;
-        NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
-        UNIT_ASSERT_VALUES_EQUAL(err, "");
-        UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
-    };
+    WriteData(runtime, name, 0, 100);
+}
 
-    for (ui64 key = 0; key < 100; ++key) {
-        fnWriteRow(TTestTxConfig::FakeHiveTablets, key, name);
-    }
+void SetConfig(
+    TTestActorRuntime &runtime,
+    ui64 schemeShard,
+    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
+{
+    auto sender = runtime.AllocateEdgeActor();
+
+    runtime.SendToPipe(schemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+}
+
+THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
+    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+
+    // little hacks to simplify life
+    auto* compactionConfig = request->Record.MutableConfig()->MutableCompactionConfig();
+    compactionConfig->MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetTimeoutSeconds(DefaultTimeout.Seconds());
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(RetryDelay.Seconds());
+
+    // 1 compaction / second
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetMaxRate(1);
+    compactionConfig->MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
+    compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+
+    return request;
 }
 
 void SetFeatures(
@@ -115,26 +168,9 @@ void SetFeatures(
     ui64 schemeShard,
     const NKikimrConfig::TFeatureFlags& features)
 {
-    auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+    auto request = GetTestCompactionConfig();
     *request->Record.MutableConfig()->MutableFeatureFlags() = features;
-
-    // little hack to simplify life
-    auto* compactionConfig = request->Record.MutableConfig()->MutableCompactionConfig();
-    compactionConfig->MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
-    compactionConfig->MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
-    compactionConfig->MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
-
-    // 1 compaction / second
-    compactionConfig->MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
-    compactionConfig->MutableBackgroundCompactionConfig()->SetMaxRate(1);
-    compactionConfig->MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
-
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SendToPipe(schemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-    TAutoPtr<IEventHandle> handle;
-    runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+    SetConfig(runtime, schemeShard, std::move(request));
 }
 
 void SetBackgroundCompactionServerless(TTestActorRuntime &runtime, TTestEnv& env, ui64 schemeShard, bool value) {
@@ -163,11 +199,15 @@ void DisableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetTimeoutSeconds(DefaultTimeout.Seconds());
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(RetryDelay.Seconds());
 
     // 1 compaction / second
     compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetMaxRate(1);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
+    compactionConfig.MutableBorrowedCompactionConfig()->SetInflightLimit(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
@@ -188,11 +228,15 @@ void EnableBackgroundCompactionViaRestart(
     compactionConfig.MutableBackgroundCompactionConfig()->SetSearchHeightThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRowCountThreshold(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetCompactSinglePartedShards(true);
+    compactionConfig.MutableBackgroundCompactionConfig()->SetTimeoutSeconds(DefaultTimeout.Seconds());
+    compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(RetryDelay.Seconds());
 
     // 1 compaction / second
     compactionConfig.MutableBackgroundCompactionConfig()->SetMinCompactionRepeatDelaySeconds(0);
     compactionConfig.MutableBackgroundCompactionConfig()->SetMaxRate(1);
     compactionConfig.MutableBackgroundCompactionConfig()->SetRoundSeconds(0);
+
+    compactionConfig.MutableBorrowedCompactionConfig()->SetInflightLimit(1);
 
     TActorId sender = runtime.AllocateEdgeActor();
     RebootTablet(runtime, schemeShard, sender);
@@ -201,17 +245,20 @@ void EnableBackgroundCompactionViaRestart(
 struct TCompactionStats {
     ui64 BackgroundRequestCount = 0;
     ui64 BackgroundCompactionCount = 0;
+    ui64 CompactBorrowedCount = 0;
 
     TCompactionStats() = default;
 
     TCompactionStats(const NKikimrTxDataShard::TEvGetCompactTableStatsResult& stats)
         : BackgroundRequestCount(stats.GetBackgroundCompactionRequests())
         , BackgroundCompactionCount(stats.GetBackgroundCompactionCount())
+        , CompactBorrowedCount(stats.GetCompactBorrowedCount())
     {}
 
     void Update(const TCompactionStats& other) {
         BackgroundRequestCount += other.BackgroundRequestCount;
         BackgroundCompactionCount += other.BackgroundCompactionCount;
+        CompactBorrowedCount += other.CompactBorrowedCount;
     }
 };
 
@@ -267,12 +314,41 @@ TCompactionStats GetCompactionStats(
         info.OwnerId);
 }
 
-void CheckShardCompacted(
+void CheckShardBorrowedCompacted(
     TTestActorRuntime &runtime,
     const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
     ui64 tabletId,
-    ui64 ownerId,
-    bool shouldCompacted = true)
+    ui64 ownerId)
+{
+    auto count = GetCompactionStats(
+        runtime,
+        userTable,
+        tabletId,
+        ownerId).CompactBorrowedCount;
+
+    UNIT_ASSERT(count > 0);
+}
+
+void CheckShardNotBorrowedCompacted(
+    TTestActorRuntime &runtime,
+    const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    ui64 tabletId,
+    ui64 ownerId)
+{
+    auto count = GetCompactionStats(
+        runtime,
+        userTable,
+        tabletId,
+        ownerId).CompactBorrowedCount;
+
+    UNIT_ASSERT_VALUES_EQUAL(count, 0UL);
+}
+
+void CheckShardBackgroundCompacted(
+    TTestActorRuntime &runtime,
+    const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    ui64 tabletId,
+    ui64 ownerId)
 {
     auto count = GetCompactionStats(
         runtime,
@@ -280,14 +356,25 @@ void CheckShardCompacted(
         tabletId,
         ownerId).BackgroundRequestCount;
 
-    if (shouldCompacted) {
-        UNIT_ASSERT(count > 0);
-    } else {
-        UNIT_ASSERT_VALUES_EQUAL(count, 0UL);
-    }
+    UNIT_ASSERT(count > 0);
 }
 
-void CheckNoCompactionsInPeriod(
+void CheckShardNotBackgroundCompacted(
+    TTestActorRuntime &runtime,
+    const NKikimrTxDataShard::TEvGetInfoResponse::TUserTable& userTable,
+    ui64 tabletId,
+    ui64 ownerId)
+{
+    auto count = GetCompactionStats(
+        runtime,
+        userTable,
+        tabletId,
+        ownerId).BackgroundRequestCount;
+
+    UNIT_ASSERT_VALUES_EQUAL(count, 0UL);
+}
+
+void CheckNoBackgroundCompactionsInPeriod(
     TTestActorRuntime &runtime,
     TTestEnv& env,
     const TString& path,
@@ -329,8 +416,10 @@ void TestBackgroundCompaction(
     enableBackgroundCompactionFunc(runtime, env);
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    for (auto shard: info.Shards)
-        CheckShardCompacted(runtime, info.UserTable, shard, info.OwnerId);
+    for (auto shard: info.Shards) {
+        CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+        CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
+    }
 }
 
 ui64 TestServerless(
@@ -421,8 +510,14 @@ ui64 TestServerless(
 
     env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-    for (auto shard: info.Shards)
-        CheckShardCompacted(runtime, info.UserTable, shard, info.OwnerId, enableServerless);
+    for (auto shard: info.Shards) {
+        if (enableServerless)
+            CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+        else
+            CheckShardNotBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+
+        CheckShardNotBorrowedCompacted(runtime, info.UserTable, shard, info.OwnerId);
+    }
 
     return schemeshardId;
 }
@@ -485,7 +580,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // some time to finish compactions in progress
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
     }
 
     Y_UNIT_TEST(ShouldNotCompactServerless) {
@@ -527,7 +622,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         // some time to finish compactions in progress
         env.SimulateSleep(runtime, TDuration::Seconds(30));
 
-        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/User/Simple", schemeshardId);
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/User/Simple", schemeshardId);
     }
 
     Y_UNIT_TEST(SchemeshardShouldNotCompactBackups) {
@@ -556,7 +651,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
 
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
 
-        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
         UNIT_ASSERT_VALUES_EQUAL(GetCompactionStats(runtime, "/MyRoot/CopyTable").BackgroundRequestCount, 0UL);
     }
 
@@ -566,9 +661,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
         TTestEnv env(runtime);
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
-        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
-        //runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, NActors::NLog::PRI_TRACE);
 
         // disable for the case, when compaction is enabled by default
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, false);
@@ -604,11 +697,386 @@ Y_UNIT_TEST_SUITE(TSchemeshardBackgroundCompactionTest) {
 
         SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
 
-        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/CopyTable");
         UNIT_ASSERT_VALUES_EQUAL(GetCompactionStats(runtime, "/MyRoot/CopyTable").BackgroundRequestCount, 0UL);
 
         // original table should not be compacted as well
-        CheckNoCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+        CheckNoBackgroundCompactionsInPeriod(runtime, env, "/MyRoot/Simple");
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldHandleCompactionTimeouts) {
+        // note that this test is good to test TOperationQueueWithTimer
+
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        size_t compactionResultCount = 0;
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactTableResult: {
+                Y_UNUSED(ev.Release());
+                ++compactionResultCount;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        while (compactionResultCount < 3UL)
+            env.SimulateSleep(runtime, DefaultTimeout + RetryDelay + TDuration::Seconds(1));
+    }
+};
+
+Y_UNIT_TEST_SUITE(TSchemeshardBorrowedCompactionTest) {
+    Y_UNIT_TEST(SchemeshardShouldCompactBorrowed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        // in case it is not enabled by default
+        SetBackgroundCompaction(runtime, env, TTestTxConfig::SchemeShard, true);
+
+        auto configRequest = GetTestCompactionConfig();
+        auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
+        compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(configRequest));
+
+        ui64 txId = 1000;
+
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 5, txId);
+
+        {
+            // write to all shards in hacky way
+            auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+            for (auto shard: simpleInfo.Shards) {
+                WriteData(runtime, "Simple", 0, 100, shard);
+            }
+        }
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+
+        // copy table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        auto simpleInfo = GetPathInfo(runtime, "/MyRoot/Simple");
+        auto copyInfo = GetPathInfo(runtime, "/MyRoot/CopyTable");
+
+        // borrow compaction only runs when we split, so nothing should be borrow compacted yet
+
+        {
+            for (auto shard: simpleInfo.Shards) {
+                CheckShardNotBorrowedCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+            }
+        }
+
+        {
+            for (auto shard: copyInfo.Shards) {
+                CheckShardNotBorrowedCompacted(runtime, copyInfo.UserTable, shard, copyInfo.OwnerId);
+            }
+        }
+
+        // now force split
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "CopyTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 20
+                                MaxPartitionsCount: 20
+                                SizeToSplit: 1
+                            }
+                        })");
+        env.TestWaitNotification(runtime, txId);
+
+        // schemeshard should get stats from DS to start borrower compactions
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        // should compact all borrowed data (note that background will not compact until then)
+
+        {
+            for (auto shard: copyInfo.Shards) {
+                CheckShardBorrowedCompacted(runtime, copyInfo.UserTable, shard, copyInfo.OwnerId);
+            }
+        }
+
+        {
+            // Simple again the only owner
+            for (auto shard: simpleInfo.Shards) {
+                CheckShardNotBorrowedCompacted(runtime, simpleInfo.UserTable, shard, simpleInfo.OwnerId);
+            }
+        }
+
+        // now should be no borrower compactions, but background should do the job
+
+        auto copyCount1 = GetCompactionStats(runtime, "/MyRoot/CopyTable").CompactBorrowedCount;
+        auto simpleCount1 = GetCompactionStats(runtime, "/MyRoot/Simple").CompactBorrowedCount;
+        env.SimulateSleep(runtime, TDuration::Seconds(30));
+
+        {
+            auto info = GetPathInfo(runtime, "/MyRoot/Simple");
+            for (auto shard: info.Shards) {
+                CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+            }
+            auto simpleCount2 = GetCompactionStats(runtime, "/MyRoot/Simple").CompactBorrowedCount;
+            UNIT_ASSERT_VALUES_EQUAL(simpleCount1, simpleCount2);
+        }
+
+        {
+            auto info = GetPathInfo(runtime, "/MyRoot/CopyTable");
+            for (auto shard: info.Shards) {
+                CheckShardBackgroundCompacted(runtime, info.UserTable, shard, info.OwnerId);
+            }
+            auto copyCount2 = GetCompactionStats(runtime, "/MyRoot/CopyTable").CompactBorrowedCount;
+            UNIT_ASSERT_VALUES_EQUAL(copyCount1, copyCount2);
+        }
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldHandleBorrowCompactionTimeouts) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto configRequest = GetTestCompactionConfig();
+        auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
+        compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+        compactionConfig->MutableBorrowedCompactionConfig()->SetTimeoutSeconds(3);
+
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(configRequest));
+
+        size_t borrowedRequests = 0;
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactBorrowed: {
+                Y_UNUSED(ev.Release());
+                ++borrowedRequests;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        // copy table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // now force split
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "CopyTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 2
+                                MaxPartitionsCount: 2
+                                SizeToSplit: 1
+                            }
+                        })");
+        env.TestWaitNotification(runtime, txId);
+
+        // wait until DS reports that it has borrowed data
+        while (borrowedRequests < 1) {
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+        }
+
+        env.SimulateSleep(runtime, TDuration::Seconds(60));
+
+        while (borrowedRequests < 3)
+            env.SimulateSleep(runtime, TDuration::Seconds(10));
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldHandleDataShardReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto configRequest = GetTestCompactionConfig();
+        auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
+        compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+        compactionConfig->MutableBorrowedCompactionConfig()->SetTimeoutSeconds(1000); // avoid timeouts
+
+        // now we have 1 inflight which will hang the queue in case on long timeout
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(configRequest));
+
+        size_t borrowedRequests = 0;
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactBorrowed: {
+                Y_UNUSED(ev.Release());
+                ++borrowedRequests;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        // copy table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // now force split
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "CopyTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 2
+                                MaxPartitionsCount: 2
+                                SizeToSplit: 1
+                            }
+                        })");
+        env.TestWaitNotification(runtime, txId);
+
+        // wait until DS reports that it has borrowed data
+        while (borrowedRequests < 1) {
+            env.SimulateSleep(runtime, TDuration::Seconds(1));
+        }
+
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(borrowedRequests, 1UL);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(borrowedRequests, 1UL);
+
+        auto info = GetPathInfo(runtime, "/MyRoot/CopyTable");
+        UNIT_ASSERT_VALUES_EQUAL(info.Shards.size(), 1UL);
+
+        // break the pipes and check that SS requested compaction again
+        TActorId sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, info.Shards[0], sender);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(borrowedRequests, 2UL);
+
+        // one more time
+        RebootTablet(runtime, info.Shards[0], sender);
+        env.SimulateSleep(runtime, TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(borrowedRequests, 3UL);
+    }
+
+    Y_UNIT_TEST(SchemeshardShouldNotCompactAfterDrop) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto configRequest = GetTestCompactionConfig();
+        auto* compactionConfig = configRequest->Record.MutableConfig()->MutableCompactionConfig();
+        compactionConfig->MutableBorrowedCompactionConfig()->SetInflightLimit(1);
+        compactionConfig->MutableBorrowedCompactionConfig()->SetTimeoutSeconds(5);
+
+        // now we have 1 inflight which will hang the queue in case on long timeout
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(configRequest));
+
+        size_t borrowedRequests = 0;
+
+        // capture original observer func by setting dummy one
+        auto originalObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        // now set our observer backed up by original
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvDataShard::EvCompactBorrowed: {
+                Y_UNUSED(ev.Release());
+                ++borrowedRequests;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            default:
+                return originalObserver(runtime, ev);
+            }
+        });
+        ui64 txId = 1000;
+
+        // note that we create 1-sharded table to avoid complications
+        CreateTableWithData(runtime, env, "/MyRoot", "Simple", 1, txId);
+
+        // copy table
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "CopyTable"
+            CopyFromTable: "/MyRoot/Simple"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // now force split
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+                        Name: "CopyTable"
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 2
+                                MaxPartitionsCount: 2
+                                SizeToSplit: 1
+                            }
+                        })");
+        env.TestWaitNotification(runtime, txId);
+
+        // wait until DS reports that it has borrowed data
+        while (borrowedRequests < 1) {
+            env.SimulateSleep(runtime, TDuration::MilliSeconds(100));
+        }
+
+        auto requestsBefore = borrowedRequests;
+
+        // SS waits reply from DS, drop the table meanwhile
+        TestDropTable(runtime, ++txId, "/MyRoot", "CopyTable");
+        env.TestWaitNotification(runtime, txId);
+        env.TestWaitTabletDeletion(runtime, TTestTxConfig::FakeHiveTablets + 1);
+
+        env.SimulateSleep(runtime, TDuration::Seconds(10)); // 2x timeout
+        UNIT_ASSERT_VALUES_EQUAL(borrowedRequests, requestsBefore);
     }
 };
 

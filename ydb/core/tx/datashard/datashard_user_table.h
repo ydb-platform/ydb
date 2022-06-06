@@ -320,6 +320,7 @@ struct TUserTable : public TThrRefBase {
         ui64 RowCountResolution = 0;
         ui64 BackgroundCompactionRequests = 0;
         ui64 BackgroundCompactionCount = 0;
+        ui64 CompactBorrowedCount = 0;
         NTable::TKeyAccessSample AccessStats;
 
         void Update(NTable::TStats&& dataStats, ui64 indexSize, THashSet<ui64>&& partOwners, ui64 partCount, TInstant statsUpdateTime) {

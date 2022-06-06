@@ -4,7 +4,9 @@
 #include "intrusive_heap.h"
 #include "token_bucket.h"
 
-#include <library/cpp/time_provider/time_provider.h>
+#include <ydb/core/base/defs.h>
+
+#include <library/cpp/actors/core/monotonic.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/algorithm.h>
@@ -26,9 +28,9 @@ enum class EStartStatus {
 class ITimer {
 public:
     // asks to call TOperationQueue::Wakeup()
-    virtual void SetWakeupTimer(TInstant t) = 0;
+    virtual void SetWakeupTimer(TDuration delta) = 0;
 
-    virtual TInstant Now() = 0;
+    virtual TMonotonic Now() = 0;
 };
 
 template <typename T>
@@ -195,18 +197,18 @@ public:
 
     struct TItemWithTs {
         T Item;
-        TInstant Timestamp;
+        TMonotonic Timestamp;
 
         explicit TItemWithTs(const T& item)
             : Item(item)
         { }
 
-        TItemWithTs(const T& item, TInstant s)
+        TItemWithTs(const T& item, TMonotonic s)
             : Item(item)
             , Timestamp(s)
         { }
 
-        TItemWithTs(T&& item, TInstant s)
+        TItemWithTs(T&& item, TMonotonic s)
             : Item(std::move(item))
             , Timestamp(s)
         { }
@@ -259,10 +261,10 @@ private:
     TRunningItems RunningItems;
     TWaitingItems WaitingItems;
 
-    TTokenBucket TokenBucket;
+    TTokenBucketBase<TMonotonic> TokenBucket;
     bool HasRateLimit = false;
 
-    TInstant NextWakeup;
+    TMonotonic NextWakeup;
     bool Running = false;
     bool WasRunning = false;
 
@@ -527,8 +529,10 @@ TDuration TOperationQueue<T, TQueue>::OnDone(const T& item) {
 
 template <typename T, typename TQueue>
 void TOperationQueue<T, TQueue>::Wakeup() {
+    NextWakeup = {};
     StartOperations();
-    ScheduleWakeup();
+    if (!NextWakeup)
+        ScheduleWakeup();
 }
 
 template <typename T, typename TQueue>
@@ -551,10 +555,19 @@ void TOperationQueue<T, TQueue>::CheckTimeoutOperations() {
     while (!RunningItems.Empty()) {
         const auto& item = RunningItems.Front();
         if (item.Timestamp + Config.Timeout <= now) {
-            Starter.OnTimeout(item.Item);
-            if (Config.IsCircular)
-                ReEnqueueNoStart(std::move(item.Item));
+            auto movedItem = std::move(item.Item);
+
+            // we want to pop before calling OnTimeout, because
+            // it might want to enqueue in case of non-circular
+            // queue
             RunningItems.PopFront();
+
+            // note that OnTimeout() can enqueue item back
+            // in case of non-circular queue
+            Starter.OnTimeout(movedItem);
+
+            if (Config.IsCircular)
+                ReEnqueueNoStart(std::move(movedItem));
             continue;
         }
         break;
@@ -622,17 +635,17 @@ void TOperationQueue<T, TQueue>::ScheduleWakeup() {
         if (TokenBucket.Available() <= 0) {
             // we didn't start anything because of RPS limit
             NextWakeup = now + TokenBucket.NextAvailableDelay();
-            Timer.SetWakeupTimer(NextWakeup);
+            Timer.SetWakeupTimer(TokenBucket.NextAvailableDelay());
             return;
-        } else if (!NextWakeup || NextWakeup <= now) {
+        } else if (!NextWakeup) {
             // special case when we failed to start anything
             NextWakeup = now + Config.WakeupInterval;
-            Timer.SetWakeupTimer(NextWakeup);
+            Timer.SetWakeupTimer(Config.WakeupInterval);
             return;
         }
     }
 
-    auto wakeup = TInstant::Max();
+    auto wakeup = TMonotonic::Max();
 
     if (Config.Timeout && !RunningItems.Empty()) {
         const auto& item = RunningItems.Front();
@@ -644,7 +657,7 @@ void TOperationQueue<T, TQueue>::ScheduleWakeup() {
         wakeup = Min(wakeup, item.Timestamp + Config.MinOperationRepeatDelay);
     }
 
-    if (wakeup == TInstant::Max())
+    if (wakeup == TMonotonic::Max())
         return;
 
     // no sense to wakeup earlier that rate limit allows
@@ -652,9 +665,9 @@ void TOperationQueue<T, TQueue>::ScheduleWakeup() {
         wakeup = Max(wakeup, now + TokenBucket.NextAvailableDelay());
     }
 
-    if (!NextWakeup || NextWakeup > wakeup || NextWakeup <= now) {
+    if (!NextWakeup || NextWakeup > wakeup) {
         NextWakeup = wakeup;
-        Timer.SetWakeupTimer(NextWakeup);
+        Timer.SetWakeupTimer(wakeup - now);
     }
 }
 

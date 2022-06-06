@@ -68,17 +68,7 @@ public:
 
         ++tableInfo.Stats.BackgroundCompactionRequests;
 
-        auto stats = txc.DB.GetCompactionStats(localTid);
-
-        bool hasBorrowed = false;
-        if (stats.PartOwners.size() > 1) {
-            hasBorrowed = true;
-        } else if (stats.PartOwners.size() == 1) {
-            if (*stats.PartOwners.begin() != Self->TabletID()) {
-                hasBorrowed = true;
-            }
-        }
-
+        bool hasBorrowed = txc.DB.HasBorrowed(tableInfo.LocalTid, Self->TabletID());
         if (hasBorrowed && !record.GetCompactBorrowed()) {
             // normally we should not receive requests to compact in this case
             // but in some rare cases like schemeshard restart we can
@@ -117,6 +107,7 @@ public:
             return true;
         }
 
+        auto stats = txc.DB.GetCompactionStats(localTid);
         bool isEmpty = stats.PartCount == 0 && stats.MemDataSize == 0;
         bool isSingleParted = stats.PartCount == 1 && stats.MemDataSize == 0;
         if (isEmpty || isSingleParted && !hasBorrowed && !record.HasCompactSinglePartedShards()) {
@@ -151,7 +142,7 @@ public:
                 << ", memtableRows# " << stats.MemRowCount);
 
             Self->IncCounter(COUNTER_TX_BACKGROUND_COMPACTION);
-            Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(std::make_tuple(compactionId, pathId, Ev->Sender));
+            Self->CompactionWaiters[tableInfo.LocalTid].emplace_back(std::make_tuple(compactionId, Ev->Sender));
             ++tableInfo.Stats.BackgroundCompactionCount;
         } else {
             // compaction failed, for now we don't care
@@ -207,6 +198,7 @@ void TDataShard::Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorCon
 void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
     auto finishedInfo = Executor()->GetFinishedCompactionInfo(tableId);
 
+    TLocalPathId localPathId = InvalidLocalPathId;
     if (tableId >= Schema::MinLocalTid) {
         for (auto& ti : TableInfos) {
             if (ti.second->LocalTid != tableId && ti.second->ShadowTid != tableId)
@@ -223,40 +215,68 @@ void TDataShard::CompactionComplete(ui32 tableId, const TActorContext &ctx) {
             }
 
             ti.second->StatsNeedUpdate = true;
+            localPathId = ti.first;
             UpdateTableStats(ctx);
             break;
         }
     }
 
-    ReplyCompactionWaiters(tableId, finishedInfo.Edge, ctx);
+    ReplyCompactionWaiters(tableId, localPathId, finishedInfo, ctx);
 }
 
-void TDataShard::ReplyCompactionWaiters(ui32 tableId, ui64 edge, const TActorContext &ctx) {
+void TDataShard::ReplyCompactionWaiters(
+    ui32 tableId,
+    TLocalPathId localPathId,
+    const NTabletFlatExecutor::TFinishedCompactionInfo& compactionInfo,
+    const TActorContext &ctx)
+{
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
         "CompactionComplete of tablet# "<< TabletID()
         << ", table# " << tableId
-        << ", finished edge# " << edge
+        << ", finished edge# " << compactionInfo.Edge
         << ", front# " << (CompactionWaiters[tableId].empty() ? 0UL : std::get<0>(CompactionWaiters[tableId].front())));
 
-    while (!CompactionWaiters[tableId].empty()) {
+    auto& fullCompactionQueue = CompactionWaiters[tableId];
+    while (!fullCompactionQueue.empty()) {
         const auto& waiter = CompactionWaiters[tableId].front();
-        if (std::get<0>(waiter) > edge)
+        if (std::get<0>(waiter) > compactionInfo.Edge)
             break;
 
-        const auto& pathId = std::get<1>(waiter);
-        const auto& sender = std::get<2>(waiter);
+        const auto& sender = std::get<1>(waiter);
         auto response = MakeHolder<TEvDataShard::TEvCompactTableResult>(
             TabletID(),
-            pathId.OwnerId,
-            pathId.LocalPathId,
+            GetPathOwnerId(),
+            localPathId,
             NKikimrTxDataShard::TEvCompactTableResult::OK);
         ctx.Send(sender, std::move(response));
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
             "Sending TEvCompactTableResult to# " << sender
-            << "pathId# " << pathId);
+            << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
 
-        CompactionWaiters[tableId].pop_front();
+        fullCompactionQueue.pop_front();
+    }
+
+    auto& compactBorrowedQueue = CompactBorrowedWaiters[tableId];
+    if (!compactBorrowedQueue.empty()) {
+        const bool hasBorrowed = Executor()->HasBorrowed(tableId, TabletID());
+        if (!hasBorrowed) {
+            while (!compactBorrowedQueue.empty()) {
+                const auto& waiter = compactBorrowedQueue.front();
+
+                auto response = MakeHolder<TEvDataShard::TEvCompactBorrowedResult>(
+                    TabletID(),
+                    GetPathOwnerId(),
+                    localPathId);
+                ctx.Send(waiter, std::move(response));
+
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                    "Sending TEvCompactBorrowedResult to# " << waiter
+                    << "pathId# " << TPathId(GetPathOwnerId(), localPathId));
+
+                compactBorrowedQueue.pop_front();
+            }
+        }
     }
 }
 
@@ -274,6 +294,7 @@ void TDataShard::Handle(TEvDataShard::TEvGetCompactTableStats::TPtr& ev, const T
         const TUserTable& tableInfo = *it->second;
         response->Record.SetBackgroundCompactionRequests(tableInfo.Stats.BackgroundCompactionRequests);
         response->Record.SetBackgroundCompactionCount(tableInfo.Stats.BackgroundCompactionCount);
+        response->Record.SetCompactBorrowedCount(tableInfo.Stats.CompactBorrowedCount);
     }
 
     ctx.Send(ev->Sender, std::move(response));

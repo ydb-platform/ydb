@@ -144,6 +144,8 @@ public:
     TAutoPtr<TSubset> Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const;
     TAutoPtr<TSubset> ScanSnapshot(ui32 table, TRowVersion snapshot = TRowVersion::Max());
 
+    bool HasBorrowed(ui32 table, ui64 selfTabletId) const;
+
     TBundleSlicesMap LookupSlices(ui32 table, TArrayRef<const TLogoBlobID> bundles) const;
     void ReplaceSlices(ui32 table, TBundleSlicesMap slices);
 

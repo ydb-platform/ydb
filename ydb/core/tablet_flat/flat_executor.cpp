@@ -3812,6 +3812,11 @@ bool TExecutor::HasLoanedParts() const {
     return false;
 }
 
+bool TExecutor::HasBorrowed(ui32 table, ui64 selfTabletId) const {
+    Y_VERIFY_S(Database, "Checking borrowers of table# " << table << " for tablet# " << selfTabletId);
+    return Database->HasBorrowed(table, selfTabletId);
+}
+
 const TExecutorStats& TExecutor::GetStats() const {
     return *Stats;
 }

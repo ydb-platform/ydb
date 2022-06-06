@@ -21,6 +21,7 @@ struct TEvPrivate {
         EvSubscribeToShardDeletion,
         EvNotifyShardDeleted,
         EvRunBackgroundCompaction,
+        EvRunBorrowedCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
         EvEnd

@@ -194,8 +194,12 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     table->UpdateShardStats(shardIdx, newStats);
 
     if (!table->IsBackup) {
-        Self->UpdateCompaction(shardIdx, newStats);
+        Self->UpdateBackgroundCompaction(shardIdx, newStats);
         Self->UpdateShardMetrics(shardIdx, newStats);
+    }
+
+    if (!newStats.HasBorrowedData) {
+        Self->RemoveBorrowedCompaction(shardIdx);
     }
 
     NIceDb::TNiceDb db(txc.DB);
@@ -333,7 +337,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     if (newStats.HasBorrowedData) {
         // We don't want to split shards that have borrow parts
         // We must ask them to compact first
-        CompactEv.Reset(new TEvDataShard::TEvCompactBorrowed(tableId));
+        Self->EnqueueBorrowedCompaction(shardIdx);
         return true;
     }
 

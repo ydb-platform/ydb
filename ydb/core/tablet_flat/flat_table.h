@@ -80,6 +80,8 @@ public:
     TAutoPtr<TSubset> ScanSnapshot(TRowVersion snapshot = TRowVersion::Max()) noexcept;
     TAutoPtr<TSubset> Unwrap() noexcept; /* full Subset(..) + final Replace(..) */
 
+    bool HasBorrowed(ui64 selfTabletId) const noexcept;
+
     /**
      * Returns current slices for bundles
      *

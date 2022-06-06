@@ -1309,7 +1309,11 @@ public:
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
 
-    void ReplyCompactionWaiters(ui32 tableId, ui64 edge, const TActorContext &ctx);
+    void ReplyCompactionWaiters(
+        ui32 tableId,
+        TLocalPathId localPathId,
+        const NTabletFlatExecutor::TFinishedCompactionInfo& compactionInfo,
+        const TActorContext &ctx);
 
     TUserTable::TSpecialUpdate SpecialUpdates(const NTable::TDatabase& db, const TTableId& tableId) const;
 
@@ -2198,8 +2202,8 @@ private:
     // in
     THashMap<ui64, TInChangeSender> InChangeSenders; // ui64 is shard id
 
-    // compactionId, tableId/ownerId, actorId
-    using TCompactionWaiter = std::tuple<ui64, TPathId, TActorId>;
+    // compactionId, actorId
+    using TCompactionWaiter = std::tuple<ui64, TActorId>;
     using TCompactionWaiterList = TList<TCompactionWaiter>;
 
     // tableLocalTid -> waiters, note that compactionId is monotonically
@@ -2207,6 +2211,11 @@ private:
     // thus we always add waiters to the end of the list and remove
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
+
+    using TCompactBorrowedWaiterList = TList<TActorId>;
+
+    // tableLocalTid -> waiters, similar to CompactionWaiters
+    THashMap<ui32, TCompactBorrowedWaiterList> CompactBorrowedWaiters;
 
     struct TReplicationSourceOffsetsReceiveState {
         // A set of tables for which we already received offsets

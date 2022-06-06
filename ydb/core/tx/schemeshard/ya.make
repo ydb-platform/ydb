@@ -60,6 +60,7 @@ SRCS(
     defs.h
     schemeshard.h
     schemeshard.cpp
+    schemeshard__borrowed_compaction.cpp
     schemeshard__compaction.cpp
     schemeshard__clean_pathes.cpp
     schemeshard__conditional_erase.cpp

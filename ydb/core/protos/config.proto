@@ -1440,7 +1440,16 @@ message TCompactionConfig {
         optional bool CompactSinglePartedShards = 10 [default = false];
     }
 
+    message TBorrowedCompactionConfig {
+        optional double MaxRate = 1 [default = 0]; // unlimitted
+        optional uint64 InflightLimit = 2 [default = 10]; // TODO: consider more?
+
+        // After this interval we will try to restart
+        optional uint64 TimeoutSeconds = 3 [default = 15];
+    }
+
     optional TBackgroundCompactionConfig BackgroundCompactionConfig = 1;
+    optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
 }
 
 // This message is used to upload custom service configs

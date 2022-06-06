@@ -548,6 +548,8 @@ namespace NFlatExecutorSetup {
         virtual THashMap<TLogoBlobID, TVector<ui64>> GetBorrowedParts() const = 0;
         virtual bool HasLoanedParts() const = 0;
 
+        virtual bool HasBorrowed(ui32 table, ui64 selfTabletId) const = 0;
+
         // This method lets executor know about new yellow channels
         virtual void OnYellowChannels(TVector<ui32> yellowMoveChannels, TVector<ui32> yellowStopChannels) = 0;
 

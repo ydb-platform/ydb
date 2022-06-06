@@ -2,6 +2,7 @@
 
 #include "circular_queue.h"
 
+#include <library/cpp/actors/core/monotonic_provider.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/ptr.h>
@@ -65,9 +66,9 @@ namespace {
 
 TDuration Timeout = TDuration::Minutes(10);
 
-class TSimpleTimeProvider : public ITimeProvider {
+class TSimpleTimeProvider : public NActors::IMonotonicTimeProvider {
 public:
-    TInstant Now() override {
+    TMonotonic Now() override {
         return Now_;
     }
 
@@ -75,12 +76,12 @@ public:
         Now_ += delta;
     }
 
-    void Move(TInstant now) {
+    void Move(TMonotonic now) {
         Now_ = now;
     }
 
 private:
-    TInstant Now_;
+    TMonotonic Now_;
 };
 
 
@@ -88,7 +89,7 @@ struct TOperationStarter : public TPriorityQueue::IStarter, public NOperationQue
     TSimpleTimeProvider TimeProvider;
 
     TVector<TPriorityItem> StartHistory;
-    TVector<TInstant> WakeupHistory;
+    TVector<TMonotonic> WakeupHistory;
 
     NOperationQueue::EStartStatus StartResult = NOperationQueue::EStartStatus::EOperationRunning;
 
@@ -98,15 +99,15 @@ struct TOperationStarter : public TPriorityQueue::IStarter, public NOperationQue
         return StartResult;
     }
 
-    void SetWakeupTimer(TInstant t) override
+    void SetWakeupTimer(TDuration delta) override
     {
-        WakeupHistory.push_back(t);
+        WakeupHistory.push_back(this->Now() + delta);
     }
 
     void OnTimeout(const TPriorityItem&) override
     {}
 
-    TInstant Now() override
+    TMonotonic Now() override
     {
         return TimeProvider.Now();
     }

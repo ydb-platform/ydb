@@ -98,17 +98,13 @@ struct TCmsSentinelConfig {
 
     static TMap<EPDiskState, ui32> LoadStateLimits(const NKikimrCms::TCmsConfig::TSentinelConfig &config)
     {
-        TMap<EPDiskState, ui32> stateLimits;
+        TMap<EPDiskState, ui32> stateLimits = DefaultStateLimits();
 
         for (const auto &val : config.GetStateLimits()) {
             stateLimits[static_cast<EPDiskState>(val.GetState())] = val.GetLimit();
         }
 
-        if (stateLimits) {
-            return stateLimits;
-        }
-
-        return DefaultStateLimits();
+        return stateLimits;
     }
 
     static TMap<EPDiskState, ui32> DefaultStateLimits()
@@ -124,6 +120,10 @@ struct TCmsSentinelConfig {
         stateLimits[NKikimrBlobStorage::TPDiskState::OpenFileError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::ChunkQuotaError] = 60;
         stateLimits[NKikimrBlobStorage::TPDiskState::DeviceIoError] = 60;
+
+        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved14] = 0;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved15] = 0;
+        stateLimits[NKikimrBlobStorage::TPDiskState::Reserved16] = 0;
         // node online, pdisk missing
         stateLimits[NKikimrBlobStorage::TPDiskState::Missing] = 60;
         // node timeout

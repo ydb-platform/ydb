@@ -1143,8 +1143,8 @@ class CmsConfigEditForm extends CommonEditForm {
         for (var e of cmsEnums['PDiskStates'].keys()) {
             var name = cmsEnums.get('PDiskStates', e);
             if (name.match(/Error$/)) {
-                sentinelDefaultStateLimits.set(e, 1);
-            } else if (e == 255) {
+                sentinelDefaultStateLimits.set(e, 60);
+            } else if (e == 255  || name.match(/^Reserved/)) {
                 sentinelDefaultStateLimits.set(e, 0);
             } else if (e > 250) {
                 sentinelDefaultStateLimits.set(e, 60);
@@ -1257,7 +1257,7 @@ class CmsConfigEditForm extends CommonEditForm {
             <div class="form-group">
                 <div class="row">
                     ${this._makeNumericInput("Default state limit", "sentinel-default-state-limit",
-                                             "Default is 5", sentinelDefaultStateLimit,
+                                             "Default is 60", sentinelDefaultStateLimit,
                                              "Number of 'state update' cycles before changing status")}
                     ${this._makeSentinelStateLimits(sentinelStateLimits, sentinelDefaultStateLimits)}
                 </div>
@@ -1352,7 +1352,7 @@ class CmsConfigEditForm extends CommonEditForm {
         for (var e of cmsEnums['PDiskStates'].keys()) {
             var name = cmsEnums.get('PDiskStates', e);
             var placeholder = "Use default if empty";
-            if (stateLimits.size == 0 && defaultStateLimits.has(e)) {
+            if (defaultStateLimits.has(e)) {
                 placeholder = "Default is " + defaultStateLimits.get(e) + " cycles";
             }
 

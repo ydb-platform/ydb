@@ -8,9 +8,6 @@ TMaybe<NActors::TInterconnectProxyCommon::TVersionInfo> VERSION = NActors::TInte
     // compatible versions; must include all compatible old ones, including this one; version verification occurs on both
     // peers and connection is accepted if at least one of peers accepts the version of the other peer
     {
-        "21-4-border",
-        "22-2",
-        "22-2-border-1",
         "22-2-border-2"
     }
 };

@@ -711,9 +711,16 @@ enum ECdcStreamMode {
     ECdcStreamModeNewAndOldImages = 5;
 }
 
+enum ECdcStreamFormat {
+    ECdcStreamFormatInvalid = 0;
+    ECdcStreamFormatProto = 1;
+    ECdcStreamFormatJson = 2;
+}
+
 message TCdcStreamDescription {
     optional string Name = 1;
     optional ECdcStreamMode Mode = 2;
+    optional ECdcStreamFormat Format = 6;
     optional NKikimrProto.TPathID PathId = 3;
     optional ECdcStreamState State = 4;
     optional uint64 SchemaVersion = 5;
@@ -1239,6 +1246,7 @@ message TModifyScheme {
     optional EOperationType OperationType = 2;
     optional bool Internal = 36 [default = false]; // internal operations are not generated directly by the user
     optional bool FailOnExist = 50 [default = false]; // as a replacement for TEvModifySchemeTransaction.FailOnExist
+    optional bool AllowAccessToPrivatePaths = 53 [default = false];
 
     optional TMkDir MkDir = 3;
     optional TTableDescription CreateTable = 4;

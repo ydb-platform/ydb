@@ -4526,8 +4526,14 @@ bool TPartition::ProcessWrites(TEvKeyValue::TEvRequest* request, const TActorCon
     }
 
     if (NewHead.PackedSize == 0) { //nothing added to head - just compaction or tmp part blobs writed
-        Y_VERIFY(sourceIdWriter.GetSourceIdsToWrite().empty());
-        return request->Record.CmdWriteSize() > 0 || request->Record.CmdRenameSize() > 0 || request->Record.CmdDeleteRangeSize() > 0;
+        if (sourceIdWriter.GetSourceIdsToWrite().empty()) {
+            return request->Record.CmdWriteSize() > 0
+                || request->Record.CmdRenameSize() > 0
+                || request->Record.CmdDeleteRangeSize() > 0;
+        } else {
+            sourceIdWriter.FillRequest(request, Partition);
+            return true;
+        }
     }
 
     sourceIdWriter.FillRequest(request, Partition);

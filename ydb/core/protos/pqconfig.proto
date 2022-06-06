@@ -693,10 +693,16 @@ message TYdsNextToken {
 }
 
 message TYdsShardIterator {
+    enum ETopicKind {
+        KIND_COMMON = 0;
+        KIND_CDC = 1;
+    }
+
     required string StreamName = 1;
     required string StreamArn = 2;
     required uint32 ShardId = 3;
     required uint64 ReadTimestampMs = 4;
     required uint32 SequenceNumber = 5;
     required uint64 CreationTimestampMs = 6;
+    optional ETopicKind Kind = 7;
 }

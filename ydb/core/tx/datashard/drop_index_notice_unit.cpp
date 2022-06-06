@@ -33,6 +33,9 @@ public:
         const auto pathId = PathIdFromPathId(params.GetPathId());
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
+        const auto version = params.GetTableSchemaVersion();
+        Y_VERIFY(version);
+
         TUserTable::TPtr tableInfo;
         if (params.HasIndexPathId()) {
             const auto& userTables = DataShard.GetUserTables();
@@ -46,13 +49,17 @@ public:
                 RemoveSender.Reset(new TEvChangeExchange::TEvRemoveSender(indexPathId));
             }
 
-            tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, params.GetTableSchemaVersion(), indexPathId);
+            tableInfo = DataShard.AlterTableDropIndex(ctx, txc, pathId, version, indexPathId);
         } else {
-            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, params.GetTableSchemaVersion());
+            tableInfo = DataShard.AlterTableSchemaVersion(ctx, txc, pathId, version);
         }
 
         Y_VERIFY(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
+
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

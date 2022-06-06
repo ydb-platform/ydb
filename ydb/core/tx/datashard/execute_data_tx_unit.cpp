@@ -235,12 +235,7 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     } else {
         result->SetTxResult(engine->GetShardReply(DataShard.TabletID()));
 
-        if (auto changes = tx->GetDataTx()->GetCollectedChanges()) {
-            op->ChangeRecords().reserve(changes.size());
-            for (const auto& change : changes) {
-                op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize());
-            }
-        }
+        op->ChangeRecords() = std::move(tx->GetDataTx()->GetCollectedChanges());
     }
 
     LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,

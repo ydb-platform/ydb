@@ -112,6 +112,7 @@ public:
             group.SetId(NPQ::NSourceIdEncoding::EncodeSimple(ToString(dstTabletId)));
         }
 
+        NTabletPipe::SendData(SelfId(), PipeClient, ev.Release());
         Become(&TThis::StateWork);
     }
 
@@ -141,13 +142,14 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
             LogPrefix = TStringBuilder()
                 << "[ChangeExchangeSplitCdcWorker]"
                 << "[" << SrcTabletId << "]"
-                << SelfId() /* contains brackets */;
+                << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
     }
 
     void Ack() {
+        LOG_I("Send ack");
         Send(Parent, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
@@ -335,14 +337,23 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
                 workers.emplace(partitionId, it->second);
                 Workers.erase(it);
             } else {
+                LOG_T("Register new worker"
+                    << ": partitionId# " << partitionId);
+
                 const auto worker = Register(new TCdcPartitionWorker(SelfId(), partitionId, tabletId, SrcTabletId, DstTabletIds));
                 workers.emplace(partitionId, worker);
                 Pending.emplace(worker, partitionId);
             }
         }
 
-        for (const auto& [_, worker] : Workers) {
+        for (const auto& kv : Workers) {
+            const auto& partitionId = kv.first;
+            const auto& worker = kv.second;
+
             if (worker) {
+                LOG_T("Kill stale worker"
+                    << ": partitionId# " << partitionId);
+
                 Send(worker, new TEvents::TEvPoisonPill());
                 Pending.erase(worker);
             }
@@ -351,6 +362,8 @@ class TCdcWorker: public TActorBootstrapped<TCdcWorker>, private TSchemeCacheHel
         if (Pending.empty()) {
             return Ack();
         }
+
+        LOG_I("Wait " << Pending.size() << " worker(s)");
 
         Workers = std::move(workers);
         Become(&TThis::StateWork);
@@ -473,7 +486,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
             LogPrefix = TStringBuilder()
                 << "[ChangeExchangeSplit]"
                 << "[" << DataShard.TabletId << "]"
-                << SelfId() /* contains brackets */;
+                << SelfId() /* contains brackets */ << " ";
         }
 
         return LogPrefix.GetRef();
@@ -495,6 +508,7 @@ class TChangeExchageSplit: public TActorBootstrapped<TChangeExchageSplit> {
     }
 
     void Ack() {
+        LOG_I("Send ack");
         Send(DataShard.ActorId, new TEvChangeExchange::TEvSplitAck());
         PassAway();
     }
@@ -549,10 +563,16 @@ public:
 
     void Bootstrap() {
         if (!Workers) {
+            LOG_N("Auto-ack (no active worker)");
             return Ack();
         }
 
-        for (auto& [pathId, worker] : Workers) {
+        for (auto& kv : Workers) {
+            const auto& pathId = kv.first;
+            auto& worker = kv.second;
+
+            LOG_D("Register worker"
+                << ": pathId# " << pathId);
             Pending.emplace(RegisterWorker(pathId, worker), pathId);
         }
 

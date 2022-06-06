@@ -3,7 +3,6 @@
 
 #include <ydb/core/protos/change_exchange.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
-#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 
 namespace NKikimr {
@@ -28,14 +27,14 @@ auto GetValueFromLocalDb(TTestActorRuntime& runtime, const TActorId& sender, ui6
 auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 tabletId) {
     auto protoValue = GetValueFromLocalDb(runtime, sender, tabletId, R"((
         (let range '( '('Order (Uint64 '0) (Void) )))
-        (let columns '('Order 'Group 'PlanStep 'TxId 'PathOwnerId 'LocalPathId) )
+        (let columns '('Order 'Group 'PlanStep 'TxId 'PathOwnerId 'LocalPathId 'SchemaVersion) )
         (let result (SelectRange 'ChangeRecords range columns '()))
         (return (AsList (SetResult 'Result result) ))
     ))");
     auto value = NClient::TValue::Create(protoValue);
     const auto& result = value["Result"]["List"];
 
-    TVector<std::tuple<ui64, ui64, ui64, ui64, TPathId>> records;
+    TVector<std::tuple<ui64, ui64, ui64, ui64, TPathId, ui64>> records;
     for (size_t i = 0; i < result.Size(); ++i) {
         const auto& item = result[i];
         records.emplace_back(
@@ -43,7 +42,8 @@ auto GetChangeRecords(TTestActorRuntime& runtime, const TActorId& sender, ui64 t
             item["Group"],
             item["PlanStep"],
             item["TxId"],
-            TPathId(item["PathOwnerId"], item["LocalPathId"])
+            TPathId(item["PathOwnerId"], item["LocalPathId"]),
+            item["SchemaVersion"]
         );
     }
 
@@ -96,37 +96,14 @@ auto GetChangeRecordsWithDetails(TTestActorRuntime& runtime, const TActorId& sen
                 .WithGroup(std::get<1>(record))
                 .WithStep(std::get<2>(record))
                 .WithTxId(std::get<3>(record))
+                .WithPathId(std::get<4>(record))
+                .WithSchemaVersion(std::get<5>(record))
                 .WithBody(std::get<2>(detail))
                 .Build()
         );
     }
 
     return result;
-}
-
-THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
-    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
-    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
-    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
-
-    auto request = MakeHolder<TNavigate>();
-    auto& entry = request->ResultSet.emplace_back();
-    entry.Path = SplitPath(path);
-    entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
-    entry.Operation = TNavigate::EOp::OpTable;
-    entry.ShowPrivatePath = true;
-    runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
-
-    auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
-    UNIT_ASSERT(ev);
-    UNIT_ASSERT(ev->Get());
-
-    auto* response = ev->Get()->Request.Release();
-    UNIT_ASSERT(response);
-    UNIT_ASSERT(response->ErrorCount == 0);
-    UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
-
-    return THolder(response);
 }
 
 using TStructKey = TVector<std::pair<TString, ui32>>;
@@ -333,6 +310,7 @@ Y_UNIT_TEST_SUITE(AsyncIndexChangeCollector) {
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -633,6 +611,7 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             UNIT_ASSERT_VALUES_EQUAL(expected.size(), actual.size());
             for (size_t i = 0; i < expected.size(); ++i) {
                 UNIT_ASSERT_VALUES_EQUAL(expected.at(i), TStructRecord::Parse(actual.at(i).GetBody(), tagToName));
+                UNIT_ASSERT_VALUES_EQUAL(actual.at(i).GetSchemaVersion(), entry.TableId.SchemaVersion);
             }
         }
     }
@@ -669,19 +648,25 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
 
     TCdcStream KeysOnly() {
         return TCdcStream{
-            "keys_stream", NKikimrSchemeOp::ECdcStreamModeKeysOnly
+            .Name = "keys_stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeKeysOnly,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
         };
     }
 
     TCdcStream Updates() {
         return TCdcStream{
-            "updates_stream", NKikimrSchemeOp::ECdcStreamModeUpdate
+            .Name = "updates_stream",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeUpdate,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
         };
     }
 
     TCdcStream NewAndOldImages() {
         return TCdcStream{
-            "new_and_old_images", NKikimrSchemeOp::ECdcStreamModeNewAndOldImages
+            .Name = "new_and_old_images",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewAndOldImages,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
         };
     }
 

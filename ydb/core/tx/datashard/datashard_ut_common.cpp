@@ -1292,28 +1292,9 @@ std::pair<TTableInfoMap, ui64> GetTables(
     return std::make_pair(result, ownerId);
 }
 
-TTableId ResolveTableId(
-        Tests::TServer::TPtr server,
-        TActorId sender,
-        const TString& path)
-{
-    auto& runtime = *server->GetRuntime();
-
-    {
-        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
-        auto& entry = request->ResultSet.emplace_back();
-        entry.Path = SplitPath(path);
-        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
-        entry.ShowPrivatePath = true;
-        runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvTxProxySchemeCache::TEvNavigateKeySet(request)));
-    }
-
-    auto ev = runtime.GrabEdgeEventRethrow<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(sender);
-    NSchemeCache::TSchemeCacheNavigate* req = ev->Get()->Request.Get();
-    Y_VERIFY(req->ErrorCount == 0);
-
-    auto& res = req->ResultSet.at(0);
-    return res.TableId;
+TTableId ResolveTableId(Tests::TServer::TPtr server, TActorId sender, const TString& path) {
+    auto response = Navigate(*server->GetRuntime(), sender, path);
+    return response->ResultSet.at(0).TableId;
 }
 
 NTable::TRowVersionRanges GetRemovedRowVersions(
@@ -1715,6 +1696,7 @@ ui64 AsyncAlterAddStream(
     desc.SetTableName(tableName);
     desc.MutableStreamDescription()->SetName(streamDesc.Name);
     desc.MutableStreamDescription()->SetMode(streamDesc.Mode);
+    desc.MutableStreamDescription()->SetFormat(streamDesc.Format);
 
     runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
@@ -1772,6 +1754,41 @@ void SimulateSleep(TTestActorRuntime& runtime, TDuration duration) {
     auto sender = runtime.AllocateEdgeActor();
     runtime.Schedule(new IEventHandle(sender, sender, new TEvents::TEvWakeup()), duration);
     runtime.GrabEdgeEventRethrow<TEvents::TEvWakeup>(sender);
+}
+
+THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TActorId& sender,
+        const TString& path, NSchemeCache::TSchemeCacheNavigate::EOp op)
+{
+    using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+    using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+    using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+    auto request = MakeHolder<TNavigate>();
+    auto& entry = request->ResultSet.emplace_back();
+    entry.Path = SplitPath(path);
+    entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+    entry.Operation = op;
+    entry.ShowPrivatePath = true;
+    runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
+
+    auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+    UNIT_ASSERT(ev);
+    UNIT_ASSERT(ev->Get());
+
+    auto* response = ev->Get()->Request.Release();
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->ErrorCount == 0);
+    UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
+
+    return THolder(response);
+}
+
+THolder<NSchemeCache::TSchemeCacheNavigate> Ls(
+        TTestActorRuntime& runtime,
+        const TActorId& sender,
+        const TString& path)
+{
+    return Navigate(runtime, sender, path, NSchemeCache::TSchemeCacheNavigate::EOp::OpList);
 }
 
 void SendSQL(Tests::TServer::TPtr server,

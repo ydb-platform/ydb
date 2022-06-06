@@ -46,6 +46,21 @@ namespace NKikimr::NGRpcProxy::V1 {
     NYql::TIssue FillIssue(const TString &errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode);
 
 
+    template <typename T>
+    class THasCdcStreamCompatibility {
+        template <typename U> static constexpr std::false_type Detect(...);
+        template <typename U> static constexpr auto Detect(U*)
+            -> typename std::is_same<bool, decltype(std::declval<U>().IsCdcStreamCompatible())>::type;
+    public:
+        static constexpr bool Value = decltype(Detect<T>(0))::value;
+    };
+
+    struct TCdcStreamCompatible {
+        bool IsCdcStreamCompatible() const {
+            return true;
+        }
+    };
+
     template<class TDerived, class TRequest>
     class TPQGrpcSchemaBase : public NKikimr::NGRpcService::TRpcSchemeRequestActor<TDerived, TRequest> {
     protected:
@@ -58,22 +73,20 @@ namespace NKikimr::NGRpcProxy::V1 {
         {
         }
 
-        void PrepareTopicPath(const NActors::TActorContext &ctx) { // ToDo !!
-            TopicPath = NPersQueue::GetFullTopicPath(ctx, this->Request_->GetDatabaseName(), TopicPath);
-        }
-
         TString GetTopicPath(const NActors::TActorContext& ctx) {
-            PrepareTopicPath(ctx);
-            return TopicPath;
+            auto path = NPersQueue::GetFullTopicPath(ctx, this->Request_->GetDatabaseName(), TopicPath);
+            if (PrivateTopicName) {
+                path = JoinPath(ChildPath(NKikimr::SplitPath(path), *PrivateTopicName));
+            }
+            return path;
         }
 
     protected:
         // TDerived must implement FillProposeRequest(TEvProposeTransaction&, const TActorContext& ctx, TString workingDir, TString name);
         void SendProposeRequest(const NActors::TActorContext &ctx) {
-            PrepareTopicPath(ctx);
             std::pair <TString, TString> pathPair;
             try {
-                pathPair = NKikimr::NGRpcService::SplitPath(TopicPath);
+                pathPair = NKikimr::NGRpcService::SplitPath(GetTopicPath(ctx));
             } catch (const std::exception &ex) {
                 this->Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
                 return this->ReplyWithResult(Ydb::StatusIds::BAD_REQUEST, ctx);
@@ -103,15 +116,15 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        void SendDescribeProposeRequest(const NActors::TActorContext& ctx) {
-            PrepareTopicPath(ctx);
+        void SendDescribeProposeRequest(const NActors::TActorContext& ctx, bool showPrivate = false) {
             auto navigateRequest = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
             navigateRequest->DatabaseName = CanonizePath(this->Request_->GetDatabaseName().GetOrElse(""));
 
             NSchemeCache::TSchemeCacheNavigate::TEntry entry;
-            entry.Path = NKikimr::SplitPath(TopicPath);
+            entry.Path = NKikimr::SplitPath(GetTopicPath(ctx));
             entry.SyncVersion = true;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic;
+            entry.ShowPrivatePath = showPrivate || PrivateTopicName.Defined();
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             navigateRequest->ResultSet.emplace_back(entry);
 
             if (this->Request_->GetInternalToken().empty()) {
@@ -157,7 +170,23 @@ namespace NKikimr::NGRpcProxy::V1 {
 
             switch (response.Status) {
             case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok: {
-                if (!result->ResultSet.front().PQGroupInfo) {
+                if (response.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
+                    if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
+                        if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
+                            Y_VERIFY(response.ListNodeEntry->Children.size() == 1);
+                            PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
+                            return SendDescribeProposeRequest(ctx);
+                        }
+                    }
+
+                    this->Request_->RaiseIssue(
+                        FillIssue(
+                            TStringBuilder() << "path '" << path << "' is not compatible scheme object",
+                            Ydb::PersQueue::ErrorCode::ERROR
+                        )
+                    );
+                    return TBase::Reply(Ydb::StatusIds::SCHEME_ERROR, ctx);
+                } else if (!response.PQGroupInfo) {
                     this->Request_->RaiseIssue(
                         FillIssue(
                             TStringBuilder() << "path '" << path << "' creation is not completed",
@@ -246,7 +275,8 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     private:
         bool IsDead = false;
-        TString TopicPath;
+        const TString TopicPath;
+        TMaybe<TString> PrivateTopicName;
     };
 
     //-----------------------------------------------------------------------------------
@@ -270,10 +300,18 @@ namespace NKikimr::NGRpcProxy::V1 {
             modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup);
             modifyScheme.SetWorkingDir(workingDir);
 
+            if constexpr (THasCdcStreamCompatibility<TDerived>::Value) {
+                modifyScheme.SetAllowAccessToPrivatePaths(static_cast<TDerived*>(this)->IsCdcStreamCompatible());
+            }
+
             auto* config = modifyScheme.MutableAlterPersQueueGroup();
             Y_VERIFY(response.Self);
             Y_VERIFY(response.PQGroupInfo);
             config->CopyFrom(response.PQGroupInfo->Description);
+
+            // keep previous values or set in ModifyPersqueueConfig
+            config->ClearTotalGroupCount();
+            config->MutablePQTabletConfig()->ClearPartitionKeySchema();
 
             {
                 auto applyIf = modifyScheme.AddApplyIf();

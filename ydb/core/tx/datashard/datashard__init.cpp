@@ -25,6 +25,7 @@ bool TDataShard::TTxInit::Execute(TTransactionContext& txc, const TActorContext&
         Self->LastChangeRecordGroup = 1;
         Self->TransQueue.Reset();
         Self->SnapshotManager.Reset();
+        Self->SchemaSnapshotManager.Reset();
         Self->S3Uploads.Reset();
         Self->S3Downloads.Reset();
 
@@ -162,6 +163,7 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
         PRECHARGE_SYS_TABLE(Schema::ReplicationSourceOffsets);
         PRECHARGE_SYS_TABLE(Schema::DstReplicationSourceOffsetsReceived);
         PRECHARGE_SYS_TABLE(Schema::UserTablesStats);
+        PRECHARGE_SYS_TABLE(Schema::SchemaSnapshots);
 
         if (!ready)
             return false;
@@ -468,6 +470,12 @@ bool TDataShard::TTxInit::ReadEverything(TTransactionContext &txc) {
             if (!rowset.Next()) {
                 return false;
             }
+        }
+    }
+
+    if (Self->State != TShardState::Offline && txc.DB.GetScheme().GetTableInfo(Schema::SchemaSnapshots::TableId)) {
+        if (!Self->SchemaSnapshotManager.Load(db)) {
+            return false;
         }
     }
 

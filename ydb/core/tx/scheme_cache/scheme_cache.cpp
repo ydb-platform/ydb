@@ -72,6 +72,7 @@ TString TSchemeCacheNavigate::ToString(const NScheme::TTypeRegistry& typeRegistr
         << " ErrorCount: " << ErrorCount
         << " DatabaseName: " << DatabaseName
         << " DomainOwnerId: " << DomainOwnerId
+        << " Instant: " << Instant
         << " ResultSet [" << ResultSetToString(ResultSet, typeRegistry) << "]"
     << " }";
 }

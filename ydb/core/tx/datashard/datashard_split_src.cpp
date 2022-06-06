@@ -458,38 +458,24 @@ public:
 
 
 class TDataShard::TTxSplitPartitioningChanged : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
-private:
-    TEvDataShard::TEvSplitPartitioningChanged::TPtr Ev;
-    bool DelayPartitioningChangedAck = false;
+    THashMap<TActorId, THashSet<ui64>> Waiters;
 
 public:
-    TTxSplitPartitioningChanged(TDataShard* ds, TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev)
+    TTxSplitPartitioningChanged(TDataShard* ds, THashMap<TActorId, THashSet<ui64>>&& waiters)
         : NTabletFlatExecutor::TTransactionBase<TDataShard>(ds)
-        , Ev(ev)
+        , Waiters(std::move(waiters))
     {}
 
     TTxType GetTxType() const override { return TXTYPE_SPLIT_PARTITIONING_CHANGED; }
 
-    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        ui64 opId = Ev->Get()->Record.GetOperationCookie();
-
-        LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged opId %" PRIu64 " at datashard %" PRIu64 " state %s",
-                opId, Self->TabletID(), DatashardStateName(Self->State).data());
-
-        if (Self->ChangesQueue || !Self->ChangeSenderActivator.AllAcked()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " delay partitioning changed ack"
-                << " ChangesQueue size: " << Self->ChangesQueue.size()
-                << " siblings to be activated: " << Self->ChangeSenderActivator.Dump());
-
-            DelayPartitioningChangedAck = true;
-            Self->SrcAckPartitioningChangedTo[Ev->Sender].insert(opId);
-        }
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
+        Y_VERIFY(!Self->ChangesQueue && Self->ChangeSenderActivator.AllAcked());
 
         // TODO: At this point Src should start rejecting all new Tx with SchemaChanged status
         if (Self->State != TShardState::SplitSrcWaitForPartitioningChanged) {
             Y_VERIFY(Self->State == TShardState::PreOffline || Self->State == TShardState::Offline,
-                "Unexpected TEvSplitPartitioningChanged opId %" PRIu64 " at datashard %" PRIu64 " state %s",
-                Ev->Get()->Record.GetOperationCookie(), Self->TabletID(), DatashardStateName(Self->State).data());
+                "Unexpected TEvSplitPartitioningChanged at datashard %" PRIu64 " state %s",
+                Self->TabletID(), DatashardStateName(Self->State).data());
 
             return true;
         }
@@ -504,15 +490,12 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        TActorId ackTo = Ev->Sender;
-        ui64 opId = Ev->Get()->Record.GetOperationCookie();
-
-        if (DelayPartitioningChangedAck) {
-            return;
+        for (const auto& [ackTo, opIds] : Waiters) {
+            for (const ui64 opId : opIds) {
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
+                ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
+            }
         }
-
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
-        ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
 
         // TODO: properly check if there are no loans
         Self->CheckStateChange(ctx);
@@ -528,7 +511,27 @@ void TDataShard::Handle(TEvDataShard::TEvSplitTransferSnapshotAck::TPtr& ev, con
 }
 
 void TDataShard::Handle(TEvDataShard::TEvSplitPartitioningChanged::TPtr& ev, const TActorContext& ctx) {
-    Execute(new TTxSplitPartitioningChanged(this, ev), ctx);
+    const auto opId = ev->Get()->Record.GetOperationCookie();
+
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvSplitPartitioningChanged"
+        << ": opId: " << opId
+        << ", at datashard: " << TabletID()
+        << ", state: " << DatashardStateName(State).data());
+
+    SrcAckPartitioningChangedTo[ev->Sender].insert(opId);
+
+    if (ChangesQueue || !ChangeSenderActivator.AllAcked()) {
+        LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " delay partitioning changed ack"
+            << ", ChangesQueue size: " << ChangesQueue.size()
+            << ", siblings to be activated: " << ChangeSenderActivator.Dump());
+    } else {
+        Execute(CreateTxSplitPartitioningChanged(std::move(SrcAckPartitioningChangedTo)), ctx);
+        SrcAckPartitioningChangedTo.clear(); // to be sure
+    }
+}
+
+NTabletFlatExecutor::ITransaction* TDataShard::CreateTxSplitPartitioningChanged(THashMap<TActorId, THashSet<ui64>>&& waiters) {
+    return new TTxSplitPartitioningChanged(this, std::move(waiters));
 }
 
 }}

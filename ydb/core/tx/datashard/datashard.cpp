@@ -123,6 +123,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , Pipeline(this)
     , SysLocks(this)
     , SnapshotManager(this)
+    , SchemaSnapshotManager(this)
     , DisableByKeyFilter(0, 0, 1)
     , MaxTxInFly(15000, 0, 100000)
     , MaxTxLagMilliseconds(5*60*1000, 0, 30*24*3600*1000ll)
@@ -518,7 +519,10 @@ void TDataShard::PersistChangeRecord(NIceDb::TNiceDb& db, const TChangeRecord& r
         NIceDb::TUpdate<Schema::ChangeRecords::TxId>(record.GetTxId()),
         NIceDb::TUpdate<Schema::ChangeRecords::PathOwnerId>(record.GetPathId().OwnerId),
         NIceDb::TUpdate<Schema::ChangeRecords::LocalPathId>(record.GetPathId().LocalPathId),
-        NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()));
+        NIceDb::TUpdate<Schema::ChangeRecords::BodySize>(record.GetBody().size()),
+        NIceDb::TUpdate<Schema::ChangeRecords::SchemaVersion>(record.GetSchemaVersion()),
+        NIceDb::TUpdate<Schema::ChangeRecords::TableOwnerId>(record.GetTableId().OwnerId),
+        NIceDb::TUpdate<Schema::ChangeRecords::TablePathId>(record.GetTableId().LocalPathId));
     db.Table<Schema::ChangeRecordDetails>().Key(record.GetOrder()).Update(
         NIceDb::TUpdate<Schema::ChangeRecordDetails::Kind>(record.GetKind()),
         NIceDb::TUpdate<Schema::ChangeRecordDetails::Body>(record.GetBody()));
@@ -540,18 +544,45 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
         << ": order: " << order
         << ", at tablet: " << TabletID());
 
-    auto it = ChangesQueue.find(order);
-    if (it != ChangesQueue.end()) {
-        Y_VERIFY(it->second <= ChangesQueueBytes);
-        ChangesQueueBytes -= it->second;
-        ChangesQueue.erase(it);
-    }
-
     db.Table<Schema::ChangeRecords>().Key(order).Delete();
     db.Table<Schema::ChangeRecordDetails>().Key(order).Delete();
+
+    auto it = ChangesQueue.find(order);
+    if (it == ChangesQueue.end()) {
+        Y_VERIFY_DEBUG_S(false, "Trying to remove non-enqueud record: " << order);
+        return;
+    }
+
+    const auto& record = it->second;
+
+    Y_VERIFY(record.BodySize <= ChangesQueueBytes);
+    ChangesQueueBytes -= record.BodySize;
+
+    if (record.SchemaSnapshotAcquired) {
+        Y_VERIFY(record.TableId);
+        auto tableIt = TableInfos.find(record.TableId.LocalPathId);
+
+        if (tableIt != TableInfos.end()) {
+            const auto snapshotKey = TSchemaSnapshotKey(record.TableId, record.SchemaVersion);
+            const bool last = SchemaSnapshotManager.ReleaseReference(snapshotKey);
+
+            if (last) {
+                const auto* snapshot = SchemaSnapshotManager.FindSnapshot(snapshotKey);
+                Y_VERIFY(snapshot);
+
+                if (snapshot->Schema->GetTableSchemaVersion() < tableIt->second->GetTableSchemaVersion()) {
+                    SchemaSnapshotManager.RemoveShapshot(db, snapshotKey);
+                }
+            }
+        } else {
+            Y_VERIFY_DEBUG(State == TShardState::PreOffline);
+        }
+    }
+
+    ChangesQueue.erase(it);
 }
 
-void TDataShard::EnqueueChangeRecords(TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>&& records) {
+void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records) {
     if (!records) {
         return;
     }
@@ -560,15 +591,23 @@ void TDataShard::EnqueueChangeRecords(TVector<TEvChangeExchange::TEvEnqueueRecor
         << ": at tablet: " << TabletID()
         << ", records: " << JoinSeq(", ", records));
 
+    TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> forward(Reserve(records.size()));
     for (const auto& record : records) {
-        if (ChangesQueue.emplace(record.Order, record.BodySize).second) {
-            Y_VERIFY(ChangesQueueBytes <= (Max<ui64>() - record.BodySize));
-            ChangesQueueBytes += record.BodySize;
+        forward.emplace_back(record.Order(), record.PathId(), record.BodySize());
+
+        if (auto res = ChangesQueue.emplace(record.Order(), record); res.second) {
+            Y_VERIFY(ChangesQueueBytes <= (Max<ui64>() - record.BodySize()));
+            ChangesQueueBytes += record.BodySize();
+
+            if (record.SchemaVersion()) {
+                res.first->second.SchemaSnapshotAcquired = SchemaSnapshotManager.AcquireReference(
+                    TSchemaSnapshotKey(record.TableId(), record.SchemaVersion()));
+            }
         }
     }
 
     Y_VERIFY(OutChangeSender);
-    Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(records)));
+    Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));
 }
 
 void TDataShard::CreateChangeSender(const TActorContext& ctx) {
@@ -630,14 +669,14 @@ void TDataShard::KillChangeSender(const TActorContext& ctx) {
     }
 }
 
-bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords) {
+bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records) {
     using Schema = TDataShard::Schema;
 
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "LoadChangeRecords"
         << ": QueueSize: " << ChangesQueue.size()
         << ", at tablet: " << TabletID());
 
-    changeRecords.reserve(ChangesQueue.size());
+    records.reserve(ChangesQueue.size());
 
     auto rowset = db.Table<Schema::ChangeRecords>().Range().Select();
     if (!rowset.IsReady()) {
@@ -647,12 +686,17 @@ bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<TEvChangeExchang
     while (!rowset.EndOfSet()) {
         const ui64 order = rowset.GetValue<Schema::ChangeRecords::Order>();
         const ui64 bodySize = rowset.GetValue<Schema::ChangeRecords::BodySize>();
+        const ui64 schemaVersion = rowset.GetValue<Schema::ChangeRecords::SchemaVersion>();
         const auto pathId = TPathId(
             rowset.GetValue<Schema::ChangeRecords::PathOwnerId>(),
             rowset.GetValue<Schema::ChangeRecords::LocalPathId>()
         );
+        const auto tableId = TPathId(
+            rowset.GetValue<Schema::ChangeRecords::TableOwnerId>(),
+            rowset.GetValue<Schema::ChangeRecords::TablePathId>()
+        );
 
-        changeRecords.emplace_back(order, pathId, bodySize);
+        records.emplace_back(order, pathId, bodySize, tableId, schemaVersion);
         if (!rowset.Next()) {
             return false;
         }
@@ -860,6 +904,24 @@ TUserTable::TPtr TDataShard::AlterTableDropCdcStream(
     return tableInfo;
 }
 
+void TDataShard::AddSchemaSnapshot(const TPathId& pathId, ui64 tableSchemaVersion, ui64 step, ui64 txId,
+    TTransactionContext& txc, const TActorContext& ctx)
+{
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Add schema snapshot"
+        << ": pathId# " << pathId
+        << ", version# " << tableSchemaVersion
+        << ", step# " << step
+        << ", txId# " << txId
+        << ", at tablet# " << TabletID());
+
+    Y_VERIFY(GetPathOwnerId() == pathId.OwnerId);
+    Y_VERIFY(TableInfos.contains(pathId.LocalPathId));
+    auto tableInfo = TableInfos[pathId.LocalPathId];
+
+    const auto key = TSchemaSnapshotKey(pathId.OwnerId, pathId.LocalPathId, tableSchemaVersion);
+    SchemaSnapshotManager.AddSnapshot(txc.DB, key, TSchemaSnapshot(tableInfo, step, txId));
+}
+
 TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
     const NKikimrSchemeOp::TTableDescription& tableScheme)
 {
@@ -913,8 +975,8 @@ THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard:
     return remap;
 }
 
-TUserTable::TPtr TDataShard::MoveUserTable(const TActorContext& ctx, TTransactionContext& txc,
-                                                  const NKikimrTxDataShard::TMoveTable& move)
+TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxDataShard::TMoveTable& move,
+    const TActorContext& ctx, TTransactionContext& txc)
 {
     auto prevId = TPathId(move.GetPathId().GetOwnerId(), move.GetPathId().GetLocalId());
     auto newId = TPathId(move.GetDstPathId().GetOwnerId(), move.GetDstPathId().GetLocalId());
@@ -922,7 +984,10 @@ TUserTable::TPtr TDataShard::MoveUserTable(const TActorContext& ctx, TTransactio
     Y_VERIFY(GetPathOwnerId() == prevId.OwnerId);
     Y_VERIFY(TableInfos.contains(prevId.LocalPathId));
 
-    auto newTableInfo = AlterTableSchemaVersion(ctx, txc, prevId, move.GetTableSchemaVersion(), false);
+    const auto version = move.GetTableSchemaVersion();
+    Y_VERIFY(version);
+
+    auto newTableInfo = AlterTableSchemaVersion(ctx, txc, prevId, version, false);
     newTableInfo->SetPath(move.GetDstPath());
 
     Y_VERIFY(move.ReMapIndexesSize() == newTableInfo->Indexes.size());
@@ -947,6 +1012,10 @@ TUserTable::TPtr TDataShard::MoveUserTable(const TActorContext& ctx, TTransactio
 
     RemoveUserTable(prevId);
     AddUserTable(newId, newTableInfo);
+
+    if (newTableInfo->NeedSchemaSnapshots()) {
+        AddSchemaSnapshot(newId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+    }
 
     NIceDb::TNiceDb db(txc.DB);
     PersistMoveUserTable(db, prevId.LocalPathId, newId.LocalPathId, *newTableInfo);

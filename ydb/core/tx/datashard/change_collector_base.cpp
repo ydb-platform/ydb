@@ -122,12 +122,20 @@ void TBaseChangeCollector::Serialize(TDataChange& out, ERowOp rop,
     }
 }
 
-void TBaseChangeCollector::Persist(TChangeRecord::EKind kind, const TPathId& pathId, const TDataChange& body) {
+void TBaseChangeCollector::Persist(
+        const TTableId& tableId, // origin table
+        const TPathId& pathId, // target object (table, stream, etc...)
+        TChangeRecord::EKind kind, const TDataChange& body)
+{
     NIceDb::TNiceDb db(Db);
 
     if (!Group) {
         Group = Self->AllocateChangeRecordGroup(db);
     }
+
+    Y_VERIFY_S(Self->IsUserTable(tableId), "Unknown table: " << tableId);
+    auto userTable = Self->GetUserTables().at(tableId.PathId.LocalPathId);
+    Y_VERIFY(userTable->GetTableSchemaVersion());
 
     auto record = TChangeRecordBuilder(kind)
         .WithOrder(Self->AllocateChangeRecordOrder(db))
@@ -135,11 +143,19 @@ void TBaseChangeCollector::Persist(TChangeRecord::EKind kind, const TPathId& pat
         .WithStep(WriteVersion.Step)
         .WithTxId(WriteVersion.TxId)
         .WithPathId(pathId)
+        .WithTableId(tableId.PathId)
+        .WithSchemaVersion(userTable->GetTableSchemaVersion())
         .WithBody(body.SerializeAsString())
         .Build();
 
     Self->PersistChangeRecord(db, record);
-    Collected.emplace_back(record.GetOrder(), record.GetPathId(), record.GetBody().size());
+    Collected.emplace_back(
+        record.GetOrder(),
+        record.GetPathId(),
+        record.GetBody().size(),
+        record.GetTableId(),
+        record.GetSchemaVersion()
+    );
 }
 
 } // NDataShard

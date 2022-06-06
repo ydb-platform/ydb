@@ -183,12 +183,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
 
         AddLocksToResult(op, ctx);
 
-        if (auto changes = dataTx->GetCollectedChanges()) {
-            op->ChangeRecords().reserve(changes.size());
-            for (const auto& change : changes) {
-                op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize());
-            }
-        }
+        op->ChangeRecords() = std::move(dataTx->GetCollectedChanges());
 
         KqpUpdateDataShardStatCounters(DataShard, dataTx->GetCounters());
         auto statsMode = kqpTx.GetRuntimeSettings().GetStatsMode();

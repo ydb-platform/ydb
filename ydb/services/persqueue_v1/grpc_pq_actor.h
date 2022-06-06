@@ -708,7 +708,7 @@ private:
 
     void CloseSession(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code, const TActorContext& ctx);
 
-
+    void DescribeTopics(const NActors::TActorContext& ctx, bool showPrivate = false);
     bool ProcessTopicSchemeCacheResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry,
                                          THashMap<TString, TTopicHolder>::iterator topicsIter, const TActorContext& ctx);
     void HandleClientSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
@@ -1148,7 +1148,9 @@ public:
     void HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx){ Y_UNUSED(ev); Y_UNUSED(ctx); }
 };
 
-class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest> {
+class TDescribeTopicActor : public TPQGrpcSchemaBase<TDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
+                          , public TCdcStreamCompatible
+{
 using TBase = TPQGrpcSchemaBase<TDescribeTopicActor, TEvPQDescribeTopicRequest>;
 
 public:
@@ -1163,7 +1165,9 @@ public:
 };
 
 
-class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest> {
+class TAddReadRuleActor : public TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>
+                        , public TCdcStreamCompatible
+{
     using TBase = TUpdateSchemeActor<TAddReadRuleActor, TEvPQAddReadRuleRequest>;
 
 public:
@@ -1176,7 +1180,9 @@ public:
                                const NKikimrSchemeOp::TDirEntry& selfInfo);
 };
 
-class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest> {
+class TRemoveReadRuleActor : public TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>
+                           , public TCdcStreamCompatible
+{
     using TBase = TUpdateSchemeActor<TRemoveReadRuleActor, TEvPQRemoveReadRuleRequest>;
 
 public:

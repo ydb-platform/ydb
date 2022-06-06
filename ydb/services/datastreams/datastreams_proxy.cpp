@@ -282,11 +282,10 @@ namespace NKikimr::NDataStreams::V1 {
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)) {
+        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error)) {
             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, Ydb::PersQueue::ErrorCode::BAD_REQUEST, error, ctx);
         }
 
@@ -323,11 +322,10 @@ namespace NKikimr::NDataStreams::V1 {
         const NKikimrSchemeOp::TPersQueueGroupDescription& pqGroupDescription,
         const NKikimrSchemeOp::TDirEntry& selfInfo
     ) {
-        Y_UNUSED(pqGroupDescription);
         Y_UNUSED(selfInfo);
 
         TString error;
-        if (!ValidateShardsCount(*GetProtoRequest(), groupConfig, error)
+        if (!ValidateShardsCount(*GetProtoRequest(), pqGroupDescription, error)
             || !ValidateWriteSpeedLimit(*GetProtoRequest(), error, ctx)
             || !ValidateRetentionPeriod(*GetProtoRequest(), groupConfig, Nothing(), error))
         {
@@ -422,7 +420,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TDescribeStreamActor : public TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest> {
+    class TDescribeStreamActor : public TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest>
+                               , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TDescribeStreamActor, TEvDataStreamsDescribeStreamRequest>;
 
     public:
@@ -745,7 +745,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest> {
+    class TListStreamConsumersActor : public TPQGrpcSchemaBase<TListStreamConsumersActor, NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest>
+                                    , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TListStreamConsumersActor, TEvDataStreamsListStreamConsumersRequest>;
 
     public:
@@ -865,7 +867,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest> {
+    class TRegisterStreamConsumerActor : public TUpdateSchemeActor<TRegisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest>
+                                       , public TCdcStreamCompatible
+    {
         using TBase = TUpdateSchemeActor<TRegisterStreamConsumerActor, TEvDataStreamsRegisterStreamConsumerRequest>;
 
     public:
@@ -940,7 +944,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest> {
+    class TDeregisterStreamConsumerActor : public TUpdateSchemeActor<TDeregisterStreamConsumerActor, NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest>
+                                         , public TCdcStreamCompatible
+    {
         using TBase = TUpdateSchemeActor<TDeregisterStreamConsumerActor, TEvDataStreamsDeregisterStreamConsumerRequest>;
 
     public:
@@ -988,7 +994,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TGetShardIteratorActor : public TPQGrpcSchemaBase<TGetShardIteratorActor, NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest> {
+    class TGetShardIteratorActor : public TPQGrpcSchemaBase<TGetShardIteratorActor, NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest>
+                                 , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TGetShardIteratorActor, TEvDataStreamsGetShardIteratorRequest>;
 
     public:
@@ -1098,8 +1106,11 @@ namespace NKikimr::NDataStreams::V1 {
             auto partitionId = partition.GetPartitionId();
             TString shardName = GetShardName(partitionId);
             if (shardName == ShardId) {
-                TShardIterator it(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber);
-                SendResponse(ctx, it);
+                if (topicInfo->ShowPrivatePath) {
+                    SendResponse(ctx, TShardIterator::Cdc(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
+                } else {
+                    SendResponse(ctx, TShardIterator::Common(StreamName, StreamName, partitionId, ReadTimestampMs, SequenceNumber));
+                }
                 return;
             }
         }
@@ -1125,7 +1136,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------
 
-    class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest> {
+    class TGetRecordsActor : public TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>
+                           , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TGetRecordsActor, TEvDataStreamsGetRecordsRequest>;
 
         static constexpr ui32 READ_TIMEOUT_MS = 150;
@@ -1184,7 +1197,7 @@ namespace NKikimr::NDataStreams::V1 {
                                   TStringBuilder() << "Limit '" << Limit << "' is out of bounds [1; " << MAX_LIMIT << "]", ctx);
         }
 
-        SendDescribeProposeRequest(ctx);
+        SendDescribeProposeRequest(ctx, ShardIterator.IsCdcTopic());
         Become(&TGetRecordsActor::StateWork);
     }
 
@@ -1331,7 +1344,7 @@ namespace NKikimr::NDataStreams::V1 {
         TShardIterator shardIterator(ShardIterator.GetStreamName(),
                                      ShardIterator.GetStreamArn(),
                                      ShardIterator.GetShardId(),
-                                     timestamp, seqNo);
+                                     timestamp, seqNo, ShardIterator.GetKind());
         result.set_next_shard_iterator(shardIterator.Serialize());
         result.set_millis_behind_latest(millisBehindLatestMs);
 
@@ -1346,7 +1359,9 @@ namespace NKikimr::NDataStreams::V1 {
 
     //-----------------------------------------------------------------------------------------
 
-    class TListShardsActor : public TPQGrpcSchemaBase<TListShardsActor, NKikimr::NGRpcService::TEvDataStreamsListShardsRequest> {
+    class TListShardsActor : public TPQGrpcSchemaBase<TListShardsActor, NKikimr::NGRpcService::TEvDataStreamsListShardsRequest>
+                           , public TCdcStreamCompatible
+    {
         using TBase = TPQGrpcSchemaBase<TListShardsActor, TEvDataStreamsListShardsRequest>;
 
     public:

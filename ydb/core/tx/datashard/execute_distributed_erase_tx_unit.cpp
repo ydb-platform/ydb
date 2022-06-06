@@ -54,12 +54,7 @@ public:
                 return EExecutionStatus::Restart;
             }
 
-            if (auto changes = changeCollector->GetCollected()) {
-                op->ChangeRecords().reserve(changes.size());
-                for (const auto& change : changes) {
-                    op->ChangeRecords().emplace_back(change.Order(), change.PathId(), change.BodySize());
-                }
-            }
+            op->ChangeRecords() = std::move(changeCollector->GetCollected());
         } else if (eraseTx->HasDependencies()) {
             THashMap<ui64, TDynBitMap> presentRows;
             for (const auto& dependency : eraseTx->GetDependencies()) {

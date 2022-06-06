@@ -30,4 +30,10 @@ TString CombinePath(TIter begin, TIter end, bool canonize = true) {
         : path;
 }
 
+inline TVector<TString> ChildPath(const TVector<TString>& parentPath, const TString& childName) {
+    auto path = parentPath;
+    path.push_back(childName);
+    return path;
+}
+
 }

@@ -1,0 +1,152 @@
+#include "datashard_impl.h"
+#include "datashard_schema_snapshots.h"
+
+#include <ydb/core/util/pb.h>
+
+namespace NKikimr {
+namespace NDataShard {
+
+TSchemaSnapshot::TSchemaSnapshot(TUserTable::TCPtr schema, ui64 step, ui64 txId)
+    : Schema(schema)
+    , Step(step)
+    , TxId(txId)
+{
+}
+
+TSchemaSnapshotManager::TSchemaSnapshotManager(const TDataShard* self)
+    : Self(self)
+{
+}
+
+void TSchemaSnapshotManager::Reset() {
+    Snapshots.clear();
+}
+
+bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
+    using Schema = TDataShard::Schema;
+
+    auto rowset = db.Table<Schema::SchemaSnapshots>().Range().Select();
+    if (!rowset.IsReady()) {
+        return false;
+    }
+
+    const auto& tables = Self->GetUserTables();
+    while (!rowset.EndOfSet()) {
+        const ui64 oid = rowset.GetValue<Schema::SchemaSnapshots::PathOwnerId>();
+        const ui64 tid = rowset.GetValue<Schema::SchemaSnapshots::LocalPathId>();
+        const ui64 version = rowset.GetValue<Schema::SchemaSnapshots::SchemaVersion>();
+        const ui64 step = rowset.GetValue<Schema::SchemaSnapshots::Step>();
+        const ui64 txId = rowset.GetValue<Schema::SchemaSnapshots::TxId>();
+        const TString schema = rowset.GetValue<Schema::SchemaSnapshots::Schema>();
+
+        NKikimrSchemeOp::TTableDescription desc;
+        const bool ok = ParseFromStringNoSizeLimit(desc, schema);
+        Y_VERIFY(ok);
+
+        auto it = tables.find(tid);
+        Y_VERIFY_S(it != tables.end(), "Cannot find table: " << tid);
+
+        const auto res = Snapshots.emplace(
+            std::piecewise_construct,
+            std::forward_as_tuple(oid, tid, version),
+            std::forward_as_tuple(new TUserTable(it->second->LocalTid, desc, 0), step, txId)
+        );
+        Y_VERIFY_S(res.second, "Duplicate schema snapshot: " << res.first->first);
+
+        if (!rowset.Next()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool TSchemaSnapshotManager::AddSnapshot(NTable::TDatabase& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {
+    if (auto it = Snapshots.find(key); it != Snapshots.end()) {
+        Y_VERIFY_DEBUG_S(false, "Duplicate schema snapshot: " << key);
+        return false;
+    }
+
+    auto it = Self->GetUserTables().find(key.PathId);
+    Y_VERIFY_S(it != Self->GetUserTables().end(), "Cannot find table: " << key.PathId);
+
+    const auto res = Snapshots.emplace(key, snapshot);
+    Y_VERIFY_S(res.second, "Duplicate schema snapshot: " << key);
+
+    NIceDb::TNiceDb nicedb(db);
+    PersistAddSnapshot(nicedb, key, snapshot);
+
+    return true;
+}
+
+const TSchemaSnapshot* TSchemaSnapshotManager::FindSnapshot(const TSchemaSnapshotKey& key) const {
+    return Snapshots.FindPtr(key);
+}
+
+void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
+    auto it = Snapshots.find(key);
+    if (it == Snapshots.end()) {
+        return;
+    }
+
+    Snapshots.erase(it);
+    PersistRemoveSnapshot(db, key);
+}
+
+bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
+    auto it = Snapshots.find(key);
+    if (it == Snapshots.end()) {
+        return false;
+    }
+
+    ++References[key];
+    return true;
+}
+
+bool TSchemaSnapshotManager::ReleaseReference(const TSchemaSnapshotKey& key) {
+    auto refIt = References.find(key);
+
+    if (refIt == References.end() || refIt->second <= 0) {
+        Y_VERIFY_DEBUG(false, "ReleaseReference underflow, check acquire/release pairs");
+        return false;
+    }
+
+    if (--refIt->second) {
+        return false;
+    }
+
+    References.erase(refIt);
+
+    auto it = Snapshots.find(key);
+    if (it == Snapshots.end()) {
+        Y_VERIFY_DEBUG(false, "ReleaseReference on an already removed snapshot");
+        return false;
+    }
+
+    return true;
+}
+
+void TSchemaSnapshotManager::PersistAddSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key, const TSchemaSnapshot& snapshot) {
+    using Schema = TDataShard::Schema;
+    db.Table<Schema::SchemaSnapshots>()
+        .Key(key.OwnerId, key.PathId, key.Version)
+        .Update(
+            NIceDb::TUpdate<Schema::SchemaSnapshots::Step>(snapshot.Step),
+            NIceDb::TUpdate<Schema::SchemaSnapshots::TxId>(snapshot.TxId),
+            NIceDb::TUpdate<Schema::SchemaSnapshots::Schema>(snapshot.Schema->GetSchema())
+        );
+}
+
+void TSchemaSnapshotManager::PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSchemaSnapshotKey& key) {
+    using Schema = TDataShard::Schema;
+    db.Table<Schema::SchemaSnapshots>()
+        .Key(key.OwnerId, key.PathId, key.Version)
+        .Delete();
+}
+
+} // NDataShard
+} // NKikimr
+
+Y_DECLARE_OUT_SPEC(, NKikimr::NDataShard::TSchemaSnapshotKey, stream, value) {
+    stream << "{ table " << value.OwnerId << ":" << value.PathId << " version " << value.Version << " }";
+}

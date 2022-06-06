@@ -51,6 +51,11 @@ public:
             if (Self->GetPathOwnerId() == INVALID_TABLET_ID) {
                 Self->PersistOwnerPathId(tableId.OwnerId, txc);
             }
+
+            if (info->NeedSchemaSnapshots()) {
+                const ui64 txId = Ev->Get()->Record.GetOperationCookie();
+                Self->AddSchemaSnapshot(tableId, info->GetTableSchemaVersion(), 0, txId, txc, ctx);
+            }
         }
 
         Self->DstSplitDescription = std::make_shared<NKikimrTxDataShard::TSplitMergeDescription>(Ev->Get()->Record.GetSplitDescription());

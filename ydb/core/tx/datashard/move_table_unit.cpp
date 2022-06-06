@@ -15,13 +15,13 @@ public:
         return true;
     }
 
-    void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveTable& move, TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo>& changeRecords) {
+    void MoveChangeRecords(NIceDb::TNiceDb& db, const NKikimrTxDataShard::TMoveTable& move, TVector<NMiniKQL::IChangeCollector::TChange>& changeRecords) {
         const THashMap<TPathId, TPathId> remap = DataShard.GetRemapIndexes(move);
 
         for (auto& record: changeRecords) {
-            if (remap.contains(record.PathId)) { // here could be the records for already deleted indexes, so skip them
-                record.PathId = remap.at(record.PathId);
-                DataShard.MoveChangeRecord(db, record.Order, record.PathId);
+            if (remap.contains(record.PathId())) { // here could be the records for already deleted indexes, so skip them
+                record.SetPathId(remap.at(record.PathId()));
+                DataShard.MoveChangeRecord(db, record.Order(), record.PathId());
             }
         }
     }
@@ -42,7 +42,7 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        TVector<TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> changeRecords;
+        TVector<NMiniKQL::IChangeCollector::TChange> changeRecords;
         if (!DataShard.LoadChangeRecords(db, changeRecords)) {
             return EExecutionStatus::Restart;
         }
@@ -56,7 +56,7 @@ public:
 
         DataShard.KillChangeSender(ctx);
 
-        DataShard.MoveUserTable(ctx, txc, params);
+        DataShard.MoveUserTable(op, params, ctx, txc);
 
         DataShard.CreateChangeSender(ctx);
         MoveChangeRecords(db, params, changeRecords);

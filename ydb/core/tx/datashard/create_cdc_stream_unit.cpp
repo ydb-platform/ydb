@@ -38,8 +38,15 @@ public:
         const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId());
         Y_VERIFY(streamPathId.OwnerId == DataShard.GetPathOwnerId());
 
-        auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, params.GetTableSchemaVersion(), streamDesc);
+        const auto version = params.GetTableSchemaVersion();
+        Y_VERIFY(version);
+
+        auto tableInfo = DataShard.AlterTableAddCdcStream(ctx, txc, pathId, version, streamDesc);
         DataShard.AddUserTable(pathId, tableInfo);
+
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
 
         AddSender.Reset(new TEvChangeExchange::TEvAddSender(
             pathId, TEvChangeExchange::ESenderType::CdcStream, streamPathId

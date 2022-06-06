@@ -23,11 +23,17 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateReady),
+        });
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathExist});
 
         TestAlterCdcStream(runtime, ++txId, "/MyRoot", R"(
@@ -37,6 +43,13 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {
+            NLs::PathExist,
+            NLs::StreamMode(NKikimrSchemeOp::ECdcStreamModeKeysOnly),
+            NLs::StreamFormat(NKikimrSchemeOp::ECdcStreamFormatProto),
+            NLs::StreamState(NKikimrSchemeOp::ECdcStreamStateDisabled),
+        });
+
         TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
             TableName: "Table"
             StreamName: "Stream"
@@ -45,6 +58,46 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream"), {NLs::PathNotExist});
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/Table/Stream/streamImpl"), {NLs::PathNotExist});
+    }
+
+    Y_UNIT_TEST(Negative) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMkDir(runtime, ++txId, "/MyRoot/Table/Stream", "Dir", {NKikimrScheme::StatusNameConflict});
+
+        TestCreateTable(runtime, ++txId, "/MyRoot/Table/Stream", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusNameConflict});
+
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot/Table/Stream", R"(
+            Name: "streamImpl2"
+            TotalGroupCount: 1
+            PartitionPerTablet: 1
+            PQTabletConfig: { PartitionConfig { LifetimeSeconds: 3600 } }
+        )", {NKikimrScheme::StatusNameConflict});
     }
 
     Y_UNIT_TEST(CreateStream) {
@@ -57,6 +110,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )", {NKikimrScheme::StatusNameConflict});
 
@@ -65,6 +119,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )", {NKikimrScheme::StatusPathDoesNotExist});
 
@@ -87,6 +142,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Index"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )", {NKikimrScheme::StatusNameConflict});
 
@@ -95,6 +151,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )", {NKikimrScheme::StatusNameConflict});
 
@@ -110,6 +167,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -122,6 +180,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )", {NKikimrScheme::StatusPathDoesNotExist});
     }
@@ -168,6 +227,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -211,6 +271,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -242,6 +303,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -267,6 +329,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -297,6 +360,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -325,6 +389,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamDescription {
               Name: "Stream"
               Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
             }
         )");
         env.TestWaitNotification(runtime, txId);

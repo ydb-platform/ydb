@@ -57,6 +57,10 @@ public:
         Y_VERIFY(tableInfo);
         DataShard.AddUserTable(pathId, tableInfo);
 
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
+
         ui64 step = params.GetSnapshotStep();
         ui64 txId = params.GetSnapshotTxId();
         Y_VERIFY(step != 0);

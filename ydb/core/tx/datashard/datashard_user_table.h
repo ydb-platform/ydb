@@ -284,10 +284,12 @@ struct TUserTable : public TThrRefBase {
 
     struct TCdcStream {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
+        using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
         using EState = NKikimrSchemeOp::ECdcStreamState;
 
         TString Name;
         EMode Mode;
+        EFormat Format;
         EState State;
 
         TCdcStream() = default;
@@ -295,6 +297,7 @@ struct TUserTable : public TThrRefBase {
         TCdcStream(const NKikimrSchemeOp::TCdcStreamDescription& streamDesc)
             : Name(streamDesc.GetName())
             , Mode(streamDesc.GetMode())
+            , Format(streamDesc.GetFormat())
             , State(streamDesc.GetState())
         {
         }
@@ -354,6 +357,7 @@ struct TUserTable : public TThrRefBase {
     TMap<TPathId, TTableIndex> Indexes;
     TMap<TPathId, TCdcStream> CdcStreams;
     ui32 AsyncIndexCount = 0;
+    ui32 JsonCdcStreamCount = 0;
 
     // Tablet thread access only, updated in-place
     mutable TStats Stats;
@@ -404,6 +408,7 @@ struct TUserTable : public TThrRefBase {
     void DisableCdcStream(const TPathId& streamPathId);
     void DropCdcStream(const TPathId& streamPathId);
     bool HasCdcStreams() const;
+    bool NeedSchemaSnapshots() const;
 
 private:
     void DoApplyCreate(NTabletFlatExecutor::TTransactionContext& txc, const TString& tableName, bool shadow,

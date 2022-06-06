@@ -99,6 +99,7 @@ SRCS(
     datashard_pipeline.h
     datashard_s3_downloads.cpp
     datashard_s3_uploads.cpp
+    datashard_schema_snapshots.cpp
     datashard_snapshots.cpp
     datashard_unsafe_upload.cpp
     datashard_user_table.cpp
@@ -205,7 +206,11 @@ RESOURCE(
 PEERDIR(
     library/cpp/actors/core
     library/cpp/containers/flat_hash
+    library/cpp/digest/md5
     library/cpp/html/pcdata
+    library/cpp/json
+    library/cpp/json/yson
+    library/cpp/string_utils/base64
     library/cpp/string_utils/quote
     ydb/core/actorlib_impl
     ydb/core/base
@@ -228,6 +233,7 @@ PEERDIR(
     ydb/public/api/protos
     ydb/public/lib/deprecated/kicli
     ydb/library/yql/dq/actors/compute
+    ydb/services/lib/sharding
 )
 
 YQL_LAST_ABI_VERSION()

@@ -877,6 +877,11 @@ namespace Tests {
         return Runtime->GetAppData().FunctionRegistry;
     }
 
+    const NYdb::TDriver& TServer::GetDriver() const {
+        Y_VERIFY(Driver);
+        return *Driver;
+    }
+
     TServer::~TServer() {
         if (Runtime->GetAppData().Mon) {
             Runtime->GetAppData().Mon->Stop();

@@ -5,11 +5,13 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/json/json_writer.h>
 
 #include <ydb/core/persqueue/partition_key_range/partition_key_range.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/persqueue/writer/writer.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -17,8 +19,6 @@ namespace NDataShard {
 using namespace NPQ;
 
 class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderPartition> {
-    static constexpr auto CodecRaw = 1;
-
     TStringBuf GetLogPrefix() const {
         if (!LogPrefix) {
             LogPrefix = TStringBuilder()
@@ -85,24 +85,42 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
                 continue;
             }
 
-            const auto createdAt = TInstant::FromValue(record.GetGroup());
-
-            NKikimrChangeExchange::TChangeRecord protoRecord;
-            record.SerializeTo(protoRecord);
-
-            NKikimrPQClient::TDataChunk data;
-            data.SetSeqNo(record.GetSeqNo());
-            data.SetCreateTime(createdAt.MilliSeconds());
-            data.SetCodec(CodecRaw);
-            data.SetData(protoRecord.SerializeAsString());
-            // TODO: meta?
+            const auto createdAt = record.GetGroup()
+                ? TInstant::FromValue(record.GetGroup())
+                : TInstant::MilliSeconds(record.GetStep());
 
             auto& cmd = *request.MutablePartitionRequest()->AddCmdWrite();
             cmd.SetSeqNo(record.GetSeqNo());
             cmd.SetSourceId(NSourceIdEncoding::EncodeSimple(SourceId));
             cmd.SetCreateTimeMS(createdAt.MilliSeconds());
-            cmd.SetData(data.SerializeAsString());
 
+            NKikimrPQClient::TDataChunk data;
+            data.SetCodec(0 /* CODEC_RAW */);
+
+            switch (Format) {
+                case NKikimrSchemeOp::ECdcStreamFormatProto: {
+                    NKikimrChangeExchange::TChangeRecord protoRecord;
+                    record.SerializeTo(protoRecord);
+                    data.SetData(protoRecord.SerializeAsString());
+                    break;
+                }
+
+                case NKikimrSchemeOp::ECdcStreamFormatJson: {
+                    NJson::TJsonValue json;
+                    record.SerializeTo(json);
+                    data.SetData(WriteJson(json, false));
+                    cmd.SetPartitionKey(record.GetPartitionKey());
+                    break;
+                }
+
+                default: {
+                    LOG_E("Unknown format"
+                        << ": format# " << static_cast<int>(Format));
+                    return Leave();
+                }
+            }
+
+            cmd.SetData(data.SerializeAsString());
             Pending.push_back(record.GetSeqNo());
         }
 
@@ -116,8 +134,9 @@ class TCdcChangeSenderPartition: public TActorBootstrapped<TCdcChangeSenderParti
     /// Write
 
     void Write(NKikimrClient::TPersQueueRequest&& request) {
-        auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>(++Cookie);
+        auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
         ev->Record = std::move(request);
+        ev->Record.MutablePartitionRequest()->SetCookie(++Cookie);
 
         Send(Writer, std::move(ev));
         Become(&TThis::StateWrite);
@@ -193,11 +212,17 @@ public:
         return NKikimrServices::TActivity::CHANGE_SENDER_CDC_ACTOR_PARTITION;
     }
 
-    explicit TCdcChangeSenderPartition(const TActorId& parent, const TDataShardId& dataShard, ui32 partitionId, ui64 shardId)
+    explicit TCdcChangeSenderPartition(
+            const TActorId& parent,
+            const TDataShardId& dataShard,
+            ui32 partitionId,
+            ui64 shardId,
+            NKikimrSchemeOp::ECdcStreamFormat format)
         : Parent(parent)
         , DataShard(dataShard)
         , PartitionId(partitionId)
         , ShardId(shardId)
+        , Format(format)
         , SourceId(ToString(DataShard.TabletId))
     {
     }
@@ -222,6 +247,7 @@ private:
     const TDataShardId DataShard;
     const ui32 PartitionId;
     const ui64 ShardId;
+    const NKikimrSchemeOp::ECdcStreamFormat Format;
     const TString SourceId;
     mutable TMaybe<TString> LogPrefix;
 
@@ -374,6 +400,15 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         return Check(&TSchemeCacheHelpers::CheckEntryKind<TNavigate::TEntry>, &TThis::LogWarnAndRetry, entry, expected);
     }
 
+    bool CheckNotEmpty(const TIntrusiveConstPtr<TNavigate::TCdcStreamInfo>& streamInfo) {
+        if (streamInfo) {
+            return true;
+        }
+
+        LogCritAndRetry(TStringBuilder() << "Empty stream info at '" << CurrentStateName() << "'");
+        return false;
+    }
+
     bool CheckNotEmpty(const TIntrusiveConstPtr<TNavigate::TPQGroupInfo>& pqInfo) {
         if (pqInfo) {
             return true;
@@ -439,6 +474,12 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         if (!CheckEntryKind(entry, TNavigate::KindCdcStream)) {
             return;
         }
+
+        if (!CheckNotEmpty(entry.CdcStreamInfo)) {
+            return;
+        }
+
+        Format = entry.CdcStreamInfo->Description.GetFormat();
 
         Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
         const auto& topic = entry.ListNodeEntry->Children.at(0);
@@ -570,34 +611,49 @@ class TCdcChangeSenderMain: public TActorBootstrapped<TCdcChangeSenderMain>
         return KeyDesc && KeyDesc->Partitions;
     }
 
-    ui64 GetPartitionId(TConstArrayRef<TCell> key) const override {
+    ui64 GetPartitionId(const TChangeRecord& record) const override {
         Y_VERIFY(KeyDesc);
         Y_VERIFY(KeyDesc->Partitions);
 
-        const auto range = TTableRange(key);
-        Y_VERIFY(range.Point);
+        switch (Format) {
+            case NKikimrSchemeOp::ECdcStreamFormatProto: {
+                const auto range = TTableRange(record.GetKey());
+                Y_VERIFY(range.Point);
 
-        TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            KeyDesc->Partitions.begin(), KeyDesc->Partitions.end(), true,
-            [&](const TKeyDesc::TPartitionInfo& partition, bool) {
-                const int compares = CompareBorders<true, false>(
-                    partition.EndKeyPrefix.GetCells(), range.From,
-                    partition.IsInclusive || partition.IsPoint,
-                    range.InclusiveFrom || range.Point, KeyDesc->Schema
+                TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
+                    KeyDesc->Partitions.begin(), KeyDesc->Partitions.end(), true,
+                    [&](const TKeyDesc::TPartitionInfo& partition, bool) {
+                        const int compares = CompareBorders<true, false>(
+                            partition.EndKeyPrefix.GetCells(), range.From,
+                            partition.IsInclusive || partition.IsPoint,
+                            range.InclusiveFrom || range.Point, KeyDesc->Schema
+                        );
+
+                        return (compares < 0);
+                    }
                 );
 
-                return (compares < 0);
+                Y_VERIFY(it != KeyDesc->Partitions.end());
+                return it->PartitionId;
             }
-        );
 
-        Y_VERIFY(it != KeyDesc->Partitions.end());
-        return it->PartitionId;
+            case NKikimrSchemeOp::ECdcStreamFormatJson: {
+                using namespace NKikimr::NDataStreams::V1;
+                const auto hashKey = HexBytesToDecimal(record.GetPartitionKey() /* MD5 */);
+                return ShardFromDecimal(hashKey, KeyDesc->Partitions.size());
+            }
+
+            default: {
+                Y_FAIL_S("Unknown format"
+                    << ": format# " << static_cast<int>(Format));
+            }
+        }
     }
 
     IActor* CreateSender(ui64 partitionId) override {
         Y_VERIFY(PartitionToShard.contains(partitionId));
         const auto shardId = PartitionToShard.at(partitionId);
-        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId);
+        return new TCdcChangeSenderPartition(SelfId(), DataShard, partitionId, shardId, Format);
     }
 
     void Handle(TEvChangeExchange::TEvEnqueueRecords::TPtr& ev) {
@@ -668,6 +724,7 @@ public:
 private:
     mutable TMaybe<TString> LogPrefix;
 
+    NKikimrSchemeOp::ECdcStreamFormat Format;
     TPathId TopicPathId;
     THolder<TKeyDesc> KeyDesc;
     THashMap<ui32, ui64> PartitionToShard;

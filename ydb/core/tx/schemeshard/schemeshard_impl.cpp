@@ -1417,6 +1417,7 @@ void TSchemeShard::PersistCdcStream(NIceDb::TNiceDb& db, const TPathId& pathId) 
     db.Table<Schema::CdcStream>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::CdcStream::AlterVersion>(alterData->AlterVersion),
         NIceDb::TUpdate<Schema::CdcStream::Mode>(alterData->Mode),
+        NIceDb::TUpdate<Schema::CdcStream::Format>(alterData->Format),
         NIceDb::TUpdate<Schema::CdcStream::State>(alterData->State)
     );
 
@@ -1439,6 +1440,7 @@ void TSchemeShard::PersistCdcStreamAlterData(NIceDb::TNiceDb& db, const TPathId&
     db.Table<Schema::CdcStreamAlterData>().Key(pathId.OwnerId, pathId.LocalPathId).Update(
         NIceDb::TUpdate<Schema::CdcStreamAlterData::AlterVersion>(alterData->AlterVersion),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::Mode>(alterData->Mode),
+        NIceDb::TUpdate<Schema::CdcStreamAlterData::Format>(alterData->Format),
         NIceDb::TUpdate<Schema::CdcStreamAlterData::State>(alterData->State)
     );
 }

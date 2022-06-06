@@ -215,11 +215,12 @@ private:
 
     void HandleDescribeTopics(TEvPqNewMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle describe topics");
+        const auto& msg = *ev->Get();
 
-        SendSchemeCacheRequest(ev->Get()->Topics, !ev->Get()->PathPrefix.empty(), false, ev->Get()->SyncVersion, ctx);
+        SendSchemeCacheRequest(msg.Topics, !msg.PathPrefix.empty(), false, msg.SyncVersion, msg.ShowPrivate, ctx);
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(
                 RequestId,
-                TWaiter{ev->Sender, std::move(ev->Get()->Topics)}
+                TWaiter{ev->Sender, std::move(msg.Topics)}
         )).second;
         Y_VERIFY(inserted);
     }
@@ -252,7 +253,7 @@ private:
         }
         if (DescribeAllTopicsWaiters.empty()) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Make full list SC request");
-            SendSchemeCacheRequest(CurrentTopics, true, true, false, ctx);
+            SendSchemeCacheRequest(CurrentTopics, true, true, false, false, ctx);
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Store waiter");
         DescribeAllTopicsWaiters.push(waiter);
@@ -262,6 +263,9 @@ private:
 
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         auto& result = ev->Get()->Request;
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Handle SchemeCache response"
+            << ": result# " << result->ToString(*AppData()->TypeRegistry));
+
         if (result->Instant == 0) {
             for (const auto& entry : result->ResultSet) {
                 if (!entry.PQGroupInfo) {
@@ -296,10 +300,10 @@ private:
         }
     }
 
-
-    void SendSchemeCacheRequest(
-            const TVector<TString>& topics, bool addDefaultPathPrefix, bool isFullListingRequest, bool syncVersion, const TActorContext& ctx
-    ) {
+    void SendSchemeCacheRequest(const TVector<TString>& topics,
+            bool addDefaultPathPrefix, bool isFullListingRequest, bool syncVersion, bool showPrivate,
+            const TActorContext& ctx)
+    {
         auto instant = isFullListingRequest ? 0 : ++RequestId;
         auto schemeCacheRequest = MakeHolder<NSchemeCache::TSchemeCacheNavigate>(instant);
         for (const auto& path : topics) {
@@ -311,7 +315,8 @@ private:
 
             entry.Path.insert(entry.Path.end(), split.begin(), split.end());
             entry.SyncVersion = syncVersion;
-            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTopic;
+            entry.ShowPrivatePath = showPrivate;
+            entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpList;
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
         ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.Release()));

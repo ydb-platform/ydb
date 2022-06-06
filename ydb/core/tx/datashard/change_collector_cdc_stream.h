@@ -13,9 +13,9 @@ class TCdcStreamChangeCollector: public TBaseChangeCollector {
     static NTable::TRowState PatchState(const NTable::TRowState& oldState, NTable::ERowOp rop,
         const THashMap<NTable::TTag, NTable::TPos>& tagToPos, const THashMap<NTable::TTag, NTable::TUpdateOp>& updates);
 
-    void Persist(const TPathId& pathId, NTable::ERowOp rop,
+    void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags, TArrayRef<const NTable::TUpdateOp> updates);
-    void Persist(const TPathId& pathId, NTable::ERowOp rop,
+    void Persist(const TTableId& tableId, const TPathId& pathId, NTable::ERowOp rop,
         TArrayRef<const TRawTypeValue> key, TArrayRef<const NTable::TTag> keyTags,
         const NTable::TRowState* oldState, const NTable::TRowState* newState, TArrayRef<const NTable::TTag> valueTags);
 

@@ -613,11 +613,11 @@ class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSe
         return KeyDesc && KeyDesc->Partitions;
     }
 
-    ui64 GetPartitionId(TConstArrayRef<TCell> key) const override {
+    ui64 GetPartitionId(const TChangeRecord& record) const override {
         Y_VERIFY(KeyDesc);
         Y_VERIFY(KeyDesc->Partitions);
 
-        const auto range = TTableRange(key);
+        const auto range = TTableRange(record.GetKey());
         Y_VERIFY(range.Point);
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(

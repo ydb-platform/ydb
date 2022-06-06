@@ -38,8 +38,16 @@ public:
 
         Y_VERIFY_S(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled, "Unexpected alter cdc stream"
             << ": desc# " << streamDesc.ShortDebugString());
-        auto tableInfo = DataShard.AlterTableDisableCdcStream(ctx, txc, pathId, params.GetTableSchemaVersion(), streamPathId);
+
+        const auto version = params.GetTableSchemaVersion();
+        Y_VERIFY(version);
+
+        auto tableInfo = DataShard.AlterTableDisableCdcStream(ctx, txc, pathId, version, streamPathId);
         DataShard.AddUserTable(pathId, tableInfo);
+
+        if (tableInfo->NeedSchemaSnapshots()) {
+            DataShard.AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+        }
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());

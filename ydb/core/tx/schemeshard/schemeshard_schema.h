@@ -1539,9 +1539,10 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct State : Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamState; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamStateInvalid; };
         struct Mode : Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamModeInvalid; };
+        struct Format : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamFormat; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamFormatInvalid; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format>;
     };
 
     struct CdcStreamAlterData : Table<96> {
@@ -1550,9 +1551,10 @@ struct Schema : NIceDb::Schema {
         struct AlterVersion : Column<3, NScheme::NTypeIds::Uint64> {};
         struct State : Column<4, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamState; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamStateInvalid; };
         struct Mode : Column<5, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamMode; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamModeInvalid; };
+        struct Format : Column<6, NScheme::NTypeIds::Uint32> { using Type = NKikimrSchemeOp::ECdcStreamFormat; static constexpr Type Default = NKikimrSchemeOp::ECdcStreamFormatInvalid; };
 
         using TKey = TableKey<OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode>;
+        using TColumns = TableColumns<OwnerPathId, LocalPathId, AlterVersion, State, Mode, Format>;
     };
 
     struct Sequences : Table<97> {

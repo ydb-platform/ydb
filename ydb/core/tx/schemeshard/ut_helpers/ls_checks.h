@@ -117,6 +117,10 @@ namespace NLs {
     TCheckFunc IndexKeys(const TVector<TString>& keyNames);
     TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames);
 
+    TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode);
+    TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format);
+    TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state);
+
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);
     TCheckFunc BackupHistoryCount(ui64 count);

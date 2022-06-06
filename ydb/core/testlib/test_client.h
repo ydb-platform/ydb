@@ -248,6 +248,7 @@ namespace Tests {
         const TServerSettings& GetSettings() const;
         const NScheme::TTypeRegistry* GetTypeRegistry();
         const NMiniKQL::IFunctionRegistry* GetFunctionRegistry();
+        const NYdb::TDriver& GetDriver() const;
 
         ui32 StaticNodes() const {
             return Settings->NodeCount;

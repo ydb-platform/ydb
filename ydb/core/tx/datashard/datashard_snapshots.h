@@ -1,6 +1,7 @@
 #pragma once
 
 #include "const.h"
+#include "snapshot_key.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
@@ -18,48 +19,6 @@ using NTabletFlatExecutor::TTransactionContext;
 
 class TOperation;
 class TDataShard;
-
-struct TSnapshotTableKey {
-    ui64 OwnerId = 0;
-    ui64 PathId = 0;
-
-    TSnapshotTableKey() = default;
-
-    TSnapshotTableKey(ui64 ownerId, ui64 pathId)
-        : OwnerId(ownerId)
-        , PathId(pathId)
-    { }
-
-    friend inline bool operator<(const TSnapshotTableKey& a, const TSnapshotTableKey& b) {
-        return std::tie(a.OwnerId, a.PathId) < std::tie(b.OwnerId, b.PathId);
-    }
-};
-
-struct TSnapshotKey : public TSnapshotTableKey {
-    ui64 Step = 0;
-    ui64 TxId = 0;
-
-    TSnapshotKey() = default;
-
-    TSnapshotKey(ui64 ownerId, ui64 pathId, ui64 step, ui64 txId)
-        : TSnapshotTableKey(ownerId, pathId)
-        , Step(step)
-        , TxId(txId)
-    { }
-
-    friend inline bool operator<(const TSnapshotKey& a, const TSnapshotKey& b) {
-        return std::tie(a.OwnerId, a.PathId, a.Step, a.TxId) < std::tie(b.OwnerId, b.PathId, b.Step, b.TxId);
-    }
-
-    friend inline bool operator==(const TSnapshotKey& a, const TSnapshotKey& b) {
-        return std::tie(a.OwnerId, a.PathId, a.Step, a.TxId) == std::tie(b.OwnerId, b.PathId, b.Step, b.TxId);
-    }
-
-    // Hash for using snapshot keys in a hash table
-    explicit operator size_t() const noexcept {
-        return ((OwnerId * 31 + PathId) * 31 + Step) * 31 + TxId;
-    }
-};
 
 class TSnapshot {
     friend class TSnapshotExpireQueue;

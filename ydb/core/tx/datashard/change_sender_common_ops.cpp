@@ -115,7 +115,7 @@ void TBaseChangeSender::SendRecords() {
     bool needToResolve = false;
 
     while (it != PendingSent.end()) {
-        const ui64 partitionId = Resolver->GetPartitionId(it->second.GetKey());
+        const ui64 partitionId = Resolver->GetPartitionId(it->second);
         if (!Senders.contains(partitionId)) {
             needToResolve = true;
             ++it;

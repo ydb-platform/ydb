@@ -9,6 +9,7 @@
 #include <ydb/core/testlib/minikql_compile.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/test_client.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -394,9 +395,11 @@ struct TShardedTableOptions {
 
     struct TCdcStream {
         using EMode = NKikimrSchemeOp::ECdcStreamMode;
+        using EFormat = NKikimrSchemeOp::ECdcStreamFormat;
 
         TString Name;
         EMode Mode;
+        EFormat Format;
     };
 
 #define TABLE_OPTION_IMPL(type, name, defaultValue) \
@@ -616,6 +619,17 @@ void WaitTxNotification(Tests::TServer::TPtr server, ui64 txId);
 
 void SimulateSleep(Tests::TServer::TPtr server, TDuration duration);
 void SimulateSleep(TTestActorRuntime& runtime, TDuration duration);
+
+THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(
+        TTestActorRuntime& runtime,
+        const TActorId& sender,
+        const TString& path,
+        NSchemeCache::TSchemeCacheNavigate::EOp op = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable);
+
+THolder<NSchemeCache::TSchemeCacheNavigate> Ls(
+        TTestActorRuntime& runtime,
+        const TActorId& sender,
+        const TString& path);
 
 void SendSQL(Tests::TServer::TPtr server,
              TActorId sender,

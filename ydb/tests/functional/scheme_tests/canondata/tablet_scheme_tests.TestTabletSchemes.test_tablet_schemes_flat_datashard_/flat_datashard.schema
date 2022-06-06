@@ -972,11 +972,6 @@
         ],
         "ColumnsAdded": [
             {
-                "ColumnId": 7,
-                "ColumnName": "BodySize",
-                "ColumnType": "Uint64"
-            },
-            {
                 "ColumnId": 1,
                 "ColumnName": "Order",
                 "ColumnType": "Uint64"
@@ -1005,19 +1000,42 @@
                 "ColumnId": 6,
                 "ColumnName": "LocalPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "BodySize",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "SchemaVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "TableOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "TablePathId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
-                    7,
                     1,
                     2,
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8,
+                    9,
+                    10
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1449,6 +1467,73 @@
                 "Columns": [
                     1,
                     2
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1
+            }
+        }
+    },
+    {
+        "TableId": 28,
+        "TableName": "SchemaSnapshots",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "PathOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "LocalPathId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "SchemaVersion",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Step",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "TxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "Schema",
+                "ColumnType": "String"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6
                 ],
                 "RoomID": 0,
                 "Codec": 0,

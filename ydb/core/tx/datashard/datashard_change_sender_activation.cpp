@@ -99,16 +99,9 @@ public:
             << ": origin# " << Origin
             << ", at tablet# " << Self->TabletID());
 
-        if (AllDstAcksReceived) {
-            for (const auto& [ackTo, opIds] : Self->SrcAckPartitioningChangedTo) {
-                for (const ui64 opId : opIds) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ack split partitioning changed to schemeshard " << opId);
-                    ctx.Send(ackTo, new TEvDataShard::TEvSplitPartitioningChangedAck(opId, Self->TabletID()));
-                }
-            }
-
-            Self->SrcAckPartitioningChangedTo.clear();
-            Self->CheckStateChange(ctx);
+        if (AllDstAcksReceived && Self->SrcAckPartitioningChangedTo) {
+            Self->Execute(Self->CreateTxSplitPartitioningChanged(std::move(Self->SrcAckPartitioningChangedTo)), ctx);
+            Self->SrcAckPartitioningChangedTo.clear(); // to be sure
         }
     }
 

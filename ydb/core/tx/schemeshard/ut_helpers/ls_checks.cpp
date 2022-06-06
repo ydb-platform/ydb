@@ -681,6 +681,24 @@ TCheckFunc IndexDataColumns(const TVector<TString>& dataColumnNames) {
     };
 }
 
+TCheckFunc StreamMode(NKikimrSchemeOp::ECdcStreamMode mode) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetMode(), mode);
+    };
+}
+
+TCheckFunc StreamFormat(NKikimrSchemeOp::ECdcStreamFormat format) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetFormat(), format);
+    };
+}
+
+TCheckFunc StreamState(NKikimrSchemeOp::ECdcStreamState state) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        UNIT_ASSERT_VALUES_EQUAL(record.GetPathDescription().GetCdcStreamDescription().GetState(), state);
+    };
+}
+
 void NoChildren(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     ChildrenCount(0)(record);
 }
@@ -1009,4 +1027,16 @@ Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::EIndexType, o, x) {
 
 Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::EIndexState, o, x) {
     o << NKikimrSchemeOp::EIndexState_Name(x);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::ECdcStreamMode, o, x) {
+    o << NKikimrSchemeOp::ECdcStreamMode_Name(x);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::ECdcStreamFormat, o, x) {
+    o << NKikimrSchemeOp::ECdcStreamFormat_Name(x);
+}
+
+Y_DECLARE_OUT_SPEC(inline, NKikimrSchemeOp::ECdcStreamState, o, x) {
+    o << NKikimrSchemeOp::ECdcStreamState_Name(x);
 }

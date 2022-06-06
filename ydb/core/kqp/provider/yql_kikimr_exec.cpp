@@ -1165,10 +1165,12 @@ private:
 
         for (const auto& op : tableOps) {
             auto table = op.GetTable();
+            auto operation = static_cast<TYdbOperation>(op.GetOperation());
             const auto& desc = SessionCtx->Tables().GetTable(cluster, table);
             YQL_ENSURE(desc.Metadata);
-            tableInfo.push_back(NKqpProto::TKqpTableInfo());
-            TableDescriptionToTableInfo(desc, &tableInfo.back());
+            size_t size = tableInfo.size();
+            TableDescriptionToTableInfo(desc, operation, tableInfo);
+            YQL_ENSURE(size + 1 == tableInfo.size());
         }
 
         if (!SessionCtx->HasTx()) {

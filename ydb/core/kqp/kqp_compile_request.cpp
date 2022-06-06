@@ -186,6 +186,11 @@ private:
             entry.SyncVersion = false;
             entry.ShowPrivatePath = true;
 
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_REQUEST, "Query has dependency on table, check the table schema version"
+                << ", self: " << ctx.SelfID
+                << ", pathId: " << entry.TableId.PathId
+                << ", version: " << entry.TableId.SchemaVersion);
+
             navigate->ResultSet.emplace_back(entry);
         }
 

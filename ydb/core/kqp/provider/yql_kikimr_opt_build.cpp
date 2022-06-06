@@ -1,4 +1,5 @@
 #include "yql_kikimr_provider_impl.h"
+#include "yql_kikimr_gateway.h"
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -130,6 +131,11 @@ bool ExploreTx(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink, T
         auto table = key.GetTablePath();
         txRes.Ops.insert(node.Raw());
         auto result = ExploreTx(maybeRead.Cast().World(), ctx, dataSink, txRes);
+
+        if (const auto& view = key.GetView()) {
+            auto indexTable = IKikimrGateway::CreateIndexTablePath(table, view.GetRef());
+            txRes.TableOperations.push_back(BuildTableOpNode(cluster, indexTable, TYdbOperation::Select, read.Pos(), ctx));
+        }
         txRes.TableOperations.push_back(BuildTableOpNode(cluster, table, TYdbOperation::Select, read.Pos(), ctx));
         return result;
     }

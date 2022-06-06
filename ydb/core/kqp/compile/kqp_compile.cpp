@@ -423,12 +423,13 @@ public:
 
         auto ops = TableOperationsToProto(tableOps, ctx);
         for (auto& op : ops) {
-            const auto& tableName = op.GetTable();
+            const auto tableName = op.GetTable();
+            auto operation = static_cast<TYdbOperation>(op.GetOperation());
 
-            queryProto.AddTableOps()->Swap(&op);
+            *queryProto.AddTableOps() = std::move(op);
 
             const auto& desc = TablesData->GetTable(Cluster, tableName);
-            TableDescriptionToTableInfo(desc, queryProto.AddTableInfos());
+            TableDescriptionToTableInfo(desc, operation, *queryProto.MutableTableInfos());
         }
 
         for (const auto& tx : query.Transactions()) {

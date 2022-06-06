@@ -522,15 +522,51 @@ TVector<NKqpProto::TKqpTableOp> TableOperationsToProto(const TKiOperationList& o
     return protoOps;
 }
 
-void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, NKqpProto::TKqpTableInfo* info) {
+template<class OutputIterator>
+void TableDescriptionToTableInfoImpl(const TKikimrTableDescription& desc, TYdbOperation op, OutputIterator back_inserter)
+{
     YQL_ENSURE(desc.Metadata);
-    info->SetTableName(desc.Metadata->Name);
-    info->MutableTableId()->SetOwnerId(desc.Metadata->PathId.OwnerId());
-    info->MutableTableId()->SetTableId(desc.Metadata->PathId.TableId());
-    info->SetSchemaVersion(desc.Metadata->SchemaVersion);
+
+    auto info = NKqpProto::TKqpTableInfo();
+    info.SetTableName(desc.Metadata->Name);
+    info.MutableTableId()->SetOwnerId(desc.Metadata->PathId.OwnerId());
+    info.MutableTableId()->SetTableId(desc.Metadata->PathId.TableId());
+    info.SetSchemaVersion(desc.Metadata->SchemaVersion);
+
     if (desc.Metadata->Indexes) {
-        info->SetHasIndexTables(true);
+        info.SetHasIndexTables(true);
     }
+
+    back_inserter = std::move(info);
+    ++back_inserter;
+
+    if (KikimrModifyOps() & op) {
+        for (ui32 idxNo = 0; idxNo < desc.Metadata->Indexes.size(); ++idxNo) {
+            const auto& idxDesc = desc.Metadata->Indexes[idxNo];
+            if (!idxDesc.ItUsedForWrite()) {
+                continue;
+            }
+
+            const auto& idxTableDesc = desc.Metadata->SecondaryGlobalIndexMetadata[idxNo];
+
+            auto info = NKqpProto::TKqpTableInfo();
+            info.SetTableName(idxTableDesc->Name);
+            info.MutableTableId()->SetOwnerId(idxTableDesc->PathId.OwnerId());
+            info.MutableTableId()->SetTableId(idxTableDesc->PathId.TableId());
+            info.SetSchemaVersion(idxTableDesc->SchemaVersion);
+
+            back_inserter = std::move(info);
+            ++back_inserter;
+        }
+    }
+}
+
+void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, NProtoBuf::RepeatedPtrField<NKqpProto::TKqpTableInfo>& infos) {
+    TableDescriptionToTableInfoImpl(desc, op, google::protobuf::internal::RepeatedPtrFieldBackInsertIterator<NKqpProto::TKqpTableInfo>(&infos));
+}
+
+void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperation op, TVector<NKqpProto::TKqpTableInfo>& infos) {
+    TableDescriptionToTableInfoImpl(desc, op, std::back_inserter(infos));
 }
 
 bool TKikimrTransactionContextBase::ApplyTableOperations(const TVector<NKqpProto::TKqpTableOp>& operations,

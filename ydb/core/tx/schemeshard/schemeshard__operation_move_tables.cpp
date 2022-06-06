@@ -97,27 +97,31 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
     for (auto& child: srcPath.Base()->GetChildren()) {
         auto name = child.first;
 
-        TPath srcIndexPath = srcPath.Child(name);
-        if (srcIndexPath.IsDeleted()) {
+        TPath srcChildPath = srcPath.Child(name);
+        if (srcChildPath.IsDeleted()) {
             continue;
+        }
+
+        if (srcChildPath.IsCdcStream()) {
+            return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, "Cannot move table with cdc streams")};
         }
 
         TPath dstIndexPath = dstPath.Child(name);
 
-        Y_VERIFY(srcIndexPath.Base()->PathId == child.second);
-        Y_VERIFY_S(srcIndexPath.Base()->GetChildren().size() == 1,
-                   srcIndexPath.PathString() << " has children " << srcIndexPath.Base()->GetChildren().size());
+        Y_VERIFY(srcChildPath.Base()->PathId == child.second);
+        Y_VERIFY_S(srcChildPath.Base()->GetChildren().size() == 1,
+                   srcChildPath.PathString() << " has children " << srcChildPath.Base()->GetChildren().size());
 
         result.push_back(CreateMoveTableIndex(TOperationId(nextId.GetTxId(),
                                                               nextId.GetSubTxId() + result.size()),
-                                                 MoveTableIndexTask(srcIndexPath, dstIndexPath)));
+                                                 MoveTableIndexTask(srcChildPath, dstIndexPath)));
 
-        TString srcImplTableName = srcIndexPath.Base()->GetChildren().begin()->first;
-        TPath srcImplTable = srcIndexPath.Child(srcImplTableName);
+        TString srcImplTableName = srcChildPath.Base()->GetChildren().begin()->first;
+        TPath srcImplTable = srcChildPath.Child(srcImplTableName);
         if (srcImplTable.IsDeleted()) {
             continue;
         }
-        Y_VERIFY(srcImplTable.Base()->PathId == srcIndexPath.Base()->GetChildren().begin()->second);
+        Y_VERIFY(srcImplTable.Base()->PathId == srcChildPath.Base()->GetChildren().begin()->second);
 
         TPath dstImplTable = dstIndexPath.Child(srcImplTableName);
 

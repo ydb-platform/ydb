@@ -62,17 +62,21 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
         return *CachedNeedToReadKeys;
     }
 
+    bool value = false;
     for (const auto& [_, tableInfo] : Self->GetUserTables()) {
         for (const auto& [_, streamInfo] : tableInfo->CdcStreams) {
+            if (streamInfo.State == NKikimrSchemeOp::ECdcStreamStateDisabled) {
+                continue;
+            }
+
             switch (streamInfo.Mode) {
             case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
             case NKikimrSchemeOp::ECdcStreamModeUpdate:
-                CachedNeedToReadKeys = false;
                 break;
             case NKikimrSchemeOp::ECdcStreamModeNewImage:
             case NKikimrSchemeOp::ECdcStreamModeOldImage:
             case NKikimrSchemeOp::ECdcStreamModeNewAndOldImages:
-                CachedNeedToReadKeys = true;
+                value = true;
                 break;
             default:
                 Y_FAIL_S("Invalid stream mode: " << static_cast<ui32>(streamInfo.Mode));
@@ -80,7 +84,7 @@ bool TCdcStreamChangeCollector::NeedToReadKeys() const {
         }
     }
 
-    Y_VERIFY(CachedNeedToReadKeys);
+    CachedNeedToReadKeys = value;
     return *CachedNeedToReadKeys;
 }
 
@@ -113,6 +117,10 @@ bool TCdcStreamChangeCollector::Collect(const TTableId& tableId, ERowOp rop,
     bool read = false;
 
     for (const auto& [pathId, stream] : userTable->CdcStreams) {
+        if (stream.State == NKikimrSchemeOp::ECdcStreamStateDisabled) {
+            continue;
+        }
+
         switch (stream.Mode) {
         case NKikimrSchemeOp::ECdcStreamModeKeysOnly:
             Persist(tableId, pathId, rop, key, keyTags, {});

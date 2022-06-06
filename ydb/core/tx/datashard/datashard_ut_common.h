@@ -586,6 +586,12 @@ ui64 AsyncAlterAddStream(
         const TString& tableName,
         const TShardedTableOptions::TCdcStream& streamDesc);
 
+ui64 AsyncAlterDisableStream(
+        Tests::TServer::TPtr server,
+        const TString& workingDir,
+        const TString& tableName,
+        const TString& streamName);
+
 ui64 AsyncAlterDropStream(
         Tests::TServer::TPtr server,
         const TString& workingDir,

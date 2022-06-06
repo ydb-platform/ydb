@@ -1347,6 +1347,20 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(DisableStream) {
+        auto action = [](TServer::TPtr server) {
+            return AsyncAlterDisableStream(server, "/Root", "Table", "Stream");
+        };
+
+        ShouldDeliverChanges(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), action, {
+            R"(UPSERT INTO `/Root/Table` (key, value) VALUES (1, 10);)",
+        }, {
+            R"(UPSERT INTO `/Root/Table` (key, value) VALUES (2, 20);)",
+        }, {
+            R"({"update":{"value":10},"key":[1]})",
+        });
+    }
+
     // Split/merge
     Y_UNIT_TEST(ShouldDeliverChangesOnSplitMerge) {
         TTestPqEnv env(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), false);

@@ -120,7 +120,8 @@ public:
                      const TActorContext &ctx,
                      const TStepOrder &stepTxId,
                      TInstant receivedAt,
-                     const TString &txBody);
+                     const TString &txBody,
+                     bool usesMvccSnapshot);
 
     ~TValidatedDataTx();
 
@@ -206,7 +207,6 @@ public:
 
     ui32 ExtractKeys(bool allowErrors);
     bool ReValidateKeys();
-    ETxOrder CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const;
 
     ui64 GetTxSize() const { return TxSize; }
     ui32 KeysCount() const { return TxInfo().ReadsCount + TxInfo().WritesCount; }

@@ -39,6 +39,21 @@ private:
         return Factory->GetChangeCollector(tableId);
     }
 
+    ui64 GetWriteTxId(const TTableId&) const override
+    {
+        return 0;
+    }
+
+    NTable::ITransactionMapPtr GetReadTxMap(const TTableId&) const override
+    {
+        return nullptr;
+    }
+
+    NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId&) const override
+    {
+        return nullptr;
+    }
+
 private:
     const TMiniKQLFactory* const Factory;
 };

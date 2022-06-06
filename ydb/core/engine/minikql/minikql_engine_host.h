@@ -130,6 +130,16 @@ public:
 
     virtual IChangeCollector* GetChangeCollector(const TTableId& tableId) const = 0;
 
+    // Non-zero WriteTxId will force engine to work using a given persistent tx
+    virtual ui64 GetWriteTxId(const TTableId& tableId) const = 0;
+
+    // Commits a given persistent tx
+    virtual void CommitWriteTxId(const TTableId& tableId, ui64 writeTxId);
+
+    // Used to control reads in the presense of uncommitted transactions
+    virtual NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId) const = 0;
+    virtual NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId) const = 0;
+
 protected:
     virtual ui64 LocalTableId(const TTableId& tableId) const;
     void ConvertKeys(const TScheme::TTableInfo* tableInfo, const TArrayRef<const TCell>& row,
@@ -160,6 +170,18 @@ public:
 
     IChangeCollector* GetChangeCollector(const TTableId& tableId) const override {
         Y_UNUSED(tableId);
+        return nullptr;
+    }
+
+    ui64 GetWriteTxId(const TTableId&) const override {
+        return 0;
+    }
+
+    NTable::ITransactionMapPtr GetReadTxMap(const TTableId&) const override {
+        return nullptr;
+    }
+
+    NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId&) const override {
         return nullptr;
     }
 };

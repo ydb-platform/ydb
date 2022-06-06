@@ -1314,9 +1314,25 @@ TOperation::TPtr TPipeline::BuildOperation(TEvDataShard::TEvProposeTransaction::
             return tx;
         }
 
-        if(tx->IsMvccSnapshotRead() && (!tx->IsImmediate() || !tx->IsReadOnly())) {
+        auto allowSnapshot = [&]() -> bool {
+            // must be immediate
+            if (!tx->IsImmediate()) {
+                return false;
+            }
+            // always ok for readonly
+            if (tx->IsReadOnly()) {
+                return true;
+            }
+            // ok for locked writes
+            if (dataTx->LockTxId()) {
+                return true;
+            }
+            return false;
+        };
+
+        if(tx->IsMvccSnapshotRead() && !allowSnapshot()) {
             tx->SetAbortedFlag();
-            TString err = "Snapshot read must be an immediate read only transaction";
+            TString err = "Snapshot read must be an immediate read only or locked write transaction";
             tx->Result().Reset(new TEvDataShard::TEvProposeTransactionResult(rec.GetTxKind(),
                                                                          Self->TabletID(),
                                                                          tx->GetTxId(),

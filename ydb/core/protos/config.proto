@@ -1233,6 +1233,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 EnableLockedWrites = 14 [(ControlOptions) = {
+            Description: "Enables experimental persistent locked writes",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {

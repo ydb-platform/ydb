@@ -399,10 +399,16 @@ bool TKqpDatashardComputeContext::ReadRow(const TTableId& tableId, TArrayRef<con
     TouchTablePoint(tableId, key);
     Shard->GetKeyAccessSampler()->AddSample(tableId, key);
 
+    NTable::ITransactionMapPtr txMap;
+    if (LockTxId && Database->HasOpenTx(localTid, LockTxId)) {
+        txMap = new NTable::TSingleTransactionMap(LockTxId, TRowVersion::Min());
+    }
+    // TODO: tx observer
+
     NTable::TRowState dbRow;
     NTable::TSelectStats stats;
     ui64 flags = EngineHost.GetSettings().DisableByKeyFilter ? (ui64) NTable::NoByKey : 0;
-    auto ready = Database->Select(localTid, keyValues, columnTags, dbRow, stats, flags, GetReadVersion());
+    auto ready = Database->Select(localTid, keyValues, columnTags, dbRow, stats, flags, GetReadVersion(), txMap);
 
     kqpStats.NSelectRow = 1;
     kqpStats.InvisibleRowSkips = stats.InvisibleRowSkips;
@@ -454,8 +460,14 @@ TAutoPtr<NTable::TTableIt> TKqpDatashardComputeContext::CreateIterator(const TTa
     keyRange.MinInclusive = range.InclusiveFrom;
     keyRange.MaxInclusive = range.InclusiveTo;
 
+    NTable::ITransactionMapPtr txMap;
+    if (LockTxId && Database->HasOpenTx(localTid, LockTxId)) {
+        txMap = new NTable::TSingleTransactionMap(LockTxId, TRowVersion::Min());
+    }
+    // TODO: tx observer
+
     TouchTableRange(tableId, range);
-    return Database->IterateRange(localTid, keyRange, columnTags, GetReadVersion());
+    return Database->IterateRange(localTid, keyRange, columnTags, GetReadVersion(), txMap);
 }
 
 TAutoPtr<NTable::TTableReverseIt> TKqpDatashardComputeContext::CreateReverseIterator(const TTableId& tableId,
@@ -475,8 +487,14 @@ TAutoPtr<NTable::TTableReverseIt> TKqpDatashardComputeContext::CreateReverseIter
     keyRange.MinInclusive = range.InclusiveFrom;
     keyRange.MaxInclusive = range.InclusiveTo;
 
+    NTable::ITransactionMapPtr txMap;
+    if (LockTxId && Database->HasOpenTx(localTid, LockTxId)) {
+        txMap = new NTable::TSingleTransactionMap(LockTxId, TRowVersion::Min());
+    }
+    // TODO: tx observer
+
     TouchTableRange(tableId, range);
-    return Database->IterateRangeReverse(localTid, keyRange, columnTags, GetReadVersion());
+    return Database->IterateRangeReverse(localTid, keyRange, columnTags, GetReadVersion(), txMap);
 }
 
 template <typename TReadTableIterator>

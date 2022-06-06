@@ -254,6 +254,11 @@ void TDatabase::CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
     Redo->EvCommitTx(table, txId, rowVersion);
 }
 
+bool TDatabase::HasOpenTx(ui32 table, ui64 txId) const
+{
+    return Require(table)->HasOpenTx(txId);
+}
+
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
 {
     if (Y_LIKELY(lower < upper)) {

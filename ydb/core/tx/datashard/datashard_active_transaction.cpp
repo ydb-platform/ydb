@@ -17,7 +17,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
                                    const TActorContext &ctx,
                                    const TStepOrder &stepTxId,
                                    TInstant receivedAt,
-                                   const TString &txBody)
+                                   const TString &txBody,
+                                   bool usesMvccSnapshot)
     : StepTxId_(stepTxId)
     , TabletId_(self->TabletID())
     , TxBody(txBody)
@@ -49,6 +50,9 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
 
     if (Tx.GetImmediate())
         EngineBay.SetIsImmediateTx();
+
+    if (usesMvccSnapshot)
+        EngineBay.SetIsRepeatableSnapshot();
 
     if (Tx.HasReadTableTransaction()) {
         auto &tx = Tx.GetReadTableTransaction();
@@ -244,38 +248,6 @@ bool TValidatedDataTx::ReValidateKeys()
     return true;
 }
 
-ETxOrder TValidatedDataTx::CheckOrder(const TSysLocks& sysLocks, const TValidatedDataTx& dataTx) const {
-    Y_VERIFY(TxInfo().Loaded);
-    Y_VERIFY(dataTx.TxInfo().Loaded);
-
-    if (KeysCount() > MaxReorderTxKeys())
-        return ETxOrder::Unknown;
-
-    if (HasLockedWrites()) {
-        if (sysLocks.IsBroken(LockTxId()))
-            return ETxOrder::Any;
-
-        // TODO: dataTx.DynRW && dataTx.RW && dataTx.LockedRW
-        if (dataTx.HasWrites())
-            return ETxOrder::Unknown;
-
-    } else if (dataTx.HasLockedWrites()) {
-        if (sysLocks.IsBroken(dataTx.LockTxId()))
-            return ETxOrder::Any;
-
-        if (LockTxId() == dataTx.LockTxId())
-            return ETxOrder::Unknown;
-
-        // TODO: DynRW && RW
-        if (HasWrites())
-            return ETxOrder::Unknown;
-    }
-
-    if (HasKeyConflict(TxInfo(), dataTx.TxInfo()))
-        return StepTxId_.CheckOrder(dataTx.StepTxId());
-    return ETxOrder::Any;
-}
-
 bool TValidatedDataTx::CanCancel() {
     if (!IsTxReadOnly()) {
         return false;
@@ -427,7 +399,7 @@ TValidatedDataTx::TPtr TActiveTransaction::BuildDataTx(TDataShard *self,
     if (!DataTx) {
         Y_VERIFY(TxBody);
         DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                    GetReceivedAt(), TxBody);
+                                                    GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
         if (DataTx->HasStreamResponse())
             SetStreamSink(DataTx->GetSink());
     }
@@ -648,7 +620,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     bool extractKeys = DataTx->IsTxInfoLoaded();
     DataTx = std::make_shared<TValidatedDataTx>(self, txc, ctx, GetStepOrder(),
-                                                GetReceivedAt(), TxBody);
+                                                GetReceivedAt(), TxBody, MvccSnapshotRepeatable);
     if (DataTx->Ready() && extractKeys) {
         DataTx->ExtractKeys(true);
     }

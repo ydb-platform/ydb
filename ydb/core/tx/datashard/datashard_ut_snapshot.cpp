@@ -7,6 +7,8 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h> // Y_UNIT_TEST_(TWIN|QUAD)
 
+#include <ydb/library/yql/minikql/mkql_node_printer.h>
+
 namespace NKikimr {
 
 using namespace NKikimr::NDataShard;
@@ -1467,6 +1469,208 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
             "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
             "} Struct { Bool: false }");
+    }
+
+    Y_UNIT_TEST_TWIN(MvccSnapshotLockedWrites, UseNewEngine) {
+        TPortManager pm;
+        TServerSettings::TControls controls;
+        controls.MutableDataShardControls()->SetPrioritizedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetUnprotectedMvccSnapshotReads(1);
+        controls.MutableDataShardControls()->SetEnableLockedWrites(1);
+
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetEnableMvcc(true)
+            .SetEnableMvccSnapshotReads(true)
+            .SetEnableKqpSessionActor(UseNewEngine)
+            .SetControls(controls);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+
+        InitRoot(server, sender);
+
+        TDisableDataShardLogBatching disableDataShardLogBatching;
+        CreateShardedTable(server, sender, "/Root", "table-1", 1);
+
+        ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1)"));
+
+        SimulateSleep(server, TDuration::Seconds(1));
+
+        auto execSimpleRequest = [&](const TString& query) -> TString {
+            auto reqSender = runtime.AllocateEdgeActor();
+            auto ev = ExecRequest(runtime, reqSender, MakeSimpleRequest(query));
+            auto& response = ev->Get()->Record.GetRef();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            if (response.GetResponse().GetResults().size() == 0) {
+                return "";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        };
+
+        auto beginSnapshotRequest = [&](TString& sessionId, TString& txId, const TString& query) -> TString {
+            auto reqSender = runtime.AllocateEdgeActor();
+            sessionId = CreateSession(runtime, reqSender);
+            auto ev = ExecRequest(runtime, reqSender, MakeBeginRequest(sessionId, query));
+            auto& response = ev->Get()->Record.GetRef();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            txId = response.GetResponse().GetTxMeta().id();
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        };
+
+        auto continueSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
+            auto reqSender = runtime.AllocateEdgeActor();
+            auto ev = ExecRequest(runtime, reqSender, MakeContinueRequest(sessionId, txId, query));
+            auto& response = ev->Get()->Record.GetRef();
+            if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+                return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+            }
+            if (response.GetResponse().GetResults().size() == 0) {
+                return "";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        };
+
+        auto commitSnapshotRequest = [&](const TString& sessionId, const TString& txId, const TString& query) -> TString {
+            auto reqSender = runtime.AllocateEdgeActor();
+            auto ev = ExecRequest(runtime, reqSender, MakeCommitRequest(sessionId, txId, query));
+            auto& response = ev->Get()->Record.GetRef();
+            if (response.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+                return TStringBuilder() << "ERROR: " << response.GetYdbStatus();
+            }
+            if (response.GetResponse().GetResults().size() == 0) {
+                return "";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
+            return response.GetResponse().GetResults()[0].GetValue().ShortDebugString();
+        };
+
+        ui64 lastLockTxId = 0;
+        TRowVersion lastMvccSnapshot = TRowVersion::Min();
+        ui64 injectLockTxId = 0;
+        TRowVersion injectMvccSnapshot = TRowVersion::Min();
+        auto capturePropose = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvProposeTransaction::EventType: {
+                    auto& record = ev->Get<TEvDataShard::TEvProposeTransaction>()->Record;
+                    Cerr << "TEvProposeTransaction:" << Endl;
+                    Cerr << record.DebugString() << Endl;
+                    if (record.GetTxKind() == NKikimrTxDataShard::TX_KIND_DATA) {
+                        NKikimrTxDataShard::TDataTransaction tx;
+                        Y_VERIFY(tx.ParseFromString(record.GetTxBody()));
+                        Cerr << "TxBody:" << Endl;
+                        Cerr << tx.DebugString() << Endl;
+                        if (tx.HasMiniKQL()) {
+                            using namespace NKikimr::NMiniKQL;
+                            TScopedAlloc alloc;
+                            TTypeEnvironment typeEnv(alloc);
+                            auto node = DeserializeRuntimeNode(tx.GetMiniKQL(), typeEnv);
+                            Cerr << "MiniKQL:" << Endl;
+                            Cerr << PrintNode(node.GetNode()) << Endl;
+                        }
+                        if (tx.HasKqpTransaction()) {
+                            for (const auto& task : tx.GetKqpTransaction().GetTasks()) {
+                                if (task.HasProgram() && task.GetProgram().GetRaw()) {
+                                    using namespace NKikimr::NMiniKQL;
+                                    TScopedAlloc alloc;
+                                    TTypeEnvironment typeEnv(alloc);
+                                    auto node = DeserializeRuntimeNode(task.GetProgram().GetRaw(), typeEnv);
+                                    Cerr << "Task program:" << Endl;
+                                    Cerr << PrintNode(node.GetNode()) << Endl;
+                                }
+                            }
+                        }
+                        if (tx.GetLockTxId()) {
+                            lastLockTxId = tx.GetLockTxId();
+                        } else if (injectLockTxId) {
+                            tx.SetLockTxId(injectLockTxId);
+                            TString txBody;
+                            Y_VERIFY(tx.SerializeToString(&txBody));
+                            record.SetTxBody(txBody);
+                        }
+                        if (record.HasMvccSnapshot()) {
+                            lastMvccSnapshot.Step = record.GetMvccSnapshot().GetStep();
+                            lastMvccSnapshot.TxId = record.GetMvccSnapshot().GetTxId();
+                        } else if (injectMvccSnapshot) {
+                            record.MutableMvccSnapshot()->SetStep(injectMvccSnapshot.Step);
+                            record.MutableMvccSnapshot()->SetTxId(injectMvccSnapshot.TxId);
+                        }
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = runtime.SetObserverFunc(capturePropose);
+
+        // Start a snapshot read transaction
+        TString sessionId, txId;
+        UNIT_ASSERT_VALUES_EQUAL(
+            beginSnapshotRequest(sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // We should have been acquiring locks
+        Y_VERIFY(lastLockTxId != 0);
+        ui64 snapshotLockTxId = lastLockTxId;
+        Y_VERIFY(lastMvccSnapshot);
+        auto snapshotVersion = lastMvccSnapshot;
+
+        // Perform an immediate write, pretending it happens as part of the above snapshot tx
+        injectLockTxId = snapshotLockTxId;
+        injectMvccSnapshot = snapshotVersion;
+        UNIT_ASSERT_VALUES_EQUAL(
+            execSimpleRequest(Q_(R"(
+                UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)
+                )")),
+            "");
+        injectLockTxId = 0;
+        injectMvccSnapshot = TRowVersion::Min();
+
+        // Start another snapshot read, it should not see above write (it's uncommitted)
+        TString sessionId2, txId2;
+        UNIT_ASSERT_VALUES_EQUAL(
+            beginSnapshotRequest(sessionId2, txId2, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "} Struct { Bool: false }");
+
+        // Perform another read using the first snapshot tx, it must see its own writes
+        UNIT_ASSERT_VALUES_EQUAL(
+            continueSnapshotRequest(sessionId, txId, Q_(R"(
+                SELECT key, value FROM `/Root/table-1`
+                WHERE key >= 1 AND key <= 3
+                ORDER BY key
+                )")),
+            "Struct { "
+            "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+            "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
+            "} Struct { Bool: false }");
+
+        // Now commit with additional changes
+        UNIT_ASSERT_VALUES_EQUAL(
+            commitSnapshotRequest(sessionId, txId, Q_(R"(
+                UPSERT INTO `Root/table-1` (key, value) VALUES (3, 3)
+                --SELECT 1
+                )")),
+            "");
     }
 
 }

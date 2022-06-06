@@ -723,6 +723,12 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
         op->SetMvccSnapshot(snapshot, /* repeatable */ false);
     }
 
+    if (snapshotRepeatable) {
+        // Repeatable snapshot writes are uncommitted, not externally visible, and don't conflict with anything
+        isGlobalWriter = false;
+        haveWrites = false;
+    }
+
     auto onImmediateConflict = [&](TOperation& conflict) {
         Y_VERIFY(!conflict.IsImmediate());
         if (snapshot.IsMax()) {

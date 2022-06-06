@@ -115,6 +115,11 @@ public:
     void CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion = TRowVersion::Min());
 
     /**
+     * Returns true when table has an open transaction that is not committed or removed yet
+     */
+    bool HasOpenTx(ui32 table, ui64 txId) const;
+
+    /**
      * Remove row versions [lower, upper) from the given table
      *
      * Once committed this cannot be undone. This is a hint to the underlying

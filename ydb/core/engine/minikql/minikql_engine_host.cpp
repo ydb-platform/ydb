@@ -297,7 +297,8 @@ NUdf::TUnboxedValue TEngineHost::SelectRow(const TTableId& tableId, const TArray
 
     NTable::TSelectStats stats;
     ui64 flags = Settings.DisableByKeyFilter ? (ui64)NTable::NoByKey : 0;
-    const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId));
+    const auto ready = Db.Select(localTid, key, tags, dbRow, stats, flags, GetReadVersion(tableId),
+        GetReadTxMap(tableId), GetReadTxObserver(tableId));
 
     Counters.InvisibleRowSkips += stats.InvisibleRowSkips;
 
@@ -627,7 +628,8 @@ public:
     TSelectRangeLazyRowsList(NTable::TDatabase& db, const TScheme& scheme, const THolderFactory& holderFactory,
         const TTableId& tableId, ui64 localTid, const TSmallVec<NTable::TTag>& tags, const TSmallVec<bool>& skipNullKeys, const TTableRange& range,
         ui64 itemsLimit, ui64 bytesLimit, bool reverse, TEngineHost& engineHost
-        , const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler)
+        , const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler,
+        NTable::ITransactionMapPtr&& txMap, NTable::ITransactionObserverPtr&& txObserver)
         : TCustomListValue(&holderFactory.GetMemInfo())
         , Db(db)
         , Scheme(scheme)
@@ -644,6 +646,8 @@ public:
         , Reverse(reverse)
         , EngineHost(engineHost)
         , KeyAccessSampler(keyAccessSampler)
+        , TxMap(std::move(txMap))
+        , TxObserver(std::move(txObserver))
     {}
 
     NUdf::TUnboxedValue GetListIterator() const override {
@@ -661,13 +665,13 @@ public:
         keyRange.MinInclusive = tableRange.InclusiveFrom;
         keyRange.MaxInclusive = tableRange.InclusiveTo;
         if (Reverse) {
-            auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
+            auto read = Db.IterateRangeReverse(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId), TxMap, TxObserver);
 
             return NUdf::TUnboxedValuePod(
                 new TIterator<NTable::TTableReverseIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
             );
         } else {
-            auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId));
+            auto read = Db.IterateRange(LocalTid, keyRange, Tags, EngineHost.GetReadVersion(TableId), TxMap, TxObserver);
 
             return NUdf::TUnboxedValuePod(
                 new TIterator<NTable::TTableIt>(GetMemInfo(), *this, std::move(read), SystemColumnTags, ShardId)
@@ -724,6 +728,9 @@ private:
     mutable TMaybe<ui64> SizeBytes;
     TEngineHost& EngineHost;
     IKeyAccessSampler::TPtr KeyAccessSampler;
+
+    NTable::ITransactionMapPtr TxMap;
+    NTable::ITransactionObserverPtr TxObserver;
 };
 
 class TSelectRangeResult : public TComputationValue<TSelectRangeResult> {
@@ -731,10 +738,12 @@ public:
     TSelectRangeResult(NTable::TDatabase& db, const TScheme& scheme, const THolderFactory& holderFactory, const TTableId& tableId, ui64 localTid,
         const TSmallVec<NTable::TTag>& tags, const TSmallVec<bool>& skipNullKeys, const TTableRange& range,
         ui64 itemsLimit, ui64 bytesLimit, bool reverse, TEngineHost& engineHost,
-        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler)
+        const TSmallVec<NTable::TTag>& systemColumnTags, ui64 shardId, IKeyAccessSampler::TPtr keyAccessSampler,
+        NTable::ITransactionMapPtr&& txMap, NTable::ITransactionObserverPtr&& txObserver)
         : TComputationValue(&holderFactory.GetMemInfo())
         , List(NUdf::TUnboxedValuePod(new TSelectRangeLazyRowsList(db, scheme, holderFactory, tableId, localTid, tags,
-            skipNullKeys, range, itemsLimit, bytesLimit, reverse, engineHost, systemColumnTags, shardId, keyAccessSampler))) {}
+            skipNullKeys, range, itemsLimit, bytesLimit, reverse, engineHost, systemColumnTags, shardId, keyAccessSampler,
+            std::move(txMap), std::move(txObserver)))) {}
 
 private:
     NUdf::TUnboxedValue GetElement(ui32 index) const override {
@@ -846,7 +855,7 @@ NUdf::TUnboxedValue TEngineHost::SelectRange(const TTableId& tableId, const TTab
 
     return NUdf::TUnboxedValuePod(new TSelectRangeResult(Db, Scheme, holderFactory, tableId, localTid, tags,
         skipNullKeysFlags, range, itemsLimit, bytesLimit, reverse, *this, systemColumnTags, GetShardId(),
-        Settings.KeyAccessSampler));
+        Settings.KeyAccessSampler, GetReadTxMap(tableId), GetReadTxObserver(tableId)));
 }
 
 // Updates the single row. Column in commands must be unique.
@@ -869,19 +878,26 @@ void TEngineHost::UpdateRow(const TTableId& tableId, const TArrayRef<const TCell
         valueBytes += upd.Value.IsNull() ? 1 : upd.Value.Size();
     }
 
-    if (auto collector = GetChangeCollector(tableId)) {
-        collector->SetWriteVersion(GetWriteVersion(tableId));
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(GetReadVersion(tableId));
+    const ui64 writeTxId = GetWriteTxId(tableId);
+
+    if (writeTxId == 0) {
+        if (auto collector = GetChangeCollector(tableId)) {
+            collector->SetWriteVersion(GetWriteVersion(tableId));
+            if (collector->NeedToReadKeys()) {
+                collector->SetReadVersion(GetReadVersion(tableId));
+            }
+
+            if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
+                collector->Reset();
+                throw TNotReadyTabletException();
+            }
         }
 
-        if (!collector->Collect(tableId, NTable::ERowOp::Upsert, key, ops)) {
-            collector->Reset();
-            throw TNotReadyTabletException();
-        }
+        Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
+    } else {
+        // TODO: integrate with change collector somehow
+        Db.UpdateTx(localTid, NTable::ERowOp::Upsert, key, ops, writeTxId);
     }
-
-    Db.Update(localTid, NTable::ERowOp::Upsert, key, ops, GetWriteVersion(tableId));
 
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NUpdateRow++;
@@ -897,23 +913,37 @@ void TEngineHost::EraseRow(const TTableId& tableId, const TArrayRef<const TCell>
     ui64 keyBytes = 0;
     ConvertTableKeys(Scheme, tableInfo, row, key, &keyBytes);
 
-    if (auto collector = GetChangeCollector(tableId)) {
-        collector->SetWriteVersion(GetWriteVersion(tableId));
-        if (collector->NeedToReadKeys()) {
-            collector->SetReadVersion(GetReadVersion(tableId));
+    const ui64 writeTxId = GetWriteTxId(tableId);
+
+    if (writeTxId == 0) {
+        if (auto collector = GetChangeCollector(tableId)) {
+            collector->SetWriteVersion(GetWriteVersion(tableId));
+            if (collector->NeedToReadKeys()) {
+                collector->SetReadVersion(GetReadVersion(tableId));
+            }
+
+            if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
+                collector->Reset();
+                throw TNotReadyTabletException();
+            }
         }
 
-        if (!collector->Collect(tableId, NTable::ERowOp::Erase, key, {})) {
-            collector->Reset();
-            throw TNotReadyTabletException();
-        }
+        Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
+    } else {
+        // TODO: integrate with change collector somehow
+        Db.UpdateTx(localTid, NTable::ERowOp::Erase, key, { }, writeTxId);
     }
-
-    Db.Update(localTid, NTable::ERowOp::Erase, key, { }, GetWriteVersion(tableId));
 
     Settings.KeyAccessSampler->AddSample(tableId, row);
     Counters.NEraseRow++;
     Counters.EraseRowBytes += keyBytes + 8;
+}
+
+void TEngineHost::CommitWriteTxId(const TTableId& tableId, ui64 writeTxId) {
+    ui64 localTid = LocalTableId(tableId);
+    Y_VERIFY(localTid, "table does not exist");
+
+    Db.CommitTx(localTid, writeTxId);
 }
 
 // Check that table is erased

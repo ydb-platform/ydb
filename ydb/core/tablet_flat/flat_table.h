@@ -154,6 +154,11 @@ public:
     void CommitTx(ui64 txId, TRowVersion rowVersion);
     void RemoveTx(ui64 txId);
 
+    /**
+     * Returns true when table has an open transaction that is not committed or removed yet
+     */
+    bool HasOpenTx(ui64 txId) const;
+
     TPartView GetPartView(const TLogoBlobID &bundle) const
     {
         auto *partView = Flatten.FindPtr(bundle);

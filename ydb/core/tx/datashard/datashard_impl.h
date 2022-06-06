@@ -1283,6 +1283,11 @@ public:
         return value != 0;
     }
 
+    bool GetEnableLockedWrites() const {
+        ui64 value = EnableLockedWrites;
+        return value != 0;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -2109,6 +2114,7 @@ private:
 
     TControlWrapper EnablePrioritizedMvccSnapshotReads;
     TControlWrapper EnableUnprotectedMvccSnapshotReads;
+    TControlWrapper EnableLockedWrites;
 
     TControlWrapper EnableLeaderLeases;
     TControlWrapper MinLeaderLeaseDurationUs;

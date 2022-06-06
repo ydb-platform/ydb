@@ -92,6 +92,7 @@ public:
     void SetWriteVersion(TRowVersion writeVersion);
     void SetReadVersion(TRowVersion readVersion);
     void SetIsImmediateTx();
+    void SetIsRepeatableSnapshot();
 
     TVector<NMiniKQL::IChangeCollector::TChange> GetCollectedChanges() const;
 

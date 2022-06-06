@@ -316,6 +316,10 @@ public:
         IsImmediateTx = true;
     }
 
+    void SetIsRepeatableSnapshot() {
+        IsRepeatableSnapshot = true;
+    }
+
     IChangeCollector* GetChangeCollector(const TTableId& tableId) const override {
         auto it = ChangeCollectors.find(tableId);
         if (it != ChangeCollectors.end()) {
@@ -350,11 +354,22 @@ public:
         if (TSysTables::IsSystemTable(key.TableId))
             return DataShardSysTable(key.TableId).IsValidKey(key);
 
-        // prevent updates/erases with LockTxId set
-        if (LockTxId && key.RowOperation != TKeyDesc::ERowOperation::Read) {
-            key.Status = TKeyDesc::EStatus::OperationNotSupported;
-            return false;
+        if (LockTxId) {
+            // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
+            if (key.RowOperation != TKeyDesc::ERowOperation::Read &&
+                (!Self->GetEnableLockedWrites() || !IsImmediateTx || !IsRepeatableSnapshot))
+            {
+                key.Status = TKeyDesc::EStatus::OperationNotSupported;
+                return false;
+            }
+        } else if (IsRepeatableSnapshot) {
+            // Prevent updates/erases in repeatable mvcc txs
+            if (key.RowOperation != TKeyDesc::ERowOperation::Read) {
+                key.Status = TKeyDesc::EStatus::OperationNotSupported;
+                return false;
+            }
         }
+
         return TEngineHost::IsValidKey(key, maxSnapshotTime);
     }
 
@@ -392,7 +407,10 @@ public:
             return;
         }
 
-        Self->SysLocksTable().BreakLock(tableId, row);
+        // TODO: handle presistent tx locks
+        if (!LockTxId) {
+            Self->SysLocksTable().BreakLock(tableId, row);
+        }
         Self->SetTableUpdateTime(tableId, Now);
 
         // apply special columns if declared
@@ -444,7 +462,10 @@ public:
             return;
         }
 
-        Self->SysLocksTable().BreakLock(tableId, row);
+        // TODO: handle persistent tx locks
+        if (!LockTxId) {
+            Self->SysLocksTable().BreakLock(tableId, row);
+        }
 
         Self->SetTableUpdateTime(tableId, Now);
         TEngineHost::EraseRow(tableId, row);
@@ -491,6 +512,36 @@ public:
         }
     }
 
+    ui64 GetWriteTxId(const TTableId& tableId) const override {
+        if (TSysTables::IsSystemTable(tableId))
+            return 0;
+
+        return LockTxId;
+    }
+
+    NTable::ITransactionMapPtr GetReadTxMap(const TTableId& tableId) const override {
+        if (TSysTables::IsSystemTable(tableId) || !LockTxId)
+            return nullptr;
+
+        // Don't use tx map when we know there's no open tx with the given txId
+        if (!DB.HasOpenTx(LocalTableId(tableId), LockTxId)) {
+            return nullptr;
+        }
+
+        // Uncommitted changes are visible in all possible snapshots
+        // TODO: we need to guarantee no other changes committed between snapshot read and our local changes
+        return new NTable::TSingleTransactionMap(LockTxId, TRowVersion::Min());
+    }
+
+    NTable::ITransactionObserverPtr GetReadTxObserver(const TTableId& tableId) const override {
+        if (TSysTables::IsSystemTable(tableId))
+            return nullptr;
+
+        // TODO: use observer to detect conflicts with other uncommitted transactions
+
+        return nullptr;
+    }
+
 private:
     const TDataShardSysTable& DataShardSysTable(const TTableId& tableId) const {
         return static_cast<const TDataShardSysTables *>(Self->GetDataShardSysTables())->Get(tableId);
@@ -500,6 +551,7 @@ private:
     NTable::TDatabase& DB;
     const ui64& LockTxId;
     bool IsImmediateTx = false;
+    bool IsRepeatableSnapshot = false;
     TInstant Now;
     TRowVersion WriteVersion = TRowVersion::Max();
     TRowVersion ReadVersion = TRowVersion::Min();
@@ -664,6 +716,13 @@ void TEngineBay::SetIsImmediateTx() {
 
     auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
     host->SetIsImmediateTx();
+}
+
+void TEngineBay::SetIsRepeatableSnapshot() {
+    Y_VERIFY(EngineHost);
+
+    auto* host = static_cast<TDataShardEngineHost*>(EngineHost.Get());
+    host->SetIsRepeatableSnapshot();
 }
 
 TVector<IChangeCollector::TChange> TEngineBay::GetCollectedChanges() const {

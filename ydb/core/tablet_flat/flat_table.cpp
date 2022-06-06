@@ -691,6 +691,15 @@ void TTable::RemoveTx(ui64 txId)
     }
 }
 
+bool TTable::HasOpenTx(ui64 txId) const
+{
+    if (OpenTransactions.contains(txId)) {
+        return !CommittedTransactions.Find(txId) && !RemovedTransactions.Contains(txId);
+    }
+
+    return false;
+}
+
 TMemTable& TTable::MemTable()
 {
     return

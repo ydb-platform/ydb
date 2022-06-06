@@ -16,6 +16,11 @@ namespace NKikimr {
             return pdiskId;
         }
 
+        static TString FormatPDiskConfig(const TString& s) {
+            NKikimrBlobStorage::TPDiskConfig proto;
+            return proto.ParseFromString(s) ? SingleLineProto(proto) : "<error>";
+        }
+
         Schema::PDisk::Guid::Type TBlobStorageController::CheckStaticPDisk(TConfigState &state, TPDiskId pdiskId,
                 const TPDiskCategory& category, const TMaybe<Schema::PDisk::PDiskConfig::Type>& pdiskConfig,
                 ui32 *staticSlotUsage) {
@@ -31,8 +36,8 @@ namespace NKikimr {
             // validate fields
             if (pdiskConfig.GetOrElse(TString()) != info.PDiskConfig) {
                 throw TExError() << "PDiskConfig field doesn't match static one"
-                    << " pdiskConfig# " << (pdiskConfig ? *pdiskConfig : "(empty)")
-                    << " info.PDiskConfig# " << info.PDiskConfig;
+                    << " pdiskConfig# " << (pdiskConfig ? FormatPDiskConfig(*pdiskConfig) : "(empty)")
+                    << " info.PDiskConfig# " << FormatPDiskConfig(info.PDiskConfig);
             } else if (category != info.Category) {
                 throw TExError() << "Type/Kind fields do not match static one";
             }

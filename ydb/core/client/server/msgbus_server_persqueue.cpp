@@ -324,10 +324,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
     for (const auto& child : SchemeCacheResponse->ResultSet) {
         if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic && child.PQGroupInfo) {
             TString name = child.PQGroupInfo->Description.GetName();
-            if (name.empty()) {
-                name = child.Path.back();
-            }
-            if (!TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
+            if (name.empty() || !TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
                 continue;
             }
             ChildrenToCreate.emplace_back(new TPerTopicInfo(child));
@@ -358,6 +355,17 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
         THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
         const auto& name = perTopicInfo->TopicEntry.PQGroupInfo->Description.GetName();
+        if (name.empty()) {
+            continue;
+        }
+
+        if (topics.find(name) != topics.end()) {
+            LOG_ERROR_S(ctx, NKikimrServices::PERSQUEUE, "already present topic '" << name << "'");
+            SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
+                                 TStringBuilder() << "already present topic '" << name  << "' Marker# PQ95");
+            return true;
+        }
+
         THolder<IActor> childActor = CreateTopicSubactor(perTopicInfo->TopicEntry, name);
         if (childActor.Get() != nullptr) {
             const TActorId actorId = ctx.Register(childActor.Release());

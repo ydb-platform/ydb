@@ -97,10 +97,14 @@ void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) 
 
 bool TMirrorer::AddToWriteRequest(
     NKikimrClient::TPersQueuePartitionRequest& request,
-    TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message
+    TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message,
+    bool& incorrectRequest
 ) {
     if (!request.HasCmdWriteOffset()) {
-        Y_VERIFY(request.CmdWriteSize() == 0);
+        if (request.CmdWriteSize() > 0) {
+            incorrectRequest = true;
+            return false;
+        }
         request.SetCmdWriteOffset(message.GetOffset(0));
     }
     if (request.GetCmdWriteOffset() + request.CmdWriteSize() != message.GetOffset(0)) {
@@ -326,9 +330,16 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
     req->SetMessageNo(0);
     req->SetCookie(WRITE_REQUEST_COOKIE);
 
-    while (!Queue.empty() && AddToWriteRequest(*req, Queue.front())) {
+    bool incorrectRequest = false;
+    while (!Queue.empty() && AddToWriteRequest(*req, Queue.front(), incorrectRequest)) {
         WriteInFlight.emplace_back(std::move(Queue.front()));
         Queue.pop_front();
+    }
+    if (incorrectRequest) {
+        ProcessError(ctx, TStringBuilder() << " incorrect filling of CmdWrite request: "
+            << req->DebugString());
+        ScheduleConsumerCreation(ctx);
+        return;
     }
 
     WriteRequestInFlight = request->Record.GetPartitionRequest();
@@ -537,27 +548,28 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.GetRef())) {
         AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TCreatePartitionStreamEvent>(&event.GetRef())) {
-        Y_VERIFY_S(
-            !PartitionStream,
-            MirrorerDescription()
-                << " already has stream " << PartitionStream->GetPartitionStreamId()
-                << ", new stream " << createStream->GetPartitionStream()->GetPartitionStreamId()
-        );
+        LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
+            MirrorerDescription() << " got create stream event for '" << createStream->DebugString()
+                << " and will set offset=" << OffsetToRead);
+        if (PartitionStream) {
+            ProcessError(ctx, TStringBuilder() << " already has stream " << PartitionStream->GetPartitionStreamId()
+                << ", new stream " << createStream->GetPartitionStream()->GetPartitionStreamId());
+            ScheduleConsumerCreation(ctx);
+            return;
+        }
+
         PartitionStream = createStream->GetPartitionStream();
-        Y_VERIFY_S(
-            Partition == PartitionStream->GetPartitionId(),
-            MirrorerDescription()
-                << " got stream for incorrect partition, stream: topic=" << PartitionStream->GetTopicPath()
-                << " partition=" << PartitionStream->GetPartitionId()
-        );
+        if (Partition != PartitionStream->GetPartitionId()) {
+            ProcessError(ctx, TStringBuilder() << " got stream for incorrect partition, stream: topic=" << PartitionStream->GetTopicPath()
+                << " partition=" << PartitionStream->GetPartitionId());
+            ScheduleConsumerCreation(ctx);
+            return;
+        }
         if (OffsetToRead < createStream->GetCommittedOffset()) {
             ProcessError(ctx, TStringBuilder() << "stream has commit offset more then partition end offset,"
                 << "gap will be created [" << OffsetToRead << ";" << createStream->GetCommittedOffset() << ")"
            );
         }
-        LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
-            MirrorerDescription() << " got create stream event for '" << createStream->DebugString()
-                << " and will set offset=" << OffsetToRead);
 
         createStream->Confirm(OffsetToRead, OffsetToRead);
         RequestSourcePartitionStatus();
@@ -567,8 +579,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         PartitionStream.Reset();
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,
             MirrorerDescription()
-                << " got destroy stream event for partition stream id: "
-                << destroyStream->GetPartitionStream()->GetPartitionStreamId());
+                << " got destroy stream event: " << destroyStream->DebugString());
    } else if (auto* streamClosed = std::get_if<TPersQueueReadEvent::TPartitionStreamClosedEvent>(&event.GetRef())) {
         PartitionStream.Reset();
         LOG_INFO_S(ctx, NKikimrServices::PQ_MIRRORER,

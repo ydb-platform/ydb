@@ -1,17 +1,20 @@
 #include "datashard_impl.h"
+#include <ydb/core/tablet/resource_broker.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 #include <ydb/core/tablet_flat/flat_dbase_sz_env.h>
 
 namespace NKikimr {
 namespace NDataShard {
 
+using namespace NResourceBroker;
 
 class TAsyncTableStatsBuilder : public TActorBootstrapped<TAsyncTableStatsBuilder> {
 public:
-    TAsyncTableStatsBuilder(TActorId replyTo, ui64 tableId, ui64 indexSize, const TAutoPtr<NTable::TSubset> subset,
+    TAsyncTableStatsBuilder(TActorId replyTo, ui64 tabletId, ui64 tableId, ui64 indexSize, const TAutoPtr<NTable::TSubset> subset,
                             ui64 memRowCount, ui64 memDataSize,
                             ui64 rowCountResolution, ui64 dataSizeResolution, ui64 searchHeight, TInstant statsUpdateTime)
         : ReplyTo(replyTo)
+        , TabletId(tabletId)
         , TableId(tableId)
         , IndexSize(indexSize)
         , StatsUpdateTime(statsUpdateTime)
@@ -28,6 +31,47 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
+        SubmitTask(ctx);
+        Become(&TThis::StateWaitResource);
+    }
+
+private:
+    void Die(const TActorContext& ctx) override {
+        ctx.Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvNotifyActorDied);
+        TActorBootstrapped::Die(ctx);
+    }
+
+    void SubmitTask(const TActorContext& ctx) {
+        ctx.Send(MakeResourceBrokerID(),
+            new TEvResourceBroker::TEvSubmitTask(
+                /* task id */ 1,
+                /* task name */ TStringBuilder() << "build-stats-table-" << TableId << "-tablet-" << TabletId,
+                /* cpu & memory */ {{ 1, 0 }},
+                /* task type */ "datashard_build_stats",
+                /* priority */ 5,
+                /* cookie */ nullptr));
+    }
+
+    void FinishTask(const TActorContext& ctx) {
+        ctx.Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(/* task id */ 1, /* cancelled */ false));
+    }
+
+private:
+    STFUNC(StateWaitResource) {
+        switch (ev->GetTypeRewrite()) {
+            SFunc(TEvents::TEvPoison, Die);
+            HFunc(TEvResourceBroker::TEvResourceAllocated, Handle);
+        }
+    }
+
+    void Handle(TEvResourceBroker::TEvResourceAllocated::TPtr& ev, const TActorContext& ctx) {
+        auto* msg = ev->Get();
+        Y_VERIFY(!msg->Cookie.Get(), "Unexpected cookie in TEvResourceAllocated");
+        Y_VERIFY(msg->TaskId == 1, "Unexpected task id in TEvResourceAllocated");
+        Start(ctx);
+    }
+
+    void Start(const TActorContext& ctx) {
         THolder<TDataShard::TEvPrivate::TEvAsyncTableStats> ev = MakeHolder<TDataShard::TEvPrivate::TEvAsyncTableStats>();
         ev->TableId = TableId;
         ev->IndexSize = IndexSize;
@@ -45,11 +89,14 @@ public:
 
         ctx.Send(ReplyTo, ev.Release());
 
+        FinishTask(ctx);
+
         return Die(ctx);
     }
 
 private:
     TActorId ReplyTo;
+    ui64 TabletId;
     ui64 TableId;
     ui64 IndexSize;
     TInstant StatsUpdateTime;
@@ -167,6 +214,8 @@ void TDataShard::Handle(TEvDataShard::TEvGetTableStats::TPtr& ev, const TActorCo
 }
 
 void TDataShard::Handle(TEvPrivate::TEvAsyncTableStats::TPtr& ev, const TActorContext& ctx) {
+    Actors.erase(ev->Sender);
+
     ui64 tableId = ev->Get()->TableId;
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Stats rebuilt at datashard %" PRIu64, TabletID());
 
@@ -282,6 +331,7 @@ public:
             }
 
             auto* builder = new TAsyncTableStatsBuilder(ctx.SelfID,
+                Self->TabletID(),
                 tableId,
                 indexSize,
                 subsetForStats,
@@ -292,7 +342,8 @@ public:
                 searchHeight,
                 AppData(ctx)->TimeProvider->Now());
 
-            ctx.Register(builder, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
+            TActorId actorId = ctx.Register(builder, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
+            Self->Actors.insert(actorId);
         }
 
         Self->SysTablesPartOnwers.clear();

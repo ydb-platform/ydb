@@ -28,15 +28,9 @@ class TExportScan: private NActors::IActor, public NTable::IScan {
         ES_COUNT,
     };
 
-    struct TStats {
-        ui64 Rows;
-        ui64 BytesRead;
-        ui64 BytesSent;
-
+    struct TStats: public IBuffer::TStats {
         TStats()
-            : Rows(0)
-            , BytesRead(0)
-            , BytesSent(0)
+            : IBuffer::TStats()
         {
             auto counters = GetServiceCounters(AppData()->Counters, "tablets")->GetSubgroup("subsystem", "store_to_yt");
 
@@ -55,8 +49,8 @@ class TExportScan: private NActors::IActor, public NTable::IScan {
             *MonBytesSent += bytesSent;
         }
 
-        void Aggr(IBuffer const* buffer) {
-            Aggr(buffer->GetRows(), buffer->GetBytesRead(), buffer->GetBytesSent());
+        void Aggr(const IBuffer::TStats& stats) {
+            Aggr(stats.Rows, stats.BytesRead, stats.BytesSent);
         }
 
         TString ToString() const {
@@ -96,9 +90,18 @@ class TExportScan: private NActors::IActor, public NTable::IScan {
             return EScan::Sleep;
         }
 
+        IBuffer::TStats stats;
+        THolder<IEventBase> ev{Buffer->PrepareEvent(noMoreData, stats)};
+
+        if (!ev) {
+            Success = false;
+            Error = Buffer->GetError();
+            return EScan::Final;
+        }
+
+        Send(Uploader, std::move(ev));
         State.Set(ES_BUFFER_SENT);
-        Stats->Aggr(Buffer.Get());
-        Send(Uploader, Buffer->PrepareEvent(noMoreData));
+        Stats->Aggr(stats);
 
         if (noMoreData) {
             Spent->Alter(false);
@@ -199,7 +202,12 @@ public:
     }
 
     EScan Feed(TArrayRef<const TCell>, const TRow& row) noexcept override {
-        Buffer->Collect(row);
+        if (!Buffer->Collect(row)) {
+            Success = false;
+            Error = Buffer->GetError();
+            return EScan::Final;
+        }
+
         return MaybeSendBuffer();
     }
 

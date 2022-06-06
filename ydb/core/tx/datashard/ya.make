@@ -8,6 +8,7 @@ OWNER(
 SRCS(
     alter_cdc_stream_unit.cpp
     alter_table_unit.cpp
+    backup_restore_traits.cpp
     backup_unit.cpp
     build_and_wait_dependencies_unit.cpp
     build_data_tx_out_rs_unit.cpp
@@ -183,20 +184,14 @@ SRCS(
     upload_stats.cpp
 )
 
+GENERATE_ENUM_SERIALIZATION(backup_restore_traits.h)
 GENERATE_ENUM_SERIALIZATION(change_exchange.h)
-
 GENERATE_ENUM_SERIALIZATION(change_record.h)
-
 GENERATE_ENUM_SERIALIZATION(datashard.h)
-
 GENERATE_ENUM_SERIALIZATION(datashard_active_transaction.h)
-
 GENERATE_ENUM_SERIALIZATION(datashard_s3_upload.h)
-
 GENERATE_ENUM_SERIALIZATION(execution_unit.h)
-
 GENERATE_ENUM_SERIALIZATION(execution_unit_kind.h)
-
 GENERATE_ENUM_SERIALIZATION(operation.h)
 
 RESOURCE(
@@ -204,6 +199,7 @@ RESOURCE(
 )
 
 PEERDIR(
+    contrib/libs/zstd
     library/cpp/actors/core
     library/cpp/containers/flat_hash
     library/cpp/digest/md5
@@ -244,7 +240,8 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
-        export_s3_buffer.cpp
+        export_s3_buffer_raw.cpp
+        export_s3_buffer_zstd.cpp
         export_s3_uploader.cpp
         import_s3.cpp
     )

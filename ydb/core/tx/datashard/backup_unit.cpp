@@ -1,5 +1,6 @@
 #include "export_iface.h"
 #include "backup_restore_common.h"
+#include "backup_restore_traits.h"
 #include "execution_unit_ctors.h"
 #include "export_scan.h"
 #include "export_s3.h"
@@ -41,21 +42,31 @@ protected:
         Y_VERIFY(txc.DB.GetScheme().GetTableInfo(localTableId));
 
         auto* appData = AppData(ctx);
-
+        const auto& columns = DataShard.GetUserTables().at(tableId)->Columns;
         std::shared_ptr<::NKikimr::NDataShard::IExport> exp;
+
         if (backup.HasYTSettings()) {
-            auto* exportFactory = appData->DataShardExportFactory;
-            if (exportFactory) {
-                const auto& settings = backup.GetYTSettings();
-                std::shared_ptr<IExport>(exportFactory->CreateExportToYt(settings.GetUseTypeV3())).swap(exp);
+            if (backup.HasCompression()) {
+                Abort(op, ctx, "Exports to YT do not support compression");
+                return false;
+            }
+
+            if (auto* exportFactory = appData->DataShardExportFactory) {
+                std::shared_ptr<IExport>(exportFactory->CreateExportToYt(backup, columns)).swap(exp);
             } else {
                 Abort(op, ctx, "Exports to YT are disabled");
                 return false;
             }
         } else if (backup.HasS3Settings()) {
-            auto* exportFactory = appData->DataShardExportFactory;
-            if (exportFactory) {
-                std::shared_ptr<IExport>(exportFactory->CreateExportToS3()).swap(exp);
+            NBackupRestoreTraits::ECompressionCodec codec;
+            if (!TryCodecFromTask(backup, codec)) {
+                Abort(op, ctx, TStringBuilder() << "Unsupported compression codec"
+                    << ": " << backup.GetCompression().GetCodec());
+                return false;
+            }
+
+            if (auto* exportFactory = appData->DataShardExportFactory) {
+                std::shared_ptr<IExport>(exportFactory->CreateExportToS3(backup, columns)).swap(exp);
             } else {
                 Abort(op, ctx, "Exports to S3 are disabled");
                 return false;
@@ -65,16 +76,15 @@ protected:
             return false;
         }
 
-        const auto& columns = DataShard.GetUserTables().at(tableId)->Columns;
         const auto& scanSettings = backup.GetScanSettings();
         const ui64 rowsLimit = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
         const ui64 bytesLimit = scanSettings.GetBytesBatchSize();
 
-        auto createUploader = [self = DataShard.SelfId(), txId = op->GetTxId(), columns, backup, exp]() {
-            return exp->CreateUploader(self, txId, columns, backup);
+        auto createUploader = [self = DataShard.SelfId(), txId = op->GetTxId(), exp]() {
+            return exp->CreateUploader(self, txId);
         };
 
-        THolder<IBuffer> buffer{exp->CreateBuffer(columns, rowsLimit, bytesLimit)};
+        THolder<IBuffer> buffer{exp->CreateBuffer(rowsLimit, bytesLimit)};
         THolder<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
 
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();

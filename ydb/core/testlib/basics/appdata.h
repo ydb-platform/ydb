@@ -15,17 +15,26 @@ namespace NKikimr {
 
     // FIXME
     // Split this factory
-    class TDataShardExportFactory : public NKikimr::NDataShard::IExportFactory {
+    class TDataShardExportFactory : public NDataShard::IExportFactory {
+        using IExport = NDataShard::IExport;
+
     public:
-        NKikimr::NDataShard::IExport* CreateExportToYt(bool useTypeV3) const override {
-            Y_UNUSED(useTypeV3);
+        IExport* CreateExportToYt(
+                const IExport::TTask& task, const IExport::TTableColumns& columns) const override
+        {
+            Y_UNUSED(task);
+            Y_UNUSED(columns);
             return nullptr;
         }
 
-        NKikimr::NDataShard::IExport* CreateExportToS3() const override {
+        IExport* CreateExportToS3(
+                const IExport::TTask& task, const IExport::TTableColumns& columns) const override
+        {
         #ifndef KIKIMR_DISABLE_S3_OPS
-            return new NKikimr::NDataShard::TS3Export();
+            return new NDataShard::TS3Export(task, columns);
         #else
+            Y_UNUSED(task);
+            Y_UNUSED(columns);
             return nullptr;
         #endif
         }

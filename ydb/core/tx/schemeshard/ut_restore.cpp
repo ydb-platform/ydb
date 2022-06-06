@@ -1,3 +1,5 @@
+#include "ut_backup_restore_common.h"
+
 #include <contrib/libs/double-conversion/ieee.h>
 
 #include <ydb/core/base/localdb.h>
@@ -10,6 +12,8 @@
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/ydb_convert/table_description.h>
+
+#include <contrib/libs/zstd/include/zstd.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/datetime/base.h>
@@ -73,13 +77,42 @@ namespace {
     }
 
     struct TTestData {
-        TString Csv;
+        TString Data;
         TString YsonStr;
+        EDataFormat DataFormat = EDataFormat::Csv;
+        ECompressionCodec CompressionCodec;
 
-        TTestData(TString csv, TString ysonStr)
-            : Csv(std::move(csv))
+        TTestData(TString data, TString ysonStr, ECompressionCodec codec = ECompressionCodec::None)
+            : Data(std::move(data))
             , YsonStr(std::move(ysonStr))
+            , CompressionCodec(codec)
         {
+        }
+
+        TString Ext() const {
+            TStringBuilder result;
+
+            switch (DataFormat) {
+            case EDataFormat::Csv:
+                result << ".csv";
+                break;
+            case EDataFormat::Invalid:
+                UNIT_ASSERT_C(false, "Invalid data format");
+                break;
+            }
+
+            switch (CompressionCodec) {
+            case ECompressionCodec::None:
+                break;
+            case ECompressionCodec::Zstd:
+                result << ".zst";
+                break;
+            case ECompressionCodec::Invalid:
+                UNIT_ASSERT_C(false, "Invalid compression codec");
+                break;
+            }
+
+            return result;
         }
     };
 
@@ -130,6 +163,63 @@ namespace {
         return TTestData(std::move(csv), std::move(yson));
     }
 
+    TString ZstdCompress(const TStringBuf src) {
+        TString compressed;
+        compressed.resize(ZSTD_compressBound(src.size()));
+
+        const auto res = ZSTD_compress(compressed.Detach(), compressed.size(), src.data(), src.size(), ZSTD_CLEVEL_DEFAULT);
+        UNIT_ASSERT_C(!ZSTD_isError(res), "Zstd error: " << ZSTD_getErrorName(res));
+        compressed.resize(res);
+
+        return compressed;
+    }
+
+    TTestData GenerateZstdTestData(const TString& keyPrefix, ui32 count, ui32 rowsPerFrame = 0) {
+        auto data = GenerateTestData(keyPrefix, count);
+        if (!rowsPerFrame) {
+            rowsPerFrame = count;
+        }
+
+        TString compressed;
+        ui32 start = 0;
+        ui32 rowsInFrame = 0;
+
+        for (ui32 i = 0; i < data.Data.size(); ++i) {
+            const auto c = data.Data[i];
+            const bool last = i == data.Data.size() - 1;
+
+            if (last) {
+                UNIT_ASSERT(c == '\n');
+            }
+
+            if (c == '\n') {
+                if (++rowsInFrame == rowsPerFrame || last) {
+                    compressed.append(ZstdCompress(TStringBuf(&data.Data[start], i + 1 - start)));
+
+                    start = i + 1;
+                    rowsInFrame = 0;
+                }
+            }
+        }
+
+        data.Data = std::move(compressed);
+        data.CompressionCodec = ECompressionCodec::Zstd;
+
+        return data;
+    }
+
+    TTestData GenerateTestData(ECompressionCodec codec, const TString& keyPrefix, ui32 count) {
+        switch (codec) {
+        case ECompressionCodec::None:
+            return GenerateTestData(keyPrefix, count);
+        case ECompressionCodec::Zstd:
+            return GenerateZstdTestData(keyPrefix, count);
+        case ECompressionCodec::Invalid:
+            UNIT_ASSERT_C(false, "Invalid compression codec");
+            Y_FAIL("unreachable");
+        }
+    }
+
     TTestDataWithScheme GenerateTestData(const TString& scheme, const TVector<std::pair<TString, ui64>>& shardsConfig) {
         TTestDataWithScheme result;
         result.Scheme = scheme;
@@ -147,7 +237,8 @@ namespace {
         for (const auto& [prefix, item] : data) {
             result.emplace(prefix + "/scheme.pb", item.Scheme);
             for (ui32 i = 0; i < item.Data.size(); ++i) {
-                result.emplace(Sprintf("%s/data_%02d.csv", prefix.data(), i), item.Data.at(i).Csv);
+                const auto& data = item.Data.at(i);
+                result.emplace(Sprintf("%s/data_%02d%s", prefix.data(), i, data.Ext().c_str()), data.Data);
             }
         }
 
@@ -265,10 +356,10 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         Restore(runtime, env, creationScheme, std::move(data), readBatchSize);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {
         TTestBasicRuntime runtime;
 
-        const auto data = GenerateTestData("a", 1);
+        const auto data = GenerateTestData(Codec, "a", 1);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -281,11 +372,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {
         TTestBasicRuntime runtime;
 
-        const auto a = GenerateTestData("a", 1);
-        const auto b = GenerateTestData("b", 1);
+        const auto a = GenerateTestData(Codec, "a", 1);
+        const auto b = GenerateTestData(Codec, "b", 1);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -309,11 +400,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         }
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnLargeData) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnLargeData) {
         TTestBasicRuntime runtime;
 
-        const auto data = GenerateTestData("", 100);
-        UNIT_ASSERT(data.Csv.size() > 128);
+        const auto data = GenerateTestData(Codec, "", 100);
+        UNIT_ASSERT(data.Data.size() > 128);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -326,10 +417,38 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(ShouldExpandBuffer) {
+    void ShouldSucceedOnMultipleFrames(ui32 batchSize) {
         TTestBasicRuntime runtime;
 
-        const auto data = GenerateTestData("a", 2);
+        const auto data = GenerateZstdTestData("a", 3, 2);
+
+        Restore(runtime, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data}, batchSize);
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnMultipleFramesStandardBatch) {
+        ShouldSucceedOnMultipleFrames(128);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnMultipleFramesSmallBatch) {
+        ShouldSucceedOnMultipleFrames(7);
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnMultipleFramesTinyBatch) {
+        ShouldSucceedOnMultipleFrames(1);
+    }
+
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldExpandBuffer) {
+        TTestBasicRuntime runtime;
+
+        const auto data = GenerateTestData(Codec, "a", 2);
         const ui32 batchSize = 1;
 
         Restore(runtime, R"(
@@ -414,7 +533,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             Columns { Name: "json_value" Type: "Json" }
             Columns { Name: "jsondoc_value" Type: "JsonDocument" }
             KeyColumnNames: ["key"]
-        )", {data}, data.Csv.size() + 1);
+        )", {data}, data.Data.size() + 1);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint64", "0"}, {
             "key",
@@ -514,11 +633,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         TestGetImport(runtime, txId, "/MyRoot");
     }
 
-    Y_UNIT_TEST(ShouldCountWrittenBytesAndRows) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldCountWrittenBytesAndRows) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        const auto data = GenerateTestData("a", 2);
+        const auto data = GenerateTestData(Codec, "a", 2);
 
         TMaybe<NKikimrTxDataShard::TShardOpResult> result;
         runtime.SetObserverFunc([&result](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
@@ -606,17 +725,20 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         env.TestWaitNotification(runtime, txId);
         UNIT_ASSERT(overloads > 0);
 
-        const ui32 expected = data.Csv.size() / batchSize + ui32(bool(data.Csv.size() % batchSize));
+        const ui32 expected = data.Data.size() / batchSize + ui32(bool(data.Data.size() % batchSize));
         UNIT_ASSERT_VALUES_EQUAL(expected, total - overloads);
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key", "Uint32", "0"});
         NKqp::CompareYson(data.YsonStr, content);
     }
 
+    template <ECompressionCodec Codec>
     void ShouldFailOnFileWithoutNewLines(ui32 batchSize) {
         TTestBasicRuntime runtime;
 
-        const auto data = TTestData("\"a1\",\"value1\"", EmptyYsonStr);
+        const TString v = "\"a1\",\"value1\"";
+        const auto d = Codec == ECompressionCodec::Zstd ? ZstdCompress(v) : v;
+        const auto data = TTestData(d, EmptyYsonStr, Codec);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -629,18 +751,20 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(ShouldFailOnFileWithoutNewLinesStandardBatch) {
-        ShouldFailOnFileWithoutNewLines(128);
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnFileWithoutNewLinesStandardBatch) {
+        ShouldFailOnFileWithoutNewLines<Codec>(128);
     }
 
-    Y_UNIT_TEST(ShouldFailOnFileWithoutNewLinesSmallBatch) {
-        ShouldFailOnFileWithoutNewLines(1);
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnFileWithoutNewLinesSmallBatch) {
+        ShouldFailOnFileWithoutNewLines<Codec>(1);
     }
 
-    Y_UNIT_TEST(ShouldFailOnEmptyToken) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnEmptyToken) {
         TTestBasicRuntime runtime;
 
-        const auto data = TTestData("\"a1\",\n", EmptyYsonStr);
+        const TString v = "\"a1\",\n";
+        const auto d = Codec == ECompressionCodec::Zstd ? ZstdCompress(v) : v;
+        const auto data = TTestData(d, EmptyYsonStr, Codec);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -653,10 +777,12 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(ShouldFailOnInvalidValue) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnInvalidValue) {
         TTestBasicRuntime runtime;
 
-        const auto data = TTestData("\"a1\",\"value1\"\n", EmptyYsonStr);
+        const TString v = "\"a1\",\"value1\"\n";
+        const auto d = Codec == ECompressionCodec::Zstd ? ZstdCompress(v) : v;
+        const auto data = TTestData(d, EmptyYsonStr, Codec);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -669,11 +795,11 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(ShouldFailOnOutboundKey) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnOutboundKey) {
         TTestBasicRuntime runtime;
 
-        const auto a = GenerateTestData("a", 1);
-        const auto b = TTestData(a.Csv, EmptyYsonStr);
+        const auto a = GenerateTestData(Codec, "a", 1);
+        const auto b = TTestData(a.Data, EmptyYsonStr);
 
         Restore(runtime, R"(
             Name: "Table"
@@ -695,6 +821,23 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
             auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 1);
             NKqp::CompareYson(b.YsonStr, content);
         }
+    }
+
+    Y_UNIT_TEST(ShouldFailOnInvalidFrame) {
+        TTestBasicRuntime runtime;
+
+        const TString garbage = "\"a1\",\"value1\""; // not valid zstd data
+        const auto data = TTestData(garbage, EmptyYsonStr, ECompressionCodec::Zstd);
+
+        Restore(runtime, R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )", {data});
+
+        auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+        NKqp::CompareYson(data.YsonStr, content);
     }
 
     void TestRestoreNegative(TTestActorRuntime& runtime, ui64 txId, const TString& parentPath, const TString& name,
@@ -799,30 +942,30 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
         NKqp::CompareYson(data.YsonStr, content);
     }
 
-    Y_UNIT_TEST(CancelUponProposeShouldSucceed) {
-        auto data = GenerateTestData("a", 1);
+    Y_UNIT_TEST_WITH_COMPRESSION(CancelUponProposeShouldSucceed) {
+        auto data = GenerateTestData(Codec, "a", 1);
         data.YsonStr = EmptyYsonStr;
         CancelShouldSucceed<TEvDataShard::TEvProposeTransaction>(data);
     }
 
-    Y_UNIT_TEST(CancelUponProposeResultShouldSucceed) {
-        auto data = GenerateTestData("a", 1);
+    Y_UNIT_TEST_WITH_COMPRESSION(CancelUponProposeResultShouldSucceed) {
+        auto data = GenerateTestData(Codec, "a", 1);
         data.YsonStr = EmptyYsonStr;
         CancelShouldSucceed<TEvDataShard::TEvProposeTransactionResult>(data);
     }
 
-    Y_UNIT_TEST(CancelUponUploadResponseShouldSucceed) {
-        const auto data = GenerateTestData("a", 1);
+    Y_UNIT_TEST_WITH_COMPRESSION(CancelUponUploadResponseShouldSucceed) {
+        const auto data = GenerateTestData(Codec, "a", 1);
         CancelShouldSucceed<TEvDataShard::TEvUnsafeUploadRowsResponse>(data);
     }
 
-    Y_UNIT_TEST(CancelHungOperationShouldSucceed) {
-        auto data = GenerateTestData("a", 1);
+    Y_UNIT_TEST_WITH_COMPRESSION(CancelHungOperationShouldSucceed) {
+        auto data = GenerateTestData(Codec, "a", 1);
         data.YsonStr = EmptyYsonStr;
         CancelShouldSucceed<TEvDataShard::TEvProposeTransactionResult>(data, true);
     }
 
-    Y_UNIT_TEST(CancelAlmostCompleteOperationShouldNotHaveEffect) {
+    Y_UNIT_TEST_WITH_COMPRESSION(CancelAlmostCompleteOperationShouldNotHaveEffect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -842,7 +985,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
         TPortManager portManager;
         THolder<TS3Mock> s3Mock;
-        const auto data = GenerateTestData("a", 1);
+        const auto data = GenerateTestData(Codec, "a", 1);
 
         RestoreNoWait(runtime, txId, portManager.GetPort(), s3Mock, {data});
         const ui64 restoreTxId = txId;
@@ -868,7 +1011,7 @@ Y_UNIT_TEST_SUITE(TRestoreTests) {
 
 Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
     void Restore(TTestWithReboots& t, TTestActorRuntime& runtime, bool& activeZone,
-            ui16 port, const TString& creationScheme, TVector<TTestData>&& data) {
+            ui16 port, const TString& creationScheme, TVector<TTestData>&& data, ui32 readBatchSize = 128) {
 
         THolder<TS3Mock> s3Mock;
         TString schemeStr;
@@ -898,20 +1041,20 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                 Endpoint: "localhost:%d"
                 Scheme: HTTP
                 Limits {
-                    ReadBatchSize: 128
+                    ReadBatchSize: %d
                 }
             }
-        )", schemeStr.data(), port));
+        )", schemeStr.data(), port, readBatchSize));
         t.TestEnv->TestWaitNotification(runtime, t.TxId);
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnSingleShardTable) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto data = GenerateTestData("a", 1);
+            const auto data = GenerateTestData(Codec, "a", 1);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -929,14 +1072,14 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMultiShardTable) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTable) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto a = GenerateTestData("a", 1);
-            const auto b = GenerateTestData("b", 1);
+            const auto a = GenerateTestData(Codec, "a", 1);
+            const auto b = GenerateTestData(Codec, "b", 1);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -964,7 +1107,7 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnMultiShardTableAndLimitedResources) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnMultiShardTableAndLimitedResources) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -987,8 +1130,8 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
                     runtime.Register(CreateResourceBrokerActor(config, runtime.GetDynamicCounters(0))));
             }
 
-            const auto a = GenerateTestData("a", 1);
-            const auto b = GenerateTestData("b", 1);
+            const auto a = GenerateTestData(Codec, "a", 1);
+            const auto b = GenerateTestData(Codec, "b", 1);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -1016,14 +1159,14 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldSucceedOnLargeData) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnLargeData) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto data = GenerateTestData("", 100);
-            UNIT_ASSERT(data.Csv.size() > 128);
+            const auto data = GenerateTestData(Codec, "", 100);
+            UNIT_ASSERT(data.Data.size() > 128);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -1041,13 +1184,40 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldFailOnFileWithoutNewLines) {
+    Y_UNIT_TEST(ShouldSucceedOnMultipleFrames) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto data = TTestData("\"a1\",\"value1\"", EmptyYsonStr);
+            const auto data = GenerateZstdTestData("a", 3, 2);
+            const ui32 batchSize = 7; // less than any frame
+
+            Restore(t, runtime, activeZone, port, R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )", {data}, batchSize);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets);
+                NKqp::CompareYson(data.YsonStr, content);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnFileWithoutNewLines) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            const TString v = "\"a1\",\"value1\"";
+            const auto d = Codec == ECompressionCodec::Zstd ? ZstdCompress(v) : v;
+            const auto data = TTestData(d, EmptyYsonStr, Codec);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -1065,13 +1235,15 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldFailOnEmptyToken) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnEmptyToken) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto data = TTestData("\"a1\",\n", EmptyYsonStr);
+            const TString v = "\"a1\",\n";
+            const auto d = Codec == ECompressionCodec::Zstd ? ZstdCompress(v) : v;
+            const auto data = TTestData(d, EmptyYsonStr, Codec);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -1089,13 +1261,15 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldFailOnInvalidValue) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnInvalidValue) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto data = TTestData("\"a1\",\"value1\"\n", EmptyYsonStr);
+            const TString v = "\"a1\",\"value1\"\n";
+            const auto d = Codec == ECompressionCodec::Zstd ? ZstdCompress(v) : v;
+            const auto data = TTestData(d, EmptyYsonStr, Codec);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -1113,14 +1287,14 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(ShouldFailOnOutboundKey) {
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldFailOnOutboundKey) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            const auto a = GenerateTestData("a", 1);
-            const auto b = TTestData(a.Csv, EmptyYsonStr);
+            const auto a = GenerateTestData(Codec, "a", 1);
+            const auto b = TTestData(a.Data, EmptyYsonStr);
 
             Restore(t, runtime, activeZone, port, R"(
                 Name: "Table"
@@ -1148,10 +1322,10 @@ Y_UNIT_TEST_SUITE(TRestoreWithRebootsTests) {
         });
     }
 
-    Y_UNIT_TEST(CancelShouldSucceed) {
+    Y_UNIT_TEST_WITH_COMPRESSION(CancelShouldSucceed) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-        const auto data = GenerateTestData("a", 1);
+        const auto data = GenerateTestData(Codec, "a", 1);
 
         TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {

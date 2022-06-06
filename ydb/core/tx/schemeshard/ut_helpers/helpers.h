@@ -135,7 +135,8 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropTableIndex);
 
     // backup & restore
-    GENERIC_HELPERS(BackupTable);
+    GENERIC_HELPERS(Backup);
+    GENERIC_HELPERS(BackupToYt);
     GENERIC_HELPERS(Restore);
 
     // cdc stream

@@ -85,6 +85,12 @@ bool TS3Mock::TRequest::HttpBadRequest(const TReplyParams& params, const TString
 
 bool TS3Mock::TRequest::HttpNotFound(const TReplyParams& params) {
     params.Output << "HTTP/1.1 404 Not found\r\n\r\n";
+    params.Output << R"(
+        <?xml version="1.0" encoding="UTF-8"?>
+        <Error>
+          <Code>NoSuchKey</Code>
+        </Error>
+    )";
     return true;
 }
 
@@ -182,7 +188,7 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
         const int uploadId = Parent->NextUploadId++;
         Parent->MultipartUploads[std::make_pair(path, ToString(uploadId))] = {};
 
-        params.Output << "HTTP/1.1 200 Ok\r\n";
+        params.Output << "HTTP/1.1 200 Ok\r\n\r\n";
         params.Output << Sprintf(R"(
             <?xml version="1.0" encoding="UTF-8"?>
             <InitiateMultipartUploadResult>
@@ -236,7 +242,7 @@ bool TS3Mock::TRequest::HttpServeAction(const TReplyParams& params, EMethod meth
 
             const TString etag = MD5::Data(Parent->Data[path]);
 
-            params.Output << "HTTP/1.1 200 Ok\r\n";
+            params.Output << "HTTP/1.1 200 Ok\r\n\r\n";
             params.Output << Sprintf(R"(
                 <?xml version="1.0" encoding="UTF-8"?>
                 <CompleteMultipartUploadResult>

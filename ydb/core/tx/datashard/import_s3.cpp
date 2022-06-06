@@ -13,15 +13,31 @@
 #include <ydb/core/io_formats/csv.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
+#include <contrib/libs/zstd/include/zstd.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
+#include <util/generic/buffer.h>
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 #include <util/memory/pool.h>
 #include <util/string/builder.h>
+
+namespace {
+
+    struct DestroyZCtx {
+        static void Destroy(::ZSTD_DCtx* p) noexcept {
+            ZSTD_freeDCtx(p);
+        }
+    };
+
+    constexpr ui64 SumWithSaturation(ui64 a, ui64 b) {
+        return Max<ui64>() - a < b ? Max<ui64>() : a + b;
+    }
+
+} // anonymous
 
 namespace NKikimr {
 namespace NDataShard {
@@ -33,11 +49,27 @@ using namespace Aws::S3;
 using namespace Aws;
 
 class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
-    class TReadController {
-        static constexpr ui64 SumWithSaturation(ui64 a, ui64 b) {
-            return Max<ui64>() - a < b ? Max<ui64>() : a + b;
-        }
+    class IReadController {
+    public:
+        enum EFeed {
+            READY_DATA = 0,
+            NOT_ENOUGH_DATA = 1,
+            ERROR = 2,
+        };
 
+    public:
+        virtual ~IReadController() = default;
+        // Returns status or error
+        virtual EFeed Feed(TString&& portion, TString& error) = 0;
+        // Returns view to internal buffer with ready data after successful Feed()
+        virtual TStringBuf GetReadyData() const = 0;
+        // Clear internal buffer & makes it ready for another Feed()
+        virtual void Confirm() = 0;
+        virtual ui64 PendingBytes() const = 0;
+        virtual ui64 ReadyBytes() const = 0;
+    };
+
+    class TReadController: public IReadController {
     public:
         explicit TReadController(ui32 rangeSize, ui64 bufferSizeLimit)
             : RangeSize(rangeSize)
@@ -49,43 +81,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             Y_VERIFY(contentLength > 0);
             Y_VERIFY(processedBytes < contentLength);
 
-            const ui64 start = processedBytes + (Buffer.size() - Pos);
+            const ui64 start = processedBytes + PendingBytes();
             const ui64 end = Min(SumWithSaturation(start, RangeSize), contentLength) - 1;
             return std::make_pair(start, end);
         }
 
-        bool Feed(TString&& portion, TStringBuf& buf) {
-            if (Buffer && Pos) {
-                Buffer.remove(0, Pos);
-                Pos = 0;
-            }
-
-            if (!Buffer) {
-                Buffer = std::move(portion);
-            } else {
-                Buffer.append(portion);
-            }
-
-            const ui64 pos = Buffer.rfind('\n');
-            if (TString::npos == pos) {
-                return false;
-            }
-
-            Pos = pos + 1; // for '\n'
-            buf = TStringBuf(Buffer.data(), Pos);
-
-            return true;
-        }
-
-        bool CanExpandBuffer(ui64 contentLength, ui64 processedBytes, TString& reason) const {
-            const auto size = Buffer.size();
-
-            if (SumWithSaturation(processedBytes, size) >= contentLength) {
-                reason = "reached end of file";
-                return false;
-            }
-
-            if (size >= BufferSizeLimit) {
+    protected:
+        bool CheckBufferSize(size_t size, TString& reason) const {
+            if ((size + RangeSize) >= BufferSizeLimit) {
                 reason = "reached buffer size limit";
                 return false;
             }
@@ -93,14 +96,152 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             return true;
         }
 
+        TStringBuf AsStringBuf(size_t size) const {
+            return TStringBuf(Buffer.Data(), size);
+        }
+
     private:
         const ui32 RangeSize;
         const ui64 BufferSizeLimit;
 
-        TString Buffer;
-        ui64 Pos = 0;
+    protected:
+        TBuffer Buffer;
 
     }; // TReadController
+
+    class TReadControllerRaw: public TReadController {
+    public:
+        using TReadController::TReadController;
+
+        EFeed Feed(TString&& portion, TString& error) override {
+            Y_VERIFY(Pos == 0);
+
+            Buffer.Append(portion.data(), portion.size());
+            const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
+
+            if (TString::npos == pos) {
+                if (!CheckBufferSize(Buffer.Size(), error)) {
+                    return ERROR;
+                } else {
+                    return NOT_ENOUGH_DATA;
+                }
+            }
+
+            Pos = pos + 1; // for '\n'
+            return READY_DATA;
+        }
+
+        TStringBuf GetReadyData() const override {
+            return AsStringBuf(Pos);
+        }
+
+        void Confirm() override {
+            Buffer.ChopHead(Pos);
+            Pos = 0;
+        }
+
+        ui64 PendingBytes() const override {
+            return Buffer.Size();
+        }
+
+        ui64 ReadyBytes() const override {
+            return Pos;
+        }
+
+    private:
+        ui64 Pos = 0;
+    };
+
+    class TReadControllerZstd: public TReadController {
+        void Reset() {
+            ZSTD_DCtx_reset(Context.Get(), ZSTD_reset_session_only);
+            ZSTD_DCtx_refDDict(Context.Get(), NULL);
+        }
+
+    public:
+        explicit TReadControllerZstd(ui32 rangeSize, ui64 bufferSizeLimit)
+            : TReadController(rangeSize, bufferSizeLimit)
+            , Context(ZSTD_createDCtx())
+        {
+            Reset();
+        }
+
+        EFeed Feed(TString&& portion, TString& error) override {
+            Y_VERIFY(ReadyInputBytes == 0 && ReadyOutputPos == 0);
+
+            auto input = ZSTD_inBuffer{portion.data(), portion.size(), 0};
+            while (input.pos < input.size) {
+                PendingInputBytes -= input.pos; // dec before decompress
+
+                auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), Buffer.Size()};
+                auto res = ZSTD_decompressStream(Context.Get(), &output, &input);
+
+                if (ZSTD_isError(res)) {
+                    error = ZSTD_getErrorName(res);
+                    return ERROR;
+                }
+
+                if (output.pos == output.size) {
+                    if (!CheckBufferSize(Buffer.Capacity(), error)) {
+                        return ERROR;
+                    }
+
+                    Buffer.Reserve(Buffer.Capacity() + ZSTD_BLOCKSIZE_MAX);
+                }
+
+                PendingInputBytes += input.pos; // inc after decompress
+                Buffer.Proceed(output.pos);
+
+                if (res == 0) {
+                    if (AsStringBuf(Buffer.Size()).back() != '\n') {
+                        error = "cannot find new line symbol";
+                        return ERROR;
+                    }
+
+                    ReadyInputBytes = PendingInputBytes;
+                    ReadyOutputPos = Buffer.Size();
+                    Reset();
+                }
+            }
+
+            if (!ReadyOutputPos) {
+                if (!CheckBufferSize(Buffer.Size(), error)) {
+                    return ERROR;
+                } else {
+                    return NOT_ENOUGH_DATA;
+                }
+            }
+
+            return READY_DATA;
+        }
+
+        TStringBuf GetReadyData() const override {
+            return AsStringBuf(ReadyOutputPos);
+        }
+
+        void Confirm() override {
+            Buffer.ChopHead(ReadyOutputPos);
+
+            PendingInputBytes -= ReadyInputBytes;
+            ReadyInputBytes = 0;
+
+            ReadyOutputPos = 0;
+        }
+
+        ui64 PendingBytes() const override {
+            return PendingInputBytes;
+        }
+
+        ui64 ReadyBytes() const override {
+            return ReadyInputBytes;
+        }
+
+    private:
+        THolder<::ZSTD_DCtx, DestroyZCtx> Context;
+        ui64 PendingInputBytes = 0;
+        ui64 ReadyInputBytes = 0;
+        ui64 ReadyOutputPos = 0;
+    };
 
     class TUploadRowsRequestBuilder {
     public:
@@ -176,9 +317,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             Send(client, new TEvents::TEvPoisonPill());
         }
 
-        Client = RegisterWithSameMailbox(CreateS3Wrapper(Settings.Credentials, Settings.Config));
+        Client = RegisterWithSameMailbox(CreateS3Wrapper(Settings.GetCredentials(), Settings.GetConfig()));
 
-        HeadObject(Settings.DataKey);
+        HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         Become(&TThis::StateWork);
     }
 
@@ -187,7 +328,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             << ": key# " << key);
 
         auto request = Model::HeadObjectRequest()
-            .WithBucket(Settings.Bucket)
+            .WithBucket(Settings.GetBucket())
             .WithKey(key);
 
         Send(Client, new TEvS3Wrapper::TEvHeadObjectRequest(request));
@@ -199,7 +340,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             << ", range# " << range.first << "-" << range.second);
 
         auto request = Model::GetObjectRequest()
-            .WithBucket(Settings.Bucket)
+            .WithBucket(Settings.GetBucket())
             .WithKey(key)
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
@@ -210,8 +351,35 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& result = ev->Get()->Result;
-        if (!CheckResult(result, TStringBuf("HeadObject"))) {
-            return;
+        if (!result.IsSuccess()) {
+            switch (result.GetError().GetErrorType()) {
+            case S3Errors::RESOURCE_NOT_FOUND:
+            case S3Errors::NO_SUCH_KEY:
+                break;
+            default:
+                IMPORT_LOG_E("Error at 'HeadObject'"
+                    << ": error# " << result);
+                return RestartOrFinish(result.GetError().GetMessage().c_str());
+            }
+
+            CompressionCodec = NBackupRestoreTraits::NextCompressionCodec(CompressionCodec);
+            if (CompressionCodec == NBackupRestoreTraits::ECompressionCodec::Invalid) {
+                return Finish(false, TStringBuilder() << "Cannot find any supported data file"
+                    << ": prefix# " << Settings.GetObjectKeyPattern());
+            }
+
+            return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
+        }
+
+        switch (CompressionCodec) {
+        case NBackupRestoreTraits::ECompressionCodec::None:
+            Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+            break;
+        case NBackupRestoreTraits::ECompressionCodec::Zstd:
+            Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+            break;
+        case NBackupRestoreTraits::ECompressionCodec::Invalid:
+            Y_FAIL("unreachable");
         }
 
         ETag = result.GetResult().GetETag();
@@ -251,7 +419,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             return Finish();
         }
 
-        GetObject(Settings.DataKey, Reader.NextRange(ContentLength, ProcessedBytes));
+        GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
+            Reader->NextRange(ContentLength, ProcessedBytes));
     }
 
     void Handle(TEvS3Wrapper::TEvGetObjectResponse::TPtr& ev) {
@@ -274,34 +443,46 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader>, private TS3User {
             << ", content-length# " << ContentLength
             << ", body-size# " << msg.Body.size());
 
-        if (!Reader.Feed(std::move(msg.Body), Buffer)) {
-            TString reason;
-            if (!Reader.CanExpandBuffer(ContentLength, ProcessedBytes, reason)) {
-                return Finish(false, TStringBuilder() << "Cannot find new line symbol in data"
-                    << ": " << reason);
-            }
+        TString error;
+        switch (Reader->Feed(std::move(msg.Body), error)) {
+        case TReadController::READY_DATA:
+            break;
 
-            IMPORT_LOG_W("Cannot find new line symbol, request additional data"
-                << ": processed-bytes# " << ProcessedBytes
-                << ", content-length# " << ContentLength);
-            return GetObject(Settings.DataKey, Reader.NextRange(ContentLength, ProcessedBytes));
+        case TReadController::NOT_ENOUGH_DATA:
+            if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
+                return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
+                    Reader->NextRange(ContentLength, ProcessedBytes));
+            } else {
+                error = "reached end of file";
+            }
+            [[fallthrough]];
+
+        default: // ERROR
+            return Finish(false, TStringBuilder() << "Cannot process data"
+                << ": " << error);
         }
 
-        ProcessedBytes += Buffer.size();
-        RequestBuilder.New(TableInfo, Scheme);
+        if (auto data = Reader->GetReadyData()) {
+            ProcessedBytes += Reader->ReadyBytes();
+            RequestBuilder.New(TableInfo, Scheme);
 
-        TMemoryPool pool(256);
-        while (ProcessData(pool));
+            TMemoryPool pool(256);
+            while (ProcessData(data, pool));
+
+            Reader->Confirm();
+        } else {
+            Y_FAIL("unreachable");
+        }
     }
 
-    bool ProcessData(TMemoryPool& pool) {
+    bool ProcessData(TStringBuf& data, TMemoryPool& pool) {
         pool.Clear();
 
-        TStringBuf line = Buffer.NextTok('\n');
+        TStringBuf line = data.NextTok('\n');
         const TStringBuf origLine = line;
 
         if (!line) {
-            if (Buffer) {
+            if (data) {
                 return true; // skip empty line
             }
 
@@ -508,11 +689,14 @@ public:
         : DataShard(dataShard)
         , TxId(txId)
         , Settings(TS3Settings::FromRestoreTask(task))
+        , DataFormat(NBackupRestoreTraits::EDataFormat::Csv)
+        , CompressionCodec(NBackupRestoreTraits::ECompressionCodec::None)
         , TableInfo(tableInfo)
         , Scheme(task.GetTableDescription())
         , LogPrefix_(TStringBuilder() << "s3:" << TxId)
         , Retries(task.GetNumberOfRetries())
-        , Reader(task.GetS3Settings().GetLimits().GetReadBatchSize(), task.GetS3Settings().GetLimits().GetReadBufferSizeLimit())
+        , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
+        , ReadBufferSizeLimit(task.GetS3Settings().GetLimits().GetReadBufferSizeLimit())
     {
     }
 
@@ -551,6 +735,8 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TS3Settings Settings;
+    const NBackupRestoreTraits::EDataFormat DataFormat;
+    NBackupRestoreTraits::ECompressionCodec CompressionCodec;
     const TTableInfo TableInfo;
     const NKikimrSchemeOp::TTableDescription Scheme;
     const TString LogPrefix_;
@@ -570,8 +756,9 @@ private:
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
 
-    TReadController Reader;
-    TStringBuf Buffer;
+    const ui32 ReadBatchSize;
+    const ui64 ReadBufferSizeLimit;
+    THolder<TReadController> Reader;
     TUploadRowsRequestBuilder RequestBuilder;
 
 }; // TS3Downloader

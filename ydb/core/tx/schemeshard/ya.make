@@ -1,5 +1,6 @@
 RECURSE_FOR_TESTS(
     ut_async_index
+    ut_backup
     ut_base
     ut_base_reboots
     ut_bsvolume

@@ -115,7 +115,7 @@ TLockInfo::TPtr TLockLocker::AddShardLock(ui64 lockTxId, const THashSet<TPathId>
 
     ShardLocks.insert(lockTxId);
     for (const TPathId& tableId : lock->GetAffectedTables()) {
-        Tables[tableId]->RemoveLock(lock);
+        Tables.at(tableId)->RemoveLock(lock);
     }
     lock->AddShardLock(affectedTables);
     return lock;
@@ -187,7 +187,7 @@ void TLockLocker::RemoveBrokenRanges() {
 
             if (!lock->IsShardLock()) {
                 for (const TPathId& tableId : lock->GetAffectedTables()) {
-                    Tables[tableId]->RemoveLock(lock);
+                    Tables.at(tableId)->RemoveLock(lock);
                 }
             } else {
                 ShardLocks.erase(lockId);
@@ -214,7 +214,7 @@ void TLockLocker::RemoveBrokenRanges() {
 
             if (!lock->IsShardLock()) {
                 for (const TPathId& tableId : lock->GetAffectedTables()) {
-                    Tables[tableId]->RemoveLock(lock);
+                    Tables.at(tableId)->RemoveLock(lock);
                 }
             } else {
                 ShardLocks.erase(lockId);
@@ -249,7 +249,7 @@ void TLockLocker::RemoveOneLock(ui64 lockTxId) {
 
         if (!txLock->IsShardLock()) {
             for (const TPathId& tableId : txLock->GetAffectedTables()) {
-                Tables[tableId]->RemoveLock(txLock);
+                Tables.at(tableId)->RemoveLock(txLock);
             }
         } else {
             ShardLocks.erase(lockTxId);
@@ -296,6 +296,13 @@ void TLockLocker::UpdateSchema(const TPathId& tableId, const TUserTable& tableIn
 
 void TLockLocker::RemoveSchema(const TPathId& tableId) {
     Tables.erase(tableId);
+    Y_VERIFY(Tables.empty());
+    Locks.clear();
+    ShardLocks.clear();
+    BrokenLocks.clear();
+    CleanupPending.clear();
+    BrokenCandidates.clear();
+    CleanupCandidates.clear();
 }
 
 

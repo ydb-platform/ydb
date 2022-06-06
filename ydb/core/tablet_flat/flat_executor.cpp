@@ -1448,6 +1448,10 @@ TExecutor::TLeaseCommit* TExecutor::EnsureReadOnlyLease(TMonotonic at) {
         lease = &LeaseCommits.emplace_back(commit->Step, ts, ts + LeaseDuration);
 
         CommitManager->Commit(commit);
+
+        if (LogicSnap->MayFlush(false)) {
+            MakeLogSnapshot();
+        }
     }
 
     return lease;
@@ -2942,6 +2946,10 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
 
     GcLogic->HoldBarrier(barrier->Step);
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
+
+    if (LogicSnap->MayFlush(false)) {
+        MakeLogSnapshot();
+    }
 
     return THolder<TScanSnapshot>(new TScanSnapshot{table, std::move(barrier), subset, snapshot});
 }
@@ -4462,6 +4470,10 @@ void TExecutor::Handle(TEvPrivate::TEvActivateCompactionChanges::TPtr& ev, const
 
     for (auto& logicResult : CompactionLogic->ApplyChanges()) {
         CommitCompactionChanges(logicResult.Table, logicResult.Changes, logicResult.Strategy);
+    }
+
+    if (LogicSnap->MayFlush(false)) {
+        MakeLogSnapshot();
     }
 }
 

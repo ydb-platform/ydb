@@ -25,6 +25,8 @@ namespace NTabletFlatExecutor {
     };
 
     struct TLogCommit {
+        using ETactic = TEvBlobStorage::TEvPut::ETactic;
+
         TLogCommit(bool sync, ui32 step, ECommit type)
             : Step(step)
             , Type(type)
@@ -52,7 +54,7 @@ namespace NTabletFlatExecutor {
         bool WaitFollowerGcAck = false;
         TString Embedded;
         TString FollowerAux;
-        TVector<TLogoBlob> Refs;
+        TVector<TEvTablet::TLogEntryReference> Refs;
         TGCBlobDelta GcDelta;
         TVector<TEvTablet::TCommitMetadata> Metadata;
         TSeat *FirstTx = nullptr;

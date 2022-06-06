@@ -190,7 +190,11 @@ struct TEvTablet {
         }
     };
 
-    using TLogEntryReference = TLogoBlob;
+    struct TLogEntryReference : public TLogoBlob {
+        std::optional<TEvBlobStorage::TEvPut::ETactic> Tactic;
+
+        using TLogoBlob::TLogoBlob;
+    };
 
     // dependency graph to boot tablet, not yet ready
     struct TEvBoot : public TEventLocal<TEvBoot, EvBoot> {

@@ -161,7 +161,11 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             }
 
             commit->GcDelta.Created.emplace_back(one.GId.Logo);
-            commit->Refs.emplace_back(one.GId.Logo, one.Data.ToString());
+            auto& ref = commit->Refs.emplace_back(one.GId.Logo, one.Data.ToString());
+
+            // External blobs are never recompacted.
+            // Prioritize small number of copies over latency.
+            ref.Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput;
         }
 
         /* Sometimes clang drops the last emplace_back above if move was used

@@ -284,7 +284,7 @@ namespace NKikimr::NDataStreams::V1 {
         ShouldBeCharged = std::find(
             AppData(ctx)->PQConfig.GetNonChargeableUser().begin(),
             AppData(ctx)->PQConfig.GetNonChargeableUser().end(),
-            token.GetUserSID()) != AppData(ctx)->PQConfig.GetNonChargeableUser().end();
+            token.GetUserSID()) == AppData(ctx)->PQConfig.GetNonChargeableUser().end();
 
         SendNavigateRequest(ctx);
         this->Become(&TPutRecordsActorBase<TDerived, TProto>::StateFunc);

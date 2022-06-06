@@ -232,12 +232,6 @@ public:
         }
     };
 
-    enum class ECollectCookie {
-        Hard = 1,
-        SoftInitial = 2,
-        Soft = 3,
-    };
-
     ui32 GetGeneration() const {
         return StoredState.UserGeneration;
     }

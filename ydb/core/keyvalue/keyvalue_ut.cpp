@@ -82,10 +82,9 @@ struct TTestContext {
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         setup(*Runtime);
-        TActorId bootstrapId = CreateTestBootstrapper(*Runtime,
+        CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
             &CreateKeyValueFlat);
-        Cerr << (TStringBuilder() << "BootstrapId# " << bootstrapId << Endl);
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
@@ -509,7 +508,6 @@ void ExecuteEvent(TDesiredPair<TRequestEvent> &dp, TTestContext &tc) {
         tc.Runtime->ResetScheduledCount();
         request = std::make_unique<TRequestEvent>();
         request->Record = dp.Request;
-        Cerr << (TStringBuilder() << "Execute event# " << TypeName(*request) << Endl);
         tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.release(), 0, GetPipeConfigWithRetries());
         response = tc.Runtime->GrabEdgeEvent<typename TRequestEvent::TResponse>(handle);
         dp.Response = response->Record;
@@ -870,56 +868,6 @@ Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOk) {
     });
 }
 
-
-Y_UNIT_TEST(TestWriteReadDeleteWithRestartsAndCatchCollectGarbageEvents) {
-    TTestContext tc;
-    TMaybe<TActorId> tabletActor;
-    bool firstCollect = true;
-    auto setup = [&] (TTestActorRuntime &runtime) {
-        runtime.SetObserverFunc([&](TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event) {
-            if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbageResult::EventType) {
-                Cerr << (TStringBuilder()  << "CollectGarbageResult!!! " << event->Sender << "->" << event->Recipient << " Cookie# " << event->Cookie << Endl);
-            }
-            if (tabletActor && *tabletActor == event->Sender && event->GetTypeRewrite() == TEvBlobStorage::TEvCollectGarbage::EventType) {
-                Cerr << (TStringBuilder()  << "CollectGarbage!!! " << event->Sender << "->" << event->Recipient << " Cookie# " << event->Cookie << Endl);
-                if (!firstCollect) {
-                    Cerr << (TStringBuilder()  << "Drop!" << Endl);
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-            }
-            if (tabletActor && *tabletActor == event->Recipient && event->GetTypeRewrite() == TEvKeyValue::TEvCollect::EventType) {
-                Cerr << (TStringBuilder()  << "Collect!!! " << event->Sender << "->" << event->Recipient << " Cookie# " << event->Cookie << Endl);
-                if (firstCollect) {
-                    Cerr << (TStringBuilder()  << "Drop!" << Endl);
-                    runtime.Send(new IEventHandle(event->Recipient, event->Recipient, new TKikimrEvents::TEvPoisonPill));
-                    firstCollect = false;
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
-        runtime.SetRegistrationObserverFunc([&](TTestActorRuntimeBase& runtime, const TActorId& /*parentId*/, const TActorId& actorId) {
-            if (TypeName(*runtime.FindActor(actorId)) == "NKikimr::NKeyValue::TKeyValueFlat") {
-                tabletActor = actorId;
-                Cerr << (TStringBuilder() << "KV tablet was created " << actorId << Endl);
-            }
-        });
-    };
-    TFinalizer finalizer(tc);
-    bool activeZone = false;
-    tc.Prepare(INITIAL_TEST_DISPATCH_NAME, setup, activeZone);
-    ExecuteWrite(tc, {{"key", "value"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-    tc.Runtime->Send(new IEventHandle(*tabletActor, *tabletActor, new TKikimrEvents::TEvPoisonPill));
-    ExecuteWrite(tc, {{"key1", "value1"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-    ExecuteWrite(tc, {{"key2", "value2"}}, 0, 2, NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
-    ExecuteRead(tc, "key", "value", 0, 0, 0);
-    ExecuteDeleteRange(tc, "key", EBorderKind::Include, "key", EBorderKind::Include, 0);
-    TDispatchOptions options;
-    options.FinalEvents.push_back(TKikimrEvents::TEvPoisonPill::EventType);
-    tc.Runtime->DispatchEvents(options);
-    ExecuteRead<NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND>(tc, "key", "", 0, 0, 0);
-    ExecuteRead(tc, "key1", "value1", 0, 0, 0);
-}
 
 Y_UNIT_TEST(TestWriteReadDeleteWithRestartsThenResponseOkWithNewApi) {
     TTestContext tc;

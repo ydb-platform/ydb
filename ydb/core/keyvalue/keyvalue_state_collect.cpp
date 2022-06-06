@@ -6,7 +6,7 @@ namespace NKeyValue {
 void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
     LOG_TRACE_S(ctx, NKikimrServices::KEYVALUE, "PrepareCollectIfNeeded KeyValue# " << TabletId << " Marker# KV61");
 
-    if (CollectOperation.Get() || InitialCollectsSent) {
+    if (CollectOperation.Get()) {
         // We already are trying to collect something, just pass this time.
         return;
     }

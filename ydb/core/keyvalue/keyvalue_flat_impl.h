@@ -368,28 +368,8 @@ protected:
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-            << " Handle TEvCollectGarbageResult Cookie# " << ev->Cookie <<  " Marker# KV52");
-        if (ev->Cookie == (ui64)TKeyValueState::ECollectCookie::Hard) {
-            return;
-        }
-
-        if (ev->Cookie == (ui64)TKeyValueState::ECollectCookie::SoftInitial) {
-            NKikimrProto::EReplyStatus status = ev->Get()->Status;
-            if (status == NKikimrProto::OK) {
-                State.RegisterInitialCollectResult(ctx);
-            } else {
-                LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-                    << " received not ok TEvCollectGarbageResult"
-                    << " Status# " << NKikimrProto::EReplyStatus_Name(status)
-                    << " ErrorReason# " << ev->Get()->ErrorReason);
-                Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
-            }
-            return;
-        }
-
-        LOG_CRIT_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
-            << " received TEvCollectGarbageResult with unexpected Cookie# " << ev->Cookie);
-        Send(SelfId(), new TKikimrEvents::TEvPoisonPill);
+            << " Handle TEvCollectGarbageResult Marker# KV52");
+        State.RegisterInitialCollectResult(ctx);
     }
 
     void Handle(TEvKeyValue::TEvRequest::TPtr ev, const TActorContext &ctx) {

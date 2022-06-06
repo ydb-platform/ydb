@@ -1264,6 +1264,14 @@ public:
         return BackupReadAheadHi;
     }
 
+    ui64 GetTtlReadAheadLoOverride() const {
+        return TtlReadAheadLo;
+    }
+
+    ui64 GetTtlReadAheadHiOverride() const {
+        return TtlReadAheadHi;
+    }
+
     bool GetEnablePrioritizedMvccSnapshotReads() const {
         ui64 value = EnablePrioritizedMvccSnapshotReads;
         return value != 0;
@@ -2086,6 +2094,9 @@ private:
 
     TControlWrapper BackupReadAheadLo;
     TControlWrapper BackupReadAheadHi;
+
+    TControlWrapper TtlReadAheadLo;
+    TControlWrapper TtlReadAheadHi;
 
     TControlWrapper EnablePrioritizedMvccSnapshotReads;
     TControlWrapper EnableUnprotectedMvccSnapshotReads;

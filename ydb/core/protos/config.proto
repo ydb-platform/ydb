@@ -1216,6 +1216,17 @@ message TImmediateControlsConfig {
             MinValue: 1000,
             MaxValue: 5000000,
             DefaultValue: 250000 }];
+
+        optional uint64 TtlReadAheadLo = 12 [(ControlOptions) = {
+            Description: "Override for ttl readahead (low watermark)",
+            MinValue: 0,
+            MaxValue: 67108864,
+            DefaultValue: 0 }];
+        optional uint64 TtlReadAheadHi = 13 [(ControlOptions) = {
+            Description: "Override for ttl readahead (high watermark)",
+            MinValue: 0,
+            MaxValue: 134217728,
+            DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1369,6 +1380,10 @@ message TDataShardConfig {
     optional string RestoreTaskName = 8 [default = "restore"];
     optional uint32 RestoreTaskPriority = 9 [default = 10];
     optional uint64 CleanupSnapshotPeriod = 10 [default = 15000]; // milliseconds
+    optional string TtlTaskName = 11 [default = "ttl"];
+    optional uint32 TtlTaskPriority = 12 [default = 10];
+    optional uint64 TtlReadAheadLo = 13 [default = 524288];
+    optional uint64 TtlReadAheadHi = 14 [default = 1048576];
 }
 
 message TCompactionConfig {

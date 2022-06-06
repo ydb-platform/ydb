@@ -1,5 +1,6 @@
 #pragma once
 
+#include "schemeshard.h"
 #include "schemeshard_types.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_path_element.h"
@@ -565,11 +566,26 @@ public:
     bool CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
 
     bool IsSplitBySizeEnabled() const {
-        return PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() != 0;
+        // Auto split is always enabled, unless table is using external blobs
+        return !PartitionConfigHasExternalBlobsEnabled(PartitionConfig());
     }
 
     bool IsMergeBySizeEnabled() const {
-        return IsSplitBySizeEnabled() && PartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount() != 0;
+        // Auto merge is only enabled when auto split is also enabled
+        if (!IsSplitBySizeEnabled()) {
+            return false;
+        }
+        // We want auto merge enabled when user has explicitly specified the
+        // size to split and the minimum partitions count.
+        if (PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() > 0 &&
+            PartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount() != 0)
+        {
+            return true;
+        }
+        // We also want auto merge enabled when table has more shards than the
+        // specified maximum number of partitions. This way when something
+        // splits by size over the limit we merge some smaller partitions.
+        return Partitions.size() > GetMaxPartitionsCount();
     }
 
     bool IsSplitByLoadEnabled() const {
@@ -580,11 +596,19 @@ public:
         return IsSplitByLoadEnabled();
     }
 
+    static ui64 GetShardForceSizeToSplit() {
+        return 2ULL * 1024 * 1024 * 1024; // 2GiB
+    }
+
     ui64 GetShardSizeToSplit() const {
+        if (!IsSplitBySizeEnabled()) {
+            return Max<ui64>();
+        }
         ui64 threshold = PartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
-        return threshold == 0 ?
-            Max<ui64>() :   // Autosplit is OFF if theshold is not specified
-            threshold;
+        if (threshold == 0 || threshold >= GetShardForceSizeToSplit()) {
+            return GetShardForceSizeToSplit();
+        }
+        return threshold;
     }
 
     ui64 GetSizeToMerge() const {
@@ -604,6 +628,26 @@ public:
     ui64 GetMaxPartitionsCount() const {
         ui64 val = PartitionConfig().GetPartitioningPolicy().GetMaxPartitionsCount();
         return val == 0 ? 32*1024 : val;
+    }
+
+    bool IsForceSplitBySizeShardIdx(TShardIdx shardIdx) const {
+        if (!Stats.PartitionStats.contains(shardIdx)) {
+            return false;
+        }
+        const auto& stats = Stats.PartitionStats.at(shardIdx);
+        return stats.DataSize >= GetShardForceSizeToSplit();
+    }
+
+    bool ShouldSplitBySize(ui64 dataSize) const {
+        if (!IsSplitBySizeEnabled()) {
+            return false;
+        }
+        // When shard is over the maximum size we split even when over max partitions
+        if (dataSize >= GetShardForceSizeToSplit()) {
+            return true;
+        }
+        // Otherwise we split when we may add one more partition
+        return Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit();
     }
 
     bool NeedRecreateParts() const {

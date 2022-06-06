@@ -247,7 +247,7 @@ public:
                           std::initializer_list<TString> includeTags = {}) {
             OverallStatus = MaxStatus(OverallStatus, status);
             if (IsErrorStatus(status)) {
-                TVector<TString> reason;
+                std::vector<TString> reason;
                 if (includeTags.size() != 0) {
                     for (const TIssueRecord& record : IssueLog) {
                         for (const TString& tag : includeTags) {
@@ -258,6 +258,8 @@ public:
                         }
                     }
                 }
+                std::sort(reason.begin(), reason.end());
+                reason.erase(std::unique(reason.begin(), reason.end()), reason.end());
                 TIssueRecord& issueRecord(*IssueLog.emplace(IssueLog.begin()));
                 Ydb::Monitoring::IssueLog& issueLog(issueRecord.IssueLog);
                 issueLog.set_status(status);
@@ -270,7 +272,7 @@ public:
                     issueLog.set_type(Type);
                 }
                 issueLog.set_level(Level);
-                if (reason) {
+                if (!reason.empty()) {
                     for (const TString& r : reason) {
                         issueLog.add_reason(r);
                     }
@@ -279,6 +281,17 @@ public:
                     issueRecord.Tag = setTag;
                 }
             }
+        }
+
+        bool HasTags(std::initializer_list<TString> tags) const {
+            for (const TIssueRecord& record : IssueLog) {
+                for (const TString& tag : tags) {
+                    if (record.Tag == tag) {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         Ydb::Monitoring::StatusFlag::Status GetOverallStatus() const {
@@ -1782,6 +1795,7 @@ public:
     void FillResult(Ydb::Monitoring::SelfCheckResult& result) {
         Ydb::Monitoring::StatusFlag::Status overall = Ydb::Monitoring::StatusFlag::GREY;
         std::unordered_set<std::pair<TString, TString>> issueIds;
+        bool hasDegraded = false;
         for (auto& [path, state] : DatabaseState) {
             Ydb::Monitoring::DatabaseStatus& databaseStatus(*result.add_database_status());
             TSelfCheckResult context;
@@ -1806,6 +1820,9 @@ public:
                 if (issueIds.emplace(key).second) {
                     result.mutable_issue_log()->Add()->CopyFrom(issueRecord.IssueLog);
                 }
+            }
+            if (!hasDegraded && overall != Ydb::Monitoring::StatusFlag::GREEN && context.HasTags({"storage-state"})) {
+                hasDegraded = true;
             }
         }
         if (DatabaseState.empty()) {
@@ -1841,8 +1858,14 @@ public:
         }
         switch (overall) {
         case Ydb::Monitoring::StatusFlag::GREEN:
-        case Ydb::Monitoring::StatusFlag::YELLOW:
             result.set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
+            break;
+        case Ydb::Monitoring::StatusFlag::YELLOW:
+            if (hasDegraded) {
+                result.set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);
+            } else {
+                result.set_self_check_result(Ydb::Monitoring::SelfCheck::GOOD);
+            }
             break;
         case Ydb::Monitoring::StatusFlag::BLUE:
             result.set_self_check_result(Ydb::Monitoring::SelfCheck::DEGRADED);

@@ -1359,6 +1359,13 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
 
 }
 
+template<typename T>
+void SetNonZero(NJson::TJsonValue& node, const TStringBuf& name, T value) {
+    if (value) {
+        node[name] = value;
+    }
+}
+
 } // namespace
 
 void WriteKqlPlan(NJsonWriter::TBuf& writer, const TExprNode::TPtr& query) {
@@ -1445,7 +1452,65 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
     NJson::TJsonValue root;
     NJson::ReadJsonTree(txPlanJson, &root, true);
 
-    auto addStatsToPlanNode = [&stages](NJson::TJsonValue& node) {
+    auto fillInputStats = [](NJson::TJsonValue& node, const NYql::NDqProto::TDqInputChannelStats& inputStats) {
+        node["ChannelId"] = inputStats.GetChannelId();
+
+        SetNonZero(node, "Bytes", inputStats.GetBytes());
+        SetNonZero(node, "Rows", inputStats.GetRowsIn());
+
+        SetNonZero(node, "WaitTimeUs", inputStats.GetWaitTimeUs());
+    };
+
+    auto fillOutputStats = [](NJson::TJsonValue& node, const NYql::NDqProto::TDqOutputChannelStats& outputStats) {
+        node["ChannelId"] = outputStats.GetChannelId();
+
+        SetNonZero(node, "Bytes", outputStats.GetBytes());
+        SetNonZero(node, "Rows", outputStats.GetRowsOut());
+
+        SetNonZero(node, "WritesBlockedNoSpace", outputStats.GetBlockedByCapacity());
+        SetNonZero(node, "SpilledBytes", outputStats.GetSpilledBytes());
+    };
+
+    auto fillTaskStats = [&](NJson::TJsonValue& node, const NYql::NDqProto::TDqTaskStats& taskStats) {
+        node["TaskId"] = taskStats.GetTaskId();
+
+        SetNonZero(node, "InputRows", taskStats.GetInputRows());
+        SetNonZero(node, "InputBytes", taskStats.GetInputBytes());
+        SetNonZero(node, "OutputRows", taskStats.GetOutputRows());
+        SetNonZero(node, "OutputBytes", taskStats.GetOutputBytes());
+
+        SetNonZero(node, "FirstRowTimeMs", taskStats.GetFirstRowTimeMs());
+        SetNonZero(node, "FinishTimeMs", taskStats.GetFinishTimeMs());
+
+        SetNonZero(node, "ComputeTimeUs", taskStats.GetComputeCpuTimeUs());
+        SetNonZero(node, "WaitTimeUs", taskStats.GetWaitTimeUs());
+        SetNonZero(node, "PendingInputTimeUs", taskStats.GetPendingInputTimeUs());
+        SetNonZero(node, "PendingOutputTimeUs", taskStats.GetPendingOutputTimeUs());
+
+        for (auto& inputStats : taskStats.GetInputChannels()) {
+            auto& inputNode = node["InputChannels"].AppendValue(NJson::TJsonValue());
+            fillInputStats(inputNode, inputStats);
+        }
+
+        for (auto& outputStats : taskStats.GetOutputChannels()) {
+            auto& outputNode = node["OutputChannels"].AppendValue(NJson::TJsonValue());
+            fillOutputStats(outputNode, outputStats);
+        }
+    };
+
+    auto fillCaStats = [&](NJson::TJsonValue& node, const NYql::NDqProto::TDqComputeActorStats& caStats) {
+        SetNonZero(node, "CpuTimeUs", caStats.GetCpuTimeUs());
+        SetNonZero(node, "DurationUs", caStats.GetDurationUs());
+
+        SetNonZero(node, "PeakMemoryUsageBytes", caStats.GetMkqlMaxMemoryUsage());
+
+        for (auto& taskStats : caStats.GetTasks()) {
+            auto& taskNode = node["Tasks"].AppendValue(NJson::TJsonValue());
+            fillTaskStats(taskNode, taskStats);
+        }
+    };
+
+    auto addStatsToPlanNode = [&](NJson::TJsonValue& node) {
         if (auto stageGuid = node.GetMapSafe().FindPtr("StageGuid")) {
             if (auto stat = stages.FindPtr(stageGuid->GetStringSafe())) {
                 auto& stats = node["Stats"];
@@ -1457,6 +1522,11 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                 stats["TotalInputBytes"] = (*stat)->GetInputBytes().GetSum();
                 stats["TotalOutputRows"] = (*stat)->GetOutputRows().GetSum();
                 stats["TotalOutputBytes"] = (*stat)->GetOutputBytes().GetSum();
+
+                for (auto& caStats : (*stat)->GetComputeActors()) {
+                    auto& caNode = stats["ComputeNodes"].AppendValue(NJson::TJsonValue());
+                    fillCaStats(caNode, caStats);
+                }
             }
         }
     };

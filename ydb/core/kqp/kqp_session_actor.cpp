@@ -105,6 +105,8 @@ EKikimrStatsMode GetStatsModeInt(const NKikimrKqp::TQueryRequest& queryRequest) 
             return EKikimrStatsMode::Basic;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
             return EKikimrStatsMode::Full;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
+            return EKikimrStatsMode::Profile;
         default:
             return EKikimrStatsMode::None;
     }

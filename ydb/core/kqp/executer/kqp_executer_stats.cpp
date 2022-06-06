@@ -48,7 +48,6 @@ NDqProto::TDqStageStats* GetOrCreateStageStats(const NYql::NDqProto::TDqTaskStat
     auto& stageInfo = tasksGraph.GetStageInfo(stageId);
     auto& stageProto = stageInfo.Meta.Tx.Body->GetStages(stageId.StageId);
 
-
     for (auto& stage : *execStats.MutableStages()) {
         if (stage.GetStageGuid() == stageProto.GetStageGuid()) {
             return &stage;
@@ -80,9 +79,9 @@ NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mo
         // Always collect basic stats for system views / request unit computation.
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
-            // TODO: Use DQ_STATS_MODE_PROFILE for STATS_COLLECTION_PROFILE mode (KIKIMR-15020)
+            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         default:
             return NYql::NDqProto::DQ_STATS_MODE_NONE;
@@ -95,9 +94,9 @@ NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollectio
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE:
             return NYql::NDqProto::DQ_STATS_MODE_NONE;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
-            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
-            // TODO: Use DQ_STATS_MODE_PROFILE for STATS_COLLECTION_PROFILE mode (KIKIMR-15020)
+            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         default:
             return NYql::NDqProto::DQ_STATS_MODE_NONE;
@@ -109,8 +108,7 @@ bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode) {
 }
 
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode) {
-    Y_UNUSED(statsMode);
-    return false;
+    return statsMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
 }
 
 void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProto::TDqComputeActorStats&& stats) {
@@ -156,7 +154,12 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
             UpdateMinMax(stageStats->MutableFinishTimeMs(), task.GetFinishTimeMs());
 
             stageStats->SetDurationUs((stageStats->GetFinishTimeMs().GetMax() - stageStats->GetFirstRowTimeMs().GetMin()) * 1'000);
+        }
+    }
 
+    if (CollectProfileStats(StatsMode)) {
+        for (auto& task : stats.GetTasks()) {
+            auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
             stageStats->AddComputeActors()->CopyFrom(stats);
         }
     }
@@ -216,7 +219,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     }
 
     if (CollectFullStats(StatsMode)) {
-        for (auto& task : *stats.MutableTasks()) {
+        for (auto& task : stats.GetTasks()) {
             auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
             stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
@@ -260,8 +263,15 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
                 bool ok = stageStats->GetExtra().UnpackTo(&stageExtraStats);
                 YQL_ENSURE(ok);
             }
-            stageExtraStats.AddDatashardTasks()->Swap(&task);
+            stageExtraStats.AddDatashardTasks()->CopyFrom(task);
             stageStats->MutableExtra()->PackFrom(stageExtraStats);
+        }
+
+        if (CollectProfileStats(StatsMode)) {
+            for (auto& task : stats.GetTasks()) {
+                auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
+                stageStats->AddComputeActors()->CopyFrom(stats);
+            }
         }
 
         DatashardStats.emplace_back(std::move(txStats));

@@ -327,6 +327,31 @@ Y_UNIT_TEST_QUAD(RequestUnitForExecute, UseNewEngine, UseSessionActor) {
     }
 }
 
+Y_UNIT_TEST_TWIN(StatsProfile, UseSessionActor) {
+    auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
+
+    TExecDataQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+    auto result = session.ExecuteDataQuery(R"(
+        SELECT COUNT(*) FROM TwoShard;
+    )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+    Cerr << result.GetQueryPlan() << Endl;
+
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(result.GetQueryPlan(), &plan, true);
+
+    auto node1 = FindPlanNodeByKv(plan, "Node Type", "TableFullScan");
+    UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
+
+    auto node2 = FindPlanNodeByKv(plan, "Node Type", "Limit");
+    UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
+}
+
 } // suite
 
 } // namespace NKqp

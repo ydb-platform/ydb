@@ -709,6 +709,7 @@ message QueryStatsCollection {
         STATS_COLLECTION_NONE = 1;       // Stats collection is disabled
         STATS_COLLECTION_BASIC = 2;      // Aggregated stats of reads, updates and deletes per table
         STATS_COLLECTION_FULL = 3;       // Add execution stats and plan on top of STATS_COLLECTION_BASIC
+        STATS_COLLECTION_PROFILE = 4;    // Detailed execution stats including stats for individual tasks and channels
     }
 }
 

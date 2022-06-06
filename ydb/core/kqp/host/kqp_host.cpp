@@ -2253,6 +2253,8 @@ Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode stats
             return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
         case NYql::EKikimrStatsMode::Full:
             return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+        case NYql::EKikimrStatsMode::Profile:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
         default:
             return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     }

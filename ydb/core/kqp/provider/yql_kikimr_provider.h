@@ -29,6 +29,7 @@ enum class EKikimrStatsMode {
     None = 0,
     Basic = 1,
     Full = 2,
+    Profile = 3,
 };
 
 class IKikimrQueryExecutor : public TThrRefBase {

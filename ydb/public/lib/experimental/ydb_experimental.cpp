@@ -125,6 +125,9 @@ public:
             case EStreamQueryProfileMode::Full:
                 request.set_profile_mode(Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_FULL);
                 break;
+            case EStreamQueryProfileMode::Profile:
+                request.set_profile_mode(Ydb::Experimental::ExecuteStreamQueryRequest_ProfileMode_PROFILE);
+                break;
         }
 
         request.set_explain(settings.Explain_);

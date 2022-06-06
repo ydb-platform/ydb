@@ -90,8 +90,6 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
     MaxPartitionWriteBurst_ = settings.max_partition_write_burst();
     ClientWriteDisabled_ = settings.client_write_disabled();
     AllowUnauthenticatedRead_ = AllowUnauthenticatedWrite_ = false;
-    AbcId_ = 0;
-    AbcSlug_ = "";
 
     for (auto& pair : settings.attributes()) {
         if (pair.first == "_partitions_per_tablet") {

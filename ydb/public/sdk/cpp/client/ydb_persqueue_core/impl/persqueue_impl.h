@@ -61,16 +61,14 @@ public:
         props.set_max_partition_write_speed(settings.MaxPartitionWriteSpeed_);
         props.set_max_partition_write_burst(settings.MaxPartitionWriteBurst_);
         props.set_client_write_disabled(settings.ClientWriteDisabled_);
-        (*props.mutable_attributes())["_partitions_per_tablet"] = TStringBuilder() << settings.PartitionsPerTablet_;
         (*props.mutable_attributes())["_allow_unauthenticated_read"] = settings.AllowUnauthenticatedRead_ ? "true" : "false";
         (*props.mutable_attributes())["_allow_unauthenticated_write"] = settings.AllowUnauthenticatedWrite_ ? "true" : "false";
-        if (settings.AbcId_) (*props.mutable_attributes())["_abc_id"] = TStringBuilder() << *settings.AbcId_;
-        if (settings.AbcSlug_) (*props.mutable_attributes())["_abc_slug"] = TStringBuilder() << *settings.AbcSlug_;
+        if (settings.PartitionsPerTablet_) (*props.mutable_attributes())["_partitions_per_tablet"] = ToString(*settings.PartitionsPerTablet_);
+        if (settings.AbcId_) (*props.mutable_attributes())["_abc_id"] = ToString(*settings.AbcId_);
+        if (settings.AbcSlug_) (*props.mutable_attributes())["_abc_slug"] = *settings.AbcSlug_;
 
         for (const auto& readRule : settings.ReadRules_) {
-
             Ydb::PersQueue::V1::TopicSettings::ReadRule& rrProps = *props.add_read_rules();
-
             ConvertToProtoReadRule(readRule, rrProps);
         }
 
@@ -108,8 +106,8 @@ public:
     }
 
     TAsyncStatus CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
-
-        auto request = MakePropsCreateOrAlterRequest<Ydb::PersQueue::V1::CreateTopicRequest>(path, settings);
+        auto request = MakePropsCreateOrAlterRequest<Ydb::PersQueue::V1::CreateTopicRequest>(path,
+            settings.PartitionsPerTablet_ ? settings : TCreateTopicSettings(settings).PartitionsPerTablet(2));
 
         return RunSimple<Ydb::PersQueue::V1::PersQueueService, Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
             std::move(request),

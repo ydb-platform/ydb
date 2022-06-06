@@ -63,9 +63,7 @@ struct TDescribeTopicResult : public TStatus {
     struct TTopicSettings {
         TTopicSettings(const Ydb::PersQueue::V1::TopicSettings&);
 
-#define GETTER(TYPE, NAME) TYPE NAME() const { \
-        return NAME ##_; \
-        }
+        #define GETTER(TYPE, NAME) TYPE NAME() const { return NAME##_; }
 
         struct TReadRule {
             TReadRule(const Ydb::PersQueue::V1::TopicSettings::ReadRule&);
@@ -119,11 +117,12 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(ui64, MaxPartitionWriteBurst);
         GETTER(bool, ClientWriteDisabled);
 
+        // attributes
         GETTER(bool, AllowUnauthenticatedWrite);
         GETTER(bool, AllowUnauthenticatedRead);
-        GETTER(ui32, PartitionsPerTablet);
-        GETTER(ui32, AbcId);
-        GETTER(TString, AbcSlug);
+        GETTER(TMaybe<ui32>, PartitionsPerTablet);
+        GETTER(TMaybe<ui32>, AbcId);
+        GETTER(TMaybe<TString>, AbcSlug);
 
         const TVector<TReadRule>& ReadRules() const {
             return ReadRules_;
@@ -142,13 +141,14 @@ struct TDescribeTopicResult : public TStatus {
         ui64 MaxPartitionWriteSpeed_;
         ui64 MaxPartitionWriteBurst_;
         bool ClientWriteDisabled_;
-        bool AllowUnauthenticatedRead_;
-        bool AllowUnauthenticatedWrite_;
-        ui32 PartitionsPerTablet_;
-        ui32 AbcId_;
-        TString AbcSlug_;
         TVector<TReadRule> ReadRules_;
         TMaybe<TRemoteMirrorRule> RemoteMirrorRule_;
+        // attributes
+        bool AllowUnauthenticatedRead_;
+        bool AllowUnauthenticatedWrite_;
+        TMaybe<ui32> PartitionsPerTablet_;
+        TMaybe<ui32> AbcId_;
+        TMaybe<TString> AbcSlug_;
     };
 
     TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result);
@@ -240,7 +240,7 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
     FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedWrite, false);
     FLUENT_SETTING_DEFAULT(bool, AllowUnauthenticatedRead, false);
 
-    FLUENT_SETTING_DEFAULT(ui32, PartitionsPerTablet, 2);
+    FLUENT_SETTING_OPTIONAL(ui32, PartitionsPerTablet);
 
     FLUENT_SETTING_OPTIONAL(ui32, AbcId);
     FLUENT_SETTING_OPTIONAL(TString, AbcSlug);
@@ -262,11 +262,11 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         MaxPartitionWriteSpeed_ = settings.MaxPartitionWriteSpeed();
         MaxPartitionWriteBurst_ = settings.MaxPartitionWriteBurst();
         ClientWriteDisabled_ = settings.ClientWriteDisabled();
-        PartitionsPerTablet_ = settings.PartitionsPerTablet();
-        if (settings.AbcId()) AbcId_ = settings.AbcId();
-        if (!settings.AbcSlug().empty()) AbcSlug_ = settings.AbcSlug();
         AllowUnauthenticatedRead_ = settings.AllowUnauthenticatedRead();
         AllowUnauthenticatedWrite_ = settings.AllowUnauthenticatedWrite();
+        PartitionsPerTablet_ = settings.PartitionsPerTablet();
+        AbcId_ = settings.AbcId();
+        AbcSlug_ = settings.AbcSlug();
 
         ReadRules_.clear();
         for (const auto& readRule : settings.ReadRules()) {

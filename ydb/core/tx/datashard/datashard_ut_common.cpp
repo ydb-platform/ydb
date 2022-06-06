@@ -1313,25 +1313,25 @@ NTable::TRowVersionRanges GetRemovedRowVersions(
     return ev->Get()->RemovedRowVersions;
 }
 
-TRowVersion CreateVolatileSnapshot(
-        Tests::TServer::TPtr server,
+void SendCreateVolatileSnapshot(
+        TTestActorRuntime& runtime,
+        const TActorId& sender,
         const TVector<TString>& tables,
         TDuration timeout)
 {
-    auto& runtime = *server->GetRuntime();
-
-    TActorId sender = runtime.AllocateEdgeActor();
-
-    {
-        auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
-        auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
-        for (const auto& path : tables) {
-            tx->AddTables()->SetTablePath(path);
-        }
-        tx->SetTimeoutMs(timeout.MilliSeconds());
-        runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+    auto request = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+    auto* tx = request->Record.MutableTransaction()->MutableCreateVolatileSnapshot();
+    for (const auto& path : tables) {
+        tx->AddTables()->SetTablePath(path);
     }
+    tx->SetTimeoutMs(timeout.MilliSeconds());
+    runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
+}
 
+TRowVersion GrabCreateVolatileSnapshotResult(
+        TTestActorRuntime& runtime,
+        const TActorId& sender)
+{
     auto ev = runtime.GrabEdgeEventRethrow<TEvTxUserProxy::TEvProposeTransactionStatus>(sender);
     const auto& record = ev->Get()->Record;
     auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(record.GetStatus());
@@ -1344,6 +1344,20 @@ TRowVersion CreateVolatileSnapshot(
         "Unexpected step " << step << " and txId " << txId);
 
     return { step, txId };
+}
+
+TRowVersion CreateVolatileSnapshot(
+        Tests::TServer::TPtr server,
+        const TVector<TString>& tables,
+        TDuration timeout)
+{
+    auto& runtime = *server->GetRuntime();
+
+    TActorId sender = runtime.AllocateEdgeActor();
+
+    SendCreateVolatileSnapshot(runtime, sender, tables, timeout);
+
+    return GrabCreateVolatileSnapshotResult(runtime, sender);
 }
 
 bool RefreshVolatileSnapshot(

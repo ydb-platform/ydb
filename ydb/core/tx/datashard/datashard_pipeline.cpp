@@ -389,6 +389,19 @@ void TPipeline::AddActiveOp(TOperation::TPtr op)
     if (op->IsImmediate()) {
         AddImmediateOp(op);
     } else {
+        // Restore possibly missing flags based on current mvcc edges
+        if (Self->IsMvccEnabled()) {
+            TStepOrder stepOrder = op->GetStepOrder();
+            TRowVersion version(stepOrder.Step, stepOrder.TxId);
+            TRowVersion completeEdge = Max(
+                    Self->SnapshotManager.GetCompleteEdge(),
+                    Self->SnapshotManager.GetUnprotectedReadEdge());
+            if (version <= completeEdge) {
+                op->SetFlag(TTxFlags::BlockingImmediateOps);
+            } else if (version <= Self->SnapshotManager.GetIncompleteEdge()) {
+                op->SetFlag(TTxFlags::BlockingImmediateWrites);
+            }
+        }
         auto pr = ActivePlannedOps.emplace(op->GetStepOrder(), op);
         Y_VERIFY(pr.second, "AddActiveOp must never add duplicate transactions");
         Y_VERIFY(pr.first == std::prev(ActivePlannedOps.end()), "AddActiveOp must always add transactions in order");
@@ -1747,8 +1760,21 @@ bool TPipeline::WaitCompletion(const TOperation::TPtr& op) const {
     return CommittingOps.HasOpsBelow(op->GetMvccSnapshot());
 }
 
+bool TPipeline::PromoteCompleteEdgeUpTo(const TRowVersion& version, TTransactionContext& txc) {
+    if (Self->IsMvccEnabled()) {
+        auto it = Self->TransQueue.PlannedTxs.lower_bound(TStepOrder(version.Step, version.TxId));
+        if (it != Self->TransQueue.PlannedTxs.begin()) {
+            // Promote complete edge to the last distributed transaction that is
+            // less than the specified version
+            --it;
+            return Self->PromoteCompleteEdge(TRowVersion(it->Step, it->TxId), txc);
+        }
+    }
+    return false;
+}
+
 bool TPipeline::MarkPlannedLogicallyCompleteUpTo(const TRowVersion& version, TTransactionContext& txc) {
-    bool hadWrites = false;
+    bool hadWrites = PromoteCompleteEdgeUpTo(version, txc);
     auto processOp = [&](const auto& pr) -> bool {
         TRowVersion prVersion(pr.first.Step, pr.first.TxId);
         if (version <= prVersion) {
@@ -1758,8 +1784,8 @@ bool TPipeline::MarkPlannedLogicallyCompleteUpTo(const TRowVersion& version, TTr
         Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateOps));
         pr.second->SetFlag(TTxFlags::BlockingImmediateOps);
         pr.second->PromoteImmediateConflicts();
+        // TODO: we don't want to persist these flags in the future
         PersistTxFlags(pr.second, txc);
-        Self->PromoteCompleteEdge(pr.second.Get(), txc);
         hadWrites = true;
         return true;
     };
@@ -1794,6 +1820,7 @@ bool TPipeline::MarkPlannedLogicallyIncompleteUpTo(const TRowVersion& version, T
         Y_VERIFY_DEBUG(!pr.second->HasFlag(TTxFlags::BlockingImmediateWrites));
         pr.second->SetFlag(TTxFlags::BlockingImmediateWrites);
         pr.second->PromoteImmediateWriteConflicts();
+        // TODO: we don't want to persist these flags in the future
         PersistTxFlags(pr.second, txc);
         Self->GetSnapshotManager().PromoteIncompleteEdge(pr.second.Get(), txc);
         hadWrites = true;

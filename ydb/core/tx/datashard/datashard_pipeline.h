@@ -344,6 +344,11 @@ public:
     bool WaitCompletion(const TOperation::TPtr& op) const;
 
     /**
+     * Promotes the mvcc complete edge to the last distributed transaction less than version
+     */
+    bool PromoteCompleteEdgeUpTo(const TRowVersion& version, TTransactionContext& txc);
+
+    /**
      * Marks all active planned transactions before this version as logically "complete"
      */
     bool MarkPlannedLogicallyCompleteUpTo(const TRowVersion& version, TTransactionContext& txc);

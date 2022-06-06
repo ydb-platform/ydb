@@ -1320,12 +1320,17 @@ TReadWriteVersions TDataShard::GetLocalReadWriteVersions() const {
     if (!IsMvccEnabled())
         return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()};
 
-    TRowVersion edge = Max(SnapshotManager.GetCompleteEdge(), SnapshotManager.GetIncompleteEdge());
+    TRowVersion edge = Max(
+            SnapshotManager.GetCompleteEdge(),
+            SnapshotManager.GetIncompleteEdge(),
+            SnapshotManager.GetUnprotectedReadEdge());
+
     if (auto nextOp = Pipeline.GetNextPlannedOp(edge.Step, edge.TxId))
         return TRowVersion(nextOp->GetStep(), nextOp->GetTxId());
 
-    TRowVersion candidate = TRowVersion((++edge).Step, ::Max<ui64>());
-    return Max(candidate, SnapshotManager.GetImmediateWriteEdge());
+    TRowVersion maxEdge(edge.Step, ::Max<ui64>());
+
+    return Max(maxEdge, edge.Next(), SnapshotManager.GetImmediateWriteEdge());
 }
 
 TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const {
@@ -1342,7 +1347,9 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
     }
 
     TRowVersion edge;
-    TRowVersion readEdge = SnapshotManager.GetCompleteEdge();
+    TRowVersion readEdge = Max(
+            SnapshotManager.GetCompleteEdge(),
+            SnapshotManager.GetUnprotectedReadEdge());
     TRowVersion writeEdge = Max(readEdge, SnapshotManager.GetIncompleteEdge());
     switch (mode) {
         case EMvccTxMode::ReadOnly:
@@ -1359,6 +1366,10 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
             // greater than both complete and incomplete edges. The reason
             // is that incomplete transactions performed some reads at that
             // point and these snapshot points must be repeatable.
+            // Note that as soon as the first write past the IncompleteEdge
+            // happens it cements all distributed transactions up to that point
+            // as complete, so all future reads and writes are guaranteed to
+            // include that point as well.
             edge = writeEdge;
             break;
     }
@@ -1385,7 +1396,7 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
             // at the start of this read.
             // Note it's only possible to have ImmediateWriteEdge > mediatorEdge
             // when ImmediateWriteEdge == mediatorEdge + 1
-            return Max(mediatorEdge, SnapshotManager.GetImmediateWriteEdgeReplied(), SnapshotManager.GetUnprotectedReadEdge());
+            return Max(mediatorEdge, SnapshotManager.GetImmediateWriteEdgeReplied());
         }
 
         case EMvccTxMode::ReadWrite: {
@@ -1393,13 +1404,10 @@ TRowVersion TDataShard::GetMvccTxVersion(EMvccTxMode mode, TOperation* op) const
             // But we must also avoid trumpling over any unprotected mvcc
             // snapshot reads that have occurred.
             // Note it's only possible to go past the last known mediator step
-            // is when we had an unprotected read, which itself happens at the
+            // when we had an unprotected read, which itself happens at the
             // last mediator step. So we may only ever have a +1 step, never
             // anything more.
-            TRowVersion postReadEdge = SnapshotManager.GetPerformedUnprotectedReads()
-                ? SnapshotManager.GetUnprotectedReadEdge().Next()
-                : TRowVersion::Min();
-            return Max(mediatorEdge, writeEdge.Next(), postReadEdge, SnapshotManager.GetImmediateWriteEdge());
+            return Max(mediatorEdge, writeEdge.Next(), SnapshotManager.GetImmediateWriteEdge());
         }
     }
 

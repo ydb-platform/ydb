@@ -147,6 +147,7 @@ TKqpReadTableSettings ParseInternal(const TKqlReadOperation& node) {
             settings.Reverse = true;
         } else if (name == TKqpReadTableSettings::SortedSettingName) {
             YQL_ENSURE(tuple.Ref().ChildrenSize() == 1);
+            settings.Sorted = true;
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTable setting name '" << name << "'");
         }

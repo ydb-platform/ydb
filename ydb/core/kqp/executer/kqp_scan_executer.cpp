@@ -417,10 +417,11 @@ private:
     TTask& AssignTaskToShard(
         TStageInfo& stageInfo, ui64 shardId,
         THashMap<ui64, std::vector<ui64>>& nodeTasks,
-        THashMap<ui64, ui64>& assignedShardsCount)
+        THashMap<ui64, ui64>& assignedShardsCount,
+        bool sorted)
     {
         ui64 nodeId = ShardIdToNodeId.at(shardId);
-        if (stageInfo.Meta.IsOlap()) {
+        if (stageInfo.Meta.IsOlap() && sorted) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
             return task;
@@ -462,7 +463,7 @@ private:
 
             bool reverse = false;
             ui64 itemsLimit = 0;
-            bool sortedScanFlag = true;
+            bool sorted = true;
             TString itemsLimitParamName;
             NDqProto::TData itemsLimitBytes;
             NKikimr::NMiniKQL::TType* itemsLimitType = nullptr;
@@ -478,7 +479,7 @@ private:
                 stageInfo.Meta.SkipNullKeys.assign(op.GetReadRange().GetSkipNullKeys().begin(),
                                                    op.GetReadRange().GetSkipNullKeys().end());
             } else if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
-                sortedScanFlag = op.GetReadOlapRange().GetSorted();
+                sorted = op.GetReadOlapRange().GetSorted();
                 reverse = op.GetReadOlapRange().GetReverse();
                 ExtractItemsLimit(stageInfo, op.GetReadOlapRange().GetItemsLimit(), holderFactory, typeEnv,
                     itemsLimit, itemsLimitParamName, itemsLimitBytes, itemsLimitType);
@@ -487,7 +488,7 @@ private:
             for (auto& [shardId, shardInfo] : partitions) {
                 YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
-                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount);
+                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount, sorted);
 
                 for (auto& [name, value] : shardInfo.Params) {
                     auto ret = task.Meta.Params.emplace(name, std::move(value));

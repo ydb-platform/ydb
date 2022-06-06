@@ -402,6 +402,9 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
         if (settings.has_remote_mirror_rule()) {
             auto mirrorFrom = partConfig->MutableMirrorFrom();
+            if (!local) {
+                mirrorFrom->SetSyncWriteTime(true);
+            }
             {
                 TString endpoint = settings.remote_mirror_rule().endpoint();
                 if (endpoint.StartsWith(GRPCS_ENDPOINT_PREFIX)) {

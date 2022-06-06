@@ -679,7 +679,7 @@ message TFeatureFlags {
     optional bool EnableSchemeTransactionsAtSchemeShard = 48 [default = true];
     optional bool EnableArrowFormatAtDatashard = 49 [default = false];
     optional bool Enable3x3RequestsForMirror3DCMinLatencyPut = 50 [default = false];
-    optional bool EnableBackgroundCompaction = 51 [default = false];
+    optional bool EnableBackgroundCompaction = 51 [default = true];
     optional bool EnableArrowFormatInChannels = 52 [default = false];
     optional bool EnableBackgroundCompactionServerless = 53 [default = false];
     optional bool EnableNotNullColumns = 54 [default = false];

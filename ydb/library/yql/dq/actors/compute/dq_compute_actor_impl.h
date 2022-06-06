@@ -470,6 +470,19 @@ protected:
             RuntimeSettings.TerminateHandler(success, issues);
         }
 
+        {
+            // free MKQL memory then destroy TaskRunner and Allocator
+            auto guard = BindAllocator();
+#define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
+            CLEANUP(InputChannelsMap);
+            CLEANUP(SourcesMap);
+            CLEANUP(InputTransformsMap);
+            CLEANUP(OutputChannelsMap);
+            CLEANUP(SinksMap);
+            CLEANUP(OutputTransformsMap);
+#undef CLEANUP
+        }
+
         this->PassAway();
         MemoryQuota = nullptr;
     }

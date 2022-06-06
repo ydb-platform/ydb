@@ -13,6 +13,48 @@
 
 namespace NKikimr::NSQS {
 
+TString SecurityPrint(const NKikimrClient::TSqsResponse& resp) {
+    switch (resp.GetResponseCase()) {
+        case NKikimrClient::TSqsResponse::kChangeMessageVisibility:
+        case NKikimrClient::TSqsResponse::kCreateQueue:
+        case NKikimrClient::TSqsResponse::kGetQueueAttributes:
+        case NKikimrClient::TSqsResponse::kDeleteMessage:
+        case NKikimrClient::TSqsResponse::kDeleteQueue:
+        case NKikimrClient::TSqsResponse::kListQueues:
+        case NKikimrClient::TSqsResponse::kPurgeQueue:
+        case NKikimrClient::TSqsResponse::kSendMessage:
+        case NKikimrClient::TSqsResponse::kSetQueueAttributes:
+        case NKikimrClient::TSqsResponse::kGetQueueUrl:
+        case NKikimrClient::TSqsResponse::kChangeMessageVisibilityBatch:
+        case NKikimrClient::TSqsResponse::kDeleteMessageBatch:
+        case NKikimrClient::TSqsResponse::kSendMessageBatch:
+        case NKikimrClient::TSqsResponse::kCreateUser:
+        case NKikimrClient::TSqsResponse::kDeleteUser:
+        case NKikimrClient::TSqsResponse::kListUsers:
+        case NKikimrClient::TSqsResponse::kModifyPermissions:
+        case NKikimrClient::TSqsResponse::kListPermissions:
+        case NKikimrClient::TSqsResponse::kDeleteQueueBatch:
+        case NKikimrClient::TSqsResponse::kPurgeQueueBatch:
+        case NKikimrClient::TSqsResponse::kGetQueueAttributesBatch:
+        case NKikimrClient::TSqsResponse::kListDeadLetterSourceQueues:
+        case NKikimrClient::TSqsResponse::kCountQueues:{
+            return TStringBuilder() << resp;
+        }
+        case NKikimrClient::TSqsResponse::kReceiveMessage: {
+            NKikimrClient::TSqsResponse respCopy = resp;
+            for (auto& msg : *respCopy.MutableReceiveMessage()->MutableMessages()) {
+                msg.SetData(TStringBuilder() << "[...user_data_" << msg.GetData().size() << "bytes" << "...]"); 
+            }
+            return TStringBuilder() << respCopy;
+        }
+        default: {
+            return TStringBuilder() << "unsupported to print response with case=" << static_cast<ui64>(resp.GetResponseCase()) << "request=" << resp.GetRequestId();
+        }
+    }
+    Y_VERIFY(false);
+}
+
+
 void TProxyActor::Bootstrap() {
     this->Become(&TProxyActor::StateFunc);
 
@@ -94,7 +136,7 @@ void TProxyActor::SendReplyAndDie(const NKikimrClient::TSqsResponse& resp) {
     if (ErrorResponse_) {
         RLOG_SQS_WARN("Sending error reply from proxy actor: " << resp);
     } else {
-        RLOG_SQS_DEBUG("Sending reply from proxy actor: " << resp);
+        RLOG_SQS_DEBUG("Sending reply from proxy actor: " << SecurityPrint(resp));
     }
     Cb_->DoSendReply(resp);
     PassAway();

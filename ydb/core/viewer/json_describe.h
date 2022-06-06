@@ -21,6 +21,7 @@ class TJsonDescribe : public TViewerPipeClient<TJsonDescribe> {
     TAutoPtr<TEvSchemeShard::TEvDescribeSchemeResult> DescribeResult;
     TJsonSettings JsonSettings;
     ui32 Timeout = 0;
+    bool ExpandSubElements = true;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -56,6 +57,7 @@ public:
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
         Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), 10000);
+        ExpandSubElements = FromStringWithDefault<ui32>(params.Get("subs"), ExpandSubElements);
         InitConfig(params);
 
         if (params.Has("schemeshard_id")) {
@@ -89,6 +91,25 @@ public:
         TStringStream json;
         TString headers = Viewer->GetHTTPOKJSON(Event->Get());
         if (DescribeResult != nullptr) {
+            if (ExpandSubElements) {
+                NKikimrScheme::TEvDescribeSchemeResult& describe = *(DescribeResult->MutableRecord());
+                if (describe.HasPathDescription()) {
+                    auto& pathDescription = *describe.MutablePathDescription();
+                    if (pathDescription.HasTable()) {
+                        auto& table = *pathDescription.MutableTable();
+                        for (auto& tableIndex : table.GetTableIndexes()) {
+                            NKikimrSchemeOp::TDirEntry& child = *pathDescription.AddChildren();
+                            child.SetName(tableIndex.GetName());
+                            child.SetPathType(NKikimrSchemeOp::EPathType::EPathTypeTableIndex);
+                        }
+                        for (auto& tableCdc : table.GetCdcStreams()) {
+                            NKikimrSchemeOp::TDirEntry& child = *pathDescription.AddChildren();
+                            child.SetName(tableCdc.GetName());
+                            child.SetPathType(NKikimrSchemeOp::EPathType::EPathTypeCdcStream);
+                        }
+                    }
+                }
+            }
             TProtoToJson::ProtoToJson(json, DescribeResult->GetRecord(), JsonSettings);
             switch (DescribeResult->GetRecord().GetStatus()) {
             case NKikimrScheme::StatusAccessDenied:

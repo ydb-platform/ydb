@@ -1027,6 +1027,7 @@ class TDataShard
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
+    void DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx);
 
     TDuration GetDataTxCompleteLag()
     {
@@ -1972,6 +1973,7 @@ private:
     ui64 CurrentSchemeShardId; // TabletID of SchemeShard wich manages the path right now
     ui64 LastKnownMediator;
     bool RegistrationSended;
+    bool PeriodicWakeupPending = false;
     std::unique_ptr<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     TSchemeOpSeqNo LastSchemeOpSeqNo;
     TInstant LastDbStatsUpdateTime;
@@ -2339,7 +2341,7 @@ protected:
             HFunc(TEvDataShard::TEvDiscardVolatileSnapshotRequest, Handle);
             HFuncTraced(TEvDataShard::TEvBuildIndexCreateRequest, Handle);
             HFunc(TEvPrivate::TEvAsyncJobComplete, Handle);
-            CFunc(TEvPrivate::EvPeriodicWakeup, DoPeriodicTasks);
+            HFunc(TEvPrivate::TEvPeriodicWakeup, DoPeriodicTasks);
             HFunc(TEvents::TEvUndelivered, Handle);
             IgnoreFunc(TEvInterconnect::TEvNodeConnected);
             HFunc(TEvInterconnect::TEvNodeDisconnected, Handle);

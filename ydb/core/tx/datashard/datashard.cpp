@@ -2435,7 +2435,16 @@ void TDataShard::DoPeriodicTasks(const TActorContext &ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Stoped key access sampling at datashard: " << TabletID());
     }
 
-    ctx.Schedule(TDuration::Seconds(5), new TEvPrivate::TEvPeriodicWakeup());
+    if (!PeriodicWakeupPending) {
+        PeriodicWakeupPending = true;
+        ctx.Schedule(TDuration::Seconds(5), new TEvPrivate::TEvPeriodicWakeup());
+    }
+}
+
+void TDataShard::DoPeriodicTasks(TEvPrivate::TEvPeriodicWakeup::TPtr&, const TActorContext &ctx) {
+    Y_VERIFY(PeriodicWakeupPending, "Unexpected TEvPeriodicWakeup message");
+    PeriodicWakeupPending = false;
+    DoPeriodicTasks(ctx);
 }
 
 void TDataShard::UpdateLagCounters(const TActorContext &ctx) {

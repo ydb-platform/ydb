@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/storage_pools.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tablet_flat/flat_database.h>
 #include <ydb/core/tablet_flat/flat_stat_table.h>
 
 #include <util/generic/ptr.h>
@@ -363,6 +364,8 @@ struct TUserTable : public TThrRefBase {
     mutable TStats Stats;
     mutable bool StatsUpdateInProgress = false;
     mutable bool StatsNeedUpdate = true;
+    mutable NTable::TDatabase::TChg LastTableChange{ 0, NTable::TEpoch::Zero() };
+    mutable TMonotonic LastTableChangeTimestamp;
 
     ui32 SpecialColTablet = Max<ui32>();
     ui32 SpecialColEpoch = Max<ui32>();

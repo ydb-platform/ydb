@@ -254,6 +254,31 @@ public:
 
     TTxType GetTxType() const override { return TXTYPE_INITIATE_STATS_UPDATE; }
 
+    void CheckIdleMemCompaction(const TUserTable& table, TTransactionContext& txc, const TActorContext& ctx) {
+        // Note: we only care about changes in the main table
+        auto lastTableChange = txc.DB.Head(table.LocalTid);
+        if (table.LastTableChange.Serial != lastTableChange.Serial ||
+            table.LastTableChange.Epoch != lastTableChange.Epoch)
+        {
+            table.LastTableChange = lastTableChange;
+            table.LastTableChangeTimestamp = ctx.Monotonic();
+            return;
+        }
+
+        // We only want to start idle compaction when there are some operations in the mem table
+        if (txc.DB.GetTableMemOpsCount(table.LocalTid) == 0) {
+            return;
+        }
+
+        // Compact non-empty mem table when there have been no changes for a while
+        TDuration elapsed = ctx.Monotonic() - table.LastTableChangeTimestamp;
+        TDuration idleInterval = TDuration::Seconds(AppData(ctx)->DataShardConfig.GetIdleMemCompactionIntervalSeconds());
+        if (elapsed >= idleInterval) {
+            Self->Executor()->CompactMemTable(table.LocalTid);
+            table.LastTableChangeTimestamp = ctx.Monotonic();
+        }
+    }
+
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         if (Self->State != TShardState::Ready)
             return true;
@@ -261,6 +286,8 @@ public:
         for (auto& ti : Self->TableInfos) {
             const ui32 localTableId = ti.second->LocalTid;
             const ui32 shadowTableId = ti.second->ShadowTid;
+
+            CheckIdleMemCompaction(*ti.second, txc, ctx);
 
             if (ti.second->StatsUpdateInProgress) {
                 // We don't want to update mem counters during updates, since

@@ -304,6 +304,10 @@ ui64 TDatabase::GetTableMemRowCount(ui32 tableId) const {
     return Require(tableId)->GetMemRowCount();
 }
 
+ui64 TDatabase::GetTableMemOpsCount(ui32 tableId) const {
+    return Require(tableId)->GetOpsCount();
+}
+
 ui64 TDatabase::GetTableIndexSize(ui32 tableId) const {
     return Require(tableId)->Stat().Parts.IndexBytes;
 }

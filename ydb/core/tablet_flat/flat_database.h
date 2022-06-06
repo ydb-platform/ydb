@@ -133,6 +133,7 @@ public:
     void EnumerateTxStatusParts(const std::function<void(const TIntrusiveConstPtr<TTxStatusPart>&)>& callback) const;
     ui64 GetTableMemSize(ui32 table, TEpoch epoch = TEpoch::Max()) const;
     ui64 GetTableMemRowCount(ui32 tableId) const;
+    ui64 GetTableMemOpsCount(ui32 tableId) const;
     ui64 GetTableIndexSize(ui32 table) const;
     ui64 GetTableSearchHeight(ui32 table) const;
     ui64 EstimateRowSize(ui32 table) const;

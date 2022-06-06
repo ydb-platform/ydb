@@ -5,8 +5,7 @@
 #include <library/cpp/grpc/server/grpc_server.h>
 #include <library/cpp/actors/core/actorsystem.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 class TGRpcYdbLogStoreService
     : public NGrpc::TGrpcServiceBase<Ydb::LogStore::V1::LogStoreService>
@@ -31,5 +30,4 @@ private:
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };
 
-} // namespace NGRpcService
-} // namespace NKikimr
+}

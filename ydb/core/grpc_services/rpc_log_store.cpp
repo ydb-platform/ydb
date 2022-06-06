@@ -11,8 +11,7 @@
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.pb.h>
 
-namespace NKikimr {
-namespace NGRpcService {
+namespace NKikimr::NGRpcService {
 
 using namespace NActors;
 using namespace Ydb;
@@ -23,6 +22,8 @@ using TEvDescribeLogStoreRequest =
     TGrpcRequestOperationCall<Ydb::LogStore::DescribeLogStoreRequest, Ydb::LogStore::DescribeLogStoreResponse>;
 using TEvDropLogStoreRequest =
     TGrpcRequestOperationCall<Ydb::LogStore::DropLogStoreRequest, Ydb::LogStore::DropLogStoreResponse>;
+using TEvAlterLogStoreRequest =
+    TGrpcRequestOperationCall<Ydb::LogStore::AlterLogStoreRequest, Ydb::LogStore::AlterLogStoreResponse>;
 using TEvCreateLogTableRequest =
     TGrpcRequestOperationCall<Ydb::LogStore::CreateLogTableRequest, Ydb::LogStore::CreateLogTableResponse>;
 using TEvDescribeLogTableRequest =
@@ -32,10 +33,65 @@ using TEvDropLogTableRequest =
 using TEvAlterLogTableRequest =
     TGrpcRequestOperationCall<Ydb::LogStore::AlterLogTableRequest, Ydb::LogStore::AlterLogTableResponse>;
 
+bool ConvertCompressionFromPublicToInternal(const Ydb::LogStore::Compression& from,
+                                            NKikimrSchemeOp::TCompressionOptions& to, TString& error)
+{
+    switch (from.compression_codec()) {
+        case Ydb::LogStore::Compression::CODEC_PLAIN:
+            //to.SetCompressionCodec(NKikimrSchemeOp::ColumnCodecPlain);
+            error = "LogStores with no compression are disabled.";
+            return false;
+        case Ydb::LogStore::Compression::CODEC_LZ4:
+            to.SetCompressionCodec(NKikimrSchemeOp::ColumnCodecLZ4);
+            break;
+        case Ydb::LogStore::Compression::CODEC_ZSTD:
+            to.SetCompressionCodec(NKikimrSchemeOp::ColumnCodecZSTD);
+            break;
+        default:
+            break;
+    }
+    if (from.compression_level()) {
+        to.SetCompressionLevel(from.compression_level());
+    }
+    return true;
+}
+
+void ConvertCompressionFromInternalToPublic(const NKikimrSchemeOp::TCompressionOptions& from,
+                                            Ydb::LogStore::Compression& to)
+{
+    to.set_compression_codec(Ydb::LogStore::Compression::CODEC_LZ4); // LZ4 if not set
+    switch (from.GetCompressionCodec()) {
+        case NKikimrSchemeOp::ColumnCodecPlain:
+            to.set_compression_codec(Ydb::LogStore::Compression::CODEC_PLAIN);
+            break;
+        case NKikimrSchemeOp::ColumnCodecLZ4:
+            to.set_compression_codec(Ydb::LogStore::Compression::CODEC_LZ4);
+            break;
+        case NKikimrSchemeOp::ColumnCodecZSTD:
+            to.set_compression_codec(Ydb::LogStore::Compression::CODEC_ZSTD);
+            break;
+        default:
+            break;
+    }
+    to.set_compression_level(from.GetCompressionLevel());
+}
+
 bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikimrSchemeOp::TColumnTableSchema& to,
     Ydb::StatusIds::StatusCode& status, TString& error)
 {
+    status = Ydb::StatusIds::SCHEME_ERROR;
+
     to.MutableKeyColumnNames()->CopyFrom(from.primary_key());
+    THashSet<TString> key;
+    for (auto& column : from.primary_key()) {
+        key.insert(column);
+    }
+    if (key.empty()) {
+        error = "no columns in primary key";
+        return false;
+    }
+    TString firstKeyColumn = from.primary_key()[0];
+
     for (const auto& column : from.columns()) {
         auto* col = to.AddColumns();
         col->SetName(column.name());
@@ -45,8 +101,28 @@ bool ConvertSchemaFromPublicToInternal(const Ydb::LogStore::Schema& from, NKikim
         }
         auto typeName = NScheme::TypeName(typeId);
         col->SetType(typeName);
+
+        key.erase(column.name());
+        if (column.name() == firstKeyColumn && typeId != NYql::NProto::Timestamp) {
+            error = "not supported first PK column type for LogStore. Only Timestamp columns are allowed for now.";
+            return false;
+        }
     }
+    if (!key.empty()) {
+        error = "unknown cloumn in primary key";
+        return false;
+    }
+
+    if (from.has_default_compression()) {
+        auto& from_compression = from.default_compression();
+        auto* to_compression = to.MutableDefaultCompression();
+        if (!ConvertCompressionFromPublicToInternal(from_compression, *to_compression, error)) {
+            return false;
+        }
+    }
+
     to.SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    status = {};
     return true;
 }
 
@@ -77,6 +153,10 @@ bool ConvertSchemaFromInternalToPublic(const NKikimrSchemeOp::TColumnTableSchema
                 return false;
             }
         }
+    }
+
+    if (from.HasDefaultCompression()) {
+        ConvertCompressionFromInternalToPublic(from.GetDefaultCompression(), *to.mutable_default_compression());
     }
     return true;
 }
@@ -133,6 +213,14 @@ private:
                 LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
                 return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
             }
+            for (const auto& tier : req->tiers()) {
+                auto* toTier = toSchemaPreset->MutableSchema()->AddStorageTiers();
+                toTier->SetName(tier.name());
+                if (!ConvertCompressionFromPublicToInternal(tier.compression(), *toTier->MutableCompression(), error)) {
+                    LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
+                    return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                }
+            }
         }
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }
@@ -180,6 +268,8 @@ private:
                 ConvertDirectoryEntry(pathDescription.GetSelf(), selfEntry, true);
                 const auto& storeDescription = pathDescription.GetColumnStoreDescription();
                 describeLogStoreResult.set_column_shard_count(storeDescription.GetColumnShardCount());
+
+                bool firstPreset = true;
                 for (const auto& schemaPreset : storeDescription.GetSchemaPresets()) {
                     auto* toSchemaPreset = describeLogStoreResult.add_schema_presets();
                     toSchemaPreset->set_name(schemaPreset.GetName());
@@ -188,6 +278,15 @@ private:
                     if (!ConvertSchemaFromInternalToPublic(schemaPreset.GetSchema(), *toSchemaPreset->mutable_schema(), status, error)) {
                         LOG_DEBUG(ctx, NKikimrServices::GRPC_SERVER, "LogStore schema error: %s", error.c_str());
                         return Reply(status, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                    }
+                    if (firstPreset) {
+                        // Preset's tiers are the same. We take first ones.
+                        firstPreset = false;
+                        for (auto& tier : schemaPreset.GetSchema().GetStorageTiers()) {
+                            auto* to = describeLogStoreResult.add_tiers();
+                            to->set_name(tier.GetName());
+                            ConvertCompressionFromInternalToPublic(tier.GetCompression(), *to->mutable_compression());
+                        }
                     }
                 }
                 return ReplyWithResult(Ydb::StatusIds::SUCCESS, describeLogStoreResult, ctx);
@@ -268,6 +367,32 @@ private:
     void ReplyWithResult(StatusIds::StatusCode status, const TActorContext &ctx) {
         this->Request_->ReplyWithYdbStatus(status);
         this->Die(ctx);
+    }
+};
+
+class TAlterLogStoreRPC : public TRpcSchemeRequestActor<TAlterLogStoreRPC, TEvAlterLogStoreRequest> {
+    using TBase = TRpcSchemeRequestActor<TAlterLogStoreRPC, TEvAlterLogStoreRequest>;
+
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TAlterLogStoreRPC(IRequestOpCtx* request)
+        : TBase(request)
+    {}
+
+    void Bootstrap(const TActorContext &ctx) {
+        TBase::Bootstrap(ctx);
+
+        SendProposeRequest(ctx);
+        Become(&TAlterLogStoreRPC::StateWork);
+    }
+
+private:
+    void SendProposeRequest(const TActorContext &ctx) {
+        return Reply(StatusIds::UNSUPPORTED, "Alter LogStore is not implemented",
+                     NKikimrIssues::TIssuesIds::UNEXPECTED, ctx);
     }
 };
 
@@ -523,6 +648,10 @@ void DoDropLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProv
     TActivationContext::AsActorContext().Register(new TDropLogStoreRPC(p.release()));
 }
 
+void DoAlterLogStoreRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TAlterLogStoreRPC(p.release()));
+}
+
 
 void DoCreateLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TCreateLogTableRPC(p.release()));
@@ -540,5 +669,4 @@ void DoAlterLogTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
     TActivationContext::AsActorContext().Register(new TAlterLogTableRPC(p.release()));
 }
 
-} // namespace NKikimr
-} // namespace NGRpcService
+}

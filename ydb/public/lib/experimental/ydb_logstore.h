@@ -4,19 +4,42 @@
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 
-namespace Ydb {
-namespace LogStore {
+namespace Ydb::LogStore {
 
 class Schema;
+class Compression;
 class CreateLogStoreRequest;
 class CreateLogTableRequest;
 class DescribeLogStoreResult;
 class DescribeLogTableResult;
 
-}}
+}
 
-namespace NYdb {
-namespace NLogStore {
+namespace NYdb::NLogStore {
+
+using NTable::TTtlSettings;
+using NTable::TAlterTtlSettings;
+
+enum class EColumnCompression {
+    None,
+    LZ4,
+    ZSTD
+};
+
+struct TCompression {
+    EColumnCompression Codec = EColumnCompression::LZ4;
+    TMaybe<int> Level;
+
+    void SerializeTo(Ydb::LogStore::Compression& compression) const;
+};
+
+struct TTierConfig {
+    TCompression Compression;
+};
+
+struct TTier {
+    TTtlSettings Eviction;
+};
 
 struct TCreateLogStoreSettings : public TOperationRequestSettings<TCreateLogStoreSettings> {
     using TSelf = TCreateLogStoreSettings;
@@ -28,6 +51,10 @@ struct TDropLogStoreSettings : public TOperationRequestSettings<TDropLogStoreSet
 
 struct TDescribeLogStoreSettings : public TOperationRequestSettings<TDescribeLogStoreSettings> {
     using TSelf = TDescribeLogStoreSettings;
+};
+
+struct TAlterLogStoreSettings : public TOperationRequestSettings<TAlterLogStoreSettings> {
+    using TSelf = TAlterLogStoreSettings;
 };
 
 struct TCreateLogTableSettings : public TOperationRequestSettings<TCreateLogTableSettings> {
@@ -42,9 +69,6 @@ struct TDescribeLogTableSettings : public TOperationRequestSettings<TDescribeLog
     using TSelf = TDescribeLogTableSettings;
 };
 
-using NTable::TTtlSettings;
-using NTable::TAlterTtlSettings;
-
 struct TAlterLogTableSettings : public TOperationRequestSettings<TAlterLogTableSettings> {
     using TSelf = TAlterLogTableSettings;
 
@@ -58,9 +82,11 @@ TType MakeColumnType(EPrimitiveType primitiveType);
 
 class TSchema {
 public:
-    TSchema(const TVector<TColumn>& columns = {}, const TVector<TString> primaryKeyColumns = {})
+    TSchema(const TVector<TColumn>& columns = {}, const TVector<TString> primaryKeyColumns = {},
+            const TCompression& defaultCompression = {})
         : Columns(columns)
         , PrimaryKeyColumns(primaryKeyColumns)
+        , DefaultCompression(defaultCompression)
     {}
 
     explicit TSchema(const Ydb::LogStore::Schema& schema);
@@ -73,14 +99,20 @@ public:
     const TVector<TString>& GetPrimaryKeyColumns() const {
         return PrimaryKeyColumns;
     }
+    const TCompression GetDefaultCompression() const {
+        return DefaultCompression;
+    }
+
 private:
     TVector<TColumn> Columns;
     TVector<TString> PrimaryKeyColumns;
+    TCompression DefaultCompression;
 };
 
 class TLogStoreDescription {
 public:
-    TLogStoreDescription(ui32 columnShardCount, const THashMap<TString, TSchema>& schemaPresets);
+    TLogStoreDescription(ui32 columnShardCount, const THashMap<TString, TSchema>& schemaPresets,
+                         const THashMap<TString, TTierConfig>& tierConfigs = {});
     TLogStoreDescription(Ydb::LogStore::DescribeLogStoreResult&& desc, const TDescribeLogStoreSettings& describeSettings);
     void SerializeTo(Ydb::LogStore::CreateLogStoreRequest& request) const;
     const THashMap<TString, TSchema>& GetSchemaPresets() const {
@@ -89,7 +121,6 @@ public:
     ui32 GetColumnShardCount() const {
         return ColumnShardCount;
     }
-
     const TString& GetOwner() const {
         return Owner;
     }
@@ -99,6 +130,9 @@ public:
     const TVector<NScheme::TPermissions>& GetEffectivePermissions() const {
         return EffectivePermissions;
     }
+    const THashMap<TString, TTierConfig>& GetTierConfigs() const {
+        return TierConfigs;
+    }
 
 private:
     ui32 ColumnShardCount;
@@ -106,6 +140,7 @@ private:
     TString Owner;
     TVector<NScheme::TPermissions> Permissions;
     TVector<NScheme::TPermissions> EffectivePermissions;
+    THashMap<TString, TTierConfig> TierConfigs;
 };
 
 class TLogTableDescription {
@@ -114,6 +149,8 @@ public:
         ui32 columnShardCount, const TMaybe<TTtlSettings>& ttlSettings = {});
     TLogTableDescription(const TSchema& schema, const TVector<TString>& shardingColumns,
         ui32 columnShardCount, const TMaybe<TTtlSettings>& ttlSettings = {});
+    TLogTableDescription(const TString& schemaPresetName, const TVector<TString>& shardingColumns,
+        ui32 columnShardCount, const THashMap<TString, TTier>& tiers);
     TLogTableDescription(Ydb::LogStore::DescribeLogTableResult&& desc, const TDescribeLogTableSettings& describeSettings);
     void SerializeTo(Ydb::LogStore::CreateLogTableRequest& request) const;
     const TSchema& GetSchema() const {
@@ -145,6 +182,7 @@ private:
     const TVector<TString> ShardingColumns;
     const ui32 ColumnShardCount;
     const TMaybe<TTtlSettings> TtlSettings;
+    THashMap<TString, TTier> Tiers;
     TString Owner;
     TVector<NScheme::TPermissions> Permissions;
     TVector<NScheme::TPermissions> EffectivePermissions;
@@ -195,6 +233,8 @@ public:
 
     TAsyncStatus DropLogStore(const TString& path, const TDropLogStoreSettings& settings = TDropLogStoreSettings());
 
+    TAsyncStatus AlterLogStore(const TString& path, const TAlterLogStoreSettings& settings = TAlterLogStoreSettings());
+
     TAsyncStatus CreateLogTable(const TString& path, TLogTableDescription&& tableDesc,
         const TCreateLogTableSettings& settings = TCreateLogTableSettings());
 
@@ -209,4 +249,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-}}
+}

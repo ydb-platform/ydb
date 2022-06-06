@@ -9,6 +9,7 @@ service LogStoreService {
     rpc CreateLogStore(CreateLogStoreRequest) returns (CreateLogStoreResponse);
     rpc DescribeLogStore(DescribeLogStoreRequest) returns (DescribeLogStoreResponse);
     rpc DropLogStore(DropLogStoreRequest) returns (DropLogStoreResponse);
+    rpc AlterLogStore(AlterLogStoreRequest) returns (AlterLogStoreResponse);
 
     rpc CreateLogTable(CreateLogTableRequest) returns (CreateLogTableResponse);
     rpc DescribeLogTable(DescribeLogTableRequest) returns (DescribeLogTableResponse);

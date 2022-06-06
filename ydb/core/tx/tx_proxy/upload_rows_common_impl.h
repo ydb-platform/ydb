@@ -110,7 +110,7 @@ private:
     bool Finished;
 
     TAutoPtr<NSchemeCache::TSchemeCacheRequest> ResolvePartitionsResult;
-    TAutoPtr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
+    std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> ResolveNamesResult;
     TSerializedCellVec MinKey;
     TSerializedCellVec MaxKey;
     TVector<NScheme::TTypeId> KeyColumnTypes;
@@ -119,7 +119,7 @@ private:
     THashSet<TTabletId> ShardRepliesLeft;
     Ydb::StatusIds::StatusCode Status;
     TString ErrorMessage;
-    NYql::TIssues Issues;
+    std::shared_ptr<NYql::TIssues> Issues = std::make_shared<NYql::TIssues>();
     NLongTxService::TLongTxId LongTxId;
     NThreading::TFuture<Ydb::LongTx::WriteResponse> WriteBatchResult;
 
@@ -186,7 +186,7 @@ public:
 
 protected:
     const NSchemeCache::TSchemeCacheNavigate* GetResolveNameResult() const {
-        return ResolveNamesResult.Get();
+        return ResolveNamesResult.get();
     }
 
     const TKeyDesc* GetKeyRange() const {
@@ -277,6 +277,7 @@ private:
 
     bool BuildSchema(const NActors::TActorContext& ctx, TString& errorMessage, bool makeYqbSchema) {
         Y_UNUSED(ctx);
+        Y_VERIFY(ResolveNamesResult);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 
@@ -480,7 +481,7 @@ private:
                 Sprintf("Table '%s' is a system view. Bulk upsert is not supported.", GetTable().c_str()), ctx);
         }
 
-        ResolveNamesResult = ev->Get()->Request;
+        ResolveNamesResult.reset(ev->Get()->Request.Release());
 
         bool makeYdbSchema = isOlapTable || (GetSourceType() != EUploadSource::ProtoValues);
         TString errorMessage;
@@ -627,6 +628,8 @@ private:
     }
 
     std::vector<TString> GetOutputColumns(const NActors::TActorContext& ctx) {
+        Y_VERIFY(ResolveNamesResult);
+
         if (ResolveNamesResult->ErrorCount > 0) {
             ReplyWithError(Ydb::StatusIds::SCHEME_ERROR, "Failed to get table schema", ctx);
             return {};
@@ -673,11 +676,13 @@ private:
     }
 
     void WriteBatchInLongTx(const TActorContext& ctx) {
+        Y_VERIFY(ResolveNamesResult);
         Y_VERIFY(Batch);
+
         TBase::Become(&TThis::StateWaitWriteBatchResult);
         TString dedupId = LongTxId.ToString(); // TODO: is this a proper dedup_id?
         NGRpcService::DoLongTxWriteSameMailbox(ctx, ctx.SelfID, LongTxId, dedupId,
-            GetDatabase(), GetTable(), *ResolveNamesResult, Batch, Issues);
+            GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {
@@ -698,7 +703,8 @@ private:
     void HandleWriteBatchResult(TEvents::TEvCompleted::TPtr& ev, const TActorContext& ctx) {
         Ydb::StatusIds::StatusCode status = (Ydb::StatusIds::StatusCode)ev->Get()->Status;
         if (status != Ydb::StatusIds::SUCCESS) {
-            for (const auto& issue: Issues) {
+            Y_VERIFY(Issues);
+            for (const auto& issue: *Issues) {
                 RaiseIssue(issue);
             }
             Finished = true;
@@ -767,6 +773,7 @@ private:
 
     void ResolveShards(const NActors::TActorContext& ctx) {
         Y_VERIFY(!GetRows().empty());
+        Y_VERIFY(ResolveNamesResult);
 
         auto& entry = ResolveNamesResult->ResultSet.front();
 

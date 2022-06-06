@@ -346,13 +346,13 @@ protected:
         LongTxId = longTxId;
     }
 
-    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate* resp) {
-        if (resp->ErrorCount > 0) {
+    void ProceedWithSchema(const NSchemeCache::TSchemeCacheNavigate& resp) {
+        if (resp.ErrorCount > 0) {
             // TODO: map to a correct error
             return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "There was an error during table query");
         }
 
-        auto& entry = resp->ResultSet[0];
+        auto& entry = resp.ResultSet[0];
 
         if (UserToken && entry.SecurityObject) {
             const ui32 access = NACLib::UpdateRow;
@@ -514,8 +514,7 @@ private:
             for (auto& issue : issues) {
                 RaiseIssue(issue);
             }
-            ReplyError(msg->Record.GetStatus());
-            return PassAway();
+            return ReplyError(msg->Record.GetStatus());
         }
 
         ReplySuccess();
@@ -609,7 +608,8 @@ public:
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
-        ProceedWithSchema(resp);
+        Y_VERIFY(resp);
+        ProceedWithSchema(*resp);
     }
 
 private:
@@ -666,18 +666,21 @@ public:
 
     explicit TLongTxWriteInternal(const TActorId& replyTo, const TLongTxId& longTxId, const TString& dedupId,
             const TString& databaseName, const TString& path,
-            const NSchemeCache::TSchemeCacheNavigate& navigateResult,
-            std::shared_ptr<arrow::RecordBatch> batch, NYql::TIssues& issues)
+            std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
+            std::shared_ptr<arrow::RecordBatch> batch,
+            std::shared_ptr<NYql::TIssues> issues)
         : TBase(databaseName, path, TString(), longTxId, dedupId)
         , ReplyTo(replyTo)
         , NavigateResult(navigateResult)
         , Batch(batch)
         , Issues(issues)
     {
+        Y_VERIFY(Issues);
     }
 
     void Bootstrap() {
-        ProceedWithSchema(&NavigateResult);
+        Y_VERIFY(NavigateResult);
+        ProceedWithSchema(*NavigateResult);
     }
 
 protected:
@@ -694,12 +697,12 @@ protected:
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
-        Issues.AddIssue(issue);
+        Issues->AddIssue(issue);
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode status, const TString& message = TString()) override {
         if (!message.empty()) {
-            Issues.AddIssue(NYql::TIssue(message));
+            Issues->AddIssue(NYql::TIssue(message));
         }
         this->Send(ReplyTo, new TEvents::TEvCompleted(0, status));
         PassAway();
@@ -712,16 +715,17 @@ protected:
 
 private:
     const TActorId ReplyTo;
-    const NSchemeCache::TSchemeCacheNavigate& NavigateResult;
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> NavigateResult;
     std::shared_ptr<arrow::RecordBatch> Batch;
-    NYql::TIssues& Issues;
+    std::shared_ptr<NYql::TIssues> Issues;
 };
 
 
 TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
-    const TString& databaseName, const TString& path, const NSchemeCache::TSchemeCacheNavigate& navigateResult,
-    std::shared_ptr<arrow::RecordBatch> batch, NYql::TIssues& issues)
+    const TString& databaseName, const TString& path,
+    std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult,
+    std::shared_ptr<arrow::RecordBatch> batch, std::shared_ptr<NYql::TIssues> issues)
 {
     return ctx.RegisterWithSameMailbox(
         new TLongTxWriteInternal(replyTo, longTxId, dedupId, databaseName, path, navigateResult, batch, issues));

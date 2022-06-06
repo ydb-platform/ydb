@@ -86,30 +86,48 @@ public:
     std::vector<ui32> MakeSharding(const std::shared_ptr<arrow::RecordBatch>& batch,
                                    const TVector<TString>& shardingColumns) const
     {
-        if (shardingColumns.size() != 2) {
+        if (shardingColumns.size() < 2) {
             return {};
         }
 
-        auto tsFiled = batch->schema()->GetFieldByName(shardingColumns[0]);
-        auto uidFiled = batch->schema()->GetFieldByName(shardingColumns[1]);
         auto tsArray = batch->GetColumnByName(shardingColumns[0]);
-        auto uidArray = batch->GetColumnByName(shardingColumns[1]);
-        if (!tsArray || !uidArray || !tsFiled || !uidFiled ||
-            (tsFiled->type()->id() != arrow::Type::TIMESTAMP) ||
-            (uidFiled->type()->id() != arrow::Type::STRING)) {
+        if (!tsArray || tsArray->type_id() != arrow::Type::TIMESTAMP) {
             return {};
+        }
+
+        std::vector<std::shared_ptr<arrow::Array>> extraColumns;
+        extraColumns.reserve(shardingColumns.size() - 1);
+
+        for (size_t i = 1; i < shardingColumns.size(); ++i) {
+            auto array = batch->GetColumnByName(shardingColumns[i]);
+            if (!array) {
+                return {};
+            }
+            extraColumns.emplace_back(array);
         }
 
         auto tsColumn = std::static_pointer_cast<arrow::TimestampArray>(tsArray);
-        auto uidColumn = std::static_pointer_cast<arrow::StringArray>(uidArray);
         std::vector<ui32> out;
         out.reserve(batch->num_rows());
 
-        for (int row = 0; row < batch->num_rows(); ++row) {
-            ui32 shardNo = ShardNo(tsColumn->Value(row), uidColumn->GetView(row));
-            Y_VERIFY(shardNo < ShardsCount);
+        if (extraColumns.size() == 1 && extraColumns[0]->type_id() == arrow::Type::STRING) {
+            auto column = std::static_pointer_cast<arrow::StringArray>(extraColumns[0]);
 
-            out.emplace_back(shardNo);
+            for (int row = 0; row < batch->num_rows(); ++row) {
+                ui32 shardNo = ShardNo(tsColumn->Value(row), column->GetView(row));
+                out.emplace_back(shardNo);
+            }
+        } else {
+            std::string concat;
+            for (int row = 0; row < batch->num_rows(); ++row) {
+                concat.clear();
+                for (auto& column : extraColumns) {
+                    AppendField(column, row, concat);
+                }
+
+                ui32 shardNo = ShardNo(tsColumn->Value(row), concat);
+                out.emplace_back(shardNo);
+            }
         }
 
         return out;
@@ -120,6 +138,32 @@ private:
     ui32 NumActive;
     ui64 TsMin;
     ui64 ChangePeriod;
+
+    static void AppendField(const std::shared_ptr<arrow::Array>& array, int row, std::string& concat) {
+        NArrow::SwitchType(array->type_id(), [&](const auto& type) {
+            using TWrap = std::decay_t<decltype(type)>;
+            using T = typename TWrap::T;
+            using TArray = typename arrow::TypeTraits<T>::ArrayType;
+
+            if (!array->IsNull(row)) {
+                auto& typedArray = static_cast<const TArray&>(*array);
+                auto value = typedArray.GetView(row);
+                if constexpr (arrow::has_string_view<T>()) {
+                    concat.append(value.data(), value.size());
+                } else if constexpr (arrow::has_c_type<T>()) {
+                    if constexpr (arrow::is_physical_integer_type<T>()) {
+                        concat.append(reinterpret_cast<const char*>(&value), sizeof(value));
+                    } else {
+                        // Do not use bool or floats for sharding
+                        static_assert(arrow::is_boolean_type<T>() || arrow::is_floating_type<T>());
+                    }
+                } else {
+                    static_assert(arrow::is_decimal_type<T>());
+                }
+            }
+            return true;
+        });
+    }
 };
 
 }

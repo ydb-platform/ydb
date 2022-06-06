@@ -12,6 +12,13 @@
 
 using namespace NYdb;
 
+namespace {
+std::vector<TString> testShardingVariants = {
+    R"(["timestamp", "uid"])",
+    R"(["timestamp", "resource_type", "resource_id", "uid"])"
+};
+}
+
 Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     NMiniKQL::IFunctionRegistry* UdfFrFactory(const NKikimr::NScheme::TTypeRegistry& typeRegistry) {
@@ -40,10 +47,11 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         return connection;
     }
 
-    void CreateOlapTable(const TServerSettings& settings, const TString& tableName, ui32 shards = 2) {
+    void CreateOlapTable(const TServerSettings& settings, const TString& tableName, ui32 numShards = 2,
+                         const TString shardingColumns = R"(["timestamp", "uid"])")
+    {
         const char * tableDescr = R"(
             Name: "OlapStore"
-            #MetaShardCount: 1
             ColumnShardCount: 4
             SchemaPresets {
                 Name: "default"
@@ -67,16 +75,18 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         TClient annoyingClient(settings);
         NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
+
         status = annoyingClient.CreateOlapTable("/Root/OlapStore", Sprintf(R"(
             Name: "%s"
             ColumnShardCount : %d
             Sharding {
                 HashSharding {
                     Function: HASH_FUNCTION_CLOUD_LOGS
-                    Columns: ["timestamp", "uid"]
+                    Columns: %s
                 }
             }
-        )", tableName.c_str(), shards));
+        )", tableName.c_str(), numShards, shardingColumns.c_str()));
+
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
     }
 
@@ -197,8 +207,8 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     // Create OLTP and OLAP tables with the same set of columns and same PK
-    void CreateTestTables(const TServerSettings& settings, const TString& tableName) {
-        CreateOlapTable(settings, tableName);
+    void CreateTestTables(const TServerSettings& settings, const TString& tableName, const TString& sharding) {
+        CreateOlapTable(settings, tableName, 2, sharding);
         CreateTable(settings, "oltp_" + tableName);
     }
 
@@ -273,7 +283,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    Y_UNIT_TEST(ManyTables) {
+    void TestManyTables(const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
@@ -281,9 +291,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
         auto connection = ConnectToServer(server);
 
-        CreateTestTables(*server.ServerSettings, "log1");
-        CreateTestTables(*server.ServerSettings, "log2");
-        CreateTestTables(*server.ServerSettings, "log3");
+        CreateTestTables(*server.ServerSettings, "log1", sharding);
+        CreateTestTables(*server.ServerSettings, "log2", sharding);
+        CreateTestTables(*server.ServerSettings, "log3", sharding);
 
         size_t rowCount = WriteTestRows(connection, "log1", 0, 1, 50);
         UNIT_ASSERT_VALUES_EQUAL(rowCount, 50);
@@ -305,7 +315,13 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         CompareQueryResults(connection, "log1", "SELECT count(*) FROM <TABLE>;");
     }
 
-    Y_UNIT_TEST(DuplicateRows) {
+    Y_UNIT_TEST(ManyTables) {
+        for (auto& sharding : testShardingVariants) {
+            TestManyTables(sharding);
+        }
+    }
+
+    void TestDuplicateRows(const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
@@ -314,7 +330,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         auto connection = ConnectToServer(server);
         NYdb::NTable::TTableClient client(connection);
 
-        CreateOlapTable(*server.ServerSettings, "log1");
+        CreateOlapTable(*server.ServerSettings, "log1", 2, sharding);
 
         const ui64 batchCount = 100;
         const ui64 batchSize = 1000;
@@ -350,14 +366,20 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         }
     }
 
-    void TestQuery(const TString& query) {
+    Y_UNIT_TEST(DuplicateRows) {
+        for (auto& sharding : testShardingVariants) {
+            TestDuplicateRows(sharding);
+        }
+    }
+
+    void TestQuery(const TString& query, const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, &UdfFrFactory);
 
         auto connection = ConnectToServer(server);
 
-        CreateTestTables(*server.ServerSettings, "log1");
+        CreateTestTables(*server.ServerSettings, "log1", sharding);
 
         // EnableDebugLogs(server);
 
@@ -375,46 +397,62 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
     }
 
     Y_UNIT_TEST(LogLast50) {
-        TestQuery(R"(
+        TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogLast50ByResource) {
-        TestQuery(R"(
+        TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
               WHERE resource_type == 'app' AND resource_id == 'resource_1'
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogGrepNonExisting) {
-        TestQuery(R"(
+        TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
               WHERE message LIKE '%non-exisiting string%'
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogGrepExisting) {
-        TestQuery(R"(
+        TString query(R"(
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`
               FROM <TABLE>
               WHERE message LIKE '%message%'
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogNonExistingRequest) {
-        TestQuery(R"(
+        TString query(R"(
             $request_id = '0xfaceb00c';
 
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`, `request_id`
@@ -423,10 +461,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogExistingRequest) {
-        TestQuery(R"(
+        TString query(R"(
             $request_id = '1f';
 
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`, `request_id`
@@ -435,10 +477,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogNonExistingUserId) {
-        TestQuery(R"(
+        TString query(R"(
             $user_id = '111';
 
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`, `json_payload`
@@ -447,10 +493,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogExistingUserId) {
-        TestQuery(R"(
+        TString query(R"(
             $user_id = '1000042';
 
             SELECT `timestamp`, `resource_type`, `resource_id`, `uid`, `level`, `message`, `json_payload`
@@ -459,10 +509,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogPagingBefore) {
-        TestQuery(R"(
+        TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
             $ts = CAST(3000000 AS Timestamp);
@@ -477,10 +531,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogPagingBetween) {
-        TestQuery(R"(
+        TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
             $ts1 = CAST(2500000 AS Timestamp);
@@ -501,10 +559,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogPagingAfter) {
-        TestQuery(R"(
+        TString query(R"(
             PRAGMA kikimr.OptEnablePredicateExtract = "true";
 
             $ts = CAST(3000000 AS Timestamp);
@@ -525,19 +587,27 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
               FROM $next50
               ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC;
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogCountByResource) {
-        TestQuery(R"(
+        TString query(R"(
             SELECT count(*)
               FROM <TABLE>
               WHERE resource_type == 'app' AND resource_id == 'resource_1'
               LIMIT 50
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogWithUnionAllAscending) {
-        TestQuery(R"(
+        TString query(R"(
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
                 $until = CAST(4100000 AS Timestamp);
@@ -562,10 +632,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                 $data = (SELECT * FROM $part0 UNION ALL SELECT * FROM $part1 UNION ALL SELECT * FROM $part2 UNION ALL SELECT * FROM $part3 UNION ALL SELECT * FROM $part4 UNION ALL SELECT * FROM $part5 UNION ALL SELECT * FROM $part6);
                 SELECT * FROM $data ORDER BY `timestamp` ASC, `resource_type` ASC, `resource_id` ASC, `uid` ASC LIMIT $limit;
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogWithUnionAllDescending) {
-        TestQuery(R"(
+        TString query(R"(
                 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
                 $until = CAST(4093000 AS Timestamp);
@@ -590,10 +664,14 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                 $data = (SELECT * FROM $part0 UNION ALL SELECT * FROM $part1 UNION ALL SELECT * FROM $part2 UNION ALL SELECT * FROM $part3 UNION ALL SELECT * FROM $part4 UNION ALL SELECT * FROM $part5 UNION ALL SELECT * FROM $part6);
                 SELECT * FROM $data ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC LIMIT $limit;
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 
     Y_UNIT_TEST(LogTsRangeDescending) {
-        TestQuery(R"(
+        TString query(R"(
                 --PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
                 $until = CAST(4093000 AS Timestamp);
@@ -608,5 +686,9 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
                     `timestamp` >= $since
                 ORDER BY `timestamp` DESC, `resource_type` DESC, `resource_id` DESC, `uid` DESC LIMIT $limit;
             )");
+
+        for (auto& sharding : testShardingVariants) {
+            TestQuery(query, sharding);
+        }
     }
 }

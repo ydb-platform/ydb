@@ -1351,6 +1351,11 @@
                 "ColumnId": 26,
                 "ColumnName": "SecurityStateVersion",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "TableCdcStreamsLimit",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -1382,7 +1387,8 @@
                     23,
                     24,
                     25,
-                    26
+                    26,
+                    27
                 ],
                 "RoomID": 0,
                 "Codec": 0,

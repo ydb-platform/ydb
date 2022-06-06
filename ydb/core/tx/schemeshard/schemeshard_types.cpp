@@ -28,6 +28,9 @@ TSchemeLimits::TSchemeLimits(const NKikimrScheme::TSchemeLimits &proto) {
     if (proto.HasMaxTableIndices()) {
         MaxTableIndices = proto.GetMaxTableIndices();
     }
+    if (proto.HasMaxTableCdcStreams()) {
+        MaxTableCdcStreams = proto.GetMaxTableCdcStreams();
+    }
     if (proto.HasMaxShards()) {
         MaxShards = proto.GetMaxShards();
     }
@@ -60,6 +63,7 @@ NKikimrScheme::TSchemeLimits TSchemeLimits::AsProto() const {
     result.SetMaxTableColumnNameLength(MaxTableColumnNameLength);
     result.SetMaxTableKeyColumns(MaxTableKeyColumns);
     result.SetMaxTableIndices(MaxTableIndices);
+    result.SetMaxTableCdcStreams(MaxTableCdcStreams);
     result.SetMaxShards(MaxShards);
     result.SetMaxShardsInPath(MaxShardsInPath);
     result.SetMaxConsistentCopyTargets(MaxConsistentCopyTargets);

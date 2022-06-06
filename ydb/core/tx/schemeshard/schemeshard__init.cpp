@@ -1475,6 +1475,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     rootLimits.MaxTableColumnNameLength = row.GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(rootLimits.MaxTableColumnNameLength);
                     rootLimits.MaxTableKeyColumns = row.GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(rootLimits.MaxTableKeyColumns);
                     rootLimits.MaxTableIndices = row.GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(rootLimits.MaxTableIndices);
+                    rootLimits.MaxTableCdcStreams = row.GetValueOrDefault<Schema::SubDomains::TableCdcStreamsLimit>(rootLimits.MaxTableCdcStreams);
                     rootLimits.MaxShards = row.GetValueOrDefault<Schema::SubDomains::ShardsLimit>(rootLimits.MaxShards);
                     rootLimits.MaxShardsInPath = row.GetValueOrDefault<Schema::SubDomains::PathShardsLimit>(rootLimits.MaxShardsInPath);
                     rootLimits.MaxConsistentCopyTargets = row.GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(rootLimits.MaxConsistentCopyTargets);
@@ -1533,6 +1534,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     limits.MaxTableColumnNameLength = rowset.GetValueOrDefault<Schema::SubDomains::TableColumnNameLengthLimit>(limits.MaxTableColumnNameLength);
                     limits.MaxTableKeyColumns = rowset.GetValueOrDefault<Schema::SubDomains::TableKeyColumnsLimit>(limits.MaxTableKeyColumns);
                     limits.MaxTableIndices = rowset.GetValueOrDefault<Schema::SubDomains::TableIndicesLimit>(limits.MaxTableIndices);
+                    limits.MaxTableCdcStreams = rowset.GetValueOrDefault<Schema::SubDomains::TableCdcStreamsLimit>(limits.MaxTableCdcStreams);
                     limits.MaxShards = rowset.GetValueOrDefault<Schema::SubDomains::ShardsLimit>(limits.MaxShards);
                     limits.MaxShardsInPath = rowset.GetValueOrDefault<Schema::SubDomains::PathShardsLimit>(limits.MaxShardsInPath);
                     limits.MaxConsistentCopyTargets = rowset.GetValueOrDefault<Schema::SubDomains::ConsistentCopyingTargetsLimit>(limits.MaxConsistentCopyTargets);

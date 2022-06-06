@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 
+#include <util/string/printf.h>
+
 using namespace NKikimr;
 using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
@@ -463,6 +465,67 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
 
         TestMoveTable(runtime, ++txId, "/MyRoot/Table", "/MyRoot/TableMoved", {NKikimrScheme::StatusPreconditionFailed});
+    }
+
+    Y_UNIT_TEST(CheckSchemeLimits) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        // index should not affect stream limits
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint64" }
+              Columns { Name: "indexed" Type: "Uint64" }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "Index"
+              KeyColumnNames: ["indexed"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TSchemeLimits limits;
+        limits.MaxTableCdcStreams = 2;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        for (ui32 i = 0; i <= limits.MaxTableCdcStreams; ++i) {
+            const auto status = i < limits.MaxTableCdcStreams
+                ? NKikimrScheme::StatusAccepted
+                : NKikimrScheme::StatusResourceExhausted;
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%u"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )", i), {status});
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        limits.MaxChildrenInDir = limits.MaxTableCdcStreams + 1 + 1 /* for index */;
+        limits.MaxTableCdcStreams = limits.MaxChildrenInDir + 1;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        for (ui32 i = limits.MaxTableCdcStreams; i <= limits.MaxChildrenInDir; ++i) {
+            const auto status = i < limits.MaxChildrenInDir
+                ? NKikimrScheme::StatusAccepted
+                : NKikimrScheme::StatusResourceExhausted;
+
+            TestCreateCdcStream(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "Table"
+                StreamDescription {
+                  Name: "Stream%u"
+                  Mode: ECdcStreamModeKeysOnly
+                  Format: ECdcStreamFormatProto
+                }
+            )", i), {status});
+            env.TestWaitNotification(runtime, txId);
+        }
     }
 
 } // TCdcStreamTests

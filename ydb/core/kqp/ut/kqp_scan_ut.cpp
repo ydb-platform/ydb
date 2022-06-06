@@ -623,6 +623,48 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         test(false);
     }
 
+    Y_UNIT_TEST(Join4) {
+        TKikimrRunner kikimr(AppCfg());
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTables(kikimr);
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+            CREATE TABLE Tmp (
+                Id Int32,
+                Value Uint64,
+                PRIMARY KEY(Id)
+            );
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            UPSERT INTO Tmp (Id, Value) VALUES
+                (100, 300),
+                (200, 300),
+                (300, 100),
+                (400, 300);
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync());
+
+        auto it = db.StreamExecuteScanQuery(R"(
+            SELECT t1.Name, t1.Amount, t2.Id
+            FROM Test AS t1
+            LEFT JOIN Tmp AS t2
+            ON t1.Amount = t2.Value;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+        CompareYson(R"([
+            [["Anna"];[3500u];#];
+            [["Paul"];[300u];[100]];
+            [["Paul"];[300u];[200]];
+            [["Paul"];[300u];[400]];
+            [["Tony"];[7200u];#]
+        ])", StreamResultToYson(it));
+    }
+
     Y_UNIT_TEST(LeftSemiJoinSimple) {
         TKikimrRunner kikimr(AppCfg());
         auto db = kikimr.GetTableClient();

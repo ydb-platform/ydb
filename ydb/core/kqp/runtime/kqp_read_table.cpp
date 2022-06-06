@@ -246,8 +246,7 @@ public:
     TKqpScanWideReadTableWrapperBase(TKqpScanComputeContext& computeCtx, std::vector<EValueRepresentation>&& representations)
         : TBase(this)
         , ComputeCtx(computeCtx)
-        , Representations(std::move(representations))
-    {}
+        , Representations(std::move(representations)) {}
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue* const* output) const {
         Y_UNUSED(ctx);
@@ -263,44 +262,42 @@ public:
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
         const auto size = GetAllColumnsSize();
-        ICodegeneratorInlineWideNode::TGettersList getters(size);
+
+        Row.resize(size);
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto valuesType = ArrayType::get(valueType, size);
-        const auto values = new AllocaInst(valuesType, 0U, "values", &ctx.Func->getEntryBlock().back());
+        const auto valuePtrType = PointerType::getUnqual(valueType);
+        const auto valuesPtr = CastInst::Create(Instruction::IntToPtr,
+            ConstantInt::get(Type::getInt64Ty(context), uintptr_t(Row.data())),
+            valuePtrType, "values", &ctx.Func->getEntryBlock().back());
 
-        const auto fieldsType = ArrayType::get(PointerType::getUnqual(valueType), size);
-        const auto fields = new AllocaInst(fieldsType, 0U, "fields", &ctx.Func->getEntryBlock().back());
-
+        ICodegeneratorInlineWideNode::TGettersList getters(size);
         const auto indexType = Type::getInt32Ty(context);
-        Value* init = UndefValue::get(fieldsType);
         for (auto i = 0U; i < size; ++i) {
-            const auto pointer = GetElementPtrInst::CreateInBounds(values,
-                    {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)},
-                    (TString("ptr_") += ToString(i)).c_str(),
-                    &ctx.Func->getEntryBlock().back());
-            init = InsertValueInst::Create(init, pointer, {i}, (TString("insert_") += ToString(i)).c_str(), &ctx.Func->getEntryBlock().back());
-
-            new StoreInst(ConstantInt::get(valueType, 0), pointer, &ctx.Func->getEntryBlock().back());
-
-            getters[i] = [i, indexType, values] (const TCodegenContext&, BasicBlock*& block) {
-                const auto loadPtr = GetElementPtrInst::CreateInBounds(values,
-                        {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)},
-                        (TString("loadPtr_") += ToString(i)).c_str(),
-                        block);
+            getters[i] = [i, valueType, valuesPtr, indexType] (const TCodegenContext&, BasicBlock*& block) {
+                const auto loadPtr = GetElementPtrInst::Create(valueType, valuesPtr,
+                    {ConstantInt::get(indexType, i)},
+                    (TString("loadPtr_") += ToString(i)).c_str(),
+                    block);
                 return new LoadInst(loadPtr, "load", block);
             };
         }
 
-        new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
+        const auto fieldsType = ArrayType::get(valuePtrType, size);
+        const auto fields = new AllocaInst(fieldsType, 0U, "fields", &ctx.Func->getEntryBlock().back());
 
-        for (ui32 i = 0U; i < size; ++i) {
-            const auto pointer = GetElementPtrInst::CreateInBounds(values,
-                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)},
-                (TString("ptr_") += ToString(i)).c_str(), block);
-            ValueCleanup(Representations[i], pointer, ctx, block);
-            new StoreInst(ConstantInt::get(valueType, 0), pointer, block);
+        Value* init = UndefValue::get(fieldsType);
+        for (auto i = 0U; i < size; ++i) {
+            const auto pointer = GetElementPtrInst::Create(valueType, valuesPtr,
+                    {ConstantInt::get(indexType, i)},
+                    (TString("ptr_") += ToString(i)).c_str(),
+                    &ctx.Func->getEntryBlock().back());
+
+            init = InsertValueInst::Create(init, pointer, {i}, (TString("insert_") += ToString(i)).c_str(),
+                &ctx.Func->getEntryBlock().back());
         }
+
+        new StoreInst(init, fields, &ctx.Func->getEntryBlock().back());
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TKqpScanWideReadTableWrapperBase::DoCalculate));
@@ -308,13 +305,6 @@ public:
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { self->getType(), ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
         const auto result = CallInst::Create(funcPtr, { self, ctx.Ctx, fields }, "fetch", block);
-
-        for (ui32 i = 0U; i < size; ++i) {
-            const auto pointer = GetElementPtrInst::CreateInBounds(values,
-                {ConstantInt::get(indexType, 0), ConstantInt::get(indexType, i)},
-                (TString("ptr_") += ToString(i)).c_str(), block);
-            ValueRelease(Representations[i], pointer, ctx, block);
-        }
 
         return {result, std::move(getters)};
     }
@@ -327,6 +317,7 @@ private:
     TKqpScanComputeContext& ComputeCtx;
     mutable TIntrusivePtr<IKqpTableReader> TableReader;
     const std::vector<EValueRepresentation> Representations;
+    mutable std::vector<NUdf::TUnboxedValue> Row;
 };
 
 class TKqpScanWideReadTableWrapper : public TKqpScanWideReadTableWrapperBase {

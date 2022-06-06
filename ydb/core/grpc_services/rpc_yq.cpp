@@ -1,10 +1,7 @@
-#include "grpc_request_proxy.h"
-#include "grpc_request_check_actor.h"
-
-#include "rpc_calls.h"
 #include "rpc_common.h"
 #include "rpc_deferrable.h"
 
+#include <ydb/core/grpc_services/service_yq.h>
 #include <ydb/core/yq/libs/audit/events/events.h>
 #include <ydb/core/yq/libs/audit/yq_audit_service.h>
 #include <ydb/core/yq/libs/control_plane_proxy/control_plane_proxy.h>
@@ -23,11 +20,21 @@ namespace NGRpcService {
 
 using namespace Ydb;
 
-template<class TEvRequest, class TEvImplRequest, class TEvImplResponse, class TResult>
-class TYandexQueryRPC : public TRpcOperationRequestActor<TYandexQueryRPC<TEvRequest, TEvImplRequest, TEvImplResponse, TResult>, TEvRequest> {
-private:
-    const TVector<TString>& Sids;
+template <typename RpcRequestType, typename EvRequestType, typename EvResponseType>
+class TYandexQueryRequestRPC : public TRpcOperationRequestActor<
+    TYandexQueryRequestRPC<RpcRequestType,EvRequestType,EvResponseType>, RpcRequestType> {
 
+public:
+    using TBase = TRpcOperationRequestActor<
+        TYandexQueryRequestRPC<RpcRequestType,EvRequestType,EvResponseType>,
+        RpcRequestType>;
+    using TBase::Become;
+    using TBase::Send;
+    using TBase::PassAway;
+    using TBase::Request_;
+    using TBase::GetProtoRequest;
+
+private:
     TString Token;
     TString FolderId;
     TString User;
@@ -36,68 +43,58 @@ private:
     TString RequestId;
 
 public:
-    using TBase = TRpcOperationRequestActor<TYandexQueryRPC<TEvRequest, TEvImplRequest, TEvImplResponse, TResult>, TEvRequest>;
-    using TBase::TBase;
-    using TBase::GetProtoRequest;
-    using TBase::Request_;
-    using TBase::PassAway;
-    using TBase::Send;
-    using TBase::Become;
-
-    TYandexQueryRPC(IRequestOpCtx* request, const TVector<TString>& sids)
-        : TBase(request)
-        , Sids(sids)
-    { }
+    TYandexQueryRequestRPC(IRequestOpCtx* request)
+        : TBase(request) {}
 
     void Bootstrap() {
-        auto requestQuery = dynamic_cast<TEvRequest*>(Request_.get());
-        Y_VERIFY(requestQuery);
+        auto requestCtx = Request_.get();
 
-        PeerName = requestQuery->GetPeerName();
-        UserAgent = requestQuery->GetPeerMetaValues("user-agent").GetOrElse("empty");
-        RequestId = requestQuery->GetPeerMetaValues("x-request-id").GetOrElse(CreateGuidAsString());
+        auto request = dynamic_cast<RpcRequestType*>(requestCtx);
+        Y_VERIFY(request);
 
-        TMaybe<TString> authToken = requestQuery->GetYdbToken();
+        auto proxyCtx = dynamic_cast<IRequestProxyCtx*>(requestCtx);
+        Y_VERIFY(proxyCtx);
+
+        PeerName = Request_->GetPeerName();
+        UserAgent = Request_->GetPeerMetaValues("user-agent").GetOrElse("empty");
+        RequestId = Request_->GetPeerMetaValues("x-request-id").GetOrElse(CreateGuidAsString());
+
+        TMaybe<TString> authToken = proxyCtx->GetYdbToken();
         if (!authToken) {
-            Request_->RaiseIssue(NYql::TIssue("token is empty"));
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+            ReplyWithStatus("token is empty", StatusIds::BAD_REQUEST);
             return;
         }
         Token = *authToken;
 
-        const TString scope = requestQuery->GetPeerMetaValues("x-yq-scope").GetOrElse("");
+        const TString scope = Request_->GetPeerMetaValues("x-yq-scope").GetOrElse("");
         if (!scope.StartsWith("yandexcloud://")) {
-            Request_->RaiseIssue(NYql::TIssue("x-yq-scope should start with yandexcloud:// but got " + scope));
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+            ReplyWithStatus("x-yq-scope should start with yandexcloud:// but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }
 
         const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
-        if (path.size() != 2 && path.size() != 3) { // todo: do not check against 3, backward compatibility
-            Request_->RaiseIssue(NYql::TIssue("x-yq-scope format is invalid. Must be yandexcloud://folder_id, but got " + scope));
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+        if (path.size() != 2) {
+            ReplyWithStatus("x-yq-scope format is invalid. Must be yandexcloud://folder_id, but got " + scope, StatusIds::BAD_REQUEST);
             return;
         }
 
         FolderId = path.back();
         if (!FolderId) {
-            Request_->RaiseIssue(NYql::TIssue("folder id is empty"));
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+            ReplyWithStatus("folder id is empty", StatusIds::BAD_REQUEST);
             return;
         }
 
         if (FolderId.length() > 1024) {
-            Request_->RaiseIssue(NYql::TIssue("folder id length greater than 1024 characters: " + FolderId));
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+            ReplyWithStatus("folder id length greater than 1024 characters: " + FolderId, StatusIds::BAD_REQUEST);
             return;
         }
 
-        const TString& internalToken = requestQuery->GetInternalToken();
+        const TString& internalToken = proxyCtx->GetInternalToken();
         TVector<TString> permissions;
         if (internalToken) {
             NACLib::TUserToken userToken(internalToken);
             User = userToken.GetUserSID();
-            for (const auto& sid: Sids) {
+            for (const auto& sid: request->Sids) {
                 if (userToken.IsExist(sid)) {
                     permissions.push_back(sid);
                 }
@@ -105,40 +102,45 @@ public:
         }
 
         if (!User) {
-            Request_->RaiseIssue(NYql::TIssue("Authorization error. Permission denied"));
-            ReplyWithResult(StatusIds::UNAUTHORIZED);
+            ReplyWithStatus("Authorization error. Permission denied", StatusIds::UNAUTHORIZED);
             return;
         }
 
-        auto request = std::make_unique<TEvImplRequest>(FolderId, *GetProtoRequest(), User, Token, permissions);
-        Send(NYq::ControlPlaneProxyActorId(), request.release());
-
-        Become(&TYandexQueryRPC::StateFunc);
+        const auto req = GetProtoRequest();
+        auto ev = MakeHolder<EvRequestType>(FolderId, *req, User, Token, permissions);
+        Send(NYq::ControlPlaneProxyActorId(), ev.Release());
+        Become(&TYandexQueryRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }
+
+    void ReplyWithStatus(const TString& issueMessage, StatusIds::StatusCode status) {		
+        Request_->RaiseIssue(NYql::TIssue(issueMessage));
+        Request_->ReplyWithYdbStatus(status);		
+        PassAway();		
+    }		
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvImplResponse, Handler);
+        hFunc(EvResponseType, Handle);
     )
 
-    template<typename T>
-    void ProcessResponse(const T& response) {
+    template <typename TResponse, typename TReq>
+    void SendResponse(const TResponse& response, TReq& req) {
         if (response.Issues) {
-            Request_->RaiseIssues(response.Issues);
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+            req.RaiseIssues(response.Issues);
+            req.ReplyWithYdbStatus(StatusIds::BAD_REQUEST);
         } else {
-            ReplyWithResult(StatusIds::SUCCESS, response.Result);
-        }
+            req.SendResult(response.Result, StatusIds::SUCCESS);
+        }       
     }
 
-    template<typename T> requires requires (T t) { t.AuditDetails; }
-    void ProcessResponse(const T& response) {
+    template <typename TResponse, typename TReq> requires requires (TResponse r) { r.AuditDetails; }
+    void SendResponse(const TResponse& response, TReq& req) {
         if (response.Issues) {
-            Request_->RaiseIssues(response.Issues);
-            ReplyWithResult(StatusIds::BAD_REQUEST);
+            req.RaiseIssues(response.Issues);
+            req.ReplyWithYdbStatus(StatusIds::BAD_REQUEST);
         } else {
-            ReplyWithResult(StatusIds::SUCCESS, response.Result);
-        }
+            req.SendResult(response.Result, StatusIds::SUCCESS);
+        }       
 
         NYq::TEvAuditService::TExtraInfo extraInfo{
             .Token = Token,
@@ -156,719 +158,199 @@ private:
             response.AuditDetails));
     }
 
-    void Handler(typename TEvImplResponse::TPtr& ev) {
-        const auto& response = *ev->Get();
-        ProcessResponse(response);
-    }
-
-    void ReplyWithResult(StatusIds::StatusCode status) {
-        Request_->ReplyWithYdbStatus(status);
-        PassAway();
-    }
-
-    void ReplyWithResult(StatusIds::StatusCode status, const TResult& result) {
-        Request_->SendResult(result, status);
+    void Handle(typename EvResponseType::TPtr& ev) {
+        SendResponse(*ev->Get(), *Request_);
         PassAway();
     }
 };
 
-void TGRpcRequestProxy::Handle(TEvYandexQueryCreateQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.create@as",
-        "yq.queries.invoke@as",
-        "yq.connections.use@as",
-        "yq.bindings.use@as",
-        "yq.resources.managePublic@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryCreateQueryRequest,
-                                          NYq::TEvControlPlaneProxy::TEvCreateQueryRequest,
-                                          NYq::TEvControlPlaneProxy::TEvCreateQueryResponse,
-                                          YandexQuery::CreateQueryResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryListQueriesRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryListQueriesRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListQueriesRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListQueriesResponse,
-                                        YandexQuery::ListQueriesResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDescribeQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.get@as",
-        "yq.queries.viewAst@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDescribeQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeQueryResponse,
-                                        YandexQuery::DescribeQueryResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryGetQueryStatusRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.getStatus@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryGetQueryStatusRequest,
-                                        NYq::TEvControlPlaneProxy::TEvGetQueryStatusRequest,
-                                        NYq::TEvControlPlaneProxy::TEvGetQueryStatusResponse,
-                                        YandexQuery::GetQueryStatusResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryModifyQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.update@as",
-        "yq.queries.invoke@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as",
-        "yq.connections.use@as",
-        "yq.bindings.use@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryModifyQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvModifyQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvModifyQueryResponse,
-                                        YandexQuery::ModifyQueryResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDeleteQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.delete@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDeleteQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDeleteQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDeleteQueryResponse,
-                                        YandexQuery::DeleteQueryResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryControlQueryRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.control@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryControlQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvControlQueryRequest,
-                                        NYq::TEvControlPlaneProxy::TEvControlQueryResponse,
-                                        YandexQuery::ControlQueryResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryGetResultDataRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.queries.getData@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryGetResultDataRequest,
-                                        NYq::TEvControlPlaneProxy::TEvGetResultDataRequest,
-                                        NYq::TEvControlPlaneProxy::TEvGetResultDataResponse,
-                                        YandexQuery::GetResultDataResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryListJobsRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.jobs.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryListJobsRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListJobsRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListJobsResponse,
-                                        YandexQuery::ListJobsResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDescribeJobRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.jobs.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDescribeJobRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeJobRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeJobResponse,
-                                        YandexQuery::DescribeJobResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryCreateConnectionRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.connections.create@as",
-        "yq.resources.managePublic@as",
-
-        // service account permissions
-        "iam.serviceAccounts.use@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryCreateConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvCreateConnectionResponse,
-                                        YandexQuery::CreateConnectionResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryListConnectionsRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.connections.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryListConnectionsRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListConnectionsRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListConnectionsResponse,
-                                        YandexQuery::ListConnectionsResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDescribeConnectionRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.connections.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDescribeConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeConnectionResponse,
-                                        YandexQuery::DescribeConnectionResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryModifyConnectionRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.connections.update@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as",
-
-        // service account permissions
-        "iam.serviceAccounts.use@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryModifyConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvModifyConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvModifyConnectionResponse,
-                                        YandexQuery::ModifyConnectionResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDeleteConnectionRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.connections.delete@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDeleteConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDeleteConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDeleteConnectionResponse,
-                                        YandexQuery::DeleteConnectionResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryTestConnectionRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.connections.create@as",
-
-        // service account permissions
-        "iam.serviceAccounts.use@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryTestConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvTestConnectionRequest,
-                                        NYq::TEvControlPlaneProxy::TEvTestConnectionResponse,
-                                        YandexQuery::TestConnectionResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryCreateBindingRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.bindings.create@as",
-        "yq.resources.managePublic@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryCreateBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvCreateBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvCreateBindingResponse,
-                                        YandexQuery::CreateBindingResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryListBindingsRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.bindings.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryListBindingsRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListBindingsRequest,
-                                        NYq::TEvControlPlaneProxy::TEvListBindingsResponse,
-                                        YandexQuery::ListBindingsResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDescribeBindingRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.bindings.get@as",
-        "yq.resources.viewPublic@as",
-        "yq.resources.viewPrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDescribeBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDescribeBindingResponse,
-                                        YandexQuery::DescribeBindingResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryModifyBindingRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.bindings.update@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryModifyBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvModifyBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvModifyBindingResponse,
-                                        YandexQuery::ModifyBindingResult>(ev->Release().Release(), permissions));
-}
-
-void TGRpcRequestProxy::Handle(TEvYandexQueryDeleteBindingRequest::TPtr& ev, const TActorContext& ctx) {
-    static const TVector<TString> permissions = {
-        // folder permissions
-        "yq.bindings.delete@as",
-        "yq.resources.managePublic@as",
-        "yq.resources.managePrivate@as"
-    };
-    ctx.Register(new TYandexQueryRPC<TEvYandexQueryDeleteBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDeleteBindingRequest,
-                                        NYq::TEvControlPlaneProxy::TEvDeleteBindingResponse,
-                                        YandexQuery::DeleteBindingResult>(ev->Release().Release(), permissions));
-}
-
-template<typename T>
-TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetAdditionalEntries(const T&)
-{
-    return {};
-}
-
-template<>
-TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetAdditionalEntries(const TEvYandexQueryCreateConnectionRequest& request)
-{
-    TString serviceAccountId = NYq::ExtractServiceAccountId(*request.GetProtoRequest());
-    if (serviceAccountId) {
-        return {{
-            {"iam.serviceAccounts.use"},
-            {
-                {"service_account_id", serviceAccountId},
-                {"database_id", "db"}
-            }
-        }};
-    }
-    return {};
-}
+using TYandexQueryCreateQueryRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::CreateQueryRequest, YandexQuery::CreateQueryResponse>,
+    NYq::TEvControlPlaneProxy::TEvCreateQueryRequest,
+    NYq::TEvControlPlaneProxy::TEvCreateQueryResponse>;
 
-template<>
-TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetAdditionalEntries(const TEvYandexQueryModifyConnectionRequest& request)
-{
-    TString serviceAccountId = NYq::ExtractServiceAccountId(*request.GetProtoRequest());
-    if (serviceAccountId) {
-        return {{
-            {"iam.serviceAccounts.use"},
-            {
-                {"service_account_id", serviceAccountId},
-                {"database_id", "db"}
-            }
-        }};
-    }
-    return {};
+void DoYandexQueryCreateQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryCreateQueryRPC(p.release()));
 }
 
-template<>
-TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> GetAdditionalEntries(const TEvYandexQueryTestConnectionRequest& request)
-{
-    TString serviceAccountId = NYq::ExtractServiceAccountId(*request.GetProtoRequest());
-    if (serviceAccountId) {
-        return {{
-            {"iam.serviceAccounts.use"},
-            {
-                {"service_account_id", serviceAccountId},
-                {"database_id", "db"}
-            }
-        }};
-    }
-    return {};
-}
-
-template <typename TEvent>
-void TGrpcRequestCheckActor<TEvent>::InitializeAttributesFromYandexQuery(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    CheckedDatabaseName_ = CanonizePath(schemeData.GetPath());
-    const TString scope = Request_->Get()->GetPeerMetaValues("x-yq-scope").GetOrElse("");
-    if (scope.StartsWith("yandexcloud://")) {
-        const TVector<TString> path = StringSplitter(scope).Split('/').SkipEmpty();
-        if (path.size() == 2 || path.size() == 3) {
-            const TString& folderId = path.back();
-            TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry> entries {{
-                GetPermissions(),
-                {
-                    {"folder_id", folderId},
-                    {"database_id", "db"}
-                }
-            }};
-
-            const auto& request = *Request_->Get();
-            const auto additionalEntries = GetAdditionalEntries(request);
-            entries.insert(entries.end(), additionalEntries.begin(), additionalEntries.end());
-            TBase::SetEntries(entries);
-        }
-    }
-}
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryCreateQueryRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.create",
-        "yq.queries.invoke",
-        "yq.connections.use",
-        "yq.bindings.use",
-        "yq.resources.managePublic"
-    };
-    return permissions;
-}
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListQueriesRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
-}
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeQueryRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.get",
-        "yq.queries.viewAst",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
-}
+using TYandexQueryListQueriesRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ListQueriesRequest, YandexQuery::ListQueriesResponse>,
+    NYq::TEvControlPlaneProxy::TEvListQueriesRequest,
+    NYq::TEvControlPlaneProxy::TEvListQueriesResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryGetQueryStatusRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "yq.queries.getStatus",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
+void DoYandexQueryListQueriesRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryListQueriesRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryModifyQueryRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.update",
-        "yq.queries.invoke",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate",
-        "yq.connections.use",
-        "yq.bindings.use"
-    };
-    return permissions;
-}
+using TYandexQueryDescribeQueryRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DescribeQueryRequest, YandexQuery::DescribeQueryResponse>,
+    NYq::TEvControlPlaneProxy::TEvDescribeQueryRequest,
+    NYq::TEvControlPlaneProxy::TEvDescribeQueryResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDeleteQueryRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.delete",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    return permissions;
+void DoYandexQueryDescribeQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDescribeQueryRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryControlQueryRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.control",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    return permissions;
-}
+using TYandexQueryGetQueryStatusRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::GetQueryStatusRequest, YandexQuery::GetQueryStatusResponse>,
+    NYq::TEvControlPlaneProxy::TEvGetQueryStatusRequest,
+    NYq::TEvControlPlaneProxy::TEvGetQueryStatusResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryGetResultDataRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.queries.getData",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
+void DoYandexQueryGetQueryStatusRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryGetQueryStatusRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListJobsRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.jobs.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
-}
+using TYandexQueryModifyQueryRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ModifyQueryRequest, YandexQuery::ModifyQueryResponse>,
+    NYq::TEvControlPlaneProxy::TEvModifyQueryRequest,
+    NYq::TEvControlPlaneProxy::TEvModifyQueryResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeJobRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.jobs.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
+void DoYandexQueryModifyQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryModifyQueryRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryCreateConnectionRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.connections.create",
-        "yq.resources.managePublic"
-    };
-    return permissions;
-}
+using TYandexQueryDeleteQueryRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DeleteQueryRequest, YandexQuery::DeleteQueryResponse>,
+    NYq::TEvControlPlaneProxy::TEvDeleteQueryRequest,
+    NYq::TEvControlPlaneProxy::TEvDeleteQueryResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListConnectionsRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.connections.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
+void DoYandexQueryDeleteQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDeleteQueryRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeConnectionRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.connections.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
-}
+using TYandexQueryControlQueryRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ControlQueryRequest, YandexQuery::ControlQueryResponse>,
+    NYq::TEvControlPlaneProxy::TEvControlQueryRequest,
+    NYq::TEvControlPlaneProxy::TEvControlQueryResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryModifyConnectionRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.connections.update",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    return permissions;
+void DoYandexQueryControlQueryRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryControlQueryRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDeleteConnectionRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.connections.delete",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    return permissions;
-}
+using TYandexQueryGetResultDataRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::GetResultDataRequest, YandexQuery::GetResultDataResponse>,
+    NYq::TEvControlPlaneProxy::TEvGetResultDataRequest,
+    NYq::TEvControlPlaneProxy::TEvGetResultDataResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryTestConnectionRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "yq.connections.create"
-    };
-    return permissions;
+void DoGetResultDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryGetResultDataRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryCreateBindingRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.bindings.create",
-        "yq.resources.managePublic"
-    };
-    return permissions;
-}
+using TYandexQueryListJobsRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ListJobsRequest, YandexQuery::ListJobsResponse>,
+    NYq::TEvControlPlaneProxy::TEvListJobsRequest,
+    NYq::TEvControlPlaneProxy::TEvListJobsResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListBindingsRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.bindings.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
+void DoListJobsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryListJobsRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeBindingRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.bindings.get",
-        "yq.resources.viewPublic",
-        "yq.resources.viewPrivate"
-    };
-    return permissions;
-}
+using TYandexQueryDescribeJobRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DescribeJobRequest, YandexQuery::DescribeJobResponse>,
+    NYq::TEvControlPlaneProxy::TEvDescribeJobRequest,
+    NYq::TEvControlPlaneProxy::TEvDescribeJobResponse>;
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryModifyBindingRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.bindings.update",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    return permissions;
+void DoDescribeJobRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDescribeJobRPC(p.release()));
 }
 
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDeleteBindingRequest>::GetPermissions() {
-    static const TVector<TString> permissions = {
-        "ydb.tables.list", // TODO: delete after enabling permission validation
-        "yq.bindings.delete",
-        "yq.resources.managePublic",
-        "yq.resources.managePrivate"
-    };
-    return permissions;
-}
+using TYandexQueryCreateConnectionRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::CreateConnectionRequest, YandexQuery::CreateConnectionResponse>,
+    NYq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
+    NYq::TEvControlPlaneProxy::TEvCreateConnectionResponse>;
 
-// yq behavior
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryCreateQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoCreateConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryCreateConnectionRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListQueriesRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryListConnectionsRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ListConnectionsRequest, YandexQuery::ListConnectionsResponse>,
+    NYq::TEvControlPlaneProxy::TEvListConnectionsRequest,
+    NYq::TEvControlPlaneProxy::TEvListConnectionsResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoListConnectionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryListConnectionsRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryGetQueryStatusRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryDescribeConnectionRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DescribeConnectionRequest, YandexQuery::DescribeConnectionResponse>,
+    NYq::TEvControlPlaneProxy::TEvDescribeConnectionRequest,
+    NYq::TEvControlPlaneProxy::TEvDescribeConnectionResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryModifyQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoDescribeConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDescribeConnectionRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDeleteQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryModifyConnectionRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ModifyConnectionRequest, YandexQuery::ModifyConnectionResponse>,
+    NYq::TEvControlPlaneProxy::TEvModifyConnectionRequest,
+    NYq::TEvControlPlaneProxy::TEvModifyConnectionResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryControlQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoModifyConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryModifyConnectionRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryGetResultDataRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryDeleteConnectionRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DeleteConnectionRequest, YandexQuery::DeleteConnectionResponse>,
+    NYq::TEvControlPlaneProxy::TEvDeleteConnectionRequest,
+    NYq::TEvControlPlaneProxy::TEvDeleteConnectionResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListJobsRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoDeleteConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDeleteConnectionRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeJobRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryTestConnectionRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::TestConnectionRequest, YandexQuery::TestConnectionResponse>,
+    NYq::TEvControlPlaneProxy::TEvTestConnectionRequest,
+    NYq::TEvControlPlaneProxy::TEvTestConnectionResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryCreateConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoTestConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryTestConnectionRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListConnectionsRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryCreateBindingRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::CreateBindingRequest, YandexQuery::CreateBindingResponse>,
+    NYq::TEvControlPlaneProxy::TEvCreateBindingRequest,
+    NYq::TEvControlPlaneProxy::TEvCreateBindingResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoCreateBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& ) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryCreateBindingRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryModifyConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryListBindingsRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ListBindingsRequest, YandexQuery::ListBindingsResponse>,
+    NYq::TEvControlPlaneProxy::TEvListBindingsRequest,
+    NYq::TEvControlPlaneProxy::TEvListBindingsResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDeleteConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryListBindingsRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryTestConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryDescribeBindingRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DescribeBindingRequest, YandexQuery::DescribeBindingResponse>,
+    NYq::TEvControlPlaneProxy::TEvDescribeBindingRequest,
+    NYq::TEvControlPlaneProxy::TEvDescribeBindingResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryCreateBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDescribeBindingRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListBindingsRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryModifyBindingRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::ModifyBindingRequest, YandexQuery::ModifyBindingResponse>,
+    NYq::TEvControlPlaneProxy::TEvModifyBindingRequest,
+    NYq::TEvControlPlaneProxy::TEvModifyBindingResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryModifyBindingRPC(p.release()));
 }
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryModifyBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
-}
+using TYandexQueryDeleteBindingRPC = TYandexQueryRequestRPC<
+    TGrpcYqRequestOperationCall<YandexQuery::DeleteBindingRequest, YandexQuery::DeleteBindingResponse>,
+    NYq::TEvControlPlaneProxy::TEvDeleteBindingRequest,
+    NYq::TEvControlPlaneProxy::TEvDeleteBindingResponse>;
 
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDeleteBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData) {
-    InitializeAttributesFromYandexQuery(schemeData);
+void DoDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TYandexQueryDeleteBindingRPC(p.release()));
 }
 
 } // namespace NGRpcService

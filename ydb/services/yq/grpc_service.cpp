@@ -3,6 +3,7 @@
 #include <ydb/core/grpc_services/grpc_helper.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/core/grpc_services/service_yq.h>
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NKikimr::NGRpcService {
@@ -34,102 +35,154 @@ void TGRpcYandexQueryService::DecRequest() {
 void TGRpcYandexQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
 
+    static const TVector<TString> CreateQueryPermissions = {
+        "yq.queries.create",
+        "yq.queries.invoke",
+        "yq.connections.use",
+        "yq.bindings.use",
+        "yq.resources.managePublic"
+    };
+    static const TVector<TString> ListQueriesPermissions = {
+        "yq.queries.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> DescribeQueryPermissions = {
+        "yq.queries.get",
+        "yq.queries.viewAst",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> GetQueryStatusPermissions = {
+        "yq.queries.getStatus",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> ModifyQueryPermissions = {
+        "yq.queries.update",
+        "yq.queries.invoke",
+        "yq.connections.use",
+        "yq.bindings.use",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate"
+    };
+    static const TVector<TString> DeleteQueryPermissions = {
+        "yq.queries.delete",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate"
+    };
+    static const TVector<TString> ControlQueryPermissions = {
+        "yq.queries.control",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate"
+    };
+    static const TVector<TString> GetResultDataPermissions = {
+        "yq.queries.getData",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> ListJobsPermissions = {
+        "yq.jobs.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> DescribeJobPermissions = {
+        "yq.jobs.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> CreateConnectionPermissions = {
+        "yq.connections.create",
+        "yq.resources.managePublic",
+    };
+    static const TVector<TString> ListConnectionsPermissions = {
+        "yq.connections.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> DescribeConnectionPermissions = {
+        "yq.connections.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> ModifyConnectionPermissions = {
+        "yq.connections.update",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate",
+    };
+    static const TVector<TString> DeleteConnectionPermissions = {
+        "yq.connections.delete",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate"
+    };
+    static const TVector<TString> TestConnectionPermissions = {
+        "yq.connections.create",
+    };
+    static const TVector<TString> CreateBindingPermissions = {
+        "yq.bindings.create",
+        "yq.resources.managePublic"
+    };
+    static const TVector<TString> ListBindingsPermissions = {
+        "yq.bindings.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> DescribeBindingPermissions = {
+        "yq.bindings.get",
+        "yq.resources.viewPublic",
+        "yq.resources.viewPrivate"
+    };
+    static const TVector<TString> ModifyBindingPermissions = {
+        "yq.bindings.update",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate"
+    };
+    static const TVector<TString> DeleteBindingPermissions = {
+        "yq.bindings.delete",
+        "yq.resources.managePublic",
+        "yq.resources.managePrivate"
+    };
+
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<YandexQuery::IN, YandexQuery::OUT, TGRpcYandexQueryService, TSecurityTextFormatPrinter<YandexQuery::IN>, TSecurityTextFormatPrinter<YandexQuery::OUT>>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &YandexQuery::V1::YandexQueryService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("yq", #NAME))->Run();
+#define ADD_REQUEST(NAME, CB, PERMISSIONS)                                                                                  \
+MakeIntrusive<TGRpcRequest<YandexQuery::NAME##Request, YandexQuery::NAME##Response, TGRpcYandexQueryService, TSecurityTextFormatPrinter<YandexQuery::NAME##Request>, TSecurityTextFormatPrinter<YandexQuery::NAME##Response>>>( \
+    this, &Service_, CQ_,                                                                                      \
+    [this](NGrpc::IRequestContextBase *ctx) {                                                                  \
+        NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
+        ActorSystem_->Send(GRpcRequestProxyId_,                                                                \
+            new TGrpcYqRequestOperationCall<YandexQuery::NAME##Request, YandexQuery::NAME##Response>                 \
+                (ctx, &CB, PERMISSIONS));                                                                                   \
+    },                                                                                                         \
+    &YandexQuery::V1::YandexQueryService::AsyncService::Request##NAME,                                  \
+    #NAME, logger, getCounterBlock("yq", #NAME))                                                     \
+    ->Run();                                                                                                   \
 
-    ADD_REQUEST(CreateQuery, CreateQueryRequest, CreateQueryResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryCreateQueryRequest(ctx));
-    })
-
-    ADD_REQUEST(ListQueries, ListQueriesRequest, ListQueriesResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryListQueriesRequest(ctx));
-    })
-
-    ADD_REQUEST(DescribeQuery, DescribeQueryRequest, DescribeQueryResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDescribeQueryRequest(ctx));
-    })
-
-    ADD_REQUEST(GetQueryStatus, GetQueryStatusRequest, GetQueryStatusResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryGetQueryStatusRequest(ctx));
-    })
-
-    ADD_REQUEST(ModifyQuery, ModifyQueryRequest, ModifyQueryResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryModifyQueryRequest(ctx));
-    })
-
-    ADD_REQUEST(DeleteQuery, DeleteQueryRequest, DeleteQueryResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDeleteQueryRequest(ctx));
-    })
-
-    ADD_REQUEST(ControlQuery, ControlQueryRequest, ControlQueryResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryControlQueryRequest(ctx));
-    })
-
-    ADD_REQUEST(GetResultData, GetResultDataRequest, GetResultDataResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryGetResultDataRequest(ctx));
-    })
-
-    ADD_REQUEST(ListJobs, ListJobsRequest, ListJobsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryListJobsRequest(ctx));
-    })
-
-    ADD_REQUEST(DescribeJob, DescribeJobRequest, DescribeJobResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDescribeJobRequest(ctx));
-    })
-
-    ADD_REQUEST(CreateConnection, CreateConnectionRequest, CreateConnectionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryCreateConnectionRequest(ctx));
-    })
-
-    ADD_REQUEST(ListConnections, ListConnectionsRequest, ListConnectionsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryListConnectionsRequest(ctx));
-    })
-
-    ADD_REQUEST(DescribeConnection, DescribeConnectionRequest, DescribeConnectionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDescribeConnectionRequest(ctx));
-    })
-
-    ADD_REQUEST(ModifyConnection, ModifyConnectionRequest, ModifyConnectionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryModifyConnectionRequest(ctx));
-    })
-
-    ADD_REQUEST(DeleteConnection, DeleteConnectionRequest, DeleteConnectionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDeleteConnectionRequest(ctx));
-    })
-
-    ADD_REQUEST(TestConnection, TestConnectionRequest, TestConnectionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryTestConnectionRequest(ctx));
-    })
-
-    ADD_REQUEST(CreateBinding, CreateBindingRequest, CreateBindingResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryCreateBindingRequest(ctx));
-    })
-
-    ADD_REQUEST(ListBindings, ListBindingsRequest, ListBindingsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryListBindingsRequest(ctx));
-    })
-
-    ADD_REQUEST(DescribeBinding, DescribeBindingRequest, DescribeBindingResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDescribeBindingRequest(ctx));
-    })
-
-    ADD_REQUEST(ModifyBinding, ModifyBindingRequest, ModifyBindingResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryModifyBindingRequest(ctx));
-    })
-
-    ADD_REQUEST(DeleteBinding, DeleteBindingRequest, DeleteBindingResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvYandexQueryDeleteBindingRequest(ctx));
-    })
+    ADD_REQUEST(CreateQuery, DoYandexQueryCreateQueryRequest, CreateQueryPermissions)
+    ADD_REQUEST(ListQueries, DoYandexQueryListQueriesRequest, ListQueriesPermissions)
+    ADD_REQUEST(DescribeQuery, DoYandexQueryDescribeQueryRequest, DescribeQueryPermissions)
+    ADD_REQUEST(GetQueryStatus, DoYandexQueryGetQueryStatusRequest, GetQueryStatusPermissions)
+    ADD_REQUEST(ModifyQuery, DoYandexQueryModifyQueryRequest, ModifyQueryPermissions)
+    ADD_REQUEST(DeleteQuery, DoYandexQueryDeleteQueryRequest, DeleteQueryPermissions)
+    ADD_REQUEST(ControlQuery, DoYandexQueryControlQueryRequest, ControlQueryPermissions)
+    ADD_REQUEST(GetResultData, DoGetResultDataRequest, GetResultDataPermissions)
+    ADD_REQUEST(ListJobs, DoListJobsRequest, ListJobsPermissions)
+    ADD_REQUEST(DescribeJob, DoDescribeJobRequest, DescribeJobPermissions)
+    ADD_REQUEST(CreateConnection, DoCreateConnectionRequest, CreateConnectionPermissions)
+    ADD_REQUEST(ListConnections, DoListConnectionsRequest, ListConnectionsPermissions)
+    ADD_REQUEST(DescribeConnection, DoDescribeConnectionRequest, DescribeConnectionPermissions)
+    ADD_REQUEST(ModifyConnection, DoModifyConnectionRequest, ModifyConnectionPermissions)
+    ADD_REQUEST(DeleteConnection, DoDeleteConnectionRequest, DeleteConnectionPermissions)
+    ADD_REQUEST(TestConnection, DoTestConnectionRequest, TestConnectionPermissions)
+    ADD_REQUEST(CreateBinding, DoCreateBindingRequest, CreateBindingPermissions)
+    ADD_REQUEST(ListBindings, DoListBindingsRequest, ListBindingsPermissions)
+    ADD_REQUEST(DescribeBinding, DoDescribeBindingRequest, DescribeBindingPermissions)
+    ADD_REQUEST(ModifyBinding, DoModifyBindingRequest, ModifyBindingPermissions)
+    ADD_REQUEST(DeleteBinding, DoDeleteBindingRequest, DeleteBindingPermissions)
 
 #undef ADD_REQUEST
+
 }
 
 } // namespace NKikimr::NGRpcService

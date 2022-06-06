@@ -18,11 +18,6 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-class ICheckerIface {
-public:
-    void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries);
-};
-
 template <typename TEvent>
 class TGrpcRequestCheckActor
     : public TActorBootstrappedSecureRequest<TGrpcRequestCheckActor<TEvent>>
@@ -71,8 +66,6 @@ public:
     void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) {
         TBase::SetEntries(entries);
     }
-
-    void InitializeAttributesFromYandexQuery(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
 
     void InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
 
@@ -424,71 +417,6 @@ void TGrpcRequestCheckActor<TEvent>::InitializeAttributes(const TSchemeBoardEven
     InitializeAttributesFromSchema(schemeData);
 }
 
-// yq behavior
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryCreateQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListQueriesRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryGetQueryStatusRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryModifyQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDeleteQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryControlQueryRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryGetResultDataRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListJobsRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeJobRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryCreateConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListConnectionsRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryModifyConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDeleteConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryTestConnectionRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryCreateBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryListBindingsRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDescribeBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryModifyBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-template <>
-void TGrpcRequestCheckActor<TEvYandexQueryDeleteBindingRequest>::InitializeAttributes(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData);
-
-
 // default permissions
 template <typename TEvent>
 const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
@@ -499,85 +427,6 @@ const TVector<TString>& TGrpcRequestCheckActor<TEvent>::GetPermissions() {
             };
     return permissions;
 }
-
-// yds behavior
-template <>
-inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordRequest>::GetPermissions() {
-    //full list of permissions for compatility. remove old permissions later.
-    static const TVector<TString> permissions = {"ydb.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
-    return permissions;
-}
-// yds behavior
-template <>
-inline const TVector<TString>& TGrpcRequestCheckActor<TEvDataStreamsPutRecordsRequest>::GetPermissions() {
-    //full list of permissions for compatility. remove old permissions later.
-    static const TVector<TString> permissions = {"ydb.streams.write", "ydb.databases.list", "ydb.databases.create", "ydb.databases.connect"};
-    return permissions;
-}
-
-// yq behavior
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryCreateQueryRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListQueriesRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeQueryRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryGetQueryStatusRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryModifyQueryRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDeleteQueryRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryControlQueryRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryGetResultDataRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListJobsRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeJobRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryCreateConnectionRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListConnectionsRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeConnectionRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryModifyConnectionRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDeleteConnectionRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryTestConnectionRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryCreateBindingRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryListBindingsRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDescribeBindingRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryModifyBindingRequest>::GetPermissions();
-
-template <>
-const TVector<TString>& TGrpcRequestCheckActor<TEvYandexQueryDeleteBindingRequest>::GetPermissions();
 
 template <typename TEvent>
 IActor* CreateGrpcRequestCheckActor(

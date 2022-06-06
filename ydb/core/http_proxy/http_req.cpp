@@ -1,4 +1,3 @@
-#include "driver_cache_actor.h"
 #include "events.h"
 #include "http_req.h"
 #include "auth_factory.h"
@@ -6,14 +5,17 @@
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
 #include <ydb/core/grpc_caching/cached_grpc_request_actor.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/protos/serverless_proxy_config.pb.h>
 #include <ydb/services/datastreams/shard_iterator.h>
 #include <ydb/services/datastreams/next_token.h>
+#include <ydb/services/datastreams/datastreams_proxy.h>
 
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/base/appdata.h>
 
 #include <ydb/library/naming_conventions/naming_conventions.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <ydb/library/http_proxy/authorization/auth_helpers.h>
 #include <ydb/library/http_proxy/error/error.h>
@@ -37,7 +39,6 @@
 #include <util/string/vector.h>
 
 namespace NKikimr::NHttpProxy {
-
 
     using namespace google::protobuf;
     using namespace Ydb::DataStreams::V1;
@@ -556,7 +557,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                  );
     }
 
-    template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall>
+    template<class TProtoService, class TProtoRequest, class TProtoResponse, class TProtoResult, class TProtoCall, class TRpcEv>
     class THttpRequestProcessor : public IHttpRequestProcessor {
     public:
         enum TRequestState {
@@ -630,6 +631,8 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             }
 
             void SendYdbDriverRequest(const TActorContext& ctx) {
+                Y_VERIFY(HttpContext.Driver);
+
                 RequestState = StateAuthorization;
 
                 auto request = MakeHolder<TEvServerlessProxy::TEvDiscoverDatabaseEndpointRequest>();
@@ -675,7 +678,24 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                               "sending grpc request to '" << HttpContext.DiscoveryEndpoint <<
                               "' database: '" << HttpContext.DatabaseName <<
                               "' iam token size: " << HttpContext.IamToken.size());
-
+                if (!HttpContext.Driver) {
+                    RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(std::move(Request), HttpContext.DatabaseName, HttpContext.SerializedUserToken, ctx.ActorSystem());
+                    RpcFuture.Subscribe([actorId = ctx.SelfID, actorSystem = ctx.ActorSystem()](const NThreading::TFuture<TProtoResponse>& future) {
+                        auto& response = future.GetValueSync();
+                        auto result = MakeHolder<TEvServerlessProxy::TEvGrpcRequestResult>();
+                        Y_VERIFY(response.operation().ready());
+                        if (response.operation().status() == Ydb::StatusIds::SUCCESS) {
+                            TProtoResult rs;
+                            response.operation().result().UnpackTo(&rs);
+                            result->Message = MakeHolder<TProtoResult>(rs);
+                        }
+                        NYql::TIssues issues;
+                        NYql::IssuesFromMessage(response.operation().issues(), issues);
+                        result->Status = MakeHolder<NYdb::TStatus>(NYdb::EStatus(response.operation().status()), std::move(issues));
+                        actorSystem->Send(actorId, result.Release());
+                    });
+                    return;
+                }
                 Y_VERIFY(Client);
                 Y_VERIFY(DiscoveryFuture->HasValue());
 
@@ -703,7 +723,13 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             void HandleToken(TEvServerlessProxy::TEvToken::TPtr& ev, const TActorContext& ctx) {
                 HttpContext.ServiceAccountId = ev->Get()->ServiceAccountId;
                 HttpContext.IamToken = ev->Get()->IamToken;
-                SendYdbDriverRequest(ctx);
+                HttpContext.SerializedUserToken = ev->Get()->SerializedUserToken;
+
+                if (HttpContext.Driver) {
+                    SendYdbDriverRequest(ctx);
+                } else {
+                    SendGrpcRequest(ctx);
+                }
             }
 
             void HandleError(TEvServerlessProxy::TEvError::TPtr& ev, const TActorContext& ctx) {
@@ -830,8 +856,12 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                               "database '" << HttpContext.DatabaseName << "' " <<
                               "stream '" << ExtractStreamName<TProtoRequest>(Request) << "'");
 
-                if (HttpContext.IamToken.empty()) {
-                    AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(ctx.SelfID, HttpContext, std::move(Signature)));
+                if (HttpContext.IamToken.empty() || !HttpContext.Driver) { //use Signature or no sdk mode - then need to auth anyway
+                    if (HttpContext.IamToken.empty() && !Signature) { //Test mode - no driver and no creds
+                        SendGrpcRequest(ctx);
+                    } else {
+                        AuthActor = ctx.Register(AppData(ctx)->DataStreamsAuthFactory->CreateAuthActor(ctx.SelfID, HttpContext, std::move(Signature)));
+                    }
                 } else {
                     SendYdbDriverRequest(ctx);
                 }
@@ -849,6 +879,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             THttpRequestContext HttpContext;
             THolder<NKikimr::NSQS::TAwsRequestSignV4> Signature;
             THolder<NThreading::TFuture<TProtoResultWrapper<TProtoResult>>> Future;
+            NThreading::TFuture<TProtoResponse> RpcFuture;
             THolder<NThreading::TFuture<void>> DiscoveryFuture;
             TProtoCall ProtoCall;
             TString Method;
@@ -880,60 +911,37 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
 
 
     void THttpRequestProcessors::Initialize() {
-        Name2Processor["PutRecords"] = MakeHolder<THttpRequestProcessor<DataStreamsService, PutRecordsRequest, PutRecordsResponse, PutRecordsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords)>>("PutRecords", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecords);
-        Name2Processor["CreateStream"] = MakeHolder<THttpRequestProcessor<DataStreamsService, CreateStreamRequest, CreateStreamResponse, CreateStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream)>>("CreateStream", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncCreateStream);
-        Name2Processor["ListStreams"] = MakeHolder<THttpRequestProcessor<DataStreamsService, ListStreamsRequest, ListStreamsResponse, ListStreamsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams)>>("ListStreams", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreams);
-        Name2Processor["DeleteStream"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DeleteStreamRequest, DeleteStreamResponse, DeleteStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream)>>("DeleteStream", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeleteStream);
-        Name2Processor["DescribeStream"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DescribeStreamRequest, DescribeStreamResponse, DescribeStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream)>>("DescribeStream", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStream);
-        Name2Processor["ListShards"] = MakeHolder<THttpRequestProcessor<DataStreamsService, ListShardsRequest, ListShardsResponse, ListShardsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListShards)>>("ListShards", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListShards);
-        Name2Processor["PutRecord"] = MakeHolder<THttpRequestProcessor<DataStreamsService, PutRecordRequest, PutRecordResponse, PutRecordResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord)>>("PutRecord", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncPutRecord);
-        Name2Processor["GetRecords"] = MakeHolder<THttpRequestProcessor<DataStreamsService, GetRecordsRequest, GetRecordsResponse, GetRecordsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords)>>("GetRecords", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetRecords);
-        Name2Processor["GetShardIterator"] = MakeHolder<THttpRequestProcessor<DataStreamsService, GetShardIteratorRequest, GetShardIteratorResponse, GetShardIteratorResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator)>>("GetShardIterator", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncGetShardIterator);
-        Name2Processor["DescribeLimits"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DescribeLimitsRequest, DescribeLimitsResponse, DescribeLimitsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits)>>("DescribeLimits", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeLimits);
-        Name2Processor["DescribeStreamSummary"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DescribeStreamSummaryRequest, DescribeStreamSummaryResponse, DescribeStreamSummaryResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary)>>("DescribeStreamSummary", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamSummary);
-        Name2Processor["DecreaseStreamRetentionPeriod"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DecreaseStreamRetentionPeriodRequest, DecreaseStreamRetentionPeriodResponse, DecreaseStreamRetentionPeriodResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod)>>("DecreaseStreamRetentionPeriod", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDecreaseStreamRetentionPeriod);
-        Name2Processor["IncreaseStreamRetentionPeriod"] = MakeHolder<THttpRequestProcessor<DataStreamsService, IncreaseStreamRetentionPeriodRequest, IncreaseStreamRetentionPeriodResponse, IncreaseStreamRetentionPeriodResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod)>>("IncreaseStreamRetentionPeriod", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncIncreaseStreamRetentionPeriod);
-        Name2Processor["UpdateShardCount"] = MakeHolder<THttpRequestProcessor<DataStreamsService, UpdateShardCountRequest, UpdateShardCountResponse, UpdateShardCountResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount)>>("UpdateShardCount", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncUpdateShardCount);
-        Name2Processor["RegisterStreamConsumer"] = MakeHolder<THttpRequestProcessor<DataStreamsService, RegisterStreamConsumerRequest, RegisterStreamConsumerResponse, RegisterStreamConsumerResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer)>>("RegisterStreamConsumer", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRegisterStreamConsumer);
-        Name2Processor["DeregisterStreamConsumer"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DeregisterStreamConsumerRequest, DeregisterStreamConsumerResponse, DeregisterStreamConsumerResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer)>>("DeregisterStreamConsumer", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDeregisterStreamConsumer);
-        Name2Processor["DescribeStreamConsumer"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DescribeStreamConsumerRequest, DescribeStreamConsumerResponse, DescribeStreamConsumerResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer)>>("DescribeStreamConsumer", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDescribeStreamConsumer);
-        Name2Processor["ListStreamConsumers"] = MakeHolder<THttpRequestProcessor<DataStreamsService, ListStreamConsumersRequest, ListStreamConsumersResponse, ListStreamConsumersResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers)>>("ListStreamConsumers", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListStreamConsumers);
-        Name2Processor["AddTagsToStream"] = MakeHolder<THttpRequestProcessor<DataStreamsService, AddTagsToStreamRequest, AddTagsToStreamResponse, AddTagsToStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream)>>("AddTagsToStream", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncAddTagsToStream);
-        Name2Processor["DisableEnhancedMonitoring"] = MakeHolder<THttpRequestProcessor<DataStreamsService, DisableEnhancedMonitoringRequest, DisableEnhancedMonitoringResponse, DisableEnhancedMonitoringResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring)>>("DisableEnhancedMonitoring", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncDisableEnhancedMonitoring);
-        Name2Processor["EnableEnhancedMonitoring"] = MakeHolder<THttpRequestProcessor<DataStreamsService, EnableEnhancedMonitoringRequest, EnableEnhancedMonitoringResponse, EnableEnhancedMonitoringResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring)>>("EnableEnhancedMonitoring", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncEnableEnhancedMonitoring);
-        Name2Processor["ListTagsForStream"] = MakeHolder<THttpRequestProcessor<DataStreamsService, ListTagsForStreamRequest, ListTagsForStreamResponse, ListTagsForStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream)>>("ListTagsForStream", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncListTagsForStream);
-        Name2Processor["MergeShards"] = MakeHolder<THttpRequestProcessor<DataStreamsService, MergeShardsRequest, MergeShardsResponse, MergeShardsResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards)>>("MergeShards", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncMergeShards);
-        Name2Processor["RemoveTagsFromStream"] = MakeHolder<THttpRequestProcessor<DataStreamsService, RemoveTagsFromStreamRequest, RemoveTagsFromStreamResponse, RemoveTagsFromStreamResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream)>>("RemoveTagsFromStream", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncRemoveTagsFromStream);
-        Name2Processor["SplitShard"] = MakeHolder<THttpRequestProcessor<DataStreamsService, SplitShardRequest, SplitShardResponse, SplitShardResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard)>>("SplitShard", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncSplitShard);
-        Name2Processor["StartStreamEncryption"] = MakeHolder<THttpRequestProcessor<DataStreamsService, StartStreamEncryptionRequest, StartStreamEncryptionResponse, StartStreamEncryptionResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption)>>("StartStreamEncryption", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStartStreamEncryption);
-        Name2Processor["StopStreamEncryption"] = MakeHolder<THttpRequestProcessor<DataStreamsService, StopStreamEncryptionRequest, StopStreamEncryptionResponse, StopStreamEncryptionResult,
-                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption)>>("StopStreamEncryption", &Ydb::DataStreams::V1::DataStreamsService::Stub::AsyncStopStreamEncryption);
+        #define DECLARE_PROCESSOR(name) Name2Processor[#name] = MakeHolder<THttpRequestProcessor<DataStreamsService, name##Request, name##Response, name##Result,\
+                    decltype(&Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name), NKikimr::NGRpcService::TEvDataStreams##name##Request>> \
+                    (#name, &Ydb::DataStreams::V1::DataStreamsService::Stub::Async##name);
+        DECLARE_PROCESSOR(PutRecords);
+        DECLARE_PROCESSOR(CreateStream);
+        DECLARE_PROCESSOR(ListStreams);
+        DECLARE_PROCESSOR(DeleteStream);
+        DECLARE_PROCESSOR(DescribeStream);
+        DECLARE_PROCESSOR(ListShards);
+        DECLARE_PROCESSOR(PutRecord);
+        DECLARE_PROCESSOR(GetRecords);
+        DECLARE_PROCESSOR(GetShardIterator);
+        DECLARE_PROCESSOR(DescribeLimits);
+        DECLARE_PROCESSOR(DescribeStreamSummary);
+        DECLARE_PROCESSOR(DecreaseStreamRetentionPeriod);
+        DECLARE_PROCESSOR(IncreaseStreamRetentionPeriod);
+        DECLARE_PROCESSOR(UpdateShardCount);
+        DECLARE_PROCESSOR(RegisterStreamConsumer);
+        DECLARE_PROCESSOR(DeregisterStreamConsumer);
+        DECLARE_PROCESSOR(DescribeStreamConsumer);
+        DECLARE_PROCESSOR(ListStreamConsumers);
+        DECLARE_PROCESSOR(AddTagsToStream);
+        DECLARE_PROCESSOR(DisableEnhancedMonitoring);
+        DECLARE_PROCESSOR(EnableEnhancedMonitoring);
+        DECLARE_PROCESSOR(ListTagsForStream);
+        DECLARE_PROCESSOR(MergeShards);
+        DECLARE_PROCESSOR(RemoveTagsFromStream);
+        DECLARE_PROCESSOR(SplitShard);
+        DECLARE_PROCESSOR(StartStreamEncryption);
+        DECLARE_PROCESSOR(StopStreamEncryption);
+        #undef DECLARE_PROCESSOR
     }
 
     bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) {

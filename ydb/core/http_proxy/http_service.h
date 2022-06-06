@@ -12,6 +12,7 @@ namespace NKikimr::NHttpProxy {
     struct THttpProxyConfig {
         NKikimrConfig::TServerlessProxyConfig Config;
         std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
+        bool UseSDK = false;
     };
 
     NActors::IActor* CreateHttpProxy(const THttpProxyConfig& config);

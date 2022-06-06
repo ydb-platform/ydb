@@ -2,97 +2,48 @@
 
 #include "events.h"
 
+#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.h>
+
 #include <ydb/core/client/server/grpc_base.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 
 #include <library/cpp/grpc/server/grpc_server.h>
-
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actorsystem.h>
 
-namespace NKikimr::NDataStreams::V1 {
+namespace NKikimr {
+namespace NGRpcService {
 
-    inline TActorId GetDataStreamsServiceActorID() {
-        return TActorId(0, "PqDsProxy");
-    }
+using TEvDataStreamsCreateStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::CreateStreamRequest, Ydb::DataStreams::V1::CreateStreamResponse>;
+using TEvDataStreamsDeleteStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DeleteStreamRequest, Ydb::DataStreams::V1::DeleteStreamResponse>;
+using TEvDataStreamsDescribeStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DescribeStreamRequest, Ydb::DataStreams::V1::DescribeStreamResponse>;
+using TEvDataStreamsRegisterStreamConsumerRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::RegisterStreamConsumerRequest, Ydb::DataStreams::V1::RegisterStreamConsumerResponse>;
+using TEvDataStreamsDeregisterStreamConsumerRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DeregisterStreamConsumerRequest, Ydb::DataStreams::V1::DeregisterStreamConsumerResponse>;
+using TEvDataStreamsDescribeStreamConsumerRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DescribeStreamConsumerRequest, Ydb::DataStreams::V1::DescribeStreamConsumerResponse>;
+using TEvDataStreamsPutRecordRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::PutRecordRequest, Ydb::DataStreams::V1::PutRecordResponse>;
+using TEvDataStreamsListStreamsRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::ListStreamsRequest, Ydb::DataStreams::V1::ListStreamsResponse>;
+using TEvDataStreamsListShardsRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::ListShardsRequest, Ydb::DataStreams::V1::ListShardsResponse>;
+using TEvDataStreamsPutRecordsRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::PutRecordsRequest, Ydb::DataStreams::V1::PutRecordsResponse>;
+using TEvDataStreamsGetRecordsRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::GetRecordsRequest, Ydb::DataStreams::V1::GetRecordsResponse>;
+using TEvDataStreamsGetShardIteratorRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::GetShardIteratorRequest, Ydb::DataStreams::V1::GetShardIteratorResponse>;
+using TEvDataStreamsSubscribeToShardRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::SubscribeToShardRequest, Ydb::DataStreams::V1::SubscribeToShardResponse>;
+using TEvDataStreamsDescribeLimitsRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DescribeLimitsRequest, Ydb::DataStreams::V1::DescribeLimitsResponse>;
+using TEvDataStreamsDescribeStreamSummaryRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DescribeStreamSummaryRequest, Ydb::DataStreams::V1::DescribeStreamSummaryResponse>;
+using TEvDataStreamsDecreaseStreamRetentionPeriodRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest, Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse>;
+using TEvDataStreamsIncreaseStreamRetentionPeriodRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest, Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse>;
+using TEvDataStreamsUpdateShardCountRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::UpdateShardCountRequest, Ydb::DataStreams::V1::UpdateShardCountResponse>;
+using TEvDataStreamsUpdateStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::UpdateStreamRequest, Ydb::DataStreams::V1::UpdateStreamResponse>;
+using TEvDataStreamsSetWriteQuotaRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::SetWriteQuotaRequest, Ydb::DataStreams::V1::SetWriteQuotaResponse>;
+using TEvDataStreamsListStreamConsumersRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::ListStreamConsumersRequest, Ydb::DataStreams::V1::ListStreamConsumersResponse>;
+using TEvDataStreamsAddTagsToStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::AddTagsToStreamRequest, Ydb::DataStreams::V1::AddTagsToStreamResponse>;
+using TEvDataStreamsDisableEnhancedMonitoringRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest, Ydb::DataStreams::V1::DisableEnhancedMonitoringResponse>;
+using TEvDataStreamsEnableEnhancedMonitoringRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest, Ydb::DataStreams::V1::EnableEnhancedMonitoringResponse>;
+using TEvDataStreamsListTagsForStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::ListTagsForStreamRequest, Ydb::DataStreams::V1::ListTagsForStreamResponse>;
+using TEvDataStreamsMergeShardsRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::MergeShardsRequest, Ydb::DataStreams::V1::MergeShardsResponse>;
+using TEvDataStreamsRemoveTagsFromStreamRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::RemoveTagsFromStreamRequest, Ydb::DataStreams::V1::RemoveTagsFromStreamResponse>;
+using TEvDataStreamsSplitShardRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::SplitShardRequest, Ydb::DataStreams::V1::SplitShardResponse>;
+using TEvDataStreamsStartStreamEncryptionRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::StartStreamEncryptionRequest, Ydb::DataStreams::V1::StartStreamEncryptionResponse>;
+using TEvDataStreamsStopStreamEncryptionRequest = TGrpcRequestOperationCall<Ydb::DataStreams::V1::StopStreamEncryptionRequest, Ydb::DataStreams::V1::StopStreamEncryptionResponse>;
 
-    IActor* CreateDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache);
-
-    class TDataStreamsService : public NActors::TActorBootstrapped<TDataStreamsService> {
-    public:
-        TDataStreamsService(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TActorId newSchemeCache);
-
-        void Bootstrap(const TActorContext& ctx);
-
-    private:
-        STFUNC(StateFunc) {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDecreaseStreamRetentionPeriodRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsIncreaseStreamRetentionPeriodRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest, Handle);
-                HFunc(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest, Handle);
-            }
-        }
-
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsCreateStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDeleteStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsRegisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDeregisterStreamConsumerRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamConsumerRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamsRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsListShardsRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsPutRecordsRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsGetRecordsRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsGetShardIteratorRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsSubscribeToShardRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeLimitsRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDescribeStreamSummaryRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDecreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsIncreaseStreamRetentionPeriodRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateShardCountRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsUpdateStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsListStreamConsumersRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsAddTagsToStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsDisableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsEnableEnhancedMonitoringRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsListTagsForStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsMergeShardsRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsRemoveTagsFromStreamRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsSplitShardRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsStartStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
-        void Handle(NKikimr::NGRpcService::TEvDataStreamsStopStreamEncryptionRequest::TPtr& ev, const TActorContext& ctx);
-
-    private:
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-
-        TActorId NewSchemeCache;
-    };
-
+}
 }

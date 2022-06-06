@@ -39,9 +39,17 @@ inline TString ExtractServiceAccountId(const YandexQuery::TestConnectionRequest&
     return ExtractServiceAccountIdImpl(c.setting());
 }
 
-template<typename T>
-TString ExtractServiceAccountId(const T& c) {
+inline TString ExtractServiceAccountId(const YandexQuery::CreateConnectionRequest&  c) {
     return ExtractServiceAccountIdImpl(c.content().setting());
+}
+
+inline TString ExtractServiceAccountId(const YandexQuery::ModifyConnectionRequest&  c) {
+    return ExtractServiceAccountIdImpl(c.content().setting());
+}
+
+template<typename T>
+TString ExtractServiceAccountId(const T&) {
+    return {};
 }
 
 } // namespace NYq

@@ -1,13 +1,39 @@
 #include "grpc_service.h"
 
-#include "datastreams_proxy.h"
-
+#include <ydb/core/grpc_services/service_datastreams.h>
+#include <ydb/core/base/counters.h>
 #include <ydb/core/base/appdata.h>
-
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
-
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/tx/scheme_board/cache.h>
+
+namespace {
+
+using namespace NKikimr;
+
+void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData, NGRpcService::ICheckerIface* checker) {
+    static const std::vector<TString> allowedAttributes = {"folder_id", "service_account_id", "database_id"};
+    //full list of permissions for compatibility. remove old permissions later.
+    static const TVector<TString> permissions = {
+        "ydb.streams.write",
+        "ydb.databases.list",
+        "ydb.databases.create",
+        "ydb.databases.connect"
+    };
+    TVector<std::pair<TString, TString>> attributes;
+    attributes.reserve(schemeData.GetPathDescription().UserAttributesSize());
+    for (const auto& attr : schemeData.GetPathDescription().GetUserAttributes()) {
+        if (std::find(allowedAttributes.begin(), allowedAttributes.end(), attr.GetKey()) != allowedAttributes.end()) {
+            attributes.emplace_back(attr.GetKey(), attr.GetValue());
+        }
+    }
+    if (!attributes.empty()) {
+        checker->SetEntries({{permissions, attributes}});
+    }
+}
+
+}
 
 namespace NKikimr::NGRpcService {
 
@@ -23,11 +49,6 @@ TGRpcDataStreamsService::TGRpcDataStreamsService(NActors::TActorSystem *system,
 void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger)
 {
     CQ_ = cq;
-
-    InitNewSchemeCache();
-    IActor *proxyService = NDataStreams::V1::CreateDataStreamsService(Counters_, NewSchemeCache);
-    auto actorId = ActorSystem_->Register(proxyService, TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
-    ActorSystem_->RegisterLocalService(NDataStreams::V1::GetDataStreamsServiceActorID(), actorId);
 
     SetupIncomingRequests(logger);
 }
@@ -45,118 +66,57 @@ void TGRpcDataStreamsService::DecRequest() {
     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
 }
 
-void TGRpcDataStreamsService::InitNewSchemeCache() {
-    auto appData = ActorSystem_->AppData<TAppData>();
-    auto cacheCounters = GetServiceCounters(Counters_, "pqproxy|schemecache");
-    auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>(appData, cacheCounters);
-    NewSchemeCache = ActorSystem_->Register(CreateSchemeBoardSchemeCache(cacheConfig.Get()),
-        TMailboxType::HTSwap, ActorSystem_->AppData<TAppData>()->UserPoolId);
-}
 
 void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
+    using std::placeholders::_1;
+    using std::placeholders::_2;
+
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, IN, OUT, ACTION) \
-    MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::IN, Ydb::DataStreams::V1::OUT, TGRpcDataStreamsService>>(this, &Service_, CQ_, \
-        [this](NGrpc::IRequestContextBase *ctx) { \
-            ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
-            ACTION; \
-        }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME, \
-        #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
+#define ADD_REQUEST(NAME, CB, ATTR) \
+    MakeIntrusive<TGRpcRequest<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response, TGRpcDataStreamsService>> \
+        (this, &Service_, CQ_,                                                                                  \
+            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                \
+                ActorSystem_->Send(GRpcRequestProxyId_,                                                         \
+                    new TGrpcRequestOperationCall<Ydb::DataStreams::V1::NAME##Request, Ydb::DataStreams::V1::NAME##Response>      \
+                        (ctx, CB, TRequestAuxSettings{TRateLimiterMode::Off, ATTR}));                       \
+            }, &Ydb::DataStreams::V1::DataStreamsService::AsyncService::Request ## NAME,                                  \
+            #NAME, logger, getCounterBlock("data_streams", #NAME))->Run();
 
-    ADD_REQUEST(DescribeStream, DescribeStreamRequest, DescribeStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDescribeStreamRequest(ctx));
-    })
-    ADD_REQUEST(CreateStream, CreateStreamRequest, CreateStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsCreateStreamRequest(ctx));
-    })
-    ADD_REQUEST(ListStreams, ListStreamsRequest, ListStreamsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsListStreamsRequest(ctx));
-    })
-    ADD_REQUEST(DeleteStream, DeleteStreamRequest, DeleteStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDeleteStreamRequest(ctx));
-    })
-    ADD_REQUEST(ListShards, ListShardsRequest, ListShardsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsListShardsRequest(ctx));
-    })
-    ADD_REQUEST(PutRecord, PutRecordRequest, PutRecordResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsPutRecordRequest(ctx));
-    })
-    ADD_REQUEST(PutRecords, PutRecordsRequest, PutRecordsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsPutRecordsRequest(ctx));
-    })
-    ADD_REQUEST(GetRecords, GetRecordsRequest, GetRecordsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsGetRecordsRequest(ctx));
-    })
-    ADD_REQUEST(GetShardIterator, GetShardIteratorRequest, GetShardIteratorResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsGetShardIteratorRequest(ctx));
-    })
-    ADD_REQUEST(SubscribeToShard, SubscribeToShardRequest, SubscribeToShardResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsSubscribeToShardRequest(ctx));
-    })
-    ADD_REQUEST(DescribeLimits, DescribeLimitsRequest, DescribeLimitsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDescribeLimitsRequest(ctx));
-    })
-    ADD_REQUEST(DescribeStreamSummary, DescribeStreamSummaryRequest, DescribeStreamSummaryResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDescribeStreamSummaryRequest(ctx));
-    })
-    ADD_REQUEST(DecreaseStreamRetentionPeriod, DecreaseStreamRetentionPeriodRequest, DecreaseStreamRetentionPeriodResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDecreaseStreamRetentionPeriodRequest(ctx));
-    })
-    ADD_REQUEST(IncreaseStreamRetentionPeriod, IncreaseStreamRetentionPeriodRequest, IncreaseStreamRetentionPeriodResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsIncreaseStreamRetentionPeriodRequest(ctx));
-    })
-    ADD_REQUEST(UpdateShardCount, UpdateShardCountRequest, UpdateShardCountResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsUpdateShardCountRequest(ctx));
-    })
-    ADD_REQUEST(RegisterStreamConsumer, RegisterStreamConsumerRequest, RegisterStreamConsumerResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsRegisterStreamConsumerRequest(ctx));
-    })
-    ADD_REQUEST(DeregisterStreamConsumer, DeregisterStreamConsumerRequest, DeregisterStreamConsumerResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDeregisterStreamConsumerRequest(ctx));
-    })
-    ADD_REQUEST(DescribeStreamConsumer, DescribeStreamConsumerRequest, DescribeStreamConsumerResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDescribeStreamConsumerRequest(ctx));
-    })
-    ADD_REQUEST(ListStreamConsumers, ListStreamConsumersRequest, ListStreamConsumersResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsListStreamConsumersRequest(ctx));
-    })
-    ADD_REQUEST(AddTagsToStream, AddTagsToStreamRequest, AddTagsToStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsAddTagsToStreamRequest(ctx));
-    })
-    ADD_REQUEST(DisableEnhancedMonitoring, DisableEnhancedMonitoringRequest, DisableEnhancedMonitoringResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsDisableEnhancedMonitoringRequest(ctx));
-    })
-    ADD_REQUEST(EnableEnhancedMonitoring, EnableEnhancedMonitoringRequest, EnableEnhancedMonitoringResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsEnableEnhancedMonitoringRequest(ctx));
-    })
-    ADD_REQUEST(ListTagsForStream, ListTagsForStreamRequest, ListTagsForStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsListTagsForStreamRequest(ctx));
-    })
-    ADD_REQUEST(MergeShards, MergeShardsRequest, MergeShardsResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsMergeShardsRequest(ctx));
-    })
-    ADD_REQUEST(RemoveTagsFromStream, RemoveTagsFromStreamRequest, RemoveTagsFromStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsRemoveTagsFromStreamRequest(ctx));
-    })
-    ADD_REQUEST(SplitShard, SplitShardRequest, SplitShardResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsSplitShardRequest(ctx));
-    })
-    ADD_REQUEST(StartStreamEncryption, StartStreamEncryptionRequest, StartStreamEncryptionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsStartStreamEncryptionRequest(ctx));
-    })
-    ADD_REQUEST(StopStreamEncryption, StopStreamEncryptionRequest, StopStreamEncryptionResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsStopStreamEncryptionRequest(ctx));
-    })
-    ADD_REQUEST(UpdateStream, UpdateStreamRequest, UpdateStreamResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsUpdateStreamRequest(ctx));
-    })
-    ADD_REQUEST(SetWriteQuota, SetWriteQuotaRequest, SetWriteQuotaResponse, {
-        ActorSystem_->Send(GRpcRequestProxyId_, new TEvDataStreamsSetWriteQuotaRequest(ctx));
-    })
+    ADD_REQUEST(DescribeStream, DoDataStreamsDescribeStreamRequest, nullptr)
+    ADD_REQUEST(CreateStream, DoDataStreamsCreateStreamRequest, nullptr)
+    ADD_REQUEST(ListStreams, DoDataStreamsListStreamsRequest, nullptr)
+    ADD_REQUEST(DeleteStream, DoDataStreamsDeleteStreamRequest, nullptr)
+    ADD_REQUEST(ListShards, DoDataStreamsListShardsRequest, nullptr)
+    ADD_REQUEST(PutRecord, DoDataStreamsPutRecordRequest, YdsProcessAttr)
+    ADD_REQUEST(PutRecords, DoDataStreamsPutRecordsRequest, YdsProcessAttr)
+    ADD_REQUEST(GetRecords, DoDataStreamsGetRecordsRequest, nullptr)
+    ADD_REQUEST(GetShardIterator, DoDataStreamsGetShardIteratorRequest, nullptr)
+    ADD_REQUEST(SubscribeToShard, DoDataStreamsSubscribeToShardRequest, nullptr)
+    ADD_REQUEST(DescribeLimits, DoDataStreamsDescribeLimitsRequest, nullptr)
+    ADD_REQUEST(DescribeStreamSummary, DoDataStreamsDescribeStreamSummaryRequest, nullptr)
+    ADD_REQUEST(DecreaseStreamRetentionPeriod, DoDataStreamsDecreaseStreamRetentionPeriodRequest, nullptr)
+    ADD_REQUEST(IncreaseStreamRetentionPeriod, DoDataStreamsIncreaseStreamRetentionPeriodRequest, nullptr)
+    ADD_REQUEST(UpdateShardCount, DoDataStreamsUpdateShardCountRequest, nullptr)
+    ADD_REQUEST(RegisterStreamConsumer, DoDataStreamsRegisterStreamConsumerRequest, nullptr)
+    ADD_REQUEST(DeregisterStreamConsumer, DoDataStreamsDeregisterStreamConsumerRequest, nullptr)
+    ADD_REQUEST(DescribeStreamConsumer, DoDataStreamsDescribeStreamConsumerRequest, nullptr)
+    ADD_REQUEST(ListStreamConsumers, DoDataStreamsListStreamConsumersRequest, nullptr)
+    ADD_REQUEST(AddTagsToStream, DoDataStreamsAddTagsToStreamRequest, nullptr)
+    ADD_REQUEST(DisableEnhancedMonitoring, DoDataStreamsDisableEnhancedMonitoringRequest, nullptr)
+    ADD_REQUEST(EnableEnhancedMonitoring, DoDataStreamsEnableEnhancedMonitoringRequest, nullptr)
+    ADD_REQUEST(ListTagsForStream, DoDataStreamsListTagsForStreamRequest, nullptr)
+    ADD_REQUEST(MergeShards, DoDataStreamsMergeShardsRequest, nullptr)
+    ADD_REQUEST(RemoveTagsFromStream, DoDataStreamsRemoveTagsFromStreamRequest, nullptr)
+    ADD_REQUEST(SplitShard, DoDataStreamsSplitShardRequest, nullptr)
+    ADD_REQUEST(StartStreamEncryption, DoDataStreamsStartStreamEncryptionRequest, nullptr)
+    ADD_REQUEST(StopStreamEncryption, DoDataStreamsStopStreamEncryptionRequest, nullptr)
+    ADD_REQUEST(UpdateStream, DoDataStreamsUpdateStreamRequest, nullptr)
+    ADD_REQUEST(SetWriteQuota, DoDataStreamsSetWriteQuotaRequest, nullptr)
 
 #undef ADD_REQUEST
 }

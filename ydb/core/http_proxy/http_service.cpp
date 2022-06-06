@@ -27,14 +27,16 @@ namespace NKikimr::NHttpProxy {
             ServiceAccountCredentialsProvider = cfg.CredentialsProvider;
             Processors = MakeHolder<THttpRequestProcessors>();
             Processors->Initialize();
-            auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
-                                      .SetGRpcKeepAlivePermitWithoutCalls(true)
-                                      .SetGRpcKeepAliveTimeout(TDuration::Seconds(90))
-                                      .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
-            if (Config.GetCaCert()) {
-                config.UseSecureConnection(TFileInput(Config.GetCaCert()).ReadAll());
+            if (cfg.UseSDK) {
+                auto config = NYdb::TDriverConfig().SetNetworkThreadsNum(1)
+                                          .SetGRpcKeepAlivePermitWithoutCalls(true)
+                                          .SetGRpcKeepAliveTimeout(TDuration::Seconds(90))
+                                          .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+                if (Config.GetCaCert()) {
+                    config.UseSecureConnection(TFileInput(Config.GetCaCert()).ReadAll());
+                }
+                Driver = MakeHolder<NYdb::TDriver>(std::move(config));
             }
-            Driver = MakeHolder<NYdb::TDriver>(std::move(config));
         }
 
         void Bootstrap(const TActorContext& ctx) {

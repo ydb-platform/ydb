@@ -24,7 +24,6 @@
 
 #include <ydb/public/api/grpc/draft/dummy.pb.h>
 #include <ydb/public/api/grpc/draft/ydb_long_tx_v1.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_datastreams_v1.pb.h>
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 
@@ -119,57 +118,6 @@ using TEvLongTxCommitRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxCommit,
 using TEvLongTxRollbackRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxRollback, Ydb::LongTx::RollbackTransactionRequest, Ydb::LongTx::RollbackTransactionResponse, true>;
 using TEvLongTxWriteRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxWrite, Ydb::LongTx::WriteRequest, Ydb::LongTx::WriteResponse, true>;
 using TEvLongTxReadRequest = TGRpcRequestWrapper<TRpcServices::EvLongTxRead, Ydb::LongTx::ReadRequest, Ydb::LongTx::ReadResponse, true>;
-using TEvDataStreamsCreateStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsCreateStream, Ydb::DataStreams::V1::CreateStreamRequest, Ydb::DataStreams::V1::CreateStreamResponse, true>;
-using TEvDataStreamsDeleteStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDeleteStream, Ydb::DataStreams::V1::DeleteStreamRequest, Ydb::DataStreams::V1::DeleteStreamResponse, true>;
-using TEvDataStreamsDescribeStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeStream, Ydb::DataStreams::V1::DescribeStreamRequest, Ydb::DataStreams::V1::DescribeStreamResponse, true>;
-using TEvDataStreamsRegisterStreamConsumerRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsRegisterStreamConsumer, Ydb::DataStreams::V1::RegisterStreamConsumerRequest, Ydb::DataStreams::V1::RegisterStreamConsumerResponse, true>;
-using TEvDataStreamsDeregisterStreamConsumerRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDeregisterStreamConsumer, Ydb::DataStreams::V1::DeregisterStreamConsumerRequest, Ydb::DataStreams::V1::DeregisterStreamConsumerResponse, true>;
-using TEvDataStreamsDescribeStreamConsumerRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeStreamConsumer, Ydb::DataStreams::V1::DescribeStreamConsumerRequest, Ydb::DataStreams::V1::DescribeStreamConsumerResponse, true>;
-using TEvDataStreamsPutRecordRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsPutRecord, Ydb::DataStreams::V1::PutRecordRequest, Ydb::DataStreams::V1::PutRecordResponse, true>;
-using TEvDataStreamsListStreamsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListStreams, Ydb::DataStreams::V1::ListStreamsRequest, Ydb::DataStreams::V1::ListStreamsResponse, true>;
-using TEvDataStreamsListShardsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListShards, Ydb::DataStreams::V1::ListShardsRequest, Ydb::DataStreams::V1::ListShardsResponse, true>;
-using TEvDataStreamsPutRecordsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsPutRecords, Ydb::DataStreams::V1::PutRecordsRequest, Ydb::DataStreams::V1::PutRecordsResponse, true>;
-using TEvDataStreamsGetRecordsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsGetRecords, Ydb::DataStreams::V1::GetRecordsRequest, Ydb::DataStreams::V1::GetRecordsResponse, true>;
-using TEvDataStreamsGetShardIteratorRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsGetShardIterator, Ydb::DataStreams::V1::GetShardIteratorRequest, Ydb::DataStreams::V1::GetShardIteratorResponse, true>;
-using TEvDataStreamsSubscribeToShardRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsSubscribeToShard, Ydb::DataStreams::V1::SubscribeToShardRequest, Ydb::DataStreams::V1::SubscribeToShardResponse, true>;
-using TEvDataStreamsDescribeLimitsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeLimits, Ydb::DataStreams::V1::DescribeLimitsRequest, Ydb::DataStreams::V1::DescribeLimitsResponse, true>;
-using TEvDataStreamsDescribeStreamSummaryRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDescribeStreamSummary, Ydb::DataStreams::V1::DescribeStreamSummaryRequest, Ydb::DataStreams::V1::DescribeStreamSummaryResponse, true>;
-using TEvDataStreamsDecreaseStreamRetentionPeriodRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDecreaseStreamRetentionPeriod, Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodRequest, Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResponse, true>;
-using TEvDataStreamsIncreaseStreamRetentionPeriodRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsIncreaseStreamRetentionPeriod, Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodRequest, Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResponse, true>;
-using TEvDataStreamsUpdateShardCountRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsUpdateShardCount, Ydb::DataStreams::V1::UpdateShardCountRequest, Ydb::DataStreams::V1::UpdateShardCountResponse, true>;
-using TEvDataStreamsUpdateStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsUpdateStream, Ydb::DataStreams::V1::UpdateStreamRequest, Ydb::DataStreams::V1::UpdateStreamResponse, true>;
-using TEvDataStreamsSetWriteQuotaRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsSetWriteQuota, Ydb::DataStreams::V1::SetWriteQuotaRequest, Ydb::DataStreams::V1::SetWriteQuotaResponse, true>;
-using TEvDataStreamsListStreamConsumersRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListStreamConsumers, Ydb::DataStreams::V1::ListStreamConsumersRequest, Ydb::DataStreams::V1::ListStreamConsumersResponse, true>;
-using TEvDataStreamsAddTagsToStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsAddTagsToStream, Ydb::DataStreams::V1::AddTagsToStreamRequest, Ydb::DataStreams::V1::AddTagsToStreamResponse, true>;
-using TEvDataStreamsDisableEnhancedMonitoringRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsDisableEnhancedMonitoring, Ydb::DataStreams::V1::DisableEnhancedMonitoringRequest, Ydb::DataStreams::V1::DisableEnhancedMonitoringResponse, true>;
-using TEvDataStreamsEnableEnhancedMonitoringRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsEnableEnhancedMonitoring, Ydb::DataStreams::V1::EnableEnhancedMonitoringRequest, Ydb::DataStreams::V1::EnableEnhancedMonitoringResponse, true>;
-using TEvDataStreamsListTagsForStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsListTagsForStream, Ydb::DataStreams::V1::ListTagsForStreamRequest, Ydb::DataStreams::V1::ListTagsForStreamResponse, true>;
-using TEvDataStreamsMergeShardsRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsMergeShards, Ydb::DataStreams::V1::MergeShardsRequest, Ydb::DataStreams::V1::MergeShardsResponse, true>;
-using TEvDataStreamsRemoveTagsFromStreamRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsRemoveTagsFromStream, Ydb::DataStreams::V1::RemoveTagsFromStreamRequest, Ydb::DataStreams::V1::RemoveTagsFromStreamResponse, true>;
-using TEvDataStreamsSplitShardRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsSplitShard, Ydb::DataStreams::V1::SplitShardRequest, Ydb::DataStreams::V1::SplitShardResponse, true>;
-using TEvDataStreamsStartStreamEncryptionRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsStartStreamEncryption, Ydb::DataStreams::V1::StartStreamEncryptionRequest, Ydb::DataStreams::V1::StartStreamEncryptionResponse, true>;
-using TEvDataStreamsStopStreamEncryptionRequest = TGRpcRequestWrapper<TRpcServices::EvDataStreamsStopStreamEncryption, Ydb::DataStreams::V1::StopStreamEncryptionRequest, Ydb::DataStreams::V1::StopStreamEncryptionResponse, true>;
-using TEvYandexQueryCreateQueryRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryCreateQuery, YandexQuery::CreateQueryRequest, YandexQuery::CreateQueryResponse, true>;
-using TEvYandexQueryListQueriesRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryListQueries, YandexQuery::ListQueriesRequest, YandexQuery::ListQueriesResponse, true>;
-using TEvYandexQueryDescribeQueryRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDescribeQuery, YandexQuery::DescribeQueryRequest, YandexQuery::DescribeQueryResponse, true>;
-using TEvYandexQueryGetQueryStatusRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryGetQueryStatus, YandexQuery::GetQueryStatusRequest, YandexQuery::GetQueryStatusResponse, true>;
-using TEvYandexQueryModifyQueryRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryModifyQuery, YandexQuery::ModifyQueryRequest, YandexQuery::ModifyQueryResponse, true>;
-using TEvYandexQueryDeleteQueryRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDeleteQuery, YandexQuery::DeleteQueryRequest, YandexQuery::DeleteQueryResponse, true>;
-using TEvYandexQueryControlQueryRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryControlQuery, YandexQuery::ControlQueryRequest, YandexQuery::ControlQueryResponse, true>;
-using TEvYandexQueryGetResultDataRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryGetResultData, YandexQuery::GetResultDataRequest, YandexQuery::GetResultDataResponse, true>;
-using TEvYandexQueryListJobsRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryListJobs, YandexQuery::ListJobsRequest, YandexQuery::ListJobsResponse, true>;
-using TEvYandexQueryDescribeJobRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDescribeJob, YandexQuery::DescribeJobRequest, YandexQuery::DescribeJobResponse, true>;
-using TEvYandexQueryCreateConnectionRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryCreateConnection, YandexQuery::CreateConnectionRequest, YandexQuery::CreateConnectionResponse, true>;
-using TEvYandexQueryListConnectionsRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryListConnections, YandexQuery::ListConnectionsRequest, YandexQuery::ListConnectionsResponse, true>;
-using TEvYandexQueryDescribeConnectionRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDescribeConnection, YandexQuery::DescribeConnectionRequest, YandexQuery::DescribeConnectionResponse, true>;
-using TEvYandexQueryModifyConnectionRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryModifyConnection, YandexQuery::ModifyConnectionRequest, YandexQuery::ModifyConnectionResponse, true>;
-using TEvYandexQueryDeleteConnectionRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDeleteConnection, YandexQuery::DeleteConnectionRequest, YandexQuery::DeleteConnectionResponse, true>;
-using TEvYandexQueryTestConnectionRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryTestConnection, YandexQuery::TestConnectionRequest, YandexQuery::TestConnectionResponse, true>;
-using TEvYandexQueryCreateBindingRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryCreateBinding, YandexQuery::CreateBindingRequest, YandexQuery::CreateBindingResponse, true>;
-using TEvYandexQueryListBindingsRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryListBindings, YandexQuery::ListBindingsRequest, YandexQuery::ListBindingsResponse, true>;
-using TEvYandexQueryDescribeBindingRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDescribeBinding, YandexQuery::DescribeBindingRequest, YandexQuery::DescribeBindingResponse, true>;
-using TEvYandexQueryModifyBindingRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryModifyBinding, YandexQuery::ModifyBindingRequest, YandexQuery::ModifyBindingResponse, true>;
-using TEvYandexQueryDeleteBindingRequest = TGRpcRequestWrapper<TRpcServices::EvYandexQueryDeleteBinding, YandexQuery::DeleteBindingRequest, YandexQuery::DeleteBindingResponse, true>;
 
 } // namespace NGRpcService
 } // namespace NKikimr

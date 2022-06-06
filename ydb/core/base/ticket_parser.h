@@ -38,6 +38,18 @@ namespace NKikimr {
             // only one of them will be processed. Which one is not guaranteed
             const std::vector<TEntry> Entries;
 
+            struct TAccessKeySignature {
+                TString AccessKeyId;
+                TString StringToSign;
+                TString Signature;
+
+                TInstant SignedAt;
+                TString Service;
+                TString Region;
+            };
+
+            const TAccessKeySignature Signature;
+
             struct TInitializationFields {
                 TString Database;
                 TString Ticket;
@@ -83,6 +95,14 @@ namespace NKikimr {
                 , PeerName(peerName)
                 , Entries(entries)
             {}
+
+            TEvAuthorizeTicket(TAccessKeySignature&& sign, const TString& peerName, const TVector<TEntry>& entries)
+                : Ticket("")
+                , PeerName(peerName)
+                , Entries(entries)
+                , Signature(std::move(sign))
+            {}
+
         };
 
         struct TError {
@@ -161,4 +181,15 @@ namespace NKikimr {
 template <>
 inline void Out<NKikimr::TEvTicketParser::TError>(IOutputStream& str, const NKikimr::TEvTicketParser::TError& error) {
     str << error.Message;
+}
+
+namespace NKikimr {
+namespace NGRpcService {
+
+class ICheckerIface {
+public:
+    virtual void SetEntries(const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& entries) = 0;
+};
+
+}
 }

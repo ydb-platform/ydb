@@ -2,7 +2,6 @@
 #include "http_service.h"
 #include "http_req.h"
 #include "metrics_actor.h"
-#include "driver_cache_actor.h"
 #include "discovery_actor.h"
 
 #include <library/cpp/actors/http/http_proxy.h>
@@ -35,12 +34,7 @@ void TAuthFactory::Initialize(
 
         const NYdb::TCredentialsProviderPtr credentialsProvider = NYdb::CreateInsecureCredentialsProviderFactory()->CreateProvider();
 
-        IActor* actor = NKikimr::NHttpProxy::CreateStaticDiscoveryActor(grpcPort);
-        localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
-                NKikimr::NHttpProxy::MakeTenantDiscoveryID(),
-                TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));
-
-        actor = NKikimr::NHttpProxy::CreateMetricsActor(NKikimr::NHttpProxy::TMetricsSettings{appData.Counters->GetSubgroup("counters", "http_proxy")});
+        auto actor = NKikimr::NHttpProxy::CreateMetricsActor(NKikimr::NHttpProxy::TMetricsSettings{appData.Counters->GetSubgroup("counters", "http_proxy")});
         localServices.push_back(std::pair<TActorId, TActorSetupCmd>(
                 NKikimr::NHttpProxy::MakeMetricsServiceID(),
                 TActorSetupCmd(actor, TMailboxType::HTSwap, appData.UserPoolId)));

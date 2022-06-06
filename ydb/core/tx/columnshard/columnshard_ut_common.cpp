@@ -36,6 +36,8 @@ void TTester::Setup(TTestActorRuntime& runtime) {
 
     app.AddDomain(domain.Release());
     SetupTabletServices(runtime, &app);
+
+    runtime.UpdateCurrentTime(TInstant::Now());
 }
 
 bool ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, NOlap::TSnapshot snap) {

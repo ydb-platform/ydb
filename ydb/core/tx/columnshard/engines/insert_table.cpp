@@ -6,14 +6,14 @@
 
 namespace NKikimr::NOlap {
 
-bool TInsertTable::Insert(IDbWrapper& dbTable, const TInsertedData& data) {
+bool TInsertTable::Insert(IDbWrapper& dbTable, TInsertedData&& data) {
     TWriteId writeId{data.WriteTxId};
     if (Inserted.count(writeId)) {
         return false;
     }
 
     dbTable.Insert(data);
-    Inserted[writeId] = data;
+    Inserted.emplace(writeId, std::move(data));
     return true;
 }
 
@@ -51,14 +51,14 @@ void TInsertTable::Abort(IDbWrapper& dbTable, ui64 metaShard, const THashSet<TWr
     Y_UNUSED(metaShard);
 
     for (auto writeId : writeIds) {
-        auto* data = Inserted.FindPtr(writeId);
-        Y_VERIFY(data, "Abort writeId %" PRIu64 " not found", (ui64)writeId);
+        // There could be inconsistency with txs and writes in case of bugs. So we could find no record for writeId.
+        if (auto* data = Inserted.FindPtr(writeId)) {
+            dbTable.EraseInserted(*data);
+            dbTable.Abort(*data);
 
-        dbTable.EraseInserted(*data);
-        dbTable.Abort(*data);
-
-        Aborted[writeId] = std::move(Inserted[writeId]);
-        Inserted.erase(writeId);
+            Aborted.emplace(writeId, std::move(*data));
+            Inserted.erase(writeId);
+        }
     }
 }
 
@@ -74,7 +74,7 @@ THashSet<TWriteId> TInsertTable::AbortOld(IDbWrapper& dbTable, const TInstant& n
     TInstant timeBorder = now - WaitCommitDelay;
     THashSet<TWriteId> toAbort;
     for (auto& [writeId, data] : Inserted) {
-        if (data.DirtyTime < timeBorder) {
+        if (data.DirtyTime && data.DirtyTime < timeBorder) {
             toAbort.insert(writeId);
         }
     }

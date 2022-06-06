@@ -67,7 +67,6 @@ public:
         LOG_S_WARN("TEvWakeup: write timeout at tablet " << TabletId << " (write)");
 
         SendResultAndDie(ctx, NKikimrProto::TIMEOUT);
-        return;
     }
 
     void SendResultAndDie(const TActorContext& ctx, NKikimrProto::EReplyStatus status) {
@@ -147,12 +146,20 @@ public:
         record.SetData(data); // modify for TxWrite
 
         { // Update meta
+            ui64 dirtyTime = AppData(ctx)->TimeProvider->Now().Seconds();
+            Y_VERIFY(dirtyTime);
+
             NKikimrTxColumnShard::TLogicalMetadata outMeta;
             outMeta.SetNumRows(batch->num_rows());
             outMeta.SetRawBytes(NArrow::GetBatchDataSize(batch));
-            outMeta.SetDirtyWriteTimeSeconds(AppData(ctx)->TimeProvider->Now().Seconds());
-            // TODO: Add FirstPkValue & LastPkValue if needed
-            Y_PROTOBUF_SUPPRESS_NODISCARD outMeta.SerializeToString(&meta);
+            outMeta.SetDirtyWriteTimeSeconds(dirtyTime);
+
+            meta.clear();
+            if (!outMeta.SerializeToString(&meta)) {
+                LOG_S_ERROR("Canot set metadata for writing blob at tablet " << TabletId);
+                SendResultAndDie(ctx, NKikimrProto::ERROR);
+                return;
+            }
         }
         record.MutableMeta()->SetLogicalMeta(meta);
 

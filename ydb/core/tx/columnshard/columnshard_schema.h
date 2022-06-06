@@ -490,13 +490,13 @@ struct Schema : NIceDb::Schema {
 
             switch (recType) {
                 case EInsertTableIds::Inserted:
-                    inserted[TWriteId{data.WriteTxId}] = std::move(data);
+                    inserted.emplace(TWriteId{data.WriteTxId}, std::move(data));
                     break;
                 case EInsertTableIds::Committed:
                     committed[data.PathId].emplace(data);
                     break;
                 case EInsertTableIds::Aborted:
-                    aborted[TWriteId{data.WriteTxId}] = std::move(data);
+                    aborted.emplace(TWriteId{data.WriteTxId}, std::move(data));
                     break;
             }
 

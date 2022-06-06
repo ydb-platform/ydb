@@ -639,7 +639,6 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowDeletes = 100;
         stats.SearchHeight = 1; // below threshold
         stats.PartCount = 1;
-        stats.MemDataSize = 0;
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(!queue.Enqueue({ShardIdx, stats}));
@@ -657,14 +656,13 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowDeletes = 100;
         stats.SearchHeight = 1; // below threshold
         stats.PartCount = 1;
-        stats.MemDataSize = 0;
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
     }
 
-    Y_UNIT_TEST(EnqueueSinglePartedShardWithMemData) {
+    Y_UNIT_TEST(ShouldNotEnqueueSinglePartedShardWithMemData) {
         TCompactionQueueImpl::TConfig config;
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 0;
@@ -674,11 +672,11 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         stats.RowDeletes = 100;
         stats.SearchHeight = 1; // below threshold
         stats.PartCount = 1;
-        stats.MemDataSize = 10;
+        stats.MemDataSize = 10; // should be ignored
 
         TCompactionQueueImpl queue(config);
-        UNIT_ASSERT(queue.Enqueue({ShardIdx, stats}));
-        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
+        UNIT_ASSERT(!queue.Enqueue({ShardIdx, stats}));
+        UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
     }
 
     Y_UNIT_TEST(EnqueuBelowSearchHeightThreshold) {

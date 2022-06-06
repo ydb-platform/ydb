@@ -196,7 +196,7 @@ public:
 
     TDuration CleanupTimeout() const;
     bool HasExpiringSnapshots() const;
-    bool RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant now);
+    bool RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc);
 
     void PersistAddSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key, const TString& name, ui64 flags, TDuration timeout);
     void PersistRemoveSnapshot(NIceDb::TNiceDb& db, const TSnapshotKey& key);

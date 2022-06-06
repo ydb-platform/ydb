@@ -661,7 +661,7 @@ bool TSnapshotManager::HasExpiringSnapshots() const {
     return IsMvccEnabled() || bool(ExpireQueue);
 }
 
-bool TSnapshotManager::RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant now) {
+bool TSnapshotManager::RemoveExpiredSnapshots(TInstant now, TTransactionContext& txc) {
     bool removed = false;
     while (auto* snapshot = ExpireQueue.Top()) {
         if (now < snapshot->ExpireTime) {
@@ -672,7 +672,7 @@ bool TSnapshotManager::RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant no
         ExpireQueue.Remove(snapshot);
         snapshot = nullptr;
 
-        if (RemoveSnapshot(db, key)) {
+        if (RemoveSnapshot(txc.DB, key)) {
             removed = true;
         }
     }
@@ -693,7 +693,11 @@ bool TSnapshotManager::RemoveExpiredSnapshots(NTable::TDatabase& db, TInstant no
             leastAcquired = Min(leastAcquired, it.second->GetMvccSnapshot());
     }
 
-    removed |= AdvanceWatermark(db, Min(proposed, leastPlanned, leastAcquired, CompleteEdge));
+    if (CompleteEdge.Step < ImmediateWriteEdgeReplied.Step) {
+        PromoteCompleteEdge(ImmediateWriteEdgeReplied.Step, txc);
+    }
+
+    removed |= AdvanceWatermark(txc.DB, Min(proposed, leastPlanned, leastAcquired, CompleteEdge));
     LastAdvanceWatermark = NActors::TActivationContext::Monotonic();
 
     return removed;

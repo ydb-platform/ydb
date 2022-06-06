@@ -1169,7 +1169,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         request.MutablePartitionRequest()->SetPartition(partitionId);
 
         auto& cmd = *request.MutablePartitionRequest()->MutableCmdRead();
-        cmd.SetClientId(NKikimr::NPQ::CLIENTID_TO_READ_INTERNALLY);
+        cmd.SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
         cmd.SetCount(10000);
         cmd.SetOffset(0);
         cmd.SetReadTimestampMs(0);

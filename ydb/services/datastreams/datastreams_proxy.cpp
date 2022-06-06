@@ -1283,7 +1283,7 @@ namespace NKikimr::NDataStreams::V1 {
         ActorIdToProto(PipeClient, request.MutablePartitionRequest()->MutablePipeClient());
 
         auto cmdRead = request.MutablePartitionRequest()->MutableCmdRead();
-        cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_TO_READ_INTERNALLY);
+        cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
         cmdRead->SetCount(Limit);
         cmdRead->SetOffset(ShardIterator.GetSequenceNumber());
         cmdRead->SetReadTimestampMs(ShardIterator.GetReadTimestamp());

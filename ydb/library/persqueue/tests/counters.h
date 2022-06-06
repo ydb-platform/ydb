@@ -97,9 +97,9 @@ NJson::TJsonValue GetCounters1stClass(ui16 port, const TString& counters,
     TStringBuilder queryBuilder;
     queryBuilder <<
         "/counters/counters=" << counters <<
-        "/database=" << databaseId <<
         "/cloud=" << cloudId <<
         "/folder=" << folderId <<
+        "/database=" << databaseId <<
         "/stream=" << JoinRange("%2F", pathItems.begin(), pathItems.end());
 
     if (consumer) {

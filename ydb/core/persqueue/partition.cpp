@@ -481,7 +481,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , Tablet(tablet)
     , BlobCache(blobCache)
     , InitState(WaitDiskStatus)
-    , PartitionedBlob(partition, 0, 0, 0, 0, 0, Head, NewHead, true, false, 8 << 20)
+    , PartitionedBlob(partition, 0, 0, 0, 0, 0, Head, NewHead, true, false, 8_MB)
     , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
     , BodySize(0)
     , MaxWriteResponsesSize(0)
@@ -852,9 +852,9 @@ void TPartition::SetupStreamCounters(const TActorContext& ctx) {
 
     WriteBufferIsFullCounter.SetCounter(
         GetCountersForStream(counters),
-        {{"database", DbId},
-         {"cloud", CloudId},
+        {{"cloud", CloudId},
          {"folder", FolderId},
+         {"database", DbId},
          {"stream", topicName},
          {"host", DCId},
          {"shard", ToString<ui32>(Partition)}},
@@ -2914,6 +2914,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 1, "",
                                                                user, 0, MAX_BLOB_PART_SIZE * 2, 0, 0, "",
                                                                false);
+
     ctx.Send(ctx.SelfID, event.Release());
     Counters.Cumulative()[COUNTER_PQ_WRITE_TIMESTAMP_CACHE_MISS].Increment(1);
 }

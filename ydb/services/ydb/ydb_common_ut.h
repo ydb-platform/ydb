@@ -48,7 +48,8 @@ public:
             TAutoPtr<TLogBackend> logBackend = {},
             bool enableYq = false,
             TAppPrepare::TFnReg udfFrFactory = nullptr,
-            std::function<void(TServerSettings& settings)> builder = nullptr)
+            std::function<void(TServerSettings& settings)> builder = nullptr,
+            ui16 dynamicNodeCount = 2, ui16 nodeCount = 0)
     {
         ui16 port = PortManager.GetPort(2134);
         ui16 grpc = PortManager.GetPort(2135);
@@ -56,7 +57,9 @@ public:
         ServerSettings->SetGrpcPort(grpc);
         ServerSettings->SetLogBackend(logBackend);
         ServerSettings->SetDomainName("Root");
-        ServerSettings->SetDynamicNodeCount(2);
+        ServerSettings->SetDynamicNodeCount(dynamicNodeCount);
+        if (nodeCount > 0)
+            ServerSettings->SetNodeCount(nodeCount);
         if (TestSettings::PrecreatePools) {
             ServerSettings->AddStoragePool("ssd");
             ServerSettings->AddStoragePool("hdd");

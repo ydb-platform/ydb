@@ -67,9 +67,9 @@ TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& realTopic)
 TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId,
                                         const TString& dbId, const TString& folderId) {
     TVector<TLabelsInfo> res = {
-            {{{"database", dbId}}, {dbId}},
             {{{"cloud", cloudId}}, {cloudId}},
             {{{"folder", folderId}}, {folderId}},
+            {{{"database", dbId}}, {dbId}},
             {{{"stream", topic}}, {topic}}};
     return res;
 }

@@ -55,7 +55,8 @@ private:
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
-                auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(), key.GetTablePath());
+                auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(),
+                    key.GetTablePath());
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
@@ -288,8 +289,8 @@ public:
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
 
-        Y_VERIFY_DEBUG(gateway);
-        Y_VERIFY_DEBUG(sessionCtx);
+        YQL_ENSURE(gateway);
+        YQL_ENSURE(sessionCtx);
     }
 
     ~TKikimrDataSource() {}
@@ -363,6 +364,10 @@ public:
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSource::CallableName())) {
+            if (node.Child(0)->Content() == YdbProviderName) {
+                node.ChildRef(0) = ctx.RenameNode(*node.Child(0), KikimrProviderName);
+            }
+
             if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));
@@ -383,7 +388,10 @@ public:
             return node.Child(1)->Child(0)->Content() == KikimrProviderName;
         }
 
-        if (node.IsCallable(TKiReadTable::CallableName()) || node.IsCallable(TKiReadTableScheme::CallableName()) || node.IsCallable(TKiReadTableList::CallableName())) {
+        if (node.IsCallable(TKiReadTable::CallableName()) ||
+            node.IsCallable(TKiReadTableScheme::CallableName()) ||
+            node.IsCallable(TKiReadTableList::CallableName()))
+        {
             return TKiDataSource(node.ChildPtr(1)).Category() == KikimrProviderName;
         }
 
@@ -616,7 +624,8 @@ IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::T
         return HandleConfigure(TExprBase(input), ctx);
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: " << input->Content()));
+    ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "(Kikimr DataSource) Unsupported function: "
+        << input->Content()));
     return TStatus::Error;
 }
 

@@ -663,9 +663,6 @@ TStatus AnnotateDqReplicate(const TExprNode::TPtr& input, TExprContext& ctx) {
         if (!EnsurePersistableType(lambda->Pos(), *lambdaItemType, ctx)) {
             return TStatus::Error;
         }
-        if (!EnsureStructType(lambda->Pos(), *lambdaItemType, ctx)) {
-            return TStatus::Error;
-        }
         outputFlowItems.push_back(lambdaItemType);
     }
     auto resultItemType = ctx.MakeType<TVariantExprType>(ctx.MakeType<TTupleExprType>(outputFlowItems));

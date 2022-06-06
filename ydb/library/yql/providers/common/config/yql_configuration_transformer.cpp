@@ -6,6 +6,7 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 
 #include <util/generic/maybe.h>
+#include <util/string/vector.h>
 
 namespace NYql {
 namespace NCommon {

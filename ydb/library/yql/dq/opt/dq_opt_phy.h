@@ -86,6 +86,6 @@ NYql::NNodes::TExprBase DqBuildHasItems(NYql::NNodes::TExprBase node, NYql::TExp
     NYql::IOptimizationContext& optCtx);
 
 NYql::NNodes::TExprBase DqBuildScalarPrecompute(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    NYql::IOptimizationContext& optCtx);
+    NYql::IOptimizationContext& optCtx, const TParentsMap& parentsMap, bool allowStageMultiUsage);
 
 } // namespace NYql::NDq

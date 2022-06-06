@@ -1548,7 +1548,9 @@ TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContex
     return precompute;
 }
 
-TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx) {
+TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
+    const TParentsMap& parentsMap, bool allowStageMultiUsage)
+{
     if (!node.Maybe<TCoToOptional>()) {
         return node;
     }
@@ -1560,6 +1562,9 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
     }
 
     auto unionAll = toOptional.List().Cast<TDqCnUnionAll>();
+    if (!IsSingleConsumerConnection(unionAll, parentsMap, allowStageMultiUsage)) {
+        return node;
+    }
 
     if (!unionAll.Output().Maybe<TDqOutput>()) {
         return node;
@@ -1610,10 +1615,7 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
 
     auto newProgram = Build<TCoLambda>(ctx, node.Pos())
         .Args({lambdaArg})
-        // DqOutput expects stream as input, thus form stream with one element
-        .Body<TCoToStream>()
-            .Input(valueExtractor)
-            .Build()
+        .Body(valueExtractor)
         .Done();
 
     auto newUnion = DqPushLambdaToStageUnionAll(unionAll, newProgram, {}, ctx, optCtx);

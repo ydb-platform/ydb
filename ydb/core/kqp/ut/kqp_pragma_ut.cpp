@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            PRAGMA kikimr.UnwrapReadTableValues = "true";
+            PRAGMA ydb.UnwrapReadTableValues = "true";
             SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());

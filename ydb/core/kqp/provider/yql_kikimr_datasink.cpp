@@ -388,6 +388,10 @@ public:
 
     bool ValidateParameters(TExprNode& node, TExprContext& ctx, TMaybe<TString>& cluster) override {
         if (node.IsCallable(TCoDataSink::CallableName())) {
+            if (node.Child(0)->Content() == YdbProviderName) {
+                node.ChildRef(0) = ctx.RenameNode(*node.Child(0), KikimrProviderName);
+            }
+
             if (node.Child(0)->Content() == KikimrProviderName) {
                 if (node.Child(1)->Content().empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(node.Child(1)->Pos()), "Empty cluster name"));

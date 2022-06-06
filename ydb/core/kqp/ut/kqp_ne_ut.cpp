@@ -3141,6 +3141,31 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             .ExpectedReads = 1,
         });
     }
+
+    Y_UNIT_TEST(ScalarMultiUsage) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = kikimr.GetTableClient().GetParamsBuilder()
+            .AddParam("$key").Uint64(701).Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            DECLARE $key AS Uint64;
+
+            $row = (SELECT TableRow() FROM EightShard WHERE Key = $key);
+
+            SELECT $row.Text AS Text;
+            DELETE FROM EightShard WHERE Key = $key AND $row.Data > 0;
+        )", TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([[["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKikimr::NKqp

@@ -77,7 +77,7 @@ message TQueryRequest {
     optional EQueryType Type = 3;
     optional TKqlSettings KqlSettings = 4;
     optional bool KeepSession = 5;
-    optional bytes Cluster = 6;
+    reserved 6; // (deprecated) Cluster
     optional NKikimrMiniKQL.TParams Parameters = 7;
     reserved 8; // (deprecated) SqlAutoCommit
     optional EQueryAction Action = 9;

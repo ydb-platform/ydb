@@ -615,13 +615,10 @@ public:
 
             LogRequest(request, requestInfo, ev->Sender, requestId, dbCounters);
         } else {
-            TString cluster = request.GetCluster();
-            if (cluster.empty()) {
-                cluster = TString(DefaultKikimrClusterName);
-            }
-
             TProcessResult<TKqpSessionInfo*> result;
-            if (!CreateNewSessionWorker(requestInfo, cluster, false, request.GetDatabase(), result)) {
+            if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
+                request.GetDatabase(), result))
+            {
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
                 }

@@ -14,6 +14,7 @@ SRCS(
     browse_pq.h
     browse.h
     counters_hosts.h
+    json_acl.h
     json_browse.h
     json_bscontrollerinfo.h
     json_bsgroupinfo.h

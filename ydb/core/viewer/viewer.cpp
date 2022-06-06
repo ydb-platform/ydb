@@ -48,6 +48,7 @@
 #include "counters_hosts.h"
 #include "json_healthcheck.h"
 #include "json_nodes.h"
+#include "json_acl.h"
 
 namespace NKikimr {
 namespace NViewer {
@@ -208,6 +209,7 @@ public:
             JsonHandlers["/json/compute"] = new TJsonHandler<TJsonCompute>;
             JsonHandlers["/json/healthcheck"] = new TJsonHandler<TJsonHealthCheck>;
             JsonHandlers["/json/nodes"] = new TJsonHandler<TJsonNodes>;
+            JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
         }
     }
 

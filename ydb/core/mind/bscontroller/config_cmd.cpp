@@ -126,6 +126,13 @@ namespace NKikimr::NBsController {
                             Self->PDiskSpaceColorBorder = static_cast<T::PDiskSpaceColorBorder::Type>(value);
                             db.Table<T>().Key(true).Update<T::PDiskSpaceColorBorder>(Self->PDiskSpaceColorBorder);
                         }
+                        for (bool value : settings.GetEnableGroupLayoutSanitizer()) {
+                            Self->GroupLayoutSanitizer = value;
+                            db.Table<T>().Key(true).Update<T::GroupLayoutSanitizer>(Self->GroupLayoutSanitizer);
+                            auto ev = std::make_unique<TEvControllerUpdateSelfHealInfo>();
+                            ev->GroupLayoutSanitizer = Self->GroupLayoutSanitizer;
+                            Self->Send(Self->SelfHealId, ev.release());
+                        }
                         return true;
                     }
 

@@ -24,16 +24,20 @@ namespace NKikimr::NBsController {
         }
 
         TPDiskInfo *pdisk = PDisks.FindForUpdate(pdiskId);
-        if (cmd.GetStatus() != pdisk->Status) {
-            const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus();
-            pdisk->Status = cmd.GetStatus();
+        const bool wasGoodExpectedStatus = pdisk->HasGoodExpectedStatus();
+        if (const auto s = cmd.GetStatus(); s != NKikimrBlobStorage::EDriveStatus::UNKNOWN && s != pdisk->Status) {
+            pdisk->Status = s;
             pdisk->StatusTimestamp = Timestamp;
-            if (pdisk->HasGoodExpectedStatus() != wasGoodExpectedStatus) {
-                for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
-                    if (slot->Group) {
-                        TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
-                        group->CalculateGroupStatus();
-                    }
+        }
+        if (const auto ds = cmd.GetDecommitStatus(); ds != NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET &&
+                ds != pdisk->DecommitStatus) {
+            pdisk->DecommitStatus = ds;
+        }
+        if (wasGoodExpectedStatus != pdisk->HasGoodExpectedStatus()) {
+            for (const auto& [id, slot] : pdisk->VSlotsOnPDisk) {
+                if (slot->Group) {
+                    TGroupInfo *group = Groups.FindForUpdate(slot->Group->ID);
+                    group->CalculateGroupStatus();
                 }
             }
         }
@@ -44,7 +48,8 @@ namespace NKikimr::NBsController {
             (IcPort, host.GetIcPort()),
             (NodeId, host.GetNodeId()),
             (Path, cmd.GetPath()),
-            (Status, cmd.GetStatus()));
+            (Status, cmd.GetStatus()),
+            (DecommitStatus, cmd.GetDecommitStatus()));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TReadDriveStatus& cmd, TStatus& status) {

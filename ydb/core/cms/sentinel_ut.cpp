@@ -48,8 +48,8 @@ Y_UNIT_TEST_SUITE(TSentinelBaseTests) {
             EPDiskStatus::ACTIVE,
             EPDiskStatus::INACTIVE,
             EPDiskStatus::BROKEN,
-            EPDiskStatus::SPARE,
             EPDiskStatus::FAULTY,
+            EPDiskStatus::TO_BE_REMOVED,
         };
 
         for (const EPDiskStatus status : AllStatuses) {

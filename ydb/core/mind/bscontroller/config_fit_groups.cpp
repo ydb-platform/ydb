@@ -51,7 +51,7 @@ namespace NKikimr {
                 for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
                     TGroupMapper::TGroupDefinition group;
                     try {
-                        AllocateGroup(0, group, nullptr, 0, {}, 0, false);
+                        AllocateGroup(0, group, {}, {}, 0, false);
                     } catch (const TExFitGroupError&) {
                         throw TExError() << "group reserve constraint hit";
                     }
@@ -92,7 +92,7 @@ namespace NKikimr {
                     requiredSpace = ExpectedSlotSize.front();
                     ExpectedSlotSize.pop_front();
                 }
-                AllocateGroup(groupId, group, nullptr, 0, {}, requiredSpace, false);
+                AllocateGroup(groupId, group, {}, {}, requiredSpace, false);
 
                 // scan all comprising PDisks for PDiskCategory
                 TMaybe<TPDiskCategory> desiredPDiskCategory;
@@ -171,6 +171,7 @@ namespace NKikimr {
                 // mapping for audit log
                 TMap<TVDiskIdShort, TVSlotId> replacedSlots;
                 TStackVec<std::pair<TVSlotId, bool>, 32> replaceQueue;
+                THashMap<TVDiskIdShort, TPDiskId> replacedDisks;
                 i64 requiredSpace = Min<i64>();
 
                 ////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -197,9 +198,6 @@ namespace NKikimr {
                                 replace = true;
                                 break;
 
-                            case NKikimrBlobStorage::EDriveStatus::SPARE:
-                                break;
-
                             case NKikimrBlobStorage::EDriveStatus::FAULTY:
                             case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
                                 // groups are moved out asynchronously
@@ -217,6 +215,7 @@ namespace NKikimr {
                         g[vslot->RingIdx][vslot->FailDomainIdx][vslot->VDiskIdx] = targetPDiskId;
                         replacedSlots.emplace(TVDiskIdShort(vslot->RingIdx, vslot->FailDomainIdx, vslot->VDiskIdx), vslot->VSlotId);
                         replaceQueue.emplace_back(vslot->VSlotId, State.SuppressDonorMode.count(vslot->VSlotId));
+                        replacedDisks.emplace(vslot->GetShortVDiskId(), vslot->VSlotId.ComprisingPDiskId());
                     } else {
                         preservedSlots.emplace(vslot->GetVDiskId(), vslot->VSlotId);
                         auto& m = vslot->Metrics;
@@ -243,10 +242,6 @@ namespace NKikimr {
                         }
                     }
                     if (hasMissingSlots || !IgnoreGroupSanityChecks) {
-                        TStackVec<TPDiskId, 32> replacedDiskIds;
-                        for (const auto& [vslotId, suppressDonorMode] : replaceQueue) {
-                            replacedDiskIds.push_back(vslotId.ComprisingPDiskId());
-                        }
                         TGroupMapper::TForbiddenPDisks forbid;
                         for (const auto& vslot : groupInfo->VDisksInGroup) {
                             for (const auto& [vslotId, vdiskId] : vslot->Donors) {
@@ -255,8 +250,7 @@ namespace NKikimr {
                                 }
                             }
                         }
-                        AllocateGroup(groupId, group, replacedDiskIds.data(), replacedDiskIds.size(), std::move(forbid),
-                            requiredSpace, AllowUnusableDisks);
+                        AllocateGroup(groupId, group, replacedDisks, std::move(forbid), requiredSpace, AllowUnusableDisks);
                         if (!IgnoreVSlotQuotaCheck) {
                             adjustSpaceAvailable = true;
                             for (const auto& [pos, vslotId] : replacedSlots) {
@@ -361,9 +355,9 @@ namespace NKikimr {
             }
 
         private:
-            void AllocateGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group, const TPDiskId replacedDiskIds[],
-                    size_t numReplacedDisks, TGroupMapper::TForbiddenPDisks forbid, i64 requiredSpace,
-                    bool addExistingDisks) {
+            void AllocateGroup(TGroupId groupId, TGroupMapper::TGroupDefinition& group,
+                    const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
+                    i64 requiredSpace, bool addExistingDisks) {
                 if (!Mapper) {
                     Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping);
                     PopulateGroupMapper();
@@ -382,8 +376,7 @@ namespace NKikimr {
                         }
                     }
                 }
-                Geometry.AllocateGroup(*Mapper, groupId, group, replacedDiskIds, numReplacedDisks, std::move(forbid),
-                    requiredSpace);
+                Geometry.AllocateGroup(*Mapper, groupId, group, replacedDisks, std::move(forbid), requiredSpace);
                 for (const TPDiskId pdiskId : removeQ) {
                     Mapper->UnregisterPDisk(pdiskId);
                 }
@@ -451,7 +444,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (info.Status != NKikimrBlobStorage::EDriveStatus::ACTIVE) {
+                if (!info.AcceptsNewSlots()) {
                     usable = false;
                 }
 
@@ -460,8 +453,17 @@ namespace NKikimr {
                 }
 
                 // register PDisk in the mapper
-                return Mapper->RegisterPDisk(id, State.HostRecords->GetLocation(id.NodeId), usable, numSlots,
-                    info.ExpectedSlotCount, groups.data(), groups.size(), availableSpace, info.Operational);
+                return Mapper->RegisterPDisk({
+                    .PDiskId = id,
+                    .Location = State.HostRecords->GetLocation(id.NodeId),
+                    .Usable = usable,
+                    .NumSlots = numSlots,
+                    .MaxSlots = info.ExpectedSlotCount,
+                    .Groups = std::move(groups),
+                    .SpaceAvailable = availableSpace,
+                    .Operational = info.Operational,
+                    .Decommitted = info.Decommitted(),
+                });
             }
 
             std::map<TVDiskIdShort, TVSlotInfo*> CreateVSlotsForGroup(TGroupInfo *groupInfo,

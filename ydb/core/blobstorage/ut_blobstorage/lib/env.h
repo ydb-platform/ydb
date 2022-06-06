@@ -29,6 +29,8 @@ struct TEnvironmentSetup {
         const std::function<void(TTestActorSystem&)> PrepareRuntime;
         const ui32 ControllerNodeId = 1;
         const bool Cache = false;
+        const ui32 NumDataCenters = 0;
+        const std::function<TNodeLocation(ui32)> LocationGenerator;
     };
 
     const TSettings Settings;
@@ -93,6 +95,11 @@ struct TEnvironmentSetup {
         Cerr << "RandomSeed# " << seed << Endl;
     }
 
+    ui32 GetNumDataCenters() const {
+        return Settings.NumDataCenters ? Settings.NumDataCenters :
+            Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc ? 3 : 1;
+    }
+
     void Initialize() {
         Runtime = std::make_unique<TTestActorSystem>(Settings.NodeCount);
         if (Settings.PrepareRuntime) {
@@ -102,8 +109,11 @@ struct TEnvironmentSetup {
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
         appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", DomainId).Release());
-        Runtime->SetupTabletRuntime(Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc,
-            Settings.ControllerNodeId);
+        if (Settings.LocationGenerator) {
+            Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId);
+        } else {
+            Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId);
+        }
         SetupStaticStorage();
         SetupTablet();
         SetupStorage();
@@ -115,8 +125,11 @@ struct TEnvironmentSetup {
 
     void StartNode(ui32 nodeId) {
         Runtime->StartNode(nodeId);
-        Runtime->SetupTabletRuntime(Settings.Erasure.GetErasure() == TBlobStorageGroupType::ErasureMirror3dc,
-            Settings.ControllerNodeId, nodeId);
+        if (Settings.LocationGenerator) {
+            Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId, nodeId);
+        } else {
+            Runtime->SetupTabletRuntime(GetNumDataCenters(), Settings.ControllerNodeId, nodeId);
+        }
         if (nodeId == Settings.ControllerNodeId) {
             SetupStaticStorage();
             SetupTablet();
@@ -549,11 +562,35 @@ struct TEnvironmentSetup {
         }
     }
 
+    void UpdateSettings(bool selfHeal, bool donorMode, bool groupLayoutSanitizer = false) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand();
+        auto *us = cmd->MutableUpdateSettings();
+        us->AddEnableSelfHeal(selfHeal);
+        us->AddEnableDonorMode(donorMode);
+        us->AddEnableGroupLayoutSanitizer(groupLayoutSanitizer);
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
     void EnableDonorMode() {
         NKikimrBlobStorage::TConfigRequest request;
         request.AddCommand()->MutableEnableDonorMode()->SetEnable(true);
         auto response = Invoke(request);
         UNIT_ASSERT(response.GetSuccess());
+    }
+
+    void UpdateDriveStatus(ui32 nodeId, ui32 pdiskId, NKikimrBlobStorage::EDriveStatus status,
+            NKikimrBlobStorage::EDecommitStatus decommitStatus) {
+        NKikimrBlobStorage::TConfigRequest request;
+        auto *cmd = request.AddCommand();
+        auto *ds = cmd->MutableUpdateDriveStatus();
+        ds->MutableHostKey()->SetNodeId(nodeId);
+        ds->SetPDiskId(pdiskId);
+        ds->SetStatus(status);
+        ds->SetDecommitStatus(decommitStatus);
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
     void SetScrubPeriodicity(TDuration periodicity) {

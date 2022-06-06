@@ -132,17 +132,25 @@ TActorId TTestActorSystem::CreateTestBootstrapper(TTabletStorageInfo *info, std:
     return Register(CreateBootstrapper(info, bi.Get()), nodeId);
 }
 
-void TTestActorSystem::SetupTabletRuntime(bool isMirror3dc, ui32 stateStorageNodeId, ui32 targetNodeId) {
-    auto setup = MakeIntrusive<TTableNameserverSetup>();
-    ui32 nodeCountInDC = (MaxNodeId + 2) / 3;
-    for (ui32 nodeId : GetNodes()) {
-        const TString name = Sprintf("127.0.0.%u", nodeId);
-        ui32 dcNum = isMirror3dc ? ((nodeId + nodeCountInDC - 1) / nodeCountInDC) : 1;
+void TTestActorSystem::SetupTabletRuntime(ui32 numDataCenters, ui32 stateStorageNodeId, ui32 targetNodeId) {
+    const ui32 nodeCountInDC = (MaxNodeId + numDataCenters - 1) / numDataCenters;
+    auto locationGenerator = [&](ui32 nodeId) {
+        const ui32 dcNum = (nodeId + nodeCountInDC - 1) / nodeCountInDC;
         NActorsInterconnect::TNodeLocation location;
         location.SetDataCenter(ToString(dcNum));
         location.SetRack(ToString(nodeId));
         location.SetUnit(ToString(nodeId));
-        setup->StaticNodeTable[nodeId] = {name, name, name, 19001, TNodeLocation(location)};
+        return TNodeLocation(location);
+    };
+    SetupTabletRuntime(locationGenerator, stateStorageNodeId, targetNodeId);
+}
+
+void TTestActorSystem::SetupTabletRuntime(const std::function<TNodeLocation(ui32)>& locationGenerator,
+        ui32 stateStorageNodeId, ui32 targetNodeId) {
+    auto setup = MakeIntrusive<TTableNameserverSetup>();
+    for (ui32 nodeId : GetNodes()) {
+        const TString name = Sprintf("127.0.0.%u", nodeId);
+        setup->StaticNodeTable[nodeId] = {name, name, name, 19001, locationGenerator(nodeId)};
     }
 
     for (ui32 nodeId : GetNodes()) {

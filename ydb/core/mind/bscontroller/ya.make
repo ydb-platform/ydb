@@ -25,6 +25,8 @@ SRCS(
     get_group.cpp
     grouper.cpp
     grouper.h
+    group_layout_checker.cpp
+    group_layout_checker.h
     group_mapper.cpp
     group_mapper.h
     group_reconfigure_wipe.cpp

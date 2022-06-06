@@ -11,6 +11,7 @@ TIMEOUT(600)
 SRCS(
     block_race.cpp
     counting_events.cpp
+    decommit_3dc.cpp
     defrag.cpp
     donor.cpp
     encryption.cpp
@@ -18,6 +19,7 @@ SRCS(
     incorrect_queries.cpp
     main.cpp
     mirror3of4.cpp
+    sanitize_groups.cpp
     space_check.cpp
     sync.cpp
     replication.cpp

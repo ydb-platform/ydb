@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/util/testactorsys.h>
 #include <ydb/core/mind/bscontroller/self_heal.h>
+#include <ydb/core/mind/bscontroller/impl.h>
 
 using namespace NActors;
 using namespace NKikimr;
@@ -13,8 +14,8 @@ void RunTestCase(TCallback&& callback) {
     TTestActorSystem runtime(1);
     runtime.Start();
     const TActorId& parentId = runtime.AllocateEdgeActor(1);
-    std::shared_ptr<std::atomic_uint64_t> UnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
-    const TActorId& selfHealId = runtime.Register(CreateSelfHealActor(1, UnreassignableGroups), parentId, {}, {}, 1);
+    TBlobStorageController Controller({}, new TTabletStorageInfo(1, TTabletTypes::FLAT_BS_CONTROLLER));
+    const TActorId& selfHealId = runtime.Register(Controller.CreateSelfHealActor(), parentId, {}, {}, 1);
     callback(selfHealId, parentId, runtime);
     runtime.Stop();
 }

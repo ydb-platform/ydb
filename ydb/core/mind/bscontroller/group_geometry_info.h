@@ -69,12 +69,11 @@ namespace NKikimr::NBsController {
         ui32 GetDomainLevelEnd() const { return DomainLevelEnd; }
 
         void AllocateGroup(TGroupMapper &mapper, TGroupId groupId, TGroupMapper::TGroupDefinition &group,
-                const TPDiskId replacedDiskIds[], size_t numReplacedDisks, TGroupMapper::TForbiddenPDisks forbid,
+                const THashMap<TVDiskIdShort, TPDiskId>& replacedDisks, TGroupMapper::TForbiddenPDisks forbid,
                 i64 requiredSpace) const {
             TString error;
             for (const bool requireOperational : {true, false}) {
-                if (mapper.AllocateGroup(groupId, group, replacedDiskIds, numReplacedDisks, forbid,
-                        requiredSpace, requireOperational, error)) {
+                if (mapper.AllocateGroup(groupId, group, replacedDisks, forbid, requiredSpace, requireOperational, error)) {
                     return;
                 }
             }
@@ -113,6 +112,10 @@ namespace NKikimr::NBsController {
                 }
             }
             return true;
+        }
+
+        TBlobStorageGroupType GetType() const {
+            return Type;
         }
 
         TBlobStorageGroupType::EErasureSpecies GetErasure() const {

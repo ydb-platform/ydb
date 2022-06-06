@@ -1,4 +1,5 @@
 #include "pdisk_mock.h"
+#include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
@@ -238,7 +239,7 @@ TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
     return res;
 }
 
-class TPDiskMockActor : public TActor<TPDiskMockActor> {
+class TPDiskMockActor : public TActorBootstrapped<TPDiskMockActor> {
     enum {
         EvResume = EventSpaceBegin(TEvents::ES_PRIVATE),
     };
@@ -251,8 +252,7 @@ class TPDiskMockActor : public TActor<TPDiskMockActor> {
 
 public:
     TPDiskMockActor(TPDiskMockState::TPtr state)
-        : TActor(&TThis::StateFunc)
-        , State(std::move(state)) // to keep ownership
+        : State(std::move(state)) // to keep ownership
         , Impl(*State->Impl)
         , Prefix(TStringBuilder() << "PDiskMock[" << Impl.NodeId << ":" << Impl.PDiskId << "] ")
     {
@@ -261,6 +261,30 @@ public:
             owner.CutLogId = TActorId();
             Impl.ResetOwnerReservedChunks(owner); // return reserved, but not committed chunks to free pool
         }
+    }
+
+    void Bootstrap() {
+        Become(&TThis::StateFunc);
+        ReportMetrics();
+    }
+
+    void ReportMetrics() {
+        ui32 usedChunks = 0;
+        for (const auto& [ownerId, owner] : Impl.Owners) {
+            usedChunks += owner.CommittedChunks.size() + owner.ReservedChunks.size();
+        }
+        Y_VERIFY(usedChunks <= Impl.TotalChunks);
+
+        auto ev = std::make_unique<TEvBlobStorage::TEvControllerUpdateDiskStatus>();
+        auto& record = ev->Record;
+        auto *p = record.AddPDisksMetrics();
+        p->SetPDiskId(Impl.PDiskId);
+        p->SetAvailableSize((Impl.TotalChunks - usedChunks) * Impl.ChunkSize);
+        p->SetTotalSize(Impl.TotalChunks * Impl.ChunkSize);
+        p->SetState(NKikimrBlobStorage::TPDiskState::Normal);
+        Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), ev.release());
+
+        Schedule(TDuration::Seconds(5), new TEvents::TEvWakeup);
     }
 
     void Handle(NPDisk::TEvYardInit::TPtr ev) {
@@ -663,6 +687,7 @@ public:
         hFunc(NPDisk::TEvSlay, Handle);
         hFunc(NPDisk::TEvHarakiri, Handle);
         hFunc(NPDisk::TEvConfigureScheduler, Handle);
+        cFunc(TEvents::TSystem::Wakeup, ReportMetrics);
     )
 };
 

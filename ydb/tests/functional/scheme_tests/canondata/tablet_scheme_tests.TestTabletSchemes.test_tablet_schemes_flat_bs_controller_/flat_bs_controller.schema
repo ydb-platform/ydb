@@ -12,6 +12,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 18,
+                "ColumnName": "GroupLayoutSanitizer",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -92,6 +97,7 @@
             "0": {
                 "Columns": [
                     17,
+                    18,
                     1,
                     2,
                     4,
@@ -174,6 +180,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 17,
+                "ColumnName": "DecommitStatus",
+                "ColumnType": "Uint32"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "NodeID",
                 "ColumnType": "Uint32"
@@ -248,6 +259,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    17,
                     1,
                     2,
                     3,

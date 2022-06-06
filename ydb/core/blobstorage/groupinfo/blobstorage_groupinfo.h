@@ -191,7 +191,8 @@ public:
         TVector<TVDiskIdShort> VDiskIdForOrderNumber;
 
         TTopology(TBlobStorageGroupType gtype);
-        TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain);
+        TTopology(TBlobStorageGroupType gtype, ui32 numFailRealms, ui32 numFailDomainsPerFailRealm, ui32 numVDisksPerFailDomain,
+                bool finalize = false);
         TTopology(const TTopology&) = delete;
         TTopology &operator =(const TTopology&) = delete;
         TTopology(TTopology&&) = default;
@@ -221,7 +222,9 @@ public:
         // get the total number of VDisks in the blobstorage group
         ui32 GetTotalVDisksNum() const { return TotalVDisks; }
         // get number of VDisks per fail domain
-        ui32 GetNumVDisksPerFailDomain() const;
+        ui32 GetNumVDisksPerFailDomain() const { return FailRealms[0].FailDomains[0].VDisks.size(); }
+        // get number of fail domains per fail realm
+        ui32 GetNumFailDomainsPerFailRealm() const { return FailRealms[0].FailDomains.size(); }
         // get quorum checker
         const IQuorumChecker& GetQuorumChecker() const { return *QuorumChecker; }
 

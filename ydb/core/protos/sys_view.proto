@@ -166,6 +166,7 @@ message TPDiskInfo {
     optional uint32 ExpectedSlotCount = 15;
     optional uint32 NumActiveSlots = 16;
     optional uint64 Category = 17;
+    optional string DecommitStatus = 18;
     // metrics ?
     // physical location ?
     // config ?

@@ -145,7 +145,6 @@ bool TPDiskStatus::IsNewStatusGood() const {
     switch (Compute(Current, unused)) {
         case EPDiskStatus::INACTIVE:
         case EPDiskStatus::ACTIVE:
-        case EPDiskStatus::SPARE:
             return true;
 
         case EPDiskStatus::UNKNOWN:

@@ -289,8 +289,17 @@ public:
                         const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
                         if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
                             const TNodeLocation& location = HostRecords->GetLocation(pdiskId.NodeId);
-                            const bool ok = mapper.RegisterPDisk(pdiskId, location, true, pdisk.GetNumActiveSlots(),
-                                pdisk.GetExpectedSlotCount(), nullptr, 0, 0, true);
+                            const bool ok = mapper.RegisterPDisk({
+                                .PDiskId = pdiskId,
+                                .Location = location,
+                                .Usable = true,
+                                .NumSlots = pdisk.GetNumActiveSlots(),
+                                .MaxSlots = pdisk.GetExpectedSlotCount(),
+                                .Groups = {},
+                                .SpaceAvailable = 0,
+                                .Operational = true,
+                                .Decommitted = false,
+                            });
                             Y_VERIFY(ok);
                             break;
                         }
@@ -301,7 +310,7 @@ public:
                 TGroupMapper::TGroupDefinition group;
                 TString error;
                 std::deque<ui64> groupSizes;
-                while (mapper.AllocateGroup(groupSizes.size(), group, nullptr, 0, {}, 0, false, error)) {
+                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 0, false, error)) {
                     std::vector<TGroupDiskInfo> disks;
                     std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
                     std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;
@@ -425,6 +434,7 @@ void CopyInfo(NKikimrSysView::TPDiskInfo* info, const THolder<TBlobStorageContro
     }
     info->SetExpectedSlotCount(pDiskInfo->ExpectedSlotCount);
     info->SetNumActiveSlots(pDiskInfo->NumActiveSlots + pDiskInfo->StaticSlotUsage);
+    info->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(pDiskInfo->DecommitStatus));
 }
 
 void SerializeVSlotInfo(NKikimrSysView::TVSlotInfo *pb, const TVDiskID& vdiskId, const NKikimrBlobStorage::TVDiskMetrics& m,
@@ -518,7 +528,6 @@ void CopyInfo(TDstMap& dst, TDeletedSet& deleted, const TSrcMap& src, TChangedSe
             deleted.insert(key);
         }
     }
-    changed.clear();
 }
 
 void TBlobStorageController::UpdateSystemViews() {
@@ -527,7 +536,7 @@ void TBlobStorageController::UpdateSystemViews() {
     }
 
     if (!SysViewChangedPDisks.empty() || !SysViewChangedVSlots.empty() || !SysViewChangedGroups.empty() ||
-            !SysViewChangedStoragePools.empty()) {
+            !SysViewChangedStoragePools.empty() || SysViewChangedSettings) {
         auto update = MakeHolder<TEvControllerUpdateSystemViews>();
         update->HostRecords = HostRecords;
         update->GroupReserveMin = GroupReserveMin;
@@ -538,7 +547,6 @@ void TBlobStorageController::UpdateSystemViews() {
         CopyInfo(state.VSlots, update->DeletedVSlots, VSlots, SysViewChangedVSlots);
         CopyInfo(state.Groups, update->DeletedGroups, GroupMap, SysViewChangedGroups);
         CopyInfo(state.StoragePools, update->DeletedStoragePools, StoragePools, SysViewChangedStoragePools);
-        SysViewChangedSettings = false;
 
         // process static slots and static groups
         for (const auto& [pdiskId, pdisk] : StaticPDisks) {
@@ -558,6 +566,7 @@ void TBlobStorageController::UpdateSystemViews() {
                     }
                 }
                 pb->SetStatusV2(NKikimrBlobStorage::EDriveStatus_Name(NKikimrBlobStorage::EDriveStatus::ACTIVE));
+                pb->SetDecommitStatus(NKikimrBlobStorage::EDecommitStatus_Name(NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE));
                 pb->SetExpectedSlotCount(pdisk.ExpectedSlotCount ? pdisk.ExpectedSlotCount : pdisk.StaticSlotUsage);
                 pb->SetNumActiveSlots(pdisk.StaticSlotUsage);
             }
@@ -602,6 +611,12 @@ void TBlobStorageController::UpdateSystemViews() {
             }
             CalculateGroupUsageStats(pb, disks, (TBlobStorageGroupType::EErasureSpecies)group.GetErasureSpecies());
         }
+
+        SysViewChangedPDisks.clear();
+        SysViewChangedVSlots.clear();
+        SysViewChangedGroups.clear();
+        SysViewChangedStoragePools.clear();
+        SysViewChangedSettings = false;
 
         Send(SystemViewsCollectorId, update.Release());
     }

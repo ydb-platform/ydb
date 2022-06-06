@@ -660,7 +660,9 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // tablet-related utility functions
 
-    void SetupTabletRuntime(bool isMirror3dc = false, ui32 stateStorageNodeId = 0, ui32 targetNodeId = 0);
+    void SetupTabletRuntime(ui32 numDataCenters = 1, ui32 stateStorageNodeId = 0, ui32 targetNodeId = 0);
+    void SetupTabletRuntime(const std::function<TNodeLocation(ui32)>& locationGenerator, ui32 stateStorageNodeId = 0,
+        ui32 targetNodeId = 0);
     static NTabletPipe::TClientConfig GetPipeConfigWithRetries();
     void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui64 cookie, const NKikimr::NTabletPipe::TClientConfig& pipeConfig);
     static TTabletStorageInfo *CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId);

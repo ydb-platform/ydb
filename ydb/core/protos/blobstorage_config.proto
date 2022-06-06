@@ -186,9 +186,16 @@ enum EDriveStatus {
     ACTIVE = 1; // working as expected
     INACTIVE = 2; // new groups are not created over this drive, but existing ones continue to work as expected
     BROKEN = 3; // drive is not working, groups are automatically moved out of this drive upon reception of this status
-    SPARE = 4; // spare drive -- groups are created only when being moved from BROKEN drives
+    reserved 4;
     FAULTY = 5; // drive is expected to become BROKEN soon, new groups are not created, old groups are asynchronously moved out from this drive
     TO_BE_REMOVED = 6; // same as INACTIVE, but drive is counted in fault model as not working
+}
+
+enum EDecommitStatus {
+    DECOMMIT_UNSET = 0; // unset status -- missing optional field
+    DECOMMIT_NONE = 1; // no decomission
+    DECOMMIT_PENDING = 2; // drive is going to be removed soon, but SelfHeal logic would not remove it automatically
+    DECOMMIT_IMMINENT = 3; // drive is going to be settled automatically
 }
 
 message TGroupStatus {
@@ -226,6 +233,7 @@ message TUpdateDriveStatus {
     uint32 PDiskId = 4; // may be set instead of path to identify PDisk
     string Serial = 5; // may be set instead of path and PDiskId to identify PDisk
     uint64 StatusChangeTimestamp = 6; // used only in return of ReadDriveStatus
+    EDecommitStatus DecommitStatus = 7;
 }
 
 message TReadDriveStatus {
@@ -426,6 +434,7 @@ message TUpdateSettings {
     repeated uint32 GroupReservePartPPM = 7;
     repeated uint32 MaxScrubbedDisksAtOnce = 8;
     repeated NKikimrBlobStorage.TPDiskSpaceColor.E PDiskSpaceColorBorder = 9;
+    repeated bool EnableGroupLayoutSanitizer = 10;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -526,6 +535,7 @@ message TBaseConfig {
         uint32 ExpectedSlotCount = 13;
         NKikimrBlobStorage.TPDiskMetrics PDiskMetrics = 14;
         uint64 DriveStatusChangeTimestamp = 15; // TInstant::GetValue()
+        EDecommitStatus DecommitStatus = 16;
     }
     message TVSlot {
         message TDonorDisk {

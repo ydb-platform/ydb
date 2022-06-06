@@ -38,10 +38,11 @@ struct Schema : NIceDb::Schema {
         struct ExpectedSerial : Column<14, NScheme::NTypeIds::String> {};
         struct LastSeenSerial : Column<15, NScheme::NTypeIds::String> {};
         struct LastSeenPath : Column<16, NScheme::NTypeIds::String> {};
+        struct DecommitStatus : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EDecommitStatus; static constexpr Type Default = Type::DECOMMIT_NONE; };
 
         using TKey = TableKey<NodeID, PDiskID>; // order is important
         using TColumns = TableColumns<NodeID, PDiskID, Path, Category, Guid, SharedWithOs, ReadCentric, NextVSlotId,
-              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath>;
+              Status, Timestamp, PDiskConfig, ExpectedSerial, LastSeenSerial, LastSeenPath, DecommitStatus>;
     };
 
     struct Group : Table<4> {
@@ -84,11 +85,13 @@ struct Schema : NIceDb::Schema {
         struct GroupReservePart : Column<15, NScheme::NTypeIds::Uint32> { static constexpr Type Default = 0; }; // parts per million
         struct MaxScrubbedDisksAtOnce : Column<16, NScheme::NTypeIds::Uint32> { static constexpr Type Default = Max<ui32>(); }; // no limit
         struct PDiskSpaceColorBorder : Column<17, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TPDiskSpaceColor::E; static constexpr Type Default = NKikimrBlobStorage::TPDiskSpaceColor::GREEN; };
+        struct GroupLayoutSanitizer : Column<18, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
 
         using TKey = TableKey<FixedKey>;
         using TColumns = TableColumns<FixedKey, NextGroupID, SchemaVersion, NextOperationLogIndex, DefaultMaxSlots,
               InstanceId, SelfHealEnable, DonorModeEnable, ScrubPeriodicity, SerialManagementStage, NextStoragePoolId,
-              PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder>;
+              PDiskSpaceMarginPromille, GroupReserveMin, GroupReservePart, MaxScrubbedDisksAtOnce, PDiskSpaceColorBorder,
+              GroupLayoutSanitizer>;
     };
 
     struct VSlot : Table<5> {

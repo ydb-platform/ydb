@@ -78,6 +78,7 @@ public:
     class TConfigState;
     class TGroupSelector;
     class TGroupFitter;
+    class TSelfHealActor;
 
     using TVSlotReadyTimestampQ = std::list<std::pair<TInstant, TVSlotInfo*>>;
 
@@ -294,6 +295,7 @@ public:
 
         NKikimrBlobStorage::EDriveStatus Status;
         TInstant StatusTimestamp;
+        NKikimrBlobStorage::EDecommitStatus DecommitStatus;
         TString ExpectedSerial;
         TString LastSeenSerial;
         TString LastSeenPath;
@@ -313,7 +315,8 @@ public:
                     Table::Timestamp,
                     Table::ExpectedSerial,
                     Table::LastSeenSerial,
-                    Table::LastSeenPath
+                    Table::LastSeenPath,
+                    Table::DecommitStatus
                 > adapter(
                     &TPDiskInfo::Path,
                     &TPDiskInfo::Kind,
@@ -326,7 +329,8 @@ public:
                     &TPDiskInfo::StatusTimestamp,
                     &TPDiskInfo::ExpectedSerial,
                     &TPDiskInfo::LastSeenSerial,
-                    &TPDiskInfo::LastSeenPath
+                    &TPDiskInfo::LastSeenPath,
+                    &TPDiskInfo::DecommitStatus
                 );
             callback(&adapter);
         }
@@ -343,6 +347,7 @@ public:
                    ui32 defaultMaxSlots,
                    NKikimrBlobStorage::EDriveStatus status,
                    TInstant statusTimestamp,
+                   NKikimrBlobStorage::EDecommitStatus decommitStatus,
                    const TString& expectedSerial,
                    const TString& lastSeenSerial,
                    const TString& lastSeenPath,
@@ -358,6 +363,7 @@ public:
             , BoxId(boxId)
             , Status(status)
             , StatusTimestamp(statusTimestamp)
+            , DecommitStatus(decommitStatus)
             , ExpectedSerial(expectedSerial)
             , LastSeenSerial(lastSeenSerial)
             , LastSeenPath(lastSeenPath)
@@ -401,21 +407,38 @@ public:
         }
 
         bool ShouldBeSettledBySelfHeal() const {
-            switch (Status) {
-                case NKikimrBlobStorage::EDriveStatus::FAULTY:
-                case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
-                    return true;
-                default:
-                    return false;
-            }
+            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
+                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
+                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT;
         }
 
         bool BadInTermsOfSelfHeal() const {
-            return ShouldBeSettledBySelfHeal() || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
+            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
+                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
+                || Status == NKikimrBlobStorage::EDriveStatus::INACTIVE;
         }
 
         std::tuple<bool, bool> GetSelfHealStatusTuple() const {
             return {ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal()};
+        }
+
+        bool AcceptsNewSlots() const {
+            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE;
+        }
+
+        bool Decommitted() const {
+            switch (DecommitStatus) {
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE:
+                    return false;
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING:
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT:
+                    return true;
+                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET:
+                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    break;
+            }
+            Y_FAIL("unexpected EDecommitStatus");
         }
 
         bool HasGoodExpectedStatus() const {
@@ -426,7 +449,6 @@ public:
 
                 case NKikimrBlobStorage::EDriveStatus::ACTIVE:
                 case NKikimrBlobStorage::EDriveStatus::INACTIVE:
-                case NKikimrBlobStorage::EDriveStatus::SPARE:
                 case NKikimrBlobStorage::EDriveStatus::FAULTY:
                 case NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED:
                     return true;
@@ -488,7 +510,7 @@ public:
         struct TGroupStatus {
             // status derived from the actual state of VDisks (IsReady() to be exact)
             NKikimrBlobStorage::TGroupStatus::E OperatingStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
-            // status derived by adding underlying PDisk status (FAULTY&BROKEN are assumed to be not working ones)
+            // status derived by adding underlying PDisk status (some of them are assumed to be not working ones)
             NKikimrBlobStorage::TGroupStatus::E ExpectedStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
         } Status;
 
@@ -1322,6 +1344,7 @@ private:
     THashMap<TPDiskId, ui32> StaticPDiskSlotUsage;
     std::unique_ptr<TStoragePoolStat> StoragePoolStat;
     bool StopGivingGroups = false;
+    bool GroupLayoutSanitizer = false;
     NKikimrBlobStorage::TSerialManagementStage::E SerialManagementStage
             = NKikimrBlobStorage::TSerialManagementStage::DISCOVER_SERIAL;
 
@@ -1347,6 +1370,7 @@ private:
             EvVSlotReadyUpdate,
             EvVSlotNotReadyHistogramUpdate,
             EvProcessIncomingEvent,
+            EvUpdateHostRecords,
         };
 
         struct TEvUpdateSystemViews : public TEventLocal<TEvUpdateSystemViews, EvUpdateSystemViews> {};
@@ -1360,6 +1384,14 @@ private:
         struct TEvScrub : TEventLocal<TEvScrub, EvScrub> {};
         struct TEvVSlotReadyUpdate : TEventLocal<TEvVSlotReadyUpdate, EvVSlotReadyUpdate> {};
         struct TEvVSlotNotReadyHistogramUpdate : TEventLocal<TEvVSlotNotReadyHistogramUpdate, EvVSlotNotReadyHistogramUpdate> {};
+
+        struct TEvUpdateHostRecords : TEventLocal<TEvUpdateHostRecords, EvUpdateHostRecords> {
+            THostRecordMap HostRecords;
+
+            TEvUpdateHostRecords(THostRecordMap hostRecords)
+                : HostRecords(std::move(hostRecords))
+            {}
+        };
     };
 
     static constexpr TDuration UpdateSystemViewsPeriod = TDuration::Seconds(5);
@@ -1546,6 +1578,16 @@ private:
     void Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev);
     void HandleHostRecordsTimeToLiveExceeded();
 
+public:
+    // Self-heal actor's main purpose is to monitor FAULTY pdisks and to slightly move groups out of them; every move
+    // should not render group unusable, also it should not exceed its fail model. It also takes into account replication
+    // broker features such as only one vslot over PDisk is being replicated at a moment.
+    //
+    // It interacts with BS_CONTROLLER and group observer (which provides information about group state on a per-vdisk
+    // basis). BS_CONTROLLER reports faulty PDisks and all involved groups in a push notification manner.
+    IActor *CreateSelfHealActor();
+
+private:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Online state
     void Handle(TEvBlobStorage::TEvControllerRegisterNode::TPtr &ev);

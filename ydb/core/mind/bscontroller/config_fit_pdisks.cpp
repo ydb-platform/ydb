@@ -89,7 +89,8 @@ namespace NKikimr {
             state.PDisks.ConstructInplaceNewEntry(pdiskId, *hostId, TString(), category.GetRaw(),
                 *driveInfo->Guid, false, false, 1000, driveInfo->PDiskConfig.GetOrElse(TString()),
                 driveInfo->BoxId, DefaultMaxSlots, NKikimrBlobStorage::EDriveStatus::ACTIVE,
-                TInstant::Zero(), serial.Serial, TString(), fsPath, staticSlotUsage);
+                TInstant::Zero(), NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, serial.Serial,
+                TString(), fsPath, staticSlotUsage);
 
             const TPDiskLocation location(nodeId, serial.Serial);
             state.PDiskLocationMap.emplace(location, pdiskId);
@@ -234,8 +235,9 @@ namespace NKikimr {
                             state.PDisks.ConstructInplaceNewEntry(pdiskId, hostId, path, category.GetRaw(),
                                 guid, driveInfo.SharedWithOs, driveInfo.ReadCentric, 1000,
                                 driveInfo.PDiskConfig.GetOrElse(TString()), boxId, DefaultMaxSlots,
-                                NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(), currentSerial, currentSerial,
-                                TString(), staticSlotUsage);
+                                NKikimrBlobStorage::EDriveStatus::ACTIVE, TInstant::Zero(),
+                                NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE,
+                                currentSerial, currentSerial, TString(), staticSlotUsage);
 
                             // insert PDisk into location map
                             state.PDiskLocationMap.emplace(location, pdiskId);

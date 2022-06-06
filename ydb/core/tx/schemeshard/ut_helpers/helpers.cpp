@@ -294,6 +294,33 @@ namespace NSchemeShardUT_Private {
         return record.DebugString();
     }
 
+    THolder<NSchemeCache::TSchemeCacheNavigate> Navigate(TTestActorRuntime& runtime, const TString& path,
+            NSchemeCache::TSchemeCacheNavigate::EOp op)
+    {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        using TEvRequest = TEvTxProxySchemeCache::TEvNavigateKeySet;
+        using TEvResponse = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
+
+        const auto sender = runtime.AllocateEdgeActor();
+        auto request = MakeHolder<TNavigate>();
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath(path);
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        entry.Operation = op;
+        entry.ShowPrivatePath = true;
+        runtime.Send(new IEventHandle(MakeSchemeCacheID(), sender, new TEvRequest(request.Release())));
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvResponse>(sender);
+        UNIT_ASSERT(ev);
+        UNIT_ASSERT(ev->Get());
+
+        auto* response = ev->Get()->Request.Release();
+        UNIT_ASSERT(response);
+        UNIT_ASSERT_VALUES_EQUAL(response->ResultSet.size(), 1);
+
+        return THolder(response);
+    }
+
     TEvSchemeShard::TEvModifySchemeTransaction* CopyTableRequest(ui64 txId, const TString& dstPath, const TString& dstName, const TString& srcFullName, TApplyIf applyIf) {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, TTestTxConfig::SchemeShard);
         auto transaction = evTx->Record.AddTransaction();

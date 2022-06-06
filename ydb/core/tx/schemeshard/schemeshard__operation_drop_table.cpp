@@ -44,10 +44,12 @@ void DropPath(NIceDb::TNiceDb& db,
     context.SS->PersistPathDirAlterVersion(db, parentDir.Base());
 
     context.SS->ClearDescribePathCaches(parentDir.Base());
-    context.OnComplete.PublishToSchemeBoard(operationId, parentDir->PathId);
-
     context.SS->ClearDescribePathCaches(path.Base());
-    context.OnComplete.PublishToSchemeBoard(operationId, path->PathId);
+
+    if (!context.SS->DisablePublicationsOfDropping) {
+        context.OnComplete.PublishToSchemeBoard(operationId, parentDir->PathId);
+        context.OnComplete.PublishToSchemeBoard(operationId, path->PathId);
+    }
 }
 
 class TDropParts: public TSubOperationState {

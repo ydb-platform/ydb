@@ -122,22 +122,21 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0           Name: "10"      }
-        Ranges { Value: 10000       Name: "20"      }
-        Ranges { Value: 20000       Name: "50"      }
-        Ranges { Value: 50000       Name: "100"     }
-        Ranges { Value: 100000      Name: "200"     }
-        Ranges { Value: 200000      Name: "500"     }
-        Ranges { Value: 500000      Name: "1000"    }
-        Ranges { Value: 1000000     Name: "2000"    }
-        Ranges { Value: 2000000     Name: "5000"    }
-        Ranges { Value: 5000000     Name: "10000"   }
-        Ranges { Value: 10000000    Name: "20000"   }
-        Ranges { Value: 20000000    Name: "60000"   }
-        Ranges { Value: 60000000    Name: "120000"  }
-        Ranges { Value: 120000000   Name: "300000"  }
-        Ranges { Value: 300000000   Name: "600000"  }
-        Ranges { Value: 600000000   Name: "Inf"     }
+        Ranges { Value: 10000       Name: "10"      }
+        Ranges { Value: 20000       Name: "20"      }
+        Ranges { Value: 50000       Name: "50"      }
+        Ranges { Value: 100000      Name: "100"     }
+        Ranges { Value: 200000      Name: "200"     }
+        Ranges { Value: 500000      Name: "500"     }
+        Ranges { Value: 1000000     Name: "1000"    }
+        Ranges { Value: 2000000     Name: "2000"    }
+        Ranges { Value: 5000000     Name: "5000"    }
+        Ranges { Value: 10000000    Name: "10000"   }
+        Ranges { Value: 20000000    Name: "20000"   }
+        Ranges { Value: 60000000    Name: "60000"   }
+        Ranges { Value: 120000000   Name: "120000"  }
+        Ranges { Value: 300000000   Name: "300000"  }
+        Ranges { Value: 600000000   Name: "600000"  }
     };
 
     COUNTER_SCAN_LATENCY = 0                                [(CounterOpts) = {Name: "ScanLatency"}];

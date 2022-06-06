@@ -25,6 +25,7 @@ YQL_LAST_ABI_VERSION()
 SRCS(
     pipe_tracker_ut.cpp
     resource_broker_ut.cpp
+    tablet_counters_ut.cpp
     tablet_counters_aggregator_ut.cpp
     tablet_metrics_ut.cpp
     tablet_pipe_ut.cpp

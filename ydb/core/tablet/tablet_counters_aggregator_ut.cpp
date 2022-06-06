@@ -190,12 +190,17 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
 
         static std::vector<ui64> GetOldHistogram(TTestBasicRuntime& runtime, const char* name) {
             size_t index = PercentileNameToIndex(name);
-            const auto ranges = RangeDefs[index].first;
-            const auto rangeCount = RangeDefs[index].second;
+            auto rangesArray = RangeDefs[index].first;
+            auto rangeCount = RangeDefs[index].second;
+
+            std::vector<TTabletPercentileCounter::TRangeDef> ranges(rangesArray, rangesArray + rangeCount);
+            ranges.push_back({});
+            ranges.back().RangeName = "inf";
+            ranges.back().RangeVal = Max<ui64>();
 
             auto appCounters = GetAppCounters(runtime);
             std::vector<ui64> buckets;
-            for (auto i: xrange(rangeCount)) {
+            for (auto i: xrange(ranges.size())) {
                 auto subGroup = appCounters->GetSubgroup("range", ranges[i].RangeName);
                 auto sensor = subGroup->FindCounter(PercentileCountersMetaInfo[index]);
                 if (sensor) {
@@ -311,7 +316,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
             runtime,
             "HIST(CountSingleBucket)",
             {0, 2},
-            {2}
+            {0, 2}
         );
 
         // sanity check we didn't mess other histograms
@@ -319,22 +324,22 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 0, 0, 0},
-            {0, 0, 0, 0}
+            {0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0}
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {2, 0, 0, 0},
-            {2, 0, 0, 0}
+            {2, 0, 0, 0, 0},
+            {2, 0, 0, 0, 0}
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
             {0, 0},
-            {0}
+            {0, 0}
         );
     }
 
@@ -362,8 +367,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {1, 0, 0, 0},
-            {0, 1, 0, 0}
+            {0, 1, 0, 0, 0},
+            {0, 1, 0, 0, 0}
         );
 
         TTabletWithHist tablet2(2);
@@ -373,8 +378,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {1, 1, 0, 0},
-            {0, 1, 1, 0}
+            {0, 1, 1, 0, 0},
+            {0, 1, 1, 0, 0}
         );
 
         TTabletWithHist tablet3(3);
@@ -384,8 +389,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {2, 1, 0, 0},
-            {0, 2, 1, 0}
+            {0, 2, 1, 0, 0},
+            {0, 2, 1, 0, 0}
         );
 
         tablet3.SetSimpleCount("Count", 13);
@@ -394,8 +399,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {1, 2, 0, 0},
-            {0, 1, 2, 0}
+            {0, 1, 2, 0, 0},
+            {0, 1, 2, 0, 0}
         );
 
         tablet3.ForgetTablet(runtime, aggregatorId, edge);
@@ -403,8 +408,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {1, 1, 0, 0},
-            {0, 1, 1, 0}
+            {0, 1, 1, 0, 0},
+            {0, 1, 1, 0, 0}
         );
 
         // sanity check we didn't mess other histograms
@@ -412,22 +417,22 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 0, 0, 0},
-            {0, 0, 0, 0}
+            {0, 0, 0, 0, 0},
+            {0, 0, 0, 0, 0}
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(CountSingleBucket)",
             {2, 0},
-            {2}
+            {2, 0}
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
             {0, 0},
-            {0}
+            {0, 0}
         );
     }
 
@@ -458,8 +463,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 0, 0, 1},
-            {0, 0, 0, 1}
+            {0, 0, 0, 0, 1},
+            {0, 0, 0, 0, 1}
         );
 
         TTabletWithHist tablet2(2);
@@ -469,8 +474,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {0, 0, 0, 2},
-            {0, 0, 0, 2}
+            {0, 0, 0, 0, 2},
+            {0, 0, 0, 0, 2}
         );
     }
 
@@ -499,8 +504,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 1, 0, 0},
-            {0, 1, 0, 0}
+            {0, 1, 0, 0, 0},
+            {0, 1, 0, 0, 0}
         );
 
         tablet1.UpdatePercentile("MyHist", 13);
@@ -510,8 +515,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 1, 1, 0},
-            {0, 1, 1, 0}
+            {0, 1, 1, 0, 0},
+            {0, 1, 1, 0, 0}
         );
 
         tablet1.UpdatePercentile("MyHist", 1);
@@ -523,8 +528,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 3, 1, 1},
-            {0, 3, 1, 1}
+            {0, 3, 1, 0, 1},
+            {0, 3, 1, 0, 1}
         );
     }
 
@@ -560,8 +565,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 3, 1, 0}, // XXX
-            {0, 3, 1, 0}
+            {0, 3, 1, 0, 0},
+            {0, 3, 1, 0, 0}
         );
 
         tablet3.ForgetTablet(runtime, aggregatorId, edge);
@@ -569,8 +574,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 2, 0, 0}, // XXX
-            {0, 2, 0, 0}
+            {0, 2, 0, 0, 0},
+            {0, 2, 0, 0, 0}
         );
 
         // sanity check we didn't mess other histograms
@@ -578,22 +583,22 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(Count)",
-            {2, 0, 0, 0},
-            {2, 0, 0, 0}
+            {2, 0, 0, 0, 0},
+            {2, 0, 0, 0, 0}
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHistSingleBucket",
             {0, 0},
-            {0}
+            {0, 0}
         );
 
         TTabletWithHist::CheckHistogram(
             runtime,
             "HIST(CountSingleBucket)",
             {2, 0},
-            {2}
+            {2, 0}
         );
     }
 
@@ -628,16 +633,16 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, v, 0, 0},
-            {0, v, 0, 0}
+            {0, 0, v, 0, 0},
+            {0, 0, v, 0, 0}
         );
 
         tablet1.ForgetTablet(runtime, aggregatorId, edge);
         TTabletWithHist::CheckHistogram(
             runtime,
             "MyHist",
-            {0, 30, 0, 0},
-            {0, 30, 0, 0}
+            {0, 0, 30, 0, 0},
+            {0, 0, 30, 0, 0}
         );
     }
 }

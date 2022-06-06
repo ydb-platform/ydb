@@ -74,7 +74,7 @@ void TTabletPercentileCounter::OutputHtml(IOutputStream &os, const char* name) c
         }
 
         DIV_CLASS("row") {
-            for (ui32 i = 0; i < RangeCount; ++i) {
+            for (auto i: xrange(Ranges.size())) {
                 DIV_CLASS("col-md-3") {
                     PRE() {
                         os << Ranges[i].RangeName << ": " << Values[i];

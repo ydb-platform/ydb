@@ -86,7 +86,7 @@ struct THistogramCounter {
     }
 
     void IncrementFor(ui64 value) {
-        const size_t i = Max<ssize_t>(0, std::upper_bound(Ranges.begin(), Ranges.end(), value) - Ranges.begin() - 1);
+        const size_t i = std::lower_bound(Ranges.begin(), Ranges.end(), value) - Ranges.begin();
         Values[i]->Inc();
 
         Histogram->Collect(value);
@@ -336,7 +336,7 @@ public:
         PercentileCounters.reserve(hint);
         Histograms.reserve(hint);
         IsDerivative.reserve(hint);
-        ShiftedBucketBounds.reserve(hint);
+        BucketBounds.reserve(hint);
         CountersByTabletID.reserve(hint);
     }
 
@@ -365,25 +365,12 @@ public:
             rangeCounters.push_back(counter);
         }
 
-        // Note that:
-        // 1. PercentileCounters always start from 0 range
-        // 2. Ranges in PercentileCounters are left inclusive, i.e. for ranges 0, 1, 2 buckets will be
-        // [0; 1), [1; 2), [2; +inf);
-        // 3. In monitoring's histogram buckets are right inclusive and can be negative, i.e. for ranges 0, 1, 2
-        // buckets will be: (-inf; 0], (0; 1], (1; 2], (2; +inf).
-        // 4. Currently we shift PercentileCounters ranges so that original ranges 0, 1, 2 become 1, 2:
-        // (-inf; 1], (1; 2], (2; +inf). This is because values in proto are lower bounds
-
         // new style
+        // note that inf bucket in histogram description is implicit
         NMonitoring::TBucketBounds bucketBounds;
-        for (ui32 r = 1; r < rangeCount; ++r) {
-            bucketBounds.push_back(percentileCounter.GetRangeBound(r));
-        }
-
-        // since we shift we need hack for hists with single bucket (though they are meaningless anyway),
-        // hist will be (-inf; range0], (range0; +inf).
-        if (bucketBounds.empty()) {
-            bucketBounds.push_back(percentileCounter.GetRangeBound(0));
+        bucketBounds.reserve(rangeCount);
+        for (auto i: xrange(rangeCount - 1)) {
+            bucketBounds.push_back(percentileCounter.GetRangeBound(i));
         }
 
         auto histogram = CounterGroup->GetHistogram(
@@ -400,11 +387,11 @@ public:
             // we need this hack to access PercentileCounters by index easily skipping
             // hists we moved to simple/cumulative aggregates
             TCountersVector().swap(rangeCounters);
-            ShiftedBucketBounds.emplace_back();
+            BucketBounds.emplace_back();
         } else {
-            // note that this bound in histogram is implicit
+            // now save inf bound (note that in Percentile it is ui64, in Hist - double)
             bucketBounds.push_back(Max<NMonitoring::TBucketBound>());
-            ShiftedBucketBounds.emplace_back(std::move(bucketBounds));
+            BucketBounds.emplace_back(std::move(bucketBounds));
         }
 
         // note that in case of histogramAggregate it will contain reference
@@ -511,7 +498,7 @@ private:
             ui64 oldValue = snapshot->Value(i);
             ui64 negValue = 0UL - values[i];
             ui64 newValue = oldValue + negValue;
-            histogram->Collect(ShiftedBucketBounds[counterIndex][i], newValue);
+            histogram->Collect(BucketBounds[counterIndex][i], newValue);
         }
     }
 
@@ -520,7 +507,7 @@ private:
         auto& histogram = Histograms[counterIndex];
         for (auto i: xrange(values.size())) {
             *percentileRanges[i] += values[i];
-            histogram->Collect(ShiftedBucketBounds[counterIndex][i], values[i]);
+            histogram->Collect(BucketBounds[counterIndex][i], values[i]);
         }
     }
 
@@ -530,7 +517,7 @@ private:
         for (auto i: xrange(percentileCounter.GetRangeCount())) {
             auto value = percentileCounter.GetRangeValue(i);
             *percentileRanges[i] += value;
-            histogram->Collect(ShiftedBucketBounds[counterIndex][i], value);
+            histogram->Collect(BucketBounds[counterIndex][i], value);
         }
     }
 
@@ -542,9 +529,8 @@ private:
     TVector<NMonitoring::THistogramPtr> Histograms; // new style (bins)
     TVector<bool> IsDerivative;
 
-    // per percentile counter bounds. Note the shift: index0 is range1,
-    // hence array size is 1 less than original ranges count
-    TVector<NMonitoring::TBucketBounds> ShiftedBucketBounds;
+    // per percentile counter bounds.
+    TVector<NMonitoring::TBucketBounds> BucketBounds;
 
     // tabletId -> values
     using TCountersByTabletIDMap = THashMap<ui64, TValuesVec>;

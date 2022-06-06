@@ -169,805 +169,740 @@ enum EPercentileCounters {
     COUNTER_LATENCY_FULL_RO_INLINE = 11                              [(CounterOpts) = {Name: "LatencyFullRoInline"}];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_0 = 12                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel0)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_1 = 13                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel1)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_2 = 14                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel2)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_3 = 15                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel3)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_4 = 16                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel4)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_5 = 17                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel5)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_6 = 18                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel6)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_7 = 19                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel7)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_8 = 20                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel8)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                     ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_9 = 21                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel9)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_10 = 22                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel10)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_11 = 23                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel11)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_12 = 24                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel12)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_13 = 25                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel13)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_14 = 26                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel14)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_READ_BYTES_CHANNEL_15 = 27                           [(CounterOpts) = {Name: "HIST(KV/ReadBytesChannel15)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_0 = 28                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel0)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_1 = 29                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel1)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_2 = 30                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel2)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_3 = 31                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel3)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_4 = 32                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel4)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_5 = 33                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel5)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_6 = 34                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel6)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_7 = 35                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel7)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_8 = 36                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel8)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                      ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_9 = 37                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel9)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_10 = 38                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel10)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_11 = 39                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel11)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_12 = 40                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel12)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_13 = 41                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel13)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_14 = 42                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel14)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 
     COUNTER_HIST_WRITE_BYTES_CHANNEL_15 = 43                           [(CounterOpts) = {Name: "HIST(KV/WriteBytesChannel15)"
-                                                                                        Ranges { Value: 0           Name: "0"        }
-                                                                                        Ranges { Value: 1           Name: "1024"     }
-                                                                                        Ranges { Value: 1024        Name: "2048"     }
-                                                                                        Ranges { Value: 2048        Name: "4096"     }
-                                                                                        Ranges { Value: 4096        Name: "8192"     }
-                                                                                        Ranges { Value: 8192        Name: "16384"    }
-                                                                                        Ranges { Value: 16384       Name: "32768"    }
-                                                                                        Ranges { Value: 32768       Name: "65536"    }
-                                                                                        Ranges { Value: 65536       Name: "131072"   }
-                                                                                        Ranges { Value: 131072      Name: "262144"   }
-                                                                                        Ranges { Value: 262144      Name: "524288"   }
-                                                                                        Ranges { Value: 524288      Name: "1048576"  }
-                                                                                        Ranges { Value: 1048576     Name: "2097152"  }
-                                                                                        Ranges { Value: 2097152     Name: "4194304"  }
-                                                                                        Ranges { Value: 4194304     Name: "5242880"  }
-                                                                                        Ranges { Value: 5242880     Name: "6291456"  }
-                                                                                        Ranges { Value: 6291456     Name: "8388608"  }
-                                                                                        Ranges { Value: 8388608     Name: "16777216" }
-                                                                                        Ranges { Value: 16777216    Name: "33554432" }
-                                                                                        Ranges { Value: 33554432    Name: "67108864" }
-                                                                                        Ranges { Value: 67108864    Name: "inf"      }
-                                                                                  }
-                                                                       ];
-
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 5242880      Name: "5242880"     }
+        Ranges: { Value: 6291456      Name: "6291456"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+    }];
 }
 
 enum ETxTypes {

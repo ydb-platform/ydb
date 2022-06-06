@@ -114,202 +114,227 @@ enum ECumulativeCounters {
 
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
-        Ranges { Value: 0           Name: "(1) < 500 us"        }
-        Ranges { Value: 500         Name: "(2) 0.5-1 ms"        }
-        Ranges { Value: 1000        Name: "(3) 1-2 ms"          }
-        Ranges { Value: 2000        Name: "(4) 2-4 ms"          }
-        Ranges { Value: 4000        Name: "(5) 4-8 ms"          }
-        Ranges { Value: 8000        Name: "(6) 8-16 ms"         }
-        Ranges { Value: 16000       Name: "(7) 16-32 ms"        }
-        Ranges { Value: 32000       Name: "(8) 32-64 ms"        }
-        Ranges { Value: 64000       Name: "(9) 64-128 ms"       }
-        Ranges { Value: 128000      Name: "(10) 128-256 ms"     }
-        Ranges { Value: 256000      Name: "(11) 256-512 ms"     }
-        Ranges { Value: 512000      Name: "(12) 512-1024 ms"    }
-        Ranges { Value: 1024000     Name: "(13) 1024-2000 ms"   }
-        Ranges { Value: 2000000     Name: "(14) 2-4 s"          }
-        Ranges { Value: 4000000     Name: "(15) 4-8 s"          }
-        Ranges { Value: 8000000     Name: "(16) 8-16 s"         }
-        Ranges { Value: 16000000    Name: "(17) 16-32 s"        }
-        Ranges { Value: 32000000    Name: "(18) 32 < s"         }
+        Ranges: { Value: 500         Name: "(1) < 500 us"      }
+        Ranges: { Value: 1000        Name: "(2) 0.5-1 ms"      }
+        Ranges: { Value: 2000        Name: "(3) 1-2 ms"        }
+        Ranges: { Value: 4000        Name: "(4) 2-4 ms"        }
+        Ranges: { Value: 8000        Name: "(5) 4-8 ms"        }
+        Ranges: { Value: 16000       Name: "(6) 8-16 ms"       }
+        Ranges: { Value: 32000       Name: "(7) 16-32 ms"      }
+        Ranges: { Value: 64000       Name: "(8) 32-64 ms"      }
+        Ranges: { Value: 128000      Name: "(9) 64-128 ms"     }
+        Ranges: { Value: 256000      Name: "(10) 128-256 ms"   }
+        Ranges: { Value: 512000      Name: "(11) 256-512 ms"   }
+        Ranges: { Value: 1024000     Name: "(12) 512-1024 ms"  }
+        Ranges: { Value: 2000000     Name: "(13) 1024-2000 ms" }
+        Ranges: { Value: 4000000     Name: "(14) 2-4 s"        }
+        Ranges: { Value: 8000000     Name: "(15) 4-8 s"        }
+        Ranges: { Value: 16000000    Name: "(16) 8-16 s"       }
+        Ranges: { Value: 32000000    Name: "(17) 16-32 s"      }
     };
 
-    COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY = 0          [(CounterOpts) = {Name: "PrepareSuccessCompleteLatency"}];
-    COUNTER_ACCEPTED_PLAN_STEP_COMPLETE_LATENCY = 1       [(CounterOpts) = {Name: "AcceptedPlanStepCompleteLatency"}];
-    COUNTER_TX_PROGRESS_COMPLETE_LATENCY = 2              [(CounterOpts) = {Name: "TxProgressCompleteLatency"}];
-    COUNTER_PLAN_TO_EXECUTE_LATENCY = 3                   [(CounterOpts) = {Name: "PlanToExecuteLatency"}];
-    COUNTER_PREPARE_EXEC_LATENCY = 4                      [(CounterOpts) = {Name: "PrepareExecLatency"}];
-    COUNTER_TX_PROGRESS_EXEC_LATENCY = 5                  [(CounterOpts) = {Name: "TxProgressExecLatency"}];
+    COUNTER_PREPARE_SUCCESS_COMPLETE_LATENCY = 0 [(CounterOpts) = {
+        Name: "PrepareSuccessCompleteLatency"
+    }];
 
-    COUNTER_LOCKS_ACTIVE_PER_SHARD = 6                    [(CounterOpts) = {Name: "LocksActivePerShard",
-                                                              Ranges: { Value: 0     Name: "0"},
-                                                              Ranges: { Value: 1     Name: "1-10"},
-                                                              Ranges: { Value: 10    Name: "10-100"}
-                                                              Ranges: { Value: 100   Name: "100-500"}
-                                                              Ranges: { Value: 500   Name: "500-1000"}
-                                                              Ranges: { Value: 1000  Name: "1000-4000"}
-                                                              Ranges: { Value: 4000  Name: "4000-8000"}
-                                                              Ranges: { Value: 8000  Name: "8000-12000"}
-                                                              Ranges: { Value: 12000 Name: "12000-16000"}
-                                                              Ranges: { Value: 16000 Name: "16000-Inf"}
-                                                          }];
+    COUNTER_ACCEPTED_PLAN_STEP_COMPLETE_LATENCY = 1 [(CounterOpts) = {
+        Name: "AcceptedPlanStepCompleteLatency"
+    }];
 
-    COUNTER_LOCKS_BROKEN_PER_SHARD = 7                    [(CounterOpts) = {Name: "LocksBrokenPerShard",
-                                                              Ranges: { Value: 0     Name: "0"},
-                                                              Ranges: { Value: 1     Name: "1-10"},
-                                                              Ranges: { Value: 10    Name: "10-100"}
-                                                              Ranges: { Value: 100   Name: "100-500"}
-                                                              Ranges: { Value: 500   Name: "500-1000"}
-                                                              Ranges: { Value: 1000  Name: "1000-4000"}
-                                                              Ranges: { Value: 4000  Name: "4000-8000"}
-                                                              Ranges: { Value: 8000  Name: "8000-12000"}
-                                                              Ranges: { Value: 12000 Name: "12000-16000"}
-                                                              Ranges: { Value: 16000 Name: "16000-Inf"}
-                                                          }];
+    COUNTER_TX_PROGRESS_COMPLETE_LATENCY = 2 [(CounterOpts) = {
+        Name: "TxProgressCompleteLatency"
+    }];
 
-    COUNTER_LOCKS_LIFETIME = 8                            [(CounterOpts) = {Name: "LocksLifetime"}];
+    COUNTER_PLAN_TO_EXECUTE_LATENCY = 3 [(CounterOpts) = {
+        Name: "PlanToExecuteLatency"
+    }];
 
-    COUNTER_PROPOSE_QUEUE_LATENCY = 9                     [(CounterOpts) = {Name: "ProposeQueueLatency"}];
+    COUNTER_PREPARE_EXEC_LATENCY = 4 [(CounterOpts) = {
+        Name: "PrepareExecLatency"
+    }];
 
-    COUNTER_HIST_RANGE_READ_BYTES = 10                    [(CounterOpts) = {Name: "HIST(DataShard/EngineHostRangeReadBytes)",
-                                                                Ranges { Value: 0           Name: "0"           }
-                                                                Ranges { Value: 1           Name: "1024"        }
-                                                                Ranges { Value: 1024        Name: "2048"        }
-                                                                Ranges { Value: 2048        Name: "4096"        }
-                                                                Ranges { Value: 4096        Name: "8192"        }
-                                                                Ranges { Value: 8192        Name: "16384"       }
-                                                                Ranges { Value: 16384       Name: "32768"       }
-                                                                Ranges { Value: 32768       Name: "65536"       }
-                                                                Ranges { Value: 65536       Name: "131072"      }
-                                                                Ranges { Value: 131072      Name: "262144"      }
-                                                                Ranges { Value: 262144      Name: "524288"      }
-                                                                Ranges { Value: 524288      Name: "1048576"     }
-                                                                Ranges { Value: 1048576     Name: "2097152"     }
-                                                                Ranges { Value: 2097152     Name: "4194304"     }
-                                                                Ranges { Value: 4194304     Name: "8388608"     }
-                                                                Ranges { Value: 8388608     Name: "16777216"    }
-                                                                Ranges { Value: 16777216    Name: "33554432"    }
-                                                                Ranges { Value: 33554432    Name: "67108864"    }
-                                                                Ranges { Value: 67108864    Name: "134217728"   }
-                                                                Ranges { Value: 134217728   Name: "inf"         }
-                                                          }];
+    COUNTER_TX_PROGRESS_EXEC_LATENCY = 5 [(CounterOpts) = {
+        Name: "TxProgressExecLatency"
+    }];
 
-    COUNTER_SELECT_ROWS_PER_REQUEST = 11                  [(CounterOpts) = {Name: "SelectRowsPerRequest",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "10"},
-                                                              Ranges: { Value: 11       Name: "100"}
-                                                              Ranges: { Value: 101      Name: "1000"}
-                                                              Ranges: { Value: 1001     Name: "10000"}
-                                                              Ranges: { Value: 10001    Name: "100000"}
-                                                              Ranges: { Value: 100001   Name: "inf"}
-                                                          }];
+    COUNTER_LOCKS_ACTIVE_PER_SHARD = 6 [(CounterOpts) = {
+        Name: "LocksActivePerShard",
+        Ranges: { Value: 0        Name: "0"           }
+        Ranges: { Value: 10       Name: "1-10"        }
+        Ranges: { Value: 100      Name: "10-100"      }
+        Ranges: { Value: 500      Name: "100-500"     }
+        Ranges: { Value: 1000     Name: "500-1000"    }
+        Ranges: { Value: 4000     Name: "1000-4000"   }
+        Ranges: { Value: 8000     Name: "4000-8000"   }
+        Ranges: { Value: 12000    Name: "8000-12000"  }
+        Ranges: { Value: 16000    Name: "12000-16000" }
+    }];
 
-    COUNTER_RANGE_READ_ROWS_PER_REQUEST = 12              [(CounterOpts) = {Name: "RangeReadRowsPerRequest",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "10"},
-                                                              Ranges: { Value: 11       Name: "100"}
-                                                              Ranges: { Value: 101      Name: "1000"}
-                                                              Ranges: { Value: 1001     Name: "10000"}
-                                                              Ranges: { Value: 10001    Name: "100000"}
-                                                              Ranges: { Value: 100001   Name: "inf"}
-                                                          }];
+    COUNTER_LOCKS_BROKEN_PER_SHARD = 7 [(CounterOpts) = {
+        Name: "LocksBrokenPerShard",
+        Ranges: { Value: 0        Name: "0"           }
+        Ranges: { Value: 10       Name: "1-10"        }
+        Ranges: { Value: 100      Name: "10-100"      }
+        Ranges: { Value: 500      Name: "100-500"     }
+        Ranges: { Value: 1000     Name: "500-1000"    }
+        Ranges: { Value: 4000     Name: "1000-4000"   }
+        Ranges: { Value: 8000     Name: "4000-8000"   }
+        Ranges: { Value: 12000    Name: "8000-12000"  }
+        Ranges: { Value: 16000    Name: "12000-16000" }
+    }];
 
-    COUNTER_PLAN_QUEUE_LATENCY_MS = 13                    [(CounterOpts) = {Name: "PlanQueueLatencyMs",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "2"},
-                                                              Ranges: { Value: 5        Name: "5"},
-                                                              Ranges: { Value: 10       Name: "10"},
-                                                              Ranges: { Value: 25       Name: "25"},
-                                                              Ranges: { Value: 50       Name: "50"},
-                                                              Ranges: { Value: 125      Name: "125"},
-                                                              Ranges: { Value: 250      Name: "250"},
-                                                              Ranges: { Value: 500      Name: "500"},
-                                                              Ranges: { Value: 1000     Name: "1000"},
-                                                              Ranges: { Value: 2000     Name: "2000"},
-                                                              Ranges: { Value: 5000     Name: "5000"},
-                                                              Ranges: { Value: 10000    Name: "10000"},
-                                                              Ranges: { Value: 15000    Name: "15000"},
-                                                              Ranges: { Value: 30000    Name: "30000"}
-                                                          }];
+    COUNTER_LOCKS_LIFETIME = 8 [(CounterOpts) = {
+        Name: "LocksLifetime"
+    }];
 
-    COUNTER_WAIT_DEPENDENCIES_LATENCY_MS = 14             [(CounterOpts) = {Name: "WaitDependenciesLatencyMs",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "2"},
-                                                              Ranges: { Value: 5        Name: "5"},
-                                                              Ranges: { Value: 10       Name: "10"},
-                                                              Ranges: { Value: 25       Name: "25"},
-                                                              Ranges: { Value: 50       Name: "50"},
-                                                              Ranges: { Value: 125      Name: "125"},
-                                                              Ranges: { Value: 250      Name: "250"},
-                                                              Ranges: { Value: 500      Name: "500"},
-                                                              Ranges: { Value: 1000     Name: "1000"},
-                                                              Ranges: { Value: 2000     Name: "2000"},
-                                                              Ranges: { Value: 5000     Name: "5000"},
-                                                              Ranges: { Value: 10000    Name: "10000"},
-                                                              Ranges: { Value: 15000    Name: "15000"},
-                                                              Ranges: { Value: 30000    Name: "30000"}
-                                                          }];
+    COUNTER_PROPOSE_QUEUE_LATENCY = 9 [(CounterOpts) = {
+        Name: "ProposeQueueLatency"
+    }];
 
-    COUNTER_WAIT_READSETS_LATENCY_MS = 15                 [(CounterOpts) = {Name: "WaitReadSetsLatencyMs",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "2"},
-                                                              Ranges: { Value: 5        Name: "5"},
-                                                              Ranges: { Value: 10       Name: "10"},
-                                                              Ranges: { Value: 25       Name: "25"},
-                                                              Ranges: { Value: 50       Name: "50"},
-                                                              Ranges: { Value: 125      Name: "125"},
-                                                              Ranges: { Value: 250      Name: "250"},
-                                                              Ranges: { Value: 500      Name: "500"},
-                                                              Ranges: { Value: 1000     Name: "1000"},
-                                                              Ranges: { Value: 2000     Name: "2000"},
-                                                              Ranges: { Value: 5000     Name: "5000"},
-                                                              Ranges: { Value: 10000    Name: "10000"},
-                                                              Ranges: { Value: 15000    Name: "15000"},
-                                                              Ranges: { Value: 30000    Name: "30000"}
-                                                          }];
+    COUNTER_HIST_RANGE_READ_BYTES = 10 [(CounterOpts) = {
+        Name: "HIST(DataShard/EngineHostRangeReadBytes)",
+        Ranges: { Value: 0            Name: "0"           }
+        Ranges: { Value: 1024         Name: "1024"        }
+        Ranges: { Value: 2048         Name: "2048"        }
+        Ranges: { Value: 4096         Name: "4096"        }
+        Ranges: { Value: 8192         Name: "8192"        }
+        Ranges: { Value: 16384        Name: "16384"       }
+        Ranges: { Value: 32768        Name: "32768"       }
+        Ranges: { Value: 65536        Name: "65536"       }
+        Ranges: { Value: 131072       Name: "131072"      }
+        Ranges: { Value: 262144       Name: "262144"      }
+        Ranges: { Value: 524288       Name: "524288"      }
+        Ranges: { Value: 1048576      Name: "1048576"     }
+        Ranges: { Value: 2097152      Name: "2097152"     }
+        Ranges: { Value: 4194304      Name: "4194304"     }
+        Ranges: { Value: 8388608      Name: "8388608"     }
+        Ranges: { Value: 16777216     Name: "16777216"    }
+        Ranges: { Value: 33554432     Name: "33554432"    }
+        Ranges: { Value: 67108864     Name: "67108864"    }
+        Ranges: { Value: 134217728    Name: "134217728"   }
+    }];
 
-    COUNTER_WAIT_EXECUTE_LATENCY_MS = 16                  [(CounterOpts) = {Name: "WaitExecuteLatencyMs",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "2"},
-                                                              Ranges: { Value: 5        Name: "5"},
-                                                              Ranges: { Value: 10       Name: "10"},
-                                                              Ranges: { Value: 25       Name: "25"},
-                                                              Ranges: { Value: 50       Name: "50"},
-                                                              Ranges: { Value: 125      Name: "125"},
-                                                              Ranges: { Value: 250      Name: "250"},
-                                                              Ranges: { Value: 500      Name: "500"},
-                                                              Ranges: { Value: 1000     Name: "1000"},
-                                                              Ranges: { Value: 2000     Name: "2000"},
-                                                              Ranges: { Value: 5000     Name: "5000"},
-                                                              Ranges: { Value: 10000    Name: "10000"},
-                                                              Ranges: { Value: 15000    Name: "15000"},
-                                                              Ranges: { Value: 30000    Name: "30000"}
-                                                          }];
+    COUNTER_SELECT_ROWS_PER_REQUEST = 11 [(CounterOpts) = {
+        Name: "SelectRowsPerRequest",
+        Ranges: { Value: 0         Name: "0"      }
+        Ranges: { Value: 1         Name: "1"      }
+        Ranges: { Value: 10        Name: "10"     }
+        Ranges: { Value: 100       Name: "100"    }
+        Ranges: { Value: 1000      Name: "1000"   }
+        Ranges: { Value: 10000     Name: "10000"  }
+        Ranges: { Value: 100000    Name: "100000" }
+    }];
 
-    COUNTER_WAIT_TOTAL_LATENCY_MS = 17                    [(CounterOpts) = {Name: "WaitTotalLatencyMs",
-                                                              Ranges: { Value: 0        Name: "0"},
-                                                              Ranges: { Value: 1        Name: "1"},
-                                                              Ranges: { Value: 2        Name: "2"},
-                                                              Ranges: { Value: 5        Name: "5"},
-                                                              Ranges: { Value: 10       Name: "10"},
-                                                              Ranges: { Value: 25       Name: "25"},
-                                                              Ranges: { Value: 50       Name: "50"},
-                                                              Ranges: { Value: 125      Name: "125"},
-                                                              Ranges: { Value: 250      Name: "250"},
-                                                              Ranges: { Value: 500      Name: "500"},
-                                                              Ranges: { Value: 1000     Name: "1000"},
-                                                              Ranges: { Value: 2000     Name: "2000"},
-                                                              Ranges: { Value: 5000     Name: "5000"},
-                                                              Ranges: { Value: 10000    Name: "10000"},
-                                                              Ranges: { Value: 15000    Name: "15000"},
-                                                              Ranges: { Value: 30000    Name: "30000"}
-                                                          }];
+    COUNTER_RANGE_READ_ROWS_PER_REQUEST = 12 [(CounterOpts) = {
+        Name: "RangeReadRowsPerRequest",
+        Ranges: { Value: 0         Name: "0"      }
+        Ranges: { Value: 1         Name: "1"      }
+        Ranges: { Value: 10        Name: "10"     }
+        Ranges: { Value: 100       Name: "100"    }
+        Ranges: { Value: 1000      Name: "1000"   }
+        Ranges: { Value: 10000     Name: "10000"  }
+        Ranges: { Value: 100000    Name: "100000" }
+    }];
+
+    COUNTER_PLAN_QUEUE_LATENCY_MS = 13 [(CounterOpts) = {
+        Name: "PlanQueueLatencyMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+        Ranges: { Value: 2000     Name: "2000"},
+        Ranges: { Value: 5000     Name: "5000"},
+        Ranges: { Value: 10000    Name: "10000"},
+        Ranges: { Value: 15000    Name: "15000"},
+        Ranges: { Value: 30000    Name: "30000"}
+    }];
+
+    COUNTER_WAIT_DEPENDENCIES_LATENCY_MS = 14 [(CounterOpts) = {
+        Name: "WaitDependenciesLatencyMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+        Ranges: { Value: 2000     Name: "2000"},
+        Ranges: { Value: 5000     Name: "5000"},
+        Ranges: { Value: 10000    Name: "10000"},
+        Ranges: { Value: 15000    Name: "15000"},
+        Ranges: { Value: 30000    Name: "30000"}
+    }];
+
+    COUNTER_WAIT_READSETS_LATENCY_MS = 15 [(CounterOpts) = {
+        Name: "WaitReadSetsLatencyMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+        Ranges: { Value: 2000     Name: "2000"},
+        Ranges: { Value: 5000     Name: "5000"},
+        Ranges: { Value: 10000    Name: "10000"},
+        Ranges: { Value: 15000    Name: "15000"},
+        Ranges: { Value: 30000    Name: "30000"}
+    }];
+
+    COUNTER_WAIT_EXECUTE_LATENCY_MS = 16 [(CounterOpts) = {
+        Name: "WaitExecuteLatencyMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+        Ranges: { Value: 2000     Name: "2000"},
+        Ranges: { Value: 5000     Name: "5000"},
+        Ranges: { Value: 10000    Name: "10000"},
+        Ranges: { Value: 15000    Name: "15000"},
+        Ranges: { Value: 30000    Name: "30000"}
+    }];
+
+    COUNTER_WAIT_TOTAL_LATENCY_MS = 17 [(CounterOpts) = {
+        Name: "WaitTotalLatencyMs",
+        Ranges: { Value: 0        Name: "0"},
+        Ranges: { Value: 1        Name: "1"},
+        Ranges: { Value: 2        Name: "2"},
+        Ranges: { Value: 5        Name: "5"},
+        Ranges: { Value: 10       Name: "10"},
+        Ranges: { Value: 25       Name: "25"},
+        Ranges: { Value: 50       Name: "50"},
+        Ranges: { Value: 125      Name: "125"},
+        Ranges: { Value: 250      Name: "250"},
+        Ranges: { Value: 500      Name: "500"},
+        Ranges: { Value: 1000     Name: "1000"},
+        Ranges: { Value: 2000     Name: "2000"},
+        Ranges: { Value: 5000     Name: "5000"},
+        Ranges: { Value: 10000    Name: "10000"},
+        Ranges: { Value: 15000    Name: "15000"},
+        Ranges: { Value: 30000    Name: "30000"}
+    }];
 }
 
 enum ETxTypes {

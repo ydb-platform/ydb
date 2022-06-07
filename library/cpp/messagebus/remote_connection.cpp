@@ -12,7 +12,7 @@
 
 #include <util/generic/cast.h>
 #include <util/network/init.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 LWTRACE_USING(LWTRACE_MESSAGEBUS_PROVIDER)
 

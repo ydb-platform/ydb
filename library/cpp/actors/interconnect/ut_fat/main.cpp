@@ -12,7 +12,7 @@
 
 #include <util/network/sock.h>
 #include <util/network/poller.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/set.h>
 
 Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {

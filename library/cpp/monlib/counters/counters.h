@@ -10,7 +10,7 @@
 #include <util/str_stl.h>
 #include <util/stream/output.h>
 #include <util/string/util.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/defaults.h>
 #include <util/system/guard.h>
 #include <util/system/sem.h>

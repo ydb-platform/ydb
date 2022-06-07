@@ -28,7 +28,7 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/ptr.h>
 #include <util/stream/input.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/condvar.h>
 #include <util/system/type_name.h>
 #include <util/system/event.h>

@@ -8,7 +8,7 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 #include <util/string/printf.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/hp_timer.h>
 #include <util/system/mutex.h>
 #include <util/system/spinlock.h>

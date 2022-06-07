@@ -8,7 +8,7 @@
 #include <util/memory/blob.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 class IThreadFactory;
 class TClientRequest;

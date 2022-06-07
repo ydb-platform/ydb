@@ -6,7 +6,7 @@
 #include <util/generic/object_counter.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 #include <util/system/thread.h>

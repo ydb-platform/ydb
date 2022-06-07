@@ -40,7 +40,7 @@
 
 #include <util/generic/deque.h>
 #include <util/generic/ptr.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/spinlock.h>
 
 #include "tune.h"

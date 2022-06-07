@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/defaults.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/spinlock.h>
 
 #include <library/cpp/sse/sse.h> // The header chooses appropriate SSE support

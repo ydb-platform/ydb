@@ -15,7 +15,7 @@
 #include <dlfcn.h>
 #endif
 
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/defaults.h>
 #include <util/system/event.h>
 #include <util/system/rwlock.h>

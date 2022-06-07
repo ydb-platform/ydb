@@ -8,7 +8,7 @@
   Almost wait-free for producers and consumers.
  */
 
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/ptr.h>
 
 namespace NThreading {

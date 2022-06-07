@@ -3,7 +3,7 @@
 #include <library/cpp/actors/util/datetime.h>
 
 #include <util/system/info.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/align.h>
 
 #include <contrib/libs/linuxvdso/interface.h>

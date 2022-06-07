@@ -2,7 +2,7 @@
 
 #include "cc_semaphore.h"
 
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace {
     struct TTestSemaphore: public TComplexConditionSemaphore<TTestSemaphore> {

@@ -20,7 +20,7 @@
 
 #include <util/generic/noncopyable.h>
 #include <util/system/types.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 #include "tune.h"
 

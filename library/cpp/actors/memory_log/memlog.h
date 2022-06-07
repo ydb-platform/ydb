@@ -6,7 +6,7 @@
 #include <util/system/datetime.h>
 #include <util/system/thread.h>
 #include <util/system/types.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/align.h>
 #include <util/system/tls.h>
 

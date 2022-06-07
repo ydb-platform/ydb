@@ -8,7 +8,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/yexception.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/align.h>
 #include <util/generic/vector.h>
 #include <util/datetime/base.h>

@@ -1,7 +1,7 @@
 #include <library/cpp/threading/light_rw_lock/lightrwlock.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/random.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/thread/pool.h>
 
 class TRWMutexTest: public TTestBase {

@@ -1,5 +1,5 @@
 #include "mpsc_intrusive_unordered.h"
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NThreading {
     void TMPSCIntrusiveUnordered::Push(TIntrusiveNode* node) noexcept {

@@ -1,6 +1,6 @@
 # File structure of data export
 
-The file structure described below is used for exporting data both to the file system and S3-compatible object storage.
+The file structure described below is used for exporting data both to the file system and S3-compatible object storage. When using S3, file path is written to the object key, while export directory is a key prefix.
 
 ## Directories {#dir}
 
@@ -15,7 +15,7 @@ Each DB table also has a corresponding same-name directory in the file structure
 
 ## Data files {#datafiles}
 
-Data is stored in `.csv` files, one file line per table entry, without a row with column headers. URL-encoded format is used for string representation. For example, a file line for a table with uint64 and uft8 columns containing the number 1 and the string "Hello", respectively, looks like this:
+Data is stored in `.csv` files, one file line per table entry, without a row with column headers. URL-encoded format is used for string representation. For example, a file line for a table with uint64 and utf8 columns containing the number 1 and the string "Привет" ("Hello" in Russian), respectively, looks like this:
 
 ```
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
@@ -37,3 +37,55 @@ When exporting tables created within a tutorial when [Getting started with YQL](
     └── scheme.pb
 ```
 
+File `series/scheme.pb` contents:
+
+``` 
+columns {
+  name: "series_id"
+  type {
+    optional_type {
+      item {
+        type_id: UINT64
+      }
+    }
+  }
+}
+columns {
+  name: "title"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+}
+columns {
+  name: "series_info"
+  type {
+    optional_type {
+      item {
+        type_id: UTF8
+      }
+    }
+  }
+}
+columns {
+  name: "release_date"
+  type {
+    optional_type {
+      item {
+        type_id: UINT64
+      }
+    }
+  }
+}
+primary_key: "series_id"
+storage_settings {
+  store_external_blobs: DISABLED
+}
+column_families {
+  name: "default"
+  compression: COMPRESSION_NONE
+}
+```

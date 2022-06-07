@@ -11,9 +11,6 @@ add_library(yabsl-strings-cord)
 target_include_directories(yabsl-strings-cord PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(yabsl-strings-cord PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(yabsl-strings-cord PUBLIC
   contrib-libs-cxxsupp
   yutil

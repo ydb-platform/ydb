@@ -15,7 +15,6 @@ target_include_directories(src-compiler-grpc_plugin_support PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
 )
 target_include_directories(src-compiler-grpc_plugin_support PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include
   ${CMAKE_BINARY_DIR}/contrib/libs/grpc
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
 )

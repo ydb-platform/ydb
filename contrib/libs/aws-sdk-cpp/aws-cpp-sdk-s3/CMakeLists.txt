@@ -38,7 +38,6 @@ target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include
 )
 target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include
 )
 target_link_libraries(libs-aws-sdk-cpp-aws-cpp-sdk-s3 PUBLIC

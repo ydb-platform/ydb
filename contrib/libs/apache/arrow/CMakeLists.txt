@@ -33,8 +33,6 @@ target_include_directories(libs-apache-arrow PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/src
 )
 target_include_directories(libs-apache-arrow PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/src
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src/generated
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/flatbuffers/include

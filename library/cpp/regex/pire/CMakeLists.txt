@@ -14,9 +14,6 @@ target_compile_options(cpp-regex-pire PRIVATE
 target_include_directories(cpp-regex-pire PUBLIC
   ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire
 )
-target_include_directories(cpp-regex-pire PRIVATE
-  ${CMAKE_BINARY_DIR}/library/cpp/regex/pire/__/__/__/__/contrib/libs/pire/pire
-)
 target_link_libraries(cpp-regex-pire PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -21,10 +21,6 @@ target_include_directories(restricted-aws-aws-c-common PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/generated/include
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/include
 )
-target_include_directories(restricted-aws-aws-c-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/generated/include
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/include
-)
 target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator.c

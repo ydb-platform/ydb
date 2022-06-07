@@ -11,9 +11,6 @@ add_library(yabsl-debugging-stacktrace)
 target_include_directories(yabsl-debugging-stacktrace PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(yabsl-debugging-stacktrace PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(yabsl-debugging-stacktrace PUBLIC
   contrib-libs-cxxsupp
   yutil

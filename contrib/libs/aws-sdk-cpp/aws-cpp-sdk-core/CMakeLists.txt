@@ -41,9 +41,6 @@ target_compile_options(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
 target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-core PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include
 )
-target_include_directories(libs-aws-sdk-cpp-aws-cpp-sdk-core PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core/include
-)
 target_link_libraries(libs-aws-sdk-cpp-aws-cpp-sdk-core PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-curl

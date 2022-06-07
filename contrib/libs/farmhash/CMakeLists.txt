@@ -11,9 +11,6 @@ add_library(contrib-libs-farmhash)
 target_include_directories(contrib-libs-farmhash PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/include
 )
-target_include_directories(contrib-libs-farmhash PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/include
-)
 target_link_libraries(contrib-libs-farmhash PUBLIC
   contrib-libs-cxxsupp
   yutil

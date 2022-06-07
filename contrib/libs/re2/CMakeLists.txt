@@ -12,7 +12,6 @@ target_include_directories(contrib-libs-re2 PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2/include
 )
 target_include_directories(contrib-libs-re2 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/re2/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2
 )
 target_link_libraries(contrib-libs-re2 PUBLIC

@@ -20,7 +20,6 @@ target_include_directories(contrib-libs-libxml PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/include
 )
 target_include_directories(contrib-libs-libxml PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml
 )
 target_link_libraries(contrib-libs-libxml PUBLIC

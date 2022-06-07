@@ -16,7 +16,6 @@ target_include_directories(libs-poco-Net PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Net/include
 )
 target_include_directories(libs-poco-Net PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Net/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Net/src
 )

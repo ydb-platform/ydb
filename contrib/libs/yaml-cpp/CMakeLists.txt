@@ -11,9 +11,6 @@ add_library(contrib-libs-yaml-cpp)
 target_include_directories(contrib-libs-yaml-cpp PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/yaml-cpp/include
 )
-target_include_directories(contrib-libs-yaml-cpp PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/yaml-cpp/include
-)
 target_link_libraries(contrib-libs-yaml-cpp PUBLIC
   contrib-libs-cxxsupp
 )

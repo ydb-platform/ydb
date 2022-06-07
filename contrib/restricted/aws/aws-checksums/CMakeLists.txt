@@ -16,9 +16,6 @@ target_compile_options(restricted-aws-aws-checksums PRIVATE
 target_include_directories(restricted-aws-aws-checksums PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/include
 )
-target_include_directories(restricted-aws-aws-checksums PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-checksums/include
-)
 target_link_libraries(restricted-aws-aws-checksums PUBLIC
   restricted-aws-aws-c-common
 )

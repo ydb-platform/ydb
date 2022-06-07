@@ -13,7 +13,6 @@ target_include_directories(libs-apache-orc PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
 )
 target_include_directories(libs-apache-orc PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/src
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/proto
   ${CMAKE_SOURCE_DIR}/contrib/libs/lz4

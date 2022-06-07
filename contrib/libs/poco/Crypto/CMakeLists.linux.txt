@@ -13,7 +13,6 @@ target_include_directories(libs-poco-Crypto PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Crypto/include
 )
 target_include_directories(libs-poco-Crypto PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Crypto/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Crypto/src
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
 )

@@ -11,9 +11,6 @@ add_library(yabsl-hash-internal)
 target_include_directories(yabsl-hash-internal PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(yabsl-hash-internal PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(yabsl-hash-internal PUBLIC
   contrib-libs-cxxsupp
   yutil

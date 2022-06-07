@@ -16,7 +16,6 @@ target_include_directories(contrib-libs-nghttp2 PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/includes
 )
 target_include_directories(contrib-libs-nghttp2 PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/includes
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib
 )

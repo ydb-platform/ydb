@@ -11,9 +11,6 @@ add_library(yabseil-cpp-tstring-y_absl-city)
 target_include_directories(yabseil-cpp-tstring-y_absl-city PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(yabseil-cpp-tstring-y_absl-city PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(yabseil-cpp-tstring-y_absl-city PUBLIC
   contrib-libs-cxxsupp
   yutil

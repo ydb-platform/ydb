@@ -11,9 +11,6 @@ add_library(ystrings-internal-str_format)
 target_include_directories(ystrings-internal-str_format PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(ystrings-internal-str_format PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(ystrings-internal-str_format PUBLIC
   contrib-libs-cxxsupp
   yutil

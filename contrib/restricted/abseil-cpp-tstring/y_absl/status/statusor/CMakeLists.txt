@@ -11,9 +11,6 @@ add_library(yabsl-status-statusor)
 target_include_directories(yabsl-status-statusor PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(yabsl-status-statusor PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(yabsl-status-statusor PUBLIC
   contrib-libs-cxxsupp
   yutil

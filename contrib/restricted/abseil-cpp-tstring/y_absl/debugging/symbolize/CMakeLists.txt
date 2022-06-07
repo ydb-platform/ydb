@@ -11,9 +11,6 @@ add_library(yabsl-debugging-symbolize)
 target_include_directories(yabsl-debugging-symbolize PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_include_directories(yabsl-debugging-symbolize PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
-)
 target_link_libraries(yabsl-debugging-symbolize PUBLIC
   contrib-libs-cxxsupp
   yutil

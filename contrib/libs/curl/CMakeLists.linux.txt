@@ -23,7 +23,6 @@ target_include_directories(contrib-libs-curl PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/include
 )
 target_include_directories(contrib-libs-curl PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/c-ares/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib
 )

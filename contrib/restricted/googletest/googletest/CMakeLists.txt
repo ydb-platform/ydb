@@ -15,10 +15,6 @@ target_include_directories(restricted-googletest-googletest PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
 )
-target_include_directories(restricted-googletest-googletest PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
-)
 target_link_libraries(restricted-googletest-googletest PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-re2

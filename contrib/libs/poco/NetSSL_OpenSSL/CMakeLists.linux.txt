@@ -13,7 +13,6 @@ target_include_directories(libs-poco-NetSSL_OpenSSL PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/include
 )
 target_include_directories(libs-poco-NetSSL_OpenSSL PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/libs/poco/NetSSL_OpenSSL/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Crypto/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Net/include

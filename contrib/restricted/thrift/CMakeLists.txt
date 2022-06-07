@@ -20,9 +20,6 @@ target_compile_options(contrib-restricted-thrift PRIVATE
 target_include_directories(contrib-restricted-thrift PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/thrift
 )
-target_include_directories(contrib-restricted-thrift PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/thrift
-)
 target_link_libraries(contrib-restricted-thrift PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-libevent

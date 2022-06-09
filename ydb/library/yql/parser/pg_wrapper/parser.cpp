@@ -26,6 +26,9 @@ extern "C" {
 #include "utils/resowner.h"
 #include "port/pg_bitutils.h"
 #include "port/pg_crc32c.h"
+#include "postmaster/postmaster.h"
+#include "storage/latch.h"
+#include "miscadmin.h"
 #include "thread_inits.h"
 #undef Abs
 #undef Min
@@ -47,6 +50,7 @@ extern "C" {
 
 extern "C" {
 
+extern __thread Latch LocalLatchData;
 extern void destroy_timezone_hashtable();
 const char *progname;
 
@@ -308,4 +312,10 @@ extern "C" void setup_pg_thread_cleanup() {
     TopTransactionResourceOwner = owner;
     CurTransactionResourceOwner = owner;
     CurrentResourceOwner = owner;
+
+    InitProcessGlobals();
+    InitializeLatchSupport();
+    MyLatch = &LocalLatchData;
+    InitLatch(MyLatch);
+    InitializeLatchWaitSet();
 };

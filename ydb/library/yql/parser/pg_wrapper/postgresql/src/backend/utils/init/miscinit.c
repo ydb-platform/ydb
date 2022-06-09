@@ -64,7 +64,7 @@ __thread BackendType MyBackendType;
 /* List of lock files to be removed at proc exit */
 static __thread List *lock_files = NIL;
 
-static __thread Latch LocalLatchData;
+__thread Latch LocalLatchData;
 
 /* ----------------------------------------------------------------
  *		ignoring system indexes support stuff

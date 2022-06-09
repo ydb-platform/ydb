@@ -1151,9 +1151,9 @@ ECompareOptions CanCompare(const TPgExprType* left, const TPgExprType* right) {
     }
 
     if (Equality) {
-        return left->IsEquatable() ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
+        return left->IsEquatable() ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
     } else {
-        return left->IsComparable() ? ECompareOptions::Comparable : ECompareOptions::Uncomparable;
+        return left->IsComparable() ? ECompareOptions::Optional : ECompareOptions::Uncomparable;
     }
 }
 

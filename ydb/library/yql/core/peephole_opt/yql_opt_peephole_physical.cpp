@@ -5154,6 +5154,20 @@ TExprNode::TPtr AggrEqualLists(const TExprNode& node, TExprContext& ctx) {
 }
 
 template <bool Asc, bool Equals>
+TExprNode::TPtr SqlComparePg(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
+    return ctx.Builder(node.Pos())
+        .Callable("FromPg")
+            .Callable(0, "PgOp")
+                .Atom(0, Asc ? (Equals ? "<=" : "<") : (Equals ? ">=" : ">"))
+                .Add(1, node.ChildPtr(0))
+                .Add(2, node.ChildPtr(1))
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+template <bool Asc, bool Equals>
 TExprNode::TPtr SqlCompareLists(const TExprNode& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Lists.";
     auto lenCompare = JustIf(ETypeAnnotationKind::Optional == node.GetTypeAnn()->GetKind(),
@@ -5255,6 +5269,45 @@ TExprNode::TPtr AggrCompareLists(const TExprNode& node, TExprContext& ctx) {
 template <bool Equals>
 TExprNode::TPtr CheckHasItems(const TExprNode::TPtr& node, TExprContext& ctx) {
     return ctx.WrapByCallableIf(Equals, "Not", ctx.NewCallable(node->Pos(), "HasItems", {node}));
+}
+
+template <bool Equals, bool IsDistinct>
+TExprNode::TPtr SqlEqualPg(const TExprNode& node, TExprContext& ctx) {
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand '" << node.Content() << "' over Pg.";
+    if constexpr (IsDistinct) {
+        return ctx.Builder(node.Pos())
+            .Callable("IfPresent")
+                .Callable(0, "FromPg")
+                    .Callable(0, "PgOp")
+                        .Atom(0, Equals ? "=" : "<>")
+                        .Add(1, node.ChildPtr(0))
+                        .Add(2, node.ChildPtr(1))
+                    .Seal()
+                .Seal()
+                .Lambda(1)
+                    .Param("unpacked")
+                    .Arg("unpacked")
+                .Seal()
+                .Callable(2, Equals ? "==" : "!=")
+                    .Callable(0, "Exists")
+                        .Add(0, node.ChildPtr(0))
+                    .Seal()
+                    .Callable(1, "Exists")
+                        .Add(0, node.ChildPtr(1))
+                    .Seal()
+                .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(node.Pos())
+            .Callable("FromPg")
+                .Callable(0, "PgOp")
+                    .Atom(0, Equals ? "=" : "<>")
+                    .Add(1, node.ChildPtr(0))
+                    .Add(2, node.ChildPtr(1))
+                .Seal()
+            .Seal()
+            .Build();
+    }
 }
 
 template <bool Equals, bool IsDistinct>
@@ -5624,6 +5677,8 @@ TExprNode::TPtr ExpandSqlEqual(const TExprNode::TPtr& node, TExprContext& ctx) {
                 return SqlEqualLists<Equals>(*node, ctx);
             case ETypeAnnotationKind::Dict:
                 return SqlEqualDicts<Equals, IsDistinct>(*node, ctx);
+            case ETypeAnnotationKind::Pg:
+                return SqlEqualPg<Equals, IsDistinct>(*node, ctx);
             case ETypeAnnotationKind::Variant:
                 return SqlCompareVariants<true, !Equals, IsDistinct>(*node, ctx);
             case ETypeAnnotationKind::Tagged:
@@ -5673,6 +5728,8 @@ TExprNode::TPtr ExpandSqlCompare(const TExprNode::TPtr& node, TExprContext& ctx)
                 return CompareTagged(*node, ctx);
             case ETypeAnnotationKind::Optional:
                 return ReduceBothArgs<false>(*node, ctx);
+            case ETypeAnnotationKind::Pg:
+                return SqlComparePg<Asc, Equals>(*node, ctx);
             default:
                 break;
         }

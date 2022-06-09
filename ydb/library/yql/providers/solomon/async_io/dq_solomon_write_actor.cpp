@@ -61,6 +61,11 @@ const ui64 MaxRequestsInflight = 3;
 
 auto RetryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetExponentialBackoffPolicy(
     [](const NHttp::TEvHttpProxy::TEvHttpIncomingResponse* resp){
+        if (!resp || !resp->Response) {
+            // Connection wasn't established. Should retry.
+            return ERetryErrorClass::ShortRetry;
+        }
+
         if (resp->Response->Status == "401") {
             return ERetryErrorClass::NoRetry;
         }

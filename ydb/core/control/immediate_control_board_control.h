@@ -2,7 +2,7 @@
 #include "defs.h"
 
 #include <util/generic/ptr.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr {
 

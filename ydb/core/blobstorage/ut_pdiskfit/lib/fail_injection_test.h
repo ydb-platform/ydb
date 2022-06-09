@@ -17,7 +17,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/folder/tempdir.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/event.h>
 #include <util/random/fast.h>
 

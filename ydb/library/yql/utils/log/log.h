@@ -7,7 +7,7 @@
 
 #include <library/cpp/logger/global/common.h>
 
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/stream/output.h>
 #include <util/generic/strbuf.h>
 

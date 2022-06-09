@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/datetime.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/event.h>
 
 class TStateManager {

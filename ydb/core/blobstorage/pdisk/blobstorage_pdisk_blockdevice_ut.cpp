@@ -11,7 +11,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/folder/dirut.h>
 #include <util/folder/tempdir.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/condvar.h>
 #include <util/string/printf.h>
 #include <util/system/file.h>

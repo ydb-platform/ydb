@@ -5,7 +5,7 @@
 #include <library/cpp/threading/queue/mpsc_read_as_filled.h>
 #include <library/cpp/threading/queue/mpsc_vinfarr_obstructive.h>
 
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/generic/vector.h>
 #include <util/generic/list.h>
 

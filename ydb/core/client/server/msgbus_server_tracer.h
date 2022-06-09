@@ -8,7 +8,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include "msgbus_server.h"
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NKikimr {
 namespace NMessageBusTracer {

@@ -5,7 +5,7 @@
 
 #include <cstdio>
 
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/event.h>
 #include <util/system/mutex.h>
 #include <util/system/condvar.h>

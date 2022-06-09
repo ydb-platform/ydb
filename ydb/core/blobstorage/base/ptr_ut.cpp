@@ -1,5 +1,5 @@
 #include "ptr.h"
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr;

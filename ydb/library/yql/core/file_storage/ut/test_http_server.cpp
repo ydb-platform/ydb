@@ -4,7 +4,7 @@
 #include <library/cpp/http/server/http_ex.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <util/system/atomic_ops.h>
+#include <library/cpp/deprecated/atomic/atomic_ops.h>
 
 namespace NYql {
 

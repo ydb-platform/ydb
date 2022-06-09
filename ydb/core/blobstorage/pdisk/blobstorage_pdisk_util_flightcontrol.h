@@ -1,7 +1,7 @@
 #pragma once
 #include "defs.h"
 #include <util/generic/vector.h>
-#include <util/system/atomic.h>
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <util/system/condvar.h>
 
 namespace NKikimr {

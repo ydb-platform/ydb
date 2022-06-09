@@ -1,4 +1,4 @@
-# Рзавертывание кластера YDB на виртуальных или железных серверах
+# Развертывание кластера YDB на виртуальных или железных серверах
 
 Данный документ описывает способ развернуть мультитенантный кластер YDB на нескольких серверах.
 
@@ -18,7 +18,7 @@
 * Используйте схему отказоустойчивости `block-4-2` для деплоя кластера в одной зоне доступности (AZ). Чтобы переживать выпадения 2 нод используйте не менее 8 нод.
 * Используйте схему отказоустойчивости `mirror-3-dc` для деплоя кластера в трех зонах доступности (AZ). Чтобы переживать выпадения 1 AZ и 1 ноды в другом AZ используйте не менее 9 нод. Количество нод в каждой AZ должно быть одинаковым.
 
-Запускайте каждую статическую ноду на отдельном сервере. 
+Запускайте каждую статическую ноду на отдельном сервере.
 
 ## Создайте системного пользователя и группу, от имени которого будет работать {{ ydb-short-name }} {#create-user}
 На каждом сервере, где будет запущен YDB выполните:
@@ -40,7 +40,7 @@ sudo usermod -aG disk ydb
 
 {% endnote %}
 
-1. Создайте раздел на выбранном диске 
+1. Создайте раздел на выбранном диске
 
 {% note alert %}
 
@@ -55,7 +55,7 @@ sudo parted -a optimal /dev/nvme0n1 mkpart primary 0% 100%
 sudo parted /dev/nvme0n1 name 1 ydb_disk_ssd_01
 sudo partx --u /dev/nvme0n1
 ```
-После выполнения в системе появится диск с лейблом `/dev/disk/by-partlabel/ydb_disk_ssd_01` 
+После выполнения в системе появится диск с лейблом `/dev/disk/by-partlabel/ydb_disk_ssd_01`
 
 
 Если вы планируете использовать более одного диска на каждом сервере - укажите для каждого свой уникальный лейбл вместо `ydb_disk_ssd_01`. Эти диски необходимо будет использовать в конфигурационных файлах далее.
@@ -80,9 +80,10 @@ sudo cp -i ydbd-main-linux-amd64/lib/libaio.so /opt/ydb/lib/
 sudo cp -i ydbd-main-linux-amd64/lib/libiconv.so /opt/ydb/lib/
 sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
 ```
-3. Отформатируйте диск встроенной командой 
+
+3. Отформатируйте диск встроенной командой
 ```bash
-sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01 
+sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
 ```
 Проделайте данную операцию для каждого диска, который будет использоваться для хранения данных.
 
@@ -93,7 +94,7 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
 - Незащищенный режим
 
   В данном режиме трафик между нодами кластера, а также между клиентом и кластером использует нешифрованное соединение. Используйте данный режим для тестовых задач.
-  
+
   {% include [prepare-configs.md](_includes/prepare-configs.md) %}
 
   Сохраните конфигурационный файл {{ ydb-short-name }} под именем `/opt/ydb/cfg/config.yaml`
@@ -106,8 +107,9 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
 
   Создайте на каждой ноде директирии для сертификатов
   ```bash
-  mkdir /opt/ydb/certs
-  chmod 0750 /opt/ydb/certs
+  sudo mkdir /opt/ydb/certs
+  sudo chown -R ydb:ydb /opt/ydb/certs
+  sudo chmod 0750 /opt/ydb/certs
   ```
 
   Скопируйте сертификаты и ключи ноды
@@ -125,7 +127,7 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
         path_to_certificate_file: "/opt/ydb/certs/node.crt"
         path_to_private_key_file: "/opt/ydb/certs/node.key"
         path_to_ca_file: "/opt/ydb/certs/ca.crt"
-  
+
     grpc_config:
         cert: "/opt/ydb/certs/node.crt"
         key: "/opt/ydb/certs/node.key"
@@ -152,8 +154,8 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
   ```
 
 - С использованием systemd
-  
-  1. Создайте на каждой ноде конфигурационный файл `/etc/systemd/system/ydbd-storage.service` со следующим содержимым 
+
+  1. Создайте на каждой ноде конфигурационный файл `/etc/systemd/system/ydbd-storage.service` со следующим содержимым
   ```text
   [Unit]
   Description=YDB storage node
@@ -181,7 +183,7 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
   [Install]
   WantedBy=multi-user.target
   ```
-  
+
   2. Запустите на каждой ноде {{ ydb-short-name }} storage:
     ```bash
   sudo systemctl start ydbd-storage
@@ -193,10 +195,10 @@ sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs di
 На одной из нод кластера выполните команду:
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file  /opt/ydb/cfg/config.yaml ; echo $?
 ```
 
-Код завершения команды должен быть нулевым, выполните команду `echo $?` для его проверки.
+Код завершения команды должен быть нулевым.
 
 ## Создание первой базы данных {#create-fist-db}
 
@@ -214,10 +216,12 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
   sudo su - ydb
   cd /opt/ydb
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  /opt/ydbd/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml \
-  --tenant /Root/testdb --node-broker node1.ydb.tech:2135 --node-broker node2.ydb.tech:2135 --node-broker node3.ydb.tech:2135
+  /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml \
+  --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
   ```
-  Запустите дополнительные динноды на других серверах для обеспечения доступности базы данных. 
+  Где `<nodeN.ydb.tech>` - FQDN серверов, на которых запущены статические ноды.
+
+  Запустите дополнительные динноды на других серверах для обеспечения доступности базы данных.
 
 - С использованием systemd
 
@@ -241,7 +245,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
   SyslogFacility=daemon
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker --node-broker --node-broker
+  ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config  /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
@@ -249,7 +253,8 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
   [Install]
   WantedBy=multi-user.target
   ```
-  
+  Где `<nodeN.ydb.tech>` - FQDN серверов, на которых запущены статические ноды.
+
   2. Запустите динамическую ноду {{ ydb-short-name }} для базы /Root/testdb:
   ```bash
   sudo systemctl start ydbd-testdb
@@ -264,11 +269,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /
 2. Создайте тестовую таблицу `test_table`:
 
    ```bash
-   ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
+   ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb scripting yql \
    --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
    ```
-   Где `<node1.domain>` - FQDN сервера, на котором запущены динамические ноды, обслуживающие базу `/Root/testdb`
-
-
-
-
+   Где `<node.ydb.tech>` - FQDN сервера, на котором запущена динамическая нода, обслуживающая базу `/Root/testdb`

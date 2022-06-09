@@ -90,7 +90,7 @@ sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
 3. Format the disk with the built-in command
 
 ```bash
-sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01 
+sudo LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin bs disk obliterate /dev/disk/by-partlabel/ydb_disk_ssd_01
 ```
 
 Perform this operation for each disk that will be used for data storage.
@@ -116,8 +116,9 @@ Prepare the configuration files:
   Create directories for certificates on each node
 
   ```bash
-  mkdir /opt/ydb/certs
-  chmod 0750 /opt/ydb/certs
+  sudo mkdir /opt/ydb/certs
+  sudo chown -R ydb:ydb /opt/ydb/certs
+  sudo chmod 0750 /opt/ydb/certs
   ```
 
   Copy the node certificates and keys
@@ -136,7 +137,7 @@ Prepare the configuration files:
         path_to_certificate_file: "/opt/ydb/certs/node.crt"
         path_to_private_key_file: "/opt/ydb/certs/node.key"
         path_to_ca_file: "/opt/ydb/certs/ca.crt"
-  
+
     grpc_config:
         cert: "/opt/ydb/certs/node.crt"
         key: "/opt/ydb/certs/node.key"
@@ -172,7 +173,7 @@ Prepare the configuration files:
   Wants=network-online.target
   StartLimitInterval=10
   StartLimitBurst=15
-  
+
   [Service]
   Restart=always
   RestartSec=1
@@ -188,7 +189,7 @@ Prepare the configuration files:
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=3221225472
-  
+
   [Install]
   WantedBy=multi-user.target
   ```
@@ -205,7 +206,7 @@ Prepare the configuration files:
 On one of the cluster nodes, run the command:
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file /opt/ydb/cfg/config.yaml ; echo $?
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin blobstorage config init --yaml-file /opt/ydb/cfg/config.yaml ; echo $?
 ```
 
 The command execution code should be null.
@@ -215,7 +216,7 @@ The command execution code should be null.
 To work with tables, you need to create at least one database and run a process serving this database (a dynamic node).
 
 ```bash
-LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
+LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
 
 ## Start the DB dynamic node {# start-dynnode}
@@ -230,8 +231,9 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   cd /opt/ydb
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
   /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml \
-  --tenant /Root/testdb --node-broker node1.ydb.tech:2135 --node-broker node2.ydb.tech:2135 --node-broker node3.ydb.tech:2135
+  --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
   ```
+  Where `<nodeX.ydb.tech>` is the FQDN of the server running the static nodes.
 
   Run additional dynamic nodes on other servers to ensure database availability.
 
@@ -245,7 +247,7 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   Wants=network-online.target
   StartLimitInterval=10
   StartLimitBurst=15
-  
+
   [Service]
   Restart=always
   RestartSec=1
@@ -257,14 +259,16 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
   SyslogFacility=daemon
   SyslogLevel=err
   Environment=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib
-  ExecStart=LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker --node-broker --node-broker
+  ExecStart=/opt/ydb/bin/ydbd server --grpc-port 2136 --ic-port 19002 --mon-port 8766 --yaml-config /opt/ydb/cfg/config.yaml --tenant /Root/testdb --node-broker <node1.ydb.tech>:2135 --node-broker <node2.ydb.tech>:2135 --node-broker <node3.ydb.tech>:2135
   LimitNOFILE=65536
   LimitCORE=0
   LimitMEMLOCK=32212254720
-  
+
   [Install]
   WantedBy=multi-user.target
   ```
+  Where `<nodeX.ydb.tech>` is the FQDN of the server running the static nodes.
+
   2. Start the {{ ydb-short-name }} dynamic node for the /Root/testdb database:
 
   ```bash
@@ -280,9 +284,8 @@ LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/ydb/lib ; /opt/ydb/bin/ydbd admin database
 2. Create a `test_table`:
 
 ```bash
-ydb -e grpc://<node1.domain>:2136 -d /Root/testdb scripting yql \
+ydb -e grpc://<node.ydb.tech>:2136 -d /Root/testdb scripting yql \
 --script 'CREATE TABLE `testdir/test_table` (id Uint64, title Utf8, PRIMARY KEY (id));'
 ```
 
-Where node.domain is the FQDN of the server running the dynamic nodes that support the `/Root/testdb` database.
-
+Where `<node.ydb.tech>` is the FQDN of the server running the dynamic nodes that support the `/Root/testdb` database.

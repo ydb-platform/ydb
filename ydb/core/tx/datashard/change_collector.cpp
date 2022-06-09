@@ -87,13 +87,20 @@ private:
 }; // TChangeCollectorProxy
 
 IChangeCollector* CreateChangeCollector(TDataShard& dataShard, NTable::TDatabase& db, const TUserTable& table, bool isImmediateTx) {
+    const bool hasAsyncIndexes = table.HasAsyncIndexes();
+    const bool hasCdcStreams = table.HasCdcStreams();
+
+    if (!hasAsyncIndexes && !hasCdcStreams) {
+        return nullptr;
+    }
+
     auto proxy = MakeHolder<TChangeCollectorProxy>();
 
-    if (table.HasAsyncIndexes()) {
+    if (hasAsyncIndexes) {
         proxy->AddUnderlying(MakeHolder<TAsyncIndexChangeCollector>(&dataShard, db, isImmediateTx));
     }
 
-    if (table.HasCdcStreams()) {
+    if (hasCdcStreams) {
         proxy->AddUnderlying(MakeHolder<TCdcStreamChangeCollector>(&dataShard, db, isImmediateTx));
     }
 

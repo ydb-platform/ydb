@@ -59,6 +59,9 @@ bool TCommonUploadOps<TEvRequest, TEvResponse>::Execute(TDataShard* self, TTrans
 
     if (CollectChanges) {
         ChangeCollector.Reset(CreateChangeCollector(*self, txc.DB, tableInfo, true));
+    }
+
+    if (ChangeCollector) {
         ChangeCollector->SetWriteVersion(writeVersion);
         if (ChangeCollector->NeedToReadKeys()) {
             ChangeCollector->SetReadVersion(readVersion);

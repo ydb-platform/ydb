@@ -52,6 +52,10 @@ class TDirectTxErase : public IDirectTx {
 
             return true;
         }
+
+        IChangeCollector* GetChangeCollector() const {
+            return Tx ? Tx->ChangeCollector.Get() : nullptr;
+        }
     };
 
     static EStatus CheckedExecute(

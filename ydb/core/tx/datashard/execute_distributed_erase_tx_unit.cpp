@@ -39,22 +39,26 @@ public:
 
         const auto& eraseTx = tx->GetDistributedEraseTx();
         const auto& request = eraseTx->GetRequest();
-        const auto versions = DataShard.GetReadWriteVersions(op.Get());
+        auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(op.Get());
 
         if (eraseTx->HasDependents()) {
             THolder<IChangeCollector> changeCollector{CreateChangeCollector(DataShard, txc.DB, request.GetTableId(), false)};
 
-            changeCollector->SetWriteVersion(versions.WriteVersion);
-            if (changeCollector->NeedToReadKeys()) {
-                changeCollector->SetReadVersion(versions.ReadVersion);
+            if (changeCollector) {
+                changeCollector->SetWriteVersion(writeVersion);
+                if (changeCollector->NeedToReadKeys()) {
+                    changeCollector->SetReadVersion(readVersion);
+                }
             }
 
             auto presentRows = TDynBitMap().Set(0, request.KeyColumnsSize());
-            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), versions.WriteVersion, changeCollector.Get())) {
+            if (!Execute(txc, request, presentRows, eraseTx->GetConfirmedRows(), writeVersion, changeCollector.Get())) {
                 return EExecutionStatus::Restart;
             }
 
-            op->ChangeRecords() = std::move(changeCollector->GetCollected());
+            if (changeCollector) {
+                op->ChangeRecords() = std::move(changeCollector->GetCollected());
+            }
         } else if (eraseTx->HasDependencies()) {
             THashMap<ui64, TDynBitMap> presentRows;
             for (const auto& dependency : eraseTx->GetDependencies()) {
@@ -68,7 +72,7 @@ public:
                     Y_VERIFY(body.ParseFromArray(rs.Body.data(), rs.Body.size()));
 
                     Y_VERIFY(presentRows.contains(rs.Origin));
-                    const bool ok = Execute(txc, request, presentRows.at(rs.Origin), DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows()), versions.WriteVersion);
+                    const bool ok = Execute(txc, request, presentRows.at(rs.Origin), DeserializeBitMap<TDynBitMap>(body.GetConfirmedRows()), writeVersion);
                     Y_VERIFY(ok);
                 }
             }

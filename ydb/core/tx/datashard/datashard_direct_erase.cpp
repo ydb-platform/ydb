@@ -66,9 +66,12 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
         }
 
         params.Tx->ChangeCollector.Reset(CreateChangeCollector(*self, params.Txc->DB, tableInfo, true));
-        params.Tx->ChangeCollector->SetWriteVersion(params.WriteVersion);
-        if (params.Tx->ChangeCollector->NeedToReadKeys()) {
-            params.Tx->ChangeCollector->SetReadVersion(params.ReadVersion);
+    }
+
+    if (auto collector = params.GetChangeCollector()) {
+        collector->SetWriteVersion(params.WriteVersion);
+        if (collector->NeedToReadKeys()) {
+            collector->SetReadVersion(params.ReadVersion);
         }
     }
 
@@ -133,9 +136,10 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
             }
         }
 
-        Y_VERIFY(params.Tx->ChangeCollector);
-        if (!params.Tx->ChangeCollector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
-            pageFault = true;
+        if (auto collector = params.GetChangeCollector()) {
+            if (!collector->Collect(fullTableId, NTable::ERowOp::Erase, key, {})) {
+                pageFault = true;
+            }
         }
 
         if (pageFault) {
@@ -147,8 +151,8 @@ TDirectTxErase::EStatus TDirectTxErase::CheckedExecute(
     }
 
     if (pageFault) {
-        if (params && params.Tx->ChangeCollector) {
-            params.Tx->ChangeCollector->Reset();
+        if (auto collector = params.GetChangeCollector()) {
+            collector->Reset();
         }
 
         return EStatus::PageFault;

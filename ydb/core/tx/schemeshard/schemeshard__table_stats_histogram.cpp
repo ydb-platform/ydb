@@ -308,9 +308,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
         return true;
 
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
+    const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
 
     ESplitReason splitReason = ESplitReason::NO_SPLIT;
-    if (table->ShouldSplitBySize(dataSize)) {
+    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         splitReason = ESplitReason::SPLIT_BY_SIZE;
     }
 

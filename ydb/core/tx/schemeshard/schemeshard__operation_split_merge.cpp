@@ -651,9 +651,10 @@ public:
         }
 
         auto srcShardIdx = tableInfo->GetPartitions()[srcPartitionIdx].ShardIdx;
+        const auto forceShardSplitSettings = context.SS->SplitSettings.GetForceShardSplitSettings();
 
         if (tableInfo->GetExpectedPartitionCount() + count - 1 > tableInfo->GetMaxPartitionsCount() &&
-            !tableInfo->IsForceSplitBySizeShardIdx(srcShardIdx))
+            !tableInfo->IsForceSplitBySizeShardIdx(srcShardIdx, forceShardSplitSettings))
         {
             errStr = "Reached MaxPartitionsCount limit: " + ToString(tableInfo->GetMaxPartitionsCount());
             return false;

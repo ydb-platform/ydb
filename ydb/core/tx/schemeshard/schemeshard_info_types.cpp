@@ -1419,6 +1419,7 @@ void TTableInfo::FinishSplitMergeOp(TOperationId opId) {
 
 
 bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
+                                    const TForceShardSplitSettings& forceShardSplitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad) const
 {
@@ -1451,7 +1452,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     bool canMerge = false;
 
     // Check if we can try merging by size
-    if (IsMergeBySizeEnabled() && stats->DataSize + totalSize <= GetSizeToMerge()) {
+    if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= GetSizeToMerge(forceShardSplitSettings)) {
         canMerge = true;
     }
 
@@ -1466,7 +1467,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
         return false;
 
     // Check that total size doesn't exceed the limits
-    if (IsSplitBySizeEnabled() && stats->DataSize + totalSize >= GetShardSizeToSplit()*0.9) {
+    if (IsSplitBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize >= GetShardSizeToSplit(forceShardSplitSettings)*0.9) {
         return false;
     }
 
@@ -1500,7 +1501,10 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     return true;
 }
 
-bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const {
+bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
+                                         const TForceShardSplitSettings& forceShardSplitSettings,
+                                         TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const
+{
     // Don't split/merge backup tables
     if (IsBackup) {
         return false;
@@ -1527,12 +1531,12 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TS
     THashSet<TTabletId> partOwners;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
         return false;
     }
 
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
             break;
         }
     }
@@ -1540,7 +1544,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings, TS
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad)) {
             break;
         }
     }

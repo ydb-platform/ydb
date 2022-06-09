@@ -141,6 +141,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     }
 
     auto shardIdx = Self->TabletIdToShardIdx[datashardId];
+    const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
 
     TTableInfo::TPartitionStats newStats;
     newStats.SeqNo = TMessageSeqNo(rec.GetGeneration(), rec.GetRound());
@@ -258,7 +259,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     }
 
     TVector<TShardIdx> shardsToMerge;
-    if (table->CheckCanMergePartitions(Self->SplitSettings, shardIdx, shardsToMerge)) {
+    if (table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge)) {
         TTxId txId = Self->GetCachedTxId(ctx);
 
         if (!txId) {
@@ -291,7 +292,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     ui64 dataSizeResolution = 0; // Datashard will use default resolution
     ui64 rowCountResolution = 0; // Datashard will use default resolution
     bool collectKeySample = false;
-    if (table->ShouldSplitBySize(dataSize)) {
+    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
         // We would like to split by size and do this no matter how many partitions there are
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already

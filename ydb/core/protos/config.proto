@@ -1277,9 +1277,23 @@ message TImmediateControlsConfig {
             DefaultValue: 250000 }];
     }
 
+    message TSchemeShardControls {
+        optional uint64 ForceShardSplitDataSize = 1 [(ControlOptions) = {
+            Description: "Forces shards to split when reaching the given data size (2 GiB by default)",
+            MinValue: 10485760, // 10 MiB
+            MaxValue: 17179869184, // 16 GiB
+            DefaultValue: 2147483648 }];
+        optional uint64 DisableForceShardSplit = 2 [(ControlOptions) = {
+            Description: "Disables forced shard splits, for special cases only",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0 }];
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
+    optional TSchemeShardControls SchemeShardControls = 4;
 };
 
 message TMeteringConfig {

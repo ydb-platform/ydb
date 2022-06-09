@@ -32,7 +32,8 @@ struct TS3Configuration : public TS3Settings, public NCommon::TSettingDispatcher
     std::unordered_map<TString, TS3ClusterSettings> Clusters;
 
     ui64 FileSizeLimit;
-    ui32 MaxFilesPerQuery;
+    ui64 MaxFilesPerQuery;
+    ui64 MaxDiscoveryFilesPerQuery;
     ui64 MaxReadSizePerQuery;
 };
 

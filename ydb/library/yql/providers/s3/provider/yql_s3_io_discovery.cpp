@@ -45,7 +45,8 @@ void OnDiscovery(
     NThreading::TPromise<void> promise,
     std::weak_ptr<TPendingBuckets> pendingBucketsWPtr,
     int promiseInd,
-    const IRetryPolicy<long>::TPtr& retryPolicy) {
+    const IRetryPolicy<long>::TPtr& retryPolicy,
+    ui64 maxDiscoveryFilesPerQuery) {
     auto pendingBuckets = pendingBucketsWPtr.lock(); // keys and output could be used only when TPendingBuckets is alive
     if (!pendingBuckets) {
         return;
@@ -67,8 +68,8 @@ void OnDiscovery(
             root.Node("s3:KeyCount", false, nss).Value<unsigned>() > 0U) {
             const auto& contents = root.XPath("s3:Contents", false, nss);
             auto& items = std::get<TItemsMap>(output);
-            if (items.size() + contents.size() > 9000ULL) {
-                std::get<TIssues>(output) = { TIssue(pos, TStringBuilder() << "It's over nine thousand items under '" << std::get<0U>(keys) << std::get<1U>(keys) << "'!")};
+            if (maxDiscoveryFilesPerQuery && items.size() + contents.size() > maxDiscoveryFilesPerQuery) {
+                std::get<TIssues>(output) = { TIssue(pos, TStringBuilder() << "Over " << maxDiscoveryFilesPerQuery << " files discovered in '" << std::get<0U>(keys) << std::get<1U>(keys) << "'")};
                 break;
             }
 
@@ -97,7 +98,7 @@ void OnDiscovery(
                         url,
                         std::move(headers),
                         0U,
-                        std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd, retryPolicy),
+                        std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd, retryPolicy, maxDiscoveryFilesPerQuery),
                         /*data=*/"",
                         retryPolicy);
                 }
@@ -121,6 +122,8 @@ void OnDiscovery(
         break;
     }
 
+    // this logging does not work at the moment since we are trying to do it in non-pipeline thread (http gateway thread)
+    // todo: fix logging
     YQL_CLOG(DEBUG, ProviderS3) << "Set promise with log message: " << logMsg;
     promise.SetValue();
 }
@@ -232,7 +235,7 @@ public:
                 0U,
                 std::bind(&OnDiscovery,
                     IHTTPGateway::TWeakPtr(Gateway_), ctx.GetPosition((*std::get<TNodeSet>(bucket.second).cbegin())->Pos()), std::placeholders::_1,
-                    std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++, retryPolicy),
+                    std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++, retryPolicy, State_->Configuration->MaxDiscoveryFilesPerQuery),
                 /*data=*/"",
                 retryPolicy
             );

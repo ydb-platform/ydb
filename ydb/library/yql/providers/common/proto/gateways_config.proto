@@ -328,8 +328,9 @@ message TS3GatewayConfig {
     repeated TS3ClusterConfig ClusterMapping = 1;
 
     optional uint64 FileSizeLimit = 2;
-    optional uint32 MaxFilesPerQuery = 3;
+    optional uint64 MaxFilesPerQuery = 3;
     optional uint64 MaxReadSizePerQuery = 4;
+    optional uint64 MaxDiscoveryFilesPerQuery = 5;
 
     repeated TAttr DefaultSettings = 100;
 }

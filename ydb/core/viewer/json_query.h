@@ -43,16 +43,16 @@ public:
         , Event(ev)
     {}
 
-    STFUNC(StateWork) {
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
-            HFunc(NKqp::TEvKqp::TEvProcessResponse, HandleReply);
-            HFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
-            HFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvProcessResponse, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
+            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            hFunc(NKqp::TEvKqpExecuter::TEvStreamProfile, HandleReply);
+            hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
 
-            CFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
 
             default: {
                 Cerr << "Unexpected event received in TJsonQuery::StateWork: " << ev->GetTypeRewrite() << Endl;
@@ -60,7 +60,7 @@ public:
         }
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         const auto& params(Event->Get()->Request.GetParams());
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
@@ -91,7 +91,7 @@ public:
             }
         }
         if (query.empty()) {
-            ReplyAndDie(HTTPBADREQUEST, ctx);
+            ReplyAndPassAway(HTTPBADREQUEST);
             return;
         }
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
@@ -118,9 +118,9 @@ public:
             event->Record.SetUserToken(Event->Get()->UserToken);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), event.Release());
+        Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
 
-        Become(&TThis::StateWork, ctx, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
     }
 
 private:
@@ -203,7 +203,7 @@ private:
         }
     }
 
-    void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleReply(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {
         TStringBuilder out;
         NKikimrKqp::TEvQueryResponse& record = ev->Get()->Record.GetRef();
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
@@ -212,26 +212,7 @@ private:
             if (!Stats.empty()) {
                 out << "{\"result\":";
             }
-            if (response.ResultsSize() > 0) {
-                const auto &result = response.GetResults();
-                if (result.empty()) {
-                    out << "[]";
-                } else {
-                    const auto &first = *result.begin();
-
-                    if (first.HasType() && first.HasValue()) {
-                        auto value = NClient::TValue::Create(first.GetValue(), first.GetType());
-                        auto data = value["Data"];
-                        if (data.HaveValue()) {
-                            out << data.GetValueText<NClient::TFormatJSON>({JsonSettings.UI64AsString});
-                        } else {
-                            out << "[]";
-                        }
-                    } else {
-                        out << "[]";
-                    }
-                }
-            } else if (ResultSets.size() > 0) {
+            if (ResultSets.size() > 0) {
                 out << "[";
                 bool comma = false;
                 for (auto it = ResultSets.begin(); it != ResultSets.end(); ++it) {
@@ -256,6 +237,25 @@ private:
                     }
                 }
                 out << ']';
+            } else if (response.ResultsSize() > 0) {
+                const auto &result = response.GetResults();
+                if (result.empty()) {
+                    out << "[]";
+                } else {
+                    const auto &first = *result.begin();
+
+                    if (first.HasType() && first.HasValue()) {
+                        auto value = NClient::TValue::Create(first.GetValue(), first.GetType());
+                        auto data = value["Data"];
+                        if (data.HaveValue()) {
+                            out << data.GetValueText<NClient::TFormatJSON>({JsonSettings.UI64AsString});
+                        } else {
+                            out << "[]";
+                        }
+                    } else {
+                        out << "[]";
+                    }
+                }
             } else if (response.HasQueryPlan()) {
                 if (Action == "explain-ast") {
                     out << "{\"ast\":\"" << TProtoToJson::EscapeJsonString(response.GetQueryAst()) << "\"}";
@@ -290,20 +290,26 @@ private:
             out << NJson::WriteJson(response, false);
         }
 
-        ReplyAndDie(out, ctx);
+        ReplyAndPassAway(out);
     }
 
-    void HandleReply(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev, const TActorContext& ctx) {
+    void HandleReply(NKqp::TEvKqp::TEvProcessResponse::TPtr& ev) {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
     }
 
-    void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev, const TActorContext& ctx) {
+    void HandleReply(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
         Y_UNUSED(ev);
-        Y_UNUSED(ctx);
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev) {
+        Y_UNUSED(ev);
+    }
+
+    void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+        Y_UNUSED(ev);
+    }
+
+    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         const NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
 
         ResultSets.emplace_back();
@@ -311,26 +317,16 @@ private:
 
         THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
         ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
-        ctx.Send(ev->Sender, ack.Release());
+        Send(ev->Sender, ack.Release());
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamProfile::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
+    void HandleTimeout() {
+        ReplyAndPassAway(Viewer->GetHTTPGATEWAYTIMEOUT());
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev, const TActorContext& ctx) {
-        Y_UNUSED(ev);
-        Y_UNUSED(ctx);
-    }
-
-    void HandleTimeout(const TActorContext& ctx) {
-        ReplyAndDie(Viewer->GetHTTPGATEWAYTIMEOUT(), ctx);
-    }
-
-    void ReplyAndDie(TString data, const TActorContext& ctx) {
-        ctx.Send(Initiator, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-        Die(ctx);
+    void ReplyAndPassAway(TString data) {
+        Send(Initiator, new NMon::TEvHttpInfoRes(std::move(data), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
+        PassAway();
     }
 };
 

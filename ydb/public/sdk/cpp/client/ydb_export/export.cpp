@@ -13,6 +13,8 @@
 #include <google/protobuf/repeated_field.h>
 #include <google/protobuf/timestamp.pb.h>
 
+#include <util/stream/str.h>
+
 namespace NYdb {
 namespace NExport {
 
@@ -94,6 +96,10 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
 
     Metadata_.Settings.Description(metadata.settings().description());
     Metadata_.Settings.NumberOfRetries(metadata.settings().number_of_retries());
+
+    if (metadata.settings().compression()) {
+        Metadata_.Settings.Compression(metadata.settings().compression());
+    }
 
     // progress
     Metadata_.Progress = TProtoAccessor::FromProto(metadata.progress());
@@ -190,6 +196,10 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
 
     if (settings.NumberOfRetries_) {
         request.mutable_settings()->set_number_of_retries(settings.NumberOfRetries_.GetRef());
+    }
+
+    if (settings.Compression_) {
+        request.mutable_settings()->set_compression(*settings.Compression_);
     }
 
     return Impl_->ExportToS3(std::move(request), settings);

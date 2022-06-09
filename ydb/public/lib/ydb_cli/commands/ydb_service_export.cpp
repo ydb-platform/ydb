@@ -262,6 +262,13 @@ void TCommandExportToS3::Config(TConfig& config) {
     config.Opts->AddLongOption("retries", "Number of retries")
         .RequiredArgument("NUM").StoreResult(&NumberOfRetries).DefaultValue(NumberOfRetries);
 
+    config.Opts->AddLongOption("compression", TStringBuilder()
+            << "Codec used to compress data" << Endl
+            << "  Available options:" << Endl
+            << "    - zstd" << Endl
+            << "    - zstd-N (N is compression level, e.g. zstd-3)" << Endl)
+        .RequiredArgument("STRING").StoreResult(&Compression);
+
     AddDeprecatedJsonOption(config);
     AddFormats(config, { EOutputFormat::Pretty, EOutputFormat::ProtoJsonBase64 });
     config.Opts->MutuallyExclusive("json", "format");
@@ -306,6 +313,10 @@ int TCommandExportToS3::Run(TConfig& config) {
     }
 
     settings.NumberOfRetries(NumberOfRetries);
+
+    if (Compression) {
+        settings.Compression(Compression);
+    }
 
     const TDriver driver = CreateDriver(config);
 

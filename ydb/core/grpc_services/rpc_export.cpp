@@ -6,6 +6,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
+#include <ydb/core/ydb_convert/compression.h>
 
 #include <library/cpp/actors/core/hfunc.h>
 
@@ -42,11 +43,11 @@ class TExportRPC: public TRpcOperationRequestActor<TDerived, TEvRequest, true>, 
         }
 
         auto& createExport = *ev->Record.MutableRequest();
-        createExport.MutableOperationParams()->CopyFrom(request.operation_params());
-        if (std::is_same_v<TEvRequest, TEvExportToYtRequest>) {
-            createExport.MutableExportToYtSettings()->CopyFrom(request.settings());
-        } else if (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
-            createExport.MutableExportToS3Settings()->CopyFrom(request.settings());
+        *createExport.MutableOperationParams() = request.operation_params();
+        if constexpr (std::is_same_v<TEvRequest, TEvExportToYtRequest>) {
+            *createExport.MutableExportToYtSettings() = request.settings();
+        } else if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
+            *createExport.MutableExportToS3Settings() = request.settings();
         }
 
         return ev.Release();
@@ -182,10 +183,20 @@ public:
     using TRpcOperationRequestActor<TDerived, TEvRequest, true>::TRpcOperationRequestActor;
 
     void Bootstrap(const TActorContext&) {
-        const auto& request = *this->GetProtoRequest();
+        const auto& settings = this->GetProtoRequest()->settings();
 
-        if (request.settings().items().empty()) {
+        if (settings.items().empty()) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
+        }
+
+        if constexpr (std::is_same_v<TEvRequest, TEvExportToS3Request>) {
+            if (settings.compression()) {
+                StatusIds::StatusCode status;
+                TString error;
+                if (!CheckCompression(settings.compression(), status, error)) {
+                    return this->Reply(status, TIssuesIds::DEFAULT_ERROR, error);
+                }
+            }
         }
 
         ResolvePaths(ExtractPaths());

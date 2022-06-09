@@ -18,6 +18,7 @@ target_link_libraries(ydb-core-ydb_convert PUBLIC
   ydb-core-engine
   ydb-core-protos
   ydb-core-scheme
+  ydb-core-util
   ydb-library-binary_json
   ydb-library-dynumber
   library-mkql_proto-protos
@@ -27,6 +28,7 @@ target_link_libraries(ydb-core-ydb_convert PUBLIC
 )
 target_sources(ydb-core-ydb_convert PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/column_families.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/compression.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_description.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/ydb_convert.cpp

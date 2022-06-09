@@ -70,6 +70,7 @@ private:
     TVector<TRegExMatch> ExclusionPatterns;
     TString Description;
     ui32 NumberOfRetries = 10;
+    TString Compression;
 };
 
 }

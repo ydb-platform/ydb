@@ -271,6 +271,7 @@ struct TDqTaskRunnerSettings {
 struct TDqTaskRunnerMemoryLimits {
     ui32 ChannelBufferSize = 0;
     ui32 OutputChunkMaxSize = 0;
+    ui32 ChunkSizeLimit = 48_MB;
 };
 
 NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, const NKikimr::NMiniKQL::TType* type,

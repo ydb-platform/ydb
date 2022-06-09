@@ -22,8 +22,6 @@ namespace {
 
 using namespace NKikimr;
 
-const ui32 ChunkSizeHardLimit = 48 * 1024 * 1024; // 48 MB
-
 bool IsSafeToEstimateValueSize(const NMiniKQL::TType* type) {
     if (type->GetKind() == NMiniKQL::TType::EKind::Data) {
         return true;
@@ -68,7 +66,7 @@ class TDqOutputChannelOld : public IDqOutputChannel {
 public:
     TDqOutputChannelOld(ui64 channelId, NMiniKQL::TType* outputType, bool collectProfileStats,
         const NMiniKQL::TTypeEnvironment& typeEnv, const NMiniKQL::THolderFactory& holderFactory, ui64 maxStoredBytes,
-        ui64 maxChunkBytes, NDqProto::EDataTransportVersion transportVersion, const TLogFunc& logFunc)
+        ui64 maxChunkBytes, ui64 chunkSizeLimit, NDqProto::EDataTransportVersion transportVersion, const TLogFunc& logFunc)
         : ChannelId(channelId)
         , OutputType(outputType)
         , BasicStats(ChannelId)
@@ -76,6 +74,7 @@ public:
         , DataSerializer(typeEnv, holderFactory, transportVersion)
         , MaxStoredBytes(maxStoredBytes)
         , MaxChunkBytes(maxChunkBytes)
+        , ChunkSizeLimit(chunkSizeLimit)
         , LogFunc(logFunc) {}
 
     ui64 GetChannelId() const override {
@@ -166,7 +165,7 @@ public:
             DLOG("Recalc estimated row size: " << EstimatedRowBytes);
         }
 
-        while (data.GetRaw().size() >= ChunkSizeHardLimit && takeRows > 1) {
+        while (data.GetRaw().size() >= ChunkSizeLimit && takeRows > 1) {
             ui64 newTakeRows = std::max<ui64>(bytes / EstimatedRowBytes, 1);
             newTakeRows = std::min<ui64>(newTakeRows, Data.size());
 
@@ -200,7 +199,7 @@ public:
             }
         }
 
-        YQL_ENSURE(data.GetRaw().size() < ChunkSizeHardLimit);
+        YQL_ENSURE(data.GetRaw().size() < ChunkSizeLimit);
 
         BasicStats.Chunks++;
         BasicStats.RowsOut += takeRows;
@@ -305,6 +304,7 @@ private:
     TDqDataSerializer DataSerializer;
     const ui64 MaxStoredBytes;
     ui64 MaxChunkBytes;
+    ui64 ChunkSizeLimit;
     TLogFunc LogFunc;
 
     using TDataType = TDeque<NUdf::TUnboxedValue, NKikimr::NMiniKQL::TMKQLAllocator<NUdf::TUnboxedValue>>;
@@ -332,6 +332,7 @@ public:
         , Storage(settings.ChannelStorage)
         , MaxStoredBytes(settings.MaxStoredBytes)
         , MaxChunkBytes(settings.MaxChunkBytes)
+        , ChunkSizeLimit(settings.ChunkSizeLimit)
         , LogFunc(log)
     {
         if (Storage && 3 * MaxChunkBytes > MaxStoredBytes) {
@@ -597,7 +598,7 @@ public:
 
             if (spilledBlob.SerializedSize <= bytes * 2) {
                 data.Swap(&protoBlob);
-                YQL_ENSURE(data.ByteSizeLong() <= ChunkSizeHardLimit);
+                YQL_ENSURE(data.ByteSizeLong() <= ChunkSizeLimit);
                 hasResult = true;
                 // LOG("return loaded blob as-is");
             } else {
@@ -657,7 +658,7 @@ public:
             data = DataSerializer.Serialize(firstDataIt, lastDataIt, OutputType);
         }
 
-        YQL_ENSURE(data.ByteSizeLong() <= ChunkSizeHardLimit);
+        YQL_ENSURE(data.ByteSizeLong() <= ChunkSizeLimit);
 
         BasicStats.Chunks++;
         BasicStats.RowsOut += takeRows;
@@ -800,6 +801,7 @@ private:
     IDqChannelStorage::TPtr Storage;
     const ui64 MaxStoredBytes;
     ui64 MaxChunkBytes;
+    ui64 ChunkSizeLimit;
     TLogFunc LogFunc;
     std::optional<ui32> RowFixedSize;
 
@@ -841,7 +843,7 @@ IDqOutputChannel::TPtr CreateDqOutputChannel(ui64 channelId, NKikimr::NMiniKQL::
     if (settings.AllowGeneratorsInUnboxedValues) {
         YQL_ENSURE(!settings.ChannelStorage);
         return new TDqOutputChannelOld(channelId, outputType, settings.CollectProfileStats, typeEnv, holderFactory,
-            settings.MaxStoredBytes, settings.MaxChunkBytes, settings.TransportVersion, logFunc);
+            settings.MaxStoredBytes, settings.MaxChunkBytes, settings.ChunkSizeLimit, settings.TransportVersion, logFunc);
     } else {
         return new TDqOutputChannelNew(channelId, outputType, typeEnv, holderFactory, settings, logFunc);
     }

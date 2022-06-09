@@ -26,7 +26,7 @@ struct TDqOutputChannelStats : TDqOutputStats {
 
     explicit TDqOutputChannelStats(ui64 channelId)
         : ChannelId(channelId) {}
-    
+
     template<typename T>
     void FromProto(const T& f)
     {
@@ -74,6 +74,7 @@ public:
 struct TDqOutputChannelSettings {
     ui64 MaxStoredBytes = 8_MB;
     ui64 MaxChunkBytes = 2_MB;
+    ui64 ChunkSizeLimit = 48_MB;
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
     IDqChannelStorage::TPtr ChannelStorage;
     bool CollectProfileStats = false;

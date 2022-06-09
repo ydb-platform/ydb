@@ -518,6 +518,7 @@ public:
                     TDqOutputChannelSettings settings;
                     settings.MaxStoredBytes = memoryLimits.ChannelBufferSize;
                     settings.MaxChunkBytes = memoryLimits.OutputChunkMaxSize;
+                    settings.ChunkSizeLimit = memoryLimits.ChunkSizeLimit;
                     settings.TransportVersion = outputChannelDesc.GetTransportVersion();
                     settings.CollectProfileStats = Settings.CollectProfileStats;
                     settings.AllowGeneratorsInUnboxedValues = Settings.AllowGeneratorsInUnboxedValues;

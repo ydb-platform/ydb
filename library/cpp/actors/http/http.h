@@ -704,7 +704,12 @@ public:
 
     TStringBuf GetConnection() const {
         if (!Connection.empty()) {
-            return Connection;
+            if (TEqNoCase()(Connection, "keep-alive")) {
+                return "keep-alive";
+            }
+            if (TEqNoCase()(Connection, "close")) {
+                return "close";
+            }
         }
         return Version == "1.0" ? "close" : "keep-alive";
     }

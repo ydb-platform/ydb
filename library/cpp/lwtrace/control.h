@@ -200,6 +200,12 @@ namespace NLWTrace {
             CyclicDepot.ReadItems(r);
             DurationDepot.ReadItems(now, duration, r);
         }
+
+        template <class TReader>
+        void ExtractItemsFromCyclicDepot(TReader& r) const {
+            CyclicDepot.ExtractItems(r);
+        }
+
         void ToProtobuf(TLogPb& pb) const;
     };
 
@@ -307,6 +313,18 @@ namespace NLWTrace {
             } else {
                 TSession* trace = it->second;
                 trace->ReadDepotItems(now, reader);
+            }
+        }
+
+        template <class TReader>
+        void ExtractItemsFromCyclicDepot(const TString& id, TReader& reader) {
+            TGuard<TMutex> g(Mtx);
+            TTraces::iterator it = Traces.find(id);
+            if (it == Traces.end()) {
+                ythrow yexception() << "trace id '" << id << "' is not used";
+            } else {
+                TSession* trace = it->second;
+                trace->ExtractItemsFromCyclicDepot(reader);
             }
         }
 

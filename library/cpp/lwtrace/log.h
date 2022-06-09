@@ -444,6 +444,12 @@ namespace NLWTrace {
                     }
                 }
             }
+
+            template <class TReader>
+            void ExtractItems(TReader& r) {
+                ReadItems(r);
+                OldBuffer->Clear();
+            }
         };
 
         size_t Capacity;
@@ -544,6 +550,17 @@ namespace NLWTrace {
             }
             for (const auto& orphanStorage : OrphanStorages) {
                 orphanStorage->ReadItems(r);
+            }
+        }
+
+        template <class TReader>
+        void ExtractItems(TReader& r) const {
+            TGuard<TSpinLock> g(Lock);
+            for (auto i: StoragesVec) {
+                i->ExtractItems(r);
+            }
+            for (const auto& orphanStorage: OrphanStorages) {
+                orphanStorage->ExtractItems(r);
             }
         }
 

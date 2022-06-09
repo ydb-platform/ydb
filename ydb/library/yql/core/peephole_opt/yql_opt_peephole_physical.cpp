@@ -1638,48 +1638,6 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
     return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(collection)});
 }
 
-TExprNode::TPtr ExpandPgOr(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ctx.Builder(input->Pos())
-        .Callable("ToPg")
-            .Callable(0, "Or")
-                .Callable(0, "FromPg")
-                    .Add(0, input->ChildPtr(0))
-                .Seal()
-                .Callable(1, "FromPg")
-                    .Add(0, input->ChildPtr(1))
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-}
-
-TExprNode::TPtr ExpandPgAnd(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ctx.Builder(input->Pos())
-        .Callable("ToPg")
-            .Callable(0, "And")
-                .Callable(0, "FromPg")
-                    .Add(0, input->ChildPtr(0))
-                .Seal()
-                .Callable(1, "FromPg")
-                    .Add(0, input->ChildPtr(1))
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-}
-
-TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
-    return ctx.Builder(input->Pos())
-        .Callable("ToPg")
-            .Callable(0, "Not")
-                .Callable(0, "FromPg")
-                    .Add(0, input->ChildPtr(0))
-                .Seal()
-            .Seal()
-        .Seal()
-        .Build();
-}
-
 TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
@@ -5890,9 +5848,6 @@ struct TPeepHoleRules {
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
         {"ToFlow", &DropToFlowDeps},
-        {"PgOr", &ExpandPgOr},
-        {"PgAnd", &ExpandPgAnd},
-        {"PgNot", &ExpandPgNot},
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {

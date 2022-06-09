@@ -27,6 +27,48 @@ namespace {
 
 using namespace NNodes;
 
+TExprNode::TPtr ExpandPgOr(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0, "Or")
+                .Callable(0, "FromPg")
+                    .Add(0, input->ChildPtr(0))
+                .Seal()
+                .Callable(1, "FromPg")
+                    .Add(0, input->ChildPtr(1))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPgAnd(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0, "And")
+                .Callable(0, "FromPg")
+                    .Add(0, input->ChildPtr(0))
+                .Seal()
+                .Callable(1, "FromPg")
+                    .Add(0, input->ChildPtr(1))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPgNot(const TExprNode::TPtr& input, TExprContext& ctx) {
+    return ctx.Builder(input->Pos())
+        .Callable("ToPg")
+            .Callable(0, "Not")
+                .Callable(0, "FromPg")
+                    .Add(0, input->ChildPtr(0))
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 template<typename TInt>
 class TMinAggregate {
 public:
@@ -6409,6 +6451,50 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
         return node;
     };
+
+    map["ToPg"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        Y_UNUSED(ctx);
+        if (node->Head().IsCallable("FromPg")) {
+            YQL_CLOG(DEBUG, Core) << "Eliminate ToPg over FromPg";
+            return node->Head().HeadPtr();
+        }
+
+        return node;
+    };
+
+    map["FromPg"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
+        if (node->Head().IsCallable("ToPg")) {
+            YQL_CLOG(DEBUG, Core) << "Eliminate FromPg over ToPg";
+            auto value = node->Head().HeadPtr();
+            if (value->GetTypeAnn()->IsOptionalOrNull()) {
+                return value;
+            }
+
+            return ctx.NewCallable(node->Pos(), "Just", { value });
+        }
+
+        if (node->Head().IsCallable("PgConst")) {
+            auto name = node->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
+            if (name = "bool") {
+                auto value = node->Head().Head().Content();
+                if (value.StartsWith('t') || value.StartsWith('f')) {
+                    return ctx.Builder(node->Pos())
+                        .Callable("Just")
+                            .Callable(0, "Bool")
+                                .Atom(0, (value[0] == 't') ? "1" : "0")
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
+            }
+        }
+
+        return node;
+    };
+
+    map["PgAnd"] = std::bind(&ExpandPgAnd, _1, _2);
+    map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
+    map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
 
     // will be applied to any callable after all above
     map[""] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

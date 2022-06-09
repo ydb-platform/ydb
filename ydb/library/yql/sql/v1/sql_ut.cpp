@@ -3281,6 +3281,13 @@ select FormatType($f());
         UNIT_ASSERT(res.Root);
         UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:48: Warning: Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column', code: 4535\n");
     }
+
+    Y_UNIT_TEST(ErrorOnColumnNameInMaxByLimit) {
+        ExpectFailWithError(
+            "SELECT AGGREGATE_BY(AsTuple(value, key), AggregationFactory(\"MAX_BY\", subkey)) FROM plato.Input;",
+            "<main>:1:42: Error: Source does not allow column references\n"
+            "<main>:1:71: Error: Column reference 'subkey'\n");
+    }
 }
 
 void CheckUnused(const TString& req, const TString& symbol, unsigned row, unsigned col) {

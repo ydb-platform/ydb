@@ -210,6 +210,7 @@ class TKeyPayloadAggregationFactory final : public TAggregationFactory {
 public:
     TKeyPayloadAggregationFactory(TPosition pos, const TString& name, const TString& factory, EAggregateMode aggMode)
         : TAggregationFactory(pos, name, factory, aggMode)
+        , FakeSource(BuildFakeSource(pos))
     {}
 
 private:
@@ -279,6 +280,12 @@ private:
     }
 
     bool DoInit(TContext& ctx, ISource* src) final {
+        if (Limit) {
+            if (!Limit->Init(ctx, FakeSource.Get())) {
+                return false;
+            }
+        }
+
         if (!Key) {
             return true;
         }
@@ -289,11 +296,6 @@ private:
         if (!Payload->Init(ctx, src)) {
             return false;
         }
-        if (Limit) {
-            if (!Limit->Init(ctx, src)) {
-                return false;
-            }
-        }
 
         if (Key->IsAggregated()) {
             ctx.Error(Pos) << "Aggregation of aggregated values is forbidden";
@@ -302,6 +304,7 @@ private:
         return true;
     }
 
+    TSourcePtr FakeSource;
     TNodePtr Key, Payload, Limit;
 };
 

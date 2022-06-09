@@ -5,6 +5,7 @@ default:
   ydb: true
   example_cluster: ydbtest
   feature_secondary_index: true 
+  feature_changefeed: true 
   feature_replace: true
   feature_upsert: true
   feature_join: true

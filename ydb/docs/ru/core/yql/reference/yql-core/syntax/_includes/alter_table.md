@@ -43,6 +43,26 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
 {% endif %}
+
+{% if feature_changefeed %}
+## Добавление или удаление Changefeed {#changefeed}
+
+```ADD CHANGEFEED <name> WITH (option = value[, ...])``` — добавляет [changefeed](../../../../concepts/cdc) с указанным именем и параметрами. Могут быть указаны все параметры, описанные в разделе [Change Data Capture (CDC) — Параметры](../../../../concepts/cdc#settings). Приведенный ниже код добавит changefeed с именем ```updates_feed```, в который будут выгружаться значения изменившихся столбцов таблицы в формате json.
+
+```sql
+ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
+    FORMAT = 'JSON',
+    MODE = 'UPDATES'
+);
+```
+
+```DROP CHANGEFEED``` — удаляет changefeed с указанным именем. Приведенный ниже код удалит changefeed с именем ```updates_feed```.
+
+```sql
+ALTER TABLE `series` DROP CHANGEFEED `updates_feed`;
+```
+{% endif %}
+
 {% if feature_map_tables %}
 
 ## Переименование таблицы {#rename}

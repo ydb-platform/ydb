@@ -69,37 +69,10 @@ void TIssueManager::LeaveScope() {
     }
 }
 
-void TIssueManager::RaiseIssueForEmptyScope() {
-    if (RawIssues_.top().first.Empty()) {
-        TIssuePtr materialized = RawIssues_.top().second();
-        if (auto p = CheckUniqAndLimit(materialized)) {
-            RawIssues_.top().first = p;
-        }
-    }
-}
-
 void TIssueManager::LeaveAllScopes() {
     while (!RawIssues_.empty()) {
         LeaveScope();
     }
-}
-
-TIssuePtr TIssueManager::CheckUniqAndLimit(TIssuePtr issue) {
-    const auto severity = issue->GetSeverity();
-    if (OverflowIssues_[severity]) {
-        return {};
-    }
-    if (UniqueIssues_[severity].contains(issue)) {
-        return {};
-    }
-    if (IssueLimit_ && UniqueIssues_[severity].size() == IssueLimit_) {
-        OverflowIssues_[severity] = MakeIntrusive<TIssue>(TStringBuilder()
-            << "Too many " << SeverityToString(issue->GetSeverity()) << " issues");
-        OverflowIssues_[severity]->Severity = severity;
-        return {};
-    }
-    UniqueIssues_[severity].insert(issue);
-    return issue;
 }
 
 TIssuePtr TIssueManager::CheckUniqAndLimit(const TIssue& issue) {
@@ -107,7 +80,18 @@ TIssuePtr TIssueManager::CheckUniqAndLimit(const TIssue& issue) {
     if (OverflowIssues_[severity]) {
         return {};
     }
-    return CheckUniqAndLimit(MakeIntrusive<TIssue>(issue));
+    TIssuePtr p = MakeIntrusive<TIssue>(issue);
+    if (UniqueIssues_[severity].contains(p)) {
+        return {};
+    }
+    if (IssueLimit_ && UniqueIssues_[severity].size() == IssueLimit_) {
+        OverflowIssues_[severity] = MakeIntrusive<TIssue>(TStringBuilder()
+            << "Too many " << SeverityToString(issue.GetSeverity()) << " issues");
+        OverflowIssues_[severity]->Severity = severity;
+        return {};
+    }
+    UniqueIssues_[severity].insert(p);
+    return p;
 }
 
 void TIssueManager::RaiseIssue(const TIssue& issue) {

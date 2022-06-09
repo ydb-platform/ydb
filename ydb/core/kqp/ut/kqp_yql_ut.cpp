@@ -309,32 +309,6 @@ Y_UNIT_TEST_SUITE(KqpYql) {
             [[2u];["Two"]]
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
-
-    Y_UNIT_TEST_NEW_ENGINE(ColumnTypeMismatch) {
-        TKikimrRunner kikimr;
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto params = TParamsBuilder()
-            .AddParam("$key").Uint64(1).Build()
-            .AddParam("$value").Uint64(2).Build()
-            .Build();
-
-        TExecDataQuerySettings settings;
-        auto req = session.ExecuteDataQuery(Q_(R"(
-            DECLARE $key AS Uint64;
-            DECLARE $value AS Uint64;
-
-            REPLACE INTO `KeyValue`
-                    (Key, Value)
-            VALUES
-                    ($key, $value);
-        )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
-
-        req.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT_VALUES_EQUAL(req.GetStatus(), EStatus::GENERIC_ERROR);
-        UNIT_ASSERT_STRING_CONTAINS(req.GetIssues().ToString(), "Failed to convert 'Value': Uint64 to Optional<String>");
-    }
 }
 
 } // namespace NKqp

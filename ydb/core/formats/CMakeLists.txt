@@ -8,11 +8,16 @@
 
 
 add_library(ydb-core-formats)
+target_compile_options(ydb-core-formats PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
 target_link_libraries(ydb-core-formats PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
   ydb-core-scheme
+  ydb-library-binary_json
+  ydb-library-dynumber
 )
 target_sources(ydb-core-formats PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats/arrow_batch_builder.cpp

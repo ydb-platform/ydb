@@ -2,6 +2,10 @@
 #include "switch_type.h"
 #include "one_batch_input_stream.h"
 #include "merging_sorted_input_stream.h"
+
+#include <ydb/library/binary_json/write.h>
+#include <ydb/library/dynumber/dynumber.h>
+#include <util/memory/pool.h>
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
@@ -912,6 +916,99 @@ std::shared_ptr<arrow::RecordBatch> SortBatch(const std::shared_ptr<arrow::Recor
     return Reorder(batch, sortPermutation);
 }
 
+static bool ConvertData(TCell& cell, const NScheme::TTypeId& colType, TMemoryPool& memPool, TString& errorMessage) {
+    switch (colType) {
+        case NScheme::NTypeIds::DyNumber: {
+            const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());
+            if (!dyNumber.Defined()) {
+                errorMessage = "Invalid DyNumber string representation";
+                return false;
+            }
+            const auto dyNumberInPool = memPool.AppendString(TStringBuf(*dyNumber));
+            cell = TCell(dyNumberInPool.data(), dyNumberInPool.size());
+            break;
+        }
+        case NScheme::NTypeIds::JsonDocument: {
+            const auto binaryJson = NBinaryJson::SerializeToBinaryJson(cell.AsBuf());
+            if (!binaryJson.Defined()) {
+                errorMessage = "Invalid JSON for JsonDocument provided";
+                return false;
+            }
+            const auto saved = memPool.AppendString(TStringBuf(binaryJson->Data(), binaryJson->Size()));
+            cell = TCell(saved.data(), saved.size());
+            break;
+        }
+        case NScheme::NTypeIds::Decimal:
+            errorMessage = "Decimal conversion is not supported yet";
+            return false;
+        default:
+            break;
+    }
+    return true;
+}
+
+static std::shared_ptr<arrow::Array> ConvertColumn(const std::shared_ptr<arrow::Array>& column,
+                                                   NScheme::TTypeId colType) {
+    if (colType == NScheme::NTypeIds::Decimal) {
+        return {};
+    }
+
+    if (column->type()->id() != arrow::Type::BINARY) {
+        return {};
+    }
+
+    auto& binaryArray = static_cast<arrow::BinaryArray&>(*column);
+    arrow::BinaryBuilder builder;
+    builder.Reserve(binaryArray.length()).ok();
+    // TODO: ReserveData
+
+    switch (colType) {
+        case NScheme::NTypeIds::DyNumber: {
+            for (i32 i = 0; i < binaryArray.length(); ++i) {
+                auto value = binaryArray.Value(i);
+                const auto dyNumber = NDyNumber::ParseDyNumberString(TStringBuf(value.data(), value.size()));
+                if (!dyNumber.Defined() || !builder.Append((*dyNumber).data(), (*dyNumber).size()).ok()) {
+                    return {};
+                }
+            }
+        }
+        case NScheme::NTypeIds::JsonDocument: {
+            for (i32 i = 0; i < binaryArray.length(); ++i) {
+                auto value = binaryArray.Value(i);
+                const auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(value.data(), value.size()));
+                if (!binaryJson.Defined() || !builder.Append(binaryJson->Data(), binaryJson->Size()).ok()) {
+                    return {};
+                }
+            }
+        }
+        default:
+            break;
+    }
+
+    std::shared_ptr<arrow::BinaryArray> result;
+    if (!builder.Finish(&result).ok()) {
+        return {};
+    }
+    return result;
+}
+
+std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                   const THashMap<TString, NScheme::TTypeId>& columnsToConvert)
+{
+    std::vector<std::shared_ptr<arrow::Array>> columns = batch->columns();
+    for (i32 i = 0; i < batch->num_columns(); ++i) {
+        auto& colName = batch->column_name(i);
+        auto it = columnsToConvert.find(TString(colName.data(), colName.size()));
+        if (it != columnsToConvert.end()) {
+            columns[i] = ConvertColumn(columns[i], it->second);
+            if (!columns[i]) {
+                return {};
+            }
+        }
+    }
+    return arrow::RecordBatch::Make(batch->schema(), batch->num_rows(), columns);
+}
+
 bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& errorMessage) {
     std::vector<std::shared_ptr<arrow::Array>> allColumns;
     allColumns.reserve(YdbSchema.size());
@@ -928,6 +1025,8 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 
     std::vector<TSmallVec<TCell>> cells;
     i64 row = 0;
+
+    TMemoryPool memPool(256); // for convertions
 
 #if 1 // optimization
     static constexpr i32 unroll = 32;
@@ -959,6 +1058,16 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
                         << " at column '" << colName << "'";
                 return false;
             }
+
+            if (NeedDataConversion(colType)) {
+                memPool.Clear();
+                for (i32 i = 0; i < unroll; ++i) {
+                    if (!ConvertData(cells[i][col], colType, memPool, errorMessage)) {
+                        return false;
+                    }
+                }
+            }
+
             ++col;
         }
 
@@ -973,23 +1082,30 @@ bool TArrowToYdbConverter::Process(const arrow::RecordBatch& batch, TString& err
 #endif
 
     for (; row < batch.num_rows(); ++row) {
+        memPool.Clear();
+
         ui32 col = 0;
         for (auto& [colName, colType] : YdbSchema) {
             auto& column = allColumns[col];
+            auto& curCell = cells[0][col];
             if (column->IsNull(row)) {
-                cells[0][col] = TCell();
+                curCell = TCell();
                 continue;
             }
 
             bool success = SwitchYqlTypeToArrowType(colType, [&]<typename TType>(TTypeWrapper<TType> typeHolder) {
                 Y_UNUSED(typeHolder);
-                cells[0][col] = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
+                curCell = MakeCell<typename arrow::TypeTraits<TType>::ArrayType>(column, row);
                 return true;
             });
 
             if (!success) {
                 errorMessage = TStringBuilder() << "No arrow conversion for type Yql::" << NScheme::TypeName(colType)
                         << " at column '" << colName << "'";
+                return false;
+            }
+
+            if (!ConvertData(curCell, colType, memPool, errorMessage)) {
                 return false;
             }
             ++col;

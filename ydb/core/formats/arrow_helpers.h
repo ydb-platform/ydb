@@ -181,6 +181,18 @@ private:
     }
 
 public:
+    static bool NeedDataConversion(const NScheme::TTypeId& colType) {
+        switch (colType) {
+            case NScheme::NTypeIds::DyNumber:
+            case NScheme::NTypeIds::JsonDocument:
+            case NScheme::NTypeIds::Decimal:
+                return true;
+            default:
+                break;
+        }
+        return false;
+    }
+
     TArrowToYdbConverter(const TVector<std::pair<TString, NScheme::TTypeId>>& ydbSchema, IRowWriter& rowWriter)
         : YdbSchema(ydbSchema)
         , RowWriter(rowWriter)
@@ -197,6 +209,9 @@ public:
     // NOTE: This method must copy cells data to its own strorage
     virtual void AddRow(const TConstArrayRef<TCell> &cells) = 0;
 };
+
+std::shared_ptr<arrow::RecordBatch> ConvertColumns(const std::shared_ptr<arrow::RecordBatch>& batch,
+                                                   const THashMap<TString, NScheme::TTypeId>& columnsToConvert);
 
 inline bool HasNulls(const std::shared_ptr<arrow::Array>& column) {
     return column->null_bitmap_data();

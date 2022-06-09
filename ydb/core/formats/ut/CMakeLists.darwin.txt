@@ -10,6 +10,7 @@
 add_executable(ydb-core-formats-ut)
 target_compile_options(ydb-core-formats-ut PRIVATE
   -Wno-unused-parameter
+  -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-core-formats-ut PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/formats
@@ -22,6 +23,8 @@ target_link_libraries(ydb-core-formats-ut PUBLIC
   ydb-core-formats
   libs-apache-arrow
   ydb-core-base
+  udf-service-exception_policy
+  yql-sql-pg_dummy
 )
 target_link_options(ydb-core-formats-ut PRIVATE
   -Wl,-no_deduplicate

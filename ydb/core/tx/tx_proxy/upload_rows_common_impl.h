@@ -148,6 +148,7 @@ protected:
     TVector<std::pair<TString, NScheme::TTypeId>> SrcColumns; // source columns in CSV could have any order
     TVector<std::pair<TString, NScheme::TTypeId>> YdbSchema;
     THashMap<ui32, size_t> Id2Position; // columnId -> its position in YdbSchema
+    THashMap<TString, NScheme::TTypeId> ColumnsToConvert;
 
     bool WriteToTableShadow = false;
     bool AllowWriteToPrivateTable = false;
@@ -405,6 +406,12 @@ private:
                 Id2Position[columnId] = position;
                 YdbSchema[position] = std::make_pair(ValueColumnNames[i], ValueColumnPositions[i].Type);
             }
+
+            for (const auto& [colName, colType] : YdbSchema) {
+                if (NArrow::TArrowToYdbConverter::NeedDataConversion(colType)) {
+                    ColumnsToConvert[colName] = colType;
+                }
+            }
         }
 
         if (!keyColumnsLeft.empty()) {
@@ -497,8 +504,11 @@ private:
                     return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                 }
 
-                if (isOlapTable && !ExtractBatch(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                if (isOlapTable) {
+                    // TUploadRowsRPCPublic::ExtractBatch() - converted JsonDocument, DynNumbers, ...
+                    if (!ExtractBatch(errorMessage)) {
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    }
                 } else {
                     FindMinMaxKeys();
                 }
@@ -507,10 +517,25 @@ private:
             case EUploadSource::ArrowBatch:
             case EUploadSource::CSV:
             {
-                if (!ExtractBatch(errorMessage)) {
-                    return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
-                }
-                if (!isOlapTable) {
+                if (isOlapTable) {
+                    // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
+                    if (!ExtractBatch(errorMessage)) {
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    }
+                    // Explicit types conversion
+                    if (!ColumnsToConvert.empty()) {
+                        Batch = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        if (!Batch) {
+                            errorMessage = "Cannot upsert arrow batch: one of data types has no conversion";
+                            return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                        }
+                    }
+                } else {
+                    // TUploadColumnsRPCPublic::ExtractBatch() - NOT converted JsonDocument, DynNumbers, ...
+                    if (!ExtractBatch(errorMessage)) {
+                        return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
+                    }
+                    // Implicit types conversion inside ExtractRows(), in TArrowToYdbConverter
                     if (!ExtractRows(errorMessage)) {
                         return ReplyWithError(Ydb::StatusIds::BAD_REQUEST, errorMessage, ctx);
                     }

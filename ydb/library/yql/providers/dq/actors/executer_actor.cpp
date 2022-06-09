@@ -225,7 +225,7 @@ private:
         Timeout = tasks.size() == 1
             ? TDuration::MilliSeconds(Settings->_LiteralTimeout.Get().GetOrElse(TDqSettings::TDefault::LiteralTimeout))
             : TDuration::MilliSeconds(Settings->_TableTimeout.Get().GetOrElse(TDqSettings::TDefault::TableTimeout));
-
+        YQL_CLOG(DEBUG, ProviderDq) << "Dq timeout set to: " << ToString(Timeout);
 
         if (Timeout) {
             if (StartTime - RequestStartTime > Timeout) {

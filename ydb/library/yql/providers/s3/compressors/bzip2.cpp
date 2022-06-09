@@ -34,15 +34,16 @@ bool TReadBuffer::nextImpl() {
 
     while (true) {
         if (!BzStream_.avail_in) {
-            BzStream_.next_in = InBuffer.data();
-            BzStream_.avail_in = Source_.read(InBuffer.data(), InBuffer.size());
-            if (!BzStream_.avail_in) {
+            if (const auto size = Source_.read(InBuffer.data(), InBuffer.size())) {
+                BzStream_.next_in = InBuffer.data();
+                BzStream_.avail_in = size;
+            } else {
                 set(nullptr, 0ULL);
                 return false;
             }
         }
 
-        switch (BZ2_bzDecompress(&BzStream_)) {
+        switch (const auto code = BZ2_bzDecompress(&BzStream_)) {
             case BZ_STREAM_END:
                 FreeDecoder();
                 InitDecoder();
@@ -55,7 +56,7 @@ bool TReadBuffer::nextImpl() {
 
                 break;
             default:
-                ythrow yexception() << "bzip error";
+                ythrow yexception() << "Bzip error: " << code;
         }
     }
 }

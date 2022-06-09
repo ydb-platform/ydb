@@ -3,6 +3,8 @@
 #include "brotli.h"
 #include "zstd.h"
 #include "bzip2.h"
+#include "xz.h"
+#include "gz.h"
 
 namespace NYql {
 
@@ -15,6 +17,10 @@ std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& input, const 
         return std::make_unique<NZstd::TReadBuffer>(input);
     if ("bzip2" == compression)
         return std::make_unique<NBzip2::TReadBuffer>(input);
+    if ("xz" == compression)
+        return std::make_unique<NXz::TReadBuffer>(input);
+    if ("gzip" == compression)
+        return std::make_unique<NGz::TReadBuffer>(input);
 
     return nullptr;
 }

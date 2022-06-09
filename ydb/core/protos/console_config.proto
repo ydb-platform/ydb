@@ -108,6 +108,7 @@ message TConfigItem {
         ResourceBrokerConfigItem = 44;
         MeteringConfigItem = 45;
         HiveConfigItem = 46;
+        SchemeShardConfigItem = 48;
         DataShardConfigItem = 49;
         YandexQueryConfigItem = 50;
         PDiskKeyConfigItem = 51;

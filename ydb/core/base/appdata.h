@@ -135,6 +135,7 @@ struct TAppData {
     TFeatureFlags FeatureFlags;
     NKikimrConfig::THiveConfig HiveConfig;
     NKikimrConfig::TDataShardConfig DataShardConfig;
+    NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
     NKikimrConfig::TMeteringConfig MeteringConfig;
     NKikimrConfig::TCompactionConfig CompactionConfig;
     NKikimrConfig::TDomainsConfig DomainsConfig;

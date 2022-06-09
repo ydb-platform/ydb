@@ -506,6 +506,11 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
 
+    if (opts.DisableStatsBatching_.value_or(false)) {
+        app.SchemeShardConfig.SetStatsMaxBatchSize(0);
+        app.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+    }
+
     for (const auto& sid : opts.SystemBackupSIDs_) {
         app.AddSystemBackupSID(sid);
     }

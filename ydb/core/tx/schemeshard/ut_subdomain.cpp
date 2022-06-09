@@ -2809,7 +2809,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(DiskSpaceUsage) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentPartitionStats(true));
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        TTestEnv env(runtime, opts);
         const auto sender = runtime.AllocateEdgeActor();
 
         auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {
@@ -2898,7 +2901,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSubDomainTest) {
 
     Y_UNIT_TEST(DiskSpaceQuotas) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnablePersistentPartitionStats(true));
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+
+        TTestEnv env(runtime, opts);
         ui64 txId = 100;
 
         auto writeRow = [&](ui64 tabletId, ui32 key, const TString& value, const char* table) {

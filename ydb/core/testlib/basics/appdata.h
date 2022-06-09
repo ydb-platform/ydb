@@ -88,6 +88,7 @@ namespace NKikimr {
         TString NetDataSourceUrl;
         NKikimrConfig::THiveConfig HiveConfig;
         NKikimrConfig::TDataShardConfig DataShardConfig;
+        NKikimrConfig::TSchemeShardConfig SchemeShardConfig;
         NKikimrConfig::TMeteringConfig MeteringConfig;
         NKikimrPQ::TPQConfig PQConfig;
 

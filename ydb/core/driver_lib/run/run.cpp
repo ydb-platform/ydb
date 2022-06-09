@@ -932,6 +932,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->DataShardConfig = runConfig.AppConfig.GetDataShardConfig();
     }
 
+    if (runConfig.AppConfig.HasSchemeShardConfig()) {
+        AppData->SchemeShardConfig = runConfig.AppConfig.GetSchemeShardConfig();
+    }
+
     if (runConfig.AppConfig.HasMeteringConfig()) {
         AppData->MeteringConfig = runConfig.AppConfig.GetMeteringConfig();
     }

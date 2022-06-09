@@ -1413,6 +1413,18 @@ message TDataShardConfig {
     optional uint64 IdleMemCompactionIntervalSeconds = 15 [default = 60];
 }
 
+message TSchemeShardConfig {
+    // after this amount of time we forcely write full stats to local DB
+    // to disable set to 0
+    optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
+
+    // number of shards stats to batch together
+    // to disable set to 0
+    optional uint32 StatsMaxBatchSize = 2 [default = 100];
+
+    optional uint32 StatsMaxExecuteMs = 3 [default = 10];
+}
+
 message TCompactionConfig {
     message TBackgroundCompactionConfig {
         optional double MaxRate = 1 [default = 1]; // 1 compaction / s
@@ -1547,6 +1559,7 @@ message TAppConfig {
     optional NYq.NConfig.TConfig YandexQueryConfig = 50;
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;
+    optional TSchemeShardConfig SchemeShardConfig = 54;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

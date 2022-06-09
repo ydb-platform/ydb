@@ -8,6 +8,12 @@
 namespace NYql {
 namespace NTypeAnnImpl {
 
+TString MakeAliasedColumn(TStringBuf alias, TStringBuf column);
+const TItemExprType* AddAlias(const TString& alias, const TItemExprType* item, TExprContext& ctx);
+TStringBuf RemoveAlias(TStringBuf column);
+TStringBuf RemoveAlias(TStringBuf column, TStringBuf& alias);
+const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx);
+
 IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 IGraphTransformer::TStatus PgBoolOpWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);

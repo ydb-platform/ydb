@@ -5292,6 +5292,14 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
                 return HasNullOverStruct(node, ctx);
             case ETypeAnnotationKind::Variant:
                 return HasNullOverVariant(node, ctx);
+            case ETypeAnnotationKind::Pg:
+                return ctx.Builder(node->Pos())
+                    .Callable("Not")
+                        .Callable(0, "Exists")
+                            .Add(0, value)
+                        .Seal()
+                    .Seal()
+                    .Build();
             default:
                 YQL_ENSURE(false, "Value type " << *valueType << " is not supported!");
         }

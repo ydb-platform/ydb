@@ -27,13 +27,13 @@ namespace {
     }
 
     void EnableLogging(TTestActorRuntime& runtime) {
-        // runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        //runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_TRACE);
-        //runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
-        //runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
-        //runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_WORKER, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_NODE, NActors::NLog::PRI_DEBUG);
         runtime.SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_TRACE);
     }
 

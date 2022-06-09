@@ -41,6 +41,8 @@ enum class EShardState : ui32 {
 
 std::string_view EShardStateToString(EShardState state);
 
+bool FindSchemeErrorInIssues(const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues);
+
 // scan over datashards
 struct TShardState {
     ui64 TabletId;

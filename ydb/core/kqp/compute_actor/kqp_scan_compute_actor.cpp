@@ -450,24 +450,7 @@ private:
                     CA_LOG_W("Got EvScanError while starting scan, status: " << Ydb::StatusIds_StatusCode_Name(status)
                         << ", reason: " << issues.ToString());
 
-                    bool schemeError = false;
-
-                    if (status == Ydb::StatusIds::SCHEME_ERROR) {
-                        schemeError = true;
-                    } else if (status == Ydb::StatusIds::ABORTED) {
-                        for (auto& issue : issues) {
-                            WalkThroughIssues(issue, false, [&schemeError](const TIssue& x, ui16) {
-                                if (x.IssueCode == TIssuesIds::KIKIMR_SCHEME_MISMATCH) {
-                                    schemeError = true;
-                                }
-                            });
-                            if (schemeError) {
-                                break;
-                            }
-                        }
-                    }
-
-                    if (schemeError) {
+                    if (FindSchemeErrorInIssues(status, issues)) {
                         ResolveShard(state);
                         return;
                     }

@@ -43,7 +43,7 @@ bool TReadBuffer::nextImpl() {
             }
         }
 
-        switch (inflate(&Z_, Z_SYNC_FLUSH)) {
+        switch (const auto code = inflate(&Z_, Z_SYNC_FLUSH)) {
             case Z_NEED_DICT:
                 ythrow yexception() << "Need dict.";
             case Z_STREAM_END:
@@ -56,7 +56,7 @@ bool TReadBuffer::nextImpl() {
                 }
                 break;
             default:
-                ythrow yexception() << GetErrMsg(Z_);
+                ythrow yexception() << GetErrMsg(Z_) << ", code: " << code;
         }
     }
 }

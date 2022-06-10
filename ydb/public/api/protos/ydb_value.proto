@@ -50,6 +50,15 @@ message TaggedType {
     Type type = 2;
 }
 
+message PgType {
+    // pg object id of the type
+    // full registry could be found here: https://github.com/postgres/postgres/blob/master/src/include/catalog/pg_type.dat
+    int32 oid = 1; // required
+    // advanced type details useful for pg wire format proxying
+    int32 typlen = 2; // optional, set to 0 by default
+    int32 typmod = 3; // optional, set to 0 by default
+}
+
 message Type {
     enum PrimitiveTypeId {
         PRIMITIVE_TYPE_ID_UNSPECIFIED = 0x0000;
@@ -99,6 +108,7 @@ message Type {
         google.protobuf.NullValue null_type = 202;
         google.protobuf.NullValue empty_list_type = 203;
         google.protobuf.NullValue empty_dict_type = 204;
+        PgType pg_type = 205;
     }
 }
 
@@ -119,8 +129,9 @@ message ValuePair {
  * For composite types repeated Items or Pairs used. See below.
  *
  * The idea is, we do not represent explicitly Optional<T> if value is not null (most common case)
- * - just represents value of T. Numbers of Optional levels we can get from type.
+ * - just represents value of T. Number of Optional levels we can get from type.
  * Variant<T> type always represent explicitly
+ * PgType could be stored either in text_value (human-readable format) or bytes_value (internal wire format)
  */
 
 message Value {

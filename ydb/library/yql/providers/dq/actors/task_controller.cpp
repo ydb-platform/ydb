@@ -121,7 +121,7 @@ private:
             << " State: " << state.GetState()
             << " PingCookie: " << ev->Cookie
             << " StatusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(state.GetStatusCode());
- 
+
         if (state.HasStats() && state.GetStats().GetTasks().size()) {
             YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
             AddStats(state.GetStats());
@@ -205,6 +205,11 @@ private:
         return nullptr;
     }
 
+    static bool IsAggregatedStage(const std::map<TString, TString>& labels) {
+        const auto it = labels.find("Stage");
+        return it != labels.end() && it->second == "Total";
+    }
+
     void ExportStats(const TCounters& stat, ui64 taskId) {
         YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " ExportStats " << (taskId ? ToString(taskId) : "Summary");
         TString name;
@@ -215,12 +220,12 @@ private:
             labels.clear();
             if (auto group = GroupForExport(stat, k, taskId, name, labels)) {
                 *group->GetCounter(name) = v.Count;
-                if (ServiceCounters.PublicCounters && taskId == 0) {
+                if (ServiceCounters.PublicCounters && taskId == 0 && IsAggregatedStage(labels)) {
                     TString publicCounterName;
                     bool isDeriv = false;
                     if (name == "MkqlMaxMemoryUsage") {
                         publicCounterName = "query.memory_usage_bytes";
-                    } else if (name == "ComputeCpuTimeUs") {
+                    } else if (name == "CpuTimeUs") {
                         publicCounterName = "query.cpu_usage_us";
                         isDeriv = true;
                     } else if (name == "Bytes") {
@@ -270,6 +275,7 @@ private:
 
         auto& stats = s;
         // basic stats
+        ADD_COUNTER(CpuTimeUs)
         ADD_COUNTER(ComputeCpuTimeUs)
         ADD_COUNTER(PendingInputTimeUs)
         ADD_COUNTER(PendingOutputTimeUs)

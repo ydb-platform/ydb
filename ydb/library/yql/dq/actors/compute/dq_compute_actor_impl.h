@@ -95,6 +95,8 @@ protected:
         RlNoResourceTag = 102,
     };
 
+    static constexpr bool HasAsyncTaskRunner = false;
+
 public:
     void Bootstrap() {
         try {
@@ -188,7 +190,7 @@ protected:
 
     void ReportEventElapsedTime() {
         if (BasicStats) {
-            ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000;
+            ui64 elapsedMicros = NActors::TlsActivationContext->GetCurrentEventTicksAsSeconds() * 1'000'000ull;
             BasicStats->CpuTime += TDuration::MicroSeconds(elapsedMicros);
         }
     }
@@ -1537,6 +1539,11 @@ public:
         if (auto* taskStats = GetTaskRunnerStats()) {
             auto* protoTask = dst->AddTasks();
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, (bool) GetProfileStats());
+
+            // More accurate cpu time counter:
+            if (TDerived::HasAsyncTaskRunner) {
+                protoTask->SetCpuTimeUs(BasicStats->CpuTime.MicroSeconds() + taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds());
+            }
 
             for (auto& [outputIndex, sinkInfo] : SinksMap) {
                 if (auto* sinkStats = GetSinkStats(outputIndex, sinkInfo)) {

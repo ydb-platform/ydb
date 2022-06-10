@@ -474,15 +474,16 @@ protected:
 
         {
             // free MKQL memory then destroy TaskRunner and Allocator
-            auto guard = BindAllocator();
+            if (auto guard = MaybeBindAllocator()) {
 #define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
-            CLEANUP(InputChannelsMap);
-            CLEANUP(SourcesMap);
-            CLEANUP(InputTransformsMap);
-            CLEANUP(OutputChannelsMap);
-            CLEANUP(SinksMap);
-            CLEANUP(OutputTransformsMap);
+                CLEANUP(InputChannelsMap);
+                CLEANUP(SourcesMap);
+                CLEANUP(InputTransformsMap);
+                CLEANUP(OutputChannelsMap);
+                CLEANUP(SinksMap);
+                CLEANUP(OutputTransformsMap);
 #undef CLEANUP
+            }
         }
 
         this->PassAway();

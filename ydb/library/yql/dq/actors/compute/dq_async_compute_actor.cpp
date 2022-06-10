@@ -551,8 +551,8 @@ private:
         Checkpoints->AfterStateLoading(std::move(ev->Get()->Error));
     }
 
-    NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv;
-    NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor;
+    NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
+    NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor = nullptr;
     NActors::TActorId TaskRunnerActorId;
     NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
 

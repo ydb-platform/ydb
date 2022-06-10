@@ -22,7 +22,7 @@ target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
   -DS2N_MADVISE_SUPPORTED
   -DS2N___RESTRICT__SUPPORTED
-  -DS2N_HAVE_EXECINFO
+  -DS2N_STACKTRACE
   -DS2N_CPUID_AVAILABLE
 )
 target_include_directories(restricted-aws-s2n PUBLIC

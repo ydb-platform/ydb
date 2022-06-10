@@ -1,2 +1,2 @@
 exclude:
-- tests/IdnaTest.txt.gz
+- tests/IdnaTestV2.txt

@@ -329,6 +329,7 @@ BELONGS ya.make
         crypto/s2n_hmac.c [4:13]
         crypto/s2n_hmac.h [4:13]
         crypto/s2n_libcrypto.c [4:13]
+        crypto/s2n_libcrypto.h [4:13]
         crypto/s2n_openssl.h [4:13]
         crypto/s2n_openssl_evp.h [4:13]
         crypto/s2n_openssl_x509.c [4:13]

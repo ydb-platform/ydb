@@ -4,6 +4,7 @@
 #include <llvm/DebugInfo/Symbolize/DIPrinter.h>
 #include <llvm/Support/raw_ostream.h>
 
+#include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/malloc/api/malloc.h>
 
 #include <util/generic/hash.h>

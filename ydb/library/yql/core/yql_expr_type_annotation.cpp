@@ -85,7 +85,7 @@ TExprNode::TPtr RebuildVariant(const TExprNode::TPtr& node,
 }
 
 IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& node,
-    const TTypeAnnotationNode& sourceType, const TTypeAnnotationNode& expectedType, TConvertFlags flags) {
+    const TTypeAnnotationNode& sourceType, const TTypeAnnotationNode& expectedType, TConvertFlags flags, bool raiseIssues = false) {
 
     if (IsSameAnnotation(sourceType, expectedType)) {
         return IGraphTransformer::TStatus::Ok;
@@ -114,7 +114,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
     if (expectedType.GetKind() == ETypeAnnotationKind::Optional) {
         auto nextType = expectedType.Cast<TOptionalExprType>()->GetItemType();
         auto originalNode = node;
-        auto status1 = TryConvertToImpl(ctx, node, sourceType, *nextType, flags);
+        auto status1 = TryConvertToImpl(ctx, node, sourceType, *nextType, flags, raiseIssues);
         if (status1.Level != IGraphTransformer::TStatus::Error) {
             node = ctx.NewCallable(node->Pos(), "Just", { node });
             return IGraphTransformer::TStatus::Repeat;
@@ -124,7 +124,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (node->IsCallable("Just")) {
             auto sourceItemType = sourceType.Cast<TOptionalExprType>()->GetItemType();
             auto value = node->HeadRef();
-            auto status = TryConvertToImpl(ctx, value, *sourceItemType, *nextType, flags);
+            auto status = TryConvertToImpl(ctx, value, *sourceItemType, *nextType, flags, raiseIssues);
             if (status.Level != IGraphTransformer::TStatus::Error) {
                 node = ctx.NewCallable(node->Pos(), "Just", { value });
                 return IGraphTransformer::TStatus::Repeat;
@@ -133,7 +133,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             auto sourceItemType = sourceType.Cast<TOptionalExprType>()->GetItemType();
             auto arg = ctx.NewArgument(node->Pos(), "item");
             auto originalArg = arg;
-            auto status = TryConvertToImpl(ctx, arg, *sourceItemType, *nextType, flags);
+            auto status = TryConvertToImpl(ctx, arg, *sourceItemType, *nextType, flags, raiseIssues);
             if (status.Level != IGraphTransformer::TStatus::Error) {
                 auto lambda = ctx.NewLambda(node->Pos(),
                     ctx.NewArguments(node->Pos(), { originalArg }),
@@ -385,6 +385,10 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             TExprNode::TPtr field;
             if (!pos) {
                 if (newField->GetItemType()->GetKind() != ETypeAnnotationKind::Optional) {
+                    if (raiseIssues) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                                "Can't find  '" << newField->GetName() << "': " << *newField->GetItemType() << " in " << sourceType));
+                    }
                     return IGraphTransformer::TStatus::Error;
                 }
 
@@ -404,8 +408,12 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 }
 
                 YQL_ENSURE(field);
-                auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags);
+                auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags, raiseIssues);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
+                    if (raiseIssues) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                                "Failed to convert '" << newField->GetName() << "': " << *oldType->GetItemType() << " to " << *newField->GetItemType()));
+                    }
                     return status;
                 }
             }
@@ -447,6 +455,10 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Seal()
                        .Build();
                 } else {
+                    if (raiseIssues) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                                "Can't find  '" << newField->GetName() << ": " << *newField->GetItemType() << "' in " << sourceType));
+                    }
                     return IGraphTransformer::TStatus::Error;
                 }
             } else {
@@ -459,8 +471,12 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                         .Seal()
                     .Build();
 
-                auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags);
+                auto status = TryConvertToImpl(ctx, field, *oldType->GetItemType(), *newField->GetItemType(), flags, raiseIssues);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
+                    if (raiseIssues) {
+                        ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
+                                "Failed to convert '" << newField->GetName() << "': " << *oldType->GetItemType() << " to " << *newField->GetItemType()));
+                    }
                     return status;
                 }
             }
@@ -511,7 +527,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 auto status = TryConvertToImpl(
                     ctx, targetItem,
                     *fromUnderlying->GetItems()[*fromTargetIndex]->GetItemType(),
-                    *toUnderlying->GetItems()[*toTargetIndex]->GetItemType(), flags);
+                    *toUnderlying->GetItems()[*toTargetIndex]->GetItemType(), flags, raiseIssues);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
@@ -528,7 +544,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     auto fromElement = item->GetItemType();
                     auto toElement = toUnderlying->GetItems()[*toIndex]->GetItemType();
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
-                    auto status1 = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags);
+                    auto status1 = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues);
                     if (status1.Level == IGraphTransformer::TStatus::Error) {
                         return status1;
                     }
@@ -558,7 +574,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 auto status = TryConvertToImpl(
                     ctx, targetItem,
                     *fromUnderlying->GetItems()[targetIndex],
-                    *toUnderlying->GetItems()[targetIndex], flags);
+                    *toUnderlying->GetItems()[targetIndex], flags, raiseIssues);
                 if (status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
@@ -569,7 +585,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     }
                     auto arg = ctx.NewArgument(TPositionHandle(), "arg");
                     auto status1 = TryConvertToImpl(ctx, arg, *fromUnderlying->GetItems()[i],
-                        *toUnderlying->GetItems()[i], flags);
+                        *toUnderlying->GetItems()[i], flags, raiseIssues);
                     if (status1.Level == IGraphTransformer::TStatus::Error) {
                         return status1;
                     }
@@ -624,7 +640,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     auto arg = ctx.NewArgument(node->Pos(), "item");
                     auto originalArg = arg;
 
-                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags);
+                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues);
                     if (status.Level == IGraphTransformer::TStatus::Error) {
                         return status;
                     }
@@ -659,7 +675,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     auto arg = ctx.NewArgument(node->Pos(), "item");
                     auto originalArg = arg;
 
-                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags);
+                    auto status = TryConvertToImpl(ctx, arg, *fromElement, *toElement, flags, raiseIssues);
                     if (status.Level == IGraphTransformer::TStatus::Error) {
                         return status;
                     }
@@ -695,7 +711,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                 const auto oldType = from->GetItems()[i];
                 const auto newType = to->GetItems()[i];
                 auto value = node->ChildPtr(i);
-                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags); status.Level == IGraphTransformer::TStatus::Error) {
+                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues); status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
 
@@ -735,7 +751,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
                     .Seal()
                     .Build();
 
-                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags); status.Level == IGraphTransformer::TStatus::Error) {
+                if (const auto status = TryConvertToImpl(ctx, value, *oldType, *newType, flags, raiseIssues); status.Level == IGraphTransformer::TStatus::Error) {
                     return status;
                 }
 
@@ -773,7 +789,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
 
         for (ui32 i = node->IsCallable("List") ? 1 : 0; i < node->ChildrenSize(); ++i) {
             auto value = node->ChildPtr(i);
-            auto status = TryConvertToImpl(ctx, value, *oldItemType, *newItemType, flags);
+            auto status = TryConvertToImpl(ctx, value, *oldItemType, *newItemType, flags, raiseIssues);
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -791,7 +807,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto nextType = to->GetItemType();
         auto arg = ctx.NewArgument(node->Pos(), "item");
         auto originalArg = arg;
-        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags);
+        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags, raiseIssues);
         if (status.Level != IGraphTransformer::TStatus::Error) {
             auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { originalArg }), std::move(arg));
 
@@ -807,7 +823,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto nextType = to->GetItemType();
         auto arg = ctx.NewArgument(node->Pos(), "item");
         auto originalArg = arg;
-        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags);
+        auto status = TryConvertToImpl(ctx, arg, *from->GetItemType(), *nextType, flags, raiseIssues);
         if (status.Level != IGraphTransformer::TStatus::Error) {
             auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { originalArg }), std::move(arg));
 
@@ -833,8 +849,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         for (ui32 i = node->IsCallable("Dict") ? 1 : 0; i < node->ChildrenSize(); ++i) {
             auto valueKey = node->Child(i)->ChildPtr(0);
             auto valuePayload = node->Child(i)->ChildPtr(1);
-            auto status = TryConvertToImpl(ctx, valueKey, *oldKeyType, *newKeyType, flags);
-            status = status.Combine(TryConvertToImpl(ctx, valuePayload, *oldPayloadType, *newPayloadType, flags));
+            auto status = TryConvertToImpl(ctx, valueKey, *oldKeyType, *newKeyType, flags, raiseIssues);
+            status = status.Combine(TryConvertToImpl(ctx, valuePayload, *oldPayloadType, *newPayloadType, flags, raiseIssues));
             if (status.Level == IGraphTransformer::TStatus::Error) {
                 return status;
             }
@@ -856,8 +872,8 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         auto arg = ctx.NewArgument(node->Pos(), "item");
         auto key = ctx.NewCallable(node->Pos(), "Nth", { arg, ctx.NewAtom(node->Pos(), "0") });
         auto value = ctx.NewCallable(node->Pos(), "Nth", { arg, ctx.NewAtom(node->Pos(), "1") });
-        auto status = TryConvertToImpl(ctx, key, *oldKeyType, *newKeyType, flags);
-        status = status.Combine(TryConvertToImpl(ctx, value, *oldPayloadType, *newPayloadType, flags));
+        auto status = TryConvertToImpl(ctx, key, *oldKeyType, *newKeyType, flags, raiseIssues);
+        status = status.Combine(TryConvertToImpl(ctx, value, *oldPayloadType, *newPayloadType, flags, raiseIssues));
         if (status.Level != IGraphTransformer::TStatus::Error) {
             auto body = ctx.NewList(node->Pos(), { key, value });
             auto lambda = ctx.NewLambda(node->Pos(), ctx.NewArguments(node->Pos(), { arg }), std::move(body));
@@ -870,7 +886,7 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
         if (from->GetTag() == to->GetTag()) {
             auto nextType = to->GetBaseType();
             auto arg = ctx.NewCallable(node->Pos(), "Untag", { node, ctx.NewAtom(node->Pos(), from->GetTag()) });
-            auto status = TryConvertToImpl(ctx, arg, *from->GetBaseType(), *nextType, flags);
+            auto status = TryConvertToImpl(ctx, arg, *from->GetBaseType(), *nextType, flags, raiseIssues);
             if (status.Level != IGraphTransformer::TStatus::Error) {
                 node = ctx.NewCallable(node->Pos(), "AsTagged", { arg, ctx.NewAtom(node->Pos(), from->GetTag()) });
                 return IGraphTransformer::TStatus::Repeat;
@@ -3426,12 +3442,14 @@ IGraphTransformer::TStatus TryConvertTo(TExprNode::TPtr& node, const TTypeAnnota
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto status = TryConvertToImpl(ctx, node, sourceType, expectedType, flags);
-    if (status.Level == IGraphTransformer::TStatus::Error) {
-        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to convert type: " <<
-            sourceType << " to " << expectedType));
+    TIssueScopeGuard guard(ctx.IssueManager, [&] {
+            return MakeIntrusive<TIssue>(ctx.GetPosition(node->Pos()),
+                TStringBuilder() << "Failed to convert type: " << sourceType << " to " << expectedType);
+        });
+    auto status = TryConvertToImpl(ctx, node, sourceType, expectedType, flags, /* raiseIssues */ true);
+    if (status.Level  == IGraphTransformer::TStatus::Error) {
+        guard.RaiseIssueForEmptyScope();
     }
-
     return status;
 }
 

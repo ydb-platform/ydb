@@ -151,7 +151,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
                 {"shard_enhanced_consumers_throughput", Parameters_.ConsumersThroughput},
                 {"reserved_storage_bytes", Parameters_.ReservedSpace}
             };
-            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours() + 1);
+            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
             while (interval < now) {
                 const auto metricsJson = GetMeteringJson(
                     name, schema, tags, "second",
@@ -159,7 +159,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
                     LastFlush_[whichOne], interval, now);
                 LastFlush_[whichOne] = interval;
                 FlushFunction_(metricsJson);
-                interval += TDuration::Hours(1);
+                interval += Parameters_.FlushLimit;
             }
             if (LastFlush_[whichOne] < now) {
                 const auto metricsJson = GetMeteringJson(
@@ -182,7 +182,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             const THashMap<TString, ui64> tags = {
                 {"reserved_throughput_bps", Parameters_.WriteQuota},
             };
-            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours() + 1);
+            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
             while (interval < now) {
                 const auto metricsJson = GetMeteringJson(
                     name, schema, tags, "second",
@@ -190,7 +190,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
                     LastFlush_[whichOne], interval, now);
                 LastFlush_[whichOne] = interval;
                 FlushFunction_(metricsJson);
-                interval += TDuration::Hours(1);
+                interval += Parameters_.FlushLimit;
             }
             if (LastFlush_[whichOne] < now) {
                 const auto metricsJson = GetMeteringJson(
@@ -210,7 +210,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             }
             const TString name = "yds.reserved_resources";
             const TString schema = "yds.storage.reserved.v1";
-            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours() + 1);
+            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
             while (interval < now) {
                 const auto metricsJson = GetMeteringJson(
                     name, schema, {}, "mbyte*second",
@@ -219,7 +219,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
                     LastFlush_[whichOne], interval, now);
                 LastFlush_[whichOne] = interval;
                 FlushFunction_(metricsJson);
-                interval += TDuration::Hours(1);
+                interval += Parameters_.FlushLimit;
             }
             if (LastFlush_[whichOne] < now) {
                 const auto metricsJson = GetMeteringJson(

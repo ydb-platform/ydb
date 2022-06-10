@@ -27,14 +27,6 @@ bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusi
         return predicateExtractSetting == EOptionalFlag::Enabled;
     }
 
-    /*
-     * SysView tables can't work with ReadRanges, because they do not support multiple ranges.
-     * KIKIMR-12434
-     */
-    if (tableData.Metadata->Kind == EKikimrTableKind::SysView) {
-        return false;
-    }
-
     if (kqpCtx->IsScanQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForScanQueries()) {
         return true;
     }

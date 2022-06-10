@@ -2,6 +2,19 @@
 
 Проверка наличия префикса или суффикса в строке.
 
+**Сигнатуры**
+```
+StartsWith(Utf8, Utf8)->Bool
+StartsWith(Utf8[?], Utf8[?])->Bool?
+StartsWith(String, String)->Bool
+StartsWith(String[?], String[?])->Bool?
+
+EndsWith(Utf8, Utf8)->Bool
+EndsWith(Utf8[?], Utf8[?])->Bool?
+EndsWith(String, String)->Bool
+EndsWith(String[?], String[?])->Bool?
+```
+
 Обязательные аргументы:
 
 * Исходная строка;

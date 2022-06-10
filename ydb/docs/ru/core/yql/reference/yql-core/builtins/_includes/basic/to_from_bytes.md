@@ -2,6 +2,15 @@
 
 Конвертация [простых типов данных](../../../types/primitive.md) в строку со своим бинарным представлением и обратно. Числа представляются в [little endian](https://en.wikipedia.org/wiki/Endianness#Little-endian).
 
+**Сигнатуры**
+```
+ToBytes(T)->String
+ToBytes(T?)->String?
+
+FromBytes(String, Type<T>)->T?
+FromBytes(String?, Type<T>)->T?
+```
+
 **Примеры**
 ``` yql
 SELECT

@@ -2,6 +2,15 @@
 
 Оборачивает значение в [Tagged тип данных](../../../types/special.md) с указанной меткой с сохранением физического типа данных. `Untag` — обратная операция.
 
+**Сигнатура**
+```
+AsTagged(T, tagName:String)->Tagged<T,tagName>
+AsTagged(T?, tagName:String)->Tagged<T,tagName>?
+
+Untag(Tagged<T, tagName>)->T
+Untag(Tagged<T, tagName>?)->T?
+```
+
 Обязательные аргументы:
 
 1. Значение произвольного типа;

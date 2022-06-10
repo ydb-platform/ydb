@@ -2,6 +2,12 @@
 
 Заменяет значения `NaN` (not a number) в выражениях типа `Float`, `Double` или [Optional](../../../types/optional.md).
 
+**Сигнатура**
+```
+NANVL(Float, Float)->Float
+NANVL(Double, Double)->Double
+```
+
 Аргументы:
 
 1. Выражение, в котором нужно произвести замену.

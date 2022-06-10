@@ -2,6 +2,12 @@
 
 Возвращает подстроку.
 
+**Сигнатура**
+```
+Substring(String[, Uint32? [, Uint32?]])->String
+Substring(String?[, Uint32? [, Uint32?]])->String?
+```
+
 Обязательные аргументы:
 
 * Исходная строка;

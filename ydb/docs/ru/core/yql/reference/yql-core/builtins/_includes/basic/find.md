@@ -2,6 +2,14 @@
 
 Поиск позиции подстроки в строке.
 
+**Сигнатура**
+```
+Find(String, String[, Uint32?])->Uint32?
+Find(String?, String[, Uint32?])->Uint32?
+Find(Utf8, Utf8[, Uint32?])->Uint32?
+Find(Utf8?, Utf8[, Uint32?])->Uint32?
+```
+
 Обязательные аргументы:
 
 * Исходная строка;
@@ -27,6 +35,14 @@ SELECT FIND("abcdefg_abcdefg", "abc", 9); -- null
 ## RFIND {#rfind}
 
 Обратный поиск позиции подстроки в строке, от конца к началу.
+
+**Сигнатура**
+```
+RFind(String, String[, Uint32?])->Uint32?
+RFind(String?, String[, Uint32?])->Uint32?
+RFind(Utf8, Utf8[, Uint32?])->Uint32?
+RFind(Utf8?, Utf8[, Uint32?])->Uint32?
+```
 
 Обязательные аргументы:
 

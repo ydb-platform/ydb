@@ -2,6 +2,8 @@
 
 #include "cc_semaphore.h"
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/generic/noncopyable.h>
 
 namespace NBus {

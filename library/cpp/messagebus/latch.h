@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/system/condvar.h>
 #include <util/system/mutex.h>
 

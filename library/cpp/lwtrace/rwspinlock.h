@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/system/spinlock.h>
 
 // State can be one of:

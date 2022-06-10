@@ -3,6 +3,8 @@
 #include "network.h"
 #include "thread_extra.h"
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/generic/hash.h>
 #include <util/network/pair.h>
 #include <util/network/poller.h>

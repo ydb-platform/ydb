@@ -2,6 +2,8 @@
 
 #include "ring_buffer.h"
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/system/spinlock.h>
 
 template <typename T>

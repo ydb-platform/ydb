@@ -14,6 +14,8 @@
 #endif
 #include <dlfcn.h>
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/system/platform.h>
 #include <util/generic/hash.h>
 #include <util/generic/map.h>

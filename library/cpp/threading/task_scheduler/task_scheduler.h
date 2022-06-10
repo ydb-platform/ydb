@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
 #include <util/generic/map.h>

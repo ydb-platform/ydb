@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/datetime/base.h>
 #include <util/system/mutex.h>
 #include <util/system/hp_timer.h>

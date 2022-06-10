@@ -2,6 +2,8 @@
 
 #include "grpc_common.h"
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/thread/factory.h>
 #include <grpc++/grpc++.h>
 #include <grpc++/support/async_stream.h>

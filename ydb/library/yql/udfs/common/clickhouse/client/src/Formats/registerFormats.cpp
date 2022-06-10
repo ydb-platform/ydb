@@ -9,6 +9,7 @@ namespace NDB
 {
 
 void registerInputFormatProcessorNative(FormatFactory & factory);
+void registerInputFormatProcessorJSONAsString(FormatFactory & factory);
 void registerInputFormatProcessorJSONEachRow(FormatFactory & factory);
 void registerInputFormatProcessorRawBLOB(FormatFactory & factory);
 void registerInputFormatProcessorORC(FormatFactory & factory);
@@ -26,6 +27,7 @@ void registerFormats()
     const std::unique_lock lock(factory.getSync());
     if (factory.getAllFormats().empty()) {
         registerInputFormatProcessorNative(factory);
+        registerInputFormatProcessorJSONAsString(factory);
         registerInputFormatProcessorJSONEachRow(factory);
         registerInputFormatProcessorRawBLOB(factory);
         registerInputFormatProcessorORC(factory);
@@ -39,4 +41,3 @@ void registerFormats()
 }
 
 }
-

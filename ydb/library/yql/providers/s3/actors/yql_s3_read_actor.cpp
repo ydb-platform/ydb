@@ -580,6 +580,8 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type) {
             case NUdf::EDataSlot::Double:
                 return std::make_shared<NDB::DataTypeFloat64>();
             case NUdf::EDataSlot::String:
+            case NUdf::EDataSlot::Utf8:
+            case NUdf::EDataSlot::Json:
                 return std::make_shared<NDB::DataTypeString>();
             case NUdf::EDataSlot::Date:
             case NUdf::EDataSlot::TzDate:

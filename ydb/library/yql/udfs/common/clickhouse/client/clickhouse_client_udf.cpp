@@ -1,6 +1,7 @@
 #include <ydb/library/yql/public/udf/udf_helpers.h>
 #include <ydb/library/yql/public/udf/udf_type_printer.h>
 #include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/minikql/dom/json.h>
 
 #include <Poco/Util/Application.h>
 
@@ -190,6 +191,8 @@ NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
             ret = std::make_shared<NDB::DataTypeFloat64>();
             break;
         case EDataSlot::String:
+        case EDataSlot::Utf8:
+        case EDataSlot::Json:
             ret = std::make_shared<NDB::DataTypeString>();
             break;
         case EDataSlot::Date:
@@ -306,6 +309,12 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
     else if (slot == EDataSlot::Utf8) {
         if (!IsUtf8(std::string_view(ref))) {
             ythrow yexception() << "Bad Utf8.";
+        }
+        return valueBuilder->NewString({ ref.data, (ui32)ref.size }).Release();
+    }
+    else if (slot == EDataSlot::Json) {
+        if (!NDom::IsValidJson(std::string_view(ref))) {
+            ythrow yexception() << "Bad Json.";
         }
         return valueBuilder->NewString({ ref.data, (ui32)ref.size }).Release();
     }

@@ -22,16 +22,17 @@ namespace NCommon {
 using namespace NNodes;
 
 namespace {
-    std::array<std::string_view, 7> Formats = {
+    constexpr std::array<std::string_view, 8> Formats = {
         "csv_with_names"sv,
         "tsv_with_names"sv,
         "json_list"sv,
         "json"sv,
         "raw"sv,
+        "json_as_string"sv,
         "json_each_row"sv,
         "parquet"sv
     };
-    std::array<std::string_view, 6> Compressions = {
+    constexpr std::array<std::string_view, 6> Compressions = {
         "gzip"sv,
         "zstd"sv,
         "lz4"sv,

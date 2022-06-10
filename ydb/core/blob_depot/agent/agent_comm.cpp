@@ -26,38 +26,60 @@ namespace NKikimr::NBlobDepot {
                     (Msg, msg.Record));
                 Registered = true;
                 BlobDepotGeneration = msg.Record.GetGeneration();
-                auto& channelGroups = msg.Record.GetChannelGroups();
-                BlobDepotChannelGroups = {channelGroups.begin(), channelGroups.end()};
+                for (const auto& kind : msg.Record.GetChannelKinds()) {
+                    auto& v = ChannelKinds[kind.GetChannelKind()];
+                    v.ChannelGroups.clear();
+                    v.IndexToChannel.clear();
+                    for (const auto& channelGroup : kind.GetChannelGroups()) {
+                        const ui8 channel = channelGroup.GetChannel();
+                        const ui32 groupId = channelGroup.GetGroupId();
+                        v.ChannelGroups.emplace_back(channel, groupId);
+                        v.ChannelToIndex[channel] = v.IndexToChannel.size();
+                        v.IndexToChannel.push_back(channel);
+                    }
+                }
             }
             return true;
         });
-        IssueAllocateIdsIfNeeded();
+        IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::Data);
+        IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::Log);
     }
 
-    void TBlobDepotAgent::IssueAllocateIdsIfNeeded() {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC09, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
-            (IdAllocInFlight, IdAllocInFlight), (IdQ.size, IdQ.size()), (PreallocatedIdCount, PreallocatedIdCount),
-            (PipeId, PipeId));
-        if (!IdAllocInFlight && IdQ.size() < PreallocatedIdCount && PipeId) {
-            const ui64 id = NextRequestId++;
-            NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvAllocateIds, id);
-            IdAllocInFlight = true;
+    void TBlobDepotAgent::IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::E channelKind) {
+        auto& kind = ChannelKinds[channelKind];
 
-            RegisterRequest(id, nullptr, [this](IEventBase *ev) {
-                Y_VERIFY(IdAllocInFlight);
-                IdAllocInFlight = false;
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC09, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
+            (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(channelKind)),
+            (IdAllocInFlight, kind.IdAllocInFlight), (IdQ.size, kind.IdQ.size()),
+            (PreallocatedIdCount, kind.PreallocatedIdCount), (PipeId, PipeId));
+        if (!kind.IdAllocInFlight && kind.IdQ.size() < kind.PreallocatedIdCount && PipeId) {
+            const ui64 id = NextRequestId++;
+            NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvAllocateIds(channelKind), id);
+            kind.IdAllocInFlight = true;
+
+            RegisterRequest(id, nullptr, [this, channelKind](IEventBase *ev) {
+                auto& kind = ChannelKinds[channelKind];
+
+                Y_VERIFY(kind.IdAllocInFlight);
+                kind.IdAllocInFlight = false;
 
                 if (ev) {
                     auto& msg = *static_cast<TEvBlobDepot::TEvAllocateIdsResult*>(ev);
                     STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC07, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
                         (Msg, msg.Record));
+                    Y_VERIFY(msg.Record.GetChannelKind() == channelKind);
                     Y_VERIFY(msg.Record.GetGeneration() == BlobDepotGeneration);
-                    IdQ.push_back(TAllocatedId{BlobDepotGeneration, msg.Record.GetRangeBegin(), msg.Record.GetRangeEnd()});
 
-                    // FIXME notify waiting requests about new ids
+                    if (msg.Record.HasRangeBegin() && msg.Record.HasRangeEnd()) {
+                        kind.IdQ.push_back({BlobDepotGeneration, msg.Record.GetRangeBegin(), msg.Record.GetRangeEnd()});
 
-                    // ask for more ids if needed
-                    IssueAllocateIdsIfNeeded();
+                        // FIXME notify waiting requests about new ids
+
+                        // ask for more ids if needed
+                        IssueAllocateIdsIfNeeded(channelKind);
+                    } else {
+                        // no such channel allocated
+                    }
                 }
 
                 return true; // request complete, remove from queue

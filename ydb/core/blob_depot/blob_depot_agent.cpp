@@ -46,9 +46,14 @@ namespace NKikimr::NBlobDepot {
         auto response = std::make_unique<TEvBlobDepot::TEvRegisterAgentResult>();
         auto& record = response->Record;
         record.SetGeneration(Executor()->Generation());
-        for (const auto& channel : Info()->Channels) {
-            Y_VERIFY(channel.Channel == record.ChannelGroupsSize());
-            record.AddChannelGroups(channel.History ? channel.History.back().GroupID : 0);
+        for (const auto& [k, v] : ChannelKinds) {
+            auto *proto = record.AddChannelKinds();
+            proto->SetChannelKind(k);
+            for (const ui32 channel : v.IndexToChannel) {
+                auto *cg = proto->AddChannelGroups();
+                cg->SetChannel(channel);
+                cg->SetGroupId(Info()->Channels[channel].History.back().GroupID);
+            }
         }
 
         SendResponseToAgent(*ev, std::move(response));
@@ -61,13 +66,15 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BD04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
-        auto response = std::make_unique<TEvBlobDepot::TEvAllocateIdsResult>();
+        auto response = std::make_unique<TEvBlobDepot::TEvAllocateIdsResult>(ev->Get()->Record.GetChannelKind(),
+            Executor()->Generation());
         auto& record = response->Record;
-        const ui32 generation = Executor()->Generation();
-        record.SetGeneration(generation);
-        record.SetRangeBegin(NextBlobSeqId);
-        NextBlobSeqId += PreallocatedIdCount;
-        record.SetRangeEnd(NextBlobSeqId);
+        if (const auto it = ChannelKinds.find(record.GetChannelKind()); it != ChannelKinds.end()) {
+            auto& nextBlobSeqId = it->second.NextBlobSeqId;
+            record.SetRangeBegin(nextBlobSeqId);
+            nextBlobSeqId += PreallocatedIdCount;
+            record.SetRangeEnd(nextBlobSeqId);
+        }
         SendResponseToAgent(*ev, std::move(response));
     }
 
@@ -87,6 +94,24 @@ namespace NKikimr::NBlobDepot {
             handle->Rewrite(TEvInterconnect::EvForward, request.InterconnectSession);
         }
         TActivationContext::Send(handle.release());
+    }
+
+    void TBlobDepot::InitChannelKinds() {
+        ui32 channel = 0;
+        for (const auto& profile : Config.GetChannelProfiles()) {
+            for (ui32 i = 0, count = profile.GetCount(); i < count; ++i, ++channel) {
+                if (channel >= 2) {
+                    const auto kind = profile.GetChannelKind();
+                    auto& p = ChannelKinds[kind];
+                    const ui32 indexWithinKind = p.IndexToChannel.size();
+                    p.IndexToChannel.push_back(channel);
+                    p.ChannelToIndex[indexWithinKind] = channel;
+                }
+            }
+        }
+        for (auto& [k, v] : ChannelKinds) {
+            v.NextBlobSeqId = TCGSI{v.IndexToChannel.front(), Executor()->Generation(), 1, 0}.ToBinary(v);
+        }
     }
 
 } // NKikimr::NBlobDepot

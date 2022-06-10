@@ -45,7 +45,13 @@ namespace NKikimr::NBlobDepot {
         THashMap<TActorId, std::optional<ui32>> PipeServerToNode;
         THashMap<ui32, TAgentInfo> Agents; // NodeId -> Agent
 
-        ui64 NextBlobSeqId = 0;
+        struct TChannelKind
+            : NBlobDepot::TChannelKind
+        {
+            ui64 NextBlobSeqId = 0;
+        };
+
+        THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev);
@@ -72,8 +78,6 @@ namespace NKikimr::NBlobDepot {
             for (auto&& ev : std::exchange(InitialEventsQ, {})) {
                 TActivationContext::Send(ev.release());
             }
-
-            NextBlobSeqId = TCGSI{BaseDataChannel, Executor()->Generation(), 1, 0}.ToBinary(Info()->Channels.size());
         }
 
         void OnDetach(const TActorContext&) override {
@@ -89,6 +93,8 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendResponseToAgent(IEventHandle& request, std::unique_ptr<IEventBase> response);
+
+        void InitChannelKinds();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

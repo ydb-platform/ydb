@@ -115,12 +115,10 @@ namespace NKikimr::NBlobDepot {
 
         bool Registered = false;
         ui32 BlobDepotGeneration = 0;
-        std::vector<ui32> BlobDepotChannelGroups;
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
         void ConnectToBlobDepot();
-        void IssueAllocateIdsIfNeeded();
         void OnDisconnect();
 
         void Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestCompleteCallback callback);
@@ -131,34 +129,44 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        struct TAllocatedId {
-            ui32 Generation;
-            ui64 Begin;
-            ui64 End;
+        struct TChannelKind
+            : NBlobDepot::TChannelKind
+        {
+            struct TAllocatedId {
+                ui32 Generation;
+                ui64 Begin;
+                ui64 End;
+            };
+
+            std::vector<std::pair<ui8, ui32>> ChannelGroups;
+
+            bool IdAllocInFlight = false;
+            std::deque<TAllocatedId> IdQ;
+            static constexpr size_t PreallocatedIdCount = 2;
+
+            std::pair<TLogoBlobID, ui32> Allocate(TBlobDepotAgent& agent, ui32 size, ui32 type) {
+                if (IdQ.empty()) {
+                    return {};
+                }
+
+                auto& item = IdQ.front();
+                auto cgsi = TCGSI::FromBinary(item.Generation, *this, item.Begin++);
+                if (item.Begin == item.End) {
+                    IdQ.pop_front();
+                }
+                static constexpr ui32 typeBits = 24 - TCGSI::IndexBits;
+                Y_VERIFY(type < (1 << typeBits));
+                const ui32 cookie = cgsi.Index << typeBits | type;
+                const TLogoBlobID id(agent.TabletId, cgsi.Generation, cgsi.Step, cgsi.Channel, size, cookie);
+                const auto [channel, groupId] = ChannelGroups[ChannelToIndex[cgsi.Channel]];
+                Y_VERIFY_DEBUG(channel == cgsi.Channel);
+                return {id, groupId};
+            }
         };
 
-        bool IdAllocInFlight = false;
-        std::deque<TAllocatedId> IdQ;
-        static constexpr size_t PreallocatedIdCount = 2;
+        THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
 
-        std::pair<TLogoBlobID, ui32> AllocateDataBlobId(ui32 size, ui32 type) {
-            if (IdQ.empty()) {
-                return {};
-            }
-
-            auto& item = IdQ.front();
-            auto cgsi = TCGSI::FromBinary(BlobDepotGeneration, BlobDepotChannelGroups.size(), item.Begin++);
-            if (item.Begin == item.End) {
-                IdQ.pop_front();
-                IssueAllocateIdsIfNeeded();
-            }
-            static constexpr ui32 typeBits = 24 - TCGSI::IndexBits;
-            Y_VERIFY(type < (1 << typeBits));
-            const ui32 cookie = cgsi.Index << typeBits | type;
-            const TLogoBlobID id(TabletId, cgsi.Generation, cgsi.Step, cgsi.Channel, size, cookie);
-            const ui32 groupId = BlobDepotChannelGroups[cgsi.Channel];
-            return {id, groupId};
-        }
+        void IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::E channelKind);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

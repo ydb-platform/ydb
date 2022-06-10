@@ -38,17 +38,27 @@ message TEvRegisterAgent {
 }
 
 message TEvRegisterAgentResult {
-    repeated uint32 ChannelGroups = 1;
-    optional uint32 Generation = 2;
+    message TChannelGroupId {
+        optional uint32 Channel = 1;
+        optional uint32 GroupId = 2;
+    };
+    message TChannelKind {
+        optional NKikimrBlobDepot.TChannelKind.E ChannelKind = 1;
+        repeated TChannelGroupId ChannelGroups = 2;
+    }
+    optional uint32 Generation = 1;
+    repeated TChannelKind ChannelKinds = 2;
 }
 
 message TEvAllocateIds {
+    optional NKikimrBlobDepot.TChannelKind.E ChannelKind = 1;
 }
 
 message TEvAllocateIdsResult {
-    optional uint32 Generation = 1; // executor generation, for validation purposes
-    optional uint64 RangeBegin = 2; // <Generation> <Step> <Channel>
-    optional uint64 RangeEnd = 3;
+    optional NKikimrBlobDepot.TChannelKind.E ChannelKind = 1;
+    optional uint32 Generation = 2; // executor generation, for validation purposes
+    optional uint64 RangeBegin = 3; // <Generation> <Step> <Channel>
+    optional uint64 RangeEnd = 4;
 }
 
 message TEvBlock {

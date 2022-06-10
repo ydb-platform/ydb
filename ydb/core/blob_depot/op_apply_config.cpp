@@ -8,7 +8,6 @@ namespace NKikimr::NBlobDepot {
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
-            const TActorId InterconnectSession;
             TString ConfigProtobuf;
 
         public:
@@ -16,9 +15,11 @@ namespace NKikimr::NBlobDepot {
                     TActorId interconnectSession)
                 : TTransactionBase(self)
                 , Response(std::move(response))
-                , InterconnectSession(interconnectSession)
             {
-                const bool success = ev.Record.SerializeToString(&ConfigProtobuf);
+                if (interconnectSession) {
+                    Response->Rewrite(TEvInterconnect::EvForward, interconnectSession);
+                }
+                const bool success = ev.Record.GetConfig().SerializeToString(&ConfigProtobuf);
                 Y_VERIFY(success);
             }
 
@@ -31,10 +32,11 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                const bool wasEmpty = !Self->Config.ByteSizeLong();
                 const bool success = Self->Config.ParseFromString(ConfigProtobuf);
                 Y_VERIFY(success);
-                if (InterconnectSession) {
-                    Response->Rewrite(TEvInterconnect::EvForward, InterconnectSession);
+                if (wasEmpty) {
+                    Self->InitChannelKinds();
                 }
                 TActivationContext::Send(Response.release());
             }

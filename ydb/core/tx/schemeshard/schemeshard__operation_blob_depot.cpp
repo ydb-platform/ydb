@@ -68,6 +68,7 @@ namespace NKikimr::NSchemeShard {
                         blobDepotInfo->BlobDepotTabletId = tabletId;
                         Y_VERIFY(shard.TabletType == ETabletType::BlobDepot);
                         auto event = std::make_unique<TEvBlobDepot::TEvApplyConfig>(static_cast<ui64>(OperationId.GetTxId()));
+                        event->Record.MutableConfig()->CopyFrom(blobDepotInfo->Description.GetConfig());
                         context.OnComplete.BindMsgToPipe(OperationId, tabletId, shardIdx, event.release());
                         txState->ShardsInProgress.insert(shardIdx);
                     }

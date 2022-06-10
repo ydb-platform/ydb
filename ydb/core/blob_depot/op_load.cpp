@@ -57,6 +57,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                Self->InitChannelKinds();
             }
         };
 

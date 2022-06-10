@@ -287,6 +287,8 @@ private:
     }
 
     void SendBatchReadRequest(const std::vector<TBlobRange>& blobRanges, const ui64 cookie, const TActorContext& ctx) {
+        Y_VERIFY(!blobRanges.empty());
+
         if (blobRanges.front().BlobId.IsSmallBlob()) {
             SendBatchReadRequestToTablet(blobRanges, cookie, ctx);
         } else {
@@ -356,24 +358,22 @@ private:
         ui64 cookie = ++ReadCookie;
 
         for (auto& [target, rangesGroup] : groupedBlobRanges) {
-            std::vector<TBlobRange> rangesBatch;
-            rangesBatch.reserve(rangesGroup.size());
             ui64 requestSize = 0;
 
             for (auto& blobRange : rangesGroup) {
-                if (!rangesBatch.empty() && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
-                    SendBatchReadRequest(rangesBatch, cookie, ctx);
-                    rangesBatch.clear();
+                if (requestSize && (requestSize + blobRange.Size > MAX_REQUEST_BYTES)) {
+                    SendBatchReadRequest(CookieToRange[cookie], cookie, ctx);
                     cookie = ++ReadCookie;
                     requestSize = 0;
                 }
 
-                rangesBatch.push_back(blobRange);
                 requestSize += blobRange.Size;
-                CookieToRange[cookie].push_back(blobRange);
+                CookieToRange[cookie].emplace_back(std::move(blobRange));
             }
-            if (!rangesBatch.empty()) {
-                SendBatchReadRequest(rangesBatch, cookie, ctx);
+            if (requestSize) {
+                SendBatchReadRequest(CookieToRange[cookie], cookie, ctx);
+                cookie = ++ReadCookie;
+                requestSize = 0;
             }
         }
 
@@ -382,10 +382,8 @@ private:
             Y_VERIFY(!ranges.empty());
 
             cookie = ++ReadCookie;
-            for (auto& blobRange : ranges) {
-                CookieToRange[cookie].push_back(blobRange);
-            }
-            SendBatchReadRequestToTablet(ranges, cookie, ctx);
+            CookieToRange[cookie] = std::move(ranges);
+            SendBatchReadRequestToTablet(CookieToRange[cookie], cookie, ctx);
         }
     }
 

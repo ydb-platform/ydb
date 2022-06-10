@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: botocore
-Version: 1.26.8
+Version: 1.26.9
 Summary: Low-level, data-driven core of boto 3.
 Home-page: https://github.com/boto/botocore
 Author: Amazon Web Services

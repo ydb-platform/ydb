@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/system/types.h>
 #include <util/system/compiler.h>
 #include <util/generic/array_ref.h>

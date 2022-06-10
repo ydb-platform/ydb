@@ -2,6 +2,8 @@
 
 #include "validator.h"
 
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/generic/bitmap.h>
 #include <util/system/mutex.h>
 

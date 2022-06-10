@@ -168,7 +168,8 @@ namespace NKikimr::NBsController {
 
                 case NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED:
                 case NKikimrBlobStorage::EVirtualGroupState::WORKING:
-                    GetGroup()->VirtualGroupSetupMachineId = {};
+                    IssueNodeNotifications(group);
+                    group->VirtualGroupSetupMachineId = {};
                     PassAway();
                     break;
 
@@ -287,6 +288,20 @@ namespace NKikimr::NBsController {
             Y_VERIFY(*group->BlobDepotId);
 
             Self->Execute(new TTxUpdateGroup(this));
+        }
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        void IssueNodeNotifications(TGroupInfo *group) {
+            for (const TNodeId nodeId : std::exchange(group->WaitingNodes, {})) {
+                TNodeInfo& node = Self->GetNode(nodeId);
+                node.WaitingForGroups.erase(group->ID);
+                auto ev = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
+                TSet<ui32> groups;
+                groups.insert(group->ID);
+                Self->ReadGroups(groups, false, ev.get(), nodeId);
+                Send(MakeBlobStorageNodeWardenID(nodeId), ev.release());
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

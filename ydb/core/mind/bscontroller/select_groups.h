@@ -23,7 +23,7 @@ namespace NKikimr {
                         for (TGroupId groupId : iter->second) {
                             const TGroupInfo *group = controller.FindGroup(groupId);
                             Y_VERIFY_DEBUG(group);
-                            if (group) {
+                            if (group && group->Listable()) {
                                 groups.push_back(group);
                             }
                         }
@@ -50,7 +50,7 @@ namespace NKikimr {
                         for (auto it = storagePoolGroups.lower_bound(id); it != storagePoolGroups.end() && it->first == id; ++it) {
                             const TGroupInfo *groupInfo = findGroupCallback(it->second);
                             Y_VERIFY_DEBUG(groupInfo);
-                            if (groupInfo) {
+                            if (groupInfo && groupInfo->Listable()) {
                                 groups.push_back(groupInfo);
                             }
                         }

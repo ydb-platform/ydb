@@ -657,6 +657,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     }
     auto res = MakeIntrusive<TBlobStorageGroupInfo>(std::move(topology), std::move(dyn), group.GetStoragePoolName(),
         acceptedScope, commonDeviceType);
+    if (group.HasBlobDepotId()) {
+        res->BlobDepotId = group.GetBlobDepotId();
+    }
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());

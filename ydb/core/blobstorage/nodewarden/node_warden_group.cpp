@@ -207,7 +207,7 @@ namespace NKikimr::NStorage {
             }
 
             if (const auto& info = group.Info) {
-                Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info, info->GetStoragePoolName()));
+                Send(WhiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvBSGroupStateUpdate(info));
                 for (auto& vdisk : group.VDisksOfGroup) {
                     UpdateGroupInfoForDisk(vdisk, info);
                 }

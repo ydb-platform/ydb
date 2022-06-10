@@ -112,6 +112,9 @@ namespace NKikimr::NStorage {
         TReplQuoter::TPtr ReplNodeResponseQuoter;
 
     public:
+        struct TGroupRecord;
+
+    public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::NODE_WARDEN;
         }
@@ -152,6 +155,7 @@ namespace NKikimr::NStorage {
         void StartInvalidGroupProxy();
         void StopInvalidGroupProxy();
         void StartLocalProxy(ui32 groupId);
+        void StartVirtualGroupAgent(ui32 groupId);
         void StartStaticProxies();
 
         TVector<NPDisk::TDriveData> ListLocalDrives();

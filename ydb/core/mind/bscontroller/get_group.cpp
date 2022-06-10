@@ -26,7 +26,7 @@ public:
 
         const TNodeId nodeId = request->Get()->Record.GetNodeID();
         auto res = std::make_unique<TEvBlobStorage::TEvControllerNodeServiceSetUpdate>(NKikimrProto::OK, nodeId);
-        Self->ReadGroups(groupIDsToRead, true, res.get());
+        Self->ReadGroups(groupIDsToRead, true, res.get(), nodeId);
 
         Response = std::make_unique<IEventHandle>(MakeBlobStorageNodeWardenID(nodeId), Self->SelfId(), res.release());
         return true;

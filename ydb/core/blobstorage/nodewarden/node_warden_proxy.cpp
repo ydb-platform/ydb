@@ -9,9 +9,6 @@ TActorId TNodeWarden::StartEjectedProxy(ui32 groupId) {
 }
 
 void TNodeWarden::StartLocalProxy(ui32 groupId) {
-    auto& group = Groups[groupId];
-    Y_VERIFY(!group.ProxyRunning);
-    group.ProxyRunning = true;
     STLOG(PRI_DEBUG, BS_NODE, NW12, "StartLocalProxy", (GroupId, groupId));
 
     std::unique_ptr<IActor> proxy;
@@ -32,6 +29,19 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
     TActorSystem *as = TActivationContext::ActorSystem();
     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), as->Register(proxy.release(), TMailboxType::ReadAsFilled,
         AppData()->SystemPoolId));
+}
+
+void TNodeWarden::StartVirtualGroupAgent(ui32 groupId) {
+    STLOG(PRI_DEBUG, BS_NODE, NW40, "StartVirtualGroupProxy", (GroupId, groupId));
+
+    TActorSystem *as = TActivationContext::ActorSystem();
+    const TActorId actorId = as->Register(NBlobDepot::CreateBlobDepotAgent(groupId), TMailboxType::ReadAsFilled,
+        AppData()->SystemPoolId);
+    if (auto info = NeedGroupInfo(groupId)) {
+        auto counters = DsProxyPerPoolCounters->GetPoolCounters(info->GetStoragePoolName(), info->GetDeviceType());
+        Send(actorId, new TEvBlobStorage::TEvConfigureProxy(std::move(info), std::move(counters)));
+    }
+    as->RegisterLocalService(MakeBlobStorageProxyID(groupId), actorId);
 }
 
 void TNodeWarden::StartStaticProxies() {
@@ -55,7 +65,12 @@ void TNodeWarden::HandleForwarded(TAutoPtr<::NActors::IEventHandle> &ev) {
         TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, errorProxy, {}, nullptr, 0));
         return;
     } else if (TGroupRecord& group = Groups[id]; !group.ProxyRunning) {
-        StartLocalProxy(id);
+        group.ProxyRunning = true;
+        if (TGroupID(id).ConfigurationType() == EGroupConfigurationType::Virtual) {
+            StartVirtualGroupAgent(id);
+        } else {
+            StartLocalProxy(id);
+        }
     }
 
     TActivationContext::Send(ev->Forward(ev->GetForwardOnNondeliveryRecipient()));

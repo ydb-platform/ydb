@@ -3,8 +3,8 @@
 
 namespace NKikimr::NBlobDepot {
 
-    IActor *CreateBlobDepotAgent(ui32 virtualGroupId, ui64 tabletId) {
-        return new TBlobDepotAgent(virtualGroupId, tabletId);
+    IActor *CreateBlobDepotAgent(ui32 virtualGroupId) {
+        return new TBlobDepotAgent(virtualGroupId);
     }
 
 } // NKikimr::NBlobDepot

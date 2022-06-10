@@ -16,4 +16,14 @@ target_link_libraries(core-blob_depot-agent PUBLIC
 )
 target_sources(core-blob_depot-agent PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_comm.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_put.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_get.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_block.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_discover.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_range.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_collect_garbage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_patch.cpp
 )

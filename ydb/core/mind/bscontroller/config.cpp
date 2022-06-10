@@ -894,9 +894,7 @@ namespace NKikimr::NBsController {
                 const TString& storagePoolName, const TMaybe<TKikimrScopeId>& scopeId) {
             group->SetGroupID(groupInfo.ID);
             group->SetGroupGeneration(groupInfo.Generation);
-            group->SetErasureSpecies(groupInfo.ErasureSpecies);
             group->SetStoragePoolName(storagePoolName);
-            group->SetDeviceType(PDiskTypeToPDiskType(groupInfo.GetCommonDeviceType()));
 
             group->SetEncryptionMode(groupInfo.EncryptionMode.GetOrElse(0));
             group->SetLifeCyclePhase(groupInfo.LifeCyclePhase.GetOrElse(0));
@@ -912,28 +910,38 @@ namespace NKikimr::NBsController {
                 pb->SetX2(x.second);
             }
 
-            std::vector<std::pair<TVDiskID, const TVSlotInfo*>> vdisks;
-            for (const auto& vslot : groupInfo.VDisksInGroup) {
-                vdisks.emplace_back(vslot->GetVDiskId(), vslot);
-            }
-            auto comp = [](const auto& x, const auto& y) { return x.first < y.first; };
-            std::sort(vdisks.begin(), vdisks.end(), comp);
+            if (!groupInfo.VirtualGroupState) {
+                group->SetErasureSpecies(groupInfo.ErasureSpecies);
+                group->SetDeviceType(PDiskTypeToPDiskType(groupInfo.GetCommonDeviceType()));
 
-            TVDiskID prevVDiskId;
-            NKikimrBlobStorage::TGroupInfo::TFailRealm *realm = nullptr;
-            NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *domain = nullptr;
-            for (const auto& [vdiskId, vslot] : vdisks) {
-                if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
-                    realm = group->AddRings();
-                    domain = nullptr;
+                std::vector<std::pair<TVDiskID, const TVSlotInfo*>> vdisks;
+                for (const auto& vslot : groupInfo.VDisksInGroup) {
+                    vdisks.emplace_back(vslot->GetVDiskId(), vslot);
                 }
-                if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {
-                    Y_VERIFY(realm);
-                    domain = realm->AddFailDomains();
-                }
-                prevVDiskId = vdiskId;
+                auto comp = [](const auto& x, const auto& y) { return x.first < y.first; };
+                std::sort(vdisks.begin(), vdisks.end(), comp);
 
-                Serialize(domain->AddVDiskLocations(), *vslot);
+                TVDiskID prevVDiskId;
+                NKikimrBlobStorage::TGroupInfo::TFailRealm *realm = nullptr;
+                NKikimrBlobStorage::TGroupInfo::TFailRealm::TFailDomain *domain = nullptr;
+                for (const auto& [vdiskId, vslot] : vdisks) {
+                    if (!realm || prevVDiskId.FailRealm != vdiskId.FailRealm) {
+                        realm = group->AddRings();
+                        domain = nullptr;
+                    }
+                    if (!domain || prevVDiskId.FailDomain != vdiskId.FailDomain) {
+                        Y_VERIFY(realm);
+                        domain = realm->AddFailDomains();
+                    }
+                    prevVDiskId = vdiskId;
+
+                    Serialize(domain->AddVDiskLocations(), *vslot);
+                }
+            } else if (*groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+                Y_VERIFY(groupInfo.BlobDepotId);
+                group->SetBlobDepotId(*groupInfo.BlobDepotId);
+            } else if (*groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
+                group->SetBlobDepotId(0);
             }
         }
 

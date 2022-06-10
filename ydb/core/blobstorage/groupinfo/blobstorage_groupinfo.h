@@ -413,6 +413,8 @@ public:
     const ui32 GroupGeneration;
     // erasure primarily
     const TBlobStorageGroupType Type;
+    // virtual group BlobDepot tablet id
+    std::optional<ui64> BlobDepotId;
     // origin of the group info content
     std::optional<NKikimrBlobStorage::TGroupInfo> Group;
 

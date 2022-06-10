@@ -516,6 +516,9 @@ public:
 
         TActorId VirtualGroupSetupMachineId;
 
+        // nodes waiting for this group to become listable
+        THashSet<TNodeId> WaitingNodes;
+
         // group's geometry; it doesn't ever change since the group is created
         const ui32 NumFailRealms = 0;
         const ui32 NumFailDomainsPerFailRealm = 0;
@@ -639,6 +642,12 @@ public:
         {
             Topology->FinalizeConstruction();
             Y_VERIFY(VDisksInGroup.size() == Topology->GetTotalVDisksNum());
+        }
+
+        bool Listable() const {
+            return !VirtualGroupState
+                || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING
+                || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED;
         }
 
         void ClearVDisksInGroup() {
@@ -798,6 +807,7 @@ public:
         TInstant LastDisconnectTimestamp;
         // in-mem only
         std::map<TString, NPDisk::TDriveData> KnownDrives;
+        THashSet<TGroupId> WaitingForGroups;
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1589,7 +1599,8 @@ private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
     THashMap<Schema::Group::Owner::Type, Schema::Group::ID::Type> OwnerIdIdxToGroup;
 
-    void ReadGroups(TSet<ui32>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result);
+    void ReadGroups(TSet<ui32>& groupIDsToRead, bool discard, TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,
+            TNodeId nodeId);
 
     void ReadPDisk(const TPDiskId& pdiskId, const TPDiskInfo& pdisk,
             TEvBlobStorage::TEvControllerNodeServiceSetUpdate *result,

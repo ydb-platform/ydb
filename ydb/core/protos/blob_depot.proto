@@ -1,6 +1,27 @@
 import "ydb/core/protos/blob_depot_config.proto";
+import "ydb/core/protos/base.proto";
 
 package NKikimrBlobDepot;
+
+message TBlobSeqId {
+    optional uint32 Channel = 1;
+    optional uint32 Generation = 2;
+    optional uint32 Step = 3;
+    optional uint32 Index = 4;
+}
+
+message TBlobLocator {
+    optional uint32 GroupId = 1;
+    optional TBlobSeqId BlobSeqId = 2;
+    optional uint32 Checksum = 3;
+    optional uint64 TotalDataLen = 4;
+}
+
+message TValueChain {
+    optional TBlobLocator Locator = 1;
+    optional uint64 SubrangeBegin = 2;
+    optional uint64 SubrangeEnd = 3;
+}
 
 message TEvApplyConfig {
     optional uint64 TxId = 1;
@@ -10,4 +31,95 @@ message TEvApplyConfig {
 message TEvApplyConfigResult {
     optional uint64 TabletId = 1;
     optional uint64 TxId = 2;
+}
+
+message TEvRegisterAgent {
+    optional uint32 VirtualGroupId = 1; // for validation purposes
+}
+
+message TEvRegisterAgentResult {
+    repeated uint32 ChannelGroups = 1;
+    optional uint32 Generation = 2;
+}
+
+message TEvAllocateIds {
+}
+
+message TEvAllocateIdsResult {
+    optional uint32 Generation = 1; // executor generation, for validation purposes
+    optional uint64 RangeBegin = 2; // <Generation> <Step> <Channel>
+    optional uint64 RangeEnd = 3;
+}
+
+message TEvBlock {
+    optional fixed64 TabletId = 1;
+    optional uint32 BlockedGeneration = 2;
+}
+
+message TEvBlockResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional uint32 TimeToLiveMs = 3;
+}
+
+message TEvPushNotify { // BlobDepot -> Agent push notification (to take some action)
+    repeated fixed64 UpdateBlocksForTabletIds = 1; // notify about some changed blocks
+}
+
+message TEvQueryBlocks {
+    repeated fixed64 TabletIds = 1;
+}
+
+message TEvQueryBlocksResult {
+    repeated uint32 BlockedGenerations = 1;
+    optional uint32 TimeToLiveMs = 2; // TTL starting since sending TEvQueryBlocks at agent
+}
+
+message TEvCommitBlobSeq {
+    message TItem {
+        optional TBlobLocator BlobLocator = 1; // GroupId and Generation are for validation purposes
+    }
+
+    repeated TItem Items = 1;
+}
+
+message TEvCommitBlobSeqResult {
+    message TItem {
+        optional NKikimrProto.EReplyStatus Status = 1;
+        optional string ErrorReason = 2;
+    }
+
+    repeated TItem Items = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TEvResolve -- lookup key in the Data table (and apply noncommitted changes if necessary) and return value chain for
+// each of the found entries.
+
+message TEvResolve {
+    message TItem {
+        optional bytes BeginningKey = 1; // start from the very first key (if not set)
+        optional bool IncludeBeginning = 2 [default = true];
+        optional bytes EndingKey = 3; // end with the key beyond the last one (if not set)
+        optional bool IncludeEnding = 4 [default = false];
+        optional uint32 MaxKeys = 5 [default = 0];
+        optional bool ReturnMeta = 6 [default = false];
+        optional bool ReturnOwners = 7 [default = false];
+        optional bool Reverse = 8 [default = false]; // reverse output
+    }
+
+    repeated TItem Items = 1;
+}
+
+message TEvResolveResult {
+    message TResolvedKey {
+        optional uint32 ItemIndex = 1;
+        optional bytes Key = 2;
+        repeated TValueChain ValueChain = 3;
+        optional bytes Meta = 4;
+        repeated uint64 Owners = 5;
+    }
+    optional NKikimrProto.EReplyStatus Status = 1; // OVERRUN means there are more messages on the way
+    optional string ErrorReason = 2;
+    repeated TResolvedKey ResolvedKeys = 3;
 }

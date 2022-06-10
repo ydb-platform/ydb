@@ -52,7 +52,7 @@ public:
                 Self->ReadVSlot(*info, msg.Get());
                 TSet<ui32> groupIDsToRead;
                 groupIDsToRead.insert(info->GroupId);
-                Self->ReadGroups(groupIDsToRead, false, msg.Get());
+                Self->ReadGroups(groupIDsToRead, false, msg.Get(), id.NodeId);
                 for (const TGroupId groupId : groupIDsToRead) {
                     STLOG(PRI_ERROR, BS_CONTROLLER, BSCTXGRW05, "No configuration for group", (GroupId, groupId));
                 }

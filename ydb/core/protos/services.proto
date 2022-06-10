@@ -316,6 +316,7 @@ enum EServiceKikimr {
 
     // Blob depot
     BLOB_DEPOT = 1300;
+    BLOB_DEPOT_AGENT = 1301;
 };
 
 message TActivity {

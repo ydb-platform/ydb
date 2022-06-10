@@ -236,18 +236,14 @@ struct TEvWhiteboard{
     struct TEvBSGroupStateUpdate : TEventPB<TEvBSGroupStateUpdate, NKikimrWhiteboard::TBSGroupStateInfo, EvBSGroupStateUpdate> {
         TEvBSGroupStateUpdate() = default;
 
-        TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo, const TMaybe<TString>& storagePoolName) {
+        TEvBSGroupStateUpdate(const TIntrusivePtr<TBlobStorageGroupInfo>& groupInfo) {
             Record.SetGroupID(groupInfo->GroupID);
             Record.SetGroupGeneration(groupInfo->GroupGeneration);
             Record.SetErasureSpecies(groupInfo->Type.ErasureSpeciesName(groupInfo->Type.GetErasure()));
-            for (auto it = groupInfo->VDisksBegin(), end = groupInfo->VDisksEnd(); it != end; ++it) {
-                auto vd = groupInfo->GetVDiskId(it->OrderNumber);
-                NKikimrBlobStorage::TVDiskID* addedVDisk = Record.AddVDiskIds();
-                VDiskIDFromVDiskID(vd, addedVDisk);
+            for (ui32 i = 0; i < groupInfo->GetTotalVDisksNum(); ++i) {
+                VDiskIDFromVDiskID(groupInfo->GetVDiskId(i), Record.AddVDiskIds());
             }
-            if (storagePoolName) {
-                Record.SetStoragePoolName(*storagePoolName);
-            }
+            Record.SetStoragePoolName(groupInfo->GetStoragePoolName());
         }
     };
 

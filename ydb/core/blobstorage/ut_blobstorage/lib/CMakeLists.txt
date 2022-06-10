@@ -14,13 +14,19 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   cpp-digest-md5
   cpp-testing-unittest
   ydb-core-base
+  ydb-core-blob_depot
   core-blobstorage-backpressure
   blobstorage-dsproxy-mock
   core-blobstorage-nodewarden
   blobstorage-pdisk-mock
   blobstorage-vdisk-common
+  ydb-core-mind
   core-mind-bscontroller
+  core-mind-hive
   core-tx-scheme_board
+  core-tx-tx_allocator
+  core-tx-mediator
+  core-tx-coordinator
   ydb-core-util
   udf-service-stub
   yql-sql-pg_dummy

@@ -4,6 +4,6 @@
 
 namespace NKikimr::NBlobDepot {
 
-    IActor *CreateBlobDepotAgent(ui32 virtualGroupId, ui64 tabletId);
+    IActor *CreateBlobDepotAgent(ui32 virtualGroupId);
 
 } // NKikimr::NBlobDepot

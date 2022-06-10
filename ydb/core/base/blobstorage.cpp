@@ -2,31 +2,31 @@
 
 namespace NKikimr {
 
-NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const TPDiskCategory::EDeviceType type) {
+NKikimrBlobStorage::EPDiskType PDiskTypeToPDiskType(const NPDisk::EDeviceType type) {
     switch (type) {
-        case TPDiskCategory::DEVICE_TYPE_ROT:
+        case NPDisk::DEVICE_TYPE_ROT:
             return NKikimrBlobStorage::EPDiskType::ROT;
-        case TPDiskCategory::DEVICE_TYPE_SSD:
+        case NPDisk::DEVICE_TYPE_SSD:
             return NKikimrBlobStorage::EPDiskType::SSD;
-        case TPDiskCategory::DEVICE_TYPE_NVME:
+        case NPDisk::DEVICE_TYPE_NVME:
             return NKikimrBlobStorage::EPDiskType::NVME;
-        case TPDiskCategory::DEVICE_TYPE_UNKNOWN:
+        case NPDisk::DEVICE_TYPE_UNKNOWN:
             return NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE;
         default:
             Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type);
     }
 }
 
-TPDiskCategory::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type) {
+NPDisk::EDeviceType PDiskTypeToPDiskType(const NKikimrBlobStorage::EPDiskType type) {
     switch (type) {
         case NKikimrBlobStorage::EPDiskType::ROT:
-            return TPDiskCategory::DEVICE_TYPE_ROT;
+            return NPDisk::DEVICE_TYPE_ROT;
         case NKikimrBlobStorage::EPDiskType::SSD:
-            return TPDiskCategory::DEVICE_TYPE_SSD;
+            return NPDisk::DEVICE_TYPE_SSD;
         case NKikimrBlobStorage::EPDiskType::NVME:
-            return TPDiskCategory::DEVICE_TYPE_NVME;
+            return NPDisk::DEVICE_TYPE_NVME;
         case NKikimrBlobStorage::EPDiskType::UNKNOWN_TYPE:
-            return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+            return NPDisk::DEVICE_TYPE_UNKNOWN;
         default:
             Y_FAIL("Device type is unknown; type# %" PRIu64, (ui64)type);
     }

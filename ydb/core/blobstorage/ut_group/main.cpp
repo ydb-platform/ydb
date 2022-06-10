@@ -314,7 +314,7 @@ public:
         dynamic.ServiceIdForOrderNumber = Info->GetDynamicInfo().ServiceIdForOrderNumber;
         dynamic.ServiceIdForOrderNumber[topology.GetOrderNumber(disk.VDiskId)] = disk.VDiskActorId;
         Info = MakeIntrusive<TBlobStorageGroupInfo>(std::move(topology), std::move(dynamic), TString(), Nothing(),
-            TPDiskCategory::DEVICE_TYPE_SSD);
+            NPDisk::DEVICE_TYPE_SSD);
 
         StartVDisk(runtime, disk);
 
@@ -368,7 +368,7 @@ private:
         for (ui32 nodeId = 1, i = 0; nodeId <= NodeCount; ++nodeId, ++i) {
             const ui32 pdiskId = 1;
             const ui64 pdiskGuid = TAppData::RandomProvider->GenRand64();
-            const TPDiskCategory category(TPDiskCategory::DEVICE_TYPE_SSD, 0);
+            const TPDiskCategory category(NPDisk::DEVICE_TYPE_SSD, 0);
             const TActorId& actorId = runtime.Register(CreatePDiskMockActor(MakeIntrusive<TPDiskMockState>(nodeId,
                 pdiskId, pdiskGuid, ui64(1000) << 30)), TActorId(), 0, std::nullopt, nodeId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);
@@ -404,7 +404,7 @@ private:
 
         auto proxy = Counters->GetSubgroup("subsystem", "proxy");
         TIntrusivePtr<TDsProxyNodeMon> mon = MakeIntrusive<TDsProxyNodeMon>(proxy, true);
-        StoragePoolCounters = MakeIntrusive<TStoragePoolCounters>(proxy, TString(), TPDiskCategory::DEVICE_TYPE_SSD);
+        StoragePoolCounters = MakeIntrusive<TStoragePoolCounters>(proxy, TString(), NPDisk::DEVICE_TYPE_SSD);
         std::unique_ptr<IActor> proxyActor{CreateBlobStorageGroupProxyConfigured(TIntrusivePtr(Info), false, mon,
             TIntrusivePtr(StoragePoolCounters), DefaultEnablePutBatching, DefaultEnableVPatch)};
         const TActorId& actorId = runtime.Register(proxyActor.release(), TActorId(), 0, std::nullopt, 1);
@@ -413,7 +413,7 @@ private:
 
     void StartVDisk(TTestActorSystem& runtime, TDiskRecord& disk) {
         TVDiskConfig::TBaseInfo baseInfo(disk.VDiskId, disk.PDiskActorId, disk.PDiskGuid, disk.PDiskId,
-            TPDiskCategory::DEVICE_TYPE_SSD, disk.VDiskSlotId, NKikimrBlobStorage::TVDiskKind::Default, ++Round,
+            NPDisk::DEVICE_TYPE_SSD, disk.VDiskSlotId, NKikimrBlobStorage::TVDiskKind::Default, ++Round,
             TString());
         auto vdiskConfig = AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = true;

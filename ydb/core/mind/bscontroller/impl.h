@@ -670,17 +670,17 @@ public:
             return values;
         }
 
-        TPDiskCategory::EDeviceType GetCommonDeviceType() const {
+        NPDisk::EDeviceType GetCommonDeviceType() const {
             if (VDisksInGroup) {
-                const TPDiskCategory::EDeviceType type = VDisksInGroup.front()->PDisk->Kind.Type();
+                const NPDisk::EDeviceType type = VDisksInGroup.front()->PDisk->Kind.Type();
                 for (const TVSlotInfo *vslot : VDisksInGroup) {
                     if (type != vslot->PDisk->Kind.Type()) {
-                        return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+                        return NPDisk::DEVICE_TYPE_UNKNOWN;
                     }
                 }
                 return type;
             } else {
-                return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+                return NPDisk::DEVICE_TYPE_UNKNOWN;
             }
         }
 
@@ -1257,7 +1257,7 @@ public:
         TMaybe<Table::Guid::Type> Guid;
         Table::LifeStage::Type LifeStage = NKikimrBlobStorage::TDriveLifeStage::UNKNOWN;
         Table::Kind::Type Kind = 0;
-        Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(TPDiskCategory::DEVICE_TYPE_UNKNOWN);
+        Table::PDiskType::Type PDiskType = PDiskTypeToPDiskType(NPDisk::DEVICE_TYPE_UNKNOWN);
         TMaybe<Table::PDiskConfig::Type> PDiskConfig;
 
         TDriveSerialInfo() = default;

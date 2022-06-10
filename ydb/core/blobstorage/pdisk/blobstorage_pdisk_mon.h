@@ -310,7 +310,7 @@ private:
 
 public:
     void Initialize(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-            const TString &name, TPDiskCategory::EDeviceType deviceType) {
+            const TString &name, NPDisk::EDeviceType deviceType) {
         TString histName = name + "Ms";
         // Histogram backets in milliseconds
         auto h = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(deviceType));

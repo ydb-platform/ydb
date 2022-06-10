@@ -1,5 +1,6 @@
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/library/pdisk_io/file_params.h>
 
 using namespace NKikimr;
@@ -12,7 +13,9 @@ TVector<NPDisk::TDriveData> TNodeWarden::ListLocalDrives() {
         TString raw = TFileInput(MockDevicesPath).ReadAll();
         if (google::protobuf::TextFormat::ParseFromString(raw, &MockDevicesConfig)) {
             for (const auto& device : MockDevicesConfig.GetDevices()) {
-                drives.emplace_back(device);
+                NPDisk::TDriveData data;
+                DriveDataToDriveData(device, data);
+                drives.push_back(data);
             }
         } else {
             STLOG(PRI_WARN, BS_NODE, NW01, "Error parsing mock devices protobuf from file", (Path, MockDevicesPath));

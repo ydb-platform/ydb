@@ -1,8 +1,6 @@
 #pragma once
 #include "defs.h"
 
-#include "blobstorage_pdisk_util_wcache.h"
-
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/compile_time_flags.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
@@ -10,8 +8,10 @@
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/config.pb.h>
 
+#include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/sector_map.h>
+#include <ydb/library/pdisk_io/wcache.h>
 
 namespace NKikimr {
 
@@ -161,29 +161,29 @@ struct TPDiskConfig : public TThrRefBase {
         Initialize();
     }
 
-    TPDiskCategory::EDeviceType RetrieveDeviceType() {
+    NPDisk::EDeviceType RetrieveDeviceType() {
         TStringStream outDetails;
 
         if (std::optional<NPDisk::TDriveData> data = NPDisk::GetDriveData(Path, &outDetails)) {
             return data->DeviceType;
         } else if (Path.Contains("nvme") || Path.Contains("NVME")) {
-            return TPDiskCategory::DEVICE_TYPE_NVME;
+            return NPDisk::DEVICE_TYPE_NVME;
         } else if (Path.Contains("ssd") || Path.Contains("SSD")) {
-            return TPDiskCategory::DEVICE_TYPE_SSD;
+            return NPDisk::DEVICE_TYPE_SSD;
         } else {
             return PDiskCategory.Type();
         }
     }
 
     void Initialize() {
-        TPDiskCategory::EDeviceType deviceType = RetrieveDeviceType();
+        NPDisk::EDeviceType deviceType = RetrieveDeviceType();
 
         auto choose = [&] (ui64 nvme, ui64 ssd, ui64 hdd) {
-            if (deviceType == TPDiskCategory::DEVICE_TYPE_ROT) {
+            if (deviceType == NPDisk::DEVICE_TYPE_ROT) {
                 return hdd;
-            } else if (deviceType == TPDiskCategory::DEVICE_TYPE_SSD) {
+            } else if (deviceType == NPDisk::DEVICE_TYPE_SSD) {
                 return ssd;
-            } else if (deviceType == TPDiskCategory::DEVICE_TYPE_NVME) {
+            } else if (deviceType == NPDisk::DEVICE_TYPE_NVME) {
                 return nvme;
             } else {
                 return hdd;
@@ -201,7 +201,7 @@ struct TPDiskConfig : public TThrRefBase {
         CostLimitNs = choose(500'000ull, 20'000'000ull, 50'000'000ull);
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
-        Y_VERIFY(!UseSpdkNvmeDriver || deviceType == TPDiskCategory::DEVICE_TYPE_NVME,
+        Y_VERIFY(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
                 "SPDK NVMe driver can be used only with NVMe devices!");
     }
 

@@ -42,7 +42,6 @@ target_sources(core-blobstorage-pdisk PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_completion_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_delayed_cost_loop.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_driveestimator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivedata.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivemodel_db.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_impl_http.cpp
@@ -58,11 +57,11 @@ target_sources(core-blobstorage-pdisk PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_atomicblockcounter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_flightcontrol.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_signal_event.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_wcache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_writer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_actions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_yard.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/drivedata_serializer.cpp
 )
 generate_enum_serilization(core-blobstorage-pdisk
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/pdisk/blobstorage_pdisk_state.h

@@ -299,7 +299,7 @@ public:
         PutThroughput->Count(size);
     }
 
-    void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
+    void CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
             TDuration duration) {
         const ui32 durationMs = duration.MilliSeconds();
         PutResponseTime.Increment(durationMs);
@@ -324,7 +324,7 @@ public:
         NodeMon->CountPutPesponseTime(type, cls, size, duration);
     }
 
-    void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
+    void CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
             TDuration duration) {
         *EventGetResBytes += size;
         GetResponseTime.Increment(duration.MilliSeconds());
@@ -351,7 +351,7 @@ public:
         NodeMon->RangeResponseTime.Increment(duration.MilliSeconds());
     }
 
-    void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) {
+    void CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration) {
         PatchResponseTime.Increment(duration.MilliSeconds());
         NodeMon->CountPatchResponseTime(type, duration);
     }

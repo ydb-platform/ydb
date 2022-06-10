@@ -57,7 +57,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
     TActorSystemCreator creator;
 
     bool isBlockDevice = false;
-    TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DEVICE_TYPE_ROT;
+    NPDisk::EDeviceType deviceType = NPDisk::DEVICE_TYPE_ROT;
     if (sectorMap) {
         if (diskSizeBytes) {
             sectorMap->ForceSize(diskSizeBytes);
@@ -69,7 +69,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
         }
     } else {
         if (path.StartsWith("PCIe:")) {
-            deviceType = TPDiskCategory::DEVICE_TYPE_NVME;
+            deviceType = NPDisk::DEVICE_TYPE_NVME;
         }
         if (diskSizeBytes == 0) {
             creator.GetActorSystem()->AppData<TAppData>()->IoContextFactory

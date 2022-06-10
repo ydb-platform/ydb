@@ -130,7 +130,7 @@ struct TTestArgs {
     ui32 DrivesPerFailDomain = 0;
     TIntrusivePtr<ITestParametrs> Parametrs = nullptr;
     bool EnablePutBatching = DefaultEnablePutBatching;
-    TPDiskCategory::EDeviceType DeviceType = TPDiskCategory::DEVICE_TYPE_ROT;
+    NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_ROT;
 };
 
 struct TTestEnvironment : public TThrRefBase {
@@ -4046,7 +4046,7 @@ public:
 
     void TestBatchedPutRequestDoesNotContainAHugeBlob() {
         TTestArgs args{0, TBlobStorageGroupType::ErasureNone};
-        args.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
+        args.DeviceType = NPDisk::DEVICE_TYPE_NVME;
         TestBlobStorage<TTestBlobStorageProxyBatchedPutRequestDoesNotContainAHugeBlob>(nullptr, args);
         SectorMapByPath.clear();
     }

@@ -50,7 +50,7 @@ public:
         StateManager = stateManager;
         Counters = env->Counters;
         PDiskConfig = new TPDiskConfig(env->PDiskFilePath, env->PDiskGuid, 1,
-                TPDiskCategory(TPDiskCategory::DEVICE_TYPE_ROT, 0).GetRaw());
+                TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
         PDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         PDiskConfig->WriteCacheSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
         env->ActorSystem->Register(this);

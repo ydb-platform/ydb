@@ -287,7 +287,7 @@ void TNodeWarden::RenderLocalDrives(IOutputStream& out) {
                         TABLED() { out << data->Path; }
                         TABLED() { out << data->SerialNumber.Quote(); }
                         TABLED() {
-                            out << TPDiskCategory::DeviceTypeStr(data->DeviceType, true);
+                            out << NPDisk::DeviceTypeStr(data->DeviceType, true);
                             out << (data->IsMock ? "(mock)" : "");
                         }
                     }

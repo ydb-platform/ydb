@@ -27,7 +27,10 @@ target_sources(ydb-library-pdisk_io PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio_map.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/buffers.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/device_type.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/drivedata.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/sector_map.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/wcache.cpp
 )
 generate_enum_serilization(ydb-library-pdisk_io
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio.h

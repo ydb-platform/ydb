@@ -7,7 +7,6 @@
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
 #include "blobstorage_pdisk_util_flightcontrol.h"
 #include "blobstorage_pdisk_util_idlecounter.h"
-#include "blobstorage_pdisk_util_wcache.h"
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/blobstorage/base/wilson_events.h>
@@ -17,6 +16,7 @@
 #include <ydb/core/util/yverify_stream.h>
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
+#include <ydb/library/pdisk_io/wcache.h>
 
 #include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/util/thread.h>

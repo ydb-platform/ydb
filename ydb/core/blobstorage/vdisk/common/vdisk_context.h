@@ -83,7 +83,7 @@ namespace NKikimr {
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& vdiskCounters,
                 const TVDiskID &selfVDisk,
                 TActorSystem *as,   // can be nullptr for tests
-                TPDiskCategory::EDeviceType type,
+                NPDisk::EDeviceType type,
                 bool donorMode = false,
                 TReplQuoter::TPtr replPDiskReadQuoter = nullptr,
                 TReplQuoter::TPtr replPDiskWriteQuoter = nullptr,

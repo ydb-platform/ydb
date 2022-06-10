@@ -1,9 +1,9 @@
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_wcache.h>
 
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/library/pdisk_io/wcache.h>
 
 #include <util/string/split.h>
 

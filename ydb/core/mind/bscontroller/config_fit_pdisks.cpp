@@ -54,8 +54,8 @@ namespace NKikimr {
             const NPDisk::TDriveData& driveData = nodeInfo.KnownDrives.at(serial.Serial);
             TString fsPath = driveData.Path;
 
-            TPDiskCategory::EDeviceType type = PDiskTypeToPDiskType(driveInfo->PDiskType);
-            if (type == TPDiskCategory::DEVICE_TYPE_UNKNOWN) {
+            NPDisk::EDeviceType type = PDiskTypeToPDiskType(driveInfo->PDiskType);
+            if (type == NPDisk::DEVICE_TYPE_UNKNOWN) {
                 type = driveData.DeviceType;
             }
             const TPDiskCategory category(type, driveInfo->Kind);

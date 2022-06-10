@@ -1,17 +1,17 @@
 #include "node_warden_impl.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_wcache.h>
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/library/pdisk_io/wcache.h>
 
 #include <util/string/split.h>
 
 namespace NKikimr::NStorage {
 
-    static const std::unordered_map<TPDiskCategory::EDeviceType, ui64> DefaultSpeedLimit{
-        {TPDiskCategory::DEVICE_TYPE_ROT, 100000000},
-        {TPDiskCategory::DEVICE_TYPE_SSD, 200000000},
-        {TPDiskCategory::DEVICE_TYPE_NVME, 300000000},
+    static const std::unordered_map<NPDisk::EDeviceType, ui64> DefaultSpeedLimit{
+        {NPDisk::DEVICE_TYPE_ROT, 100000000},
+        {NPDisk::DEVICE_TYPE_SSD, 200000000},
+        {NPDisk::DEVICE_TYPE_NVME, 300000000},
     };
 
     TIntrusivePtr<TPDiskConfig> TNodeWarden::CreatePDiskConfig(const NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk& pdisk)  {

@@ -40,10 +40,10 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
 
     IsCountersPresentedForIdx.fill(false);
     if (initForAllDeviceTypes) {
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_ROT);
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_SSD);
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_NVME);
-        CheckNodeMonCountersForDeviceType(TPDiskCategory::DEVICE_TYPE_UNKNOWN);
+        CheckNodeMonCountersForDeviceType(NPDisk::DEVICE_TYPE_ROT);
+        CheckNodeMonCountersForDeviceType(NPDisk::DEVICE_TYPE_SSD);
+        CheckNodeMonCountersForDeviceType(NPDisk::DEVICE_TYPE_NVME);
+        CheckNodeMonCountersForDeviceType(NPDisk::DEVICE_TYPE_UNKNOWN);
     }
 
     // restart counters
@@ -88,17 +88,17 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &c
     }
 }
 
-ui32 IdxForType(TPDiskCategory::EDeviceType type) {
+ui32 IdxForType(NPDisk::EDeviceType type) {
     switch (type) {
-        case TPDiskCategory::DEVICE_TYPE_ROT: return 0;
-        case TPDiskCategory::DEVICE_TYPE_SSD: return 1;
-        case TPDiskCategory::DEVICE_TYPE_NVME: return 2;
-        case TPDiskCategory::DEVICE_TYPE_UNKNOWN: return 3;
+        case NPDisk::DEVICE_TYPE_ROT: return 0;
+        case NPDisk::DEVICE_TYPE_SSD: return 1;
+        case NPDisk::DEVICE_TYPE_NVME: return 2;
+        case NPDisk::DEVICE_TYPE_UNKNOWN: return 3;
     }
     return 3;
 }
 
-void TDsProxyNodeMon::CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls,
+void TDsProxyNodeMon::CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls,
         ui32 size, TDuration duration) {
     const ui32 durationMs = duration.MilliSeconds();
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
@@ -135,7 +135,7 @@ void TDsProxyNodeMon::CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKi
     }
 }
 
-void TDsProxyNodeMon::CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls,
+void TDsProxyNodeMon::CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls,
         ui32 size, TDuration duration) {
     const ui32 durationMs = duration.MilliSeconds();
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
@@ -174,7 +174,7 @@ void TDsProxyNodeMon::CountGetResponseTime(TPDiskCategory::EDeviceType type, NKi
     }
 }
 
-void TDsProxyNodeMon::CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration) {
+void TDsProxyNodeMon::CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration) {
     const ui32 durationMs = duration.MilliSeconds();
     const double durationMsFloat = duration.MicroSeconds() / 1000.0;
     PatchResponseTime.Increment(durationMs);
@@ -183,13 +183,13 @@ void TDsProxyNodeMon::CountPatchResponseTime(TPDiskCategory::EDeviceType type, T
     PatchResponseTimeHist[idx]->Collect(durationMsFloat);
 }
 
-void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type) {
+void TDsProxyNodeMon::CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type) {
     const ui32 idx = IdxForType(type);
 
     if (!IsCountersPresentedForIdx[idx]) {
         IsCountersPresentedForIdx[idx] = true;
         TIntrusivePtr<NMonitoring::TDynamicCounters> subGroup =
-            Group->GetSubgroup("media", to_lower(TPDiskCategory::DeviceTypeStr(type, true)));
+            Group->GetSubgroup("media", to_lower(NPDisk::DeviceTypeStr(type, true)));
 
         auto getNamedHisto = [&subGroup, &type] (const TString& name) {
             auto buckets = NMonitoring::ExplicitHistogram(GetCommonLatencyHistBounds(type));

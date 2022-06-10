@@ -270,8 +270,8 @@ public:
             pdiskItem.SetPath(pdiskInfo.Path);
             pdiskItem.SetPDiskGuid(pdiskInfo.PDiskGuid);
 
-            TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DeviceTypeFromStr(pdiskInfo.Type);
-            if (deviceType == TPDiskCategory::DEVICE_TYPE_UNKNOWN) {
+            NPDisk::EDeviceType deviceType = NPDisk::DeviceTypeFromStr(pdiskInfo.Type);
+            if (deviceType == NPDisk::DEVICE_TYPE_UNKNOWN) {
                 ythrow yexception() << "invalid PDisk Type " << pdiskInfo.Type;
             }
             const ui64 kind = 0;

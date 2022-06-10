@@ -28,7 +28,7 @@ namespace NKikimr {
             auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
             auto info = MakeIntrusive<TBlobStorageGroupInfo>(TBlobStorageGroupType::Erasure4Plus2Block);
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
-                nullptr, TPDiskCategory::DEVICE_TYPE_UNKNOWN);
+                nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
             std::unique_ptr<THullHugeKeeperPersState> state(
                     new THullHugeKeeperPersState(vctx, chunkSize, appendBlockSize,
                         minHugeBlobInBytes, milestoneHugeBlobInBytes, maxBlobInBytes,

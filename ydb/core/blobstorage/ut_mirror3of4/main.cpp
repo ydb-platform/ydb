@@ -264,7 +264,7 @@ private:
                 pdiskActorId,
                 pdisk.PDiskGuid,
                 pdisk.PDiskId,
-                TPDiskCategory::DEVICE_TYPE_SSD,
+                NPDisk::DEVICE_TYPE_SSD,
                 0,
                 NKikimrBlobStorage::TVDiskKind::Default,
                 2, // InitOwnerRound

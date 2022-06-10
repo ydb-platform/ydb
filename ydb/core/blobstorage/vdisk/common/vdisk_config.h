@@ -22,7 +22,7 @@ namespace NKikimr {
             ui64 InitOwnerRound = 0;
             ui64 PDiskGuid = 0;
             ui32 PDiskId = 0;
-            TPDiskCategory::EDeviceType DeviceType = TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+            NPDisk::EDeviceType DeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
             ui32 VDiskSlotId = 0;
             EKind Kind = NKikimrBlobStorage::TVDiskKind::Default;
             // name of the storage pool this VDisk belongs to
@@ -45,7 +45,7 @@ namespace NKikimr {
                     const TActorId &pDiskActorId,
                     ui64 pDiskGuid,
                     ui32 pdiskId,
-                    TPDiskCategory::EDeviceType deviceType,
+                    NPDisk::EDeviceType deviceType,
                     ui32 vdiskSlotId,
                     EKind kind,
                     ui64 initOwnerRound,

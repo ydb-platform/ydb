@@ -1,8 +1,9 @@
 #include "file_params.h"
 
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_wcache.h>
+#include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/spdk_state.h>
 #include <ydb/library/pdisk_io/aio.h>
+#include <ydb/library/pdisk_io/wcache.h>
 
 #include <linux/fs.h>
 #include <regex>

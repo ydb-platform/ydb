@@ -5,8 +5,8 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_defs.h>
-#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_drivedata.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_config.h>
+#include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 
 namespace NKikimr {
 
@@ -46,7 +46,7 @@ namespace NKikimr {
                 Record.AddGroupGenerations(generation);
             }
             for (const auto& data : drivesData) {
-                data.ToProto(Record.AddDrivesData());
+                DriveDataToDriveData(data, Record.AddDrivesData());
             }
         }
 
@@ -69,7 +69,7 @@ namespace NKikimr {
         TEvControllerUpdateNodeDrives(ui32 nodeId, const TVector<NPDisk::TDriveData>& drivesData) {
             Record.SetNodeId(nodeId);
             for (const auto& data : drivesData) {
-                data.ToProto(Record.AddDrivesData());
+                DriveDataToDriveData(data, Record.AddDrivesData());
             }
         }
 

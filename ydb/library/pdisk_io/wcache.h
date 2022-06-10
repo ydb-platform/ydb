@@ -1,6 +1,7 @@
 #pragma once
-#include "blobstorage_pdisk_drivedata.h"
+#include <ydb/library/pdisk_io/drivedata.h>
 
+#include <util/stream/str.h>
 #include <util/system/file.h>
 
 #include <optional>

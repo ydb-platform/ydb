@@ -1,8 +1,10 @@
-#include "blobstorage_pdisk_util_wcache.h"
-#include <library/cpp/actors/core/log.h>
-#include <ydb/core/protos/services.pb.h>
+#include "wcache.h"
+//#include <library/cpp/actors/core/log.h>
+//#include <ydb/core/protos/services.pb.h>
 
+#include <util/generic/yexception.h>
 #include <util/stream/file.h>
+#include <util/string/builder.h>
 #include <util/string/strip.h>
 #include <util/system/file.h>
 
@@ -459,14 +461,14 @@ struct TIdentifyData {
         return GetString(27, 40);
     }
 
-    TPDiskCategory::EDeviceType GetDeviceType() const {
+    EDeviceType GetDeviceType() const {
         // "nominal media rotation rate" of HDD devices, equals to 1 for SSD
         if (Id[217] > 0x401) {
-            return TPDiskCategory::DEVICE_TYPE_ROT;
+            return DEVICE_TYPE_ROT;
         } else if (Id[217] == 1) {
-            return TPDiskCategory::DEVICE_TYPE_SSD;
+            return DEVICE_TYPE_SSD;
         } else {
-            return TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+            return DEVICE_TYPE_UNKNOWN;
         }
     }
 
@@ -615,7 +617,7 @@ static std::optional<TDriveData> GetNvmeDriveData(int fd, TStringStream *outDeta
         data.SerialNumber = RenderCharField(id + NVME_ID_SERIAL_NUMBER_OFFSET, NVME_ID_SERIAL_NUMBER_SIZE);
         data.ModelNumber = RenderCharField(id + NVME_ID_MODEL_NUMBER_OFFSET, NVME_ID_MODEL_NUMBER_SIZE);
         data.FirmwareRevision = RenderCharField(id + NVME_ID_FIRMWARE_REVISION_OFFSET, NVME_ID_FIRMWARE_REVISION_SIZE);
-        data.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
+        data.DeviceType = DEVICE_TYPE_NVME;
         return data;
     } else {
         return std::nullopt;
@@ -654,7 +656,7 @@ static std::optional<TDriveData> GetSysfsDriveData(const TString &path, TStringS
         data.SerialNumber = readField("device/serial");
         data.ModelNumber = readField("device/model");
         data.FirmwareRevision = readField("device/firmware_rev");
-        data.DeviceType = TPDiskCategory::DEVICE_TYPE_NVME;
+        data.DeviceType = DEVICE_TYPE_NVME;
         return data;
     } catch (const TFileError& err) {
         *outDetails << "can't open sysfs files, caught TFileError, what# " << err.what();

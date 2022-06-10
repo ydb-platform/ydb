@@ -1831,7 +1831,7 @@ namespace NKikimr {
 
             // add 'media'
             const auto media = cfg->BaseInfo.DeviceType;
-            vdiskCounters = vdiskCounters->GetSubgroup("media", to_lower(TPDiskCategory::DeviceTypeStr(media, true)));
+            vdiskCounters = vdiskCounters->GetSubgroup("media", to_lower(NPDisk::DeviceTypeStr(media, true)));
 
             return vdiskCounters;
         }

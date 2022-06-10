@@ -22,7 +22,7 @@ struct TRequestMonItem {
     NMonitoring::TDynamicCounters::TCounterPtr GeneratedSubrequestBytes;
     NMonitoring::THistogramPtr ResponseTime;
 
-    void Init(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TPDiskCategory::EDeviceType type) {
+    void Init(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NPDisk::EDeviceType type) {
         RequestBytes = counters->GetCounter("requestBytes", true);
         GeneratedSubrequests = counters->GetCounter("generatedSubrequests", true);
         GeneratedSubrequestBytes = counters->GetCounter("generatedSubrequestBytes", true);
@@ -164,7 +164,7 @@ public:
     }
 
     TStoragePoolCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, const TString &storagePoolName,
-            TPDiskCategory::EDeviceType type) {
+            NPDisk::EDeviceType type) {
         StoragePoolName = storagePoolName;
         TIntrusivePtr<NMonitoring::TDynamicCounters> poolGroup = counters->GetSubgroup("storagePool", storagePoolName);
         for (ui32 handleClass = 0; handleClass < (ui32)HcCount; ++handleClass) {
@@ -198,7 +198,7 @@ public:
     };
 
     TIntrusivePtr<TStoragePoolCounters> GetPoolCounters(const TString &storagePoolName,
-            TPDiskCategory::EDeviceType type = TPDiskCategory::DEVICE_TYPE_UNKNOWN) {
+            NPDisk::EDeviceType type = NPDisk::DEVICE_TYPE_UNKNOWN) {
         auto it = StoragePoolCounters.find(storagePoolName);
         if (it != StoragePoolCounters.end()) {
             return it->second;

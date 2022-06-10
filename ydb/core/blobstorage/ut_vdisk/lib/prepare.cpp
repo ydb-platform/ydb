@@ -153,7 +153,7 @@ void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
         TOnePDisk &inst = PDisks[i];
         inst.PDiskActorID = MakeBlobStoragePDiskID(node, i);
         TIntrusivePtr<TPDiskConfig> pDiskConfig;
-        TPDiskCategory::EDeviceType deviceType = TPDiskCategory::DeviceTypeFromStr(Cfg.DeviceType);
+        NPDisk::EDeviceType deviceType = NPDisk::DeviceTypeFromStr(Cfg.DeviceType);
         pDiskConfig.Reset(new TPDiskConfig(inst.Filename, inst.PDiskGuid, inst.PDiskID,
                                            TPDiskCategory(deviceType, 0).GetRaw()));
         pDiskConfig->GetDriveDataSwitch = NKikimrBlobStorage::TPDiskConfig::DoNotTouch;
@@ -244,7 +244,7 @@ bool TDefaultVDiskSetup::SetUp(TAllVDisks::TVDiskInstance &vdisk, TAllPDisks *pd
     vdisk.VDiskID = TVDiskID(0, 1, 0, d, j);
 
     NKikimr::TVDiskConfig::TBaseInfo baseInfo(vdisk.VDiskID, pdisk.PDiskActorID, pdisk.PDiskGuid,
-            pdisk.PDiskID, NKikimr::TPDiskCategory::DEVICE_TYPE_ROT, slotId,
+            pdisk.PDiskID, NKikimr::NPDisk::DEVICE_TYPE_ROT, slotId,
             NKikimrBlobStorage::TVDiskKind::Default, initOwnerRound, {});
     vdisk.Cfg = MakeIntrusive<NKikimr::TVDiskConfig>(baseInfo);
 

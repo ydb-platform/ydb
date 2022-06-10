@@ -122,8 +122,8 @@ namespace NKikimr {
 
     void TVDiskConfig::SetupHugeBytes() {
         switch (BaseInfo.DeviceType) {
-            case TPDiskCategory::DEVICE_TYPE_SSD:
-            case TPDiskCategory::DEVICE_TYPE_NVME:
+            case NPDisk::DEVICE_TYPE_SSD:
+            case NPDisk::DEVICE_TYPE_NVME:
                 MinHugeBlobInBytes = 64u << 10u;
                 break;
             default:

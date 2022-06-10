@@ -9,7 +9,7 @@ namespace NKikimr {
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
                 const TString &name,
                 const TString &value,
-                TPDiskCategory::EDeviceType type)
+                NPDisk::EDeviceType type)
         {
             auto group = counters->GetSubgroup(name, value);
             ThroughputBytes = group->GetCounter("requestBytes", true);

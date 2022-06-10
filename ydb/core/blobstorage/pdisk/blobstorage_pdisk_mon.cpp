@@ -95,7 +95,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counter
     QueueRequests = QueueGroup->GetCounter("QueueRequests", true);
     QueueBytes = QueueGroup->GetCounter("QueueBytes", true);
 
-    auto deviceType = cfg ? cfg->PDiskCategory.Type() : TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+    auto deviceType = cfg ? cfg->PDiskCategory.Type() : NPDisk::DEVICE_TYPE_UNKNOWN;
 
     // scheduler subgroup
     ForsetiCbsNotFound = SchedulerGroup->GetCounter("ForsetiCbsNotFound");

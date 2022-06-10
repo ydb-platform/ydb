@@ -27,7 +27,7 @@ class TBlobStorageController::TTxUpdateNodeDrives
                     << data.GetPath() << " "
                     << data.GetSerialNumber() << " "
                     << data.GetModelNumber() << " "
-                    << TPDiskCategory::DeviceTypeStr(PDiskTypeToPDiskType(data.GetDeviceType()), true) << " "
+                    << NPDisk::DeviceTypeStr(PDiskTypeToPDiskType(data.GetDeviceType()), true) << " "
                     << "}";
             }
             out << "]";
@@ -120,9 +120,11 @@ class TBlobStorageController::TTxUpdateNodeDrives
             } else {
                 Self->NodeForSerial[serial] = nodeId;
             }
-            auto [it, emplaced] = nodeInfo.KnownDrives.emplace(serial, data);
-            if (it->second.DeviceType == TPDiskCategory::DEVICE_TYPE_NVME) {
-                it->second.DeviceType = TPDiskCategory::DEVICE_TYPE_SSD;
+            NPDisk::TDriveData driveData;
+            DriveDataToDriveData(data, driveData);
+            auto [it, emplaced] = nodeInfo.KnownDrives.emplace(serial, driveData);
+            if (it->second.DeviceType == NPDisk::DEVICE_TYPE_NVME) {
+                it->second.DeviceType = NPDisk::DEVICE_TYPE_SSD;
             }
         }
     }

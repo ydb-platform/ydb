@@ -5,7 +5,7 @@ namespace NKikimr {
 
         THistograms::THistograms(
                 const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-                TPDiskCategory::EDeviceType type)
+                NPDisk::EDeviceType type)
         {
             for (const auto& item : {
                     std::make_pair(&VGetAsyncLatencyHistogram,     "GetAsync"    ),

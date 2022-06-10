@@ -194,7 +194,7 @@ public:
             PDiskId,
             PDiskGuid,
             1,
-            TPDiskCategory::DEVICE_TYPE_ROT,
+            NPDisk::DEVICE_TYPE_ROT,
             0,
             NKikimrBlobStorage::TVDiskKind::Default,
             2,

@@ -23,7 +23,7 @@ namespace NKikimr {
             TLtcHisto(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
                     const TString &name,
                     const TString &value,
-                    TPDiskCategory::EDeviceType type);
+                    NPDisk::EDeviceType type);
 
             // update histogram with with an operation with duration 'd'
             void Collect(TDuration d, ui64 size = 0);

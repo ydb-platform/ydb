@@ -95,14 +95,14 @@ struct TDsProxyNodeMon : public TThrRefBase {
     NMonitoring::TDynamicCounters::TCounterPtr ConnectedMinus3more;
 
     TDsProxyNodeMon(TIntrusivePtr<NMonitoring::TDynamicCounters> &counters, bool initForAllDeviceTypes);
-    void CountPutPesponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
+    void CountPutPesponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EPutHandleClass cls, ui32 size,
             TDuration duration);
-    void CountGetResponseTime(TPDiskCategory::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
+    void CountGetResponseTime(NPDisk::EDeviceType type, NKikimrBlobStorage::EGetHandleClass cls, ui32 size,
             TDuration duration);
-    void CountPatchResponseTime(TPDiskCategory::EDeviceType type, TDuration duration);
+    void CountPatchResponseTime(NPDisk::EDeviceType type, TDuration duration);
 
     // Called only from NodeWarder
-    void CheckNodeMonCountersForDeviceType(TPDiskCategory::EDeviceType type);
+    void CheckNodeMonCountersForDeviceType(NPDisk::EDeviceType type);
 
     void IncNumUnconnected(ui32 num) {
         switch (num) {

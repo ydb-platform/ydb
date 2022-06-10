@@ -584,7 +584,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(TBlobStorageGroupType gtype, ui32 n
 }
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, TPDiskCategory::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
     : GroupID(dyn.GroupId)
     , GroupGeneration(dyn.GroupGeneration)
     , Type(topology->GType)
@@ -596,7 +596,7 @@ TBlobStorageGroupInfo::TBlobStorageGroupInfo(std::shared_ptr<TTopology> topology
 {}
 
 TBlobStorageGroupInfo::TBlobStorageGroupInfo(TTopology&& topology, TDynamicInfo&& dyn, TString storagePoolName,
-        TMaybe<TKikimrScopeId> acceptedScope, TPDiskCategory::EDeviceType deviceType)
+        TMaybe<TKikimrScopeId> acceptedScope, NPDisk::EDeviceType deviceType)
     : TBlobStorageGroupInfo(std::make_shared<TTopology>(std::move(topology)), std::move(dyn), std::move(storagePoolName),
             std::move(acceptedScope), deviceType)
 {
@@ -651,7 +651,7 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
         const auto& scope = group.GetAcceptedScope();
         acceptedScope.ConstructInPlace(scope.GetX1(), scope.GetX2());
     }
-    TPDiskCategory::EDeviceType commonDeviceType = TPDiskCategory::DEVICE_TYPE_UNKNOWN;
+    NPDisk::EDeviceType commonDeviceType = NPDisk::DEVICE_TYPE_UNKNOWN;
     if (group.HasDeviceType()) {
         commonDeviceType = PDiskTypeToPDiskType(group.GetDeviceType());
     }

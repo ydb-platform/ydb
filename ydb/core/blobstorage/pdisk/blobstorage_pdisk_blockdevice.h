@@ -2,13 +2,13 @@
 #include "defs.h"
 
 #include "blobstorage_pdisk_completion.h"
-#include "blobstorage_pdisk_drivedata.h"
 #include "blobstorage_pdisk_request_id.h"
 #include "blobstorage_pdisk_util_devicemode.h"
 
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/library/pdisk_io/aio.h>
+#include <ydb/library/pdisk_io/drivedata.h>
 #include <ydb/library/pdisk_io/sector_map.h>
 #include <ydb/library/wilson/wilson_event.h>
 

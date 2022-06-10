@@ -123,6 +123,7 @@ class ExportToS3Settings(s_impl.BaseRequestSettings):
         self.secret_key = None
         self.number_of_retries = 0
         self.storage_class = None
+        self.compression = None
 
     def with_scheme(self, scheme):
         self.scheme = scheme
@@ -130,6 +131,10 @@ class ExportToS3Settings(s_impl.BaseRequestSettings):
 
     def with_storage_class(self, storage_class):
         self.storage_class = storage_class
+        return self
+
+    def with_compression(self, compression):
+        self.compression = compression
         return self
 
     def with_bucket(self, bucket):
@@ -211,6 +216,9 @@ def _export_to_s3_request_factory(settings):
 
     if settings.number_of_retries > 0:
         request.settings.number_of_retries = settings.number_of_retries
+
+    if settings.compression is not None:
+        request.settings.compression = settings.compression
 
     for source_path, destination_prefix in settings.items:
         request.settings.items.add(

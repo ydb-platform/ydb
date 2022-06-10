@@ -200,7 +200,7 @@ public:
     //-- proxy interface
     virtual EResult SetProgram(TStringBuf program, TStringBuf params = TStringBuf()) noexcept = 0;
     virtual TVector<THolder<TKeyDesc>>& GetDbKeys() noexcept = 0;
-    virtual EResult PrepareShardPrograms(const TShardLimits& shardLimits = TShardLimits()) noexcept = 0;
+    virtual EResult PrepareShardPrograms(const TShardLimits& shardLimits = TShardLimits(), ui32* outRSCount = nullptr) noexcept = 0;
     virtual ui32 GetAffectedShardCount() const noexcept = 0;
     virtual EResult GetAffectedShard(ui32 index, TShardData& data) const noexcept = 0;
     virtual void AfterShardProgramsExtracted() noexcept = 0;

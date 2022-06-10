@@ -316,7 +316,11 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         auto& queryLimits = *appConfig.MutableTableServiceConfig()->MutableQueryLimits();
         queryLimits.MutablePhaseLimits()->SetTotalReadSizeLimitBytes(100'000'000);
 
-        TKikimrRunner kikimr(appConfig);
+        auto serverSettings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetEnableMvccSnapshotReads(false);
+
+        TKikimrRunner kikimr(serverSettings);
         CreateLargeTable(kikimr, 20, 10, 1'000'000, 1);
 
         auto db = kikimr.GetTableClient();

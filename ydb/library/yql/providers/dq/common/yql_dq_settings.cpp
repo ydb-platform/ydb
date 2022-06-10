@@ -23,6 +23,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, OptLLVM);
     REGISTER_SETTING(*this, ChannelBufferSize);
     REGISTER_SETTING(*this, OutputChunkMaxSize);
+    REGISTER_SETTING(*this, ChunkSizeLimit);
     REGISTER_SETTING(*this, MemoryLimit);
     REGISTER_SETTING(*this, EnableInsert);
 

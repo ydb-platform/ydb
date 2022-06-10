@@ -759,8 +759,9 @@ public:
 
         QueryStat.Measure<void>("Prepare", [&]() {
             NDq::TDqTaskRunnerMemoryLimits limits;
-            limits.ChannelBufferSize = DqConfiguration->ChannelBufferSize.Get().GetOrElse(2000_MB);
-            limits.OutputChunkMaxSize = DqConfiguration->OutputChunkMaxSize.Get().GetOrElse(4_MB);
+            limits.ChannelBufferSize = DqConfiguration->ChannelBufferSize.Get().GetOrElse(TDqSettings::TDefault::ChannelBufferSize);
+            limits.OutputChunkMaxSize = DqConfiguration->OutputChunkMaxSize.Get().GetOrElse(TDqSettings::TDefault::OutputChunkMaxSize);
+            limits.ChunkSizeLimit = DqConfiguration->ChunkSizeLimit.Get().GetOrElse(TDqSettings::TDefault::ChunkSizeLimit);
             Runner->Prepare(task, limits);
         });
 

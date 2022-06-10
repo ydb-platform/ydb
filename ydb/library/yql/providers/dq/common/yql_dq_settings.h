@@ -25,6 +25,9 @@ struct TDqSettings {
         static constexpr ui64 LiteralTimeout = 60000; // 1 minutes
         static constexpr ui64 TableTimeout = 600000; // 10 minutes
         static constexpr ui32 CloudFunctionConcurrency = 10;
+        static constexpr ui64 ChannelBufferSize = 2000_MB;
+        static constexpr ui64 OutputChunkMaxSize = 4_MB;
+        static constexpr ui64 ChunkSizeLimit = 128_MB;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -49,6 +52,7 @@ struct TDqSettings {
     NCommon::TConfSetting<TString, false> OptLLVM;
     NCommon::TConfSetting<ui64, false> ChannelBufferSize;
     NCommon::TConfSetting<ui64, false> OutputChunkMaxSize;
+    NCommon::TConfSetting<ui64, false> ChunkSizeLimit;
     NCommon::TConfSetting<NSize::TSize, false> MemoryLimit;
     NCommon::TConfSetting<ui64, false> _LiteralTimeout;
     NCommon::TConfSetting<ui64, false> _TableTimeout;

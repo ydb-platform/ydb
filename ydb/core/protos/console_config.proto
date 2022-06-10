@@ -108,12 +108,12 @@ message TConfigItem {
         ResourceBrokerConfigItem = 44;
         MeteringConfigItem = 45;
         HiveConfigItem = 46;
-        SchemeShardConfigItem = 48;
         DataShardConfigItem = 49;
         YandexQueryConfigItem = 50;
         PDiskKeyConfigItem = 51;
         CompactionConfigItem = 52;
         HttpProxyConfigItem = 53;
+        SchemeShardConfigItem = 54;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

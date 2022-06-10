@@ -2727,7 +2727,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
     auto& userInfo = UsersInfoStorage.GetOrCreate(user, ctx);
 
     ui64 offset = read->Offset;
-    if (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo.ReadFromTimestamp > TInstant::MilliSeconds(1)) {
+    if (read->PartNo == 0 && (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo.ReadFromTimestamp > TInstant::MilliSeconds(1))) {
         TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
         timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
         timestamp = Max(timestamp, userInfo.ReadFromTimestamp);
@@ -2910,7 +2910,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
             "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
                 << " user " << user << " readTimeStamp for offset " << userInfo.Offset << " initiated "
                 << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset
-                << " ReadingTimestamp " << ReadingTimestamp
+                << " ReadingTimestamp " << ReadingTimestamp << " rrg " << userInfo.ReadRuleGeneration
     );
 
     if (ReadingTimestamp) {
@@ -2956,7 +2956,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
             "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
             << " user " << user << " send read request for offset " << userInfo.Offset << " initiated "
             << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset
-            << " ReadingTimestamp " << ReadingTimestamp
+            << " ReadingTimestamp " << ReadingTimestamp << " rrg " << ReadingForUserReadRuleGeneration
     );
 
 
@@ -2987,7 +2987,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
             ctx, NKikimrServices::PERSQUEUE,
             "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
                 << " user " << ReadingForUser << " readTimeStamp for other generation or no client info at all"
-    );
+        );
 
         ProcessTimestampRead(ctx);
         return;

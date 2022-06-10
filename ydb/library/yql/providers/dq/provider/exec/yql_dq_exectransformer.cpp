@@ -285,7 +285,7 @@ private:
         }
     }
 
-    TExprNode::TPtr GetLambdaBody(int& level, TExprNode::TPtr&& node, TExprContext& ctx) const {
+    TExprNode::TPtr WrapLambdaBody(int& level, TExprNode::TPtr node, TExprContext& ctx) const {
         const auto kind = node->GetTypeAnn()->GetKind();
         const bool data = kind != ETypeAnnotationKind::Flow && kind != ETypeAnnotationKind::List && kind != ETypeAnnotationKind::Stream && kind != ETypeAnnotationKind::Optional;
         level = data ? 1 : 0;
@@ -517,30 +517,20 @@ private:
     TStatusCallbackPair GetLambda(
         TString* lambda,
         bool* untrustedUdfFlag,
-        int* level,
         TUploadList* uploadList,
-        const TResult& result, TExprContext& ctx,
+        const TExprNode::TPtr& resInput, TExprContext& ctx,
         bool hasGraphParams,
         bool enableLocalRun) const
     {
-        auto input = Build<TDqPhyStage>(ctx, result.Pos())
+        auto input = Build<TDqPhyStage>(ctx, resInput->Pos())
             .Inputs()
                 .Build()
             .Program<TCoLambda>()
                 .Args({})
-                .Body(GetLambdaBody(*level, result.Input().Ptr(), ctx))
+                .Body(resInput)
             .Build()
             .Settings().Build()
         .Done().Ptr();
-
-        {
-            auto block = MeasureBlock("PeepHole");
-
-            bool hasNonDeterministicFunctions = false;
-            if (const auto status = PeepHoleOptimizeNode<true>(input, input, ctx, *State->TypeCtx, nullptr, hasNonDeterministicFunctions); status.Level != TStatus::Ok) {
-                return SyncStatus(status);
-            }
-        }
 
         // copy-paste {
         TUserDataTable crutches = State->TypeCtx->UserDataStorageCrutches;
@@ -675,6 +665,22 @@ private:
 
         try {
             auto result = TMaybeNode<TResult>(input).Cast();
+
+            auto precomputes = FindIndependentPrecomputes(result.Input().Ptr());
+            if (!precomputes.empty()) {
+                auto status = HandlePrecomputes(precomputes, ctx);
+                if (status.Level != TStatus::Ok) {
+                    if (status == TStatus::Async) {
+                        return std::make_pair(status, ExecState->Promise.GetFuture().Apply([execState = ExecState](const TFuture<void>& completedFuture) {
+                            completedFuture.GetValue();
+                            return HandlePrecomputeAsyncComplete(execState);
+                        }));
+                    } else {
+                        return SyncStatus(status);
+                    }
+                }
+            }
+
             IDataProvider::TFillSettings fillSettings = NCommon::GetFillSettings(result.Ref());
             auto settings = State->Settings->WithFillSettings(fillSettings);
             if (!settings->_RowsLimitPerWrite.Get() && !settings->_AllResultsBytesLimit.Get()) {
@@ -690,12 +696,6 @@ private:
             TString type;
             TVector<TString> columns;
             GetResultType(&type, &columns, result.Ref(), result.Input().Ref());
-            TString lambda;
-            bool untrustedUdfFlag;
-            int level;
-            TUploadList uploadList;
-
-            bool enableLocalRun = true;
 
             TPublicIds::TPtr publicIds = std::make_shared<TPublicIds>();
             VisitExpr(result.Ptr(), [&](const TExprNode::TPtr& node) {
@@ -720,9 +720,24 @@ private:
                     && integration->PrepareFullResultTableParams(result.Ref(), ctx, graphParams, secureParams);
                 settings->EnableFullResultWrite = enableFullResultWrite;
             }
+
+            int level;
+            TExprNode::TPtr resInput = WrapLambdaBody(level, result.Input().Ptr(), ctx);
+            {
+                auto block = MeasureBlock("PeepHole");
+                if (const auto status = PeepHole(resInput, resInput, ctx); status.Level != TStatus::Ok) {
+                    return SyncStatus(status);
+                }
+            }
+
+            TString lambda;
+            bool untrustedUdfFlag;
+            TUploadList uploadList;
+
+            bool enableLocalRun = true;
+
             NThreading::TFuture<IDqGateway::TResult> future;
             bool localRun = false;
-
             // try to prepare lambda with localRun 'on' and 'off'
             for (int i = 0; i < 2 && !future.Initialized(); i++) {
                 uploadList.clear();
@@ -730,9 +745,8 @@ private:
                 auto lambdaResult = GetLambda(
                     &lambda,
                     &untrustedUdfFlag,
-                    &level,
                     &uploadList,
-                    result,
+                    resInput,
                     ctx,
                     hasGraphParams,
                     enableLocalRun);
@@ -1361,15 +1375,13 @@ private:
         if (TDqStageBase::Match(node.Get())) {
             auto stage = TDqStageBase(node);
             for (const auto& input : stage.Inputs()) {
-                if (auto maybePrecompute = input.Maybe<TDqPhyPrecompute>()) {
-                    if (!input.Ref().HasResult() && input.Ref().GetState() != TExprNode::EState::Error) {
-                        hasPrecompute = true;
-                        if (input.Ref().StartsExecution() || !FindIndependentPrecomputesImpl(input.Ptr(), precomputes, visitedNodes)) {
-                            precomputes[input.Raw()] = input.Ptr();
-                        }
-                    }
-                } else {
-                    hasPrecompute = FindIndependentPrecomputesImpl(input.Ptr(), precomputes, visitedNodes) || hasPrecompute;
+                hasPrecompute = FindIndependentPrecomputesImpl(input.Ptr(), precomputes, visitedNodes) || hasPrecompute;
+            }
+        } else if (TDqPhyPrecompute::Match(node.Get())) {
+            if (!node->HasResult() && node->GetState() != TExprNode::EState::Error) {
+                hasPrecompute = true;
+                if (node->StartsExecution() || !FindIndependentPrecomputesImpl(node->HeadPtr(), precomputes, visitedNodes)) {
+                    precomputes[node.Get()] = node;
                 }
             }
         } else {

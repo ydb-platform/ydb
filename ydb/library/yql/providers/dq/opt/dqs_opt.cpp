@@ -34,8 +34,7 @@
     do {                                                                   \
         if (auto result = func(__VA_ARGS__); result.Raw() != node.Raw()) { \
             YQL_CLOG(DEBUG, ProviderDq) << #func;                          \
-            node = result;                                                 \
-            return node.Ptr();                                             \
+            return result.Ptr();                                             \
         }                                                                  \
     } while (0)
 
@@ -65,18 +64,12 @@ namespace NYql::NDqs {
     }
 
     THolder<IGraphTransformer> CreateDqsReplacePrecomputesTransformer(TTypeAnnotationContext* typesCtx, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) {
-        return CreateFunctorTransformer([typesCtx, funcRegistry](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-            TProcessedNodesSet ignoreNodes;
-            VisitExpr(input, [&](const TExprNode::TPtr& node) {
-                if (node != input && (TDqReadWrapBase::Match(node.Get()) || TDqPhyPrecompute::Match(node.Get()))) {
-                    ignoreNodes.insert(node->UniqueId());
-                    return false;
-                }
-                return true;
-            });
-
+        return CreateFunctorTransformer([typesCtx, funcRegistry](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
             TOptimizeExprSettings settings(typesCtx);
-            settings.ProcessedNodes = &ignoreNodes;
+            settings.VisitChecker = [&](const TExprNode& node) {
+                return input.Get() == &node || (!TDqReadWrapBase::Match(&node) && !TDqPhyPrecompute::Match(&node));
+            };
+            settings.VisitStarted = true;
 
             NKikimr::NMiniKQL::TScopedAlloc alloc;
             NKikimr::NMiniKQL::TTypeEnvironment env(alloc);
@@ -84,7 +77,7 @@ namespace NYql::NDqs {
             NKikimr::NMiniKQL::TMemoryUsageInfo memInfo("Precompute");
             NKikimr::NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
 
-            return OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+            auto status = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
                 if (TDqStageBase::Match(node.Get())) {
                     auto stage = TDqStageBase(node);
                     TNodeOnNodeOwnedMap replaces;
@@ -130,6 +123,48 @@ namespace NYql::NDqs {
                 }
                 return node;
             }, ctx, settings);
+
+            if (status.Level != TStatus::Ok) {
+                return status;
+            }
+
+            auto precomputes = FindNodes(output,
+                [](const TExprNode::TPtr& node) {
+                    return !TDqReadWrapBase::Match(node.Get());
+                },
+                [] (const TExprNode::TPtr& node) {
+                    return TDqPhyPrecompute::Match(node.Get()) && node->HasResult();
+                }
+            );
+
+            if (!precomputes.empty()) {
+                TNodeOnNodeOwnedMap replaces;
+                for (auto node: precomputes) {
+                    auto yson = node->GetResult().Content();
+                    auto dataNode = NYT::NodeFromYsonString(yson);
+                    YQL_ENSURE(dataNode.IsList() && !dataNode.AsList().empty());
+                    dataNode = dataNode[0];
+                    TStringStream err;
+                    NKikimr::NMiniKQL::TType* mkqlType = NCommon::BuildType(*node->GetTypeAnn(), pgmBuilder, err);
+                    if (!mkqlType) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to process " << TDqPhyPrecompute::CallableName() << " type: " << err.Str()));
+                        return TStatus::Error;
+                    }
+
+                    auto value = NCommon::ParseYsonNodeInResultFormat(holderFactory, dataNode, mkqlType, &err);
+                    if (!value) {
+                        ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder() << "Failed to parse " << TDqPhyPrecompute::CallableName() << " value: " << err.Str()));
+                        return TStatus::Error;
+                    }
+                    replaces[node.Get()] = NCommon::ValueToExprLiteral(node->GetTypeAnn(), *value, ctx, node->Pos());
+                }
+                TOptimizeExprSettings settings(typesCtx);
+                settings.VisitStarted = true;
+                YQL_CLOG(DEBUG, ProviderDq) << "DqsReplacePrecomputes";
+                return RemapExpr(output, output, replaces, ctx, settings);
+            }
+
+            return TStatus::Ok;
         });
     }
 

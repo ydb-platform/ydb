@@ -229,9 +229,9 @@ private:
     void AfterCreate(TTransformationPipeline*) const final {}
 
     void AfterTypeAnnotation(TTransformationPipeline* pipeline) const final {
+        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(pipeline->GetTypeAnnotationContext().Get(), State_->FunctionRegistry), "ReplacePrecomputes");
         pipeline->Add(NDq::CreateDqBuildPhyStagesTransformer(false), "BuildPhy");
         pipeline->Add(NDqs::CreateDqsRewritePhyCallablesTransformer(), "RewritePhyCallables");
-        pipeline->Add(NDqs::CreateDqsReplacePrecomputesTransformer(pipeline->GetTypeAnnotationContext().Get(), State_->FunctionRegistry), "ReplacePrecomputes");
     }
 
     void AfterOptimize(TTransformationPipeline*) const final {}

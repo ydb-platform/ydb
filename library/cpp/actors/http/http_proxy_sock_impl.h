@@ -40,7 +40,9 @@ struct TPlainSocketImpl : virtual public THttpConfig {
 
     void Shutdown() {
         //Socket->Socket.ShutDown(SHUT_RDWR); // KIKIMR-3895
-        ::shutdown(Socket->Socket, SHUT_RDWR);
+        if (Socket) {
+            ::shutdown(Socket->Socket, SHUT_RDWR);
+        }
     }
 
     int Connect(SocketAddressType address) {

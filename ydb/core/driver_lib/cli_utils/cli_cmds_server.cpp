@@ -318,10 +318,9 @@ protected:
 #define OPTION_MERGE(NAME, FIELD) MutableConfigPartMerge(config, NAME, &NKikimrConfig::TAppConfig::Mutable##FIELD)
 
         OPTION("auth-file", AuthConfig);
-        OPTION_MERGE("auth-token-file", AuthConfig);
-
         LoadBaseConfig(config);
         LoadYamlConfig();
+        OPTION_MERGE("auth-token-file", AuthConfig);
 
         // start memorylog as soon as possible
         if (auto mem = OPTION("memorylog-file", MemoryLogConfig)) {

@@ -2454,6 +2454,47 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
         }
     }
 
+    Y_UNIT_TEST_QUAD(SecondaryIndexSelectUsingScripting, WithMvcc, UseNewEngine) {
+        auto setting = NKikimrKqp::TKqpSetting();
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc)
+            .SetKqpSettings({setting});
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        TScriptingClient client(kikimr.GetDriver());
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            const TString createTableSql(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/SharedHouseholds` (
+                    guest_huid Uint64, guest_id Uint64, owner_huid Uint64, owner_id Uint64, household_id String,
+                    PRIMARY KEY (guest_huid, owner_huid, household_id),
+                    INDEX shared_households_owner_huid GLOBAL SYNC ON (`owner_huid`)
+                );)");
+            auto result = session.ExecuteSchemeQuery(createTableSql).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            const TString query(Q1_(R"(
+                SELECT
+                    guest_id
+                FROM
+                    SharedHouseholds VIEW shared_households_owner_huid
+                WHERE
+                    owner_huid == 1 AND
+                    household_id == "1";
+            )"));
+
+            auto result = client.ExecuteYqlScript(query).GetValueSync();
+
+            UNIT_ASSERT_C(result.GetIssues().Empty(), result.GetIssues().ToString());
+            UNIT_ASSERT(result.IsSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(result.GetResultSet(0)), "[]");
+        }
+    }
+
     Y_UNIT_TEST_QUAD(SecondaryIndexSelect, WithMvcc, UseNewEngine) {
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()

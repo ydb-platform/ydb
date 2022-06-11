@@ -36,6 +36,8 @@ static TTypeParser::ETypeKind GetKind(const Ydb::Type& type) {
             return ETypeKind::Primitive;
         case Ydb::Type::kDecimalType:
             return ETypeKind::Decimal;
+        case Ydb::Type::kPgType:
+            return ETypeKind::Pg;
         case Ydb::Type::kOptionalType:
             return ETypeKind::Optional;
         case Ydb::Type::kListType:
@@ -132,6 +134,12 @@ public:
         return TDecimalType(
             GetProto().decimal_type().precision(),
             GetProto().decimal_type().scale());
+    }
+
+    TPgType GetPg() const {
+        CheckKind(ETypeKind::Pg, "GetPg");
+        const auto& pg = GetProto().pg_type();
+        return TPgType(pg.oid(), pg.typlen(), pg.typmod());
     }
 
     template<ETypeKind kind>
@@ -359,6 +367,10 @@ TDecimalType TTypeParser::GetDecimal() const {
     return Impl_->GetDecimal();
 }
 
+TPgType TTypeParser::GetPg() const {
+    return Impl_->GetPg();
+}
+
 void TTypeParser::OpenOptional() {
     Impl_->Open<ETypeKind::Optional>();
 }
@@ -454,7 +466,12 @@ void FormatTypeInternal(TTypeParser& parser, IOutputStream& out) {
         case TTypeParser::ETypeKind::Decimal: {
             auto decimal = parser.GetDecimal();
             out << "Decimal(" << (ui32)decimal.Precision << ',' << (ui32)decimal.Scale << ")";
-            //out << "Decimal";
+            break;
+        }
+
+        case TTypeParser::ETypeKind::Pg: {
+            auto pg = parser.GetPg();
+            out << "Pg("sv << pg.Oid << ',' << pg.Typlen << ',' << pg.Typmod << ')';
             break;
         }
 
@@ -573,6 +590,13 @@ public:
         auto& decimal = *GetProto().mutable_decimal_type();
         decimal.set_precision(decimalType.Precision);
         decimal.set_scale(decimalType.Scale);
+    }
+
+    void Pg(const TPgType& pgType) {
+        auto& pg = *GetProto().mutable_pg_type();
+        pg.set_oid(pgType.Oid);
+        pg.set_typlen(pgType.Typlen);
+        pg.set_typmod(pgType.Typmod);
     }
 
     void BeginOptional() {
@@ -761,6 +785,11 @@ TTypeBuilder& TTypeBuilder::Decimal(const TDecimalType& decimalType) {
     return *this;
 }
 
+TTypeBuilder& TTypeBuilder::Pg(const TPgType& pgType) {
+    Impl_->Pg(pgType);
+    return *this;
+}
+
 TTypeBuilder& TTypeBuilder::BeginOptional() {
     Impl_->BeginOptional();
     return *this;
@@ -882,6 +911,32 @@ TDecimalValue::TDecimalValue(const TString& decimalString, ui8 precision, ui8 sc
 TString TDecimalValue::ToString() const {
     NYql::NDecimal::TInt128 val = NYql::NDecimal::FromHalfs(Low_, Hi_);
     return NYql::NDecimal::ToString(val, DecimalType_.Precision, DecimalType_.Scale);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TPgValue::TPgValue(const Ydb::Value& pgValueProto, const TPgType& pgType)
+    : PgType_(pgType)
+{
+    IsText_ = pgValueProto.has_text_value();
+    if (IsText_) {
+        Content_ = pgValueProto.text_value();
+    }
+
+    if (pgValueProto.has_bytes_value()) {
+        Content_ = pgValueProto.bytes_value();
+    }
+}
+
+TPgValue::TPgValue(bool isText, const TString& content, const TPgType& pgType)
+    : PgType_(pgType)
+    , IsText_(isText)
+    , Content_(content)
+{
+}
+
+bool TPgValue::IsText() const {
+    return IsText_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1084,6 +1139,11 @@ public:
     TDecimalValue GetDecimal() const {
         CheckDecimal();
         return TDecimalValue(GetProto(), TypeParser_.GetDecimal());
+    }
+
+    TPgValue GetPg() const {
+        CheckPg();
+        return TPgValue(GetProto(), TypeParser_.GetPg());
     }
 
     void OpenOptional() {
@@ -1361,6 +1421,10 @@ private:
         CheckTransportKind(Ydb::Value::kLow128);
     }
 
+    void CheckPg() const {
+        CheckKind(ETypeKind::Pg, "Get");
+    }
+
     const Ydb::Value& GetProto() const {
         return *static_cast<const Ydb::Value*>(GetPathBack().Ptr);
     }
@@ -1557,6 +1621,10 @@ const TString& TValueParser::GetDyNumber() const {
 
 TDecimalValue TValueParser::GetDecimal() const {
     return Impl_->GetDecimal();
+}
+
+TPgValue TValueParser::GetPg() const {
+    return Impl_->GetPg();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1947,6 +2015,15 @@ public:
         GetValue().set_high_128(value.Hi_);
     }
 
+    void Pg(const TPgValue& value) {
+        FillPgType(value.PgType_);
+        if (value.IsText()) {
+            GetValue().set_text_value(value.Content_);
+        } else {
+            GetValue().set_bytes_value(value.Content_);
+        }
+    }
+
     void BeginOptional() {
         SetBuildType(!CheckType(ETypeKind::Optional));
 
@@ -2319,6 +2396,12 @@ private:
         }
     }
 
+    void FillPgType(const TPgType& type) {
+        if (!CheckPgType()) {
+            TypeBuilder_.Pg(type);
+        }
+    }
+
     bool CheckType() {
         if (!GetType().type_case()) {
             return false;
@@ -2372,11 +2455,11 @@ private:
     }
 
     bool CheckDecimalType() {
-        if (!CheckType(ETypeKind::Decimal)) {
-            return false;
-        }
+        return CheckType(ETypeKind::Decimal);
+    }
 
-        return true;
+    bool CheckPgType() {
+        return CheckType(ETypeKind::Pg);
     }
 
     void CheckContainerKind(ETypeKind kind) {
@@ -2629,6 +2712,12 @@ TDerived& TValueBuilderBase<TDerived>::DyNumber(const TString& value) {
 template<typename TDerived>
 TDerived& TValueBuilderBase<TDerived>::Decimal(const TDecimalValue& value) {
     Impl_->Decimal(value);
+    return static_cast<TDerived&>(*this);
+}
+
+template<typename TDerived>
+TDerived& TValueBuilderBase<TDerived>::Pg(const TPgValue& value) {
+    Impl_->Pg(value);
     return static_cast<TDerived&>(*this);
 }
 

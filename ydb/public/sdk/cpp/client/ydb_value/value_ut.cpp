@@ -109,6 +109,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                     .AddElement()
                         .Decimal(TDecimalType(8, 13))
                     .AddElement()
+                        .Pg(TPgType(1, 2, -3))
+                    .AddElement()
                         .BeginOptional()
                             .Primitive(EPrimitiveType::Utf8)
                         .EndOptional()
@@ -118,7 +120,7 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             .Build();
 
         UNIT_ASSERT_NO_DIFF(FormatType(type),
-            R"(Struct<'Member1':List<Uint32?>,'Member2':Dict<Int64,Tuple<Decimal(8,13),Utf8?>>>)");
+            R"(Struct<'Member1':List<Uint32?>,'Member2':Dict<Int64,Tuple<Decimal(8,13),Pg(1,2,-3),Utf8?>>>)");
     }
 
     Y_UNIT_TEST(BuildTypeReuse) {
@@ -317,6 +319,63 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             R"([[10u;[1000u]];[20u;[2000u]]])");
         UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
             R"([[10,{"Member1":"1972-09-27"}],[20,{"Member1":"1975-06-24"}]])");
+    }
+
+    Y_UNIT_TEST(ParseValuePg) {
+        auto protoTypeStr = R"(
+            struct_type {
+                members {
+                    name: "A"
+                    type {
+                        pg_type {
+                            oid: 123
+                            typlen: 345
+                            typmod: -321
+                        }
+                    }
+                }
+                members {
+                    name: "B"
+                    type {
+                        pg_type {
+                            oid: 123
+                            typlen: -345
+                            typmod: 321
+                        }
+                    }
+                }
+            }
+            )";
+
+        auto protoValueStr = R"(
+            items {
+                text_value: "my_text_value"
+            }
+            items {
+                bytes_value: "my_binary_value"
+            }
+            items {
+                text_value: ""
+            }
+            items {
+                bytes_value: ""
+            }
+        )";
+
+        Ydb::Type protoType;
+        NProtoBuf::TextFormat::ParseFromString(protoTypeStr, &protoType);
+
+        Ydb::Value protoValue;
+        NProtoBuf::TextFormat::ParseFromString(protoValueStr, &protoValue);
+
+        TValue value(TType(protoType), protoValue);
+
+        UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
+            R"(["my_text_value";["my_binary_value"]])");
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
+            R"({"A":"my_text_value","B":["my_binary_value"]})");
+        UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Base64),
+            R"({"A":"my_text_value","B":["bXlfYmluYXJ5X3ZhbHVl"]})");
     }
 
     Y_UNIT_TEST(ParseValueMaybe) {

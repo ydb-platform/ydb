@@ -98,6 +98,17 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             writer.OnStringScalar(parser.GetDecimal().ToString());
             break;
 
+        case TTypeParser::ETypeKind::Pg:
+            if (parser.GetPg().IsText()) {
+                writer.OnStringScalar(parser.GetPg().Content_);
+            } else {
+                writer.OnBeginList();
+                writer.OnListItem();
+                writer.OnStringScalar(parser.GetPg().Content_);
+                writer.OnEndList();
+            }
+            break;
+
         case TTypeParser::ETypeKind::Optional:
             parser.OpenOptional();
             if (parser.IsNull()) {

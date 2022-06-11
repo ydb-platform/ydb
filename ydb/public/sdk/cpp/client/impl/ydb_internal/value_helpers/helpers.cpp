@@ -14,6 +14,10 @@ bool TypesEqual(const Ydb::Type& t1, const Ydb::Type& t2) {
         case Ydb::Type::kDecimalType:
             return t1.decimal_type().precision() == t2.decimal_type().precision()
                 && t1.decimal_type().scale() == t2.decimal_type().scale();
+        case Ydb::Type::kPgType:
+            return t1.pg_type().oid() == t2.pg_type().oid()
+                && t1.pg_type().typlen() == t2.pg_type().typlen()
+                && t1.pg_type().typmod() == t2.pg_type().typmod();
         case Ydb::Type::kOptionalType:
             return TypesEqual(t1.optional_type().item(), t2.optional_type().item());
         case Ydb::Type::kListType:

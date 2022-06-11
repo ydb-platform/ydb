@@ -69,6 +69,18 @@ struct TDecimalType {
         , Scale(scale) {}
 };
 
+struct TPgType {
+    ui32 Oid;
+    i32 Typlen;
+    i32 Typmod;
+
+    TPgType(ui32 oid, i32 typlen, i32 typmod)
+        : Oid(oid)
+        , Typlen(typlen)
+        , Typmod(typmod)
+    {}
+};
+
 //! Types can be complex, so TTypeParser allows to traverse through this hierarchies.
 class TTypeParser : public TMoveOnly {
     friend class TValueParser;
@@ -86,7 +98,8 @@ public:
         Null,
         EmptyList,
         EmptyDict,
-        Tagged
+        Tagged,
+        Pg
     };
 
 public:
@@ -99,6 +112,7 @@ public:
 
     EPrimitiveType GetPrimitive() const;
     TDecimalType GetDecimal() const;
+    TPgType GetPg() const;
 
     // Optional
     void OpenOptional();
@@ -157,6 +171,7 @@ public:
 
     TTypeBuilder& Primitive(const EPrimitiveType& primitiveType);
     TTypeBuilder& Decimal(const TDecimalType& decimalType);
+    TTypeBuilder& Pg(const TPgType& pgType);
 
     // Optional
     TTypeBuilder& BeginOptional();
@@ -203,6 +218,16 @@ struct TDecimalValue {
     TDecimalType DecimalType_;
     ui64 Low_;
     i64 Hi_;
+};
+
+struct TPgValue {
+    TPgValue(const Ydb::Value& pgValueProto, const TPgType& pgType);
+    TPgValue(bool isText, const TString& content, const TPgType& pgType);
+    bool IsText() const;
+
+    TPgType PgType_;
+    bool IsText_;
+    TString Content_;
 };
 
 //! Representation of YDB value.
@@ -257,6 +282,7 @@ public:
     const TString& GetYson() const;
     const TString& GetJson() const;
     TDecimalValue GetDecimal() const;
+    TPgValue GetPg() const;
     const TString& GetJsonDocument() const;
     const TString& GetDyNumber() const;
 
@@ -360,6 +386,7 @@ public:
     TDerived& Yson(const TString& value);
     TDerived& Json(const TString& value);
     TDerived& Decimal(const TDecimalValue& value);
+    TDerived& Pg(const TPgValue& value);
     TDerived& JsonDocument(const TString& value);
     TDerived& DyNumber(const TString& value);
 

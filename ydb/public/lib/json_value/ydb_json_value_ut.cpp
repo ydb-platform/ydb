@@ -557,6 +557,46 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
             TProtoAccessor::GetProto(resultValue).DebugString()
         );
     }
+
+    Y_UNIT_TEST(PgValue) {
+        TPgType pgType(1, 2, 3);
+        TPgValue v1(true, "text_value", pgType);
+        TPgValue v2(false, "binary_value", pgType);
+        TPgValue v3(true, "", pgType);
+        TPgValue v4(false, "", pgType);
+        TValue value = TValueBuilder()
+            .BeginList()
+            .AddListItem()
+                .Pg(v1)
+            .AddListItem()
+                .Pg(v2)
+            .AddListItem()
+                .Pg(v3)
+            .AddListItem()
+                .Pg(v4)
+            .EndList()
+            .Build();
+
+        // unicode
+        const TString jsonString1 = FormatValueJson(value, EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(jsonString1, R"(["text_value",["binary_value"],"",[""]])");
+
+        TValue resultValue1 = JsonToYdbValue(jsonString1, value.GetType(), EBinaryStringEncoding::Unicode);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue1).DebugString()
+        );
+
+        // base64
+        const TString jsonString2 = FormatValueJson(value, EBinaryStringEncoding::Base64);
+        UNIT_ASSERT_NO_DIFF(jsonString2, R"(["text_value",["YmluYXJ5X3ZhbHVl"],"",[""]])");
+
+        TValue resultValue2 = JsonToYdbValue(jsonString2, value.GetType(), EBinaryStringEncoding::Base64);
+        UNIT_ASSERT_NO_DIFF(
+            TProtoAccessor::GetProto(value).DebugString(),
+            TProtoAccessor::GetProto(resultValue2).DebugString()
+        );
+    }
 }
 
 } // namespace NYdb

@@ -86,7 +86,7 @@ void TCommandImportFromS3::Parse(TConfig& config) {
 
     Items = TItem::Parse(config, "item");
     if (Items.empty()) {
-        throw TMissUseException() << "At least one item should be provided";
+        throw TMisuseException() << "At least one item should be provided";
     }
 
     for (auto& item : Items) {
@@ -185,7 +185,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > TImportFileSettings::MaxBytesPerRequest) {
-            throw TMissUseException()
+            throw TMisuseException()
                 << "--batch-bytes cannot be larger than "
                 << HumanReadableSize(TImportFileSettings::MaxBytesPerRequest, SF_BYTES);
         }
@@ -199,7 +199,7 @@ int TCommandImportFromCsv::Run(TConfig& config) {
     settings.MaxInFlightRequests(MaxInFlightRequests);
 
     if (Delimiter.size() != 1) {
-        throw TMissUseException()
+        throw TMisuseException()
             << "--delimiter should be a one symbol string. Got: '" << Delimiter << "'";
     } else {
         settings.Delimiter(Delimiter);

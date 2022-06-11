@@ -77,7 +77,7 @@ void TClientCommandRootBase::ParseProtocol(TConfig& config) {
         } else if (protocol == "grpc") {
             config.EnableSsl = false;
         } else {
-            throw TMissUseException() << "Unknown protocol \"" << protocol << "\".";
+            throw TMisuseException() << "Unknown protocol \"" << protocol << "\".";
         }
         Address = Address.substr(separator_pos + 3);
     }
@@ -88,7 +88,7 @@ void TClientCommandRootBase::ParseCaCerts(TConfig& config) {
         return;
     }
     if (!config.EnableSsl) {
-        throw TMissUseException()
+        throw TMisuseException()
             << "\"ca-file\" option provided for a non-ssl connection. Use grpcs:// prefix for host to connect using SSL.";
     }
     config.CaCerts = ReadFromFile(CaCertsFile, "CA certificates");

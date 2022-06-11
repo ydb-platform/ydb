@@ -100,7 +100,7 @@ void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, const TVect
 void TCommandWithFormat::ParseFormats() {
     if (InputFormat != EOutputFormat::Default
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
-        throw TMissUseException() << "Input format " << InputFormat << " is not available for this command";
+        throw TMisuseException() << "Input format " << InputFormat << " is not available for this command";
     }
 
 
@@ -108,7 +108,7 @@ void TCommandWithFormat::ParseFormats() {
         return;
     }
     if (std::find(AllowedFormats.begin(), AllowedFormats.end(), OutputFormat) == AllowedFormats.end()) {
-        throw TMissUseException() << "Output format " << OutputFormat << " is not available for this command";
+        throw TMisuseException() << "Output format " << OutputFormat << " is not available for this command";
     }
 }
 
@@ -142,7 +142,7 @@ void TQueryPlanPrinter::Print(const TString& plan) {
             PrintJson(plan);
             break;
         default:
-            throw TMissUseException() << "This command doesn't support " << Format << " output format";
+            throw TMisuseException() << "This command doesn't support " << Format << " output format";
     }
 }
 
@@ -302,7 +302,7 @@ void TResultSetPrinter::Print(const TResultSet& resultSet) {
         PrintCsv(resultSet);
         break;
     default:
-        throw TMissUseException() << "This command doesn't support " << Format << " output format";
+        throw TMisuseException() << "This command doesn't support " << Format << " output format";
     }
 }
 

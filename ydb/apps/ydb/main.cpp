@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     try {
         return NYdb::NConsoleClient::NewClient(argc, argv);
     }
-    catch (const NYdb::NConsoleClient::TMissUseException& e) {
+    catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;
         Cerr << "Try \"--help\" option for more info." << Endl;
         return EXIT_FAILURE;

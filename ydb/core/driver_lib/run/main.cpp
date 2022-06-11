@@ -175,7 +175,7 @@ int ParameterizedMain(int argc, char **argv, std::shared_ptr<NKikimr::TModuleFac
     try {
         return NKikimr::Main(argc, argv, std::move(factories));
     }
-    catch (const NYdb::NConsoleClient::TMissUseException& e) {
+    catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;
         Cerr << "Try \"--help\" option for more info." << Endl;
         return 1;

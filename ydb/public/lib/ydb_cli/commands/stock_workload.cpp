@@ -50,7 +50,7 @@ void TCommandStockInit::Parse(TConfig& config) {
 
 int TCommandStockInit::Run(TConfig& config) {
     if (ProductCount > 500'000) {
-        throw TMissUseException() << "Product count must be in range 1..500 000." << Endl;
+        throw TMisuseException() << "Product count must be in range 1..500 000." << Endl;
     }
 
     Driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
@@ -66,7 +66,7 @@ int TCommandStockInit::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator("stock", &params);
     if (workloadGen.get() == nullptr) {
-        throw TMissUseException() << "Invalid path to database." << Endl;
+        throw TMisuseException() << "Invalid path to database." << Endl;
     }
 
     auto session = GetSession();
@@ -133,7 +133,7 @@ int TCommandStockRunInsertRandomOrder::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator("stock", &params);
     if (workloadGen.get() == nullptr) {
-        throw TMissUseException() << "Invalid path to database." << Endl;
+        throw TMisuseException() << "Invalid path to database." << Endl;
     }
 
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TStockWorkloadGenerator::EType::InsertRandomOrder));
@@ -167,7 +167,7 @@ int TCommandStockRunSubmitRandomOrder::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator("stock", &params);
     if (workloadGen.get() == nullptr) {
-        throw TMissUseException() << "Invalid path to database." << Endl;
+        throw TMisuseException() << "Invalid path to database." << Endl;
     }
 
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TStockWorkloadGenerator::EType::SubmitRandomOrder));
@@ -201,7 +201,7 @@ int TCommandStockRunSubmitSameOrder::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator("stock", &params);
     if (workloadGen.get() == nullptr) {
-        throw TMissUseException() << "Invalid path to database." << Endl;
+        throw TMisuseException() << "Invalid path to database." << Endl;
     }
 
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TStockWorkloadGenerator::EType::SubmitSameOrder));
@@ -235,7 +235,7 @@ int TCommandStockRunGetRandomCustomerHistory::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator("stock", &params);
     if (workloadGen.get() == nullptr) {
-        throw TMissUseException() << "Invalid path to database." << Endl;
+        throw TMisuseException() << "Invalid path to database." << Endl;
     }
 
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TStockWorkloadGenerator::EType::GetRandomCustomerHistory));
@@ -269,7 +269,7 @@ int TCommandStockRunGetCustomerHistory::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator("stock", &params);
     if (workloadGen.get() == nullptr) {
-        throw TMissUseException() << "Invalid path to database." << Endl;
+        throw TMisuseException() << "Invalid path to database." << Endl;
     }
 
     return RunWorkload(workloadGen, static_cast<int>(NYdbWorkload::TStockWorkloadGenerator::EType::GetCustomerHistory));

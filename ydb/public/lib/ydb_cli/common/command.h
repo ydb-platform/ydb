@@ -239,17 +239,17 @@ public:
             if (minFailed || maxFailed) {
                 if (minSet && maxSet) {
                     if (minValue == maxValue) {
-                        throw TMissUseException() << "Command " << ArgV[0]
+                        throw TMisuseException() << "Command " << ArgV[0]
                             << " requires exactly " << minValue << " free arg(s).";
                     }
-                    throw TMissUseException() << "Command " << ArgV[0]
+                    throw TMisuseException() << "Command " << ArgV[0]
                         << " requires from " << minValue << " to " << maxValue << " free arg(s).";
                 }
                 if (minFailed) {
-                    throw TMissUseException() << "Command " << ArgV[0]
+                    throw TMisuseException() << "Command " << ArgV[0]
                         << " requires at least " << minValue << " free arg(s).";
                 }
-                throw TMissUseException() << "Command " << ArgV[0]
+                throw TMisuseException() << "Command " << ArgV[0]
                     << " requires at most " << maxValue << " free arg(s).";
             }
         }

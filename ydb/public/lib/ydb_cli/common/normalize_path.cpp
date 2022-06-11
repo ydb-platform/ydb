@@ -47,7 +47,7 @@ namespace NConsoleClient {
     void AdjustPath(TString& path, const TClientCommand::TConfig& config) {
         if (path.StartsWith('/')) {
             if (!path.StartsWith(config.Database)) {
-                throw TMissUseException() << "Provided path \"" << path << "\" starts with '/'. "
+                throw TMisuseException() << "Provided path \"" << path << "\" starts with '/'. "
                     << "That means you are using an absolute path that should start with the path "
                     << "to your database \"" << config.Database << "\", but it doesn't. " << Endl
                     << "Please, provide full path starting from the domain root "

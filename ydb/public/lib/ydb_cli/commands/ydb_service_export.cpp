@@ -145,7 +145,7 @@ void TCommandExportToYt::Parse(TConfig& config) {
 
     Items = TItem::Parse(config, "item");
     if (Items.empty()) {
-        throw TMissUseException() << "At least one item should be provided";
+        throw TMisuseException() << "At least one item should be provided";
     }
 
     for (auto& item : Items) {
@@ -283,7 +283,7 @@ void TCommandExportToS3::Parse(TConfig& config) {
 
     Items = TItem::Parse(config, "item");
     if (Items.empty()) {
-        throw TMissUseException() << "At least one item should be provided";
+        throw TMisuseException() << "At least one item should be provided";
     }
 
     for (auto& item : Items) {

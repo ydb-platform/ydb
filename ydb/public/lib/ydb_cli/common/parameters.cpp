@@ -9,7 +9,7 @@ void TCommandWithParameters::ParseParameters() {
     for (const auto& parameterOption : ParameterOptions) {
         auto equalPos = parameterOption.find("=");
         if (equalPos == TString::npos) {
-            throw TMissUseException() << "Wrong parameter format for \"" << parameterOption
+            throw TMisuseException() << "Wrong parameter format for \"" << parameterOption
                 << "\". Parameter option should have equal sign. Example (for linux):\n"
                 << "--param '$input=1'";
         }
@@ -17,7 +17,7 @@ void TCommandWithParameters::ParseParameters() {
         auto paramName = parameterOption.substr(0, equalPos);
 
         if (!paramName.StartsWith('$') || equalPos <= 1) {
-            throw TMissUseException() << "Wrong parameter name \"" << paramName << "\" at option \""
+            throw TMisuseException() << "Wrong parameter name \"" << paramName << "\" at option \""
                 << parameterOption << "\". " << "Parameter name should start with '$' sign. Example (for linux):\n"
                 << "--param '$input=1'";
         }
@@ -73,14 +73,14 @@ TParams TCommandWithParameters::BuildParams(const std::map<TString, TType>& para
         encoding = EBinaryStringEncoding::Base64;
         break;
     default:
-        throw TMissUseException() << "Unknown input format: " << inputFormat;
+        throw TMisuseException() << "Unknown input format: " << inputFormat;
     }
 
     TParamsBuilder paramBuilder;
     for (const auto&[name, value] : Parameters) {
         auto paramIt = paramTypes.find(name);
         if (paramIt == paramTypes.end()) {
-            throw TMissUseException() << "Query does not contain parameter \"" << name << "\".";
+            throw TMisuseException() << "Query does not contain parameter \"" << name << "\".";
         }
         const TType& type = (*paramIt).second;
         paramBuilder.AddParam(name, JsonToYdbValue(value, type, encoding));

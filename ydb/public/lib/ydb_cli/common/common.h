@@ -9,7 +9,7 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TMissUseException : public yexception {};
+class TMisuseException : public yexception {};
 
 class TProfileConfig {
 public:

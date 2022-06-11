@@ -197,7 +197,7 @@ int TCommandRestore::Run(TConfig& config) {
 
     if (auto bytesPerRequest = NYdb::SizeFromString(BytesPerRequest)) {
         if (bytesPerRequest > NDump::TRestoreSettings::MaxBytesPerRequest) {
-            throw TMissUseException()
+            throw TMisuseException()
                 << "--upload-batch-bytes cannot be larger than "
                 << HumanReadableSize(NDump::TRestoreSettings::MaxBytesPerRequest, SF_BYTES);
         }
@@ -258,7 +258,7 @@ void TCommandCopy::Parse(TConfig& config) {
 
     Items = TItem::Parse(config, "item");
     if (Items.empty()) {
-        throw TMissUseException() << "At least one item should be provided";
+        throw TMisuseException() << "At least one item should be provided";
     }
 
     for (auto& item : Items) {
@@ -348,7 +348,7 @@ void TCommandRename::Parse(TConfig& config) {
 
     Items = TItem::Parse(config, "item");
     if (Items.empty()) {
-        throw TMissUseException() << "At least one item should be provided";
+        throw TMisuseException() << "At least one item should be provided";
     }
 
     for (auto& item : Items) {

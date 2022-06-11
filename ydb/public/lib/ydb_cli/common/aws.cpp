@@ -38,7 +38,7 @@ static TStringBuf GetKey(TStringBuf content, const TString& key) {
         return line;
     }
 
-    throw TMissUseException() << "Cannot find \"" << key << "\" key";
+    throw TMisuseException() << "Cannot find \"" << key << "\" key";
 }
 
 void TCommandWithAwsCredentials::ReadAwsAccessKey() {

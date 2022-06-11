@@ -12,7 +12,7 @@ namespace NConsoleClient {
 
 void TCommandWithYtProxy::ParseYtProxy(const TString& proxy) {
     if (proxy.empty()) {
-        throw TMissUseException() << "No YT proxy provided.";
+        throw TMisuseException() << "No YT proxy provided.";
     }
 
     TMaybe<ui16> port;
@@ -20,7 +20,7 @@ void TCommandWithYtProxy::ParseYtProxy(const TString& proxy) {
     try {
         Split(proxy, ':', YtHost, port);
     } catch (const yexception& ex) {
-        throw TMissUseException() << "Bad YT proxy format: \"" << proxy << "\".";
+        throw TMisuseException() << "Bad YT proxy format: \"" << proxy << "\".";
     }
 
     if (YtHost.find('.') == TString::npos && YtHost.find("localhost") == TString::npos) {

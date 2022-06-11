@@ -41,11 +41,11 @@ void TCommandYql::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
     if (!Script && !ScriptFile) {
-        throw TMissUseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
+        throw TMisuseException() << "Neither \"Text of script\" (\"--script\", \"-s\") "
             << "nor \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
     if (Script && ScriptFile) {
-        throw TMissUseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
+        throw TMisuseException() << "Both mutually exclusive options \"Text of script\" (\"--script\", \"-s\") "
             << "and \"Path to file with script text\" (\"--file\", \"-f\") were provided.";
     }
     if (ScriptFile) {

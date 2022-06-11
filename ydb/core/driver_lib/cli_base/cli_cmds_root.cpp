@@ -107,7 +107,7 @@ public:
                 if (config.IsHelpCommand()) {
                     return;
                 } else {
-                    throw TMissUseException()
+                    throw TMisuseException()
                         << "Missing required option 'server'. Also couldn't find 'host' variable in profile config.";
                 }
             }

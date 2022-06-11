@@ -51,11 +51,11 @@ namespace NYdb::NConsoleClient {
         for (const TString &codecStr : split) {
             auto exists = ExistingCodecs.find(to_lower(codecStr));
             if (exists == ExistingCodecs.end()) {
-                throw TMissUseException() << "Supported codec " << codecStr << " is not available for this command";
+                throw TMisuseException() << "Supported codec " << codecStr << " is not available for this command";
             }
 
             if (std::find(AllowedCodecs_.begin(), AllowedCodecs_.end(), exists->second) == AllowedCodecs_.end()) {
-                throw TMissUseException() << "Supported codec " << codecStr << " is not available for this command";
+                throw TMisuseException() << "Supported codec " << codecStr << " is not available for this command";
             }
 
             SupportedCodecs_.push_back(exists->second);

@@ -250,7 +250,7 @@ int TCommandDescribe::PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopic
         case EOutputFormat::ProtoJsonBase64:
             return PrintStreamResponseProtoJsonBase64(result);
         default:
-            throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
+            throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
     }
     return EXIT_SUCCESS;
 }
@@ -604,7 +604,7 @@ int TCommandDescribe::PrintTableResponse(NTable::TDescribeTableResult& result) {
     case EOutputFormat::ProtoJsonBase64:
         return PrintResponseProtoJsonBase64(tableDescription);
     default:
-        throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
+        throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
     }
     return EXIT_SUCCESS;
 }
@@ -736,7 +736,7 @@ int TCommandList::Run(TConfig& config) {
         break;
     }
     default:
-        throw TMissUseException() << "This command doesn't support " << OutputFormat << " output format";
+        throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
     }
     printer->Print();
     return EXIT_SUCCESS;
@@ -772,10 +772,10 @@ void TCommandPermissionGrant::Parse(TConfig& config) {
     ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (!Subject) {
-        throw TMissUseException() << "Missing required argument <subject>";
+        throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToGrant.size()) {
-        throw TMissUseException() << "At least one permission to grant should be provided";
+        throw TMisuseException() << "At least one permission to grant should be provided";
     }
 }
 
@@ -813,10 +813,10 @@ void TCommandPermissionRevoke::Parse(TConfig& config) {
     ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (!Subject) {
-        throw TMissUseException() << "Missing required argument <subject>";
+        throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToRevoke.size()) {
-        throw TMissUseException() << "At least one permission to revoke should be provided";
+        throw TMisuseException() << "At least one permission to revoke should be provided";
     }
 }
 
@@ -854,10 +854,10 @@ void TCommandPermissionSet::Parse(TConfig& config) {
     ParsePath(config, 0);
     Subject = config.ParseResult->GetFreeArgs()[1];
     if (!Subject) {
-        throw TMissUseException() << "Missing required argument <subject>";
+        throw TMisuseException() << "Missing required argument <subject>";
     }
     if (!PermissionsToSet.size()) {
-        throw TMissUseException() << "At least one permission to set should be provided";
+        throw TMisuseException() << "At least one permission to set should be provided";
     }
 }
 
@@ -892,7 +892,7 @@ void TCommandChangeOwner::Parse(TConfig& config) {
     ParsePath(config, 0);
     Owner = config.ParseResult->GetFreeArgs()[1];
     if (!Owner){
-        throw TMissUseException() << "Missing required argument <owner>";
+        throw TMisuseException() << "Missing required argument <owner>";
     }
 }
 

@@ -127,7 +127,7 @@ namespace {
             [&type](const std::pair<TString, EPrimitiveType>& it) { return it.first == type; }
         );
         if (result == YdbPrimitives.end()) {
-            throw TMissUseException() << "Unknown type: " << type << Endl << "Allowed types: " << GetAllTypesString();
+            throw TMisuseException() << "Unknown type: " << type << Endl << "Allowed types: " << GetAllTypesString();
         }
         return result->second;
     }
@@ -180,10 +180,10 @@ void TCommandCreateTable::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParsePath(config, 0);
     if (!Columns.size()) {
-        throw TMissUseException() << "At least one column should be provided";
+        throw TMisuseException() << "At least one column should be provided";
     }
     if (!PrimaryKeys.size()) {
-        throw TMissUseException() << "At least one primary key should be provided";
+        throw TMisuseException() << "At least one primary key should be provided";
     }
 }
 
@@ -193,7 +193,7 @@ int TCommandCreateTable::Run(TConfig& config) {
         TVector<TString> parts = StringSplitter(column).Split(':');
         if (parts[1] == "Decimal") {
             if (parts.size() != 4 && parts.size() != 5) {
-                throw TMissUseException() << "Can't parse column \"" << column
+                throw TMisuseException() << "Can't parse column \"" << column
                     << "\". Expected decimal format: \"<name>:Decimal:<precision>:<scale>[:<family>]\"";
             }
             TString family;
@@ -207,7 +207,7 @@ int TCommandCreateTable::Run(TConfig& config) {
             );
         } else {
             if (parts.size() != 2 && parts.size() != 3) {
-                throw TMissUseException()
+                throw TMisuseException()
                     << "Can't parse column \"" << column << "\". Expected format: \"<name>:<type>[:<family>]\"";
             }
             TString family;
@@ -221,13 +221,13 @@ int TCommandCreateTable::Run(TConfig& config) {
     for (const TString& index : Indexes) {
         TVector<TString> parts = StringSplitter(index).Split(':');
         if (parts.size() != 2 || !parts[0] || !parts[1]) {
-            throw TMissUseException() << "Can't parse index \"" << index
+            throw TMisuseException() << "Can't parse index \"" << index
                 << "\". Need exactly one colon. Expected format: \"<name>:<column1>[,<column2>,...]\"";
         }
         TVector<TString> columns = StringSplitter(parts[1]).Split(',');
         for (TString& column : columns) {
             if (!column) {
-                throw TMissUseException() << "Can't parse index \"" << index
+                throw TMisuseException() << "Can't parse index \"" << index
                     << "\". Empty column names found. Expected format: \"<name>:<column1>[,<column2>,...]\"";
             }
         }
@@ -259,7 +259,7 @@ int TCommandCreateTable::Run(TConfig& config) {
                 if (AutoPartitioning == "AutoSplitMerge") {
                     partitioningPolicy.AutoPartitioning(NTable::EAutoPartitioningPolicy::AutoSplitMerge);
                 } else {
-                    throw TMissUseException() << "Unknown auto-partitioning policy.";
+                    throw TMisuseException() << "Unknown auto-partitioning policy.";
                 }
             }
         }
@@ -321,11 +321,11 @@ int TCommandDropTable::Run(TConfig& config) {
 
 void TCommandQueryBase::CheckQueryOptions() const {
     if (!Query && !QueryFile) {
-        throw TMissUseException() << "Neither \"Text of query\" (\"--query\", \"-q\") "
+        throw TMisuseException() << "Neither \"Text of query\" (\"--query\", \"-q\") "
             << "nor \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
     }
     if (Query && QueryFile) {
-        throw TMissUseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
+        throw TMisuseException() << "Both mutually exclusive options \"Text of query\" (\"--query\", \"-q\") "
             << "and \"Path to file with query text\" (\"--file\", \"-f\") were provided.";
     }
 }
@@ -380,10 +380,10 @@ void TCommandExecuteQuery::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     ParseFormats();
     if (BasicStats && CollectStatsMode) {
-        throw TMissUseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
+        throw TMisuseException() << "Both mutually exclusive options \"--stats\" and \"-s\" are provided.";
     }
     if (ParameterOptions.size() && QueryType == "scheme") {
-        throw TMissUseException() << "Scheme queries does not support parameters.";
+        throw TMisuseException() << "Scheme queries does not support parameters.";
     }
     ParseParameters();
     CheckQueryOptions();
@@ -402,7 +402,7 @@ int TCommandExecuteQuery::Run(TConfig& config) {
             return ExecuteScanQuery(config);
         }
     }
-    throw TMissUseException() << "Unknown query type.";
+    throw TMisuseException() << "Unknown query type.";
 }
 
 int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
@@ -421,7 +421,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
                 if (TxMode == "stale-ro") {
                     txSettings = NTable::TTxSettings::StaleRO();
                 } else {
-                    throw TMissUseException() << "Unknown transaction mode.";
+                    throw TMisuseException() << "Unknown transaction mode.";
                 }
             }
         }
@@ -643,7 +643,7 @@ int TCommandExplain::Run(TConfig& config) {
         ast = result.GetAst();
 
     } else {
-        throw TMissUseException() << "Unknown query type for explain.";
+        throw TMisuseException() << "Unknown query type for explain.";
     }
 
     if (PrintAst) {
@@ -720,10 +720,10 @@ namespace {
             , NTable::TTableDescription& tableDescription) {
         NJson::TJsonValue jsonValue;
         if (!ReadJsonTree(jsonString, &jsonValue)) {
-            throw TMissUseException() << "Can't parse string \"" << jsonString << "\" (--" << optionName << " option) as json";
+            throw TMisuseException() << "Can't parse string \"" << jsonString << "\" (--" << optionName << " option) as json";
         }
         if (!jsonValue.IsArray()) {
-            throw TMissUseException() << "json string in \"--" << optionName
+            throw TMisuseException() << "json string in \"--" << optionName
                 << "\" should contain array of elements representing tuple with key prefix, but it doesn't";
         }
         TTypeBuilder typebuilder;
@@ -733,7 +733,7 @@ namespace {
         for (const auto& element : jsonValue.GetArray()) {
             Y_UNUSED(element);
             if (pkColumnNamesIterator == pkColumnNames.end()) {
-                throw TMissUseException() << "json string in \"--" << optionName << "\" option contains more elements ("
+                throw TMisuseException() << "json string in \"--" << optionName << "\" option contains more elements ("
                     << jsonValue.GetArray().size() << ") then columns in table primary key (" << pkColumnNames.size() << ")";
             }
             for (const auto& column : tableDescription.GetTableColumns()) {
@@ -779,7 +779,7 @@ int TCommandReadTable::Run(TConfig& config) {
             encoding = EBinaryStringEncoding::Base64;
             break;
         default:
-            throw TMissUseException() << "Unknown input format: " << InputFormat;
+            throw TMisuseException() << "Unknown input format: " << InputFormat;
         }
 
         if (From) {
@@ -1030,7 +1030,7 @@ void TCommandTtlSet::Config(TConfig& config) {
 
             const auto value = NTable::TValueSinceUnixEpochModeSettings::UnitFromString(arg);
             if (value == NTable::TTtlSettings::EUnit::Unknown) {
-                throw TMissUseException() << "Unknown unit: " << arg << Endl << "Allowed units: " << allowedUnits;
+                throw TMisuseException() << "Unknown unit: " << arg << Endl << "Allowed units: " << allowedUnits;
             }
 
             ColumnUnit = value;

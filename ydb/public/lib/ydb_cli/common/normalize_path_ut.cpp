@@ -30,8 +30,8 @@ Y_UNIT_TEST_SUITE(NormalizePathTest) {
         UNIT_ASSERT(AdjustPath("./abc", FakeConfig("/root/db")) == "/root/db/abc");
         UNIT_ASSERT(AdjustPath("/root/db/abc", FakeConfig("/root/db")) == "/root/db/abc");
 
-        UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMissUseException);
-        UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMissUseException);
+        UNIT_ASSERT_EXCEPTION(AdjustPath("/abc", FakeConfig("/root/db")), TMisuseException);
+        UNIT_ASSERT_EXCEPTION(AdjustPath("/root/bd/abc", FakeConfig("/root/db")), TMisuseException);
     }
 }
 

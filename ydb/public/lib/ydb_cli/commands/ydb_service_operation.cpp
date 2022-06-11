@@ -61,7 +61,7 @@ void TCommandWithOperationId::Parse(TConfig& config) {
     try {
         OperationId = TOperationId(config.ParseResult->GetFreeArgs()[0]);
     } catch (const yexception& ex) {
-        throw TMissUseException() << "Invalid operation ID";
+        throw TMisuseException() << "Invalid operation ID";
     }
 }
 
@@ -96,12 +96,12 @@ int TCommandGetOperation::Run(TConfig& config) {
         if (OperationId.GetSubKind() == "s3") {
             return GetOperation<NImport::TImportFromS3Response>(client, OperationId, OutputFormat);
         } else {
-            throw TMissUseException() << "Invalid operation ID (unexpected sub-kind of operation)";
+            throw TMisuseException() << "Invalid operation ID (unexpected sub-kind of operation)";
         }
     case Ydb::TOperationId::BUILD_INDEX:
         return GetOperation<NTable::TBuildIndexOperation>(client, OperationId, OutputFormat);
     default:
-        throw TMissUseException() << "Invalid operation ID (unexpected kind of operation)";
+        throw TMisuseException() << "Invalid operation ID (unexpected kind of operation)";
     }
 
     return EXIT_SUCCESS;
@@ -184,7 +184,7 @@ void TCommandListOperations::Parse(TConfig& config) {
 
     Kind = config.ParseResult->GetFreeArgs()[0];
     if (!KindToHandler.contains(Kind)) {
-        throw TMissUseException() << "Invalid kind. Use one of: " << KindChoices();
+        throw TMisuseException() << "Invalid kind. Use one of: " << KindChoices();
     }
 }
 

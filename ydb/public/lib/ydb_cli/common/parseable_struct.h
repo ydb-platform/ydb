@@ -43,10 +43,10 @@ class TParseableStruct {
         while (property.IsInited()) {
             if (const TString field = t.LoadProperty(property, buf.NextTok(','))) {
                 if (!matched.insert(field).second) {
-                    throw TMissUseException() << "Duplicate value for \"" << field << "\"";
+                    throw TMisuseException() << "Duplicate value for \"" << field << "\"";
                 }
             } else {
-                throw TMissUseException() << "Bad property: \"" << property << "\"";
+                throw TMisuseException() << "Bad property: \"" << property << "\"";
             }
 
             property = buf.NextTok('=');
@@ -54,7 +54,7 @@ class TParseableStruct {
 
         for (auto it = Fields.begin(), last = Fields.end(); it != last; ++it) {
             if (it->second.Required && !matched.contains(it->first)) {
-                throw TMissUseException() << "Missing required property \"" << it->first << "\"";
+                throw TMisuseException() << "Missing required property \"" << it->first << "\"";
             }
         }
 

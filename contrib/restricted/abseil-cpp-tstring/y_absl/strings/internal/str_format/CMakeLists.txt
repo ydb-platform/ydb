@@ -7,23 +7,23 @@
 
 
 
-add_library(strings-internal-str_format)
-target_include_directories(strings-internal-str_format PUBLIC
+add_library(ystrings-internal-str_format)
+target_include_directories(ystrings-internal-str_format PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(strings-internal-str_format PUBLIC
+target_link_libraries(ystrings-internal-str_format PUBLIC
   contrib-libs-cxxsupp
   yutil
-  abseil-cpp-tstring-y_absl-base
-  base-internal-raw_logging
-  base-internal-spinlock_wait
-  base-internal-throw_delegate
-  y_absl-base-log_severity
-  abseil-cpp-tstring-y_absl-numeric
-  abseil-cpp-tstring-y_absl-strings
-  strings-internal-absl_strings_internal
+  yabseil-cpp-tstring-y_absl-base
+  ybase-internal-raw_logging
+  ybase-internal-spinlock_wait
+  ybase-internal-throw_delegate
+  yabsl-base-log_severity
+  yabseil-cpp-tstring-y_absl-numeric
+  yabseil-cpp-tstring-y_absl-strings
+  ystrings-internal-absl_strings_internal
 )
-target_sources(strings-internal-str_format PRIVATE
+target_sources(ystrings-internal-str_format PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/arg.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/bind.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/strings/internal/str_format/extension.cc

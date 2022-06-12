@@ -24,15 +24,15 @@ target_link_libraries(src-core-lib PUBLIC
   contrib-libs-cxxsupp
   yutil
   grpc-third_party-upb
-  base-internal-spinlock_wait
+  ybase-internal-spinlock_wait
   abseil-cpp-tstring-y_absl-container
   abseil-cpp-tstring-y_absl-memory
-  abseil-cpp-tstring-y_absl-status
-  abseil-cpp-tstring-y_absl-strings
-  y_absl-strings-cord
-  strings-internal-str_format
-  abseil-cpp-tstring-y_absl-synchronization
-  abseil-cpp-tstring-y_absl-time
+  yabseil-cpp-tstring-y_absl-status
+  yabseil-cpp-tstring-y_absl-strings
+  yabsl-strings-cord
+  ystrings-internal-str_format
+  yabseil-cpp-tstring-y_absl-synchronization
+  yabseil-cpp-tstring-y_absl-time
 )
 target_sources(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/any.upb.c

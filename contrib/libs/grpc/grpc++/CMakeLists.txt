@@ -29,13 +29,13 @@ target_link_libraries(libs-grpc-grpc++ PUBLIC
   grpc-third_party-address_sorting
   grpc-third_party-upb
   OpenSSL::OpenSSL
-  container-internal-raw_hash_set
-  abseil-cpp-tstring-y_absl-hash
-  abseil-cpp-tstring-y_absl-status
-  y_absl-status-statusor
-  abseil-cpp-tstring-y_absl-strings
-  abseil-cpp-tstring-y_absl-synchronization
-  abseil-cpp-tstring-y_absl-time
+  ycontainer-internal-raw_hash_set
+  yabseil-cpp-tstring-y_absl-hash
+  yabseil-cpp-tstring-y_absl-status
+  yabsl-status-statusor
+  yabseil-cpp-tstring-y_absl-strings
+  yabseil-cpp-tstring-y_absl-synchronization
+  yabseil-cpp-tstring-y_absl-time
 )
 target_sources(libs-grpc-grpc++ PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/transport/binder/client/binder_connector.cc

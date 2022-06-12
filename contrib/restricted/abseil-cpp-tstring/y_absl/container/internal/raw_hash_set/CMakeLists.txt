@@ -7,37 +7,37 @@
 
 
 
-add_library(container-internal-raw_hash_set)
-target_include_directories(container-internal-raw_hash_set PUBLIC
+add_library(ycontainer-internal-raw_hash_set)
+target_include_directories(ycontainer-internal-raw_hash_set PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(container-internal-raw_hash_set PUBLIC
+target_link_libraries(ycontainer-internal-raw_hash_set PUBLIC
   contrib-libs-cxxsupp
   yutil
-  abseil-cpp-tstring-y_absl-base
-  base-internal-low_level_alloc
-  base-internal-raw_logging
-  base-internal-spinlock_wait
-  base-internal-throw_delegate
-  y_absl-base-log_severity
-  container-internal-absl_hashtablez_sampler
-  abseil-cpp-tstring-y_absl-debugging
-  y_absl-debugging-stacktrace
-  y_absl-debugging-symbolize
-  abseil-cpp-tstring-y_absl-demangle
-  abseil-cpp-tstring-y_absl-hash
-  abseil-cpp-tstring-y_absl-numeric
-  profiling-internal-exponential_biased
-  abseil-cpp-tstring-y_absl-strings
-  strings-internal-absl_strings_internal
-  abseil-cpp-tstring-y_absl-synchronization
-  y_absl-synchronization-internal
-  abseil-cpp-tstring-y_absl-time
-  y_absl-time-civil_time
-  y_absl-time-time_zone
+  yabseil-cpp-tstring-y_absl-base
+  ybase-internal-low_level_alloc
+  ybase-internal-raw_logging
+  ybase-internal-spinlock_wait
+  ybase-internal-throw_delegate
+  yabsl-base-log_severity
+  ycontainer-internal-absl_hashtablez_sampler
+  yabseil-cpp-tstring-y_absl-debugging
+  yabsl-debugging-stacktrace
+  yabsl-debugging-symbolize
+  yabseil-cpp-tstring-y_absl-demangle
+  yabseil-cpp-tstring-y_absl-hash
+  yabseil-cpp-tstring-y_absl-numeric
+  yprofiling-internal-exponential_biased
+  yabseil-cpp-tstring-y_absl-strings
+  ystrings-internal-absl_strings_internal
+  yabseil-cpp-tstring-y_absl-synchronization
+  yabsl-synchronization-internal
+  yabseil-cpp-tstring-y_absl-time
+  yabsl-time-civil_time
+  yabsl-time-time_zone
   abseil-cpp-tstring-y_absl-types
-  y_absl-types-bad_optional_access
+  yabsl-types-bad_optional_access
 )
-target_sources(container-internal-raw_hash_set PRIVATE
+target_sources(ycontainer-internal-raw_hash_set PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/container/internal/raw_hash_set.cc
 )

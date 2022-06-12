@@ -7,25 +7,25 @@
 
 
 
-add_library(abseil-cpp-tstring-y_absl-time)
-target_include_directories(abseil-cpp-tstring-y_absl-time PUBLIC
+add_library(yabseil-cpp-tstring-y_absl-time)
+target_include_directories(yabseil-cpp-tstring-y_absl-time PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(abseil-cpp-tstring-y_absl-time PUBLIC
+target_link_libraries(yabseil-cpp-tstring-y_absl-time PUBLIC
   contrib-libs-cxxsupp
   yutil
-  abseil-cpp-tstring-y_absl-base
-  base-internal-raw_logging
-  base-internal-spinlock_wait
-  base-internal-throw_delegate
-  y_absl-base-log_severity
-  abseil-cpp-tstring-y_absl-numeric
-  abseil-cpp-tstring-y_absl-strings
-  strings-internal-absl_strings_internal
-  y_absl-time-civil_time
-  y_absl-time-time_zone
+  yabseil-cpp-tstring-y_absl-base
+  ybase-internal-raw_logging
+  ybase-internal-spinlock_wait
+  ybase-internal-throw_delegate
+  yabsl-base-log_severity
+  yabseil-cpp-tstring-y_absl-numeric
+  yabseil-cpp-tstring-y_absl-strings
+  ystrings-internal-absl_strings_internal
+  yabsl-time-civil_time
+  yabsl-time-time_zone
 )
-target_sources(abseil-cpp-tstring-y_absl-time PRIVATE
+target_sources(yabseil-cpp-tstring-y_absl-time PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/clock.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/duration.cc

@@ -55,6 +55,8 @@ namespace {
                 return ValueFromString(NUdf::EDataSlot::JsonDocument, value.text_value());
             case NUdf::TDataType<NUdf::TDyNumber>::Id:
                 return ValueFromString(NUdf::EDataSlot::DyNumber, value.text_value());
+            case NUdf::TDataType<NUdf::TDecimal>::Id:
+                return NUdf::TUnboxedValuePod(NYql::NDecimal::FromHalfs(value.low_128(), value.high_128()));
             default:
                 return MakeString(value.bytes_value());
         }

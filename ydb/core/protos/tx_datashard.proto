@@ -114,14 +114,14 @@ message TReadTableTransaction {
 
 message TKqpLocks {
     repeated TLock Locks = 1;
-    repeated uint64 SendingShards = 2;   // empty at Erase
-    repeated uint64 ReceivingShards = 3; // empty at Erase
+    repeated uint64 SendingShards = 2;   // empty on Rollback
+    repeated uint64 ReceivingShards = 3; // empty on Rollback
 
     enum ELocksOp {
         Unspecified = 0;
         Validate = 1;
-        ValidateAndErase = 2;
-        Erase = 3;
+        Commit = 2; // Validate locks, commit buffered changes and erase locks
+        Rollback = 3; // Rollback buffered changes and erase locks
     }
     optional ELocksOp Op = 4;
 }

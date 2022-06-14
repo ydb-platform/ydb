@@ -134,6 +134,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         }
 
         if (!KqpValidateLocks(tabletId, tx, DataShard.SysLocksTable())) {
+            KqpRollbackLockChanges(tabletId, tx, DataShard, txc);
             KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
             DataShard.SysLocksTable().ApplyLocks();
             return EExecutionStatus::Executed;
@@ -160,6 +161,8 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         auto [readVersion, writeVersion] = DataShard.GetReadWriteVersions(tx);
         dataTx->SetReadVersion(readVersion);
         dataTx->SetWriteVersion(writeVersion);
+
+        KqpCommitLockChanges(tabletId, tx, DataShard, txc);
 
         auto& computeCtx = tx->GetDataTx()->GetKqpComputeCtx();
 

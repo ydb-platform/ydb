@@ -1570,10 +1570,10 @@ private:
         if (auto locksMap = ExtractLocks(Request.Locks); !locksMap.empty()) {
             YQL_ENSURE(Request.ValidateLocks || Request.EraseLocks);
             auto locksOp = Request.ValidateLocks && Request.EraseLocks
-                ? NKikimrTxDataShard::TKqpLocks::ValidateAndErase
+                ? NKikimrTxDataShard::TKqpLocks::Commit
                 : (Request.ValidateLocks
                         ? NKikimrTxDataShard::TKqpLocks::Validate
-                        : NKikimrTxDataShard::TKqpLocks::Erase);
+                        : NKikimrTxDataShard::TKqpLocks::Rollback);
 
             TSet<ui64> taskShardIds;
             if (Request.ValidateLocks) {

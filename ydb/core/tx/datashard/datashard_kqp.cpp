@@ -183,11 +183,11 @@ NDq::ERunStatus RunKqpTransactionInternal(const TActorContext& ctx, ui64 txId,
 
 bool NeedValidateLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::ValidateAndErase:
         case NKikimrTxDataShard::TKqpLocks::Validate:
+        case NKikimrTxDataShard::TKqpLocks::Commit:
             return true;
 
-        case NKikimrTxDataShard::TKqpLocks::Erase:
+        case NKikimrTxDataShard::TKqpLocks::Rollback:
         case NKikimrTxDataShard::TKqpLocks::Unspecified:
             return false;
     }
@@ -195,11 +195,23 @@ bool NeedValidateLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
 
 bool NeedEraseLocks(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
     switch (op) {
-        case NKikimrTxDataShard::TKqpLocks::ValidateAndErase:
-        case NKikimrTxDataShard::TKqpLocks::Erase:
+        case NKikimrTxDataShard::TKqpLocks::Commit:
+        case NKikimrTxDataShard::TKqpLocks::Rollback:
             return true;
 
         case NKikimrTxDataShard::TKqpLocks::Validate:
+        case NKikimrTxDataShard::TKqpLocks::Unspecified:
+            return false;
+    }
+}
+
+bool NeedCommitLockChanges(NKikimrTxDataShard::TKqpLocks_ELocksOp op) {
+    switch (op) {
+        case NKikimrTxDataShard::TKqpLocks::Commit:
+            return true;
+
+        case NKikimrTxDataShard::TKqpLocks::Validate:
+        case NKikimrTxDataShard::TKqpLocks::Rollback:
         case NKikimrTxDataShard::TKqpLocks::Unspecified:
             return false;
     }
@@ -609,6 +621,68 @@ void KqpEraseLocks(ui64 origin, TActiveTransaction* tx, TSysLocks& sysLocks) {
 
         auto lockKey = MakeLockKey(lockProto);
         sysLocks.EraseLock(lockKey);
+    }
+}
+
+void KqpCommitLockChanges(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc) {
+    auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
+
+    if (!kqpTx.HasLocks()) {
+        return;
+    }
+
+    if (NeedCommitLockChanges(kqpTx.GetLocks().GetOp())) {
+        // We assume locks have been validated earlier
+        for (auto& lockProto : kqpTx.GetLocks().GetLocks()) {
+            if (lockProto.GetDataShard() != origin) {
+                continue;
+            }
+
+            TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+            auto localTid = dataShard.GetLocalTableId(tableId);
+            Y_VERIFY_S(localTid, "Unexpected failure to find table " << tableId << " in datashard " << origin);
+
+            auto txId = lockProto.GetLockId();
+            if (!txc.DB.HasOpenTx(localTid, txId)) {
+                continue;
+            }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpCommitLockChanges: committing txId# " << txId << " in localTid# " << localTid);
+            txc.DB.CommitTx(localTid, txId);
+        }
+    } else {
+        KqpRollbackLockChanges(origin, tx, dataShard, txc);
+    }
+}
+
+void KqpRollbackLockChanges(ui64 origin, TActiveTransaction* tx, TDataShard& dataShard, TTransactionContext& txc) {
+    auto& kqpTx = tx->GetDataTx()->GetKqpTransaction();
+
+    if (!kqpTx.HasLocks()) {
+        return;
+    }
+
+    if (NeedEraseLocks(kqpTx.GetLocks().GetOp())) {
+        for (auto& lockProto : kqpTx.GetLocks().GetLocks()) {
+            if (lockProto.GetDataShard() != origin) {
+                continue;
+            }
+
+            TTableId tableId(lockProto.GetSchemeShard(), lockProto.GetPathId());
+            auto localTid = dataShard.GetLocalTableId(tableId);
+            if (!localTid) {
+                // It may have been dropped already
+                continue;
+            }
+
+            auto txId = lockProto.GetLockId();
+            if (!txc.DB.HasOpenTx(localTid, txId)) {
+                continue;
+            }
+
+            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "KqpRollbackLockChanges: removing txId# " << txId << " from localTid# " << localTid);
+            txc.DB.RemoveTx(localTid, txId);
+        }
     }
 }
 

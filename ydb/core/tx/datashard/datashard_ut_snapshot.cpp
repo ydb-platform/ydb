@@ -1664,13 +1664,29 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
             "} Struct { Bool: false }");
 
-        // Now commit with additional changes
+        // Now commit with additional changes (temporarily needed to trigger lock commits)
         UNIT_ASSERT_VALUES_EQUAL(
             commitSnapshotRequest(sessionId, txId, Q_(R"(
                 UPSERT INTO `Root/table-1` (key, value) VALUES (3, 3)
-                --SELECT 1
                 )")),
             "");
+
+        if (UseNewEngine) {
+            // Verify new snapshots observe all committed changes
+            // This is only possible with new engine at this time
+            TString sessionId3, txId3;
+            UNIT_ASSERT_VALUES_EQUAL(
+                beginSnapshotRequest(sessionId3, txId3, Q_(R"(
+                    SELECT key, value FROM `/Root/table-1`
+                    WHERE key >= 1 AND key <= 3
+                    ORDER BY key
+                    )")),
+                "Struct { "
+                "List { Struct { Optional { Uint32: 1 } } Struct { Optional { Uint32: 1 } } } "
+                "List { Struct { Optional { Uint32: 2 } } Struct { Optional { Uint32: 2 } } } "
+                "List { Struct { Optional { Uint32: 3 } } Struct { Optional { Uint32: 3 } } } "
+                "} Struct { Bool: false }");
+        }
     }
 
 }

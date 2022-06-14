@@ -532,6 +532,9 @@
         },
         "marketsre": {
             "description": "Run Market SRE Cli"
+        },
+        "metrika-core": {
+            "description": "Run metrika-core toolkit"
         }
     },
     "toolchain": {
@@ -6474,6 +6477,22 @@
                 "objcopy": "$(RISCV)/bin/riscv32-elf-objcopy",
                 "gcc_version": "7.4.0"
             }
+        },
+        "metrika-core": {
+            "tools": {
+                "metrika-core": {
+                    "bottle": "metrika-core",
+                    "executable": "metrika-core"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                }
+            ]
         }
     },
     "bottles": {
@@ -8973,6 +8992,17 @@
                 "cc": [
                     "bin",
                     "riscv32-elf-gcc"
+                ]
+            }
+        },
+        "metrika-core": {
+            "formula": {
+                "sandbox_id": 1342201764,
+                "match": "metrika-core"
+            },
+            "executable": {
+                "metrika-core": [
+                    "metrika-core"
                 ]
             }
         }

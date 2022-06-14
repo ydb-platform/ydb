@@ -688,7 +688,7 @@ message TFeatureFlags {
     optional bool EnableBackgroundCompactionServerless = 53 [default = false];
     optional bool EnableNotNullColumns = 54 [default = false];
     optional bool EnableTtlOnAsyncIndexedTables = 55 [default = true];
-    optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = false];
+    optional bool EnableBulkUpsertToAsyncIndexedTables = 56 [default = true];
     optional bool EnableNodeBrokerSingleDomainMode = 57 [default = false];
     optional bool EnableKqpSessionActor = 58 [default = true];
     // Dangerous settings we don't want in the public api unless required

@@ -6475,7 +6475,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
         if (node->Head().IsCallable("PgConst")) {
             auto name = node->Head().GetTypeAnn()->Cast<TPgExprType>()->GetName();
-            if (name = "bool") {
+            if (name == "bool") {
                 auto value = node->Head().Head().Content();
                 if (value.StartsWith('t') || value.StartsWith('f')) {
                     return ctx.Builder(node->Pos())

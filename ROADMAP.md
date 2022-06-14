@@ -81,7 +81,7 @@
 
 ## Tests and Benchmarks
 1. [ ] **Built-in load test for DataShards** in YCSB manner
-1. [ ] **`ydb worload` for topics**
+1. [ ] **`ydb workload` for topics**
 1. [ ] **Jepsen tests support**
 
 ## Experiments

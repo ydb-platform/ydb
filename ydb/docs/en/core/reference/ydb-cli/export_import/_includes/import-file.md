@@ -2,7 +2,9 @@
 
 Using the `import file` subcommand, you can import data from [CSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/CSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Comma-separated_values){% endif %} or [TSV]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/TSV){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/Tab-separated_values){% endif %} files to an existing table.
 
-Data is imported by the `BulkUpsert` method that doesn't guarantee transactionality. In case the table already contains data, it will be replaced with imported data if the primary key matches.
+Data is imported using the `BulkUpsert` method that provides high-efficient batch data inserts without atomicity guarantees. Data writes are split in multiple independent single-shard transactions executed in parallel. When succesfully completed, all data is guaranteed to be inserted.
+
+In case the table already contains data, it will be replaced with imported data if the primary key matches.
 
 The imported file must be encoded in [UTF-8]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/UTF-8){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/UTF-8){% endif %}. Processing a line break inside a data field is not supported.
 

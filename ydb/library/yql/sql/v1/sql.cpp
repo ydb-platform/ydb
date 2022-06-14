@@ -9777,6 +9777,22 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                     Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                 }
                 return {};
+            } else if (normalizedPragma == "casttostring" || normalizedPragma == "disablecasttostring") {
+                const bool allow = normalizedPragma == "casttostring";
+                if (values.size() == 0U) {
+                    Ctx.YsonCastToString = allow;
+                    success = true;
+                    return {};
+                }
+                bool pragmaYsonCastToString;
+                if (values.size() == 1U && values.front().GetLiteral() && TryFromString(*values.front().GetLiteral(), pragmaYsonCastToString)) {
+                    Ctx.PragmaYsonStrict = allow ? pragmaYsonCastToString : !pragmaYsonCastToString;
+                    success = true;
+                } else {
+                    Error() << "Expected 'true', 'false' or no parameter for: " << pragma;
+                    Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                }
+                return {};
             } else {
                 Error() << "Unknown pragma: '" << pragma << "'";
                 Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");

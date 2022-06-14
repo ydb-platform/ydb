@@ -745,6 +745,14 @@ namespace {
                     return false;
                 }
             }
+            else if (name == "YsonCastToString" || name == "DisableYsonCastToString") {
+                if (args.size() != 0) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected no arguments, but got " << args.size()));
+                    return false;
+                }
+
+                Types.YsonCastToString = (name == "YsonCastToString");
+            }
             else {
                 ctx.AddError(TIssue(pos, TStringBuilder() << "Unsupported command: " << name));
                 return false;

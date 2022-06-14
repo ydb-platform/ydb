@@ -3905,7 +3905,7 @@ namespace NTypeAnnImpl {
     }
 
     template <bool Strong>
-    IGraphTransformer::TStatus CastWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    IGraphTransformer::TStatus CastWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
         }
@@ -4000,10 +4000,17 @@ namespace NTypeAnnImpl {
                 }
 
                 if (sourceDataType->GetSlot() == EDataSlot::Yson && targetDataType->GetSlot() == EDataSlot::String) {
-                    auto issue = TIssue(ctx.Expr.GetPosition(input->Head().Pos()), "Consider using ToBytes to get internal representation of Yson type,"
-                        " or Yson::ConvertToString* methods to get string values");
-                    SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_CAST_YSON_JSON_BYTES, issue);
-                    if (!ctx.Expr.AddWarning(issue)) {
+                    const TString msg = "Consider using ToBytes to get internal representation of Yson type,"
+                                        " or Yson::ConvertToString* methods to get string values";
+                    if (ctx.Types.YsonCastToString) {
+                        auto issue = TIssue(ctx.Expr.GetPosition(input->Head().Pos()), msg);
+                        SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_CORE_CAST_YSON_JSON_BYTES, issue);
+                        if (!ctx.Expr.AddWarning(issue)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    } else {
+                        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Head().Pos()),
+                            TStringBuilder() << "Casting Yson to String is ambiguous. " << msg));
                         return IGraphTransformer::TStatus::Error;
                     }
                 }
@@ -11078,8 +11085,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AlterTo"] = &AlterToWrapper;
         Functions["ToIntegral"] = &ToIntegralWrapper;
         Functions["Cast"] = &OldCastWrapper;
-        Functions["SafeCast"] = &CastWrapper<false>;
-        Functions["StrictCast"] = &CastWrapper<true>;
         Functions["BitCast"] = &BitCastWrapper;
         Functions["WidenIntegral"] = &WidenIntegralWrapper;
         Functions["Default"] = &DefaultWrapper;
@@ -11471,6 +11476,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["AssumeColumnOrder"] = &AssumeColumnOrderWrapper;
         ExtFunctions["AssumeColumnOrderPartial"] = &AssumeColumnOrderWrapper;
         ExtFunctions["UnionAllPositional"] = &UnionAllPositionalWrapper;
+        ExtFunctions["SafeCast"] = &CastWrapper<false>;
+        ExtFunctions["StrictCast"] = &CastWrapper<true>;
 
         ColumnOrderFunctions["PgSetItem"] = &OrderForPgSetItem;
         ColumnOrderFunctions["AssumeColumnOrder"] = &OrderForAssumeColumnOrder;

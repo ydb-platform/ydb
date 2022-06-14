@@ -220,6 +220,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     TString DqFallbackPolicy = "";
     bool StrictTableProps = true;
     bool JsonQueryReturnsJsonDocument = false;
+    bool YsonCastToString = true;
     ui32 FolderSubDirsLimit = 1000;
 
     // compatibility with v0 or raw s-expression code

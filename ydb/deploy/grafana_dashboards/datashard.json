@@ -111,7 +111,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRowReads{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -196,7 +196,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRowReadBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -281,7 +281,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRangeReadRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -366,7 +366,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRangeReadBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -451,7 +451,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (le) (rate(tablets_DataShard_SelectRowsPerRequest_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -537,7 +537,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (le) (rate(tablets_DataShard_RangeReadRowsPerRequest_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -623,7 +623,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRowUpdates{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -708,7 +708,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRowUpdateBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -793,7 +793,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRowErases{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -878,7 +878,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_EngineHostRowEraseBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -963,7 +963,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_UploadRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1048,7 +1048,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_UploadRowsBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1133,7 +1133,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_ScannedRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1218,7 +1218,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_ScannedBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1303,7 +1303,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_ReadColumnsRows{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1388,7 +1388,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum (rate(tablets_DataShard_ReadColumnsBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1485,7 +1485,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+_ReadBytes\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)_ReadBytes\")[1m:]))",
@@ -1546,32 +1546,7 @@
                 ]
               }
             },
-            "overrides": [
-              {
-                "__systemRef": "hideSeriesFrom",
-                "matcher": {
-                  "id": "byNames",
-                  "options": {
-                    "mode": "exclude",
-                    "names": [
-                      "TTxReadColumns"
-                    ],
-                    "prefix": "All except:",
-                    "readOnly": true
-                  }
-                },
-                "properties": [
-                  {
-                    "id": "custom.hideFrom",
-                    "value": {
-                      "legend": false,
-                      "tooltip": false,
-                      "viz": true
-                    }
-                  }
-                ]
-              }
-            ]
+            "overrides": []
           },
           "gridPos": {
             "h": 5,
@@ -1597,7 +1572,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+_WrittenBytes\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)_WrittenBytes\")[1m:]))",
@@ -1684,7 +1659,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+_LoadedBlocks\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)_LoadedBlocks\")[1m:]))",
@@ -1771,7 +1746,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"tablets_DataShard_.+_TouchedBlocks\"}, \"name_label\", \"$1\", \"__name__\", \"tablets_DataShard_(.+)_TouchedBlocks\")[1m:]))",
@@ -1872,7 +1847,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_DataShard_PrepareExecLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -1960,7 +1935,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_DataShard_PrepareSuccessCompleteLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2048,7 +2023,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_DataShard_TxProgressExecLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2136,7 +2111,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_DataShard_TxProgressCompleteLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2224,7 +2199,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_DataShard_AcceptedPlanStepCompleteLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2312,7 +2287,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_DataShard_PlanToExecuteLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2414,7 +2389,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_TxRoLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2502,7 +2477,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_TxRwLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2590,7 +2565,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(tablets_TxCommitLatency_bucket{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -2690,7 +2665,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum (rate(tablets_CompactionBytesRead{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -2775,7 +2750,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum (rate(tablets_CompactionBytesWritten{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -2860,7 +2835,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_EnqueuedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen0\"})",
@@ -2871,7 +2846,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_EnqueuedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen1\"})",
@@ -2883,7 +2858,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_EnqueuedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen2\"})",
@@ -2895,7 +2870,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_EnqueuedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen3\"})",
@@ -2981,7 +2956,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_InFlyTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen0\"})",
@@ -2992,7 +2967,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_InFlyTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen1\"})",
@@ -3004,7 +2979,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_InFlyTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen2\"})",
@@ -3016,7 +2991,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_InFlyTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen3\"})",
@@ -3102,7 +3077,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_FinishedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen0\"}[1m]))",
@@ -3113,7 +3088,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_FinishedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen1\"}[1m]))",
@@ -3125,7 +3100,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_FinishedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen2\"}[1m]))",
@@ -3137,7 +3112,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_EnqueuedTasks{database=\"$database\",container=\"ydb-dynamic\",task=\"compaction_gen3\"}[1m]))",
@@ -3237,7 +3212,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_ReadsetReceivedCount{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3322,7 +3297,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_ReadsetReceivedSize{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3407,7 +3382,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_ReadsetSentCount{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3492,7 +3467,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_ReadsetSentSize{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3591,9 +3566,9 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
+              "exemplar": false,
               "expr": "sum (rate(tablets_DataShard_MiniKQLProgramSize{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
               "interval": "",
               "legendFormat": "bytes",
@@ -3676,7 +3651,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_TxResultSize{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3761,7 +3736,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_AckSent{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3846,7 +3821,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DataShard_AckSentDelayed{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -3931,7 +3906,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "max(tablets_MAX_DataShard_TxCompleteLag_{database=\"$database\",container=\"ydb-dynamic\"})",
@@ -4016,7 +3991,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "max(tablets_MAX_DataShard_ScanTxCompleteLag_{database=\"$database\",container=\"ydb-dynamic\"})",
@@ -4101,7 +4076,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(tablets_SUM_DataShard_ImmediateTxInFly_{database=\"$database\",container=\"ydb-dynamic\"})",
@@ -4186,7 +4161,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(tablets_DbRedoWrittenBytes{database=\"$database\",container=\"ydb-dynamic\",type=\"DataShard\"}[1m]))",
@@ -4225,6 +4200,19 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "ds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
       }
     ]
   },

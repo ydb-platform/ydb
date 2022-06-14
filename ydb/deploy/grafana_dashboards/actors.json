@@ -100,9 +100,9 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
-          "exemplar": true,
+          "exemplar": false,
           "expr": "sum by (execpool) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "interval": "",
           "legendFormat": "{{execpool}}",
@@ -187,16 +187,16 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
-          "exemplar": true,
+          "exemplar": false,
           "expr": "sum by (activity) (utils_ActorsAliveByActivity{database=\"$database\",container=\"ydb-dynamic\"})",
           "interval": "",
           "legendFormat": "{{activity}}",
           "refId": "A"
         }
       ],
-      "title": "Actors count",
+      "title": "Actor count",
       "type": "timeseries"
     },
     {
@@ -284,16 +284,16 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
-              "expr": "sum by (pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[1m]))",
+              "exemplar": false,
+              "expr": "sum by (host, pod) (rate(utils_ElapsedMicrosec{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[1m]))",
               "interval": "",
-              "legendFormat": "{{pod}}",
+              "legendFormat": "{{host}}{{pod}}",
               "refId": "A"
             }
           ],
-          "title": "User pool - CPU by pod (us)",
+          "title": "User pool - CPU by host (us)",
           "type": "timeseries"
         },
         {
@@ -371,9 +371,9 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
+              "exemplar": false,
               "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"User\"}[1m]))",
               "interval": "",
               "legendFormat": "{{activity}}",
@@ -458,9 +458,9 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
+              "exemplar": false,
               "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"System\"}[1m]))",
               "interval": "",
               "legendFormat": "{{activity}}",
@@ -545,9 +545,9 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
+              "exemplar": false,
               "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IO\"}[1m]))",
               "interval": "",
               "legendFormat": "{{activity}}",
@@ -632,9 +632,9 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
+              "exemplar": false,
               "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"IC\"}[1m]))",
               "interval": "",
               "legendFormat": "{{activity}}",
@@ -719,9 +719,9 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
-              "exemplar": true,
+              "exemplar": false,
               "expr": "sum by (activity) (rate(utils_ElapsedMicrosecByActivity{database=\"$database\",container=\"ydb-dynamic\",execpool=\"Batch\"}[1m]))",
               "interval": "",
               "legendFormat": "{{activity}}",
@@ -794,23 +794,7 @@
                 ]
               }
             },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "4"
-                },
-                "properties": [
-                  {
-                    "id": "color",
-                    "value": {
-                      "fixedColor": "#8AB8FF",
-                      "mode": "fixed"
-                    }
-                  }
-                ]
-              }
-            ]
+            "overrides": []
           },
           "gridPos": {
             "h": 5,
@@ -836,7 +820,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (execpool) (rate(utils_EventProcessingCount{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -924,7 +908,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(utils_EventProcessingTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1012,7 +996,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(utils_ActivationTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1100,7 +1084,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(utils_EventDeliveryTimeUs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1140,6 +1124,19 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "ds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
       }
     ]
   },

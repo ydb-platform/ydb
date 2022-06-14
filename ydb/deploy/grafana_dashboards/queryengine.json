@@ -87,47 +87,7 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "Execute"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Execute"
-            },
-            "properties": [
-              {
-                "id": "color",
-                "value": {
-                  "fixedColor": "dark-purple",
-                  "mode": "fixed"
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -153,7 +113,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryExecute{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -165,7 +125,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryExecPrepared{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -178,7 +138,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryPrepare{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -191,7 +151,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryExplain{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -204,7 +164,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryValidate{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -217,7 +177,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryParse{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -230,7 +190,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryBeginTx{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -243,7 +203,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryCommitTx{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -256,7 +216,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryRollbackTx{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -269,7 +229,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_CreateSession{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -282,7 +242,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_PingSession{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -295,7 +255,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_CloseSession{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -308,7 +268,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryOther{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -395,7 +355,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_Bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -407,7 +367,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_ParametersBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -420,7 +380,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Requests_QueryBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -483,32 +443,7 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "Success"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 5,
@@ -534,7 +469,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (name_label) (rate(label_replace({database=\"$database\",container=\"ydb-dynamic\",__name__=~\"kqp_YdbResponses_.+\"}, \"name_label\", \"$1\", \"__name__\", \"kqp_YdbResponses_(.+)\")[1m:]))",
@@ -620,7 +555,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Responses_Bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -632,7 +567,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum(rate(kqp_Responses_QueryResultBytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -729,7 +664,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Workers_QueriesPerWorkerQ_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -815,7 +750,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(kqp_Workers_Active{database=\"$database\",container=\"ydb-dynamic\"})",
@@ -901,7 +836,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Workers_LifeSpanMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -987,7 +922,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(kqp_Workers_Created{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -999,7 +934,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(kqp_Workers_ClosedIdle{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1012,7 +947,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(kqp_Workers_ClosedError{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1025,7 +960,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum(rate(kqp_Workers_ClosedRequest{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1128,7 +1063,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_ExecuteLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1216,7 +1151,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_BeginTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1305,7 +1240,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_ExecPreparedLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1393,7 +1328,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_CommitTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1481,7 +1416,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_PrepareLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1569,7 +1504,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_RollbackTxLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1657,7 +1592,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_ExplainLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1745,7 +1680,7 @@
             {
               "datasource": {
                 "type": "prometheus",
-                "uid": "prometheus"
+                "uid": "$ds"
               },
               "exemplar": false,
               "expr": "sum by (le) (rate(kqp_Query_ValidateLatencyMs_bucket{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -1786,6 +1721,19 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "ds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
       }
     ]
   },

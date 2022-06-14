@@ -100,9 +100,9 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
-          "exemplar": true,
+          "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_request_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
           "instant": false,
           "interval": "",
@@ -188,7 +188,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_request_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -278,7 +278,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_response_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -365,7 +365,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_request_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -452,7 +452,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_response_dropped_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -539,7 +539,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_count{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -626,7 +626,7 @@
         {
           "datasource": {
             "type": "prometheus",
-            "uid": "prometheus"
+            "uid": "$ds"
           },
           "exemplar": false,
           "expr": "sum by (method) (rate(ydb_api_grpc_request_inflight_bytes{database=\"$database\",container=\"ydb-dynamic\"}[1m]))",
@@ -661,6 +661,19 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "multi": false,
+        "name": "ds",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
       }
     ]
   },

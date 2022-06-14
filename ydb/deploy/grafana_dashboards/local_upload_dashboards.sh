@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+GRAFANA_API="http://admin:admin@localhost:3000/api"
+
+curl -X POST -H "Content-Type: application/json" ${GRAFANA_API}/folders --data-ascii '{ "uid": "ydb", "title": "YDB" }'
+
+for DASH in dbstatus actors grpc queryengine txproxy datashard; do
+    cat ${DASH}.json | jq '{ folderUid: "ydb", dashboard: . }' | curl -X POST -H "Content-Type: application/json" ${GRAFANA_API}/dashboards/db -d @-
+done
+

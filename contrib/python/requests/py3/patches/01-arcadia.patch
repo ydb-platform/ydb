@@ -1,5 +1,5 @@
---- contrib/python/requests/requests/adapters.py	(index)
-+++ contrib/python/requests/requests/adapters.py	(working tree)
+--- contrib/python/requests/py3/requests/adapters.py	(index)
++++ contrib/python/requests/py3/requests/adapters.py	(working tree)
 @@ -224,13 +224,13 @@ class HTTPAdapter(BaseAdapter):
              if not cert_loc:
                  cert_loc = extract_zipped_paths(DEFAULT_CA_BUNDLE_PATH)
@@ -16,8 +16,8 @@
                  conn.ca_certs = cert_loc
              else:
                  conn.ca_cert_dir = cert_loc
---- contrib/python/requests/requests/utils.py	(index)
-+++ contrib/python/requests/requests/utils.py	(working tree)
+--- contrib/python/requests/py3/requests/utils.py	(index)
++++ contrib/python/requests/py3/requests/utils.py	(working tree)
 @@ -246,7 +246,7 @@ def extract_zipped_paths(path):
      archive with the location of an extracted copy of the target, or else
      just return the provided path unchanged.

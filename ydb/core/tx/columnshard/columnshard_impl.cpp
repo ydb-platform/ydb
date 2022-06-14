@@ -738,6 +738,9 @@ std::unique_ptr<TEvPrivate::TEvEviction> TColumnShard::SetupTtl(const THashMap<u
         LOG_S_NOTICE("Cannot prepare TTL at tablet " << TabletID());
         return {};
     }
+    if (indexChanges->NeedRepeat) {
+        Ttl.Repeat();
+    }
 
     bool needWrites = !indexChanges->PortionsToEvict.empty();
 

@@ -6,6 +6,7 @@ namespace NKikimr::NColumnShard {
 class TTtl {
 public:
     static constexpr const ui64 DEFAULT_TTL_TIMEOUT_SEC = 60 * 60;
+    static constexpr const ui64 DEFAULT_REPEAT_TTL_TIMEOUT_SEC = 10;
 
     struct TEviction {
         TString TierName;
@@ -80,7 +81,7 @@ public:
     }
 
     THashMap<ui64, NOlap::TTiersInfo> MakeIndexTtlMap(TInstant now, bool force = false) {
-        if ((now < LastRegularTtl + RegularTtlTimeout) && !force) {
+        if ((now < LastRegularTtl + TtlTimeout) && !force) {
             return {};
         }
 
@@ -93,12 +94,18 @@ public:
         return out;
     }
 
+    void Repeat() {
+        LastRegularTtl -= TtlTimeout;
+        LastRegularTtl += RepeatTtlTimeout;
+    }
+
     const THashSet<TString>& TtlColumns() const { return Columns; }
 
 private:
     THashMap<ui64, TDescription> PathTtls; // pathId -> ttl
     THashSet<TString> Columns;
-    TDuration RegularTtlTimeout{TDuration::Seconds(DEFAULT_TTL_TIMEOUT_SEC)};
+    TDuration TtlTimeout{TDuration::Seconds(DEFAULT_TTL_TIMEOUT_SEC)};
+    TDuration RepeatTtlTimeout{TDuration::Seconds(DEFAULT_REPEAT_TTL_TIMEOUT_SEC)};
     TInstant LastRegularTtl;
 
     NOlap::TTiersInfo Convert(const TDescription& descr, TInstant timePoint) const {

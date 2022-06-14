@@ -44,6 +44,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
     auto changes = Ev->Get()->IndexChanges;
     Y_VERIFY(changes);
 
+    LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString()
+        << ") changes: " << *changes << " at tablet " << Self->TabletID());
+
     bool ok = false;
     if (Ev->Get()->PutStatus == NKikimrProto::OK) {
         NOlap::TSnapshot snapshot = changes->ApplySnapshot;
@@ -55,8 +58,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
         NOlap::TDbWrapper dbWrap(txc.DB, &dsGroupSelector);
         ok = Self->PrimaryIndex->ApplyChanges(dbWrap, changes, snapshot); // update changes + apply
         if (ok) {
-            LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString()
-                << ") apply changes: " << *changes << " at tablet " << Self->TabletID());
+            LOG_S_DEBUG("TTxWriteIndex (" << changes->TypeString() << ") apply at tablet " << Self->TabletID());
 
             TBlobManagerDb blobManagerDb(txc.DB);
             for (const auto& cmtd : changes->DataToIndex) {
@@ -213,6 +215,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
     }
 
     if (BlobsToExport.size()) {
+        size_t numBlobs = BlobsToExport.size();
         for (auto& [blobId, tierName] : BlobsToExport) {
             ExportTierBlobs[tierName].emplace(blobId, TString{});
         }
@@ -220,6 +223,9 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
 
         ExportNo = Self->LastExportNo + 1;
         Self->LastExportNo += ExportTierBlobs.size();
+
+        LOG_S_DEBUG("TTxWriteIndex init export " << ExportNo << " of " << numBlobs << " blobs in "
+            << ExportTierBlobs.size() << " tiers at tablet " << Self->TabletID());
 
         NIceDb::TNiceDb db(txc.DB);
         Schema::SaveSpecialValue(db, Schema::EValueIds::LastExportNumber, Self->LastExportNo);

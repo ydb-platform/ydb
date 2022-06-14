@@ -771,13 +771,18 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartCleanup(const T
     return changes;
 }
 
-std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiersInfo>& pathTtls) {
+std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THashMap<ui64, TTiersInfo>& pathTtls,
+                                                                     ui64 maxEvictBytes) {
     if (pathTtls.empty()) {
         return {};
     }
 
     TSnapshot fakeSnapshot = {1, 1}; // TODO: better snapshot
     auto changes = std::make_shared<TChanges>(TColumnEngineChanges::TTL, fakeSnapshot);
+    ui64 evicttionSize = 0;
+    bool allowEviction = true;
+    ui64 dropBlobs = 0;
+    bool allowDrop = true;
 
     for (auto& [pathId, ttl] : pathTtls) {
         if (!PathGranules.count(pathId)) {
@@ -800,19 +805,24 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
                     continue;
                 }
 
+                allowEviction = (evicttionSize <= maxEvictBytes);
+                allowDrop = (dropBlobs <= TCompactionLimits::MAX_BLOBS_TO_DELETE);
+
                 if (auto max = info.MaxValue(ttlColumnId)) {
                     bool keep = false;
                     for (auto& border : ttl.TierBorders) {
                         if (NArrow::ScalarLess(*border.ToTimestamp(), *max)) {
                             keep = true;
-                            if (info.TierName != border.TierName) {
+                            if (allowEviction && info.TierName != border.TierName) {
+                                evicttionSize += info.BlobsSizes().first;
                                 changes->PortionsToEvict.emplace_back(info, border.TierName);
                             }
                             break;
                         }
                     }
-                    if (!keep) {
+                    if (!keep && allowDrop) {
                         Y_VERIFY(!NArrow::ScalarLess(*ttl.TierBorders.back().ToTimestamp(), *max));
+                        dropBlobs += info.NumRecords();
                         changes->PortionsToDrop.push_back(info);
                     }
                 }
@@ -825,6 +835,9 @@ std::shared_ptr<TColumnEngineChanges> TColumnEngineForLogs::StartTtl(const THash
         return {};
     }
 
+    if (!allowEviction || !allowDrop) {
+        changes->NeedRepeat = true;
+    }
     return changes;
 }
 

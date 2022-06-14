@@ -1,14 +1,14 @@
 # YDB Roadmap
 
 ## Query Processor
-1. [ ] Support for **Snapshot Readonly** transactions mode
+1. [ ] Support for **Snapshot Read-only** transactions mode
 1. [ ] **Better resource management** for KQP Resource Manager (share information about nodes resources, avoid OOMs)
 1. [ ] Switch to **New Engine** for OLTP queries
 1. ✅ Support **`not null` for table columns**
 1. [ ] **Aggregates and predicates push down to column-oriented tables**
 1. [ ] **Optimize data formats** for data transition between query phases
-1. [ ] **Index Rename/Rebuild**
-1. [ ] **KQP Session Actor** as a replacement for KQP Worker Actor (optimize to reduce CPU usage)
+1. [ ] **Index Rebuild**
+1. [ ] Optimize **KQP Session Actor** (optimize to reduce CPU usage)
 1. [ ] **PostgreSQL compatibility**
     * [ ] Support PostgreSQL datatypes **serialization/deserialization** in YDB Public API
     * [ ] PostgreSQL compatible **query execution** (TPC-C, TPC-H queries should work)
@@ -17,13 +17,13 @@
 1. [ ] Support **constraints in query optimizer**
 1. [ ] **Query Processor 3.0** (a set of tasks to be more like traditional database in case of query execution functionality)
     * [ ] Support for **Streaming Lookup Join** via MVCC snapshots (avoid distributed transactions, scalability is better)
-    * [ ] **Universal API call for DML, DDL with unlimited results size** (aka StreamExecuteQuery, which allows to execute each query)
+    * [ ] **Universal API call for DML, DDL, ScanQuery** (aka StreaminExecuteQuery, which allows to execute each query)
     * [ ] Support for **secondary indexes in ScanQuery**
-    * [ ] **Transaction can see its own updates** (updates made during transaction execution are not buffered in RAM anymore, but rather are written to disk and available to read by this transaction)
-1. [ ] **Computation graphs caching (compute/datashard programs)** (optimize CPU usage)
+    * [ ] **Transaction can see its updates** (updates made during transaction execution are not buffered in RAM anymore, but rather are written to disk and available to read by this transaction)
+1. [ ] **Query graphs caching at DataShards** (optimize CPU usage)
 1. [ ] **RPC Deadline & Cancellation propagation** (smooth timeout management)
 1. [ ] **DDL for column-oriented tables**
-1. [ ] **Select indexes automatically**
+2. [ ] **Select indexes automatically**
 
 ## Database Core (Tablets, etc)
 1. [ ] Get **YDB topics** (aka pers queue, streams) ready for production

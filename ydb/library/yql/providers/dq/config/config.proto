@@ -145,4 +145,7 @@ message TDqConfig {
 
     optional TSolomon Solomon = 15;
     optional TPortoSettings PortoSettings = 16;
+
+    optional uint64 OpenSessionTimeoutMs = 17 [default = 15000];
+    optional uint64 RequestTimeoutMs = 18 [default = 720000];
 }

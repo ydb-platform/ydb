@@ -27,8 +27,8 @@ class TDqGateway: public IDqGateway
     };
 
 public:
-    TDqGateway(const TString& host, int port, int threads, const TString& vanillaJobPath, const TString& vanillaJobMd5, TDuration timeout = TDuration::Minutes(60))
-        : GrpcConf(TStringBuilder() << host << ":" << port)
+    TDqGateway(const TString& host, int port, int threads, const TString& vanillaJobPath, const TString& vanillaJobMd5, TDuration timeout = TDuration::Minutes(60), TDuration requestTimeout = TDuration::Max())
+        : GrpcConf(TStringBuilder() << host << ":" << port, requestTimeout)
         , GrpcClient(1)
         , Service(GrpcClient.CreateGRpcServiceConnection<Yql::DqsProto::DqService>(GrpcConf))
         , VanillaJobPath(vanillaJobPath)
@@ -447,7 +447,8 @@ TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config) {
     return new TDqGateway("localhost", config.GetPort(), 8,
         config.GetYtBackends()[0].GetVanillaJob(),
         config.GetYtBackends()[0].GetVanillaJobMd5(),
-        TDuration::Seconds(15));
+        TDuration::MilliSeconds(config.GetOpenSessionTimeoutMs()),
+        TDuration::MilliSeconds(config.GetRequestTimeoutMs()));
 }
 
 } // namespace NYql

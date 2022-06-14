@@ -23,6 +23,3 @@
 #define DLQ_ID_AND_SHARD_KEYS_PARAM                 "%17$s"
 #define DLQ_SHARD_TYPE_PARAM                        "%18$s"
 #define DLQ_STATE_KEYS_PARAM                        "%19$s"
-
-#define SELECT_QUEUE_AND_SHARD_HASH_PARAM           "%20$s"
-#define LOAD_QUEUE_AND_SHARD_HASH_OR_ZERO_PARAM     "%21$s"

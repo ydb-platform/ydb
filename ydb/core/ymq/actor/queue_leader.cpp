@@ -1519,7 +1519,6 @@ void TQueueLeader::RequestMessagesCountMetrics(ui64 shard) {
         .Params()
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
             .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
-            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
             .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
         .ParentBuilder().Start();
     ++MetricsQueriesInfly_;
@@ -1751,6 +1750,7 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
         .Counters(Counters_)
         .Params()
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
             .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
         .ParentBuilder().Start();
@@ -1769,8 +1769,8 @@ void TQueueLeader::StartLoadingInfly(ui64 shard, bool afterFailure) {
         .Counters(Counters_)
         .Params()
             .Uint64("QUEUE_ID_NUMBER", QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueueVersion_))
             .AddWithType("SHARD", shard, TablesFormat_ == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
-            .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(QueueVersion_, shard))
         .ParentBuilder().Start();
 }
 
@@ -2599,6 +2599,7 @@ void TQueueLeader::TLoadBatch::Execute(TQueueLeader* leader) {
         .RetryOnTimeout()
         .Params()
             .Uint64("QUEUE_ID_NUMBER", leader->QueueVersion_)
+            .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(leader->QueueVersion_))
             .Uint64("QUEUE_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(leader->QueueVersion_, Shard))
             .Uint64("NOW", now.MilliSeconds())
             .Uint64("READ_ID", RandomNumber<ui64>())
@@ -2655,6 +2656,7 @@ void TQueueLeader::TLoadBatch::Execute(TQueueLeader* leader) {
 
         builder.Params()
             .Uint64("DLQ_ID_NUMBER", dlqInfo.QueueVersion)
+            .Uint64("DLQ_ID_NUMBER_HASH", GetKeysHash(dlqInfo.QueueVersion))
             .AddWithType("DLQ_SHARD", dlqShard, dlqInfo.TablesFormat == 1 ? NScheme::NTypeIds::Uint32 : NScheme::NTypeIds::Uint64)
             .Uint64("DLQ_ID_NUMBER_AND_SHARD_HASH", GetKeysHash(dlqInfo.QueueVersion, dlqShard))
             .Uint64("DEAD_LETTERS_COUNT", deadLettersCounter);

@@ -2,15 +2,49 @@
 
 #include "queries.h"
 
+namespace {
+    const char* const STD_STATE_KEYS = R"__(
+            '('QueueIdNumberHash queueIdNumberHash)
+            '('QueueIdNumber queueIdNumber)
+            '('Shard shard)
+        )__";
+
+    const char* const DLQ_STD_STATE_KEYS = R"__(
+            '('QueueIdNumberHash dlqIdNumberHash)
+            '('QueueIdNumber dlqIdNumber)
+            '('Shard dlqShard)
+        )__";
+}
+
+
 
 namespace NKikimr::NSQS {
-
-    const char* TDbQueriesMaker::GetSelectQueueAndShardHash() const {
-        return TablesFormat_ == 1 ? "'QueueIdNumberAndShardHash" : "";
+    const char* TDbQueriesMaker::GetStateKeys() const {
+        if (TablesFormat_ == 0) {
+            return IsFifo_ ? "'('State (Uint64 '0))" : "'('State shard)";
+        }
+        return IsFifo_ ? GetIdKeys() : STD_STATE_KEYS;
     }
 
-    const char* TDbQueriesMaker::GetLoadQueueAndShardHashOrZero() const {
-        return TablesFormat_ == 1 ? "Member item 'QueueIdNumberAndShardHash" : "Uint64 '0";
+    const char* TDbQueriesMaker::GetDlqStateKeys() const {
+        if (TablesFormat_ == 0) {
+            return IsFifo_ ? "'('State (Uint64 '0))" : "'('State dlqShard)";
+        }
+        return IsFifo_ ? GetDlqIdKeys() : DLQ_STD_STATE_KEYS;
+    }
+
+    const char* TDbQueriesMaker::GetAllShardsRange() const {
+        if (TablesFormat_ == 1) {
+            if (IsFifo_) {
+                return QUEUE_ID_KEYS_RANGE;
+            }
+            return R"__(
+                '('QueueIdNumberHash queueIdNumberHash queueIdNumberHash)
+                '('QueueIdNumber queueIdNumber queueIdNumber)
+                '('Shard (Uint32 '0) (Uint32 '4294967295))
+            )__";
+        }
+        return "'('State (Uint64 '0) (Uint64 '18446744073709551615))";
     }
 
     TString TDbQueriesMaker::FillQuery(const char* query) const {
@@ -37,10 +71,7 @@ namespace NKikimr::NSQS {
             GetDlqIdKeys(),                         // 16
             GetDlqIdAndShardKeys(),                 // 17
             GetShardColumnType(DlqTablesFormat_),   // 18
-            GetDlqStateKeys(),                      // 19
-
-            GetSelectQueueAndShardHash(),           // 20
-            GetLoadQueueAndShardHashOrZero()        // 21
+            GetDlqStateKeys()                       // 19
         );
     }
     

@@ -715,10 +715,12 @@ const char* const LoadOrRedriveMessageQuery = R"__(
                 '('VisibilityDeadline (DataType 'Uint64))))))
 
         (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
         (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
         (let dlqIdNumber                (Parameter 'DLQ_ID_NUMBER (DataType 'Uint64)))
+        (let dlqIdNumberAndShardHash    (Parameter 'DLQ_ID_NUMBER_HASH (DataType 'Uint64)))
         (let dlqShard                   (Parameter 'DLQ_SHARD  (DataType ')__" DLQ_SHARD_TYPE_PARAM R"__()))
         (let dlqIdNumberAndShardHash    (Parameter 'DLQ_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
@@ -922,6 +924,7 @@ const char* const LoadOrRedriveMessageQuery = R"__(
 const char* const WriteMessageQuery = R"__(
     (
         (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
         (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
         (let randomId  (Parameter 'RANDOM_ID  (DataType 'Uint64)))
@@ -1041,7 +1044,6 @@ const char* const SetRetentionQuery = R"__(
         ))
         (let fields '(
             ')__" SHARD_COLUMN_NAME_PARAM R"__(
-            )__" SELECT_QUEUE_AND_SHARD_HASH_PARAM R"__(
             'RetentionBoundary
         ))
         (let records (Member (SelectRange stateTable range fields '()) 'List))
@@ -1057,9 +1059,6 @@ const char* const SetRetentionQuery = R"__(
                     '('Shard (
                         Member item ')__" SHARD_COLUMN_NAME_PARAM R"__(
                     ))
-                    '('QueueIdNumberAndShardHash (
-                        )__" LOAD_QUEUE_AND_SHARD_HASH_OR_ZERO_PARAM R"__(
-                    ))
                     '('RetentionBoundary (Max boundary (Member item 'RetentionBoundary)))
                     '('Updated updated))))))))
 
@@ -1072,7 +1071,6 @@ const char* const SetRetentionQuery = R"__(
 
             (Map updated (lambda '(item) (block '(
                 (let shard (Member item 'Shard))
-                (let queueIdNumberAndShardHash (Member item 'QueueIdNumberAndShardHash))
                 (let row '(
                     )__" STATE_KEYS_PARAM R"__(
                 ))
@@ -1139,6 +1137,7 @@ const char* const GetRetentionOffsetQuery = R"__(
 const char* const LoadInflyQuery = R"__(
     (
         (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash          (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
         (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
 
@@ -1171,9 +1170,9 @@ const char* const LoadInflyQuery = R"__(
 
 const char* const GetStateQuery = R"__(
     (
-        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
-        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
+        (let shard              (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
 
         (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 
@@ -1269,9 +1268,9 @@ const char* const GetUserSettingsQuery = R"__(
 
 const char* const GetMessageCountMetricsQuery = R"__(
     (
-        (let queueIdNumber              (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
-        (let shard                      (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
-        (let queueIdNumberAndShardHash  (Parameter 'QUEUE_ID_NUMBER_AND_SHARD_HASH (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let shard              (Parameter 'SHARD  (DataType ')__" SHARD_TYPE_PARAM R"__()))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
 
         (let stateTable ')__" QUEUE_TABLES_FOLDER_PARAM R"__(/State)
 

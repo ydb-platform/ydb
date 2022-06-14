@@ -906,11 +906,10 @@ static const char* const CommitQueueParamsQuery = R"__(
             (ListIf willCommit (UpdateRow eventsTable eventsRow eventsUpdate))
             (ListIf willCommit (UpdateRow attrsTable attrRow attrUpdate))
             
-             (If (Not willCommit) (AsList (Void))
-                (Map (Enumerate queueIdNumberAndShardHashes) (lambda '(item) (block '(
-                    (let shardOriginal (Nth item '0))
+            
+            (If (Not willCommit) (AsList (Void))
+                (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
                     (let shard (Cast shardOriginal 'Uint32))
-                    (let queueIdNumberAndShardHash (Nth item '1))
                         
                     (let row '(%5$s))
                     (let update '(
@@ -937,7 +936,7 @@ TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) {
             )__";
         }
         return R"__(
-            '('QueueIdNumberAndShardHash queueIdNumberAndShardHash)
+            '('QueueIdNumberHash queueIdNumberHash)
             '('QueueIdNumber version)
             '('Shard shard)
         )__";

@@ -132,7 +132,13 @@ def create_attibutes_table(root, session, queue_type):
 
 
 def create_state_table(root, session, queue_type):
-    queue_keys = get_table_keys_for_queue(with_shard=(queue_type == QueueType.STD))
+    queue_keys = columns = [
+        ('QueueIdNumberHash', ydb.PrimitiveType.Uint64),
+        ('QueueIdNumber', ydb.PrimitiveType.Uint64),
+    ]
+    if queue_type == QueueType.STD:
+        queue_keys.append(('Shard', ydb.PrimitiveType.Uint32))
+
     columns = queue_keys + [
         ('CleanupTimestamp', ydb.PrimitiveType.Uint64),
         ('CreatedTimestamp', ydb.PrimitiveType.Uint64),

@@ -25,7 +25,7 @@ public:
     TGRpcProxyCounters(NMonitoring::TDynamicCounterPtr counters, bool forDatabase) {
         NMonitoring::TDynamicCounterPtr group;
         if (forDatabase) {
-            group = counters->GetSubgroup("group", "grpc");
+            group = counters;
         } else {
             group = GetServiceCounters(counters, "grpc");
         }

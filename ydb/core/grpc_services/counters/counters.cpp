@@ -230,7 +230,7 @@ TYdbCounterBlock::TYdbCounterBlock(const NMonitoring::TDynamicCounterPtr& counte
     // group for all counters
     NMonitoring::TDynamicCounterPtr group;
     if (forDatabase) {
-        group = internalGroup->GetSubgroup("group", "grpc");
+        group = internalGroup;
     } else {
         group = GetServiceCounters(counters, "grpc")->GetSubgroup("subsystem", "serverStats");
     }

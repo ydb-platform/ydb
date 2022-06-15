@@ -318,7 +318,7 @@ private:
     TString DatabaseId;
 
     NMonitoring::TDynamicCounterPtr ExternalGroup;
-    NMonitoring::TDynamicCounterPtr InternalGroup;
+    std::unordered_map<TString, NMonitoring::TDynamicCounterPtr> InternalGroups;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
         NKikimr::NSysView::TDbServiceCounters>;

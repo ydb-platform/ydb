@@ -141,6 +141,9 @@ namespace {
 
         if constexpr (std::is_same_v<NExport::TExportToS3Response, T>) {
             freeText << "StorageClass: " << settings.StorageClass_ << Endl;
+            if (settings.Compression_) {
+                freeText << "Compression: " << *settings.Compression_ << Endl;
+            }
         }
 
         if (!status.GetIssues().Empty()) {

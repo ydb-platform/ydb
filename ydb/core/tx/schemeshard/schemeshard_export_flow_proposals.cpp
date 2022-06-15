@@ -1,6 +1,8 @@
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_path_describer.h"
 
+#include <ydb/core/ydb_convert/compression.h>
+
 #include <util/string/builder.h>
 #include <util/string/cast.h>
 
@@ -146,6 +148,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 break;
             default:
                 Y_FAIL("Unknown scheme");
+            }
+
+            if (const auto compression = exportSettings.compression()) {
+                Y_VERIFY(FillCompression(*task.MutableCompression(), compression));
             }
         }
         break;

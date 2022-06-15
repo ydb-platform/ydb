@@ -9,6 +9,7 @@ IF (SANITIZER_TYPE OR WITH_VALGRIND)
 ENDIF()
 
 SRCS(
+    compression_ut.cpp
     ydb_convert_ut.cpp
 )
 

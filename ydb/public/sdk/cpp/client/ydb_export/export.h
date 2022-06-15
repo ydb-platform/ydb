@@ -89,6 +89,7 @@ struct TExportToS3Settings : public TOperationRequestSettings<TExportToS3Setting
     FLUENT_SETTING_VECTOR(TItem, Item);
     FLUENT_SETTING_OPTIONAL(TString, Description);
     FLUENT_SETTING_OPTIONAL(ui32, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL(TString, Compression);
 };
 
 class TExportToS3Response : public TOperation {
@@ -125,12 +126,10 @@ private:
 } // namespace NExport
 } // namespace NYdb
 
-template<>
-inline void Out<NYdb::NExport::TExportToYtResponse>(IOutputStream& o, const NYdb::NExport::TExportToYtResponse& x) {
+Y_DECLARE_OUT_SPEC(inline, NYdb::NExport::TExportToYtResponse, o, x) {
     return x.Out(o);
 }
 
-template<>
-inline void Out<NYdb::NExport::TExportToS3Response>(IOutputStream& o, const NYdb::NExport::TExportToS3Response& x) {
+Y_DECLARE_OUT_SPEC(inline, NYdb::NExport::TExportToS3Response, o, x) {
     return x.Out(o);
 }

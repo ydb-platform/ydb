@@ -683,8 +683,8 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
         ActorSystem->Send(HttpProxyActorId, addPort.release());
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/", HttpMonServiceActorId));
         ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/node", NodeProxyServiceActorId));
-        for (NMonitoring::IMonPage* page : ActorMonPages) {
-            RegisterActorMonPage(page);
+        for (auto& pageInfo : ActorMonPages) {
+            RegisterActorMonPage(pageInfo);
         }
         ActorMonPages.clear();
     }
@@ -712,14 +712,14 @@ NMonitoring::TIndexMonPage* TAsyncHttpMon::RegisterIndexPage(const TString& path
     return page;
 }
 
-void TAsyncHttpMon::RegisterActorMonPage(NMonitoring::IMonPage* page) {
+void TAsyncHttpMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
     if (ActorSystem) {
-        TActorMonPage* actorMonPage = reinterpret_cast<TActorMonPage*>(page);
+        TActorMonPage* actorMonPage = reinterpret_cast<TActorMonPage*>(pageInfo.Page);
         auto actorId = ActorSystem->Register(
             new THttpMonServiceLegacyActor(actorMonPage),
             TMailboxType::ReadAsFilled,
             ActorSystem->AppData<NKikimr::TAppData>()->UserPoolId);
-        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(GetPageFullPath(actorMonPage), actorId));
+        ActorSystem->Send(HttpProxyActorId, new NHttp::TEvHttpProxy::TEvRegisterHandler(pageInfo.Path, actorId));
         ActorServices.push_back(actorId);
     }
 }
@@ -741,10 +741,15 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         Register(page);
     }
 
+    TActorMonPageInfo pageInfo = {
+        .Page = page,
+        .Path = GetPageFullPath(page),
+    };
+
     if (ActorSystem && HttpProxyActorId) {
-        RegisterActorMonPage(page);
+        RegisterActorMonPage(pageInfo);
     } else {
-        ActorMonPages.push_back(page);
+        ActorMonPages.emplace_back(pageInfo);
     }
 
     return page;

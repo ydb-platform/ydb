@@ -33,10 +33,16 @@ protected:
     TActorId HttpProxyActorId;
     TActorId HttpMonServiceActorId;
     TActorId NodeProxyServiceActorId;
-    std::vector<NMonitoring::IMonPage*> ActorMonPages;
+
+    struct TActorMonPageInfo {
+        NMonitoring::IMonPage* Page;
+        TString Path;
+    };
+
+    std::vector<TActorMonPageInfo> ActorMonPages;
     std::vector<TActorId> ActorServices;
 
-    void RegisterActorMonPage(NMonitoring::IMonPage* page);
+    void RegisterActorMonPage(const TActorMonPageInfo& pageInfo);
 };
 
 } // NActors

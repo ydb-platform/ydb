@@ -18,6 +18,7 @@
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
 #include <ydb/core/tx/coordinator/coordinator_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -39,6 +40,7 @@ static constexpr ui32 ReplySizeLimit = 48 * 1024 * 1024; // 48 MB
 
 class TKqpDataExecuter : public TKqpExecuterBase<TKqpDataExecuter, EExecType::Data> {
     using TBase = TKqpExecuterBase<TKqpDataExecuter, EExecType::Data>;
+    using TKqpSnapshot = IKqpGateway::TKqpSnapshot;
 
     struct TEvPrivate {
         enum EEv {
@@ -1048,6 +1050,8 @@ private:
                                     task.Meta.Writes->Ranges.MergeWritePoints(TShardKeyRanges(read.Ranges), keyTypes);
                                 }
                             }
+
+                            ShardsWithEffects.insert(task.Meta.ShardId);
                         }
                     } else {
                         auto result = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kUpsertRows)
@@ -1067,6 +1071,8 @@ private:
                             } else {
                                 task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
                             }
+
+                            ShardsWithEffects.insert(shardId);
                         }
                     }
                     break;
@@ -1187,14 +1193,14 @@ private:
             << ", locks: " << dataTransaction.GetKqpTransaction().GetLocks().ShortDebugString());
 
         TEvDataShard::TEvProposeTransaction* ev;
-        if (Request.Snapshot.IsValid() && ReadOnlyTx) {
+        if (Snapshot.IsValid() && ReadOnlyTx) {
             ev = new TEvDataShard::TEvProposeTransaction(
                 NKikimrTxDataShard::TX_KIND_DATA,
                 SelfId(),
                 TxId,
                 dataTransaction.SerializeAsString(),
-                Request.Snapshot.Step,
-                Request.Snapshot.TxId,
+                Snapshot.Step,
+                Snapshot.TxId,
                 ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
         } else {
             ev = new TEvDataShard::TEvProposeTransaction(
@@ -1455,16 +1461,74 @@ private:
 
         if (ReadOnlyTx && Request.Snapshot.IsValid()) {
             // Snapshot reads are always immediate
+            Snapshot = Request.Snapshot;
             ImmediateTx = true;
         }
 
+        const bool forceSnapshot = (
+                ReadOnlyTx &&
+                !ImmediateTx &&
+                !HasPersistentChannels &&
+                !Database.empty() &&
+                AppData()->FeatureFlags.GetEnableMvccSnapshotReads());
+
+        if (forceSnapshot) {
+            ComputeTasks = std::move(computeTasks);
+            DatashardTxs = std::move(datashardTxs);
+
+            auto longTxService = NLongTxService::MakeLongTxServiceID(SelfId().NodeId());
+            Send(longTxService, new NLongTxService::TEvLongTxService::TEvAcquireReadSnapshot(Database));
+
+            LOG_T("Create temporary mvcc snapshot, ebcome WaitSnapshotState");
+            Become(&TKqpDataExecuter::WaitSnapshotState);
+            return;
+        }
+
+        ContinueExecute(computeTasks, datashardTxs);
+    }
+
+    STATEFN(WaitSnapshotState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult, Handle);
+                hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(TEvents::TEvWakeup, HandleTimeout);
+                default:
+                    UnexpectedEvent("WaitSnapshotState", ev->GetTypeRewrite());
+            }
+        } catch (const yexception& e) {
+            InternalError(e.what());
+        }
+        ReportEventElapsedTime();
+    }
+
+    void Handle(NLongTxService::TEvLongTxService::TEvAcquireReadSnapshotResult::TPtr& ev) {
+        auto& record = ev->Get()->Record;
+
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            ReplyErrorAndDie(record.GetStatus(), record.MutableIssues());
+            return;
+        }
+
+        Snapshot = TKqpSnapshot(record.GetSnapshotStep(), record.GetSnapshotTxId());
+        ImmediateTx = true;
+
+        auto computeTasks = std::move(ComputeTasks);
+        auto datashardTxs = std::move(DatashardTxs);
+        ContinueExecute(computeTasks, datashardTxs);
+    }
+
+    void ContinueExecute(
+            TVector<NDqProto::TDqTask>& computeTasks,
+            THashMap<ui64, NKikimrTxDataShard::TKqpTransaction>& datashardTxs)
+    {
         UseFollowers = Request.IsolationLevel == NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
         if (datashardTxs.size() > 1) {
             // Followers only allowed for single shard transactions.
             // (legacy behaviour, for compatibility with current execution engine)
             UseFollowers = false;
         }
-        if (Request.Snapshot.IsValid()) {
+        if (Snapshot.IsValid()) {
             // TODO: KIKIMR-11912
             UseFollowers = false;
         }
@@ -1510,7 +1574,9 @@ private:
             TSet<ui64> taskShardIds;
             if (Request.ValidateLocks) {
                 for (auto& [shardId, _] : datashardTasks) {
-                    taskShardIds.insert(shardId);
+                    if (ShardsWithEffects.contains(shardId)) {
+                        taskShardIds.insert(shardId);
+                    }
                 }
             }
 
@@ -1711,6 +1777,10 @@ public:
 
         channelDesc.SetIsPersistent(IsCrossShardChannel(TasksGraph, channel));
         channelDesc.SetInMemory(channel.InMemory);
+
+        if (channelDesc.GetIsPersistent()) {
+            HasPersistentChannels = true;
+        }
     }
 
 private:
@@ -1759,6 +1829,17 @@ private:
 
     TInstant FirstPrepareReply;
     TInstant LastPrepareReply;
+
+    // Tracks which shards are expected to have effects
+    THashSet<ui64> ShardsWithEffects;
+    bool HasPersistentChannels = false;
+
+    // Either requested or temporarily acquired snapshot
+    TKqpSnapshot Snapshot;
+
+    // Temporary storage during snapshot acquisition
+    TVector<NDqProto::TDqTask> ComputeTasks;
+    THashMap<ui64, NKikimrTxDataShard::TKqpTransaction> DatashardTxs;
 };
 
 } // namespace

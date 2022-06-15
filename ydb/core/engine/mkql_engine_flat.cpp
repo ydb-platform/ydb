@@ -380,7 +380,7 @@ public:
         return DbKeys;
     }
 
-    EResult PrepareShardPrograms(const TShardLimits& limits) noexcept override {
+    EResult PrepareShardPrograms(const TShardLimits& limits, ui32* outRSCount) noexcept override {
         Y_VERIFY(!AreAffectedShardsPrepared, "PrepareShardPrograms is already called");
         TGuard<TScopedAlloc> allocGuard(Alloc);
         AffectedShards.clear();
@@ -495,6 +495,10 @@ public:
                 JoinStrings(srcTables.begin(), srcTables.end(), ",").c_str(),
                 JoinStrings(dstTables.begin(), dstTables.end(), ",").c_str()).data());
             return EResult::TooManyRS;
+        }
+
+        if (outRSCount) {
+            *outRSCount = readsets.size();
         }
 
         AreAffectedShardsPrepared = true;

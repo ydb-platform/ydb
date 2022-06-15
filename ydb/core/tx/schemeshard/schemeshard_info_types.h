@@ -33,6 +33,11 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+struct TForceShardSplitSettings {
+    ui64 ForceShardSplitDataSize;
+    bool DisableForceShardSplit;
+};
+
 struct TSplitSettings {
     TControlWrapper SplitMergePartCountLimit;
     TControlWrapper FastSplitSizeThreshold;
@@ -42,6 +47,8 @@ struct TSplitSettings {
     TControlWrapper SplitByLoadMaxShardsDefault;
     TControlWrapper MergeByLoadMinUptimeSec;
     TControlWrapper MergeByLoadMinLowLoadDurationSec;
+    TControlWrapper ForceShardSplitDataSize;
+    TControlWrapper DisableForceShardSplit;
 
     TSplitSettings()
         : SplitMergePartCountLimit(2000, -1, 1000000)
@@ -52,6 +59,8 @@ struct TSplitSettings {
         , SplitByLoadMaxShardsDefault(50, 0, 10000)
         , MergeByLoadMinUptimeSec(10*60, 0, 4ll*1000*1000*1000)
         , MergeByLoadMinLowLoadDurationSec(1*60*60, 0, 4ll*1000*1000*1000)
+        , ForceShardSplitDataSize(2ULL * 1024 * 1024 * 1024, 10 * 1024 * 1024, 16ULL * 1024 * 1024 * 1024)
+        , DisableForceShardSplit(0, 0, 1)
     {}
 
     void Register(TIntrusivePtr<NKikimr::TControlBoard>& icb) {
@@ -64,6 +73,16 @@ struct TSplitSettings {
         icb->RegisterSharedControl(SplitByLoadMaxShardsDefault,     "SchemeShard_SplitByLoadMaxShardsDefault");
         icb->RegisterSharedControl(MergeByLoadMinUptimeSec,         "SchemeShard_MergeByLoadMinUptimeSec");
         icb->RegisterSharedControl(MergeByLoadMinLowLoadDurationSec,"SchemeShard_MergeByLoadMinLowLoadDurationSec");
+
+        icb->RegisterSharedControl(ForceShardSplitDataSize,         "SchemeShardControls.ForceShardSplitDataSize");
+        icb->RegisterSharedControl(DisableForceShardSplit,          "SchemeShardControls.DisableForceShardSplit");
+    }
+
+    TForceShardSplitSettings GetForceShardSplitSettings() const {
+        return TForceShardSplitSettings{
+            .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
+            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
+        };
     }
 };
 
@@ -557,22 +576,30 @@ public:
         return ExpectedPartitionCount;
     }
 
-    bool TryAddShardToMerge(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
+    bool TryAddShardToMerge(const TSplitSettings& splitSettings,
+                            const TForceShardSplitSettings& forceShardSplitSettings,
+                            TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad) const;
 
-    bool CheckCanMergePartitions(const TSplitSettings& splitSettings, TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const;
+    bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
+                                 const TForceShardSplitSettings& forceShardSplitSettings,
+                                 TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const;
 
     bool CheckFastSplitForPartition(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
     bool CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
 
-    bool IsSplitBySizeEnabled() const {
+    bool IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {
+        // Respect unspecified SizeToSplit when force shard splits are disabled
+        if (params.DisableForceShardSplit && PartitionConfig().GetPartitioningPolicy().GetSizeToSplit() == 0) {
+            return false;
+        }
         // Auto split is always enabled, unless table is using external blobs
         return !PartitionConfigHasExternalBlobsEnabled(PartitionConfig());
     }
 
-    bool IsMergeBySizeEnabled() const {
+    bool IsMergeBySizeEnabled(const TForceShardSplitSettings& params) const {
         // Auto merge is only enabled when auto split is also enabled
-        if (!IsSplitBySizeEnabled()) {
+        if (!IsSplitBySizeEnabled(params)) {
             return false;
         }
         // We want auto merge enabled when user has explicitly specified the
@@ -585,7 +612,7 @@ public:
         // We also want auto merge enabled when table has more shards than the
         // specified maximum number of partitions. This way when something
         // splits by size over the limit we merge some smaller partitions.
-        return Partitions.size() > GetMaxPartitionsCount();
+        return Partitions.size() > GetMaxPartitionsCount() && !params.DisableForceShardSplit;
     }
 
     bool IsSplitByLoadEnabled() const {
@@ -596,27 +623,29 @@ public:
         return IsSplitByLoadEnabled();
     }
 
-    static ui64 GetShardForceSizeToSplit() {
-        return 2ULL * 1024 * 1024 * 1024; // 2GiB
-    }
-
-    ui64 GetShardSizeToSplit() const {
-        if (!IsSplitBySizeEnabled()) {
+    ui64 GetShardSizeToSplit(const TForceShardSplitSettings& params) const {
+        if (!IsSplitBySizeEnabled(params)) {
             return Max<ui64>();
         }
         ui64 threshold = PartitionConfig().GetPartitioningPolicy().GetSizeToSplit();
-        if (threshold == 0 || threshold >= GetShardForceSizeToSplit()) {
-            return GetShardForceSizeToSplit();
+        if (params.DisableForceShardSplit) {
+            if (threshold == 0) {
+                return Max<ui64>();
+            }
+        } else {
+            if (threshold == 0 || threshold >= params.ForceShardSplitDataSize) {
+                return params.ForceShardSplitDataSize;
+            }
         }
         return threshold;
     }
 
-    ui64 GetSizeToMerge() const {
-        if (!IsMergeBySizeEnabled()) {
+    ui64 GetSizeToMerge(const TForceShardSplitSettings& params) const {
+        if (!IsMergeBySizeEnabled(params)) {
             // Disable auto-merge by default
             return 0;
         } else {
-            return GetShardSizeToSplit() / 2;
+            return GetShardSizeToSplit(params) / 2;
         }
     }
 
@@ -630,24 +659,24 @@ public:
         return val == 0 ? 32*1024 : val;
     }
 
-    bool IsForceSplitBySizeShardIdx(TShardIdx shardIdx) const {
-        if (!Stats.PartitionStats.contains(shardIdx)) {
+    bool IsForceSplitBySizeShardIdx(TShardIdx shardIdx, const TForceShardSplitSettings& params) const {
+        if (!Stats.PartitionStats.contains(shardIdx) || params.DisableForceShardSplit) {
             return false;
         }
         const auto& stats = Stats.PartitionStats.at(shardIdx);
-        return stats.DataSize >= GetShardForceSizeToSplit();
+        return stats.DataSize >= params.ForceShardSplitDataSize;
     }
 
-    bool ShouldSplitBySize(ui64 dataSize) const {
-        if (!IsSplitBySizeEnabled()) {
+    bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params) const {
+        if (!IsSplitBySizeEnabled(params)) {
             return false;
         }
         // When shard is over the maximum size we split even when over max partitions
-        if (dataSize >= GetShardForceSizeToSplit()) {
+        if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
             return true;
         }
         // Otherwise we split when we may add one more partition
-        return Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit();
+        return Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params);
     }
 
     bool NeedRecreateParts() const {

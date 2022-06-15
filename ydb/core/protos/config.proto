@@ -291,7 +291,7 @@ message TLogConfig {
 
     repeated TEntry Entry = 1;
     optional bool   SysLog = 2 [default = false];
-    optional uint32 DefaultLevel = 3 [default = 4]; // NActors::NLog::PRI_WARN
+    optional uint32 DefaultLevel = 3 [default = 5]; // NActors::NLog::PRI_NOTICE
     optional uint32 DefaultSamplingLevel = 4 [default = 7]; // NActors::NLog::PRI_DEBUG
     optional uint32 DefaultSamplingRate = 5 [default = 0];
     optional string Format = 6 [default = "full"]; // "full" | "short" | "json"

@@ -144,8 +144,6 @@ public:
         , Config(CreateConfig(kqpSettings, workerSettings))
         , ExplicitTransactions(*Config->_KqpMaxActiveTxPerSession.Get())
     {
-        IdleDuration = TDuration::Seconds(*Config->_KqpSessionIdleTimeoutSec.Get());
-
         RequestCounters = MakeIntrusive<TKqpRequestCounters>();
         RequestCounters->Counters = Counters;
         RequestCounters->DbCounters = Settings.DbCounters;
@@ -153,6 +151,7 @@ public:
     }
 
     void Bootstrap() {
+        LOG_D("SessonActor bootstrapped, workerId: " << SelfId());
         Counters->ReportSessionActorCreated(Settings.DbCounters);
         CreationTime = TInstant::Now();
 
@@ -467,6 +466,8 @@ public:
 
         Become(&TKqpSessionActor::ExecuteState);
 
+        QueryState->TxCtx->OnBeginQuery();
+
         if (queryRequest.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN) {
             AcquirePersistentSnapshot();
             return;
@@ -475,6 +476,8 @@ public:
             AcquireMvccSnapshot();
             return;
         }
+
+
         // Can reply inside (in case of deferred-only transactions) and become ReadyState
         ExecuteOrDefer();
     }
@@ -1336,6 +1339,10 @@ public:
         FillStats(record);
 
         YQL_ENSURE(QueryState);
+        if (QueryState->TxCtx) {
+            QueryState->TxCtx->OnEndQuery();
+        }
+
         if (QueryState->Commit) {
             ResetTxState();
         }
@@ -1602,10 +1609,11 @@ public:
         StopIdleTimer();
 
         ++IdleTimerId;
-        IdleTimerActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), IdleDuration,
+        auto idleDuration = TDuration::Seconds(*Config->_KqpSessionIdleTimeoutSec.Get());
+        IdleTimerActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), idleDuration,
                 new IEventHandle(SelfId(), SelfId(), new TEvKqp::TEvIdleTimeout(IdleTimerId)));
         LOG_D("Created long timer for idle timeout, timer id: " << IdleTimerId
-                << ", duration: " << IdleDuration << ", actor: " << IdleTimerActorId);
+                << ", duration: " << idleDuration << ", actor: " << IdleTimerActorId);
     }
 
     void StopIdleTimer() {
@@ -1618,8 +1626,6 @@ public:
 
     void Handle(TEvKqp::TEvIdleTimeout::TPtr& ev) {
         auto timerId = ev->Get()->TimerId;
-        LOG_D("Received TEvIdleTimeout in ready state, timer id: "
-            << timerId << ", sender: " << ev->Sender);
 
         if (timerId == IdleTimerId) {
             LOG_N(TKqpRequestInfo("", SessionId) << "SessionActor idle timeout, worker destroyed");
@@ -1942,7 +1948,6 @@ private:
 
     TActorId IdleTimerActorId;
     ui32 IdleTimerId = 0;
-    TDuration IdleDuration;
     std::optional<TSessionShutdownState> ShutdownState;
 };
 

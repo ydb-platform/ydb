@@ -4,4 +4,5 @@
 
 - [Системные таблицы](../system_views_db.md)
 - [Метрики](../monitoring.md)
+- [Дашборды Grafana](../grafana_dashboards.md)
 

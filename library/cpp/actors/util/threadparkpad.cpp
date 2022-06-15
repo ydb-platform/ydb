@@ -43,6 +43,8 @@ namespace NActors {
     };
 
 #elif defined _win32_
+#include <library/cpp/deprecated/atomic/atomic.h>
+
 #include <util/generic/bt_exception.h>
 #include <util/generic/yexception.h>
 
@@ -84,6 +86,8 @@ namespace NActors {
     };
 
 #else
+
+#include <library/cpp/deprecated/atomic/atomic.h>
 
 #include <util/system/event.h>
 

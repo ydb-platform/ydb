@@ -27,7 +27,7 @@ service TopicService {
     //        <----------------
     //         [something went wrong] (status != SUCCESS, issues not empty)
     //        <----------------
-    rpc StreamWrite(stream StreamWriteClientMessage) returns (stream StreamWriteServerMessage);
+    rpc StreamWrite(stream StreamWriteMessage.FromClient) returns (stream StreamWriteMessage.FromServer);
 
 
     // Create Read Session
@@ -61,7 +61,7 @@ service TopicService {
     //        <----------------
     //         [something went wrong] (status != SUCCESS, issues not empty)
     //        <----------------
-    rpc StreamRead(stream StreamReadClientMessage) returns (stream StreamReadServerMessage);
+    rpc StreamRead(stream StreamReadMessage.FromClient) returns (stream StreamReadMessage.FromServer);
 
 
     // Describe topic command.
@@ -84,6 +84,6 @@ service TopicService {
     rpc AddConsumer(AddConsumerRequest) returns (AddConsumerResponse);
 
 
-    // Remove consumer command.
-    rpc RemoveConsumer(RemoveConsumerRequest) returns (RemoveConsumerResponse);
+    // Drop consumer command.
+    rpc DropConsumer(RemoveConsumerRequest) returns (RemoveConsumerResponse);
 }

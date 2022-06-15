@@ -466,28 +466,37 @@ class TTcMallocMonitor : public IAllocMonitor {
 
     struct TControls {
         static constexpr size_t MaxSamplingRate = 4ll << 30;
+        static constexpr size_t MaxPageCacheTargetSize = 128ll << 30;
+        static constexpr size_t MaxPageCacheReleaseRate = 128ll << 20;
+
+        static constexpr size_t DefaultPageCacheTargetSize = 512ll << 20;
+        static constexpr size_t DefaultPageCacheReleaseRate = 8ll << 20;
 
         TControlWrapper ProfileSamplingRate;
         TControlWrapper GuardedSamplingRate;
-        TControlWrapper BackgroundReleaseRate;
         TControlWrapper MemoryLimit;
+        TControlWrapper PageCacheTargetSize;
+        TControlWrapper PageCacheReleaseRate;
 
         TControls()
             : ProfileSamplingRate(tcmalloc::MallocExtension::GetProfileSamplingRate(),
                 64 << 10, MaxSamplingRate)
             , GuardedSamplingRate(MaxSamplingRate,
                 64 << 10, MaxSamplingRate)
-            , BackgroundReleaseRate(0,
-                0, 64 << 20)
             , MemoryLimit(0,
                 0, std::numeric_limits<i64>::max())
+            , PageCacheTargetSize(DefaultPageCacheTargetSize,
+                0, MaxPageCacheTargetSize)
+            , PageCacheReleaseRate(DefaultPageCacheReleaseRate,
+                0, MaxPageCacheReleaseRate)
         {}
 
         void Register(TIntrusivePtr<TControlBoard> icb) {
             icb->RegisterSharedControl(ProfileSamplingRate, "TCMallocControls.ProfileSamplingRate");
             icb->RegisterSharedControl(GuardedSamplingRate, "TCMallocControls.GuardedSamplingRate");
-            icb->RegisterSharedControl(BackgroundReleaseRate, "TCMallocControls.BackgroundReleaseRate");
             icb->RegisterSharedControl(MemoryLimit, "TCMallocControls.MemoryLimit");
+            icb->RegisterSharedControl(PageCacheTargetSize, "TCMallocControls.PageCacheTargetSize");
+            icb->RegisterSharedControl(PageCacheReleaseRate, "TCMallocControls.PageCacheReleaseRate");
         }
     };
     TControls Controls;
@@ -544,14 +553,22 @@ private:
         }
         tcmalloc::MallocExtension::SetGuardedSamplingRate(Controls.GuardedSamplingRate);
 
-        tcmalloc::MallocExtension::BytesPerSecond rate{(size_t)Controls.BackgroundReleaseRate};
-        tcmalloc::MallocExtension::SetBackgroundReleaseRate(rate);
-
         tcmalloc::MallocExtension::MemoryLimit limit;
         limit.hard = false;
         limit.limit = Controls.MemoryLimit ?
             (size_t)Controls.MemoryLimit : std::numeric_limits<size_t>::max();
         tcmalloc::MallocExtension::SetMemoryLimit(limit);
+    }
+
+    void ReleaseMemoryIfNecessary(TDuration interval) {
+        auto properties = tcmalloc::MallocExtension::GetProperties();
+        i64 pageHeapSize = GetProperty(properties, "tcmalloc.page_heap_free");
+        if (pageHeapSize > Controls.PageCacheTargetSize) {
+            auto excess = (ui64)(pageHeapSize - Controls.PageCacheTargetSize);
+            auto releaseLimit = (ui64)(Controls.PageCacheReleaseRate * interval.Seconds());
+            tcmalloc::MallocExtension::ReleaseMemoryToSystem(
+                std::min(excess, releaseLimit));
+        }
     }
 
     void DumpCurrent(IOutputStream& out, tcmalloc::ProfileType type,
@@ -672,9 +689,10 @@ public:
         Controls.Register(icb);
     }
 
-    void Update() override {
+    void Update(TDuration interval) override {
         UpdateCounters();
         UpdateControls();
+        ReleaseMemoryIfNecessary(interval);
     }
 
     void Dump(IOutputStream& out, const TString& relPath) override {

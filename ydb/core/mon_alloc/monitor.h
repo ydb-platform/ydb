@@ -34,7 +34,7 @@ namespace NKikimr {
             Y_UNUSED(icb);
         }
 
-        virtual void Update() = 0;
+        virtual void Update(TDuration interval) = 0;
 
         virtual void Dump(IOutputStream& out, const TString& relPath) = 0;
 

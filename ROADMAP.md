@@ -68,11 +68,12 @@
 
 ## Embedded UI
 1.  **Support for all schema entities**
-    * **YDB Topics Support** (add support for viewing metadata of YDB topics, its data, lag, etc)
+    * **YDB Topics** (add support for viewing metadata of YDB topics, its data, lag, etc)
     * **CDC Streams**
     * **Secondary Indexes**
     * **Read Replicas**
     * **Column-oriented Tables**
+1.  **Basic charts for database monitoring**    
 
 ## Command Line Utility
 1. Use a **single `ydb yql`** instead of `ydb table query` or `ydb scripting`

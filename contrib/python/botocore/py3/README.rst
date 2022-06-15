@@ -18,7 +18,7 @@ on 2021-07-15. To avoid disruption, customers using Botocore on Python 2.7 may
 need to upgrade their version of Python or pin the version of Botocore. For
 more information, see this `blog post <https://aws.amazon.com/blogs/developer/announcing-end-of-support-for-python-2-7-in-aws-sdk-for-python-and-aws-cli-v1/>`__.
 
-On 2022-05-30, we will be dropping support for Python 3.6. This follows the
+On 2022-05-30, support was dropped for Python 3.6. This follows the
 Python Software Foundation `end of support <https://www.python.org/dev/peps/pep-0494/#lifespan>`__
 for the runtime which occurred on 2021-12-23.
 For more information, see this `blog post <https://aws.amazon.com/blogs/developer/python-support-policy-updates-for-aws-sdks-and-tools/>`__.

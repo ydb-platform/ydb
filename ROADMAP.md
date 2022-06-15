@@ -39,6 +39,7 @@
 1. **Transaction can see its own updates** (updates made during transaction execution are not buffered in RAM anymore, but rather are written to disk and available to read by this transaction)
 1. **Data Ingestion from topic to table** (implement built-in compatibility to ingest data to YDB tables from topics)
 1. Support **snapshot read over read replicas** (consistent reads against read replicas)
+1. **Transactions between topics and tables**
 
 ### Hardcore
 1. **Datashard iterator reads via MVCC**
@@ -73,7 +74,7 @@
     * **Secondary Indexes**
     * **Read Replicas**
     * **Column-oriented Tables**
-1.  **Basic charts for database monitoring**    
+1.  **Basic charts for database monitoring**
 
 ## Command Line Utility
 1. Use a **single `ydb yql`** instead of `ydb table query` or `ydb scripting`

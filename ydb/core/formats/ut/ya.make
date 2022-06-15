@@ -22,7 +22,12 @@ ENDIF()
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
+
+    # for NYql::NUdf alloc stuff used in binary_json
+    ydb/library/yql/public/udf/service/exception_policy
 )
+
+YQL_LAST_ABI_VERSION()
 
 CFLAGS(
     -Wno-unused-parameter

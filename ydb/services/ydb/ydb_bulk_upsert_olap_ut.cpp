@@ -11,18 +11,62 @@ using namespace NYdb;
 
 namespace {
 
-// TODO: there's no way to read all data via LongTx Read. It returns some part of result.
-TString Read(TDriver& connection, const TString& tablePath) {
-    NYdb::NLongTx::TClient client(connection);
+ui32 ScanQuerySelect(NYdb::NTable::TTableClient client, const TString& tablePath,
+                     const std::vector<std::pair<TString, NYdb::EPrimitiveType>>& ydbSchema = TTestOlap::PublicSchema()) {
+    auto query = Sprintf("SELECT * FROM `%s`", tablePath.c_str());
 
-    NLongTx::TLongTxBeginResult resBeginTx = client.BeginReadTx().GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(resBeginTx.Status().GetStatus(), EStatus::SUCCESS);
+    // Executes scan query
+    auto result = client.StreamExecuteScanQuery(query).GetValueSync();
+    if (!result.IsSuccess()) {
+        Cerr << "ScanQuery execution failure: " << result.GetIssues().ToString() << Endl;
+        return 0;
+    }
 
-    auto txId = resBeginTx.GetResult().tx_id();
+    ui32 numRows = 0;
+    bool eos = false;
+    Cout << "ScanQuery:" << Endl;
+    while (!eos) {
+        auto streamPart = result.ReadNext().ExtractValueSync();
+        if (!streamPart.IsSuccess()) {
+            eos = true;
+            if (!streamPart.EOS()) {
+                Cerr << "ScanQuery execution failure: " << streamPart.GetIssues().ToString() << Endl;
+                return 0;
+            }
+            continue;
+        }
 
-    NLongTx::TLongTxReadResult resRead = client.Read(txId, tablePath).GetValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(resRead.Status().GetStatus(), EStatus::SUCCESS);
-    return resRead.GetResult().data().data();
+        if (streamPart.HasResultSet()) {
+            auto rs = streamPart.ExtractResultSet();
+            auto columns = rs.GetColumnsMeta();
+
+            TResultSetParser parser(rs);
+            while (parser.TryNextRow()) {
+                for (auto& [colName, colType] : ydbSchema) {
+                    switch (colType) {
+                        case NYdb::EPrimitiveType::Timestamp:
+                            Cout << parser.ColumnParser(colName).GetOptionalTimestamp() << ", ";
+                            break;
+                        case NYdb::EPrimitiveType::Utf8:
+                            Cout << parser.ColumnParser(colName).GetOptionalUtf8() << ", ";
+                            break;
+                        case NYdb::EPrimitiveType::Int32:
+                            Cout << parser.ColumnParser(colName).GetOptionalInt32() << ", ";
+                            break;
+                        case NYdb::EPrimitiveType::JsonDocument:
+                            Cout << parser.ColumnParser(colName).GetOptionalJsonDocument() << ", ";
+                            break;
+                        default:
+                            Cout << "<other>, ";
+                            break;
+                    }
+                }
+                Cout << Endl;
+                ++numRows;
+            }
+        }
+    }
+    return numRows;
 }
 
 }
@@ -60,13 +104,9 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
 
-        { // read with long tx read
-            TString readRes = Read(connection, tablePath);
-            UNIT_ASSERT(!readRes.empty());
-
-            auto batch = NArrow::DeserializeBatch(readRes, schema);
-            UNIT_ASSERT(batch);
-            UNIT_ASSERT(batch->num_rows() > 0);
+        { // Read all
+            ui32 numRows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_GT(numRows, 0);
         }
 
         // Negatives
@@ -151,13 +191,9 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
 
-        { // read with long tx read
-            TString readRes = Read(connection, tablePath);
-            UNIT_ASSERT(!readRes.empty());
-
-            auto batch = NArrow::DeserializeBatch(readRes, schema);
-            UNIT_ASSERT(batch);
-            UNIT_ASSERT(batch->num_rows() > 0);
+        { // Read all
+            ui32 numRows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_GT(numRows, 0);
         }
 
         // Negatives
@@ -230,11 +266,11 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
 
         { // Big CSV batch
-            auto bigBatch = TTestOlap::SampleBatch(true, 150000);
+            auto bigBatch = TTestOlap::SampleBatch(true, 130000);
             ui32 batchSize = NArrow::GetBatchDataSize(bigBatch);
             Cerr << "rows: " << bigBatch->num_rows() << " batch size: " << batchSize << Endl;
             UNIT_ASSERT(batchSize > 15 * 1024 * 1024);
-            UNIT_ASSERT(batchSize < 20 * 1024 * 1024);
+            UNIT_ASSERT(batchSize < 17 * 1024 * 1024);
 
             TString bigCsv = TTestOlap::ToCSV(bigBatch);
 
@@ -246,11 +282,11 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
 
         { // Too big CSV batch
-            auto bigBatch = TTestOlap::SampleBatch(true, 200000); // 2 shards, greater then 8 Mb per shard
+            auto bigBatch = TTestOlap::SampleBatch(true, 150000); // 2 shards, greater then 8 Mb per shard
             ui32 batchSize = NArrow::GetBatchDataSize(bigBatch);
             Cerr << "rows: " << bigBatch->num_rows() << " batch size: " << batchSize << Endl;
-            UNIT_ASSERT(batchSize > 20 * 1024 * 1024);
-            UNIT_ASSERT(batchSize < 30 * 1024 * 1024);
+            UNIT_ASSERT(batchSize > 16 * 1024 * 1024);
+            UNIT_ASSERT(batchSize < 20 * 1024 * 1024);
 
             TString bigCsv = TTestOlap::ToCSV(bigBatch);
 
@@ -303,6 +339,11 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
             UNIT_ASSERT_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
         }
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
+
+        { // Read all
+            ui32 numRows = ScanQuerySelect(client, tablePath);
+            UNIT_ASSERT_GT(numRows, 0);
+        }
 
         // Read
         auto res = session.ExecuteDataQuery("SELECT count(*) AS _cnt FROM [/Root/LogsX];",

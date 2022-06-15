@@ -2,6 +2,7 @@
 #include <ydb/core/formats/arrow_helpers.h>
 #include <ydb/core/formats/one_batch_input_stream.h>
 #include <ydb/core/formats/merging_sorted_input_stream.h>
+#include <ydb/library/binary_json/write.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/printf.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -35,8 +36,8 @@ struct TDataRow {
         NTypeIds::Datetime,
         NTypeIds::Timestamp,
         NTypeIds::Interval,
-        NTypeIds::Decimal
-        // NTypeIds::PairUi64Ui64, NTypeIds::ActorId, NTypeIds::StepOrderId
+        NTypeIds::JsonDocument,
+        // TODO: DyNumber, Decimal
     };
 
     bool Bool;
@@ -58,7 +59,8 @@ struct TDataRow {
     ui32 Datetime;
     i64 Timestamp;
     i64 Interval;
-    ui64 Decimal[2];
+    std::string JsonDocument;
+    //ui64 Decimal[2];
 
     bool operator == (const TDataRow& r) const {
         return (Bool == r.Bool) &&
@@ -80,7 +82,8 @@ struct TDataRow {
             (Datetime == r.Datetime) &&
             (Timestamp == r.Timestamp) &&
             (Interval == r.Interval) &&
-            (Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
+            (JsonDocument == r.JsonDocument);
+            //(Decimal[0] == r.Decimal[0] && Decimal[1] == r.Decimal[1]);
     }
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
@@ -104,7 +107,8 @@ struct TDataRow {
             arrow::field("datetime", arrow::uint32()),
             arrow::field("ts", arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO)),
             arrow::field("ival", arrow::duration(arrow::TimeUnit::TimeUnit::MICRO)),
-            arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
+            arrow::field("json_doc", arrow::binary()),
+            //arrow::field("dec", arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE)),
         };
 
         return std::make_shared<arrow::Schema>(fields);
@@ -131,7 +135,8 @@ struct TDataRow {
             {"datetime", NTypeIds::Datetime },
             {"ts", NTypeIds::Timestamp },
             {"ival", NTypeIds::Interval },
-            {"dec", NTypeIds::Decimal }
+            {"json_doc", NTypeIds::JsonDocument },
+            //{"dec", NTypeIds::Decimal }
         };
         return columns;
     }
@@ -157,9 +162,21 @@ struct TDataRow {
         Cells[16] = TCell::Make<ui32>(Datetime);
         Cells[17] = TCell::Make<i64>(Timestamp);
         Cells[18] = TCell::Make<i64>(Interval);
-        Cells[19] = TCell((const char *)&Decimal[0], 16);
+        Cells[19] = TCell(JsonDocument.data(), JsonDocument.size());
+        //Cells[19] = TCell((const char *)&Decimal[0], 16);
 
         return NKikimr::TDbTupleRef(Types, Cells, 20);
+    }
+
+    TOwnedCellVec SerializedCells() const {
+        NKikimr::TDbTupleRef value = ToDbTupleRef();
+        TVector<TCell> cells(value.Cells().data(), value.Cells().data() + value.Cells().size());
+
+        auto binaryJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(JsonDocument.data(), JsonDocument.size()));
+        UNIT_ASSERT(binaryJson.Defined());
+
+        cells[19] = TCell(binaryJson->Data(), binaryJson->Size());
+        return TOwnedCellVec(cells);
     }
 };
 
@@ -198,18 +215,19 @@ std::vector<TDataRow> ToVector(const std::shared_ptr<T>& table) {
     auto arts = std::static_pointer_cast<arrow::TimestampArray>(GetColumn(*table, 17));
     auto arival = std::static_pointer_cast<arrow::DurationArray>(GetColumn(*table, 18));
 
-    auto ardec = std::static_pointer_cast<arrow::Decimal128Array>(GetColumn(*table, 19));
+    auto arjd = std::static_pointer_cast<arrow::BinaryArray>(GetColumn(*table, 19));
+    //auto ardec = std::static_pointer_cast<arrow::Decimal128Array>(GetColumn(*table, 19));
 
     for (int64_t i = 0; i < table->num_rows(); ++i) {
-        ui64 dec[2];
-        memcpy(dec, ardec->Value(i), 16);
+        //ui64 dec[2];
+        //memcpy(dec, ardec->Value(i), 16);
         TDataRow r{ arbool->Value(i),
             ari8->Value(i), ari16->Value(i), ari32->Value(i), ari64->Value(i),
             aru8->Value(i), aru16->Value(i), aru32->Value(i), aru64->Value(i),
             arf32->Value(i), arf64->Value(i),
             arstr->GetString(i), arutf->GetString(i), arj->GetString(i), ary->GetString(i),
-            ard->Value(i), ardt->Value(i), arts->Value(i), arival->Value(i),
-            {dec[0], dec[1]}
+            ard->Value(i), ardt->Value(i), arts->Value(i), arival->Value(i), arjd->GetString(i)
+            //{dec[0], dec[1]}
         };
         rows.emplace_back(std::move(r));
     }
@@ -223,7 +241,7 @@ public:
     TDataRowTableBuilder()
         : Bts(arrow::timestamp(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
         , Bival(arrow::duration(arrow::TimeUnit::TimeUnit::MICRO), arrow::default_memory_pool())
-        , Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
+        //, Bdec(arrow::decimal(NScheme::DECIMAL_PRECISION, NScheme::DECIMAL_SCALE), arrow::default_memory_pool())
     {}
 
     void AddRow(const TDataRow& row) {
@@ -249,7 +267,8 @@ public:
         UNIT_ASSERT(Bts.Append(row.Timestamp).ok());
         UNIT_ASSERT(Bival.Append(row.Interval).ok());
 
-        UNIT_ASSERT(Bdec.Append((const char *)&row.Decimal).ok());
+        UNIT_ASSERT(Bjd.Append(row.JsonDocument).ok());
+        //UNIT_ASSERT(Bdec.Append((const char *)&row.Decimal).ok());
     }
 
     std::shared_ptr<arrow::Table> Finish() {
@@ -275,7 +294,8 @@ public:
         std::shared_ptr<arrow::TimestampArray> arts;
         std::shared_ptr<arrow::DurationArray> arival;
 
-        std::shared_ptr<arrow::Decimal128Array> ardec;
+        std::shared_ptr<arrow::BinaryArray> arjd;
+        //std::shared_ptr<arrow::Decimal128Array> ardec;
 
         UNIT_ASSERT(Bbool.Finish(&arbool).ok());
         UNIT_ASSERT(Bi8.Finish(&ari8).ok());
@@ -299,7 +319,8 @@ public:
         UNIT_ASSERT(Bts.Finish(&arts).ok());
         UNIT_ASSERT(Bival.Finish(&arival).ok());
 
-        UNIT_ASSERT(Bdec.Finish(&ardec).ok());
+        UNIT_ASSERT(Bjd.Finish(&arjd).ok());
+        //UNIT_ASSERT(Bdec.Finish(&ardec).ok());
 
         std::shared_ptr<arrow::Schema> schema = TDataRow::MakeArrowSchema();
         return arrow::Table::Make(schema, {
@@ -308,8 +329,8 @@ public:
             aru8, aru16, aru32, aru64,
             arf32, arf64,
             arstr, arutf, arj, ary,
-            ard, ardt, arts, arival,
-            ardec
+            ard, ardt, arts, arival, arjd
+            //ardec
         });
     }
 
@@ -341,7 +362,8 @@ private:
     arrow::UInt32Builder Bdt;
     arrow::TimestampBuilder Bts;
     arrow::DurationBuilder Bival;
-    arrow::Decimal128Builder Bdec;
+    arrow::BinaryBuilder Bjd;
+    //arrow::Decimal128Builder Bdec;
 };
 
 std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TDataRow>& rows) {
@@ -360,10 +382,10 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
 
 std::vector<TDataRow> TestRows() {
     std::vector<TDataRow> rows = {
-        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1", "u1", "{j:1}", "{y:1}", 0, 0, 0, 0, {0,0} },
-        {false, 2, 2, 2, 2, 2, 2, 2, 2, 2.0f, 2.0, "s2", "u2", "{j:2}", "{y:2}", 0, 0, 0, 0, {0,0} },
-        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3", "u3", "{j:3}", "{y:3}", 0, 0, 0, 0, {0,0} },
-        {false, -4, -4, -4, -4, 4, 4, 4, 4, 4.0f, 4.0, "s4", "u4", "{j:4}", "{y:4}", 0, 0, 0, 0, {0,0} },
+        {false, -1, -1, -1, -1, 1, 1, 1, 1, -1.0f, -1.0, "s1", "u1", "{\"j\":1}", "{y:1}", 0, 0, 0, 0, "{\"jd\":1}" },
+        {false, 2, 2, 2, 2, 2, 2, 2, 2, 2.0f, 2.0, "s2", "u2", "{\"j\":2}", "{y:2}", 0, 0, 0, 0, "{\"jd\":1}" },
+        {false, -3, -3, -3, -3, 3, 3, 3, 3, -3.0f, -3.0, "s3", "u3", "{\"j\":3}", "{y:3}", 0, 0, 0, 0, "{\"jd\":1}" },
+        {false, -4, -4, -4, -4, 4, 4, 4, 4, 4.0f, 4.0, "s4", "u4", "{\"j\":4}", "{y:4}", 0, 0, 0, 0, "{\"jd\":1}" },
     };
     return rows;
 }
@@ -547,8 +569,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
 
         TVector<TOwnedCellVec> cellRows;
         for (const TDataRow& row : rows) {
-            NKikimr::TDbTupleRef value = row.ToDbTupleRef();
-            cellRows.push_back(TOwnedCellVec(value.Cells()));
+            cellRows.push_back(TOwnedCellVec(row.SerializedCells()));
         }
 
         std::shared_ptr<arrow::RecordBatch> batch = VectorToBatch(rows);
@@ -569,6 +590,7 @@ Y_UNIT_TEST_SUITE(ArrowTest) {
         NArrow::TArrowToYdbConverter toYdbConverter(TDataRow::MakeYdbSchema(), rowWriter);
         TString errStr;
         bool ok = toYdbConverter.Process(*batch, errStr);
+        Cerr << "Process: " << errStr << "\n";
         UNIT_ASSERT(ok);
 
         UNIT_ASSERT_VALUES_EQUAL(cellRows.size(), rowWriter.Rows.size());

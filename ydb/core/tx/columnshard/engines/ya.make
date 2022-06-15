@@ -27,6 +27,9 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
+
+    # for NYql::NUdf alloc stuff used in binary_json
+    ydb/library/yql/public/udf/service/exception_policy
 )
 
 YQL_LAST_ABI_VERSION()

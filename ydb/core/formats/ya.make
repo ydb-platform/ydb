@@ -5,14 +5,18 @@ RECURSE_FOR_TESTS(
 LIBRARY()
 
 OWNER(
-    davenger
+    chertus
     g:kikimr
 )
 
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/scheme
+    ydb/library/binary_json
+    ydb/library/dynumber
 )
+
+YQL_LAST_ABI_VERSION()
 
 SRCS(
     arrow_batch_builder.cpp

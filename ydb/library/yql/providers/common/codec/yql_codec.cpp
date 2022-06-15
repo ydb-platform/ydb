@@ -2422,10 +2422,7 @@ TExprNode::TPtr ValueToExprLiteral(const TTypeAnnotationNode* type, const NKikim
     case ETypeAnnotationKind::Pg: {
         auto pgType = type->Cast<TPgExprType>();
         if (!value) {
-            return ctx.NewCallable(pos, "PgCast", {
-                ctx.NewCallable(pos, "Utf8", {
-                    ctx.NewAtom(pos, "null")
-                }),
+            return ctx.NewCallable(pos, "Nothing", {
                 ctx.NewCallable(pos, "PgType", {
                     ctx.NewAtom(pos, pgType->GetName())
                 })

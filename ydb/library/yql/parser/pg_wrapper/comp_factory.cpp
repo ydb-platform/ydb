@@ -1596,9 +1596,7 @@ void WriteYsonValueInTableFormatPg(TOutputBuf& buf, TPgType* type, const NUdf::T
 }
 
 TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
-    if (!value) {
-        return "null";
-    }
+    YQL_ENSURE(value);
 
     TString ret;
     switch (pgTypeId) {

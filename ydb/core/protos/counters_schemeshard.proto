@@ -158,6 +158,14 @@ enum ESimpleCounters {
 
     COUNTER_BORROWED_COMPACTION_QUEUE_SIZE = 129          [(CounterOpts) = {Name: "BorrowedCompactionQueueSize"}];
     COUNTER_BORROWED_COMPACTION_QUEUE_RUNNING = 130       [(CounterOpts) = {Name: "BorrowedCompactionQueueRunning"}];
+
+    COUNTER_BLOB_DEPOT_COUNT = 131                        [(CounterOpts) = {Name: "BlobDepots"}];
+    COUNTER_BLOB_DEPOT_SHARD_COUNT = 132                  [(CounterOpts) = {Name: "BlobDepotShards"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateBlobDepot = 133         [(CounterOpts) = {Name: "InFlightOps/CreateBlobDepot"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterBlobDepot = 134          [(CounterOpts) = {Name: "InFlightOps/AlterBlobDepot"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropBlobDepot = 135           [(CounterOpts) = {Name: "InFlightOps/DropBlobDepot"}];
+
+    COUNTER_STATS_QUEUE_SIZE = 136                        [(CounterOpts) = {Name: "StatsQueueSize"}];
 }
 
 enum ECumulativeCounters {
@@ -252,6 +260,12 @@ enum ECumulativeCounters {
 
     COUNTER_BORROWED_COMPACTION_OK = 76                  [(CounterOpts) = {Name: "BorrowedCompactionOK"}];
     COUNTER_BORROWED_COMPACTION_TIMEOUT = 77             [(CounterOpts) = {Name: "BorrowedCompactionTimeout"}];
+
+    COUNTER_FINISHED_OPS_TxCreateBlobDepot = 78           [(CounterOpts) = {Name: "FinishedOps/CreateBlobDepot"}];
+    COUNTER_FINISHED_OPS_TxAlterBlobDepot = 79            [(CounterOpts) = {Name: "FinishedOps/AlterBlobDepot"}];
+    COUNTER_FINISHED_OPS_TxDropBlobDepot = 80             [(CounterOpts) = {Name: "FinishedOps/DropBlobDepot"}];
+
+    COUNTER_STATS_WRITTEN = 81                            [(CounterOpts) = {Name: "StatsWritten"}];
 }
 
 enum EPercentileCounters {
@@ -342,6 +356,17 @@ enum EPercentileCounters {
         Ranges: { Value: 10000000     Name: "10000000"   },
         Ranges: { Value: 100000000    Name: "100000000"  },
         Ranges: { Value: 1000000000   Name: "1000000000" },
+    }];
+
+    COUNTER_STATS_BATCH_LATENCY = 5 [(CounterOpts) = {
+        Name: "StatsBatchLatency",
+        Ranges: { Value: 1000        Name: "1 ms"         }
+        Ranges: { Value: 10000       Name: "10 ms"        }
+        Ranges: { Value: 50000       Name: "50 ms"        }
+        Ranges: { Value: 100000      Name: "100 ms"       }
+        Ranges: { Value: 200000      Name: "200 ms"       }
+        Ranges: { Value: 500000      Name: "500 ms"       }
+        Ranges: { Value: 1000000     Name: "1000 ms"      }
     }];
 }
 

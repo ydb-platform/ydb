@@ -136,6 +136,7 @@ namespace NActors {
             nodeAppData->FeatureFlags = app0->FeatureFlags;
             nodeAppData->CompactionConfig = app0->CompactionConfig;
             nodeAppData->HiveConfig = app0->HiveConfig;
+            nodeAppData->SchemeShardConfig = app0->SchemeShardConfig;
             nodeAppData->DataShardConfig = app0->DataShardConfig;
             nodeAppData->MeteringConfig = app0->MeteringConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;

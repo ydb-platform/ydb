@@ -162,6 +162,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
+        opts.DisableStatsBatching(true);
 
         TTestEnv env(runtime, opts);
 

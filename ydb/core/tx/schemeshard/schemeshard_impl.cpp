@@ -2156,6 +2156,10 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TShardIdx& shardIdx, const TTableInfo::TPtr tableInfo) {
+    if (!AppData()->FeatureFlags.GetEnablePersistentPartitionStats()) {
+        return;
+    }
+
     const auto& shardToPartition = tableInfo->GetShard2PartitionIdx();
     if (!shardToPartition.contains(shardIdx)) {
         return;
@@ -2172,6 +2176,10 @@ void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId
 }
 
 void TSchemeShard::PersistTablePartitionStats(NIceDb::TNiceDb& db, const TPathId& tableId, const TTableInfo::TPtr tableInfo) {
+    if (!AppData()->FeatureFlags.GetEnablePersistentPartitionStats()) {
+        return;
+    }
+
     const auto& tableStats = tableInfo->GetStats();
 
     for (const auto& [shardIdx, pi] : tableInfo->GetShard2PartitionIdx()) {
@@ -3800,6 +3808,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableBackgroundCompactionServerless = appData->FeatureFlags.GetEnableBackgroundCompactionServerless();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
+    ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -4047,6 +4056,8 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvPrivate::TEvCleanDroppedPaths, Handle);
         HFuncTraced(TEvPrivate::TEvCleanDroppedSubDomains, Handle);
         HFuncTraced(TEvPrivate::TEvSubscribeToShardDeletion, Handle);
+
+        HFuncTraced(TEvPrivate::TEvPersistStats, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvLogin, Handle);
 
@@ -6002,6 +6013,7 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
         new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({
             (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
             (ui32)NKikimrConsole::TConfigItem::CompactionConfigItem,
+            (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
         }));
 }
 
@@ -6013,6 +6025,10 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     if (appConfig.HasCompactionConfig()) {
         const auto& compactionConfig = appConfig.GetCompactionConfig();
         ConfigureCompactionQueues(compactionConfig, ctx);
+    }
+
+    if (appConfig.HasSchemeShardConfig()) {
+        ConfigureStatsBatching(appConfig.GetSchemeShardConfig(), ctx);
     }
 
     if (IsShemeShardConfigured()) {
@@ -6041,6 +6057,16 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
 
     EnableBackgroundCompaction = featureFlags.GetEnableBackgroundCompaction();
     EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless();
+}
+
+void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
+    StatsBatchTimeout = TDuration::MilliSeconds(config.GetStatsBatchTimeoutMs());
+    StatsMaxBatchSize = config.GetStatsMaxBatchSize();
+    StatsMaxExecuteTime = TDuration::MicroSeconds(config.GetStatsMaxExecuteMs());
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "StatsBatching config: StatsBatchTimeout# " << StatsBatchTimeout
+                 << ", StatsMaxBatchSize# " << StatsMaxBatchSize
+                 << ", StatsMaxExecuteTime# " << StatsMaxExecuteTime);
 }
 
 void TSchemeShard::ConfigureCompactionQueues(

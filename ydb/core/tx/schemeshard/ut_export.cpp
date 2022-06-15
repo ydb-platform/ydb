@@ -702,7 +702,11 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
 
     Y_UNIT_TEST(ShouldExcludeBackupTableFromStats) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+
+        TTestEnv env(runtime, opts);
+
         ui64 txId = 100;
 
         auto writeRow = [&](ui64 tabletId, const TString& key, const TString& value) {

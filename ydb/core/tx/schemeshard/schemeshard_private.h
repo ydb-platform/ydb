@@ -24,6 +24,7 @@ struct TEvPrivate {
         EvRunBorrowedCompaction,
         EvCompletePublication,
         EvCompleteBarrier,
+        EvPersistStats,
         EvEnd
     };
 
@@ -156,6 +157,9 @@ struct TEvPrivate {
         }
     };
 
+    struct TEvPersistStats: public TEventLocal<TEvPersistStats, EvPersistStats> {
+        TEvPersistStats() = default;
+    };
 
 }; // TEvPrivate
 

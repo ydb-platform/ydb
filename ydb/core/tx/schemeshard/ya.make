@@ -32,6 +32,7 @@ RECURSE_FOR_TESTS(
     ut_sequence
     ut_sequence_reboots
     ut_serverless
+    ut_stats
     ut_split_merge
     ut_split_merge_reboots
     ut_subdomain

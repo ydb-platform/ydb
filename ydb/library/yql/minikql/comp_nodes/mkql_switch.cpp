@@ -75,11 +75,15 @@ private:
             Buffer.Clear();
         }
 
+        void ResetPosition() {
+            Position = 0U;
+        }
+
         NUdf::TUnboxedValuePod Handler(ui32 index, const TSwitchHandler& handler, TComputationContext& ctx) {
             while (true) {
                 auto current = Get(Position++);
                 if (current.IsSpecial()) {
-                    Position = 0U;
+                    ResetPosition();
                     return current;
                 }
 
@@ -150,6 +154,7 @@ public:
             const auto& handler = Handlers[ptr->ChildReadIndex];
             auto childRes = handler.NewItem->GetValue(ctx);
             if (childRes.IsSpecial()) {
+                ptr->ResetPosition();
                 if (++ptr->ChildReadIndex == Handlers.size()) {
                     ptr->Clear();
                 }

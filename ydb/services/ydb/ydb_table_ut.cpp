@@ -180,6 +180,7 @@ Y_UNIT_TEST_SUITE(YdbYqlClient) {
         auto ref = R"___(<main>: Error: Type annotation, code: 1030
     <main>:2:25: Error: At function: KiWriteTable!
         <main>:2:43: Error: Failed to convert type: Struct<'Key':String,'Value':String> to Struct<'Key':Uint32?,'Value':String?>
+            <main>:2:43: Error: Failed to convert 'Key': String to Optional<Uint32>
         <main>:2:43: Error: Failed to convert input columns types to scheme types, code: 2031
 )___";
         UNIT_ASSERT_EQUAL(result.GetIssues().Size(), 1);

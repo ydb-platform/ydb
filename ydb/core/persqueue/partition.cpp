@@ -2699,7 +2699,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr ev, TDuration waitQuotaTime, const 
     auto& userInfo = UsersInfoStorage.GetOrCreate(user, ctx);
 
     ui64 offset = read->Offset;
-    if (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo.ReadFromTimestamp > TInstant::MilliSeconds(1)) {
+    if (read->PartNo == 0 && (read->MaxTimeLagMs > 0 || read->ReadTimestampMs > 0 || userInfo.ReadFromTimestamp > TInstant::MilliSeconds(1))) {
         TInstant timestamp = read->MaxTimeLagMs > 0 ? ctx.Now() - TDuration::MilliSeconds(read->MaxTimeLagMs) : TInstant::Zero();
         timestamp = Max(timestamp, TInstant::MilliSeconds(read->ReadTimestampMs));
         timestamp = Max(timestamp, userInfo.ReadFromTimestamp);
@@ -2867,8 +2867,13 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     if (userInfo.ReadScheduled)
         return;
     userInfo.ReadScheduled = true;
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
-                << " user " << user << " readTimeStamp for offset " << userInfo.Offset << " initiated " << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset << " ReadingTimestamp " << ReadingTimestamp);
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "Topic '" << TopicName << "' partition " << Partition
+                << " user " << user << " readTimeStamp for offset " << userInfo.Offset << " initiated "
+                << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset
+                << " ReadingTimestamp " << ReadingTimestamp << " rrg " << userInfo.ReadRuleGeneration
+    );
 
     if (ReadingTimestamp) {
         UpdateUserInfoTimestamp.push_back(std::make_pair(user, userInfo.ReadRuleGeneration));
@@ -2907,8 +2912,13 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     for (const auto& user : UpdateUserInfoTimestamp) {
         Y_VERIFY(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration);
     }
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Topic '" << TopicName << "' partition " << Partition
-                << " user " << user << " send read request for offset " << userInfo.Offset << " initiated " << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset << " ReadingTimestamp " << ReadingTimestamp);
+    LOG_DEBUG_S(
+            ctx, NKikimrServices::PERSQUEUE,
+            "Topic '" << TopicName << "' partition " << Partition
+            << " user " << user << " send read request for offset " << userInfo.Offset << " initiated "
+            << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << StartOffset
+            << " ReadingTimestamp " << ReadingTimestamp << " rrg " << ReadingForUserReadRuleGeneration
+    );
 
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 1, "",

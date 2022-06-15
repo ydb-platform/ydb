@@ -125,8 +125,6 @@ private:
 
         const auto& res = record.GetPartitionResponse().GetCmdReadResult();
 
-        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen() ? res.GetReadFromTimestampMs() : 0;
-
         Response->Record.SetStatus(NMsgBusProxy::MSTATUS_OK);
         Response->Record.SetErrorCode(NPersQueue::NErrorCode::OK);
 
@@ -140,6 +138,11 @@ private:
             readRes->SetBlobsFromCache(readRes->GetBlobsFromCache() + res.GetBlobsFromCache());
             isStart = true;
         }
+        ui64 readFromTimestampMs = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+                                    ? (isStart ? res.GetReadFromTimestampMs()
+                                                : Response->Record.GetPartitionResponse().GetCmdReadResult().GetReadFromTimestampMs())
+                                    : 0;
+
         if (record.GetPartitionResponse().HasCookie())
             Response->Record.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
 
@@ -171,6 +174,12 @@ private:
                 isStart = false;
             } else { //glue to last res
                 auto rr = partResp->MutableResult(partResp->ResultSize() - 1);
+                if (rr->GetSeqNo() != res.GetResult(i).GetSeqNo() || rr->GetPartNo() + 1 != res.GetResult(i).GetPartNo()) {
+                    LOG_CRIT_S(ctx, NKikimrServices::PERSQUEUE, "Handle TEvRead tablet: " << Tablet
+                                    << " last read pos (seqno/parno): " << rr->GetSeqNo() << "," << rr->GetPartNo() << " readed now "
+                                    << res.GetResult(i).GetSeqNo() << ", " << res.GetResult(i).GetPartNo() 
+                                    << " full request(now): " << Request);
+                }
                 Y_VERIFY(rr->GetSeqNo() == res.GetResult(i).GetSeqNo());
                 (*rr->MutableData()) += res.GetResult(i).GetData();
                 rr->SetPartitionKey(res.GetResult(i).GetPartitionKey());
@@ -194,7 +203,7 @@ private:
                 read->ClearBytes();
                 read->ClearTimeoutMs();
                 read->ClearMaxTimeLagMs();
-                read->SetReadTimestampMs(res.GetReadFromTimestampMs());
+                read->SetReadTimestampMs(readFromTimestampMs);
 
                 THolder<TEvPersQueue::TEvRequest> req(new TEvPersQueue::TEvRequest);
                 req->Record = Request;

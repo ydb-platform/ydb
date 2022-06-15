@@ -72,6 +72,17 @@ ydb -e grpc://localhost:2136 -d /Root/test scheme ls
 
 Для работы со структурой и данными в базе данных также доступен встроенный в процесс `ydbd` web-интерфейс по адресу `http://localhost:8765`. Подробней возможности встроенного веб-интерфейса описаны в разделе [Embedded UI](../../../maintenance/embedded_monitoring/ydb_monitoring.md).
 
+
+## Мониторинг базы данных с помощью Grafana и Prometheus {#dashboards}
+
+Локальный сервер YDB может быть интегрирован с [Prometheus](https://prometheus.io/) и [Grafana](https://grafana.com/), популярными инструментами с открытым исходным кодом для сбора и визуализации метрик. Чтобы настроить стандартные [дашборды](../../../troubleshooting/grafana_dashboards.html), следуйте этой инструкции:
+
+1. [Установите и запустите](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus с этим [файлом конфигурации](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
+1. [Установите и запустите](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
+1. [Создайте](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) источник данных с типом "prometheus" в Grafana и подсоедините его к инстансу Prometheus.
+1. Загрузите [дашборды](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/) в Grafana. Вы можете загрузить дашборды в ручном режиме через функцию Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) или использовать простой [скрипт](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Пожалуйста, обратите внимание на то, что скрипт использует [базовую аутентификацию](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) в Grafana. Для других случаев модифицируйте скрипт.
+
+
 ## Дополнительные возможности {#advanced}
 
 Описание развертывания многоузловых кластеров и их конфигурирования находится в разделе [Управление кластером](../../../deploy/index.md).

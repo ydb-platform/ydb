@@ -72,6 +72,17 @@ ydb -e grpc://localhost:2136 -d /Root/test scheme ls
 
 To work with the DB structure and data, you can also use the web interface embedded in the `ydbd` process. It is available at `http://localhost:8765`. For more information about the embedded web interface, see [Embedded UI](../../../maintenance/embedded_monitoring/ydb_monitoring.md).
 
+
+## Monitoring database using Grafana and Prometheus {#dashboards}
+
+The local YDB server may be integrated with [Prometheus](https://prometheus.io/) and [Grafana](https://grafana.com/), popular open source tools for metrics gathering and visualization. To setup standard [dashboards](../../../troubleshooting/grafana_dashboards.html), follow these instructions:
+
+1. [Install and run](https://prometheus.io/docs/prometheus/latest/getting_started/#downloading-and-running-prometheus) Prometheus with this [configuration file](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_ydb_prometheus.yml).
+1. [Install and run](https://grafana.com/docs/grafana/latest/getting-started/getting-started/) Grafana.
+1. [Create](https://prometheus.io/docs/visualization/grafana/#creating-a-prometheus-data-source) datasource of type "prometheus" in Grafana and connect it to your Prometheus instance.
+1. Upload [dashboards](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/) to Grafana. You may upload dashboards manually via Grafana UI [Import](https://grafana.com/docs/grafana/latest/dashboards/export-import/#import-dashboard) function or use simple [script](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/grafana_dashboards/local_upload_dashboards.sh). Please note that the script uses [basic authentification](https://grafana.com/docs/grafana/latest/http_api/create-api-tokens-for-org/#authentication) in Grafana. For other cases, adjust the script accordingly.
+
+
 ## Advanced options {#advanced}
 
 Instructions on how to deploy multi-node clusters and configure them are given in [Deploy YDB on-premises](../../../deploy/manual/deploy-ydb-on-premises.md) in the "Cluster management" section.

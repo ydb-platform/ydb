@@ -328,6 +328,66 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 
+    Y_UNIT_TEST(Decimal) {
+        Ydb::ResultSet rs;
+        {
+            auto& column = *rs.add_columns();
+            column.set_name("column0");
+            auto& type = *column.mutable_type()->mutable_decimal_type();
+            type.set_precision(21);
+            type.set_scale(7);
+        }
+        {
+            auto& value = *rs.add_rows();
+            value.add_items()->set_low_128(1);
+            value.add_items()->set_high_128(2);
+        }
+
+        NJson::TJsonValue root;
+        FormatResultSet(root, rs);
+
+        TStringStream stream;
+        NJson::WriteJson(&stream, &root);
+
+        // Cerr << stream.Str() << Endl;
+
+        TString expected = R"___({"data":[{"column0":"0.0000001"}],"columns":[{"name":"column0","type":["DataType","Decimal","21","7"]}]})___";
+
+        UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+    }
+
+    Y_UNIT_TEST(Pg) {
+        Ydb::ResultSet rs;
+        {
+            auto& column = *rs.add_columns();
+            column.set_name("column0");
+            auto& pg_type = *column.mutable_type()->mutable_pg_type();
+            pg_type.set_oid(16);
+            pg_type.set_typlen(234);
+            pg_type.set_typmod(-987);
+        }
+        {
+            auto& value = *rs.add_rows();
+            auto& cell = *value.add_items();
+            cell.set_text_value("my_text_value");
+        }
+        // empty text value
+        {
+            auto& value = *rs.add_rows();
+            auto& cell = *value.add_items();
+            cell.set_text_value("");
+        }
+
+        NJson::TJsonValue root;
+        FormatResultSet(root, rs);
+
+        TStringStream stream;
+        NJson::WriteJson(&stream, &root);
+        //Cerr << "Stream >> " << stream.Str() << Endl;
+        TString expected = R"___({"data":[{"column0":"my_text_value"},{"column0":""}],"columns":[{"name":"column0","type":["PgType","bool"]}]})___";
+        UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+    }
+
     Y_UNIT_TEST(VariantStruct) {
         Ydb::ResultSet rs;
         {

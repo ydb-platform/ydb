@@ -1,5 +1,6 @@
 #include "result_formatter.h"
 
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
@@ -26,23 +27,34 @@ const NYql::TTypeAnnotationNode* MakePrimitiveType(NYdb::TTypeParser& parser, NY
     return ctx.MakeType<NYql::TDataExprType>(dataSlot);
 }
 
-const NYql::TTypeAnnotationNode* MakeDecimalType(NYdb::TTypeParser& parser, NYql::TExprContext& ctx)
-{
-    auto decimal = parser.GetDecimal();
-    auto dataSlot = NYql::NUdf::GetDataSlot(TStringBuilder() << "Decimal(" << (ui32)decimal.Precision << ',' << (ui32)decimal.Scale << ")");
-    return ctx.MakeType<NYql::TDataExprType>(dataSlot);
-}
-
 NKikimr::NMiniKQL::TType* MakePrimitiveType(NYdb::TTypeParser& parser, NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
     auto dataSlot = NYql::NUdf::GetDataSlot(TStringBuilder() << parser.GetPrimitive());
     return TDataType::Create(GetDataTypeInfo(dataSlot).TypeId, env);
 }
 
+const NYql::TTypeAnnotationNode* MakeDecimalType(NYdb::TTypeParser& parser, NYql::TExprContext& ctx)
+{
+    auto decimal = parser.GetDecimal();
+    return ctx.MakeType<NYql::TDataExprParamsType>(NYql::EDataSlot::Decimal, ctx.AppendString(ToString(decimal.Precision)), ctx.AppendString(ToString(decimal.Scale)));
+}
+
 NKikimr::NMiniKQL::TType* MakeDecimalType(NYdb::TTypeParser& parser, NKikimr::NMiniKQL::TTypeEnvironment& env)
 {
     auto decimal = parser.GetDecimal();
     return TDataDecimalType::Create((ui8)decimal.Precision, (ui8)decimal.Scale, env);
+}
+
+const NYql::TTypeAnnotationNode* MakePgType(NYdb::TTypeParser& parser, NYql::TExprContext& ctx)
+{
+    auto pgType = parser.GetPg();
+    return ctx.MakeType<NYql::TPgExprType>(pgType.Oid);
+}
+
+NKikimr::NMiniKQL::TType* MakePgType(NYdb::TTypeParser& parser, NKikimr::NMiniKQL::TTypeEnvironment& env)
+{
+    auto pgType = parser.GetPg();
+    return TPgType::Create(pgType.Oid, env);
 }
 
 const NYql::TTypeAnnotationNode* MakeOptionalType(const NYql::TTypeAnnotationNode* underlying, NYql::TExprContext& ctx)
@@ -184,6 +196,9 @@ TType MakeType(NYdb::TTypeParser& parser, TContext& env)
     case NYdb::TTypeParser::ETypeKind::Decimal: {
         return MakeDecimalType(parser, env);
     }
+    case NYdb::TTypeParser::ETypeKind::Pg: {
+        return MakePgType(parser, env);
+    }
     case NYdb::TTypeParser::ETypeKind::Optional: {
         parser.OpenOptional();
         auto underlying = MakeType<TType>(parser, env);
@@ -288,7 +303,7 @@ struct TTypePair {
 
 TTypePair FormatColumnType(
     NJson::TJsonValue& root,
-    NYdb::TType type,
+    const NYdb::TType& type,
     NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     NYql::TExprContext& ctx)
 {
@@ -319,11 +334,29 @@ void FormatColumnValue(
     NJson::TJsonValue& root,
     const NYdb::TValue& value,
     NKikimr::NMiniKQL::TType* type,
+    const NKikimr::NMiniKQL::TTypeEnvironment&,
     const THolderFactory& holderFactory)
 {
+    if (type->GetKind() == TType::EKind::Pg) {
+        NYdb::TValueParser parser(value);
+        auto pgValue = parser.GetPg();
+        /*if (pgValue.IsNull()) {
+            root = NJson::TJsonValue();
+            return;
+        }*/
+
+        if (pgValue.IsText()) {
+            root = NJson::TJsonValue(pgValue.Content_);
+            return;
+        }
+
+        root = NJson::TJsonValue("<binary pg value>");
+        return;
+    }
+
     const Ydb::Value& rawProtoValue = NYdb::TProtoAccessor::GetProto(value);
 
-    NYql::NUdf::TUnboxedValue unboxed = ImportValueFromProto(
+    auto unboxed = ImportValueFromProto(
         type,
         rawProtoValue,
         holderFactory);
@@ -384,6 +417,7 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)
                 row[columnMeta.Name],
                 rsParser.GetValue(columnNum),
                 columnTypes[columnNum].MiniKQLType,
+                typeEnv,
                 holderFactory);
         }
     }

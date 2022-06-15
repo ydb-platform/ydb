@@ -691,7 +691,7 @@ message TFeatureFlags {
     optional bool EnablePublicApiExternalBlobs = 59 [default = false];
     optional bool EnablePublicApiKeepInMemory = 60 [default = false];
     optional bool EnableImplicitScanQueryInScripts = 61 [default = false];
-    optional bool EnablePredicateExtractForScanQueries = 62 [default = false];
+    optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
     optional bool AllowVDiskDefrag = 63 [default = true];
     optional bool EnableChangefeeds = 65 [default = false];
 }

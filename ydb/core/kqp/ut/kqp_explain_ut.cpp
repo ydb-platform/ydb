@@ -206,14 +206,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangeScan");
+        auto node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableRangesScan");
         UNIT_ASSERT(node.IsDefined());
 
         auto operators = node.GetMapSafe().at("Operators").GetArraySafe();
-        UNIT_ASSERT(operators[1].GetMapSafe().at("Name") == "TableRangeScan");
+        UNIT_ASSERT(operators[1].GetMapSafe().at("Name") == "TableRangesScan");
 
-        auto& readRange = operators[1].GetMapSafe().at("ReadRange").GetArraySafe();
-        UNIT_ASSERT(readRange[0] == "Key [150, 266]");
+        auto& readRanges = operators[1].GetMapSafe().at("ReadRanges").GetArraySafe();
+        UNIT_ASSERT(readRanges[0] == "Key [150, 266]");
     }
 
     Y_UNIT_TEST(CompoundKeyRange) {

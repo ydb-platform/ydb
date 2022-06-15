@@ -40,7 +40,7 @@ public:
     TString GetMeteringJson(const TString& metricBillingId, const TString& schemeName,
                             const THashMap<TString, ui64>& tags, const TString& quantityUnit, ui64 quantity,
                             TInstant start, TInstant end, TInstant now);
-    ui32 GetMeteringCounter() const;
+    ui64 GetMeteringCounter() const;
 
 private:
     TParameters Parameters_{};
@@ -50,7 +50,7 @@ private:
     TMap<EMeteringJson, TInstant> LastFlush_;
     std::function<void(TString)> FlushFunction_;
 
-    static ui32 MeteringCounter_;
+    static std::atomic<ui64> MeteringCounter_;
 
 private:
     void Flush(TInstant now, bool force);

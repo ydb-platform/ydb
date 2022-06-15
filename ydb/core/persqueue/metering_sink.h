@@ -15,6 +15,7 @@ enum class EMeteringJson {
 class TMeteringSink {
 public:
     struct TParameters {
+        TDuration FlushLimit{TDuration::Hours(1)};
         TDuration FlushInterval;
         TString TabletId;
         TString YcCloudId;

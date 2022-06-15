@@ -370,7 +370,7 @@ private:
     }
 
 private:
-    void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse,
+    void FillReadInfo(TTaskMeta& taskMeta, ui64 itemsLimit, bool reverse, bool sorted,
         const TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>& readOlapRange)
     {
         if (taskMeta.Reads && !taskMeta.Reads.GetRef().empty()) {
@@ -389,6 +389,7 @@ private:
 
         taskMeta.ReadInfo.ItemsLimit = itemsLimit;
         taskMeta.ReadInfo.Reverse = reverse;
+        taskMeta.ReadInfo.Sorted = sorted;
 
         if (!readOlapRange || readOlapRange->GetOlapProgram().empty()) {
             return;
@@ -512,9 +513,9 @@ private:
 
                 if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange) {
                     const auto& readRange = op.GetReadOlapRange();
-                    FillReadInfo(task.Meta, itemsLimit, reverse, readRange);
+                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, readRange);
                 } else {
-                    FillReadInfo(task.Meta, itemsLimit, reverse, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
+                    FillReadInfo(task.Meta, itemsLimit, reverse, sorted, TMaybe<::NKqpProto::TKqpPhyOpReadOlapRanges>());
                 }
 
                 if (!task.Meta.Reads) {

@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto &runtime = *server->GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        // EnableLogging(runtime);
+        EnableLogging(runtime);
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 7);
@@ -265,7 +265,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto sender = runtime.AllocateEdgeActor();
         auto senderSplit = runtime.AllocateEdgeActor();
 
-        // EnableLogging(runtime);
+        EnableLogging(runtime);
 
         SetSplitMergePartCountLimit(&runtime, -1);
 

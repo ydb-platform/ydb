@@ -45,7 +45,6 @@ target_proto_messages(api-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_table.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_value.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_s3_internal.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/ydb_topic.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/protos/yq.proto
 )
 generate_enum_serilization(api-protos

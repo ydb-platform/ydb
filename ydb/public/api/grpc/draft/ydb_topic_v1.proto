@@ -64,26 +64,17 @@ service TopicService {
     rpc StreamRead(stream StreamReadMessage.FromClient) returns (stream StreamReadMessage.FromServer);
 
 
-    // Describe topic command.
-    rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse);
-
-
-    // Drop topic command.
-    rpc DropTopic(DropTopicRequest) returns (DropTopicResponse);
-
-
     // Create topic command.
     rpc CreateTopic(CreateTopicRequest) returns (CreateTopicResponse);
+
+
+    // Describe topic command.
+    rpc DescribeTopic(DescribeTopicRequest) returns (DescribeTopicResponse);
 
 
     // Alter topic command.
     rpc AlterTopic(AlterTopicRequest) returns (AlterTopicResponse);
 
 
-    // Add consumer command.
-    rpc AddConsumer(AddConsumerRequest) returns (AddConsumerResponse);
-
-
-    // Drop consumer command.
-    rpc DropConsumer(RemoveConsumerRequest) returns (RemoveConsumerResponse);
-}
+    // Drop topic command.
+    rpc DropTopic(DropTopicRequest) returns (DropTopicResponse);

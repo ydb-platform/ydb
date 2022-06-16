@@ -200,6 +200,11 @@ namespace NTest {
         IOutputStream &Out;
     };
 
+    void DumpSnapshot(const NKikimrExecutorFlat::TLogMemSnap& snap) {
+        Cerr << " | Table " << snap.GetTable() << " snapshot " << snap.GetGeneration() << ":" << snap.GetStep()
+             << " epoch " << snap.GetHead() << Endl;
+    }
+
     void DumpPart(const NKikimrExecutorFlat::TLogTableSnap& part) {
         Cerr << " | Table " << part.GetTable() << " level " << part.GetCompactionLevel() << Endl;
         for (auto& bundle : part.GetBundles()) {
@@ -207,6 +212,9 @@ namespace NTest {
             for (auto& pageCollection : bundle.GetPageCollections()) {
                 Y_VERIFY(pageCollection.HasLargeGlobId(), "Found a page collection without a largeGlobId");
                 Cerr << " " << LogoBlobIDFromLogoBlobID(pageCollection.GetLargeGlobId().GetLead());
+            }
+            if (bundle.HasEpoch()) {
+                Cerr << " epoch " << bundle.GetEpoch();
             }
             Cerr << Endl;
             if (bundle.HasLegacy() || bundle.HasOpaque()) {
@@ -342,8 +350,14 @@ int main(int argc, char *argv[])
         NTest::TProtoDump<NKikimrExecutorFlat::TTablePartSwitch>(Cerr).Do(raw);
 
         TProtoBox<NKikimrExecutorFlat::TTablePartSwitch> proto(raw);
+        if (proto.HasTableSnapshoted()) {
+            NTest::DumpSnapshot(proto.GetTableSnapshoted());
+        }
         if (proto.HasIntroducedParts()) {
             NTest::DumpPart(proto.GetIntroducedParts());
+        }
+        for (const auto& label : proto.GetLeavingBundles()) {
+            Cerr << " | - bundle " << LogoBlobIDFromLogoBlobID(label) << Endl;
         }
 
     } else if (!strcmp(res->Get("blob"), "borrow")) {

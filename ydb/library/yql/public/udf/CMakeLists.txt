@@ -18,6 +18,7 @@ target_link_libraries(yql-public-udf PUBLIC
   library-cpp-resource
   yql-public-decimal
   yql-public-types
+  cpp-deprecated-atomic
 )
 target_sources(yql-public-udf PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/public/udf/udf_allocator.cpp

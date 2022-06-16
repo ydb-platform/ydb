@@ -17,6 +17,7 @@ target_link_libraries(core-blobstorage-pdisk PUBLIC
   cpp-actors-util
   cpp-actors-wilson
   cpp-containers-stack_vector
+  cpp-deprecated-atomic
   library-cpp-lwtrace
   monlib-dynamic_counters-percentile
   monlib-service-pages

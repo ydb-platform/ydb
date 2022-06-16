@@ -45,6 +45,7 @@ target_link_libraries(core-client-server PUBLIC
   lib-deprecated-client
   lib-deprecated-kicli
   ydb-services-persqueue_v1
+  cpp-deprecated-atomic
 )
 target_sources(core-client-server PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/client/server/http_ping.cpp

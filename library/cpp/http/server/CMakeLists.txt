@@ -14,6 +14,7 @@ target_link_libraries(cpp-http-server PUBLIC
   cpp-http-misc
   cpp-http-io
   cpp-threading-equeue
+  cpp-deprecated-atomic
 )
 target_sources(cpp-http-server PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/http/server/conn.cpp

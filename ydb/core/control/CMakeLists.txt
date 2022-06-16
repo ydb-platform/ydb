@@ -16,6 +16,7 @@ target_link_libraries(ydb-core-control PUBLIC
   ydb-core-base
   ydb-core-mon
   ydb-core-node_whiteboard
+  cpp-deprecated-atomic
 )
 target_sources(ydb-core-control PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/control/immediate_control_board_actor.cpp

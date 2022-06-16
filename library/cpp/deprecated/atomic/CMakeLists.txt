@@ -7,13 +7,8 @@
 
 
 
-add_library(cpp-messagebus-scheduler)
-target_link_libraries(cpp-messagebus-scheduler PUBLIC
+add_library(cpp-deprecated-atomic INTERFACE)
+target_link_libraries(cpp-deprecated-atomic INTERFACE
   contrib-libs-cxxsupp
   yutil
-  cpp-threading-future
-  cpp-deprecated-atomic
-)
-target_sources(cpp-messagebus-scheduler PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/scheduler/scheduler.cpp
 )

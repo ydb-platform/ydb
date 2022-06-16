@@ -12,6 +12,7 @@ target_link_libraries(yql-utils-backtrace PUBLIC
   contrib-libs-cxxsupp
   yutil
   lib-DebugInfo-Symbolize
+  cpp-deprecated-atomic
 )
 target_sources(yql-utils-backtrace PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/backtrace/backtrace.cpp

@@ -22,6 +22,7 @@ target_link_libraries(library-cpp-messagebus PUBLIC
   cpp-messagebus-scheduler
   cpp-string_utils-indent_text
   cpp-threading-future
+  cpp-deprecated-atomic
 )
 target_sources(library-cpp-messagebus PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/messagebus/acceptor.cpp

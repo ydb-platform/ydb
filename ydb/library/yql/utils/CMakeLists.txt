@@ -15,6 +15,7 @@ target_link_libraries(library-yql-utils PUBLIC
   library-cpp-messagebus
   cpp-string_utils-quote
   cpp-threading-future
+  cpp-deprecated-atomic
 )
 target_sources(library-yql-utils PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/bind_in_range.cpp

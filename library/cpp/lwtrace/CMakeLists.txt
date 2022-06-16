@@ -12,6 +12,7 @@ target_link_libraries(library-cpp-lwtrace PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-lwtrace-protos
+  cpp-deprecated-atomic
 )
 target_sources(library-cpp-lwtrace PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/lwtrace/check.cpp

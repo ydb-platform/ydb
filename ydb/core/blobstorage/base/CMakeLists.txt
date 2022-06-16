@@ -12,6 +12,7 @@ target_link_libraries(core-blobstorage-base PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-wilson
+  cpp-deprecated-atomic
   library-cpp-lwtrace
   ydb-core-protos
 )

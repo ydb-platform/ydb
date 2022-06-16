@@ -13,6 +13,7 @@ target_link_libraries(yql-utils-log PUBLIC
   yutil
   library-cpp-logger
   cpp-logger-global
+  cpp-deprecated-atomic
 )
 target_sources(yql-utils-log PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/utils/log/context.cpp

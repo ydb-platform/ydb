@@ -13,6 +13,7 @@ target_link_libraries(cpp-actors-memory_log PUBLIC
   yutil
   cpp-threading-queue
   contrib-libs-linuxvdso
+  cpp-deprecated-atomic
 )
 target_sources(cpp-actors-memory_log PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/memory_log/memlog.cpp

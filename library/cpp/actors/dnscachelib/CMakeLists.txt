@@ -14,6 +14,7 @@ target_link_libraries(cpp-actors-dnscachelib PUBLIC
   yutil
   c-ares::c-ares
   library-cpp-lwtrace
+  cpp-deprecated-atomic
 )
 target_sources(cpp-actors-dnscachelib PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/dnscachelib/dnscache.cpp

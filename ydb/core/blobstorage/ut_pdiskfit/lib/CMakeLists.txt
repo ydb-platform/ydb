@@ -15,6 +15,7 @@ target_link_libraries(blobstorage-ut_pdiskfit-lib PUBLIC
   ydb-core-base
   core-blobstorage-pdisk
   ydb-library-pdisk_io
+  cpp-deprecated-atomic
 )
 target_sources(blobstorage-ut_pdiskfit-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_pdiskfit/lib/basic_test.cpp

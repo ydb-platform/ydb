@@ -12,6 +12,7 @@ target_link_libraries(cpp-grpc-client PUBLIC
   contrib-libs-cxxsupp
   yutil
   contrib-libs-grpc
+  cpp-deprecated-atomic
 )
 target_sources(cpp-grpc-client PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/grpc/client/grpc_client_low.cpp

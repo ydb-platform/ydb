@@ -33,6 +33,7 @@ target_link_libraries(ydb-core-base PUBLIC
   library-pretty_types_print-protobuf
   api-protos-out
   library-yql-minikql
+  cpp-deprecated-atomic
   library-cpp-resource
   tools-enum_parser-enum_serialization_runtime
 )
@@ -106,6 +107,7 @@ target_link_libraries(ydb-core-base.global PUBLIC
   library-pretty_types_print-protobuf
   api-protos-out
   library-yql-minikql
+  cpp-deprecated-atomic
   library-cpp-resource
   tools-enum_parser-enum_serialization_runtime
 )

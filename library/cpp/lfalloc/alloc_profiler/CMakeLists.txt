@@ -13,6 +13,7 @@ target_link_libraries(cpp-lfalloc-alloc_profiler PUBLIC
   yutil
   cpp-lfalloc-dbg_info
   library-cpp-cache
+  cpp-deprecated-atomic
 )
 target_sources(cpp-lfalloc-alloc_profiler PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/alloc_profiler/profiler.cpp

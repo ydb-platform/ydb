@@ -20,6 +20,7 @@ target_link_libraries(ydb-library-yql-core-file_storage-ut PUBLIC
   cpp-http-server
   cpp-threading-future
   core-file_storage-http_download
+  cpp-deprecated-atomic
 )
 target_link_options(ydb-library-yql-core-file_storage-ut PRIVATE
   -Wl,-no_deduplicate

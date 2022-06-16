@@ -52,6 +52,24 @@ private:
 
 }; // TPrinter
 
+
+bool IsScalarType(const FieldDescriptor* field) {
+    switch (field->cpp_type()) {
+        case FieldDescriptor::CPPTYPE_INT32:
+        case FieldDescriptor::CPPTYPE_INT64:
+        case FieldDescriptor::CPPTYPE_UINT32:
+        case FieldDescriptor::CPPTYPE_UINT64:
+        case FieldDescriptor::CPPTYPE_DOUBLE:
+        case FieldDescriptor::CPPTYPE_FLOAT:
+        case FieldDescriptor::CPPTYPE_BOOL:
+        case FieldDescriptor::CPPTYPE_STRING:
+            return true;
+        default:
+            return false;
+    }
+    return false;
+}
+
 class TFieldGenerator: public TThrRefBase {
     void Required(TPrinter& printer) const {
         Y_VERIFY(!Field->is_repeated(), "Repeated fields cannot be required or not");
@@ -59,7 +77,7 @@ class TFieldGenerator: public TThrRefBase {
         if (Field->options().GetExtension(Ydb::required)) {
             if (Field->cpp_type() == FieldDescriptor::CPPTYPE_STRING) {
                 printer->Print(Vars, "if ($field$().empty()) {\n");
-            } else if (Field->message_type()) {
+            } else if (Field->has_presence()) {
                 printer->Print(Vars, "if (!has_$field$()) {\n");
             } else {
                 Y_FAIL_S(" Field type = " << Field->type_name() << " cannot be required or not");
@@ -152,6 +170,7 @@ class TFieldGenerator: public TThrRefBase {
 
         Y_FAIL_S("Invalid value: " << annValue);
     }
+
 
     void CheckValue(TPrinter& printer, const FieldDescriptor* field, TVariables vars) const {
         switch (field->cpp_type()) {
@@ -274,8 +293,17 @@ class TFieldGenerator: public TThrRefBase {
     void Body(TPrinter& printer) const {
         const auto& opts = Field->options();
 
+
         if (opts.HasExtension(Ydb::required)) {
             Required(printer);
+        }
+
+        if (Field->has_presence() && IsScalarType(Field)) {
+            printer->Print(Vars, "if (!has_$field$()) {\n");
+            printer->Indent();
+            printer->Print(Vars, "return true;\n");
+            printer->Outdent();
+            printer->Print(Vars, "}\n");
         }
         if (opts.HasExtension(Ydb::size)) {
             Size(printer);
@@ -515,18 +543,23 @@ public:
 
         TItems items;
 
+        for (int i = 0; i < Message->real_oneof_decl_count(); i++) {
+            const OneofDescriptor* oneof = Message->oneof_decl(i);
+            TOneofGenerator::TPtr oneofGen = new TOneofGenerator(oneof, Vars.at("class"));
+            items.emplace(oneof, TItem(oneofGen));
+        }
+
         for (auto i = 0; i < Message->field_count(); ++i) {
             const FieldDescriptor* field = Message->field(i);
             const OneofDescriptor* oneof = field->containing_oneof();
 
             TFieldGenerator::TPtr fieldGen = new TFieldGenerator(field, Vars.at("class"));
-            TOneofGenerator::TPtr oneofGen = oneof ? new TOneofGenerator(oneof, Vars.at("class")) : nullptr;
 
             auto it = items.find(oneof);
             if (it == items.end()) {
-                it = items.emplace(oneof, TItem(oneofGen)).first;
+                it = items.emplace(nullptr, TItem(nullptr)).first;
             }
-
+            Y_VERIFY(it != items.end());
             it->second.AddField(fieldGen);
         }
 
@@ -568,6 +601,10 @@ class TCodeGenerator: public CodeGenerator {
         }
 
         return true;
+    }
+
+    uint64 GetSupportedFeatures() const override {
+        return FEATURE_PROTO3_OPTIONAL;
     }
 
 }; // TCodeGenerator

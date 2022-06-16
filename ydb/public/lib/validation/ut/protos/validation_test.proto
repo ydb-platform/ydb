@@ -46,6 +46,12 @@ message MessageBasic {
     int32 check_value_range_4 = 25 [(value) = "(1; 10)"];
 }
 
+message MessageOptional {
+    optional int32 check_required = 1 [(required) = true];
+    optional string check_length = 2 [(length).range = {min: 1, max: 3}];
+    optional int32 check_value_int32 = 3 [(value) = "> 0"];
+}
+
 message MessageMap {
     map<string, string> values = 1 [(size).gt = 0, (map_key).length.lt = 2, (length).lt = 2, (map_key).value = '!= "k"', (value) = '!= "v"'];
 }
@@ -54,7 +60,11 @@ message MessageOneof {
     uint32 key = 1;
     string check_required = 2 [(required) = true];
     oneof value {
-        string check_le_1 = 3 [(length).le = 1];
-        string check_le_2 = 4 [(length).le = 2];
+        string check_ge_1 = 3 [(length).ge = 1];
+        string check_ge_2 = 4 [(length).ge = 2];
+    }
+
+    message SomeMessage {
+        int32 some_value = 1;
     }
 }

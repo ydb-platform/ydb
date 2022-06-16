@@ -1306,10 +1306,9 @@ public:
 
         TAstNode* rowTest;
         if (value->testexpr) {
-            TExprSettings settings;
-            settings.AllowColumns = true;
-            settings.Scope = "SUBLINK TEST";
-            auto test = ParseExpr(value->testexpr, settings);
+            TExprSettings localSettings = settings;
+            localSettings.Scope = "SUBLINK TEST";
+            auto test = ParseExpr(value->testexpr, localSettings);
             if (!test) {
                 return nullptr;
             }

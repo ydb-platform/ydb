@@ -5,6 +5,7 @@
 #include <google/protobuf/duration.pb.h>
 #include <google/protobuf/empty.pb.h>
 #include <google/protobuf/timestamp.pb.h>
+#include <google/protobuf/wrappers.pb.h>
 
 #include <util/string/builder.h>
 #include <util/string/subst.h>
@@ -55,6 +56,13 @@ bool IsCustomMessage(const google::protobuf::Descriptor* message) {
     if (message->full_name() == google::protobuf::Timestamp::descriptor()->full_name()) {
         return false;
     }
+    if (message->full_name() == google::protobuf::Int64Value::descriptor()->full_name()) {
+        return false;
+    }
+    if (message->full_name() == google::protobuf::BoolValue::descriptor()->full_name()) {
+        return false;
+    }
+
     if (message->options().map_entry()) {
         return false;
     }

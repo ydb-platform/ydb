@@ -1,4 +1,0 @@
-grpcio==1.38.0
-protobuf==3.17.3
-pytest==6.2.4
-aiohttp==3.7.4

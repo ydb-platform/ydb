@@ -1467,6 +1467,10 @@ message TEvGetCompactTableStatsResult {
 //    - ContinuationToken, which user can use to restart the read.
 // 5. User reads until the end using TEvReadAck to update the quota.
 // 6. User stops reading by TEvReadCancel.
+//
+// TEvReadResult is valid only if its Status is equal to Ydb::StatusIds::SUCCESS.
+// In case of any other status code iterator has been invalidated and further
+// usage of its ReadId will result in either non-success status code.
 message TEvRead {
     // User must always provide unique ReadId
     // Note that shard distinguishes equal ReadId's

@@ -788,8 +788,11 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         helper.SendCancel("table-1", 1);
         helper.SendReadAck("table-1", readResult1->Record, 3, 10000);
 
-        auto readResult2 = helper.WaitReadResult(TDuration::MilliSeconds(10));
-        UNIT_ASSERT(!readResult2);
+        auto readResult2 = helper.WaitReadResult();
+        UNIT_ASSERT(readResult2);
+        UNIT_ASSERT(readResult2->Record.HasStatus());
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_SESSION);
+
         UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
     }
 
@@ -1223,6 +1226,15 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         auto readResult2 = helper.WaitReadResult();
         UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.GetStatus().GetCode(), Ydb::StatusIds::SCHEME_ERROR);
+
+        UNIT_ASSERT(readResult2->Record.HasReadId());
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.GetReadId(), readResult1->Record.GetReadId());
+
+        // try to make one more read using this iterator
+        helper.SendReadAck("table-1", readResult1->Record, 3, 10000);
+        auto readResult3 = helper.WaitReadResult();
+        UNIT_ASSERT(readResult3);
+        UNIT_ASSERT_VALUES_EQUAL(readResult3->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_SESSION);
     }
 };
 

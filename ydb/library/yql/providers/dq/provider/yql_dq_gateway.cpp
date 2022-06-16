@@ -229,17 +229,16 @@ public:
     }
 
     NThreading::TFuture<TResult>
-    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
+    ExecutePlan(const TString& sessionId, NDqs::TPlan&& plan, const TVector<TString>& columns,
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
                 bool discard) override
     {
         YQL_LOG_CTX_ROOT_SCOPE(sessionId);
-        auto tasks = plan.GetTasks();
 
         Yql::DqsProto::ExecuteGraphRequest queryPB;
-        for (const auto& task : tasks) {
+        for (const auto& task : plan.Tasks) {
             auto* t = queryPB.AddTask();
             *t = task;
 
@@ -251,8 +250,8 @@ public:
             }
         }
         queryPB.SetSession(sessionId);
-        queryPB.SetResultType(plan.GetResultType());
-        queryPB.SetSourceId(plan.GetSourceID().NodeId()-1);
+        queryPB.SetResultType(plan.ResultType);
+        queryPB.SetSourceId(plan.SourceID.NodeId()-1);
         for (const auto& column : columns) {
             *queryPB.AddColumns() = column;
         }

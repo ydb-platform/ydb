@@ -13,6 +13,8 @@
 
 #include <library/cpp/messagebus/network.h>
 
+#include <util/system/env.h>
+
 namespace NYql {
 
 using namespace NActors;
@@ -78,10 +80,24 @@ private:
 
 class TDqGatewayLocal: public IDqGateway
 {
+    struct TRequest {
+        TString SessionId;
+        NDqs::TPlan Plan;
+        TVector<TString> Columns;
+        THashMap<TString, TString> SecureParams;
+        THashMap<TString, TString> GraphParams;
+        TDqSettings::TPtr Settings;
+        TDqProgressWriter ProgressWriter;
+        THashMap<TString, TString> ModulesMapping;
+        bool Discard;
+        NThreading::TPromise<TResult> Result;
+    };
+
 public:
     TDqGatewayLocal(THolder<TLocalServiceHolder>&& localService, const IDqGateway::TPtr& gateway)
         : LocalService(std::move(localService))
         , Gateway(gateway)
+        , DeterministicMode(!!GetEnv("YQL_DETERMINISTIC_MODE"))
     { }
 
     NThreading::TFuture<void> OpenSession(const TString& sessionId, const TString& username) override {
@@ -93,18 +109,49 @@ public:
     }
 
     NThreading::TFuture<TResult>
-    ExecutePlan(const TString& sessionId, NDqs::IDqsExecutionPlanner& plan, const TVector<TString>& columns,
+    ExecutePlan(const TString& sessionId, NDqs::TPlan&& plan, const TVector<TString>& columns,
                 const THashMap<TString, TString>& secureParams, const THashMap<TString, TString>& graphParams,
                 const TDqSettings::TPtr& settings,
                 const TDqProgressWriter& progressWriter, const THashMap<TString, TString>& modulesMapping,
                 bool discard) override
     {
-        return Gateway->ExecutePlan(sessionId, plan, columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard);
+
+        NThreading::TFuture<TResult> result;
+        {
+            TGuard<TMutex> lock(Mutex);
+            Queue.emplace_back(TRequest{sessionId, std::move(plan), columns, secureParams, graphParams, settings, progressWriter, modulesMapping, discard, NThreading::NewPromise<TResult>()});
+            result = Queue.back().Result;
+        }
+
+        TryExecuteNext();
+
+        return result;
     }
 
 private:
+    void TryExecuteNext() {
+        TGuard<TMutex> lock(Mutex);
+        if (!DeterministicMode || Queue.size() == 1) {
+            auto request = std::move(Queue.front()); Queue.pop_front();
+            lock.Release();
+
+            Gateway->ExecutePlan(request.SessionId, std::move(request.Plan), request.Columns, request.SecureParams, request.GraphParams, request.Settings, request.ProgressWriter, request.ModulesMapping, request.Discard)
+                .Apply([promise=request.Result, this](const NThreading::TFuture<TResult>& result) mutable {
+                    try {
+                        promise.SetValue(result.GetValue());
+                    } catch (...) {
+                        promise.SetException(std::current_exception());
+                    }
+                    TryExecuteNext();
+                });
+        }
+    }
+
     THolder<TLocalServiceHolder> LocalService;
     IDqGateway::TPtr Gateway;
+    const bool DeterministicMode;
+    TMutex Mutex;
+    TList<TRequest> Queue;
 };
 
 THolder<TLocalServiceHolder> CreateLocalServiceHolder(const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,

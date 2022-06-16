@@ -27,7 +27,7 @@ public:
 
     NThreading::TFuture<TResult> ExecutePlan(
         const TString& sessionId,
-        NYql::NDqs::IDqsExecutionPlanner& plan,
+        NYql::NDqs::TPlan&& plan,
         const TVector<TString>& columns,
         const THashMap<TString, TString>& secureParams,
         const THashMap<TString, TString>& queryParams,
@@ -43,8 +43,8 @@ public:
 
         NProto::TGraphParams params;
         THashMap<i64, TString> stagePrograms;
-        NTasksPacker::Pack(plan.GetTasks(), stagePrograms);
-        for (auto&& task : plan.GetTasks()) {
+        NTasksPacker::Pack(plan.Tasks, stagePrograms);
+        for (auto&& task : plan.Tasks) {
             *params.AddTasks() = std::move(task);
         }
         for (const auto& [id, program]: stagePrograms) {
@@ -57,9 +57,9 @@ public:
             (*params.MutableSecureParams())[k] = v;
         }
         settings->Save(params);
-        if (plan.GetSourceID()) {
-            params.SetSourceId(plan.GetSourceID().NodeId() - 1);
-            params.SetResultType(plan.GetResultType());
+        if (plan.SourceID) {
+            params.SetSourceId(plan.SourceID.NodeId() - 1);
+            params.SetResultType(plan.ResultType);
         }
         params.SetSession(sessionId);
 
@@ -70,7 +70,7 @@ public:
         // fake it till you make it
         // generate dummy result for YQL facade now, remove this gateway completely
         // when top-level YQL facade call like Preprocess() is implemented
-        if (plan.GetResultType()) {
+        if (plan.ResultType) {
             // for resultable graphs return dummy "select 1" result (it is not used and is required to satisfy YQL facade only)
             gatewayResult.SetSuccess();
             gatewayResult.Data = "[[\001\0021]]";

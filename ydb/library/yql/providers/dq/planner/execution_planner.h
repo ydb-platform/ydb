@@ -14,6 +14,12 @@
 #include <tuple>
 
 namespace NYql::NDqs {
+    struct TPlan {
+        TVector<NDqProto::TDqTask> Tasks;
+        NActors::TActorId SourceID;
+        TString ResultType;
+    };
+
     class IDqsExecutionPlanner {
     public:
         virtual ~IDqsExecutionPlanner() = default;
@@ -21,6 +27,14 @@ namespace NYql::NDqs {
         virtual TVector<NDqProto::TDqTask>& GetTasks() = 0;
         virtual NActors::TActorId GetSourceID() const = 0;
         virtual TString GetResultType(bool withTagged = false) const = 0;
+
+        TPlan GetPlan() {
+            return TPlan {
+                GetTasks(),
+                GetSourceID(),
+                GetResultType()
+            };
+        }
     };
 
     class TDqsExecutionPlanner: public IDqsExecutionPlanner {

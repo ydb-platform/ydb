@@ -46,7 +46,7 @@ namespace NMonitoring {
         {
         }
 
-        TDeprecatedCounter(TValue value, bool derivative = false)
+        TDeprecatedCounter(TValueBase value, bool derivative = false)
             : Value(value)
             , Derivative(derivative)
         {
@@ -63,7 +63,7 @@ namespace NMonitoring {
             return AtomicGet(Value);
         }
 
-        void Set(TValue val) {
+        void Set(TValueBase val) {
             AtomicSet(Value, val);
         }
 
@@ -74,10 +74,10 @@ namespace NMonitoring {
             return AtomicDecrement(Value);
         }
 
-        TValueBase Add(const TValue val) {
+        TValueBase Add(const TValueBase val) {
             return AtomicAdd(Value, val);
         }
-        TValueBase Sub(const TValue val) {
+        TValueBase Sub(const TValueBase val) {
             return AtomicAdd(Value, -val);
         }
 
@@ -96,14 +96,14 @@ namespace NMonitoring {
             Dec();
         }
 
-        void operator+=(TValue rhs) {
+        void operator+=(TValueBase rhs) {
             Add(rhs);
         }
-        void operator-=(TValue rhs) {
+        void operator-=(TValueBase rhs) {
             Sub(rhs);
         }
 
-        TValueBase operator=(TValue rhs) {
+        TValueBase operator=(TValueBase rhs) {
             AtomicSwap(&Value, rhs);
             return rhs;
         }

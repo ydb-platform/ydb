@@ -91,9 +91,13 @@ private:
                 resourceId = (ui64(++ResourceIdPart) << 32) | SelfId().NodeId();
             }
 
+            bool placementFailure = false;
+            ui64 memoryLimit = AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic());
+            ui64 memoryAllocated = AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic());
             TVector<TPeer> nodes;
             for (ui32 i = 0; i < count; ++i) {
                 TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0};
+                bool selfPlacement = true;
                 if (!Peers.empty()) {
                     auto FirstPeer = NextPeer;
                     while (true) {
@@ -111,20 +115,34 @@ private:
                             // adjust allocated size to place next tasks correctly, will be reset after next health check
                             nextNode.MemoryAllocated += MkqlInitialMemoryLimit;
                             node = nextNode;
+                            selfPlacement = false;
                             break;
                         }
+                    }
+                }
+                if (selfPlacement) {
+                    if (memoryLimit == 0 || memoryLimit > memoryAllocated + MkqlInitialMemoryLimit) {
+                        memoryAllocated += MkqlInitialMemoryLimit;
+                    } else {
+                        placementFailure = true;
+                        auto& error = *req->Record.MutableError();
+                        error.SetErrorCode(NYql::NDqProto::EMISMATCH);
+                        error.SetMessage("Not enough free memory in the cluster");
+                        break;
                     }
                 }
                 nodes.push_back(node);
             }
 
-            req->Record.ClearError();
-            auto& group = *req->Record.MutableNodes();
-            group.SetResourceId(resourceId);
-            for (const auto& node : nodes) {
-                auto* worker = group.AddWorker();
-                *worker->MutableGuid() = node.InstanceId;
-                worker->SetNodeId(node.NodeId);
+            if (!placementFailure) {
+                req->Record.ClearError();
+                auto& group = *req->Record.MutableNodes();
+                group.SetResourceId(resourceId);
+                for (const auto& node : nodes) {
+                    auto* worker = group.AddWorker();
+                    *worker->MutableGuid() = node.InstanceId;
+                    worker->SetNodeId(node.NodeId);
+                }
             }
         }
         LOG_D("TEvAllocateWorkersResponse " << req->Record.DebugString());

@@ -790,7 +790,7 @@ private:
                     }
                 } else {
                     future = State->DqGateway->ExecutePlan(
-                        State->SessionId, std::move(executionPlanner->GetPlan()), columns, secureParams, graphParams,
+                        State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
                         settings, progressWriter, ModulesMapping, fillSettings.Discard);
                 }
             }
@@ -1149,7 +1149,7 @@ private:
 
         IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
-        auto future = State->DqGateway->ExecutePlan(State->SessionId, std::move(executionPlanner->GetPlan()), columns, secureParams, graphParams,
+        auto future = State->DqGateway->ExecutePlan(State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
             settings, progressWriter, ModulesMapping, fillSettings.Discard);
 
         future.Subscribe([publicIds, progressWriter = State->ProgressWriter](const NThreading::TFuture<IDqGateway::TResult>& completedFuture) {
@@ -1595,7 +1595,7 @@ private:
 
             IDqGateway::TDqProgressWriter progressWriter = MakeDqProgressWriter(publicIds);
 
-            auto future = State->DqGateway->ExecutePlan(State->SessionId, std::move(executionPlanner->GetPlan()), {}, secureParams, graphParams,
+            auto future = State->DqGateway->ExecutePlan(State->SessionId, executionPlanner->GetPlan(), {}, secureParams, graphParams,
                 settings, progressWriter, ModulesMapping, false);
 
             executionPlanner.Destroy();

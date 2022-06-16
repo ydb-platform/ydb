@@ -16,7 +16,7 @@ TUserTable::TUserTable(ui32 localTid, const NKikimrSchemeOp::TTableDescription& 
     , ShadowTid(shadowTid)
 {
     Y_PROTOBUF_SUPPRESS_NODISCARD descr.SerializeToString(&Schema);
-    Name = descr.GetName();
+    Name = ExtractBase(descr.GetPath());
     Path = descr.GetPath();
     ParseProto(descr);
 }
@@ -31,12 +31,7 @@ TUserTable::TUserTable(const TUserTable& table, const NKikimrSchemeOp::TTableDes
 
 void TUserTable::SetPath(const TString &path)
 {
-    auto name = ExtractBase(path);
-    if (!name) {
-        return;
-    }
-
-    Name = name;
+    Name = ExtractBase(path);
     Path = path;
     AlterSchema();
 }
@@ -346,7 +341,7 @@ void TUserTable::AlterSchema() {
     schema.SetPartitionRangeEnd(Range.To.GetBuffer());
     schema.SetPartitionRangeEndIsInclusive(Range.ToInclusive);
 
-    schema.SetPath(Name);
+    schema.SetName(Name);
     schema.SetPath(Path);
 
     SetSchema(schema);

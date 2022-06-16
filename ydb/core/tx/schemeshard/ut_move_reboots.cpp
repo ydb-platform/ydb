@@ -331,5 +331,67 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
             }
         });
     }
+
+    Y_UNIT_TEST(AlterAfter) {
+        TTestWithReboots t;
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                                Name: "Table"
+                                Columns { Name: "key"   Type: "Uint64" }
+                                Columns { Name: "value" Type: "Utf8" }
+                                KeyColumnNames: ["key"]
+                                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Write some data to the user table
+                auto fnWriteRow = [&] (ui64 tabletId) {
+                    TString writeQuery = R"(
+                        (
+                            (let key '( '('key (Uint64 '0)) ) )
+                            (let value '('('value (Utf8 '281474980010683)) ) )
+                            (return (AsList (UpdateRow '__user__Table key value) ))
+                        )
+                    )";
+                    NKikimrMiniKQL::TResult result;
+                    TString err;
+                    NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, tabletId, writeQuery, result, err);
+                    UNIT_ASSERT_VALUES_EQUAL(err, "");
+                    UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
+                };
+                fnWriteRow(TTestTxConfig::FakeHiveTablets);
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::PathExist,
+                                    NLs::ChildrenCount(2),
+                                    NLs::ShardsInsideDomain(1)});
+
+                TestMoveTable(runtime, ++t.TxId, "/MyRoot/Table", "/MyRoot/TableMove");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            t.TestEnv->ReliablePropose(runtime, AlterTableRequest(++t.TxId, "/MyRoot",
+                                                                      R"(Name: "TableMove" Columns { Name: "add" Type: "Utf8" })"),
+                                       {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusPreconditionFailed});
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                   {NLs::ChildrenCount(2),
+                                    NLs::ShardsInsideDomain(1)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/TableMove"),
+                                   {NLs::IsTable,
+                                    NLs::PathVersionEqual(7),
+                                    NLs::CheckColumns("TableMove", {"key", "value", "add"}, {}, {"key"}),
+                                    NLs::PathsInsideDomain(2),
+                                    NLs::ShardsInsideDomain(1)});
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                                   {NLs::PathNotExist});
+            }
+        });
+    }
 }
 

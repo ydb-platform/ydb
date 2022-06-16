@@ -18,5 +18,6 @@ message StatusIds {
         LIMIT_EXCEEDED = 10;
         UNSUPPORTED    = 11;
         EXTERNAL_ERROR = 12;
+        CLUSTER_OVERLOADED = 13;
     }
 }

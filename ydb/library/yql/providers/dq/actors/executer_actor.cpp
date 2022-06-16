@@ -314,7 +314,7 @@ private:
                     << ev->Get()->Record.GetError().GetMessage() << ":"
                     << static_cast<int>(ev->Get()->Record.GetError().GetErrorCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
-                Finish(NYql::NDqProto::StatusIds::OVERLOADED, /*retriable = */ true, /*fallback = */ true);
+                Finish(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED, /*retriable = */ true, /*fallback = */ true);
                 return;
             }
             case TAllocateWorkersResponse::kNodes:

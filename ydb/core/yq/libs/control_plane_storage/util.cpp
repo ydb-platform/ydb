@@ -119,6 +119,14 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
             policy.SetRetryPeriod("1m");
             policy.SetBackoffPeriod("1s");
         }
+        {
+            auto& policyMapping = *config.AddRetryPolicyMapping();
+            policyMapping.AddStatusCode(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
+            auto& policy = *policyMapping.MutablePolicy();
+            policy.SetRetryCount(3);
+            policy.SetRetryPeriod("1d");
+            policy.SetBackoffPeriod("2s");
+        }
     }
 
     if (!config.GetStorage().GetToken() && config.GetStorage().GetOAuthFile()) {

@@ -100,7 +100,7 @@ struct TCompactionLogicState {
 
         bool ChangesRequested = false;
 
-        bool AllowBorrowedGarbageCompaction = true;
+        bool AllowBorrowedGarbageCompaction = false;
 
         TTableInfo() = default;
 

@@ -6,7 +6,7 @@ with open("README.md", "r") as r:
 
 setuptools.setup(
     name="ydb",
-    version="2.4.0",
+    version="2.5.0",
     description="YDB Python SDK",
     author="Yandex LLC",
     author_email="ydb@yandex-team.ru",
@@ -24,7 +24,7 @@ setuptools.setup(
         "Programming Language :: Python :: 3.6",
     ],
     install_requires=(
-        "protobuf>=3.13.0",
+        "protobuf>=3.13.0,<4.0.0",
         "grpcio>=1.5.0",
         "enum-compat>=0.0.1",
     ),

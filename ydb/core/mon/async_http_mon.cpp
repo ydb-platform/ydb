@@ -425,7 +425,12 @@ public:
             }
             if (index) {
                 TStringBuilder response;
-                response << "HTTP/1.1 302 Found\r\nLocation: " << url + "/" << "\r\n\r\n";
+                auto p = url.rfind('/');
+                if (p != TString::npos) {
+                    url = url.substr(p + 1);
+                }
+                url += '/';
+                response << "HTTP/1.1 302 Found\r\nLocation: " << url << "\r\n\r\n";
                 Send(ev->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(ev->Get()->Request->CreateResponseString(response)));
                 return;
             }

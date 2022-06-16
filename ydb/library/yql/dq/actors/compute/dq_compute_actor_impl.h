@@ -519,33 +519,40 @@ protected:
     }
 
     void InternalError(TIssuesIds::EIssueCode issueCode, const TString& message) {
-        CA_LOG_E(TIssuesIds::EIssueCode_Name(issueCode) << ": " << message << ".");
-        TIssue issue(message);
-        SetIssueCode(issueCode, issue);
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
-        State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, {std::move(issue)});
+        InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, issueCode, message);
     }
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
-        CA_LOG_E("InternalError: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode) << " " << TIssuesIds::EIssueCode_Name(issueCode) << ": " << message << ".");
         TIssue issue(message);
         SetIssueCode(issueCode, issue);
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
-        State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(statusCode, TIssues({std::move(issue)}));
+        InternalError(statusCode, std::move(issue));
     }
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssue issue) {
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
-        State = NDqProto::COMPUTE_STATE_FAILURE;
-        ReportStateAndMaybeDie(statusCode, TIssues({std::move(issue)}));
+        InternalError(statusCode, TIssues({std::move(issue)}));
     }
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssues issues) {
+        CA_LOG_E(InternalErrorLogString(statusCode, issues));
+
         std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard = MaybeBindAllocator();
         State = NDqProto::COMPUTE_STATE_FAILURE;
         ReportStateAndMaybeDie(statusCode, issues);
+    }
+
+    TString InternalErrorLogString(NYql::NDqProto::StatusIds::StatusCode statusCode, const TIssues& issues) {
+        TStringBuilder log;
+        log << "InternalError: " << NYql::NDqProto::StatusIds_StatusCode_Name(statusCode);
+        if (issues) {
+            const auto& issueCodeName = TIssuesIds::EIssueCode_Name(issues.begin()->GetCode());
+            if (!issueCodeName.empty()) {
+                log << ' ' << issueCodeName;
+            }
+            log << ": ";
+            issues.PrintTo(log.Out, true /* oneLine */);
+        }
+        log << '.';
+        return std::move(log);
     }
 
     void ContinueExecute() {
@@ -860,11 +867,7 @@ protected:
     }
 
     virtual std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> MaybeBindAllocator() {
-        std::optional<TGuard<NKikimr::NMiniKQL::TScopedAlloc>> guard;
-        if (!TaskRunner->GetTypeEnv().GetAllocator().IsAttached()) {
-            guard.emplace(TaskRunner->BindAllocator());
-        }
-        return guard;
+        return TaskRunner->BindAllocator();
     }
 
     virtual void AsyncInputPush(NKikimr::NMiniKQL::TUnboxedValueVector&& batch, TAsyncInputInfoBase& source, i64 space, bool finished) {

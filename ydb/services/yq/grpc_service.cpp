@@ -184,13 +184,15 @@ void TGRpcYandexQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         };
     }};
 
-    static const std::function CreateBindingPermissions{[](const YandexQuery::CreateBindingRequest& request) {
+    static const std::function CreateBindingPermissions{[](const YandexQuery::CreateBindingRequest&) {
         TVector<NPerms::TPermission> permissions{
             NPerms::Required("yq.bindings.create"),
         };
-        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
-            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
-        }
+        // For use in binding links on connection with visibility SCOPE,
+        // the yq.resources.managePublic permission is required. But there
+        // is no information about connection visibility in this place,
+        // so yq.resources.managePublic is always requested as optional
+        permissions.push_back(NPerms::Optional("yq.resources.managePublic"));
         return permissions;
     }};
 
@@ -210,14 +212,16 @@ void TGRpcYandexQueryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         };
     }};
 
-    static const std::function ModifyBindingPermissions{[](const YandexQuery::ModifyBindingRequest& request) {
+    static const std::function ModifyBindingPermissions{[](const YandexQuery::ModifyBindingRequest&) {
         TVector<NPerms::TPermission> permissions{
             NPerms::Required("yq.bindings.update"),
             NPerms::Optional("yq.resources.managePrivate")
         };
-        if (request.content().acl().visibility() == YandexQuery::Acl::SCOPE) {
-            permissions.push_back(NPerms::Required("yq.resources.managePublic"));
-        }
+        // For use in binding links on connection with visibility SCOPE,
+        // the yq.resources.managePublic permission is required. But there
+        // is no information about connection visibility in this place,
+        // so yq.resources.managePublic is always requested as optional
+        permissions.push_back(NPerms::Optional("yq.resources.managePublic"));
         return permissions;
     }};
 

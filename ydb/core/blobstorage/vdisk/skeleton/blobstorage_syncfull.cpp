@@ -125,7 +125,7 @@ namespace NKikimr {
             Result->Record.SetBlockTabletFrom(KeyBlock.TabletId);
             KeyBarrier.Serialize(*Result->Record.MutableBarrierFrom());
             // send reply
-            SendVDiskResponse(ctx, Recipient, Result.release(), *this, 0);
+            SendVDiskResponse(ctx, Recipient, Result.release(), 0);
             // notify parent about death
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             Die(ctx);

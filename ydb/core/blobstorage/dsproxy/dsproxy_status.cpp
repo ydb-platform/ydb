@@ -79,10 +79,10 @@ public:
     TBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
-            ui64 cookie, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, NWilson::TTraceId(),
+            ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_STATUS, false, {}, now, storagePoolCounters,
-                ev->RestartCounter)
+                ev->RestartCounter, "DSProxy.Status")
         , Deadline(ev->Deadline)
         , Requests(0)
         , Responses(0)
@@ -105,7 +105,7 @@ public:
                 << " node# " << Info->GetActorId(vd).NodeId());
 
             auto msg = std::make_unique<TEvBlobStorage::TEvVStatus>(vd);
-            SendToQueue(std::move(msg), cookie, NWilson::TTraceId()); // FIXME: wilson
+            SendToQueue(std::move(msg), cookie);
             ++Requests;
         }
 
@@ -129,8 +129,8 @@ public:
 IActor* CreateBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
-        ui64 cookie, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupStatusRequest(info, state, source, mon, ev, cookie, now, storagePoolCounters);
+        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
+    return new TBlobStorageGroupStatusRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
 }
 
 } // NKikimr

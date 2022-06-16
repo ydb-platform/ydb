@@ -3,7 +3,6 @@
 #include "blobstorage_skeletonerr.h"
 #include "blobstorage_skeleton.h"
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/base/utility.h>
 #include <ydb/core/blobstorage/base/html.h>
 
@@ -99,21 +98,13 @@ namespace NKikimr {
             NKikimrBlobStorage::EVDiskQueueId ExtQueueId;
             NBackpressure::TQueueClientId ClientId;
             TActorId ActorId;
+            NWilson::TSpan Span;
 
-            TRecord()
-                : Ev()
-                , ReceivedTime()
-                , Deadline()
-                , ByteSize(0)
-                , MsgId()
-                , Cost(0)
-                , ExtQueueId(NKikimrBlobStorage::EVDiskQueueId::Unknown)
-                , ClientId()
-            {}
+            TRecord() = default;
 
             TRecord(std::unique_ptr<IEventHandle> ev, TInstant now, ui32 recByteSize, const NBackpressure::TMessageId &msgId,
                     ui64 cost, TInstant deadline, NKikimrBlobStorage::EVDiskQueueId extQueueId,
-                    const NBackpressure::TQueueClientId& clientId)
+                    const NBackpressure::TQueueClientId& clientId, TString name)
                 : Ev(std::move(ev))
                 , ReceivedTime(now)
                 , Deadline(deadline)
@@ -123,7 +114,10 @@ namespace NKikimr {
                 , ExtQueueId(extQueueId)
                 , ClientId(clientId)
                 , ActorId(Ev->Sender)
-            {}
+                , Span(9 /*verbosity*/, NWilson::ERelation::FollowsFrom, std::move(Ev->TraceId), now, "VDisk.PutInQueue")
+            {
+                Span.Attribute("QueueName", std::move(name));
+            }
         };
 
         using TMyQueueBackpressure = NBackpressure::TQueueBackpressure<NBackpressure::TQueueClientId>;
@@ -224,10 +218,9 @@ namespace NKikimr {
                     ++*SkeletonFrontDelayedCount;
                     *SkeletonFrontDelayedBytes += recByteSize;
 
-                    WILSON_TRACE_FROM_ACTOR(ctx, front, &converted->TraceId, EvSkeletonFrontEnqueue);
-
                     TInstant now = TAppData::TimeProvider->Now();
-                    Queue->Push(TRecord(std::move(converted), now, recByteSize, msgId, cost, deadline, extQueueId, clientId));
+                    Queue->Push(TRecord(std::move(converted), now, recByteSize, msgId, cost, deadline, extQueueId,
+                        clientId, Name));
                 }
             }
 
@@ -256,13 +249,15 @@ namespace NKikimr {
                         TDuration inQueue = now - rec->ReceivedTime;
                         ApplyToRecord(*rec->Ev, TUpdateInQueueTime(inQueue));
 
+                        // trace end of in-queue span
+                        rec->Span.EndOk();
+
                         if (forceError) {
                             front.GetExtQueue(rec->ExtQueueId).DroppedWithError(ctx, rec, now, front);
                         } else if (now >= rec->Deadline) {
                             ++Deadlines;
                             front.GetExtQueue(rec->ExtQueueId).DeadlineHappened(ctx, rec, now, front);
                         } else {
-                            WILSON_TRACE_FROM_ACTOR(ctx, front, &rec->Ev->TraceId, EvSkeletonFrontProceed);
                             ctx.ExecutorThread.Send(rec->Ev.release());
 
                             ++InFlightCount;
@@ -1298,7 +1293,7 @@ namespace NKikimr {
                 TInstant now) {
             using namespace NErrBuilder;
             auto res = ErroneousResult(VCtx, status, errorReason, ev, now, nullptr, SelfVDiskId, VDiskIncarnationGuid, GInfo);
-            SendVDiskResponse(ctx, ev->Sender, res.release(), *this, ev->Cookie);
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
         }
 
         void Reply(TEvBlobStorage::TEvVCheckReadiness::TPtr &ev, const TActorContext &ctx,

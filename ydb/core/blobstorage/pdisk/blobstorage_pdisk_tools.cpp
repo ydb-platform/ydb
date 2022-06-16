@@ -14,7 +14,6 @@
 #include "blobstorage_pdisk_util_countedqueueoneone.h"
 #include "blobstorage_pdisk_writer.h"
 
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/util/queue_oneone_inplace.h>

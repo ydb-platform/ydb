@@ -93,7 +93,7 @@ public:
             const TActorId &proxyId, bool useVPatch = false)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
-                ev->RestartCounter)
+                ev->RestartCounter, "DSProxy.Patch")
         , ProxyActorId(proxyId)
         , OriginalGroupId(ev->OriginalGroupId)
         , OriginalId(ev->OriginalId)
@@ -138,7 +138,6 @@ public:
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         TEvBlobStorage::TEvGetResult *result = ev->Get();
         Orbit = std::move(result->Orbit);
-        TraceId = std::move(ev->TraceId);
 
         ui32 patchedIdHash = PatchedId.Hash();
         bool incorrectCookie = ev->Cookie != patchedIdHash;
@@ -173,13 +172,12 @@ public:
         std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
                 NKikimrBlobStorage::AsyncBlob, TEvBlobStorage::TEvPut::TacticDefault);
         put->Orbit = std::move(Orbit);
-        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), std::move(TraceId));
+        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), Span);
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev) {
         TEvBlobStorage::TEvPutResult *result = ev->Get();
         Orbit = std::move(result->Orbit);
-        TraceId = std::move(ev->TraceId);
 
         StatusFlags = result->StatusFlags;
         ApproximateFreeSpaceShare = result->ApproximateFreeSpaceShare;
@@ -224,7 +222,6 @@ public:
         NKikimrBlobStorage::TEvVMovedPatchResult &record = result->Record;
         PullOutStatusFlagsAndFressSpace(record);
         Orbit = std::move(result->Orbit);
-        TraceId = std::move(ev->TraceId);
 
         ui64 expectedCookie = ((ui64)OriginalId.Hash() << 32) | PatchedId.Hash();
         bool incorrectCookie = ev->Cookie != expectedCookie;
@@ -531,9 +528,9 @@ public:
             NKikimrBlobStorage::AsyncRead);
         get->Orbit = std::move(Orbit);
         if (OriginalGroupId == Info->GroupID) {
-            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), std::move(TraceId));
+            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), Span);
         } else {
-            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), std::move(TraceId));
+            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span);
         }
     }
 

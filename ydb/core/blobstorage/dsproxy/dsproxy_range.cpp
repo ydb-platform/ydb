@@ -4,7 +4,6 @@
 #include "dsproxy_blob_tracker.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 
 #include <library/cpp/pop_count/popcount.h>
 
@@ -51,7 +50,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
             size += resp.Buffer.size();
         }
         Mon->CountRangeResponseTime(TActivationContext::Now() - StartTime);
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, RangeGetResultSent, ReplyStatus = reply->Status, ResponseSize = size);
         SendResponseAndDie(std::move(reply));
     }
 
@@ -65,9 +63,8 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         msg->Record.SetSuppressBarrierCheck(true);
 
         // trace message and send it to queue
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetSent);
         CountEvent(*msg);
-        SendToQueue(std::move(msg), 0, TraceId.SeparateBranch());
+        SendToQueue(std::move(msg), 0);
 
         // add pending count
         ++NumVGetsPending;
@@ -87,8 +84,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         A_LOG_DEBUG_S("DSR01", "received"
             << " VDiskId# " << vdisk
             << " TEvVGetResult# " << ev->Get()->ToString());
-
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetResultReceived, MergedNode = std::move(ev->TraceId));
 
         Y_VERIFY(NumVGetsPending > 0);
         --NumVGetsPending;
@@ -252,8 +247,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
 
         A_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetSent);
-        SendToBSProxy(SelfId(), Info->GroupID, get.release(), 0, TraceId.SeparateBranch());
+        SendToBSProxy(SelfId(), Info->GroupID, get.release(), 0, Span);
 
         // switch state
         Become(&TThis::StateGet);
@@ -271,8 +265,6 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultReceived, MergedNode = std::move(ev->TraceId));
-
         TEvBlobStorage::TEvGetResult &getResult = *ev->Get();
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
@@ -346,7 +338,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_RANGE, false, {}, now, storagePoolCounters,
-                ev->RestartCounter)
+                ev->RestartCounter, "DSProxy.Range")
         , TabletId(ev->TabletId)
         , From(ev->From)
         , To(ev->To)
@@ -369,8 +361,6 @@ public:
             << " IsIndexOnly# " << (IsIndexOnly ? "true" : "false")
             << " ForceBlockedGeneration# " << ForceBlockedGeneration
             << " RestartCounter# " << RestartCounter);
-
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, RangeGetReceived);
 
         // ensure we are querying ranges for the same tablet
         Y_VERIFY(TabletId == From.TabletID());

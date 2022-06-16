@@ -144,9 +144,8 @@ namespace NKikimr {
     void TBlobStorageGroupProxy::HandleNormal(TEvBlobStorage::TEvBlock::TPtr &ev) {
         EnsureMonitoring(ev->Get()->IsMonitored);
         Mon->EventBlock->Inc();
-        const TActorId reqID = Register(
-            CreateBlobStorageGroupBlockRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                ev->Get(), ev->Cookie, TActivationContext::Now(), StoragePoolCounters));
+        const TActorId reqID = Register(CreateBlobStorageGroupBlockRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+                ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
         ActiveRequests.insert(reqID);
     }
 
@@ -206,15 +205,15 @@ namespace NKikimr {
 
         if (!ev->Get()->IsMultiCollectAllowed || ev->Get()->PerGenerationCounterStepSize() == 1) {
             Mon->EventCollectGarbage->Inc();
-            const TActorId reqID = Register(
-                CreateBlobStorageGroupCollectGarbageRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                    ev->Get(), ev->Cookie, TActivationContext::Now(), StoragePoolCounters));
+            const TActorId reqID = Register(CreateBlobStorageGroupCollectGarbageRequest(Info, Sessions->GroupQueues,
+                ev->Sender, Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(),
+                StoragePoolCounters));
             ActiveRequests.insert(reqID);
         } else {
             Mon->EventMultiCollect->Inc();
-            const TActorId reqID = Register(
-                CreateBlobStorageGroupMultiCollectRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                    ev->Get(), ev->Cookie, TActivationContext::Now(), StoragePoolCounters));
+            const TActorId reqID = Register(CreateBlobStorageGroupMultiCollectRequest(Info, Sessions->GroupQueues,
+                ev->Sender, Mon, ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(),
+                StoragePoolCounters));
             ActiveRequests.insert(reqID);
         }
     }
@@ -227,9 +226,8 @@ namespace NKikimr {
         }
         EnsureMonitoring(true);
         Mon->EventStatus->Inc();
-        const TActorId reqID = Register(
-            CreateBlobStorageGroupStatusRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
-                ev->Get(), ev->Cookie, TActivationContext::Now(), StoragePoolCounters));
+        const TActorId reqID = Register(CreateBlobStorageGroupStatusRequest(Info, Sessions->GroupQueues, ev->Sender, Mon,
+            ev->Get(), ev->Cookie, std::move(ev->TraceId), TActivationContext::Now(), StoragePoolCounters));
         ActiveRequests.insert(reqID);
     }
 

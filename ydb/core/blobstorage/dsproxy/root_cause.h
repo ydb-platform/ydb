@@ -3,7 +3,6 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/base/appdata.h>
 
 namespace NKikimr {

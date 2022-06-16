@@ -28,7 +28,7 @@ namespace NKikimr {
             const bool prettyPrint = Ev->Get()->Record.GetPrettyPrint();
             CalculateStat(str, prettyPrint);
             Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie);
+            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             TThis::Die(ctx);
         }

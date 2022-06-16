@@ -7,7 +7,6 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_costmodel.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/base/interconnect_channels.h>
@@ -18,4 +17,5 @@
 #include <library/cpp/actors/core/mailbox.h>
 #include <library/cpp/actors/core/mon.h>
 #include <library/cpp/containers/intrusive_rb_tree/rb_tree.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 #include <google/protobuf/message.h>

@@ -462,7 +462,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(std::move(info), std::move(state), std::move(mon), source, cookie,
                 std::move(traceId), NKikimrServices::BS_PROXY_DISCOVER, false, {}, now, storagePoolCounters,
-                ev->RestartCounter)
+                ev->RestartCounter, "DSProxy.Discover(mirror-3-dc)")
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
         , StartTime(now)
@@ -505,7 +505,7 @@ public:
 
                 A_LOG_DEBUG_S("DSPDM06", "sending TEvVGetBlock# " << query->ToString());
 
-                SendToQueue(std::move(query), 0, NWilson::TTraceId());
+                SendToQueue(std::move(query), 0);
                 ++RequestsInFlight;
             }
         }
@@ -523,7 +523,7 @@ public:
             A_LOG_DEBUG_S("DSPDM07", "sending TEvVGet# " << msg->ToString());
 
             CountEvent(*msg);
-            SendToQueue(std::move(msg), 0, NWilson::TTraceId());
+            SendToQueue(std::move(msg), 0);
             ++RequestsInFlight;
         }
         Msgs.clear();

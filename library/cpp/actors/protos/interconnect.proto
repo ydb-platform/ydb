@@ -70,8 +70,8 @@ message THandshakeRequest {
     optional bool DoCheckCookie = 17;
 
     optional bool RequestModernFrame = 18;
-
     optional bool RequestAuthOnly = 19;
+    optional bool RequestExtendedTraceFmt = 20;
 }
 
 message THandshakeSuccess {
@@ -92,8 +92,8 @@ message THandshakeSuccess {
     optional TScopeId ServerScopeId = 10;
 
     optional bool UseModernFrame = 11;
-
     optional bool AuthOnly = 12;
+    optional bool UseExtendedTraceFmt = 13;
 }
 
 message THandshakeReply {

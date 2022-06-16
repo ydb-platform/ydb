@@ -1,7 +1,6 @@
 #include "dsproxy.h"
 #include "dsproxy_mon.h"
 
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/vdisk/query/query_spacetracker.h>
 
 #include <util/generic/set.h>
@@ -39,8 +38,6 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         RequestsInFlight--;
 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultReceived, MergedNode = std::move(ev->TraceId));
-
         const TEvBlobStorage::TEvGetResult &res = *ev->Get();
         if (res.Status != NKikimrProto::OK) {
             R_LOG_ERROR_S("BPMG1", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(res.Status));
@@ -72,7 +69,6 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
         }
         ev->ErrorReason = ErrorReason;
         Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent);
         Y_VERIFY(status != NKikimrProto::OK);
         SendResponseAndDie(std::move(ev));
     }
@@ -96,7 +92,8 @@ public:
             NWilson::TTraceId traceId, TMaybe<TGroupStat::EKind> latencyQueueKind, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
-                NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0)
+                NKikimrServices::BS_PROXY_MULTIGET, false, latencyQueueKind, now, storagePoolCounters, 0,
+                "DSProxy.MultiGet")
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
@@ -125,22 +122,18 @@ public:
     void SendRequests() {
         for (; RequestsInFlight < MaxRequestsInFlight && !PendingGets.empty(); ++RequestsInFlight, PendingGets.pop_front()) {
             auto& [ev, cookie] = PendingGets.front();
-            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetSent);
-            SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, TraceId.SeparateBranch());
+            SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, Span);
         }
         if (!RequestsInFlight && PendingGets.empty()) {
             auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);
             ev->ResponseSz = QuerySize;
             ev->Responses = std::move(Responses);
             Mon->CountGetResponseTime(Info->GetDeviceType(), GetHandleClass, ev->PayloadSizeBytes(), TActivationContext::Now() - StartTime);
-            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetResultSent);
             SendResponseAndDie(std::move(ev));
         }
     }
 
     void Bootstrap() {
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, MultiGetReceived);
-
         auto dumpQuery = [this] {
             TStringStream str;
             str << "{";

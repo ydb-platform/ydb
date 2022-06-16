@@ -16,10 +16,10 @@ target_link_libraries(ydb-library-pdisk_io PUBLIC
   AIO::aio
   $CONAN_OPTS_SEM
   cpp-actors-core
+  cpp-actors-wilson
   cpp-monlib-dynamic_counters
   ydb-core-debug
   library-pdisk_io-protos
-  ydb-library-wilson
 )
 target_sources(ydb-library-pdisk_io PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/pdisk_io/aio_linux.cpp

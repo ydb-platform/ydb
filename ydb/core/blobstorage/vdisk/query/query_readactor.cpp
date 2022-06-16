@@ -1,6 +1,6 @@
 #include "query_readbatch.h"
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
 
 using namespace NKikimrServices;
@@ -17,7 +17,7 @@ namespace NKikimr {
         const TActorId NotifyID;
         std::shared_ptr<TReadBatcherResult> Result;
         const ui8 Priority;
-        NWilson::TTraceId TraceId;
+        NWilson::TSpan Span;
         const bool IsRepl;
         ui32 Counter = 0;
 
@@ -37,10 +37,6 @@ namespace NKikimr {
                 // cookie for this request
                 void *cookie = &*it;
 
-                // generate wilson event with query details
-                WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadSent, ChunkIdx = it->Part.ChunkIdx,
-                        Offset = it->Part.Offset, Size = it->Part.Size, YardCookie = cookie);
-
                 // create request
                 std::unique_ptr<NPDisk::TEvChunkRead> msg(new NPDisk::TEvChunkRead(Ctx->PDiskCtx->Dsk->Owner,
                             Ctx->PDiskCtx->Dsk->OwnerRound, it->Part.ChunkIdx, it->Part.Offset, it->Part.Size,
@@ -51,7 +47,7 @@ namespace NKikimr {
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
-                    msg.release(), 0, 0, nullptr, TraceId.SeparateBranch()), it->Part.Size);
+                    msg.release(), 0, 0, nullptr, Span), it->Part.Size);
 
                 Counter++;
             }
@@ -62,7 +58,7 @@ namespace NKikimr {
                 VDISKP(Ctx->VCtx->VDiskLogPrefix, "GLUEREAD FINISHED(%p): actualReadN# %" PRIu32
                     " origReadN# %" PRIu32, this, ui32(Result->GlueReads.size()),
                     ui32(Result->DiskDataItemPtrs.size())));
-            ctx.Send(NotifyID, new TEvents::TEvCompleted(), 0, 0, std::move(TraceId));
+            ctx.Send(NotifyID, new TEvents::TEvCompleted);
             Die(ctx);
         }
 
@@ -87,8 +83,6 @@ namespace NKikimr {
             }
 
             NPDisk::TEvChunkReadResult *msg = ev->Get();
-            WILSON_TRACE_FROM_ACTOR(ctx, *this, &TraceId, EvChunkReadResultReceived, YardCookie = msg->Cookie,
-                    MergedNode = std::move(ev->TraceId));
 
             TGlueRead *glueRead = static_cast<TGlueRead *>(msg->Cookie);
             glueRead->Data = std::move(msg->Data);
@@ -122,13 +116,14 @@ namespace NKikimr {
                 std::shared_ptr<TReadBatcherResult> result,
                 ui8 priority,
                 NWilson::TTraceId traceId,
-                bool isRepl)
+                bool isRepl,
+                TInstant now)
             : TActorBootstrapped<TTReadBatcherActor>()
             , Ctx(ctx)
             , NotifyID(notifyID)
             , Result(std::move(result))
             , Priority(priority)
-            , TraceId(std::move(traceId))
+            , Span(12, NWilson::ERelation::ChildOf, std::move(traceId), now, "VDisk.TReadBatcherActor")
             , IsRepl(isRepl)
         {}
     };
@@ -139,9 +134,10 @@ namespace NKikimr {
         std::shared_ptr<TReadBatcherResult> result,
         ui8 priority,
         NWilson::TTraceId traceId,
-        bool isRepl)
+        bool isRepl,
+        TInstant now)
     {
-        return new TTReadBatcherActor(ctx, notifyID, result, priority, std::move(traceId), isRepl);
+        return new TTReadBatcherActor(ctx, notifyID, result, priority, std::move(traceId), isRepl, now);
     }
 
 } // NKikimr

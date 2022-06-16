@@ -11,20 +11,18 @@
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
-    DECLARE_WILSON_EVENT(EventSentToSocket);
-    DECLARE_WILSON_EVENT(EventReceivedFromSocket);
-
     bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
-        const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr);
+        const size_t descrSize = Params.UseExtendedTraceFmt ? sizeof(TEventDescr2) : sizeof(TEventDescr1);
+        const size_t amount = sizeof(TChannelPart) + descrSize;
         if (task.GetVirtualFreeAmount() < amount) {
             return false;
         }
 
-        NWilson::TTraceId traceId(event.Descr.TraceId);
-//        if (ctx) {
-//            WILSON_TRACE(*ctx, &traceId, EventSentToSocket);
-//        }
-        traceId.Serialize(&event.Descr.TraceId);
+        auto& span = *event.Span;
+        span.EndOk();
+        const NWilson::TTraceId traceId(span);
+        event.Span.reset();
+
         LWTRACK(SerializeToPacketEnd, event.Orbit, PeerNodeId, ChannelId, OutputQueueSize, task.GetDataSize());
         task.Orbit.Take(event.Orbit);
 
@@ -33,8 +31,34 @@ namespace NActors {
 
         TChannelPart *part = static_cast<TChannelPart*>(task.GetFreeArea());
         part->Channel = ChannelId | TChannelPart::LastPartFlag;
-        part->Size = sizeof(TEventDescr);
-        memcpy(part + 1, &event.Descr, sizeof(TEventDescr));
+        part->Size = descrSize;
+
+        void *descr = part + 1;
+        if (Params.UseExtendedTraceFmt) {
+            auto *p = static_cast<TEventDescr2*>(descr);
+            *p = {
+                event.Descr.Type,
+                event.Descr.Flags,
+                event.Descr.Recipient,
+                event.Descr.Sender,
+                event.Descr.Cookie,
+                {},
+                event.Descr.Checksum
+            };
+            traceId.Serialize(&p->TraceId);
+        } else {
+            auto *p = static_cast<TEventDescr1*>(descr);
+            *p = {
+                event.Descr.Type,
+                event.Descr.Flags,
+                event.Descr.Recipient,
+                event.Descr.Sender,
+                event.Descr.Cookie,
+                {},
+                event.Descr.Checksum
+            };
+        }
+
         task.AppendBuf(part, amount);
         *weightConsumed += amount;
         OutputQueueSize -= part->Size;

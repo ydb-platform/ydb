@@ -3,7 +3,6 @@
 #include "dsproxy_quorum_tracker.h"
 #include "dsproxy_blob_tracker.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -261,7 +260,7 @@ public:
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_INDEXRESTOREGET, false, latencyQueueKind, now, storagePoolCounters,
-                ev->RestartCounter)
+                ev->RestartCounter, "DSProxy.IndexRestoreGet")
         , QuerySize(ev->QuerySize)
         , Queries(ev->Queries.Release())
         , Deadline(ev->Deadline)
@@ -285,8 +284,6 @@ public:
     }
 
     void Bootstrap() {
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetReceived);
-
         auto makeQueriesList = [this] {
             TStringStream str;
             str << "{";
@@ -314,7 +311,7 @@ public:
                 if (vget) {
                     const ui64 cookie = TVDiskIdShort(vd).GetRaw();
                     CountEvent(*vget);
-                    SendToQueue(std::move(vget), cookie, NWilson::TTraceId()); // FIXME: wilson
+                    SendToQueue(std::move(vget), cookie);
                     vget.reset();
                     ++VGetsInFlight;
                 }

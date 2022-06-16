@@ -305,7 +305,6 @@ namespace NKikimr {
         }
 
         void HandleReadCompletion(TEvents::TEvCompleted::TPtr& ev, const TActorContext &ctx) {
-            WILSON_TRACE_FROM_ACTOR(ctx, *this, &Result->TraceId, ReadBatcherFinish, MergedNode = std::move(ev->TraceId));
             ActiveActors.Erase(ev->Sender);
             Finish(ctx);
         }
@@ -346,9 +345,8 @@ namespace NKikimr {
                 SendResponseAndDie(ctx, this);
             } else {
                 ui8 priority = PDiskPriority();
-                WILSON_TRACE_FROM_ACTOR(ctx, *this, &Result->TraceId, ReadBatcherStart);
-                std::unique_ptr<IActor> a(Batcher.CreateAsyncDataReader(ctx.SelfID, priority, Result->TraceId.SeparateBranch(),
-                    IsRepl()));
+                std::unique_ptr<IActor> a(Batcher.CreateAsyncDataReader(ctx.SelfID, priority, std::move(Result->TraceId),
+                    IsRepl(), TActivationContext::Now()));
                 if (a) {
                     auto aid = ctx.Register(a.release());
                     ActiveActors.Insert(aid);

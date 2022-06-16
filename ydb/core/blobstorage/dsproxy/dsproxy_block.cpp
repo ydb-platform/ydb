@@ -88,7 +88,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
                 Y_FAIL("unexpected newStatus# %s", NKikimrProto::EReplyStatus_Name(newStatus).data());
         }
         for (const TVDiskID& vdiskId : queryStatus) {
-            SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0, NWilson::TTraceId());
+            SendToQueue(std::make_unique<TEvBlobStorage::TEvVStatus>(vdiskId), 0);
         }
         for (const TVDiskID& vdiskId : resend) {
             SendBlockRequest(vdiskId);
@@ -113,7 +113,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
             << " node# " << Info->GetActorId(vdiskId).NodeId());
 
         auto msg = std::make_unique<TEvBlobStorage::TEvVBlock>(TabletId, Generation, vdiskId, Deadline, IssuerGuid);
-        SendToQueue(std::move(msg), cookie, NWilson::TTraceId()); // FIXME: wilson
+        SendToQueue(std::move(msg), cookie);
     }
 
     std::unique_ptr<IEventBase> RestartQuery(ui32 counter) {
@@ -135,10 +135,11 @@ public:
     TBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-            ui64 cookie, TInstant now,
+            ui64 cookie, NWilson::TTraceId traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, NWilson::TTraceId(),
-                NKikimrServices::BS_PROXY_BLOCK, false, {}, now, storagePoolCounters, ev->RestartCounter)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+                NKikimrServices::BS_PROXY_BLOCK, false, {}, now, storagePoolCounters, ev->RestartCounter,
+                "DSProxy.Block")
         , TabletId(ev->TabletId)
         , Generation(ev->Generation)
         , Deadline(ev->Deadline)
@@ -177,8 +178,8 @@ public:
 IActor* CreateBlobStorageGroupBlockRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvBlock *ev,
-        ui64 cookie, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupBlockRequest(info, state, source, mon, ev, cookie, now, storagePoolCounters);
+        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
+    return new TBlobStorageGroupBlockRequest(info, state, source, mon, ev, cookie, std::move(traceId), now, storagePoolCounters);
 }
 
 } // NKikimr

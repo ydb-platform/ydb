@@ -152,14 +152,13 @@ namespace NKikimr {
             const TVDiskContextPtr &vctx,
             const TActorContext &ctx,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
-            const IActor& actor)
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
     {
         result->SetError();
         LOG_DEBUG(ctx, NKikimrServices::BS_VDISK_OTHER,
                 VDISKP(vctx->VDiskLogPrefix,
                     "TEvVDbStatResult: %s", result->ToString().data()));
-        SendVDiskResponse(ctx, ev->Sender, result.release(), actor, ev->Cookie);
+        SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie);
     }
 
     template <class TKey, class TMemRec>
@@ -169,8 +168,7 @@ namespace NKikimr {
             TLevelIndexSnapshot<TKey, TMemRec> &&levelSnap,
             const TActorId &parentId,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
-            const IActor& actor)
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
     {
         const NKikimrBlobStorage::TEvVDbStat &record = ev->Get()->Record;
         switch (record.GetAction()) {
@@ -183,7 +181,7 @@ namespace NKikimr {
                 return new TStatActor(hullCtx, parentId, std::move(levelSnap), ev, std::move(result));
             }
             default: {
-                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result), actor);
+                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result));
                 return nullptr;
             }
         }
@@ -201,29 +199,27 @@ namespace NKikimr {
             THullDsSnap &&fullSnap,
             const TActorId &parentId,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
-            const IActor& actor) {
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result) {
         const NKikimrBlobStorage::TEvVDbStat &record = ev->Get()->Record;
         switch (record.GetType()) {
-            case NKikimrBlobStorage::StatLogoBlobs: {
-                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.LogoBlobsSnap), parentId, ev, std::move(result), actor);
-            }
-            case NKikimrBlobStorage::StatBlocks: {
-                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BlocksSnap), parentId, ev, std::move(result), actor);
-            }
-            case NKikimrBlobStorage::StatBarriers: {
-                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BarriersSnap), parentId, ev, std::move(result), actor);
-            }
-            case NKikimrBlobStorage::StatTabletType: {
+            case NKikimrBlobStorage::StatLogoBlobs:
+                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.LogoBlobsSnap), parentId, ev, std::move(result));
+
+            case NKikimrBlobStorage::StatBlocks:
+                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BlocksSnap), parentId, ev, std::move(result));
+
+            case NKikimrBlobStorage::StatBarriers:
+                return RunDbStatAction(hullCtx, ctx, std::move(fullSnap.BarriersSnap), parentId, ev, std::move(result));
+
+            case NKikimrBlobStorage::StatTabletType:
                 return CreateTabletStatActor(hullCtx, parentId, std::move(fullSnap), ev, std::move(result));
-            }
-            case NKikimrBlobStorage::StatHugeType: {
+
+            case NKikimrBlobStorage::StatHugeType:
                 return CreateHugeStatActor(hullCtx, hugeBlobCtx, parentId, std::move(fullSnap), ev, std::move(result));
-            }
-            default: {
-                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result), actor);
+
+            default:
+                DbStatError(hullCtx->VCtx, ctx, ev, std::move(result));
                 return nullptr;
-            }
         }
     }
 

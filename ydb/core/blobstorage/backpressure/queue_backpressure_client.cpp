@@ -36,6 +36,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     const TVDiskIdShort VDiskIdShort;
     TActorId RemoteVDisk;
     TVDiskID VDiskId;
+    ui32 VDiskOrderNumber;
     NKikimrBlobStorage::EVDiskQueueId QueueId;
     const TDuration QueueWatchdogTimeout;
     ui64 CheckReadinessCookie = 1;
@@ -108,6 +109,7 @@ private:
         Y_VERIFY(info.Type.GetErasure() == GType.GetErasure());
         VDiskId = info.CreateVDiskID(VDiskIdShort);
         RemoteVDisk = info.GetActorId(VDiskIdShort);
+        VDiskOrderNumber = info.GetOrderNumber(VDiskIdShort);
         LogPrefix = Sprintf("[%s TargetVDisk# %s Queue# %s]", SelfId().ToString().data(), VDiskId.ToString().data(), QueueName.data());
         RecentGroup = info.Group;
     }
@@ -123,7 +125,7 @@ private:
     void Pump(const TActorContext &ctx) {
         // if in 'Running' state, then send messages to VDisk
         if (IsReady()) {
-            Queue.SendToVDisk(ctx, RemoteVDisk, this);
+            Queue.SendToVDisk(ctx, RemoteVDisk, VDiskOrderNumber);
         }
     }
 
@@ -197,11 +199,7 @@ private:
             << " cookie# " << ev->Cookie);
 
         if (IsReady()) {
-            // trace wilson event if tracing is enabled for this request
-            WILSON_TRACE_FROM_ACTOR(ctx, *this, &ev->TraceId, EvBlobStorageQueuePut,
-                InQueueWaitingItems = Queue.GetItemsWaiting(), InQueueWaitingBytes = Queue.GetBytesWaiting());
-
-            Queue.Enqueue(ctx, ev, deadline, RemoteVDisk.NodeId() == SelfId().NodeId());
+            Queue.Enqueue(ctx, ev, deadline, RemoteVDisk.NodeId() == SelfId().NodeId(), TActivationContext::Now());
             Pump(ctx);
             UpdateRequestTrackingStats(ctx);
         } else {

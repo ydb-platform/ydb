@@ -10,7 +10,6 @@
 #include "dsproxy_strategy_put_m3dc.h"
 #include "dsproxy_strategy_put_m3of4.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {

@@ -1,6 +1,5 @@
 #include "query_readbatch.h"
 #include "query_readactor.h"
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
 #include <util/generic/algorithm.h>
 
@@ -218,10 +217,8 @@ namespace NKikimr {
         return true;
     }
 
-    IActor *TReadBatcher::CreateAsyncDataReader(const TActorId &notifyID,
-                                                ui8 priority,
-                                                NWilson::TTraceId traceId,
-                                                bool isRepl) {
+    IActor *TReadBatcher::CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId,
+            bool isRepl, TInstant now) {
         if (Result->DiskDataItemPtrs.empty())
             return nullptr;
         else {
@@ -242,7 +239,7 @@ namespace NKikimr {
                 PDiskReadBytes += size;
             }
             // start reader
-            return CreateReadBatcherActor(Ctx, notifyID, Result, priority, std::move(traceId), isRepl);
+            return CreateReadBatcherActor(Ctx, notifyID, Result, priority, std::move(traceId), isRepl, now);
         }
     }
 

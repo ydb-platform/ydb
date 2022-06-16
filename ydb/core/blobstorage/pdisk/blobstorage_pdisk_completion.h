@@ -1,11 +1,11 @@
 #pragma once
 
 #include <ydb/library/pdisk_io/aio.h>
-#include <ydb/library/wilson/wilson_event.h>
 
 #include <util/system/hp_timer.h>
 #include <util/generic/string.h>
 #include <library/cpp/lwtrace/shuttle.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 namespace NKikimr::NPDisk {
 

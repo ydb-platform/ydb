@@ -15,6 +15,7 @@ target_link_libraries(core-blobstorage-pdisk PUBLIC
   cpp-actors-core
   cpp-actors-protos
   cpp-actors-util
+  cpp-actors-wilson
   cpp-containers-stack_vector
   library-cpp-lwtrace
   monlib-dynamic_counters-percentile
@@ -32,7 +33,6 @@ target_link_libraries(core-blobstorage-pdisk PUBLIC
   ydb-library-schlab
   library-schlab-mon
   library-schlab-schine
-  ydb-library-wilson
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(core-blobstorage-pdisk PRIVATE

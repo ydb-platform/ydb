@@ -7,16 +7,9 @@
 #include <util/network/address.h>
 
 #include "interconnect_stream.h"
-#include "packet.h"
 #include "types.h"
 
 namespace NActors {
-    struct TProgramInfo {
-        ui64 PID = 0;
-        ui64 StartTime = 0;
-        ui64 Serial = 0;
-    };
-
     enum class ENetwork : ui32 {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // local messages

@@ -11,7 +11,8 @@ namespace NKikimr {
         std::shared_ptr<TReadBatcherResult> result,
         ui8 priority,
         NWilson::TTraceId traceId,
-        bool isRepl);
+        bool isRepl,
+        TInstant now);
 
 } // NKikimr
 

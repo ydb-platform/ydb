@@ -93,9 +93,10 @@ public:
     TBlobStorageGroupMultiCollectRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
             const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev, ui64 cookie,
-            TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
-        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, NWilson::TTraceId(),
-                NKikimrServices::BS_PROXY_MULTICOLLECT, false, {}, now, storagePoolCounters, 0)
+            NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
+        : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
+                NKikimrServices::BS_PROXY_MULTICOLLECT, false, {}, now, storagePoolCounters, 0,
+                "DSProxy.MultiCollect")
         , TabletId(ev->TabletId)
         , RecordGeneration(ev->RecordGeneration)
         , PerGenerationCounter(ev->PerGenerationCounter)
@@ -154,7 +155,7 @@ public:
         R_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
             << " isLast# " << isLast
             << " ev# " << ev->ToString());
-        SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie);
+        SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, Span);
 
         if (isLast) {
             CollectRequestsInFlight++;
@@ -205,8 +206,8 @@ public:
 IActor* CreateBlobStorageGroupMultiCollectRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
         const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvCollectGarbage *ev,
-        ui64 cookie, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
-    return new TBlobStorageGroupMultiCollectRequest(info, state, source, mon, ev, cookie, now,
+        ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters) {
+    return new TBlobStorageGroupMultiCollectRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
             storagePoolCounters);
 }
 

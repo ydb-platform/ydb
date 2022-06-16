@@ -24,7 +24,7 @@ namespace NKikimr {
         // setup input compaction request
         void Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cState);
         // when hull db reports compaction finish we change state by calling this function
-        void Compacted(const TActorContext &ctx, const IActor& actor, i64 reqId, EHullDbType dbType);
+        void Compacted(const TActorContext &ctx, i64 reqId, EHullDbType dbType);
         // when data is flushed to recovery log run compaction
         void Logged(const TActorContext &ctx, ui64 lsn) {
             if (Triggered && lsn >= LsnToCommit) {

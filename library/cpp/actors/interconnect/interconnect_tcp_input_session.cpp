@@ -270,13 +270,43 @@ namespace NActors {
 
             Metrics->AddInputChannelsIncomingTraffic(channel, sizeof(part) + part.Size);
 
-            TEventDescr descr;
+            char buffer[Max(sizeof(TEventDescr1), sizeof(TEventDescr2))];
+            auto& v1 = reinterpret_cast<TEventDescr1&>(buffer);
+            auto& v2 = reinterpret_cast<TEventDescr2&>(buffer);
             if (~part.Channel & TChannelPart::LastPartFlag) {
                 Payload.ExtractFront(part.Size, eventData);
-            } else if (part.Size != sizeof(descr)) {
+            } else if (part.Size != sizeof(v1) && part.Size != sizeof(v2)) {
                 LOG_CRIT_IC_SESSION("ICIS11", "incorrect last part of an event");
                 return DestroySession(TDisconnectReason::FormatError());
-            } else if (Payload.ExtractFrontPlain(&descr, sizeof(descr))) {
+            } else if (Payload.ExtractFrontPlain(buffer, part.Size)) {
+                TEventData descr;
+
+                switch (part.Size) {
+                    case sizeof(TEventDescr1):
+                        descr = {
+                            v1.Type,
+                            v1.Flags,
+                            v1.Recipient,
+                            v1.Sender,
+                            v1.Cookie,
+                            NWilson::TTraceId(), // do not accept traces with old format
+                            v1.Checksum
+                        };
+                        break;
+
+                    case sizeof(TEventDescr2):
+                        descr = {
+                            v2.Type,
+                            v2.Flags,
+                            v2.Recipient,
+                            v2.Sender,
+                            v2.Cookie,
+                            NWilson::TTraceId(v2.TraceId),
+                            v2.Checksum
+                        };
+                        break;
+                }
+
                 Metrics->IncInputChannelsIncomingEvents(channel);
                 ProcessEvent(*eventData, descr);
                 *eventData = TRope();
@@ -286,7 +316,7 @@ namespace NActors {
         }
     }
 
-    void TInputSessionTCP::ProcessEvent(TRope& data, TEventDescr& descr) {
+    void TInputSessionTCP::ProcessEvent(TRope& data, TEventData& descr) {
         if (!Params.UseModernFrame || descr.Checksum) {
             ui32 checksum = 0;
             for (const auto&& [data, size] : data) {
@@ -305,7 +335,7 @@ namespace NActors {
             MakeIntrusive<TEventSerializedData>(std::move(data), bool(descr.Flags & IEventHandle::FlagExtendedFormat)),
             descr.Cookie,
             Params.PeerScopeId,
-            NWilson::TTraceId(descr.TraceId));
+            std::move(descr.TraceId));
         if (Common->EventFilter && !Common->EventFilter->CheckIncomingEvent(*ev, Common->LocalScopeId)) {
             LOG_CRIT_IC_SESSION("ICIC03", "Event dropped due to scope error LocalScopeId# %s PeerScopeId# %s Type# 0x%08" PRIx32,
                 ScopeIdToString(Common->LocalScopeId).data(), ScopeIdToString(Params.PeerScopeId).data(), descr.Type);

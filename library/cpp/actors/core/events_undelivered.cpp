@@ -44,15 +44,15 @@ namespace NActors {
             const TActorId recp = OnNondeliveryHolder ? OnNondeliveryHolder->Recipient : TActorId();
 
             if (Event)
-                return new IEventHandle(recp, Sender, Event.Release(), updatedFlags, Cookie, &Recipient, TraceId.Clone());
+                return new IEventHandle(recp, Sender, Event.Release(), updatedFlags, Cookie, &Recipient, std::move(TraceId));
             else
-                return new IEventHandle(Type, updatedFlags, recp, Sender, Buffer, Cookie, &Recipient, TraceId.Clone());
+                return new IEventHandle(Type, updatedFlags, recp, Sender, Buffer, Cookie, &Recipient, std::move(TraceId));
         }
 
         if (Flags & FlagTrackDelivery) {
             const ui32 updatedFlags = Flags & ~(FlagTrackDelivery | FlagSubscribeOnSession | FlagGenerateUnsureUndelivered);
             return new IEventHandle(Sender, Recipient, new TEvents::TEvUndelivered(Type, reason, unsure), updatedFlags,
-                Cookie, nullptr, TraceId.Clone());
+                Cookie, nullptr, std::move(TraceId));
         }
 
         return nullptr;

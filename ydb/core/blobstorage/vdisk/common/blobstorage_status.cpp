@@ -36,7 +36,7 @@ namespace NKikimr {
                 SetRacingGroupInfo(record, Result->Record, GroupInfo);
                 LOG_DEBUG(ctx, BS_VDISK_OTHER, VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult Request# {%s} Response# {%s}",
                     SingleLineProto(record).data(), SingleLineProto(Result->Record).data()));
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel());
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel());
                 Die(ctx);
                 return;
             }
@@ -71,7 +71,7 @@ namespace NKikimr {
                 ctx.Send(NotifyId, new TEvents::TEvActorDied());
                 LOG_DEBUG(ctx, BS_VDISK_GET,
                     VDISKP(VCtx->VDiskLogPrefix, "TEvVStatusResult"));
-                SendVDiskResponse(ctx, Ev->Sender, Result.release(), *this, Ev->Cookie, Ev->GetChannel());
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, Ev->GetChannel());
                 Die(ctx);
             }
         }

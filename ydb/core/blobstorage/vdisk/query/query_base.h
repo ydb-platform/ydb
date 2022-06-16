@@ -5,7 +5,6 @@
 #include "query_spacetracker.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/hull_ds_all_snap.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 
 namespace NKikimr {
 
@@ -110,7 +109,7 @@ namespace NKikimr {
                 ctx.Send(ReplSchedulerId, new TEvBlobStorage::TEvEnrichNotYet(BatcherCtx->OrigEv, std::move(Result)));
             } else {
                 // send reply event to sender
-                SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), *self, BatcherCtx->OrigEv->Cookie);
+                SendVDiskResponse(ctx, BatcherCtx->OrigEv->Sender, Result.release(), BatcherCtx->OrigEv->Cookie);
             }
 
             ctx.Send(ParentId, new TEvents::TEvActorDied);

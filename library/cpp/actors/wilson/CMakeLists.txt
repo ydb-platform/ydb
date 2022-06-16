@@ -7,9 +7,13 @@
 
 
 
-add_library(cpp-actors-wilson INTERFACE)
-target_link_libraries(cpp-actors-wilson INTERFACE
+add_library(cpp-actors-wilson)
+target_link_libraries(cpp-actors-wilson PUBLIC
   contrib-libs-cxxsupp
   yutil
-  cpp-string_utils-base64
+  cpp-actors-core
+  actors-wilson-protos
+)
+target_sources(cpp-actors-wilson PRIVATE
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_span.cpp
 )

@@ -83,8 +83,7 @@ namespace NKikimr {
             THullDsSnap &&fullSnap,
             const TActorId &parentId,
             TEvBlobStorage::TEvVDbStat::TPtr &ev,
-            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result,
-            const IActor& actor);
+            std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result);
 
     IActor *CreateMonStreamActor(THullDsSnap&& fullSnap, TEvBlobStorage::TEvMonStreamQuery::TPtr& ev);
 

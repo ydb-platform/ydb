@@ -3,7 +3,6 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 
 namespace NKikimr {
 
@@ -300,7 +299,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         const TDuration duration = TActivationContext::Now() - StartTime;
         Mon->CountDiscoverResponseTime(duration);
         const bool success = result->Status == NKikimrProto::OK;
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvDiscoverResultSent);
         LWPROBE(DSProxyRequestDuration, TEvBlobStorage::EvDiscover, 0, duration.SecondsFloat() * 1000.0,
                 TabletId, Info->GroupID, TLogoBlobID::MaxChannel, "", success);
         SendResponseAndDie(std::move(result));
@@ -317,7 +315,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
 
     void Handle(TEvBlobStorage::TEvVGetBlockResult::TPtr &ev) {
         ProcessReplyFromQueue(ev);
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetBlockResultReceived, MergedNode = std::move(ev->TraceId));
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetBlockResult &record = ev->Get()->Record;
@@ -362,8 +359,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
         ProcessReplyFromQueue(ev);
         CountEvent(*ev->Get());
 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetResultReceived, MergedNode = std::move(ev->TraceId));
-
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
         Y_VERIFY(record.HasStatus());
@@ -380,8 +375,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev) {
         ProcessReplyFromQueue(ev);
         CountEvent(*ev->Get());
-
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetResultReceived, MergedNode = std::move(ev->TraceId));
 
         TotalRecieved++;
         NKikimrBlobStorage::TEvVGetResult &record = ev->Get()->Record;
@@ -609,8 +602,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         getRequest->IsInternal = true;
                         getRequest->TabletId = TabletId;
                         getRequest->AcquireBlockedGeneration = true;
-                        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetSent);
-                        bool isSent = SendToBSProxy(SelfId(), Info->GroupID, getRequest.release(), 0, TraceId.SeparateBranch());
+                        bool isSent = SendToBSProxy(SelfId(), Info->GroupID, getRequest.release(), 0, Span);
                         Y_VERIFY(isSent);
                         TotalSent++;
 
@@ -722,7 +714,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         << " msg# " << msg->ToString()
                         << " cookie# " << cookie);
                     CountEvent(*msg);
-                    SendToQueue(std::move(msg), cookie, NWilson::TTraceId()); // FIXME: wilson
+                    SendToQueue(std::move(msg), cookie);
                     TotalSent++;
 
                     curVDisk.IsMoreRequested = true;
@@ -743,8 +735,6 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
     }
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultReceived, MergedNode = std::move(ev->TraceId));
-
         TotalRecieved++;
         TEvBlobStorage::TEvGetResult *msg = ev->Get();
         const NKikimrProto::EReplyStatus status = msg->Status;
@@ -897,7 +887,8 @@ public:
             ui64 cookie, NWilson::TTraceId traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
-                NKikimrServices::BS_PROXY_DISCOVER, true, {}, now, storagePoolCounters, ev->RestartCounter)
+                NKikimrServices::BS_PROXY_DISCOVER, true, {}, now, storagePoolCounters, ev->RestartCounter,
+                "DSProxy.Discover")
         , TabletId(ev->TabletId)
         , MinGeneration(ev->MinGeneration)
         , ReadBody(ev->ReadBody)
@@ -921,12 +912,9 @@ public:
             << " FromLeader# " << (FromLeader ? "true" : "false")
             << " RestartCounter# " << RestartCounter);
 
-        const ui32 groupId = Info->GroupID;
         const TLogoBlobID from = TLogoBlobID(TabletId, Max<ui32>(), Max<ui32>(), 0,
             TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxChannel, TLogoBlobID::MaxPartId);
         const TLogoBlobID to = TLogoBlobID(TabletId, MinGeneration, 0, 0, 0, 0, 1);
-
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvDiscoverReceived, GroupId = groupId, From = from, To = to);
 
         for (const auto& vdisk : Info->GetVDisks()) {
             auto vd = Info->GetVDiskId(vdisk.OrderNumber);
@@ -937,8 +925,7 @@ public:
                     << " vDiskId# " << vd
                     << " cookie# " << cookie
                     << " node# " << Info->GetActorId(vd).NodeId());
-                WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetBlockSent);
-                SendToQueue(std::move(getBlock), cookie, TraceId.SeparateBranch());
+                SendToQueue(std::move(getBlock), cookie);
                 TotalSent++;
             }
 
@@ -953,9 +940,8 @@ public:
                 << " node# " << Info->GetActorId(vd).NodeId()
                 << " msg# " << msg->ToString()
                 << " cookie# " << cookie);
-            WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetSent);
             CountEvent(*msg);
-            SendToQueue(std::move(msg), cookie, TraceId.SeparateBranch());
+            SendToQueue(std::move(msg), cookie);
             TotalSent++;
 
             TVDiskInfo &curVDisk = VDiskInfo[TVDiskIdShort(vd).GetRaw()];

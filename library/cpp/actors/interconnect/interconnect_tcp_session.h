@@ -249,7 +249,7 @@ namespace NActors {
         void ReceiveData();
         void ProcessHeader(size_t headerLen);
         void ProcessPayload(ui64& numDataBytes);
-        void ProcessEvent(TRope& data, TEventDescr& descr);
+        void ProcessEvent(TRope& data, TEventData& descr);
         bool ReadMore();
 
         void ReestablishConnection(TDisconnectReason reason);

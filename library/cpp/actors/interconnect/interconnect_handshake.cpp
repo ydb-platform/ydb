@@ -496,6 +496,7 @@ namespace NActors {
 
                 request.SetRequestModernFrame(true);
                 request.SetRequestAuthOnly(Common->Settings.TlsAuthOnly);
+                request.SetRequestExtendedTraceFmt(true);
 
                 SendExBlock(request, "ExRequest");
 
@@ -526,6 +527,7 @@ namespace NActors {
                 Params.Encryption = success.GetStartEncryption();
                 Params.UseModernFrame = success.GetUseModernFrame();
                 Params.AuthOnly = Params.Encryption && success.GetAuthOnly();
+                Params.UseExtendedTraceFmt = success.GetUseExtendedTraceFmt();
                 if (success.HasServerScopeId()) {
                     ParsePeerScopeId(success.GetServerScopeId());
                 }
@@ -681,6 +683,7 @@ namespace NActors {
 
                 Params.UseModernFrame = request.GetRequestModernFrame();
                 Params.AuthOnly = Params.Encryption && request.GetRequestAuthOnly() && Common->Settings.TlsAuthOnly;
+                Params.UseExtendedTraceFmt = request.GetRequestExtendedTraceFmt();
 
                 if (request.HasClientScopeId()) {
                     ParsePeerScopeId(request.GetClientScopeId());
@@ -706,6 +709,7 @@ namespace NActors {
                     }
                     success.SetUseModernFrame(Params.UseModernFrame);
                     success.SetAuthOnly(Params.AuthOnly);
+                    success.SetUseExtendedTraceFmt(Params.UseExtendedTraceFmt);
                     SendExBlock(record, "ExReply");
 
                     // extract sender actor id (self virtual id)

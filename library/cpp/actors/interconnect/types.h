@@ -1,5 +1,9 @@
 #pragma once
 
+#include <library/cpp/actors/core/defs.h>
+#include <library/cpp/actors/core/actorid.h>
+#include <library/cpp/actors/core/event.h>
+
 #include <util/generic/string.h>
 
 namespace NActors {
@@ -40,4 +44,26 @@ namespace NActors {
         static TVector<const char*> Reasons;
     };
 
+    struct TProgramInfo {
+        ui64 PID = 0;
+        ui64 StartTime = 0;
+        ui64 Serial = 0;
+    };
+
+    struct TSessionParams {
+        bool Encryption = {};
+        bool UseModernFrame = {};
+        bool AuthOnly = {};
+        bool UseExtendedTraceFmt = {};
+        TString AuthCN;
+        NActors::TScopeId PeerScopeId;
+    };
+
 } // NActors
+
+using NActors::IEventBase;
+using NActors::IEventHandle;
+using NActors::TActorId;
+using NActors::TConstIoVec;
+using NActors::TEventSerializedData;
+using NActors::TSessionParams;

@@ -14,8 +14,7 @@
 #include <ydb/core/protos/blobstorage_config.pb.h>
 #include <ydb/core/util/yverify_stream.h>
 
-#include <ydb/library/wilson/wilson_event.h>
-
+#include <library/cpp/actors/wilson/wilson_trace.h>
 #include <library/cpp/lwtrace/shuttle.h>
 
 #include <util/stream/str.h>

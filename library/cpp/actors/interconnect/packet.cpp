@@ -13,7 +13,6 @@ ui32 TEventHolder::Fill(IEventHandle& ev) {
     Descr.Recipient = ev.Recipient;
     Descr.Sender = ev.Sender;
     Descr.Cookie = ev.Cookie;
-    ev.TraceId.Serialize(&Descr.TraceId);
     ForwardRecipient = ev.GetForwardOnNondeliveryRecipient();
     EventActuallySerialized = 0;
     Descr.Checksum = 0;

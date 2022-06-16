@@ -78,12 +78,8 @@ namespace NKikimr {
         bool ProcessPostponedEvents(const TActorContext &ctx, int batchSize, bool actualizeLevels);
 
         // Postpone event in case of overload
-        bool PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
-        bool PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
-        bool PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
-        bool PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
-        bool PostponeEvent(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
-        bool PostponeEvent(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton);
+        template<typename TEv>
+        bool PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev);
 
         static void ToWhiteboard(const TOverloadHandler *this_, NKikimrWhiteboard::TVDiskSatisfactionRank &v);
         ui32 GetIntegralRankPercent() const;
@@ -95,9 +91,6 @@ namespace NKikimr {
         NMonGroup::TSkeletonOverloadGroup Mon;
         std::unique_ptr<TEmergencyQueue> EmergencyQueue;
         std::shared_ptr<TDynamicPDiskWeightsManager> DynamicPDiskWeightsManager;
-
-        template <class TEv>
-        bool PostponeEventPrivate(TEv &ev, const TActorContext &ctx, IActor *skeleton);
     };
 
 } // NKikimr

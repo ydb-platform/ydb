@@ -7,20 +7,17 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/actors/util/rope.h>
 #include <library/cpp/actors/prof/tag.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/lwtrace/shuttle.h>
 #include <util/generic/string.h>
 #include <util/generic/list.h>
 
+#include "types.h"
+
 #ifndef FORCE_EVENT_CHECKSUM
 #define FORCE_EVENT_CHECKSUM 0
 #endif
-
-using NActors::IEventBase;
-using NActors::IEventHandle;
-using NActors::TActorId;
-using NActors::TConstIoVec;
-using NActors::TEventSerializedData;
 
 Y_FORCE_INLINE ui32 Crc32cExtendMSanCompatible(ui32 checksum, const void *data, size_t len) {
     if constexpr (NSan::MSanIsOn()) {
@@ -32,14 +29,6 @@ Y_FORCE_INLINE ui32 Crc32cExtendMSanCompatible(ui32 checksum, const void *data, 
     }
     return Crc32cExtend(checksum, data, len);
 }
-
-struct TSessionParams {
-    bool Encryption = {};
-    bool UseModernFrame = {};
-    bool AuthOnly = {};
-    TString AuthCN;
-    NActors::TScopeId PeerScopeId;
-};
 
 struct TTcpPacketHeader_v1 {
     ui32 HeaderCRC32;
@@ -87,21 +76,40 @@ union TTcpPacketBuf {
     } v2;
 };
 
-#pragma pack(push, 1)
-struct TEventDescr {
+struct TEventData {
     ui32 Type;
     ui32 Flags;
     TActorId Recipient;
     TActorId Sender;
     ui64 Cookie;
-    // wilson trace id is stored as a serialized entity to avoid using complex object with prohibited copy ctor
+    NWilson::TTraceId TraceId;
+    ui32 Checksum;
+};
+
+#pragma pack(push, 1)
+struct TEventDescr1 {
+    ui32 Type;
+    ui32 Flags;
+    TActorId Recipient;
+    TActorId Sender;
+    ui64 Cookie;
+    char TraceId[16]; // obsolete trace id format
+    ui32 Checksum;
+};
+
+struct TEventDescr2 {
+    ui32 Type;
+    ui32 Flags;
+    TActorId Recipient;
+    TActorId Sender;
+    ui64 Cookie;
     NWilson::TTraceId::TSerializedTraceId TraceId;
     ui32 Checksum;
 };
 #pragma pack(pop)
 
 struct TEventHolder : TNonCopyable {
-    TEventDescr Descr;
+    TEventData Descr;
     TActorId ForwardRecipient;
     THolder<IEventBase> Event;
     TIntrusivePtr<TEventSerializedData> Buffer;
@@ -109,6 +117,7 @@ struct TEventHolder : TNonCopyable {
     ui32 EventSerializedSize;
     ui32 EventActuallySerialized;
     mutable NLWTrace::TOrbit Orbit;
+    std::optional<NWilson::TSpan> Span;
 
     ui32 Fill(IEventHandle& ev);
 
@@ -123,7 +132,7 @@ struct TEventHolder : TNonCopyable {
     }
 
     void ForwardOnNondelivery(bool unsure) {
-        TEventDescr& d = Descr;
+        TEventData& d = Descr;
         const TActorId& r = d.Recipient;
         const TActorId& s = d.Sender;
         const TActorId *f = ForwardRecipient ? &ForwardRecipient : nullptr;
@@ -137,6 +146,7 @@ struct TEventHolder : TNonCopyable {
         Event.Reset();
         Buffer.Reset();
         Orbit.Reset();
+        Span.reset();
     }
 };
 

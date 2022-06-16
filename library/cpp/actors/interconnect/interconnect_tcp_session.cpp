@@ -12,8 +12,6 @@
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
-    DECLARE_WILSON_EVENT(OutputQueuePush, (ui32, QueueSizeInEvents), (ui64, QueueSizeInBytes));
-
     template<typename T>
     T Coalesce(T&& x) {
         return x;
@@ -128,7 +126,7 @@ namespace NActors {
         auto& oChannel = ChannelScheduler->GetOutputChannel(evChannel);
         const bool wasWorking = oChannel.IsWorking();
 
-        const auto [dataSize, event] = oChannel.Push(*ev);
+        const auto [dataSize, event] = oChannel.Push(*ev, TActivationContext::Now());
         LWTRACK(ForwardEvent, event->Orbit, Proxy->PeerNodeId, event->Descr.Type, event->Descr.Flags, LWACTORID(event->Descr.Recipient), LWACTORID(event->Descr.Sender), event->Descr.Cookie, event->EventSerializedSize);
 
         TotalOutputQueueSize += dataSize;
@@ -142,9 +140,6 @@ namespace NActors {
         ++NumEventsInReadyChannels;
 
         LWTRACK(EnqueueEvent, event->Orbit, Proxy->PeerNodeId, NumEventsInReadyChannels, GetWriteBlockedTotal(), evChannel, oChannel.GetQueueSize(), oChannel.GetBufferedAmountOfData());
-        WILSON_TRACE(*TlsActivationContext, &ev->TraceId, OutputQueuePush,
-                     QueueSizeInEvents = oChannel.GetQueueSize(),
-                     QueueSizeInBytes = oChannel.GetBufferedAmountOfData());
 
         // check for overloaded queues
         ui64 sendBufferDieLimit = Proxy->Common->Settings.SendBufferDieLimitInMB * ui64(1 << 20);

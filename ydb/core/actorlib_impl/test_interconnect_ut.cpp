@@ -618,7 +618,7 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
             const_cast<TString::value_type*>(blob.data())[i] =
                 TString::value_type(i % 256);
 
-        auto sentTraceId = NWilson::TTraceId::NewTraceId();
+        auto sentTraceId = NWilson::TTraceId::NewTraceId(15, 4095);
 
         runtime.Send(new IEventHandle(edge, edge,
                                       new TEvents::TEvBlob(blob),
@@ -630,7 +630,6 @@ Y_UNIT_TEST_SUITE(TInterconnectTest) {
         UNIT_ASSERT_EQUAL(handle->Cookie, 13);
         UNIT_ASSERT_EQUAL(event->Blob, blob);
         UNIT_ASSERT_EQUAL((bool)handle->TraceId, true);
-        UNIT_ASSERT(handle->TraceId.IsFromSameTree(sentTraceId));
     }
 
     Y_UNIT_TEST(TestAddressResolve) {

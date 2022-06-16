@@ -2,7 +2,6 @@
 
 #include "defs.h"
 
-#include <ydb/core/blobstorage/base/wilson_events.h>
 
 #include "blobstorage_pdisk.h"
 #include "blobstorage_pdisk_gate.h"
@@ -217,7 +216,6 @@ public:
         if (ev.Data.size() > (1 << 20)) {
             Mon->WriteHugeLog.CountRequest();
         }
-        // WILSON_TRACE(*ActorSystem, &traceId, EvLogReceived); // TODO
         return NewRequest(new TLogWrite(ev, sender, AtomicGet(*EstimatedLogChunkIdx), reqId, std::move(traceId)), &burstMs);
     }
 
@@ -229,7 +227,6 @@ public:
         Mon->QueueRequests->Inc();
         *Mon->QueueBytes += ev.Size;
         Mon->GetReadCounter(ev.PriorityClass)->CountRequest(ev.Size);
-        WILSON_TRACE(*ActorSystem, &traceId, EvChunkReadReceived, ChunkIdx = ev.ChunkIdx, Offset = ev.Offset, Size = ev.Size);
         auto read = new TChunkRead(ev, sender, reqId, std::move(traceId));
         read->SelfPointer = read;
         return NewRequest(read, &burstMs);
@@ -245,7 +242,6 @@ public:
         ev.Validate();
         *Mon->QueueBytes += size;
         Mon->GetWriteCounter(ev.PriorityClass)->CountRequest(size);
-        WILSON_TRACE(*ActorSystem, &traceId, EvChunkWriteReceived, ChunkIdx = ev.ChunkIdx, Offset = ev.Offset, Size = size);
         return NewRequest(new TChunkWrite(ev, sender, reqId, std::move(traceId)), &burstMs);
     }
 };

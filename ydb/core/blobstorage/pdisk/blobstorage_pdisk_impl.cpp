@@ -973,7 +973,6 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     ui64 readOffset = Format.Offset(read->ChunkIdx, read->FirstSector, currentSectorOffset);
     // TODO: Get this from the drive
-    WILSON_TRACE(*ActorSystem, &read->TraceId, AsyncReadScheduled, DiskOffset = readOffset, Size = bytesToRead);
     THolder<TCompletionChunkReadPart> completion(new TCompletionChunkReadPart(this, read, bytesToRead,
                 payloadBytesToRead, payloadOffset, read->FinalCompletion, isTheLastPart, Cfg->UseT1ha0HashInFooter));
     completion->CostNs = DriveModel.TimeForSizeNs(bytesToRead, read->ChunkIdx, TDriveModel::OP_TYPE_READ);
@@ -2297,7 +2296,6 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
     logWrite->Result.Reset(new NPDisk::TEvLogResult(status,
             GetStatusFlags(logWrite->Owner, logWrite->OwnerGroupType), err.Str()));
     logWrite->Result->Results.push_back(NPDisk::TEvLogResult::TRecord(logWrite->Lsn, logWrite->Cookie));
-    WILSON_TRACE(*ActorSystem, &logWrite->TraceId, EnqueueLogWrite);
 }
 
 NKikimrProto::EReplyStatus TPDisk::CheckOwnerAndRound(TRequestBase* req, TStringStream& err) {
@@ -2533,7 +2531,6 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             log->SetOwnerGroupType(ownerData.IsStaticGroupOwner());
             ownerData.SetLastSeenLsn(log->Lsn);
             ownerData.WriteThroughput.Increment(log->Data.size(), ActorSystem->Timestamp());
-            WILSON_TRACE(*ActorSystem, &log->TraceId, EnqueueLogWrite);
             break;
         }
         case ERequestType::RequestYardInit:
@@ -2832,7 +2829,6 @@ void TPDisk::RouteRequest(TRequestBase *request) {
                 if (log->Signature.HasCommitRecord()) {
                     JointCommits.push_back(log);
                 }
-                WILSON_TRACE(*ActorSystem, &log->TraceId, RouteLogWrite);
                 log = batch;
             }
             break;

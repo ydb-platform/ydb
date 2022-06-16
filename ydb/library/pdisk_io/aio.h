@@ -7,7 +7,7 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_request_id.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_devicemode.h>
 
-#include <ydb/library/wilson/wilson_event.h>
+#include <library/cpp/actors/wilson/wilson_event.h>
 
 #include <util/system/file.h>
 #include <util/generic/string.h>

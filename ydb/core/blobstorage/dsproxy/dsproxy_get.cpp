@@ -3,7 +3,6 @@
 #include "root_cause.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/digest/crc32c/crc32c.h>
 #include <util/generic/set.h>
@@ -231,9 +230,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
         }
         DiskCounters[orderNumber].Received++;
 
-        // generate wilson event with merging into trunk
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVGetResultReceived, MergedNode = std::move(ev->TraceId));
-
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
         ResponsesReceived++;
@@ -351,8 +347,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     void HandleVPutResult(typename TPutEventResult::TPtr &ev) {
         Y_VERIFY(ev->Get()->Record.HasStatus());
 
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvVPutResultReceived, MergedNode = std::move(ev->TraceId));
-
         const ui64 cyclesPerUs = NHPTimer::GetCyclesPerSecond() / 1000000;
         ev->Get()->Record.MutableTimestamps()->SetReceivedByDSProxyUs(GetCycleCountFast() / cyclesPerUs);
         const auto &record = ev->Get()->Record;
@@ -451,15 +445,12 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
     }
 
     void SendReplyAndDie(TAutoPtr<TEvBlobStorage::TEvGetResult> &evResult) {
-        const NKikimrProto::EReplyStatus status = evResult->Status;
         const TInstant now = TActivationContext::Now();
         const TDuration duration = (now > StartTime) ? (now - StartTime) : TDuration::MilliSeconds(0);
         Mon->CountGetResponseTime(Info->GetDeviceType(), GetImpl.GetHandleClass(), evResult->PayloadSizeBytes(), duration);
         *Mon->ActiveGetCapacity -= ReportedBytes;
         ReportedBytes = 0;
         bool success = evResult->Status == NKikimrProto::OK;
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetResultSent, ReplyStatus = status,
-                ResponseSize = GetImpl.GetReplyBytes());
         ui64 requestSize = 0;
         ui64 tabletId = 0;
         ui32 channel = 0;
@@ -502,7 +493,7 @@ public:
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, bool isVMultiPutMode)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_GET, ev->IsVerboseNoDataEnabled || ev->CollectDebugInfo,
-                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter)
+                latencyQueueKind, now, storagePoolCounters, ev->RestartCounter, "DSProxy.Get")
         , GetImpl(info, state, ev, std::move(nodeLayout), LogCtx.RequestPrefix)
         , Orbit(std::move(ev->Orbit))
         , Deadline(ev->Deadline)
@@ -537,7 +528,6 @@ public:
             << " RestartCounter# " << RestartCounter);
 
         LWTRACK(DSProxyGetBootstrap, Orbit);
-        WILSON_TRACE_FROM_ACTOR(*TlsActivationContext, *this, &TraceId, EvGetReceived);
 
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVGet>> vGets;
         TDeque<std::unique_ptr<TEvBlobStorage::TEvVPut>> vPuts;

@@ -5,7 +5,6 @@
 #include "dsproxy_cookies.h"
 #include "dsproxy_mon.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {

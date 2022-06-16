@@ -53,7 +53,6 @@ namespace NKikimr {
 
     void TVDiskCompactionState::Compacted(
             const TActorContext &ctx,
-            const IActor& actor,
             i64 reqId,
             EHullDbType dbType) {
         auto it = Requests.find(reqId);
@@ -68,7 +67,7 @@ namespace NKikimr {
         }
 
         if (req.AllDone()) {
-            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), actor, req.ClientCookie);
+            SendVDiskResponse(ctx, req.ClientId, req.Reply.release(), req.ClientCookie);
             // delete req from Request, we handled it
             Requests.erase(it);
         }

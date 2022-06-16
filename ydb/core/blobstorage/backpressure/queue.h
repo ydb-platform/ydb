@@ -43,7 +43,7 @@ class TBlobStorageQueue {
     {
         EItemQueue Queue;
         TCostModel::TMessageCostEssence CostEssence;
-        NWilson::TTraceId TraceId;
+        NWilson::TSpan Span;
         TEventHolder Event;
         ui64 MsgId;
         ui64 SequenceId;
@@ -54,15 +54,16 @@ class TBlobStorageQueue {
         THPTimer ProcessingTimer;
         TTrackableList<TItem>::iterator Iterator;
 
-        template<typename TPtr>
-        TItem(TPtr& event, TInstant deadline,
+        template<typename TEvent>
+        TItem(TAutoPtr<TEventHandle<TEvent>>& event, TInstant deadline,
                 const NMonitoring::TDynamicCounters::TCounterPtr& serItems,
                 const NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,
-                bool local)
+                bool local, TInstant now)
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
-            , TraceId(std::move(event->TraceId))
+            , Span(9 /*verbosity*/, NWilson::ERelation::ChildOf, std::move(event->TraceId), now, TStringBuilder()
+                << "Backpressure(" << TypeName<TEvent>() << ")")
             , Event(event, serItems, serBytes, bspctx, interconnectChannel, local)
             , MsgId(Max<ui64>())
             , SequenceId(0)
@@ -183,7 +184,7 @@ public:
 
     void SetItemQueue(TItem& item, EItemQueue newQueue);
 
-    void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, IActor *actor);
+    void SendToVDisk(const TActorContext& ctx, const TActorId& remoteVDisk, ui32 vdiskOrderNumber);
 
     void ReplyWithError(TItem& item, NKikimrProto::EReplyStatus status, const TString& errorReason, const TActorContext& ctx);
     bool Expecting(ui64 msgId, ui64 sequenceId) const;
@@ -196,13 +197,13 @@ public:
     void OnConnect();
 
     template<typename TPtr>
-    void Enqueue(const TActorContext &ctx, TPtr& event, TInstant deadline, bool local) {
+    void Enqueue(const TActorContext &ctx, TPtr& event, TInstant deadline, bool local, TInstant now) {
         Y_UNUSED(ctx);
 
         TItemList::iterator newIt;
         if (Queues.Unused.empty()) {
             newIt = Queues.Waiting.emplace(Queues.Waiting.end(), event, deadline,
-                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local);
+                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local, now);
             ++*QueueSize;
         } else {
             newIt = Queues.Unused.begin();
@@ -211,7 +212,7 @@ public:
             TItem& item = *newIt;
             item.~TItem();
             new(&item) TItem(event, deadline, QueueSerializedItems, QueueSerializedBytes, BSProxyCtx,
-                InterconnectChannel, local);
+                InterconnectChannel, local, now);
         }
 
         newIt->Iterator = newIt;

@@ -219,7 +219,7 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
             if (rate) {
                 const ui64 num = RandomNumber<ui64>(1000000); // in range [0, 1000000)
                 if (num < rate) {
-                    ev->TraceId = NWilson::TTraceId::NewTraceId();
+                    ev->TraceId = NWilson::TTraceId::NewTraceId(15, 4095);
                 }
             }
         }

@@ -21,7 +21,6 @@
 
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/library/schlab/schine/scheduler.h>
 #include <ydb/library/schlab/schine/job_kind.h>

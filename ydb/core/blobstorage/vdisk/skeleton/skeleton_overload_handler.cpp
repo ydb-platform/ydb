@@ -1,5 +1,4 @@
 #include "skeleton_overload_handler.h"
-#include <ydb/core/blobstorage/base/wilson_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
@@ -210,30 +209,6 @@ namespace NKikimr {
         return proceedFurther;
     }
 
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
-    bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
-    bool TOverloadHandler::PostponeEvent(TEvLocalSyncData::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
-    bool TOverloadHandler::PostponeEvent(TEvAnubisOsirisPut::TPtr &ev, const TActorContext &ctx, IActor *skeleton) {
-        return PostponeEventPrivate(ev, ctx, skeleton);
-    }
-
     void TOverloadHandler::ToWhiteboard(const TOverloadHandler *this_, NKikimrWhiteboard::TVDiskSatisfactionRank &v) {
         if (this_) {
             this_->DynamicPDiskWeightsManager->ToWhiteboard(v);
@@ -258,14 +233,20 @@ namespace NKikimr {
     }
 
     template <class TEv>
-    inline bool TOverloadHandler::PostponeEventPrivate(TEv &ev, const TActorContext &ctx, IActor *skeleton) {
+    inline bool TOverloadHandler::PostponeEvent(TAutoPtr<TEventHandle<TEv>> &ev) {
         if (DynamicPDiskWeightsManager->StopPuts() || !EmergencyQueue->Empty()) {
-            WILSON_TRACE_FROM_ACTOR(ctx, *skeleton, &ev->TraceId, EvPutIntoEmergQueue);
             EmergencyQueue->Push(ev);
             return true;
         } else {
             return false;
         }
     }
+
+    template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMovedPatch::TPtr &ev);
+    template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPatchStart::TPtr &ev);
+    template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVPut::TPtr &ev);
+    template bool TOverloadHandler::PostponeEvent(TEvBlobStorage::TEvVMultiPut::TPtr &ev);
+    template bool TOverloadHandler::PostponeEvent(TEvLocalSyncData::TPtr &ev);
+    template bool TOverloadHandler::PostponeEvent(TEvAnubisOsirisPut::TPtr &ev);
 
 } // NKikimr

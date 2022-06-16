@@ -3294,8 +3294,12 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             }
 
             if (type.StartsWith("pg")) {
-                TVector<TNodePtr> pgConstArgs = args;
-                pgConstArgs.push_back(new TCallNodeImpl(pos, "PgType", { BuildQuotedAtom(pos, type.substr(2)) }));
+                TVector<TNodePtr> pgConstArgs;
+                if (!args.empty()) {
+                    pgConstArgs.push_back(args.front());
+                    pgConstArgs.push_back(new TCallNodeImpl(pos, "PgType", { BuildQuotedAtom(pos, type.substr(2), TNodeFlags::Default) }));
+                    pgConstArgs.insert(pgConstArgs.end(), args.begin() + 1, args.end());
+                }
                 return new TYqlPgConst(pos, pgConstArgs);
             } else if (type == "Void" || type == "EmptyList" || type == "EmptyDict") {
                 return new TCallNodeImpl(pos, type, 0, 0, args);

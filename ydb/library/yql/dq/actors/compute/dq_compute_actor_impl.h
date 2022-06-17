@@ -1003,7 +1003,7 @@ protected:
 
     void HandleExecuteBase(TEvDqCompute::TEvNewCheckpointCoordinator::TPtr& ev) {
         if (!InputTransformsMap.empty()) {
-            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, "Internal error: input transforms don't support checkpoints yet");
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, "Input transforms don't support checkpoints yet");
             return;
         }
 

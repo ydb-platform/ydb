@@ -74,6 +74,18 @@ BELONGS ya.make
     Files with this license:
         LICENSE.md [59:93]
 
+KEEP     MIT                  74ab01fc06feca8221855c04a783e6ad
+BELONGS ya.make
+    License text:
+        - Changed license from BSD to MIT style.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 95.00
+        Match type      : REFERENCE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        NEWS.md [211:211]
+
 KEEP     MIT                  b9f647ef7e29973cc8b999af88006590
 BELONGS ya.make
     License text:
@@ -98,3 +110,22 @@ BELONGS ya.make
         Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/free-unknown.LICENSE
     Files with this license:
         utf8proc.h [28:28]
+
+KEEP     MIT AND Unicode      f1f18913b6e9a1006771a56a06d41a82
+BELONGS ya.make
+FILE_INCLUDE LICENSE.md found in files: README.md at line 31
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        README.md [26:31]
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unicode
+        Score           : 100.00
+        Match type      : NOTICE
+        Links           : http://unicode.org/, http://unicode.org/copyright.html, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unicode.LICENSE
+    Files with this license:
+        README.md [26:31]

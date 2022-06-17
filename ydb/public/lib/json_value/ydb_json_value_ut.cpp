@@ -560,10 +560,12 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
 
     Y_UNIT_TEST(PgValue) {
         TPgType pgType(1, 2, 3);
-        TPgValue v1(true, "text_value", pgType);
-        TPgValue v2(false, "binary_value", pgType);
-        TPgValue v3(true, "", pgType);
-        TPgValue v4(false, "", pgType);
+        TPgValue v1(TPgValue::VK_TEXT, "text_value", pgType);
+        TPgValue v2(TPgValue::VK_BINARY, "binary_value", pgType);
+        TPgValue v3(TPgValue::VK_TEXT, "", pgType);
+        TPgValue v4(TPgValue::VK_BINARY, "", pgType);
+        TPgValue v5(TPgValue::VK_NULL, "", pgType);
+
         TValue value = TValueBuilder()
             .BeginList()
             .AddListItem()
@@ -574,12 +576,14 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
                 .Pg(v3)
             .AddListItem()
                 .Pg(v4)
+            .AddListItem()
+                .Pg(v5)
             .EndList()
             .Build();
 
         // unicode
         const TString jsonString1 = FormatValueJson(value, EBinaryStringEncoding::Unicode);
-        UNIT_ASSERT_NO_DIFF(jsonString1, R"(["text_value",["binary_value"],"",[""]])");
+        UNIT_ASSERT_NO_DIFF(jsonString1, R"(["text_value",["binary_value"],"",[""],null])");
 
         TValue resultValue1 = JsonToYdbValue(jsonString1, value.GetType(), EBinaryStringEncoding::Unicode);
         UNIT_ASSERT_NO_DIFF(
@@ -589,7 +593,7 @@ Y_UNIT_TEST_SUITE(JsonValueTest) {
 
         // base64
         const TString jsonString2 = FormatValueJson(value, EBinaryStringEncoding::Base64);
-        UNIT_ASSERT_NO_DIFF(jsonString2, R"(["text_value",["YmluYXJ5X3ZhbHVl"],"",[""]])");
+        UNIT_ASSERT_NO_DIFF(jsonString2, R"(["text_value",["YmluYXJ5X3ZhbHVl"],"",[""],null])");
 
         TValue resultValue2 = JsonToYdbValue(jsonString2, value.GetType(), EBinaryStringEncoding::Base64);
         UNIT_ASSERT_NO_DIFF(

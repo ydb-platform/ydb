@@ -344,6 +344,36 @@ Y_UNIT_TEST_SUITE(YdbValue) {
                         }
                     }
                 }
+                members {
+                    name: "C"
+                    type {
+                        pg_type {
+                            oid: 123
+                            typlen: -345
+                            typmod: -321
+                        }
+                    }
+                }
+                members {
+                    name: "D"
+                    type {
+                        pg_type {
+                            oid: 123
+                            typlen: -1
+                            typmod: -1
+                        }
+                    }
+                }
+                members {
+                    name: "E"
+                    type {
+                        pg_type {
+                            oid: 123
+                            typlen: -1
+                            typmod: -1
+                        }
+                    }
+                }
             }
             )";
 
@@ -360,6 +390,8 @@ Y_UNIT_TEST_SUITE(YdbValue) {
             items {
                 bytes_value: ""
             }
+            items {
+            }
         )";
 
         Ydb::Type protoType;
@@ -371,11 +403,11 @@ Y_UNIT_TEST_SUITE(YdbValue) {
         TValue value(TType(protoType), protoValue);
 
         UNIT_ASSERT_NO_DIFF(FormatValueYson(value),
-            R"(["my_text_value";["my_binary_value"]])");
+            R"(["my_text_value";["my_binary_value"];"";[""];#])");
         UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Unicode),
-            R"({"A":"my_text_value","B":["my_binary_value"]})");
+            R"({"A":"my_text_value","B":["my_binary_value"],"C":"","D":[""],"E":null})");
         UNIT_ASSERT_NO_DIFF(FormatValueJson(value, EBinaryStringEncoding::Base64),
-            R"({"A":"my_text_value","B":["bXlfYmluYXJ5X3ZhbHVl"]})");
+            R"({"A":"my_text_value","B":["bXlfYmluYXJ5X3ZhbHVl"],"C":"","D":[""],"E":null})");
     }
 
     Y_UNIT_TEST(ParseValueMaybe) {

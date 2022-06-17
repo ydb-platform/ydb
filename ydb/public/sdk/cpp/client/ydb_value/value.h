@@ -221,12 +221,19 @@ struct TDecimalValue {
 };
 
 struct TPgValue {
+    enum EPgValueKind {
+        VK_NULL,
+        VK_TEXT,
+        VK_BINARY
+    };
+
     TPgValue(const Ydb::Value& pgValueProto, const TPgType& pgType);
-    TPgValue(bool isText, const TString& content, const TPgType& pgType);
+    TPgValue(EPgValueKind kind, const TString& content, const TPgType& pgType);
+    bool IsNull() const;
     bool IsText() const;
 
     TPgType PgType_;
-    bool IsText_;
+    EPgValueKind Kind_ = VK_NULL;
     TString Content_;
 };
 

@@ -377,6 +377,11 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
             auto& cell = *value.add_items();
             cell.set_text_value("");
         }
+        // null
+        {
+            auto& value = *rs.add_rows();
+            value.add_items();
+        }
 
         NJson::TJsonValue root;
         FormatResultSet(root, rs);
@@ -384,7 +389,7 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         TStringStream stream;
         NJson::WriteJson(&stream, &root);
         //Cerr << "Stream >> " << stream.Str() << Endl;
-        TString expected = R"___({"data":[{"column0":"my_text_value"},{"column0":""}],"columns":[{"name":"column0","type":["PgType","bool"]}]})___";
+        TString expected = R"___({"data":[{"column0":"my_text_value"},{"column0":""},{"column0":null}],"columns":[{"name":"column0","type":["PgType","bool"]}]})___";
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 

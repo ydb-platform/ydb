@@ -99,7 +99,9 @@ static void FormatValueYsonInternal(TValueParser& parser, NYson::TYsonWriter& wr
             break;
 
         case TTypeParser::ETypeKind::Pg:
-            if (parser.GetPg().IsText()) {
+            if (parser.GetPg().IsNull()) {
+                writer.OnEntity();
+            } else if (parser.GetPg().IsText()) {
                 writer.OnStringScalar(parser.GetPg().Content_);
             } else {
                 writer.OnBeginList();

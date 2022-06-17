@@ -340,10 +340,10 @@ void FormatColumnValue(
     if (type->GetKind() == TType::EKind::Pg) {
         NYdb::TValueParser parser(value);
         auto pgValue = parser.GetPg();
-        /*if (pgValue.IsNull()) {
-            root = NJson::TJsonValue();
+        if (pgValue.IsNull()) {
+            root = NJson::TJsonValue(NJson::JSON_NULL);
             return;
-        }*/
+        }
 
         if (pgValue.IsText()) {
             root = NJson::TJsonValue(pgValue.Content_);

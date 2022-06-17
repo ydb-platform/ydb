@@ -211,7 +211,9 @@ namespace NYdb {
                 break;
 
             case TTypeParser::ETypeKind::Pg:
-                if (Parser.GetPg().IsText()) {
+                if (Parser.GetPg().IsNull()) {
+                    Writer.WriteNull();
+                } else if (Parser.GetPg().IsText()) {
                     Writer.WriteString(Parser.GetPg().Content_);
                 } else {
                     Writer.BeginList();
@@ -645,7 +647,9 @@ namespace {
             case TTypeParser::ETypeKind::Pg: {
                     TPgType pgType(0, 0, 0);
                     if (jsonValue.GetType() == NJson::JSON_STRING) {
-                        ValueBuilder.Pg(TPgValue(true, jsonValue.GetString(), pgType));
+                        ValueBuilder.Pg(TPgValue(TPgValue::VK_TEXT, jsonValue.GetString(), pgType));
+                    } else if (jsonValue.GetType() == NJson::JSON_NULL) {
+                        ValueBuilder.Pg(TPgValue(TPgValue::VK_NULL, {}, pgType));
                     } else {
                         EnsureType(jsonValue, NJson::JSON_ARRAY);
                         if (jsonValue.GetArray().size() != 1) {
@@ -654,7 +658,7 @@ namespace {
                         auto& innerJsonValue = jsonValue.GetArray().at(0);
                         EnsureType(innerJsonValue, NJson::JSON_STRING);
                         auto binary = JsonStringToBinaryString(innerJsonValue.GetString());
-                        ValueBuilder.Pg(TPgValue(false, binary, pgType));
+                        ValueBuilder.Pg(TPgValue(TPgValue::VK_BINARY, binary, pgType));
                     }
                 }
                 break;

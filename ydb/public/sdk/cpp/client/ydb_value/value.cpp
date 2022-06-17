@@ -918,25 +918,34 @@ TString TDecimalValue::ToString() const {
 TPgValue::TPgValue(const Ydb::Value& pgValueProto, const TPgType& pgType)
     : PgType_(pgType)
 {
-    IsText_ = pgValueProto.has_text_value();
-    if (IsText_) {
+    if (pgValueProto.has_text_value()) {
+        Kind_ = VK_TEXT;
         Content_ = pgValueProto.text_value();
+        return;
     }
 
     if (pgValueProto.has_bytes_value()) {
+        Kind_ = VK_BINARY;
         Content_ = pgValueProto.bytes_value();
+        return;
     }
+
+    Kind_ = VK_NULL;
 }
 
-TPgValue::TPgValue(bool isText, const TString& content, const TPgType& pgType)
+TPgValue::TPgValue(EPgValueKind kind, const TString& content, const TPgType& pgType)
     : PgType_(pgType)
-    , IsText_(isText)
+    , Kind_(kind)
     , Content_(content)
 {
 }
 
+bool TPgValue::IsNull() const {
+    return Kind_ == VK_NULL;
+}
+
 bool TPgValue::IsText() const {
-    return IsText_;
+    return Kind_ == VK_TEXT;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -2019,7 +2028,7 @@ public:
         FillPgType(value.PgType_);
         if (value.IsText()) {
             GetValue().set_text_value(value.Content_);
-        } else {
+        } else if (!value.IsNull()) {
             GetValue().set_bytes_value(value.Content_);
         }
     }

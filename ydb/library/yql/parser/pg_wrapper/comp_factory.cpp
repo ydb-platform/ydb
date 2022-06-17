@@ -1768,15 +1768,8 @@ NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(TPgType* type, char cmd, TInput
     }
 }
 
-NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
-    using namespace NYson::NDetail;
-    if (cmd == EntitySymbol) {
-        return NUdf::TUnboxedValuePod();
-    }
-
-    CHECK_EXPECTED(cmd, StringMarker);
-    auto s = buf.ReadYtString();
-    switch (type->GetTypeId()) {
+NUdf::TUnboxedValue PgValueFromString(const TStringBuf s, ui32 pgTypeId) {
+    switch (pgTypeId) {
     case BOOLOID: {
         return ScalarDatumToPod(BoolGetDatum(FromString<bool>(s)));
     }
@@ -1806,10 +1799,10 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         return PointerDatumToPod((Datum)ret);
     }
     default:
-        TString str{s};
+        TString str{ s };
 
         TPAllocScope call;
-        const auto& typeInfo = NPg::LookupType(type->GetTypeId());
+        const auto& typeInfo = NPg::LookupType(pgTypeId);
         auto typeIOParam = MakeTypeIOParam(typeInfo);
         auto inFuncId = typeInfo.InFuncId;
         if (typeInfo.TypeId == typeInfo.ArrayTypeId) {
@@ -1837,6 +1830,17 @@ NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
         Y_ENSURE(!callInfo->isnull);
         return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
     }
+}
+
+NUdf::TUnboxedValue ReadYsonValuePg(TPgType* type, char cmd, TInputBuf& buf) {
+    using namespace NYson::NDetail;
+    if (cmd == EntitySymbol) {
+        return NUdf::TUnboxedValuePod();
+    }
+
+    CHECK_EXPECTED(cmd, StringMarker);
+    auto s = buf.ReadYtString();
+    return PgValueFromString(s, type->GetTypeId());
 }
 
 NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NCommon::TInputBuf& buf) {

@@ -13,6 +13,7 @@ namespace NYql {
 namespace NCommon {
 
 TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
+NUdf::TUnboxedValue PgValueFromString(const TStringBuf text, ui32 pgTypeId);
 
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions);

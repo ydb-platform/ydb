@@ -19,6 +19,7 @@ target_link_libraries(ydb-library-mkql_proto PUBLIC
   api-protos
   library-yql-minikql
   yql-minikql-computation
+  providers-common-codec
 )
 target_sources(ydb-library-mkql_proto PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/mkql_proto/mkql_proto.cpp

@@ -16,6 +16,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
 
         UNIT_ASSERT(!CanExportType(pgmBuilder.NewVoid().GetStaticType()->GetType(), env));
         UNIT_ASSERT(CanExportType(pgmBuilder.NewVoid().GetStaticType(), env));
+        UNIT_ASSERT(CanExportType(pgmBuilder.NewPgType(16), env));
         auto dtype = pgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
         UNIT_ASSERT(CanExportType(dtype, env));
         UNIT_ASSERT(CanExportType(pgmBuilder.NewOptionalType(dtype), env));
@@ -45,7 +46,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "}\n");
     }
 
- Y_UNIT_TEST(TestExportDecimalType) {
+    Y_UNIT_TEST(TestExportDecimalType) {
         TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
             NYql::NDecimal::TInt128 x;
             ui64* p = (ui64*)&x;
@@ -61,6 +62,18 @@ Y_UNIT_TEST_SUITE(TMiniKQLProtoTest) {
         "    Precision: 21\n"
         "    Scale: 8\n"
         "  }\n"
+        "}\n");
+    }
+
+    Y_UNIT_TEST(TestExportPgType) {
+        TestExportType<NKikimrMiniKQL::TType>([](TProgramBuilder& pgmBuilder) {
+            auto pgType = static_cast<TPgType*>(pgmBuilder.NewPgType(16));
+            auto pgmReturn = pgmBuilder.PgConst(pgType, "true");
+            return pgmReturn;
+        },
+        "Kind: Pg\n"
+        "Pg {\n"
+        "  oid: 16\n"
         "}\n");
     }
 

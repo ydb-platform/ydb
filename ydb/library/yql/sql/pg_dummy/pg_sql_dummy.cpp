@@ -23,7 +23,13 @@ namespace NCommon {
 TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
     Y_UNUSED(value);
     Y_UNUSED(pgTypeId);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "PgValueToString: PG types are not supported";
+}
+
+NUdf::TUnboxedValue PgValueFromString(const TStringBuf text, ui32 pgTypeId) {
+    Y_UNUSED(text);
+    Y_UNUSED(pgTypeId);
+    throw yexception() << "PgValueFromString: PG types are not supported";
 }
 
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
@@ -32,55 +38,55 @@ void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& v
     Y_UNUSED(value);
     Y_UNUSED(type);
     Y_UNUSED(structPositions);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "WriteYsonValuePg: PG types are not supported";
 }
 
 void WriteYsonValueInTableFormatPg(TOutputBuf& buf, NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value) {
     Y_UNUSED(buf);
     Y_UNUSED(type);
     Y_UNUSED(value);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "WriteYsonValueInTableFormatPg: PG types are not supported";
 }
 
 NUdf::TUnboxedValue ReadYsonValueInTableFormatPg(NKikimr::NMiniKQL::TPgType* type, char cmd, TInputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(cmd);
     Y_UNUSED(buf);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "ReadYsonValueInTableFormatPg: PG types are not supported";
 }
 
 NUdf::TUnboxedValue ReadYsonValuePg(NKikimr::NMiniKQL::TPgType* type, char cmd, TInputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(cmd);
     Y_UNUSED(buf);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "ReadYsonValuePg: PG types are not supported";
 }
 
 NKikimr::NUdf::TUnboxedValue ReadSkiffPg(NKikimr::NMiniKQL::TPgType* type, NCommon::TInputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(buf);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "ReadSkiffPg: PG types are not supported";
 }
 
 void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(value);
     Y_UNUSED(buf);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "WriteSkiffPg: PG types are not supported";
 }
 
 extern "C" void ReadSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, NKikimr::NUdf::TUnboxedValue& value, NCommon::TInputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(value);
     Y_UNUSED(buf);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "ReadSkiffPgValue: PG types are not supported";
 }
 
 extern "C" void WriteSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     Y_UNUSED(type);
     Y_UNUSED(value);
     Y_UNUSED(buf);
-    throw yexception() << "PG types are not supported";
+    throw yexception() << "WriteSkiffPgValue: PG types are not supported";
 }
 
 } // namespace NCommon

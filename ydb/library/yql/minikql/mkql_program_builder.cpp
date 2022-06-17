@@ -5154,6 +5154,10 @@ bool CanExportType(TType* type, const TTypeEnvironment& env) {
             node->SetCookie(1);
             break;
 
+        case TType::EKind::Pg:
+            node->SetCookie(1);
+            break;
+
         case TType::EKind::Optional: {
             auto optionalType = static_cast<TOptionalType*>(node);
             if (!optionalType->GetItemType()->GetCookie()) {

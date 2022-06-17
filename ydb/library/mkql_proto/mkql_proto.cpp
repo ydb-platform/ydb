@@ -6,6 +6,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
+#include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -148,6 +149,13 @@ void ExportTypeToProtoImpl(TType* type, NKikimrMiniKQL::TType& res) {
             break;
         }
 
+        case TType::EKind::Pg: {
+            auto pgType = static_cast<TPgType *>(type);
+            res.SetKind(NKikimrMiniKQL::ETypeKind::Pg);
+            res.MutablePg()->set_oid(pgType->GetTypeId());
+            break;
+        }
+
         case TType::EKind::Optional: {
             auto optionalType = static_cast<TOptionalType *>(type);
             res.SetKind(NKikimrMiniKQL::ETypeKind::Optional);
@@ -252,6 +260,13 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
                     break;
             }
 
+            break;
+        }
+
+        case TType::EKind::Pg: {
+            auto pgType = static_cast<TPgType*>(type);
+            auto t = res.mutable_pg_type();
+            t->set_oid(pgType->GetTypeId());
             break;
         }
 
@@ -439,6 +454,17 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
             break;
         }
 
+        case TType::EKind::Pg: {
+            if (!value) {
+                // do not set Text and Bytes fields
+                return;
+            }
+            auto pgType = static_cast<TPgType*>(type);
+            auto textValue = NYql::NCommon::PgValueToString(value, pgType->GetTypeId());
+            res.SetText(textValue);
+            break;
+        }
+
         case TType::EKind::Optional: {
             auto optionalType = static_cast<TOptionalType*>(type);
             if (value) {
@@ -523,7 +549,7 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
         case TType::EKind::Void:
         case TType::EKind::EmptyList:
         case TType::EKind::EmptyDict:
-	    break;
+        break;
 
         case TType::EKind::Null: {
             res.set_null_flag_value(::google::protobuf::NULL_VALUE);
@@ -532,6 +558,17 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
 
         case TType::EKind::Data: {
             HandleKindDataExport(type, value, res);
+            break;
+        }
+
+        case TType::EKind::Pg: {
+            if (!value) {
+                // do not set Text and Bytes fields
+                return;
+            }
+            auto pgType = static_cast<TPgType*>(type);
+            auto textValue = NYql::NCommon::PgValueToString(value, pgType->GetTypeId());
+            res.set_text_value(textValue);
             break;
         }
 
@@ -951,6 +988,10 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
                 return TDataType::Create(schemeType, env);
             }
         }
+        case NKikimrMiniKQL::ETypeKind::Pg: {
+            const NKikimrMiniKQL::TPgType& protoPgType = type.GetPg();
+            return TPgType::Create(protoPgType.Getoid(), env);
+        }
         case NKikimrMiniKQL::ETypeKind::Optional: {
             const NKikimrMiniKQL::TOptionalType& protoOptionalType = type.GetOptional();
             TType* child = ImportTypeFromProto(protoOptionalType.GetItem());
@@ -1010,13 +1051,13 @@ TType* TProtoImporter::ImportTypeFromProto(const NKikimrMiniKQL::TType& type) {
 
 TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TValue& value) {
     switch (type->GetKind()) {
-        case TCallableType::EKind::Void: {
+        case TType::EKind::Void: {
             return env.GetVoid();
         }
-        case TCallableType::EKind::Null: {
+        case TType::EKind::Null: {
             return env.GetNull();
         }
-        case TCallableType::EKind::Data: {
+        case TType::EKind::Data: {
             TDataType* dataType = static_cast<TDataType*>(type);
             TDataLiteral* dataNode = nullptr;
             switch (const auto schemeType = dataType->GetSchemeType()) {
@@ -1114,7 +1155,7 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
             }
             return dataNode;
         }
-        case TCallableType::EKind::Optional: {
+        case TType::EKind::Optional: {
             TOptionalType* optionalType = static_cast<TOptionalType*>(type);
             TOptionalLiteral* optionalNode;
             if (value.HasOptional()) {
@@ -1126,7 +1167,7 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
             }
             return optionalNode;
         }
-        case TCallableType::EKind::List: {
+        case TType::EKind::List: {
             TListType* listType = static_cast<TListType*>(type);
             TType* itemType = listType->GetItemType();
             TVector<TRuntimeNode> items;
@@ -1140,7 +1181,7 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
             TListLiteral* listNode = TListLiteral::Create(items.data(), items.size(), listType, env);
             return listNode;
         }
-        case TCallableType::EKind::Tuple: {
+        case TType::EKind::Tuple: {
             TTupleType* tupleType = static_cast<TTupleType*>(type);
             ui32 elementsCount = tupleType->GetElementsCount();
             MKQL_ENSURE(elementsCount == value.TupleSize(), "Invalid protobuf format, tuple size mismatch between Type and Value");
@@ -1154,7 +1195,7 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
             TTupleLiteral* tupleNode = TTupleLiteral::Create(elements.size(), elements.data(), tupleType, env);
             return tupleNode;
         }
-        case TCallableType::EKind::Struct: {
+        case TType::EKind::Struct: {
             TStructType* structType = static_cast<TStructType*>(type);
             ui32 membersCount = structType->GetMembersCount();
             MKQL_ENSURE(membersCount == value.StructSize(), "Invalid protobuf format, struct size mismatch between Type and Value");
@@ -1170,7 +1211,7 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
             TStructLiteral* structNode = TStructLiteral::Create(members.size(), members.data(), structType, env);
             return structNode;
         }
-        case TCallableType::EKind::Dict: {
+        case TType::EKind::Dict: {
             TDictType* dictType = static_cast<TDictType*>(type);
             ui32 dictSize = value.DictSize();
 
@@ -1185,7 +1226,7 @@ TNode* TProtoImporter::ImportNodeFromProto(TType* type, const NKikimrMiniKQL::TV
             TDictLiteral* dictNode = TDictLiteral::Create(items.size(), items.data(), dictType, env);
             return dictNode;
         }
-        case TCallableType::EKind::Variant: {
+        case TType::EKind::Variant: {
             TVariantType* variantType = static_cast<TVariantType*>(type);
             auto variantIndex = value.GetVariantIndex();
             TType* innerType = variantType->GetAlternativeType(variantIndex);
@@ -1217,6 +1258,15 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
 
         case TType::EKind::Data:
             return HandleKindDataImport(type, value);
+
+        case TType::EKind::Pg: {
+            auto pgType = static_cast<const TPgType*>(type);
+            MKQL_ENSURE(!value.HasBytes(), "Pg binary format is not supported");
+            if (!value.HasText() && !value.HasBytes()) {
+                return NUdf::TUnboxedValue();
+            }
+            return NYql::NCommon::PgValueFromString(value.GetText(), pgType->GetTypeId());
+        }
 
         case TType::EKind::Optional: {
             auto optionalType = static_cast<const TOptionalType*>(type);

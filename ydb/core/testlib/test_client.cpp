@@ -818,7 +818,8 @@ namespace Tests {
                 NKikimr::NFolderService::CreateMockFolderServiceActor,
                 NYq::CreateMockYqAuditServiceActor,
                 ydbCredFactory,
-                /*IcPort = */0
+                /*IcPort = */0,
+                {}
                 );
             NYq::InitTest(Runtime.Get(), port, Settings->GrpcPort, YqSharedResources);
         }

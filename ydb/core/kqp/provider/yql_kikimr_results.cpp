@@ -1212,8 +1212,9 @@ bool IsSameType(const NKikimrMiniKQL::TType& actual, const NKikimrMiniKQL::TType
             return IsSameType(actual.GetVariant(), expected.GetVariant());
         case NKikimrMiniKQL::ETypeKind::Null:
             return true;
+        case NKikimrMiniKQL::ETypeKind::Pg:
+            return actual.GetPg().Getoid() == expected.GetPg().Getoid();
         case NKikimrMiniKQL::ETypeKind::Unknown:
-        case NKikimrMiniKQL::ETypeKind::Reserved_10:
         case NKikimrMiniKQL::ETypeKind::Reserved_11:
         case NKikimrMiniKQL::ETypeKind::Reserved_12:
         case NKikimrMiniKQL::ETypeKind::Reserved_13:

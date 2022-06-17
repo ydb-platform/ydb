@@ -142,6 +142,7 @@
 #include <ydb/library/folder_service/proto/config.pb.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
+#include <ydb/library/yql/parser/pg_wrapper/comp_factory.h>
 
 #include <library/cpp/actors/protos/services_common.pb.h>
 
@@ -2332,7 +2333,8 @@ void TYandexQueryInitializer::InitializeServices(TActorSystemSetup* setup, const
         Factories->FolderServiceFactory,
         Factories->YqAuditServiceFactory,
         Factories->YdbCredentialProviderFactory,
-        IcPort
+        IcPort,
+        Factories->AdditionalComputationNodeFactories
         );
 }
 

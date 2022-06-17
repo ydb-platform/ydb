@@ -45,11 +45,13 @@ service TopicService {
     //        <----------------
     //         StartPartitionSessionRequest(Topic2, Partition2, PartitionSessionID2, ...)
     //        <----------------
-    //         StartPartitionSessionResponse(PartitionSessionID1, ...) - client must respond with this message to actually start recieving data messages from this partition
+    //         StartPartitionSessionResponse(PartitionSessionID1, ...)
+    //             client must respond with this message to actually start recieving data messages from this partition
     //        ---------------->
     //         StopPartitionSessionRequest(PartitionSessionID1, ...)
     //        <----------------
-    //         StopPartitionSessionResponse(PartitionSessionID1, ...) - only after this response server will give this parittion to other session.
+    //         StopPartitionSessionResponse(PartitionSessionID1, ...)
+    //             only after this response server will give this parittion to other session.
     //        ---------------->
     //         StartPartitionSessionResponse(PartitionSession2, ...)
     //        ---------------->

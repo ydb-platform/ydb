@@ -7,8 +7,6 @@ import "ydb/public/api/protos/ydb_issue_message.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
-import "google/protobuf/wrappers.proto";
-
 package Ydb.Topic;
 
 option java_package = "com.yandex.ydb.topic";
@@ -21,6 +19,8 @@ enum Codec {
     CODEC_GZIP = 2;
     CODEC_LZOP = 3;
     CODEC_ZSTD = 4;
+    reserved 5 to 9999;
+    // User-defined codecs from 10000 to 19999
     CODEC_CUSTOM = 10000;
     reserved 20000 to max;
 }
@@ -415,7 +415,7 @@ message StreamReadMessage {
         // Partition contains messages with offsets in range [start, end).
         OffsetsRange partition_offsets = 2;
 
-        // Each offset up to and including (committed_offset - 1) was committed.
+        // Each offset up to and including (committed_offset - 1) was fully processed.
         int64 committed_offset = 3;
 
         // Write timestamp of next message written to this partition will be no less than write_time_high_watermark.
@@ -428,7 +428,7 @@ message StreamReadMessage {
         // Partition session description.
         PartitionSession partition_session = 1;
 
-        // Each offset up to and including (committed_offset - 1) was committed.
+        // Each offset up to and including (committed_offset - 1) was fully processed.
         int64 committed_offset = 2;
 
         // Partition contains messages with offsets in range [start, end).
@@ -511,13 +511,13 @@ message AlterConsumer {
     // Consumer may be marked as 'important'. It means messages for this consumer will never expire due to retention.
     // User should take care that such consumer never stalls, to prevent running out of disk space.
     // Flag that this consumer is important.
-    optional bool important = 2;
+    optional bool set_important = 2;
     // All messages with smaller server written_at timestamp will be skipped.
-    google.protobuf.Timestamp read_from = 3;
+    google.protobuf.Timestamp set_read_from = 3;
     reserved 4; // supported_format
     // List of supported codecs by this consumer.
     // supported_codecs on topic must be contained inside this list.
-    SupportedCodecs supported_codecs = 5;
+    SupportedCodecs set_supported_codecs = 5;
 
     // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
@@ -531,24 +531,25 @@ message CreateTopicRequest {
     // Topic path.
     string path = 2;
 
-    // Topic settings.
+    // Partitioning settings.
     oneof partitioning {
         // Uniform partitioning case.
-        // How many uniform partitions in topic. Must less than database limit. Default limit - 10.
-        int64 partitions_count = 3;
+        // How many partitions in topic. Must be less than database limit. Default limit - 10.
+        int64 uniform_partitions = 3;
         // 4 reserved for partition_at_keys
     }
     reserved 4; // partition_at_keys inside partitions oneof
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
-
+    //
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
     google.protobuf.Duration retention_period = 5;
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Zero value means infinite limit.
     int64 retention_storage_mb = 6;
+
     reserved 7; // supported_format.
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
@@ -602,16 +603,12 @@ message DescribeTopicResult {
     // Settings of topic.
 
     // Partitioning description.
-    oneof partitioning {
-        // Case of 'partitions_count' uniform partitions in topic.
-        int64 partitions_count = 2;
-        // 3 reserved for partition_at_keys
-    }
-    reserved 3; // partition_at_keys inside partitions oneof
+    int64 partitions_count = 2;
+    reserved 3; // partition_at_keys
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
-
+    //
     // How long data in partition should be stored.
     google.protobuf.Duration retention_period = 4;
     // How much data in partition should be stored.
@@ -644,30 +641,31 @@ message AlterTopicRequest {
     string path = 2;
 
     // Partitioning setting.
-    oneof partitioning {
+    oneof set_partitioning {
         // How many uniform partitions in topic. Must less than database limit. Default limit - 10.
-        int64 partitions_count = 3;
+        int64 uniform_partitions = 3;
         // 4 reserved for partition_at_keys
     }
     reserved 4; // partition_at_keys inside partitions oneof
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
-
+    //
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
-    google.protobuf.Duration retention_period = 5;
+    google.protobuf.Duration set_retention_period = 5;
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
-    optional int64 retention_storage_mb = 6;
+    optional int64 set_retention_storage_mb = 6;
+
     reserved 7; // supported_format.
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
-    SupportedCodecs supported_codecs = 8;
+    SupportedCodecs set_supported_codecs = 8;
 
     // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
-    optional int64 partition_write_speed_bytes_per_second = 9;
+    optional int64 set_partition_write_speed_bytes_per_second = 9;
     // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
-    optional int64 partition_write_burst_bytes = 10;
+    optional int64 set_partition_write_burst_bytes = 10;
 
     // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.

@@ -44,7 +44,7 @@
 #define BLCKSZ 8192
 
 /* Saved arguments from configure */
-#define CONFIGURE_ARGS " '--prefix=/var/empty/postgresql-14.3' '--with-openssl' '--with-libxml' '--sysconfdir=/etc' '--libdir=$(lib)/lib' '--with-system-tzdata=/var/empty/tzdata-2021c/share/zoneinfo' '--enable-debug' '--with-systemd' '--with-ossp-uuid' '--with-icu' '--with-lz4' '--with-gssapi' '--without-gssapi' '--without-systemd' 'CC=cc' 'CXX=g++' 'PKG_CONFIG=pkg-config' 'PKG_CONFIG_PATH=/var/empty/zlib-1.2.11-dev/lib/pkgconfig:/var/empty/ncurses-6.2-dev/lib/pkgconfig:/var/empty/openssl-1.1.1l-dev/lib/pkgconfig:/var/empty/libxml2-2.9.12-dev/lib/pkgconfig:/var/empty/icu4c-70.1-dev/lib/pkgconfig:/var/empty/lz4-1.9.3-dev/lib/pkgconfig:/var/empty/systemd-249.5-dev/lib/pkgconfig:/var/empty/systemd-249.5-dev/share/pkgconfig:/var/empty/libkrb5-1.18-dev/lib/pkgconfig:/var/empty/libossp-uuid-1.6.2/lib/pkgconfig'"
+#define CONFIGURE_ARGS " '--prefix=/var/empty/postgresql-14.4' '--with-openssl' '--with-libxml' '--sysconfdir=/etc' '--libdir=$(lib)/lib' '--with-system-tzdata=/var/empty/tzdata-2022a/share/zoneinfo' '--enable-debug' '--with-systemd' '--with-ossp-uuid' '--with-icu' '--with-lz4' '--with-gssapi' '--without-gssapi' '--without-systemd' 'CC=cc' 'CXX=g++' 'PKG_CONFIG=pkg-config' 'PKG_CONFIG_PATH=/var/empty/zlib-1.2.12-dev/lib/pkgconfig:/var/empty/ncurses-6.3-dev/lib/pkgconfig:/var/empty/openssl-1.1.1o-dev/lib/pkgconfig:/var/empty/libxml2-2.9.14-dev/lib/pkgconfig:/var/empty/icu4c-71.1-dev/lib/pkgconfig:/var/empty/lz4-1.9.3-dev/lib/pkgconfig:/var/empty/systemd-250.4-dev/lib/pkgconfig:/var/empty/systemd-250.4-dev/share/pkgconfig:/var/empty/libkrb5-1.19.3-dev/lib/pkgconfig:/var/empty/libossp-uuid-1.6.2/lib/pkgconfig'"
 
 /* Define to the default TCP port number on which the server listens and to
    which clients will try to connect. This can be overridden at run-time, but
@@ -802,7 +802,7 @@
 #define PACKAGE_NAME "PostgreSQL"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "PostgreSQL 14.3"
+#define PACKAGE_STRING "PostgreSQL 14.4"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "postgresql"
@@ -811,7 +811,7 @@
 #define PACKAGE_URL "https://www.postgresql.org/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "14.3"
+#define PACKAGE_VERSION "14.4"
 
 /* Define to the name of a signed 128-bit integer type. */
 #define PG_INT128_TYPE __int128
@@ -830,7 +830,7 @@
 #define PG_MAJORVERSION_NUM 14
 
 /* PostgreSQL minor version number */
-#define PG_MINORVERSION_NUM 3
+#define PG_MINORVERSION_NUM 4
 
 /* Define to best printf format archetype, usually gnu_printf if available. */
 #define PG_PRINTF_ATTRIBUTE gnu_printf
@@ -839,13 +839,13 @@
 #define PG_USE_STDBOOL 1
 
 /* PostgreSQL version as a string */
-#define PG_VERSION "14.3"
+#define PG_VERSION "14.4"
 
 /* PostgreSQL version as a number */
-#define PG_VERSION_NUM 140003
+#define PG_VERSION_NUM 140004
 
 /* A string containing the version number, platform, and C compiler */
-#define PG_VERSION_STR "PostgreSQL 14.3 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 10.3.0, 64-bit"
+#define PG_VERSION_STR "PostgreSQL 14.4 on x86_64-pc-linux-gnu, compiled by gcc (GCC) 11.3.0, 64-bit"
 
 /* Define to 1 to allow profiling output to be saved separately for each
    process. */

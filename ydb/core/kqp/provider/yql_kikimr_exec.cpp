@@ -17,6 +17,12 @@ using namespace NCommon;
 using namespace NThreading;
 
 namespace {
+    NThreading::TFuture<IKikimrGateway::TGenericResult> CreateDummySuccess() {
+        IKikimrGateway::TGenericResult result;
+        result.SetSuccess();
+        return NThreading::MakeFuture(result);
+    }
+
     bool EnsureNotPrepare(const TString featureName, TPositionHandle pos, const TKikimrQueryContext& queryCtx,
         TExprContext& ctx)
     {
@@ -467,7 +473,8 @@ public:
                 return SyncError();
             }
 
-            auto future = Gateway->CreateTable(table.Metadata, true);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->CreateTable(table.Metadata, true);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -494,7 +501,8 @@ public:
                 return SyncError();
             }
 
-            auto future = Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->DropTable(table.Metadata->Cluster, table.Metadata->Name);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -882,7 +890,8 @@ public:
                 }
             }
 
-            auto future = Gateway->AlterTable(std::move(alterTableRequest), cluster);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->AlterTable(std::move(alterTableRequest), cluster);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -906,7 +915,8 @@ public:
             auto cluster = TString(maybeCreateUser.Cast().DataSink().Cluster());
             TCreateUserSettings createUserSettings = ParseCreateUserSettings(maybeCreateUser.Cast());
 
-            auto future = Gateway->CreateUser(cluster, createUserSettings);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->CreateUser(cluster, createUserSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -929,7 +939,8 @@ public:
             auto cluster = TString(maybeAlterUser.Cast().DataSink().Cluster());
             TAlterUserSettings alterUserSettings = ParseAlterUserSettings(maybeAlterUser.Cast());
 
-            auto future = Gateway->AlterUser(cluster, alterUserSettings);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->AlterUser(cluster, alterUserSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -952,7 +963,8 @@ public:
             auto cluster = TString(maybeDropUser.Cast().DataSink().Cluster());
             TDropUserSettings dropUserSettings = ParseDropUserSettings(maybeDropUser.Cast());
 
-            auto future = Gateway->DropUser(cluster, dropUserSettings);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->DropUser(cluster, dropUserSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -975,7 +987,8 @@ public:
             auto cluster = TString(maybeCreateGroup.Cast().DataSink().Cluster());
             TCreateGroupSettings createGroupSettings = ParseCreateGroupSettings(maybeCreateGroup.Cast());
 
-            auto future = Gateway->CreateGroup(cluster, createGroupSettings);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->CreateGroup(cluster, createGroupSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -998,7 +1011,8 @@ public:
             auto cluster = TString(maybeAlterGroup.Cast().DataSink().Cluster());
             TAlterGroupSettings alterGroupSettings = ParseAlterGroupSettings(maybeAlterGroup.Cast());
 
-            auto future = Gateway->AlterGroup(cluster, alterGroupSettings);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->AlterGroup(cluster, alterGroupSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -1021,7 +1035,8 @@ public:
             auto cluster = TString(maybeDropGroup.Cast().DataSink().Cluster());
             TDropGroupSettings dropGroupSettings = ParseDropGroupSettings(maybeDropGroup.Cast());
 
-            auto future = Gateway->DropGroup(cluster, dropGroupSettings);
+            bool prepareOnly = SessionCtx->Query().PrepareOnly;
+            auto future = prepareOnly ? CreateDummySuccess() : Gateway->DropGroup(cluster, dropGroupSettings);
 
             return WrapFuture(future,
                 [](const IKikimrGateway::TGenericResult& res, const TExprNode::TPtr& input, TExprContext& ctx) {

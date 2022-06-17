@@ -274,18 +274,21 @@ private:
             NJson::TJsonValue response;
             NJson::TJsonValue& jsonIssues = response["issues"];
 
-            for (const auto& queryIssue : record.GetResponse().GetQueryIssues()) {
-                NJson::TJsonValue& issue = jsonIssues.AppendValue({});
-                NProtobufJson::Proto2Json(queryIssue, issue);
-            }
             // find first deepest error
-            const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues = &(record.GetResponse().GetQueryIssues());
+            google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>* protoIssues = record.MutableResponse()->MutableQueryIssues();
+            std::stable_sort(protoIssues->begin(), protoIssues->end(), [](const Ydb::Issue::IssueMessage& a, const Ydb::Issue::IssueMessage& b) -> bool {
+                return a.severity() < b.severity();
+            });
             while (protoIssues->size() > 0 && (*protoIssues)[0].issuesSize() > 0) {
-                protoIssues = &((*protoIssues)[0].issues());
+                protoIssues = (*protoIssues)[0].mutable_issues();
             }
             if (protoIssues->size() > 0) {
                 const Ydb::Issue::IssueMessage& issue = (*protoIssues)[0];
                 NProtobufJson::Proto2Json(issue, response["error"]);
+            }
+            for (const auto& queryIssue : record.GetResponse().GetQueryIssues()) {
+                NJson::TJsonValue& issue = jsonIssues.AppendValue({});
+                NProtobufJson::Proto2Json(queryIssue, issue);
             }
             out << NJson::WriteJson(response, false);
         }

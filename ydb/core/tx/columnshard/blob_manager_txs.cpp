@@ -16,11 +16,15 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        Y_UNUSED(txc);
         Y_UNUSED(ctx);
 
-        Requests = Self->BlobManager->PreparePerGroupGCRequests();
+        // Cleanup delayed blobs before next GC
+        TBlobManagerDb blobManagerDb(txc.DB);
+        if (Self->BlobManager->CleanupFlaggedBlobs(blobManagerDb)) {
+            return true;
+        }
 
+        Requests = Self->BlobManager->PreparePerGroupGCRequests();
         return true;
     }
 
@@ -69,7 +73,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         // Schedule next GC
-        if (Self->BlobManager->TryMoveGCBarrier()) {
+        if (Self->BlobManager->CanCollectGarbage()) {
             Self->Execute(Self->CreateTxRunGc(), ctx);
         }
     }

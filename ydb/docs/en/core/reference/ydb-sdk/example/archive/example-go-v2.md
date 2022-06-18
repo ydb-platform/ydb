@@ -183,8 +183,6 @@ if err != nil {
 }
 ```
 
-{% include [results_processing.md](../_includes/steps/08_scan_query.md) %}
-
 Query results:
 
 ```go

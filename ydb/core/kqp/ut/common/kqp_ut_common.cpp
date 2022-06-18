@@ -687,6 +687,7 @@ TCollectedStreamResult CollectStreamResultImpl(TIterator& it) {
         if (streamPart.HasResultSet()) {
             auto resultSet = streamPart.ExtractResultSet();
             PrintResultSet(resultSet, resultSetWriter);
+            res.RowsCount += resultSet.RowsCount();
         }
 
         if constexpr (std::is_same_v<TIterator, NYdb::NTable::TScanQueryPartIterator>) {
@@ -820,6 +821,33 @@ NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString&
     }
 
     return NJson::TJsonValue();
+}
+
+void FindPlanNodesImpl(const NJson::TJsonValue& node, const TString& key, std::vector<NJson::TJsonValue>& results) {
+    if (node.IsArray()) {
+        for (const auto& item: node.GetArray()) {
+            FindPlanNodesImpl(item, key, results);
+        }
+    }
+
+    if (!node.IsMap()) {
+        return;
+    }
+
+    auto map = node.GetMap();
+    if (map.contains(key)) {
+        results.push_back(map.at(key));
+    }
+
+    for (const auto& [_, value]: map) {
+        FindPlanNodesImpl(value, key, results);
+    }
+}
+
+std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, const TString& key) {
+    std::vector<NJson::TJsonValue> results;
+    FindPlanNodesImpl(plan, key, results);
+    return results;
 }
 
 void CreateSampleTablesWithIndex(TSession& session) {

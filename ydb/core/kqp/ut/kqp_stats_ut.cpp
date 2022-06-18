@@ -16,17 +16,21 @@ Y_UNIT_TEST_SUITE(KqpStats) {
 
 Y_UNIT_TEST_TWIN(MultiTxStatsFullExp, UseSessionActor) {
     auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
-    NExperimental::TStreamQueryClient db{kikimr.GetDriver()};
-    auto settings = NExperimental::TExecuteStreamQuerySettings();
-    settings.ProfileMode(NYdb::NExperimental::EStreamQueryProfileMode::Full);
+    auto db = kikimr.GetTableClient();
 
-    auto it = db.ExecuteStreamQuery(R"(
+    TStreamExecScanQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
+
+    auto it = db.StreamExecuteScanQuery(R"(
         SELECT * FROM `/Root/EightShard` WHERE Key BETWEEN 150 AND 266 ORDER BY Data LIMIT 4;
     )", settings).GetValueSync();
 
     auto res = CollectStreamResult(it);
-    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-    UNIT_ASSERT_VALUES_EQUAL(res.ResultSetYson, R"([[[1];[202u];["Value2"]];[[2];[201u];["Value1"]];[[3];[203u];["Value3"]]])");
+    CompareYson(R"([
+        [[1];[202u];["Value2"]];
+        [[2];[201u];["Value1"]];
+        [[3];[203u];["Value3"]]
+    ])", res.ResultSetYson);
 
     UNIT_ASSERT(res.PlanJson);
     NJson::TJsonValue plan;

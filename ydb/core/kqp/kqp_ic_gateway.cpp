@@ -882,14 +882,6 @@ private:
 
         result.ExecuterResult.Swap(response->MutableResult());
 
-        if (Target && result.ExecuterResult.HasStats()) {
-            auto statsEv = MakeHolder<TEvKqpExecuter::TEvStreamProfile>();
-            auto& record = statsEv->Record;
-
-            record.MutableProfile()->Swap(result.ExecuterResult.MutableStats());
-            this->Send(Target, statsEv.Release());
-        }
-
         Promise.SetValue(std::move(result));
         this->PassAway();
     }

@@ -1130,34 +1130,26 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto cfg = AppCfg();
         cfg.MutableFeatureFlags()->SetEnablePredicateExtractForScanQueries(WithPredicatesExtract);
         auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {}, cfg);
-        NExperimental::TStreamQueryClient db(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
 
-        auto settings = NExperimental::TExecuteStreamQuerySettings()
-            .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic);
+        TStreamExecScanQuerySettings settings;
+        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         // simple key
         {
-            auto it = db.ExecuteStreamQuery(Sprintf(R"(
+            auto it = db.StreamExecuteScanQuery(Sprintf(R"(
                 PRAGMA Kikimr.OptEnablePredicateExtract = '%s';
                 SELECT * FROM `/Root/EightShard` WHERE Key = 301;
             )", WithPredicatesExtract ? "true" : "false"), settings).GetValueSync();
 
             UNIT_ASSERT(it.IsSuccess());
 
-            TVector<TString> profiles;
-            CompareYson(R"([[[3];[301u];["Value1"]]])", StreamResultToYson(it, &profiles));
+            auto res = CollectStreamResult(it);
+            CompareYson(R"([[[3];[301u];["Value1"]]])", res.ResultSetYson);
 
-            UNIT_ASSERT_EQUAL(1, profiles.size());
-
-            {
-                NYql::NDqProto::TDqExecutionStats stats;
-                google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-                UNIT_ASSERT(stats.IsInitialized());
-
-                NKqpProto::TKqpExecutionExtraStats extraStats;
-                UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-                UNIT_ASSERT_VALUES_EQUAL_C(extraStats.GetAffectedShards(), 1, "" << stats.DebugString());
-            }
+            UNIT_ASSERT(res.QueryStats);
+            UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).affected_shards(), 1);
         }
 
         // complex key
@@ -1166,7 +1158,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                 .AddParam("$ts").Int64(2).Build()
                 .Build();
 
-            auto it = db.ExecuteStreamQuery(Sprintf(R"(
+            auto it = db.StreamExecuteScanQuery(Sprintf(R"(
                 PRAGMA Kikimr.OptEnablePredicateExtract = '%s';
                 DECLARE $ts AS Int64;
                 SELECT * FROM `/Root/Logs` WHERE App = "nginx" AND Ts > $ts
@@ -1174,65 +1166,42 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
             UNIT_ASSERT(it.IsSuccess());
 
-            TVector<TString> profiles;
-            CompareYson(R"([[["nginx"];["nginx-23"];["GET /cat.jpg HTTP/1.1"];[3]]])", StreamResultToYson(it, &profiles));
+            auto res = CollectStreamResult(it);
+            CompareYson(R"([[["nginx"];["nginx-23"];["GET /cat.jpg HTTP/1.1"];[3]]])", res.ResultSetYson);
 
-            UNIT_ASSERT_EQUAL(1, profiles.size());
-
-            {
-                NYql::NDqProto::TDqExecutionStats stats;
-                google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-                UNIT_ASSERT(stats.IsInitialized());
-
-                NKqpProto::TKqpExecutionExtraStats extraStats;
-                UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-                UNIT_ASSERT_VALUES_EQUAL_C(extraStats.GetAffectedShards(), 1, "" << stats.DebugString());
-            }
+            UNIT_ASSERT(res.QueryStats);
+            UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).affected_shards(), 1);
         }
     }
 
     Y_UNIT_TEST_TWIN(PrunePartitionsByExpr, UseSessionActor) {
         auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {}, AppCfg());
-        NExperimental::TStreamQueryClient db(kikimr.GetDriver());
+        auto db = kikimr.GetTableClient();
 
-        auto settings = NExperimental::TExecuteStreamQuerySettings()
-            .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic);
+        TStreamExecScanQuerySettings settings;
+        settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto params = TParamsBuilder()
             .AddParam("$key").Uint64(300).Build()
             .Build();
 
-        auto it = db.ExecuteStreamQuery(R"(
+        auto it = db.StreamExecuteScanQuery(R"(
             DECLARE $key AS Uint64;
             SELECT * FROM `/Root/EightShard` WHERE Key = $key + 1;
         )", params, settings).GetValueSync();
 
         UNIT_ASSERT(it.IsSuccess());
 
-        TVector<TString> profiles;
-        CompareYson(R"([[[3];[301u];["Value1"]]])", StreamResultToYson(it, &profiles));
+        auto res = CollectStreamResult(it);
+        CompareYson(R"([
+            [[3];[301u];["Value1"]]
+        ])", res.ResultSetYson);
 
-        UNIT_ASSERT_EQUAL(2, profiles.size());
-
-        {
-            NYql::NDqProto::TDqExecutionStats stats;
-            google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-            UNIT_ASSERT(stats.IsInitialized());
-
-            NKqpProto::TKqpExecutionExtraStats extraStats;
-            UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-            UNIT_ASSERT_VALUES_EQUAL(extraStats.GetAffectedShards(), 0);
-        }
-
-        {
-            NYql::NDqProto::TDqExecutionStats stats;
-            google::protobuf::TextFormat::ParseFromString(profiles[1], &stats);
-            UNIT_ASSERT(stats.IsInitialized());
-
-            NKqpProto::TKqpExecutionExtraStats extraStats;
-            UNIT_ASSERT(stats.GetExtra().UnpackTo(&extraStats));
-            UNIT_ASSERT_VALUES_EQUAL(extraStats.GetAffectedShards(), 1);
-        }
+        UNIT_ASSERT(res.QueryStats);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(0).affected_shards(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(res.QueryStats->query_phases(1).affected_shards(), 1);
     }
 
     Y_UNIT_TEST_TWIN(TooManyComputeActors, UseSessionActor) {

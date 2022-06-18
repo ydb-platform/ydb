@@ -283,10 +283,6 @@ public:
             queryResult.PreparedQuery = Query;
         }
 
-        /*
-         * Set stats and plan for DataQuery. In case of ScanQuery they will be set
-         * later in TStreamExecuteScanQueryRPC.
-         */
         if (ExecuteCtx->QueryResults.size() == 1) {
             auto& execResult = ExecuteCtx->QueryResults[0];
             queryResult.QueryStats.Swap(&execResult.QueryStats);

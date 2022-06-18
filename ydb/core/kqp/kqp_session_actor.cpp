@@ -1070,24 +1070,14 @@ public:
             return;
         }
 
-        bool scan = QueryState->Request.GetType() == NKikimrKqp::QUERY_TYPE_SQL_SCAN;
-        if (scan) {
-            if (QueryState->RequestActorId && txResult.HasStats()) {
-                auto statsEv = MakeHolder<TEvKqpExecuter::TEvStreamProfile>();
-                auto& record = statsEv->Record;
-
-                record.MutableProfile()->Swap(txResult.MutableStats());
-                Send(QueryState->RequestActorId, statsEv.Release());
-            }
-        } else {
-            if (txResult.HasStats()) {
-                auto* exec = QueryState->Stats.AddExecutions();
-                exec->Swap(txResult.MutableStats());
-            }
+        if (txResult.HasStats()) {
+            auto* exec = QueryState->Stats.AddExecutions();
+            exec->Swap(txResult.MutableStats());
         }
 
         if (QueryState->PreparedQuery &&
-                QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize()) {
+            QueryState->CurrentTx < QueryState->PreparedQuery->GetPhysicalQuery().TransactionsSize())
+        {
             ExecuteOrDefer();
         } else {
             ReplySuccess();
@@ -1203,32 +1193,6 @@ public:
         }
     }
 
-    // TODO: Remove? Is it actual for NewEngine?
-    void FillQueryProfile(const NKqpProto::TKqpStatsQuery& stats, NKikimrKqp::TQueryResponse& response) {
-        auto& kqlProfile = *response.MutableProfile()->AddKqlProfiles();
-        for (auto& execStats : stats.GetExecutions()) {
-            auto& txStats = *kqlProfile.AddMkqlProfiles()->MutableTxStats();
-
-            txStats.SetDurationUs(execStats.GetDurationUs());
-            for (auto& tableStats : execStats.GetTables()) {
-                auto& txTableStats = *txStats.AddTableAccessStats();
-
-                txTableStats.MutableTableInfo()->SetName(tableStats.GetTablePath());
-                if (tableStats.GetReadRows() > 0) {
-                    txTableStats.MutableSelectRange()->SetRows(tableStats.GetReadRows());
-                    txTableStats.MutableSelectRange()->SetBytes(tableStats.GetReadBytes());
-                }
-                if (tableStats.GetWriteRows() > 0) {
-                    txTableStats.MutableUpdateRow()->SetCount(tableStats.GetWriteRows());
-                    txTableStats.MutableUpdateRow()->SetBytes(tableStats.GetWriteBytes());
-                }
-                if (tableStats.GetEraseRows() > 0) {
-                    txTableStats.MutableEraseRow()->SetCount(tableStats.GetEraseRows());
-                }
-            }
-        }
-    }
-
     void FillStats(NKikimrKqp::TEvQueryResponse* record) {
         auto *response = record->MutableResponse();
         auto* stats = &QueryState->Stats;
@@ -1263,7 +1227,6 @@ public:
 
         bool reportStats = (GetStatsModeInt(queryRequest) != EKikimrStatsMode::None);
         if (reportStats) {
-            FillQueryProfile(*stats, *response);
             response->SetQueryPlan(SerializeAnalyzePlan(*stats));
 
             response->MutableQueryStats()->Swap(stats);

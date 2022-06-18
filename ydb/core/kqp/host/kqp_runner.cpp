@@ -97,12 +97,17 @@ class TScanAsyncRunResult : public TKqpAsyncResultBase<IKikimrQueryExecutor::TQu
 public:
     using TResult = IKikimrQueryExecutor::TQueryResult;
 
-    TScanAsyncRunResult(const TExprNode::TPtr& queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer)
-        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer) {}
+    TScanAsyncRunResult(const TExprNode::TPtr& queryRoot, TExprContext& exprCtx, IGraphTransformer& transformer,
+        const TKqlTransformContext& transformCtx)
+        : TKqpAsyncResultBase(queryRoot, exprCtx, transformer)
+        , TransformCtx(transformCtx) {}
 
     void FillResult(TResult& queryResult) const override {
-        Y_UNUSED(queryResult);
+        queryResult.QueryStats.CopyFrom(TransformCtx.QueryStats);
     }
+
+private:
+    const TKqlTransformContext& TransformCtx;
 };
 
 class TKqpIterationGuardTransformer : public TSyncTransformerBase {
@@ -609,7 +614,7 @@ private:
 
         Y_ASSERT(!TxState->Tx().GetSnapshot().IsValid());
 
-        return MakeIntrusive<TScanAsyncRunResult>(world, ctx, *ScanRunQueryTransformer);
+        return MakeIntrusive<TScanAsyncRunResult>(world, ctx, *ScanRunQueryTransformer, *TransformCtx);
     }
 
     static bool MergeFlagValue(const TMaybe<bool>& configFlag, const TMaybe<bool>& flag) {

@@ -173,6 +173,7 @@ struct TCollectedStreamResult {
     TString ResultSetYson;
     TMaybe<TString> PlanJson;
     TMaybe<Ydb::TableStats::QueryStats> QueryStats;
+    ui64 RowsCount = 0;
 };
 
 TCollectedStreamResult CollectStreamResult(NYdb::NExperimental::TStreamPartIterator& it);
@@ -243,6 +244,7 @@ TString StreamResultToYson(NYdb::NTable::TTablePartIterator& it);
 
 ui32 CountPlanNodesByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
 NJson::TJsonValue FindPlanNodeByKv(const NJson::TJsonValue& plan, const TString& key, const TString& value);
+std::vector<NJson::TJsonValue> FindPlanNodes(const NJson::TJsonValue& plan, const TString& key);
 
 TString ReadTableToYson(NYdb::NTable::TSession session, const TString& table);
 TString ReadTablePartToYson(NYdb::NTable::TSession session, const TString& table);

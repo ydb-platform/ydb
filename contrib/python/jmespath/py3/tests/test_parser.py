@@ -1,6 +1,8 @@
 #!/usr/bin/env python
-
 import re
+import random
+import string
+import threading
 from . import unittest, OrderedDict
 
 from jmespath import parser
@@ -167,7 +169,7 @@ class TestErrorMessages(unittest.TestCase):
         error_message = re.compile(
             r'Bad jmespath expression: '
             r'Invalid \\uXXXX escape.*\\uAZ12', re.DOTALL)
-        with self.assertRaisesRegexp(exceptions.LexerError, error_message):
+        with self.assertRaisesRegex(exceptions.LexerError, error_message):
             self.parser.parse(r'"\uAZ12"')
 
 
@@ -321,6 +323,30 @@ class TestParserCaching(unittest.TestCase):
                          second.parsed)
         self.assertEqual(first.parsed,
                          cached.parsed)
+
+    def test_thread_safety_of_cache(self):
+        errors = []
+        expressions = [
+            ''.join(random.choice(string.ascii_letters) for _ in range(3))
+            for _ in range(2000)
+        ]
+        def worker():
+            p = parser.Parser()
+            for expression in expressions:
+                try:
+                    p.parse(expression)
+                except Exception as e:
+                    errors.append(e)
+
+        threads = []
+        for i in range(10):
+            threads.append(threading.Thread(target=worker))
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        self.assertEqual(errors, [])
 
 
 class TestParserAddsExpressionAttribute(unittest.TestCase):

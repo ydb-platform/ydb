@@ -47,8 +47,20 @@ ALTER TABLE `series` DROP INDEX `title_index`;
 {% if feature_changefeed %}
 ## Добавление или удаление Changefeed {#changefeed}
 
-```ADD CHANGEFEED <name> WITH (option = value[, ...])``` — добавляет [changefeed](../../../../concepts/cdc) с указанным именем и параметрами. Могут быть указаны все параметры, описанные в разделе [Change Data Capture (CDC) — Параметры](../../../../concepts/cdc#settings). Приведенный ниже код добавит changefeed с именем ```updates_feed```, в который будут выгружаться значения изменившихся столбцов таблицы в формате json.
+```ADD CHANGEFEED <name> WITH (option = value[, ...])``` — добавляет [changefeed](../../../../concepts/cdc) с указанным именем и параметрами.
 
+### Параметры Changefeed {#changefeed-options}
+
+* `MODE`. Режим работы. Указывает, что именно будет записано в changefeed при каждом изменении данных в таблице.
+  * `KEYS_ONLY`. Будут записаны только компоненты первичного ключа и признак изменения.
+  * `UPDATES`. Будут записаны значения изменившихся столбцов, получившиеся в результате изменения.
+  * `NEW_IMAGE`. Будут записаны значения всех столбцов, получившиеся в результате изменения.
+  * `OLD_IMAGE`. Будут записаны значения всех столбцов, предшествующие изменению.
+  * `NEW_AND_OLD_IMAGES`. Комбинация режимов `NEW_IMAGE` и `OLD_IMAGE` — будут записаны значения всех столбцов *до* и *в результате* изменения.
+* `FORMAT`. Формат данных, в котором будут записаны данные.
+  * `JSON`. Структура записи приведена на странице [описания changefeed](../../../../concepts/cdc#record-structure).
+
+Приведенный ниже код добавит changefeed с именем ```updates_feed```, в который будут выгружаться значения изменившихся столбцов таблицы в формате json.
 ```sql
 ALTER TABLE `series` ADD CHANGEFEED `updates_feed` WITH (
     FORMAT = 'JSON',

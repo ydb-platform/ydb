@@ -2,8 +2,6 @@
 
 {% include [Guarantees](_includes/cdc/guarantees.md) %}
 
-{% include [Settings](_includes/cdc/settings.md) %}
+{% include [Settings](_includes/cdc/record_structure.md) %}
 
 {% include [Using](_includes/cdc/using.md) %}
-
-{% include [Processing](_includes/cdc/processing.md) %}

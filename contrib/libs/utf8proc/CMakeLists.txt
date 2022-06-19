@@ -8,9 +8,6 @@
 
 
 add_library(contrib-libs-utf8proc)
-target_compile_options(contrib-libs-utf8proc PUBLIC
-  -DUTF8PROC_STATIC
-)
 target_sources(contrib-libs-utf8proc PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/utf8proc/utf8proc.c
 )

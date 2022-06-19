@@ -29,42 +29,29 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
-KEEP     COPYRIGHT_SERVICE_LABEL 1d50473f143812371fcfe0d38cbb5764
+KEEP     COPYRIGHT_SERVICE_LABEL 1bf0d41af40e40f004ad052d60870e01
 BELONGS ya.make
     License text:
-         *  Copyright (c) 2015 Steven G. Johnson, Jiahao Chen, Peter Colberg, Tony Kelman, Scott P. Jones, and other contributors.
-         *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        utf8proc.c [3:4]
-        utf8proc.h [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 4342f5b409956a6777adfa764b09dcdd
-BELONGS ya.make
-    License text:
-         *  Copyright (c) 2015 Steven G. Johnson, Jiahao Chen, Peter Colberg, Tony Kelman, Scott P. Jones, and other contributors.
-         *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        utf8proc.c [3:4]
-        utf8proc.h [2:3]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 6426e7d9aab211c64c5141f673c67fff
-BELONGS ya.make
-    License text:
-        *Copyright &copy; 2014-2015 by Steven G. Johnson, Jiahao Chen, Tony Kelman, Jonas Fonseca, and other contributors listed in the git history.*
+        *Copyright &copy; 2014-2021 by Steven G. Johnson, Jiahao Chen, Tony Kelman, Jonas Fonseca, and other contributors listed in the git history.*
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
         LICENSE.md [10:10]
+
+KEEP     COPYRIGHT_SERVICE_LABEL 1d50473f143812371fcfe0d38cbb5764
+BELONGS ya.make
+    License text:
+         *  Copyright (c) 2014-2021 Steven G. Johnson, Jiahao Chen, Peter Colberg, Tony Kelman, Scott P. Jones, and other contributors.
+         *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utf8proc.c [3:4]
+        utf8proc.h [2:3]
 
 KEEP     COPYRIGHT_SERVICE_LABEL a46e434110f608cf0cfb9b71e70f5e1c
 BELONGS ya.make
@@ -88,3 +75,16 @@ BELONGS ya.make
         Match type      : COPYRIGHT
     Files with this license:
         LICENSE.md [32:32]
+
+KEEP     COPYRIGHT_SERVICE_LABEL cd60ad4acc98c56e6197736c3447f8de
+BELONGS ya.make
+    License text:
+         *  Copyright (c) 2014-2021 Steven G. Johnson, Jiahao Chen, Peter Colberg, Tony Kelman, Scott P. Jones, and other contributors.
+         *  Copyright (c) 2009 Public Software Group e. V., Berlin, Germany
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        utf8proc.c [3:4]
+        utf8proc.h [2:3]

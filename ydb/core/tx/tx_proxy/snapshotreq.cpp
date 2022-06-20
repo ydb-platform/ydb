@@ -328,7 +328,7 @@ public:
                 return Die(ctx);
             }
 
-            for (auto& partition : entry.KeyDescription->Partitions) {
+            for (auto& partition : entry.KeyDescription->GetPartitions()) {
                 auto& state = PerShardStates[partition.ShardId];
                 state.Tables.insert(entry.KeyDescription->TableId);
             }
@@ -1367,7 +1367,7 @@ public:
                 return Die(ctx);
             }
 
-            for (auto& partition : entry.KeyDescription->Partitions) {
+            for (auto& partition : entry.KeyDescription->GetPartitions()) {
                 auto& state = PerShardStates[partition.ShardId];
                 state.Tables.insert(entry.KeyDescription->TableId);
             }

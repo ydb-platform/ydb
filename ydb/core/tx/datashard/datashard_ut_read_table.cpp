@@ -524,7 +524,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
                         Cerr << "... ignored TEvResolveKeySetResult with errors" << Endl;
                         break;
                     }
-                    size_t partitions = request->ResultSet[0].KeyDescription->Partitions.size();
+                    size_t partitions = request->ResultSet[0].KeyDescription->GetPartitions().size();
                     if (partitions == captureResolveKeySetResultPartitions) {
                         Cerr << "... captured TEvResolveKeySetResult with " << partitions << " partitions" << Endl;
                         capturedResolveKeySetResults.emplace_back(ev.Release());

@@ -79,10 +79,10 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
 
     static ui64 GetShardId(const TTableRange& range, const TKeyDesc* keyDesc) {
         Y_VERIFY(range.Point);
-        Y_VERIFY(!keyDesc->Partitions.empty());
+        Y_VERIFY(!keyDesc->GetPartitions().empty());
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            keyDesc->Partitions.begin(), keyDesc->Partitions.end(), true,
+            keyDesc->GetPartitions().begin(), keyDesc->GetPartitions().end(), true,
             [&](const TKeyDesc::TPartitionInfo& partition, bool) {
                 const int cmp = CompareBorders<true, false>(
                     partition.Range->EndKeyPrefix.GetCells(), range.From,
@@ -94,7 +94,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             }
         );
 
-        Y_VERIFY(it != keyDesc->Partitions.end());
+        Y_VERIFY(it != keyDesc->GetPartitions().end());
         return it->ShardId;
     }
 
@@ -216,7 +216,7 @@ class TImportDataRPC: public TRpcRequestActor<TImportDataRPC, TEvImportDataReque
             return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 
-        if (KeyDesc->Partitions.empty()) {
+        if (KeyDesc->GetPartitions().empty()) {
             return Reply(StatusIds::SCHEME_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
         }
 

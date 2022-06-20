@@ -382,9 +382,10 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(KeyRange->Partitions));
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: "
+            << getShardsString(KeyRange->GetPartitions()));
 
-        if (KeyRange->Partitions.size() > 0) {
+        if (KeyRange->GetPartitions().size() > 0) {
             CurrentShardIdx = 0;
             MakeShardRequest(CurrentShardIdx, ctx);
         } else {
@@ -393,7 +394,7 @@ private:
     }
 
     void MakeShardRequest(ui32 idx, const NActors::TActorContext& ctx) {
-        ui64 shardId = KeyRange->Partitions[idx].ShardId;
+        ui64 shardId = KeyRange->GetPartitions()[idx].ShardId;
 
         THolder<TEvDataShard::TEvS3ListingRequest> ev(new TEvDataShard::TEvS3ListingRequest());
         ev->Record.SetTableId(KeyRange->TableId.PathId.LocalPathId);
@@ -472,7 +473,7 @@ private:
             ContentsRows.emplace_back(shardResponse.GetContentsRows(i));
         }
 
-        if (CurrentShardIdx+1 < KeyRange->Partitions.size() &&
+        if (CurrentShardIdx+1 < KeyRange->GetPartitions().size() &&
             MaxKeys > ContentsRows.size() + CommonPrefixesRows.size() &&
             shardResponse.GetMoreRows())
         {

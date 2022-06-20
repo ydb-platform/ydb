@@ -440,7 +440,7 @@ namespace NSchemeShardUT_Private {
             TVector<NScheme::TTypeId> KeyColumnTypes;
             TVector<TBorder> Partitioning;
 
-            void ResolveKey(const TTableRange& range, TVector<TKeyDesc::TPartitionInfo>& partitions) const;
+            std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> ResolveKey(const TTableRange& range) const;
         };
 
         void FillTablePartitioningInfo();
@@ -450,7 +450,7 @@ namespace NSchemeShardUT_Private {
                 FillTablePartitioningInfo();
             }
 
-            TablePartitioningInfo.ResolveKey(dbKey.Range, dbKey.Partitions);
+            dbKey.Partitioning = TablePartitioningInfo.ResolveKey(dbKey.Range);
             dbKey.Status = TKeyDesc::EStatus::Ok;
         }
 

@@ -455,7 +455,7 @@ public:
             for (auto& x : ProxyCallables) {
                 auto name = x.second.Node->GetType()->GetNameStr();
                 if (name == Strings.EraseRow || name == Strings.UpdateRow) {
-                    proxyShards[x.first] = &x.second.Key->Partitions;
+                    proxyShards[x.first] = &x.second.Key->GetPartitions();
                 }
             }
 
@@ -476,7 +476,7 @@ public:
         if (readsets.size() > limits.RSCount) {
             THashMap<ui64, TTableId> tableMap;
             for (auto& key : DbKeys) {
-                for (auto& partition : key->Partitions) {
+                for (auto& partition : key->GetPartitions()) {
                     tableMap[partition.ShardId] = key->TableId;
                 }
             }
@@ -1498,7 +1498,7 @@ private:
     };
 
     static void AddShards(TSet<ui64>& set, const TKeyDesc& key) {
-        for (auto& partition : key.Partitions) {
+        for (auto& partition : key.GetPartitions()) {
             Y_VERIFY(partition.ShardId);
             set.insert(partition.ShardId);
         }
@@ -1576,7 +1576,7 @@ private:
                 auto uniqueName = ToString(callable->GetUniqueId());
                 shardsForReadBuilder.Add(uniqueName, ctx.ShardsForRead);
 
-                for (auto& partition : ctx.Key->Partitions) {
+                for (auto& partition : ctx.Key->GetPartitions()) {
                     auto shardForRead = partition.ShardId;
                     if (shardForRead != shard) {
                         readsets.insert(std::make_pair(shardForRead, shard));
@@ -1589,7 +1589,7 @@ private:
             auto key = ctx.Key;
             Y_VERIFY(key);
 
-            for (auto& partition : key->Partitions) {
+            for (auto& partition : key->GetPartitions()) {
                 if (partition.ShardId == shard) {
                     return true;
                 }
@@ -2039,7 +2039,7 @@ private:
                 Y_VERIFY(key);
 
                 TListLiteralBuilder listOfShards(Env, Ui64Type);
-                for (auto& partition : key->Partitions) {
+                for (auto& partition : key->GetPartitions()) {
                     listOfShards.Add(TRuntimeNode(BuildDataLiteral(NUdf::TUnboxedValuePod(partition.ShardId),
                         NUdf::TDataType<ui64>::Id, Env), true));
                 }

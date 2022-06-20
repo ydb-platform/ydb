@@ -95,7 +95,7 @@ public:
         TSet<ui64> shardIds;
         for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
             if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->Partitions) {
+                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                     shardIds.insert(partition.ShardId);
                 }
             }

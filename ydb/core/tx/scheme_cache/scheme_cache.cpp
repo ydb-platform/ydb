@@ -84,7 +84,7 @@ TString TSchemeCacheRequest::TEntry::ToString() const {
         << " SyncVersion: " << (SyncVersion ? "true" : "false")
         << " Status: " << Status
         << " Kind: " << Kind
-        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->Partitions.size()) : "<moved>")
+        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->GetPartitions().size()) : "<moved>")
         << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>")
     << " }";
 }
@@ -97,7 +97,7 @@ TString TSchemeCacheRequest::TEntry::ToString(const NScheme::TTypeRegistry& type
         << " SyncVersion: " << (SyncVersion ? "true" : "false")
         << " Status: " << Status
         << " Kind: " << Kind
-        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->Partitions.size()) : "<moved>")
+        << " PartitionsCount: " << (KeyDescription ? ::ToString(KeyDescription->GetPartitions().size()) : "<moved>")
         << " DomainInfo " << (DomainInfo ? DomainInfo->ToString() : "<null>");
 
     if (KeyDescription) {

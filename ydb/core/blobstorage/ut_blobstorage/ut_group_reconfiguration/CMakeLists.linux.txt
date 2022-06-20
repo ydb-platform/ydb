@@ -14,7 +14,8 @@ target_include_directories(ut_group_reconfiguration PRIVATE
 target_link_libraries(ut_group_reconfiguration PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   blobstorage-ut_blobstorage-lib

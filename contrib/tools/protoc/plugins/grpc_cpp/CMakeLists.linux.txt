@@ -18,7 +18,8 @@ target_include_directories(grpc_cpp PRIVATE
 target_link_libraries(grpc_cpp PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   src-compiler-grpc_plugin_support
 )

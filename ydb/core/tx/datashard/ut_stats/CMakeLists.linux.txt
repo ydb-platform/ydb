@@ -17,7 +17,8 @@ target_include_directories(ydb-core-tx-datashard-ut_stats PRIVATE
 target_link_libraries(ydb-core-tx-datashard-ut_stats PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   core-tx-datashard

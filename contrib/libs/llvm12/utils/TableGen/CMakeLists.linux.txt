@@ -13,7 +13,8 @@ target_include_directories(llvm-tblgen PRIVATE
 )
 target_link_libraries(llvm-tblgen PUBLIC
   contrib-libs-cxxsupp
-  library-cpp-lfalloc
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
   contrib-libs-llvm12
   llvm12-lib-Demangle
   llvm12-lib-Support

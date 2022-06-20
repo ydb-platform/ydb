@@ -18,7 +18,8 @@ target_include_directories(ydb-services-persqueue_v1-ut-new_schemecache_ut PRIVA
 target_link_libraries(ydb-services-persqueue_v1-ut-new_schemecache_ut PUBLIC
   contrib-libs-cxxsupp
   yutil
-  library-cpp-lfalloc
+  cpp-malloc-tcmalloc
+  libs-tcmalloc-no_percpu_cache
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   ydb-services-persqueue_v1

@@ -83,8 +83,9 @@ TValidationQuery CreateRelatedBindingsValidator(const TString& scope,
 TValidationQuery CreateConnectionExistsValidator(const TString& scope,
                                                  const TString& connectionId,
                                                  const TString& error,
-                                                TPermissions permissions,
+                                                 TPermissions permissions,
                                                  const TString& user,
+                                                 YandexQuery::Acl::Visibility bindingVisibility,
                                                  const TString& tablePathPrefix);
 
 TValidationQuery CreateTtlValidator(const TString& tableName,

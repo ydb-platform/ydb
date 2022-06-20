@@ -104,6 +104,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
         "Connection " + connectionId + " does not exist or permission denied. Please check the id connection or your access rights",
         permissions,
         user,
+        content.acl().visibility(),
         YdbConnection->TablePathPrefix);
 
     TVector<TValidationQuery> validators;
@@ -461,7 +462,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
         TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "ModifyBinding(write)");
         writeQueryBuilder.AddString("scope", scope);
         writeQueryBuilder.AddString("binding_id", bindingId);
-        writeQueryBuilder.AddInt64("visibility", YandexQuery::Acl::SCOPE); // TODO: fix me
+        writeQueryBuilder.AddInt64("visibility", binding.content().acl().visibility());
         writeQueryBuilder.AddString("name", binding.content().name());
         writeQueryBuilder.AddInt64("revision", meta.revision());
         writeQueryBuilder.AddString("internal", bindingInternal.SerializeAsString());

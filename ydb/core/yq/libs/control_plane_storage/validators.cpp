@@ -295,6 +295,7 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
                                                  const TString& error,
                                                  TPermissions permissions,
                                                  const TString& user,
+                                                 YandexQuery::Acl::Visibility bindingVisibility,
                                                  const TString& tablePathPrefix) {
     TSqlQueryBuilder queryBuilder(tablePathPrefix);
     queryBuilder.AddString("scope", scope);
@@ -304,7 +305,7 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
         "FROM `" CONNECTIONS_TABLE_NAME "` WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" CONNECTION_ID_COLUMN_NAME "` = $connection_id;"
     );
 
-    auto validator = [error, user, permissions](NYdb::NTable::TDataQueryResult result) {
+    auto validator = [error, user, permissions, bindingVisibility](NYdb::NTable::TDataQueryResult result) {
         const auto& resultSets = result.GetResultSets();
         if (resultSets.size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets.size() << ". Please contact internal support";
@@ -317,6 +318,10 @@ TValidationQuery CreateConnectionExistsValidator(const TString& scope,
 
         YandexQuery::Acl::Visibility connectionVisibility = static_cast<YandexQuery::Acl::Visibility>(parser.ColumnParser(VISIBILITY_COLUMN_NAME).GetOptionalInt64().GetOrElse(YandexQuery::Acl::VISIBILITY_UNSPECIFIED));
         TString connectionUser = parser.ColumnParser(USER_COLUMN_NAME).GetOptionalString().GetOrElse("");
+
+        if (connectionVisibility != bindingVisibility && connectionVisibility != YandexQuery::Acl::SCOPE) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Binding with SCOPE visibility cannot refer to connection with PRIVATE visibility";
+        }
 
         if (!HasManageAccess(permissions, connectionVisibility, connectionUser, user)) {
             ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << error;

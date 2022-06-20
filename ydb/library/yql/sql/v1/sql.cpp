@@ -2948,7 +2948,7 @@ TNodePtr TSqlTranslation::StructLiteral(const TRule_struct_literal& node) {
 
 bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& hints) {
     // table_hint:
-    //      an_id_hint (EQUALS type_name_tag)?
+    //      an_id_hint (EQUALS (type_name_tag | LPAREN type_name_tag (COMMA type_name_tag)* COMMA? RPAREN))?
     //    | (SCHEMA | COLUMNS) type_name_or_bind
     //    | SCHEMA LPAREN (struct_arg_positional (COMMA struct_arg_positional)*)? COMMA? RPAREN
     switch (rule.Alt_case()) {
@@ -2962,7 +2962,21 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
         }
         TVector<TNodePtr> hint_val;
         if (alt.HasBlock2()) {
-            hint_val.push_back(TypeNameTag(alt.GetBlock2().GetRule_type_name_tag2()));
+            auto& tags = alt.GetBlock2().GetBlock2();
+            switch (tags.Alt_case()) {
+                case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt1:
+                    hint_val.push_back(TypeNameTag(tags.GetAlt1().GetRule_type_name_tag1()));
+                    break;
+                case TRule_table_hint_TAlt1_TBlock2_TBlock2::kAlt2: {
+                    hint_val.push_back(TypeNameTag(tags.GetAlt2().GetRule_type_name_tag2()));
+                    for (auto& tag : tags.GetAlt2().GetBlock3()) {
+                        hint_val.push_back(TypeNameTag(tag.GetRule_type_name_tag2()));
+                    }
+                    break;
+                }
+                default:
+                    Y_FAIL("You should change implementation according to grammar changes");
+            }
         }
         hints[id] = hint_val;
         break;

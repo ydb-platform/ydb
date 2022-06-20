@@ -1241,7 +1241,7 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon, code: 4518\n");
     }
 
     Y_UNIT_TEST(WarnUnionAllWithDiscardIntoResultWithExplicitLegacyMode) {
@@ -1254,7 +1254,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
 
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:4:21: Warning: INTO RESULT will be ignored here. Please use INTO RESULT after last subquery in UNION ALL if you want label entire UNION ALL result, code: 4522\n"
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon, code: 4518\n"
+                                          "<main>:4:21: Warning: INTO RESULT will be ignored here. Please use INTO RESULT after last subquery in UNION ALL if you want label entire UNION ALL result, code: 4522\n"
                                           "<main>:6:1: Warning: DISCARD will be ignored here. Please use DISCARD before first subquery in UNION ALL if you want to discard entire UNION ALL result, code: 4522\n");
     }
 
@@ -1269,7 +1270,8 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
                    ");";
         auto res = SqlToYql(req);
         UNIT_ASSERT(res.Root);
-        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:7:3: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:2:8: Warning: Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon, code: 4518\n"
+                                          "<main>:7:3: Warning: ORDER BY without LIMIT in subquery will be ignored, code: 4504\n");
     }
 
     Y_UNIT_TEST(ReduceUsingUdfWithShortcutsWorks) {

@@ -248,6 +248,7 @@ namespace NSQLTranslationV1 {
         TMaybe<bool> AnsiInForEmptyOrNullableItemsCollections;
         TMaybe<bool> AnsiRankForNullableKeys = true;
         TMaybe<bool> AnsiOrderByLimitInUnionAll = true;
+        bool EnforceAnsiOrderByLimitInUnionAll = false;
         const bool AnsiQuotedIdentifiers;
         bool AnsiOptionalAs = true;
         bool OrderedColumns = false;

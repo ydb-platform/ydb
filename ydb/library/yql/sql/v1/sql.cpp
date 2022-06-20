@@ -9629,8 +9629,10 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "ansiorderbylimitinunionall") {
             Ctx.AnsiOrderByLimitInUnionAll = true;
             Ctx.IncrementMonCounter("sql_pragma", "AnsiOrderByLimitInUnionAll");
-        } else if (normalizedPragma == "disableansiorderbylimitinunionall") {
+        } else if (!Ctx.EnforceAnsiOrderByLimitInUnionAll && normalizedPragma == "disableansiorderbylimitinunionall") {
             Ctx.AnsiOrderByLimitInUnionAll = false;
+            Ctx.Warning(Ctx.Pos(), TIssuesIds::YQL_DEPRECATED_PRAGMA)
+                << "Use of deprecated DisableAnsiOrderByLimitInUnionAll pragma. It will be dropped soon";
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiOrderByLimitInUnionAll");
         } else if (normalizedPragma == "ansioptionalas") {
             Ctx.AnsiOptionalAs = true;

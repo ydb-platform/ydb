@@ -21,14 +21,19 @@ public:
 
     IActor* CreateUploader(const TActorId& dataShard, ui64 txId) const override;
 
-    IBuffer* CreateBuffer(ui64 rowsLimit, ui64 bytesLimit) const override {
+    IBuffer* CreateBuffer() const override {
         using namespace NBackupRestoreTraits;
+
+        const auto& scanSettings = Task.GetScanSettings();
+        const ui64 maxRows = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
+        const ui64 maxBytes = scanSettings.GetBytesBatchSize();
+        const ui64 minBytes = Task.GetS3Settings().GetLimits().GetMinWriteBatchSize();
 
         switch (CodecFromTask(Task)) {
         case ECompressionCodec::None:
-            return CreateS3ExportBufferRaw(Columns, rowsLimit, bytesLimit);
+            return CreateS3ExportBufferRaw(Columns, maxRows, maxBytes);
         case ECompressionCodec::Zstd:
-            return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, rowsLimit, bytesLimit);
+            return CreateS3ExportBufferZstd(Task.GetCompression().GetLevel(), Columns, maxRows, maxBytes, minBytes);
         case ECompressionCodec::Invalid:
             Y_FAIL("unreachable");
         }

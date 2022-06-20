@@ -80,3 +80,4 @@ service TopicService {
 
     // Drop topic command.
     rpc DropTopic(DropTopicRequest) returns (DropTopicResponse);
+}

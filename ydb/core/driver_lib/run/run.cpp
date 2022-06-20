@@ -98,6 +98,7 @@
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
+#include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/local_discovery/grpc_service.h>
@@ -686,6 +687,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasPQv1) {
             server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
+            server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         }
 
         if (hasPQCD) {

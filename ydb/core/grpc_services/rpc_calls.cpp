@@ -25,6 +25,18 @@ void FillYdbStatus(Ydb::PersQueue::V1::MigrationStreamingReadServerMessage& resp
 }
 
 template <>
+void FillYdbStatus(Ydb::Topic::StreamWriteMessage::FromServer& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
+    resp.set_status(status);
+    NYql::IssuesToMessage(issues, resp.mutable_issues());
+}
+
+template <>
+void FillYdbStatus(Ydb::Topic::StreamReadMessage::FromServer& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
+    resp.set_status(status);
+    NYql::IssuesToMessage(issues, resp.mutable_issues());
+}
+
+template <>
 void FillYdbStatus(Draft::Dummy::PingResponse& resp, const NYql::TIssues& issues, Ydb::StatusIds::StatusCode status) {
     Y_UNUSED(resp);
     Y_UNUSED(issues);

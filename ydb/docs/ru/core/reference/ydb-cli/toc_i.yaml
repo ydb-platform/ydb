@@ -25,7 +25,7 @@ items:
     items:
     - name: Выполнение запроса к данным
       href: commands/query.md
-    - name: План исполнения запроса
+    - name: Получение плана исполнения запроса и AST
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md

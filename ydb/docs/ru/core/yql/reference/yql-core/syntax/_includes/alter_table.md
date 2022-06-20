@@ -25,6 +25,7 @@ ALTER TABLE episodes DROP column is_deleted;
 ```
 
 {% if feature_secondary_index %}
+
 ## Добавление или удаление вторичного индекса {#secondary-index}
 
 ```ADD INDEX``` — добавляет индекс с указанным именем и типом для заданного набора колонок. Приведенный ниже код добавит глобальный индекс с именем ```title_index``` для колонки ```title```.
@@ -42,6 +43,9 @@ ALTER TABLE `series` ADD INDEX `title_index` GLOBAL ON (`title`);
 ```sql
 ALTER TABLE `series` DROP INDEX `title_index`;
 ```
+
+Также добавить или удалить вторичный индекс можно с помощью команды [table index](https://ydb.tech/ru/docs/reference/ydb-cli/commands/secondary_index) {{ ydb-short-name }} CLI.
+
 {% endif %}
 
 {% if feature_changefeed %}

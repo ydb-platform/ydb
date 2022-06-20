@@ -8,7 +8,7 @@ The `table index` command lets you create and delete [secondary indexes](../../.
 
 {% include [conn_options_ref.md](conn_options_ref.md) %}
 
-For information about the purpose and use of secondary indexes for app development, see [Secondary indexes](../../../../best_practices/schema_design.md) in the "Recommendations" section.
+For information about the purpose and use of secondary indexes for app development, see [Secondary indexes](../../../../best_practices/secondary_indexes.md) in the "Recommendations" section.
 
 ## Creating a secondary index {#add}
 

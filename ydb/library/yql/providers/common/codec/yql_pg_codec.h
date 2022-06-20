@@ -15,6 +15,12 @@ namespace NCommon {
 TString PgValueToString(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
 NUdf::TUnboxedValue PgValueFromString(const TStringBuf text, ui32 pgTypeId);
 
+TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
+NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId);
+
+TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
+NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgTypeId);
+
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions);
 

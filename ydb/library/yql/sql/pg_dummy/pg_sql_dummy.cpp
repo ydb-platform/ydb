@@ -32,6 +32,30 @@ NUdf::TUnboxedValue PgValueFromString(const TStringBuf text, ui32 pgTypeId) {
     throw yexception() << "PgValueFromString: PG types are not supported";
 }
 
+TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
+    Y_UNUSED(value);
+    Y_UNUSED(pgTypeId);
+    throw yexception() << "PgValueToNativeText: PG types are not supported";
+}
+
+NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) {
+    Y_UNUSED(text);
+    Y_UNUSED(pgTypeId);
+    throw yexception() << "PgValueFromNativeText: PG types are not supported";
+}
+
+TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
+    Y_UNUSED(value);
+    Y_UNUSED(pgTypeId);
+    throw yexception() << "PgValueToNativeBinary: PG types are not supported";
+}
+
+NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgTypeId) {
+    Y_UNUSED(binary);
+    Y_UNUSED(pgTypeId);
+    throw yexception() << "PgValueFromNativeBinary: PG types are not supported";
+}
+
 void WriteYsonValuePg(TYsonResultWriter& writer, const NUdf::TUnboxedValuePod& value, NKikimr::NMiniKQL::TPgType* type,
     const TVector<ui32>* structPositions) {
     Y_UNUSED(writer);

@@ -1069,6 +1069,8 @@ public:
             return "H";
         case TTabletTypes::DataShard:
             return "DS";
+        case TTabletTypes::ColumnShard:
+            return "CS";
         case TTabletTypes::KeyValue:
             return "KV";
         case TTabletTypes::PersQueue:

@@ -379,24 +379,9 @@ public:
             if (tableInfo->Description.HasTtlSettings()) {
                 create->MutableTtlSettings()->CopyFrom(tableInfo->Description.GetTtlSettings());
             }
-#if 0
-            if (tableInfo->Description.HasTtlSettingsPresetId()) {
-                const ui32 presetId = tableInfo->Description.GetTtlSettingsPresetId();
-                Y_VERIFY(storeInfo->TtlSettingsPresets.contains(presetId),
-                    "Failed to find ttl settings preset %" PRIu32 " in an olap store", presetId);
-                auto& preset = storeInfo->TtlSettingsPresets.at(presetId);
-                size_t presetIndex = preset.ProtoIndex;
-                create->MutableTtlSettingsPreset()->CopyFrom(storeInfo->Description.GetTtlSettingsPresets(presetIndex));
-            }
-#endif
             if (tableInfo->Description.HasSchemaPresetVersionAdj()) {
                 create->SetSchemaPresetVersionAdj(tableInfo->Description.GetSchemaPresetVersionAdj());
             }
-#if 0
-            if (tableInfo->Description.HasTtlSettingsPresetVersionAdj()) {
-                create->SetTtlSettingsPresetVersionAdj(tableInfo->Description.GetTtlSettingsPresetVersionAdj());
-            }
-#endif
 
             Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
         }

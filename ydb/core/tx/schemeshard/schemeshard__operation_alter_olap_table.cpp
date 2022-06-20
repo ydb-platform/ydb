@@ -36,14 +36,6 @@ TOlapTableInfo::TPtr ParseParams(
     if (alterData->Description.HasTtlSettings()) {
         currentTtlVersion = alterData->Description.GetTtlSettings().GetVersion();
     }
-#if 0
-    else if (alterData->Description.HasTtlSettingsPresetId()) {
-        auto& preset = storeInfo->TtlSettingsPresets.at(alterData->Description.GetTtlSettingsPresetId());
-        currentTtlVersion = preset.Version + alterData->Description.GetTtlSettingsPresetVersionAdj();
-    } else {
-        currentTtlVersion = alterData->Description.GetTtlSettingsPresetVersionAdj();
-    }
-#endif
 
     if (alter.HasAlterTtlSettings()) {
         const NKikimrSchemeOp::TColumnTableSchema* tableSchema = nullptr;
@@ -81,36 +73,11 @@ TOlapTableInfo::TPtr ParseParams(
 
         *alterData->Description.MutableTtlSettings() = alter.GetAlterTtlSettings();
         alterData->Description.MutableTtlSettings()->SetVersion(currentTtlVersion + 1);
-#if 0
-        alterData->Description.ClearTtlSettingsPresetId();
-        alterData->Description.ClearTtlSettingsPresetName();
-        alterData->Description.ClearTtlSettingsPresetVersionAdj();
-#endif
     }
     if (alter.HasRESERVED_AlterTtlSettingsPresetName()) {
-#if 1
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = "TTL presets are not supported";
         return nullptr;
-#else
-        auto it = storeInfo->TtlSettingsPresetByName.find(alter.GetAlterTtlSettingsPresetName());
-        if (it == storeInfo->TtlSettingsPresetByName.end()) {
-            status = NKikimrScheme::StatusInvalidParameter;
-            errStr = TStringBuilder()
-                << "Cannot find ttl settings preset '" << alter.GetAlterTtlSettingsPresetName() << "'";
-            return nullptr;
-        }
-        alterData->Description.ClearTtlSettings();
-        alterData->Description.SetTtlSettingsPresetId(it->second);
-        alterData->Description.SetTtlSettingsPresetName(alter.GetAlterTtlSettingsPresetName());
-        auto& preset = storeInfo->TtlSettingsPresets.at(it->second);
-        if (preset.Version > currentTtlVersion) {
-            alterData->Description.ClearTtlSettingsPresetVersionAdj();
-        } else {
-            // New version must be currentTtlVersion + 1 == preset.Version + adj
-            alterData->Description.SetTtlSettingsPresetVersionAdj(currentTtlVersion - preset.Version + 1);
-        }
-#endif
     }
 
     tableInfo->AlterData = alterData;
@@ -188,24 +155,9 @@ public:
             if (alterInfo->Description.HasTtlSettings()) {
                 *alter->MutableTtlSettings() = alterInfo->Description.GetTtlSettings();
             }
-#if 0
-            if (alterInfo->Description.HasTtlSettingsPresetId()) {
-                const ui32 presetId = alterInfo->Description.GetTtlSettingsPresetId();
-                Y_VERIFY(storeInfo->TtlSettingsPresets.contains(presetId),
-                    "Failed to find ttl settings preset %" PRIu32 " in an olap store", presetId);
-                auto& preset = storeInfo->TtlSettingsPresets.at(presetId);
-                size_t presetIndex = preset.ProtoIndex;
-                *alter->MutableTtlSettingsPreset() = storeInfo->Description.GetTtlSettingsPresets(presetIndex);
-            }
-#endif
             if (alterInfo->Description.HasSchemaPresetVersionAdj()) {
                 alter->SetSchemaPresetVersionAdj(alterInfo->Description.GetSchemaPresetVersionAdj());
             }
-#if 0
-            if (alterInfo->Description.HasTtlSettingsPresetVersionAdj()) {
-                alter->SetTtlSettingsPresetVersionAdj(alterInfo->Description.GetTtlSettingsPresetVersionAdj());
-            }
-#endif
 
             Y_VERIFY(tx.SerializeToString(&columnShardTxBody));
         }

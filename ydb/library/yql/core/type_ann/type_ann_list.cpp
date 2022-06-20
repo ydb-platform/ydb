@@ -591,12 +591,8 @@ namespace {
         const TTypeAnnotationNode& finishType, TStringBuf finishName, TExprNode::TPtr& output, TContext& ctx)
     {
         auto defaultValue = input->Child(defaultValueIndex);
-        if (!defaultValue->IsCallable({"Null", "EmptyList"})) {
+        if (!defaultValue->IsCallable("Null")) {
             if (defaultValue->IsLambda()) {
-                if (!EnsureMinArgsCount(defaultValue->Head(), 0, ctx.Expr)) {
-                    return IGraphTransformer::TStatus::Error;
-                }
-
                 if (!EnsureMaxArgsCount(defaultValue->Head(), 1, ctx.Expr)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -616,12 +612,15 @@ namespace {
             }
 
             auto finishItemType = RemoveOptionalType(&finishType);
-            if (finishItemType->GetKind() != ETypeAnnotationKind::Null && finishItemType->GetKind() != ETypeAnnotationKind::EmptyList
-                && !IsSameAnnotation(*finishItemType, *defaultValue->GetTypeAnn())) {
-                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(defaultValue->Pos()),
-                    TStringBuilder() << "Mismatch of default value type and " << finishName
-                                     << " type: " << *defaultValue->GetTypeAnn() << " != " << finishType));
-                return IGraphTransformer::TStatus::Error;
+            if (finishItemType->GetKind() != ETypeAnnotationKind::Null) {
+                auto arg = ctx.Expr.NewArgument(defaultValue->Pos(), "arg");
+                auto status = TrySilentConvertTo(arg, *defaultValue->GetTypeAnn(), finishType, ctx.Expr);
+                if (status == IGraphTransformer::TStatus::Error) {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(defaultValue->Pos()),
+                        TStringBuilder() << "Uncompatible types of default value and " << finishName
+                                         << " : " << *defaultValue->GetTypeAnn() << " != " << finishType));
+                    return status;
+                }
             }
         }
 

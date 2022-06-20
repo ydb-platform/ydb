@@ -5036,7 +5036,7 @@ bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertT
         if (unpacked->GetKind() != ETypeAnnotationKind::Data) {
             ctx.AddError(TIssue(ctx.GetPosition(pos),
                 "Nested optional type is not compatible to PG"));
-            return IGraphTransformer::TStatus::Error;
+            return false;
         }
 
         auto slot = unpacked->Cast<TDataExprType>()->GetSlot();

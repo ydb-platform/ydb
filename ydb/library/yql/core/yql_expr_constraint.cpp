@@ -1133,8 +1133,6 @@ private:
     }
 
     TStatus MemberWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        TVector<TStringBuf> unique;
-
         const auto& memberName = input->Tail().Content();
         const auto& structNode = input->Head();
         if (const auto structPassthrough = structNode.GetConstraint<TPassthroughConstraintNode>()) {
@@ -1142,16 +1140,18 @@ private:
                 input->AddConstraint(p);
             }
         }
-        if (!TCoNothing::Match(&structNode)) {
+        if (const auto emptyConstraint = structNode.GetConstraint<TEmptyConstraintNode>()) {
+            input->AddConstraint(emptyConstraint);
+        } else {
+            TVector<TStringBuf> unique;
             if (auto structUnique = structNode.GetConstraint<TUniqueConstraintNode>()) {
                 if (structUnique->GetColumns().has(memberName)) {
                     unique.push_back(memberName);
                 }
             }
-        }
-
-        if (!unique.empty()) {
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
+            if (!unique.empty()) {
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
+            }
         }
 
         if (structNode.IsCallable("AsStruct")) {
@@ -1320,11 +1320,11 @@ private:
 
         TVector<TStringBuf> unique;
         TNodeSet srcStructs;
-        if (!TCoNothing::Match(&addStructNode)) {
-            if (auto structUnique = addStructNode.GetConstraint<TUniqueConstraintNode>()) {
-                srcStructs.insert(&addStructNode);
-                unique.insert(unique.end(), structUnique->GetColumns().begin(), structUnique->GetColumns().end());
-            }
+        if (const auto emptyConstraint = addStructNode.GetConstraint<TEmptyConstraintNode>()) {
+            input->AddConstraint(emptyConstraint);
+        } else if (const auto structUnique = addStructNode.GetConstraint<TUniqueConstraintNode>()) {
+            srcStructs.insert(&addStructNode);
+            unique.insert(unique.end(), structUnique->GetColumns().begin(), structUnique->GetColumns().end());
         }
 
         if (TCoMember::Match(valueNode)) {
@@ -1901,8 +1901,6 @@ private:
     }
 
     TStatus NthWrap(const TExprNode::TPtr& input, TExprNode::TPtr& /*output*/, TExprContext& ctx) const {
-        TVector<TStringBuf> unique;
-
         const auto& memberName = input->Tail().Content();
         const auto& structNode = input->Head();
         if (const auto structPassthrough = structNode.GetConstraint<TPassthroughConstraintNode>()) {
@@ -1910,16 +1908,18 @@ private:
                 input->AddConstraint(p);
             }
         }
-        if (!TCoNothing::Match(&structNode)) {
+        if (const auto emptyConstraint = structNode.GetConstraint<TEmptyConstraintNode>()) {
+            input->AddConstraint(emptyConstraint);
+        } else {
+            TVector<TStringBuf> unique;
             if (auto structUnique = structNode.GetConstraint<TUniqueConstraintNode>()) {
                 if (structUnique->GetColumns().has(memberName)) {
                     unique.push_back(memberName);
                 }
             }
-        }
-
-        if (!unique.empty()) {
-            input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
+            if (!unique.empty()) {
+                input->AddConstraint(ctx.MakeConstraint<TUniqueConstraintNode>(std::move(unique)));
+            }
         }
 
         if (input->Child(0)->IsList()) {

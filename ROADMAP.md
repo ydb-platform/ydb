@@ -4,7 +4,7 @@
 1. Support for **Snapshot Readonly** transactions mode
 1. **Better resource management** for KQP Resource Manager (share information about nodes resources, avoid OOMs)
 1. Switch to **New Engine** for OLTP queries
-1. ✅ Support **`not null` for PK (private key) table columns**
+1. ✅ Support **`not null` for PK (primary key) table columns**
 1. **Aggregates and predicates push down to column-oriented tables**
 1. **Optimize data formats** for data transition between query phases
 1. **Index Rename/Rebuild**

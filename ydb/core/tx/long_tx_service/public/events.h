@@ -25,6 +25,11 @@ namespace NLongTxService {
             EvAttachColumnShardWritesResult,
             EvAcquireReadSnapshot,
             EvAcquireReadSnapshotResult,
+            EvRegisterLock,
+            EvUnregisterLock,
+            EvSubscribeLock,
+            EvSubscribeLockResult,
+            EvUnsubscribeLock,
             EvEnd,
         };
 
@@ -185,6 +190,62 @@ namespace NLongTxService {
                 if (issues) {
                     IssuesToMessage(issues, Record.MutableIssues());
                 }
+            }
+        };
+
+        struct TEvRegisterLock
+            : TEventLocal<TEvRegisterLock, EvRegisterLock>
+        {
+            const ui64 LockId;
+
+            explicit TEvRegisterLock(ui64 lockId)
+                : LockId(lockId)
+            { }
+        };
+
+        struct TEvUnregisterLock
+            : TEventLocal<TEvUnregisterLock, EvUnregisterLock>
+        {
+            const ui64 LockId;
+
+            explicit TEvUnregisterLock(ui64 lockId)
+                : LockId(lockId)
+            { }
+        };
+
+        struct TEvSubscribeLock
+            : TEventPB<TEvSubscribeLock, NKikimrLongTxService::TEvSubscribeLock, EvSubscribeLock>
+        {
+            TEvSubscribeLock() = default;
+
+            TEvSubscribeLock(ui64 lockId, ui32 lockNode) {
+                Record.SetLockId(lockId);
+                Record.SetLockNode(lockNode);
+            }
+        };
+
+        struct TEvSubscribeLockResult
+            : TEventPB<TEvSubscribeLockResult, NKikimrLongTxService::TEvSubscribeLockResult, EvSubscribeLockResult>
+        {
+            using EResult = NKikimrLongTxService::TEvSubscribeLockResult::EResult;
+
+            TEvSubscribeLockResult() = default;
+
+            TEvSubscribeLockResult(ui64 lockId, ui32 lockNode, EResult result) {
+                Record.SetLockId(lockId);
+                Record.SetLockNode(lockNode);
+                Record.SetResult(result);
+            }
+        };
+
+        struct TEvUnsubscribeLock
+            : TEventPB<TEvUnsubscribeLock, NKikimrLongTxService::TEvUnsubscribeLock, EvUnsubscribeLock>
+        {
+            TEvUnsubscribeLock() = default;
+
+            TEvUnsubscribeLock(ui64 lockId, ui32 lockNode) {
+                Record.SetLockId(lockId);
+                Record.SetLockNode(lockNode);
             }
         };
     };

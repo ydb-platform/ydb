@@ -1,6 +1,7 @@
 #include "long_tx_service.h"
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -170,7 +171,7 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         // Change txId to a non-existant node and try to commit
         {
             auto badTxId = txId;
-            badTxId.NodeId = 3;
+            badTxId.NodeId = runtime.GetNodeId(1) + 1;
             runtime.Send(
                 new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvCommitTx(badTxId)),
@@ -232,6 +233,130 @@ Y_UNIT_TEST_SUITE(LongTxService) {
             UNIT_ASSERT_VALUES_EQUAL(txId.NodeId, runtime.GetNodeId(0));
             UNIT_ASSERT_C(txId.Snapshot > TRowVersion::Min(), "Unexpected snapshot @ " << txId.Snapshot);
         }
+    }
+
+    Y_UNIT_TEST(LockSubscribe) {
+        TTenantTestRuntime runtime(MakeTenantTestConfig(true));
+        runtime.SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NLog::PRI_DEBUG);
+
+        TLockHandle handle(123, runtime.GetActorSystem(0));
+
+        auto node1 = runtime.GetNodeId(0);
+        auto sender1 = runtime.AllocateEdgeActor(0);
+        auto service1 = MakeLongTxServiceID(node1);
+        auto node2 = runtime.GetNodeId(1);
+        auto sender2 = runtime.AllocateEdgeActor(1);
+        auto service2 = MakeLongTxServiceID(node2);
+
+        {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvSubscribeLock(987, node1)),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender1);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 987u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+        }
+
+        {
+            runtime.Send(
+                new IEventHandle(service2, sender2,
+                    new TEvLongTxService::TEvSubscribeLock(987, node1)),
+                1, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 987u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(),node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+        }
+
+        {
+            runtime.Send(
+                new IEventHandle(service1, sender1,
+                    new TEvLongTxService::TEvSubscribeLock(123, node1)),
+                0, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender1);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED);
+        }
+
+        {
+            runtime.Send(
+                new IEventHandle(service2, sender2,
+                    new TEvLongTxService::TEvSubscribeLock(123, node1)),
+                1, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED);
+        }
+
+        {
+            // move lock handle out, so it unregisters itself
+            auto movedOut = std::move(handle);
+        }
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender1);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+        }
+
+        {
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+        }
+
+        // Block all cross-node TEvSubscribeLock messages and disconnect instead
+        size_t disconnectCount = 0;
+        auto observer = [&](auto& runtime, auto& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvLongTxService::TEvSubscribeLock::EventType: {
+                    ui32 node1 = ev->Sender.NodeId();
+                    ui32 node2 = ev->Recipient.NodeId();
+                    if (node1 != node2) {
+                        ++disconnectCount;
+                        auto proxy = runtime.GetInterconnectProxy(0, 1);
+                        runtime.Send(
+                            new IEventHandle(proxy, {}, new TEvInterconnect::TEvDisconnect()),
+                            0, true);
+                        // Advance time on each disconnect, so timeout happens faster
+                        runtime.AdvanceCurrentTime(TDuration::Seconds(5));
+                        return TTestBasicRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestBasicRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observer);
+
+        // Try to subscribe to the lock of a disconnecting node
+        // We should eventually get an unavailable result
+        {
+            runtime.Send(
+                new IEventHandle(service2, sender2,
+                    new TEvLongTxService::TEvSubscribeLock(234, node1)),
+                1, true);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            const auto* msg = ev->Get();
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 234u);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE);
+        }
+
+        // We expect multiple disconnects before unavailable result is returned
+        UNIT_ASSERT_GE(disconnectCount, 3);
     }
 
 } // Y_UNIT_TEST_SUITE(LongTxService)

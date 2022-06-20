@@ -23,5 +23,6 @@ target_link_libraries(tx-long_tx_service-public PUBLIC
 )
 target_sources(tx-long_tx_service-public PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/public/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/public/lock_handle.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/long_tx_service/public/types.cpp
 )

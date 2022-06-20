@@ -15,13 +15,69 @@ namespace NLongTxService {
 
 static constexpr size_t MaxAcquireSnapshotInFlight = 4;
 static constexpr TDuration AcquireSnapshotBatchDelay = TDuration::MicroSeconds(500);
+static constexpr TDuration RemoteLockTimeout = TDuration::Seconds(15);
+static constexpr bool InterconnectUndeliveryBroken = true;
 
 void TLongTxServiceActor::Bootstrap() {
     LogPrefix = TStringBuilder() << "TLongTxService [Node " << SelfId().NodeId() << "] ";
     Become(&TThis::StateWork);
 }
 
+void TLongTxServiceActor::TSessionSubscribeActor::Subscribe(const TActorId& sessionId) {
+    Send(sessionId, new TEvents::TEvSubscribe(), IEventHandle::FlagTrackDelivery);
+}
+
+void TLongTxServiceActor::TSessionSubscribeActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr&) {
+    // nothing
+}
+
+void TLongTxServiceActor::TSessionSubscribeActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+    if (Self) {
+        Self->OnSessionDisconnected(ev->Sender);
+    }
+}
+
+void TLongTxServiceActor::TSessionSubscribeActor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
+    if (Self) {
+        Self->OnSessionDisconnected(ev->Sender);
+    }
+}
+
+TLongTxServiceActor::TSessionState& TLongTxServiceActor::SubscribeToSession(const TActorId& sessionId) {
+    auto it = Sessions.find(sessionId);
+    if (it != Sessions.end()) {
+        return it->second;
+    }
+    if (!SessionSubscribeActor) {
+        SessionSubscribeActor = new TSessionSubscribeActor(this);
+        RegisterWithSameMailbox(SessionSubscribeActor);
+    }
+    SessionSubscribeActor->Subscribe(sessionId);
+    return Sessions[sessionId];
+}
+
+void TLongTxServiceActor::OnSessionDisconnected(const TActorId& sessionId) {
+    auto itSession = Sessions.find(sessionId);
+    if (itSession == Sessions.end()) {
+        return;
+    }
+    auto& session = itSession->second;
+    for (ui64 lockId : session.SubscribedLocks) {
+        auto itLock = Locks.find(lockId);
+        if (itLock != Locks.end()) {
+            itLock->second.RemoteSubscribers.erase(sessionId);
+        }
+    }
+    session.SubscribedLocks.clear();
+    Sessions.erase(itSession);
+}
+
 void TLongTxServiceActor::HandlePoison() {
+    if (SessionSubscribeActor) {
+        SessionSubscribeActor->PassAway();
+        SessionSubscribeActor->Self = nullptr;
+        SessionSubscribeActor = nullptr;
+    }
     PassAway();
 }
 
@@ -386,6 +442,289 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     }
 }
 
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev) {
+    auto* msg = ev->Get();
+    ui64 lockId = msg->LockId;
+    TXLOG_DEBUG("Received TEvRegisterLock for LockId# " << lockId);
+
+    Y_VERIFY(lockId, "Unexpected registration of a zero LockId");
+
+    auto& lock = Locks[lockId];
+    ++lock.RefCount;
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) {
+    auto* msg = ev->Get();
+    ui64 lockId = msg->LockId;
+    TXLOG_DEBUG("Received TEvUnregisterLock for LockId# " << lockId);
+
+    auto it = Locks.find(lockId);
+    if (it == Locks.end()) {
+        return;
+    }
+
+    auto& lock = it->second;
+    Y_VERIFY(lock.RefCount > 0);
+    if (0 == --lock.RefCount) {
+        for (auto& pr : lock.LocalSubscribers) {
+            Send(pr.first,
+                new TEvLongTxService::TEvSubscribeLockResult(
+                    lockId, SelfId().NodeId(),
+                    NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND),
+                0, pr.second);
+        }
+        for (auto& prSession : lock.RemoteSubscribers) {
+            TActorId sessionId = prSession.first;
+            for (const auto& pr : prSession.second) {
+                SendViaSession(
+                    sessionId, pr.first,
+                    new TEvLongTxService::TEvSubscribeLockResult(
+                        lockId, SelfId().NodeId(),
+                        NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND),
+                    0, pr.second);
+            }
+            auto itSession = Sessions.find(sessionId);
+            if (itSession != Sessions.end()) {
+                itSession->second.SubscribedLocks.erase(lockId);
+            }
+        }
+        Locks.erase(it);
+    }
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    ui64 lockId = record.GetLockId();
+    ui32 lockNode = record.GetLockNode();
+    TXLOG_DEBUG("Received TEvSubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
+
+    if (!lockId) {
+        SendViaSession(
+            ev->InterconnectSession, ev->Sender,
+            new TEvLongTxService::TEvSubscribeLockResult(
+                lockId, lockNode,
+                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+            0, ev->Cookie);
+        return;
+    }
+
+    // For remote locks we start a proxy subscription
+    if (lockNode != SelfId().NodeId()) {
+        auto& node = ConnectProxyNode(lockNode);
+        if (node.State == EProxyState::Disconnected) {
+            // Looks like there's no proxy for this node
+            Send(ev->Sender,
+                new TEvLongTxService::TEvSubscribeLockResult(
+                    lockId, lockNode,
+                    NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+                0, ev->Cookie);
+            return;
+        }
+
+        auto& lock = node.Locks[lockId];
+        if (lock.LockId == 0) {
+            lock.LockId = lockId;
+        }
+
+        if (lock.State == EProxyLockState::Subscribed) {
+            Send(ev->Sender,
+                new TEvLongTxService::TEvSubscribeLockResult(
+                    lockId, lockNode,
+                    NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED),
+                0, ev->Cookie);
+            lock.RepliedSubscribers[ev->Sender] = ev->Cookie;
+            return;
+        }
+
+        lock.NewSubscribers[ev->Sender] = ev->Cookie;
+        lock.RepliedSubscribers.erase(ev->Sender);
+
+        // Send subscription request immediately if node is already connected
+        if (node.State == EProxyState::Connected && lock.Cookie == 0) {
+            lock.Cookie = ++LastCookie;
+            node.CookieToLock[lock.Cookie] = lockId;
+            SendViaSession(
+                node.Session, MakeLongTxServiceID(lockNode),
+                new TEvLongTxService::TEvSubscribeLock(lockId, lockNode),
+                IEventHandle::FlagTrackDelivery, lock.Cookie);
+        }
+
+        // Otherwise we wait until the lock is subscribed
+        return;
+    }
+
+    auto it = Locks.find(lockId);
+    if (it == Locks.end()) {
+        SendViaSession(
+            ev->InterconnectSession, ev->Sender,
+            new TEvLongTxService::TEvSubscribeLockResult(
+                lockId, lockNode,
+                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND),
+            0, ev->Cookie);
+        return;
+    }
+
+    auto& lock = it->second;
+    if (ev->InterconnectSession) {
+        auto& session = SubscribeToSession(ev->InterconnectSession);
+        session.SubscribedLocks.insert(lockId);
+        lock.RemoteSubscribers[ev->InterconnectSession][ev->Sender] = ev->Cookie;
+    } else {
+        lock.LocalSubscribers[ev->Sender] = ev->Cookie;
+    }
+
+    SendViaSession(
+        ev->InterconnectSession, ev->Sender,
+        new TEvLongTxService::TEvSubscribeLockResult(
+            lockId, lockNode,
+            NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED),
+        0, ev->Cookie);
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLockResult::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    ui64 lockId = record.GetLockId();
+    ui32 lockNode = record.GetLockNode();
+    auto lockStatus = record.GetResult();
+    TXLOG_DEBUG("Received TEvSubscribeLockResult from " << ev->Sender
+            << " for LockId# " << lockId << " LockNode# " << lockNode
+            << " LockStatus# " << lockStatus);
+
+    auto* node = ProxyNodes.FindPtr(lockNode);
+    if (!node || node->State != EProxyState::Connected) {
+        // Ignore replies from unexpected nodes
+        return;
+    }
+
+    if (ev->InterconnectSession != node->Session) {
+        // Ignore replies that arrived via unexpected sessions
+        return;
+    }
+
+    auto itLock = node->Locks.find(lockId);
+    if (itLock == node->Locks.end()) {
+        // Ignore replies for locks without subscriptions
+        return;
+    }
+
+    auto& lock = itLock->second;
+
+    if (lock.Cookie != ev->Cookie) {
+        // Ignore replies that don't have a matching cookie
+        return;
+    }
+
+    // Make sure lock is removed from expire queue
+    if (node->LockExpireQueue.Has(&lock)) {
+        node->LockExpireQueue.Remove(&lock);
+    }
+
+    // Special handling for successful lock subscriptions
+    if (lockStatus == NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED) {
+        lock.State = EProxyLockState::Subscribed;
+        for (auto& pr : lock.NewSubscribers) {
+            Send(pr.first,
+                new TEvLongTxService::TEvSubscribeLockResult(lockId, lockNode, lockStatus),
+                0, pr.second);
+            lock.RepliedSubscribers[pr.first] = pr.second;
+        }
+        lock.NewSubscribers.clear();
+        return;
+    }
+
+    // Treat any other status as a confirmed error, reply to all and remove the lock
+
+    for (auto& pr : lock.RepliedSubscribers) {
+        Send(pr.first,
+            new TEvLongTxService::TEvSubscribeLockResult(lockId, lockNode, lockStatus),
+            0, pr.second);
+    }
+
+    for (auto& pr : lock.NewSubscribers) {
+        Send(pr.first,
+            new TEvLongTxService::TEvSubscribeLockResult(lockId, lockNode, lockStatus),
+            0, pr.second);
+    }
+
+    node->CookieToLock.erase(lock.Cookie);
+    node->Locks.erase(itLock);
+}
+
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    ui64 lockId = record.GetLockId();
+    ui32 lockNode = record.GetLockNode();
+    TXLOG_DEBUG("Received TEvUnsubscribeLock from " << ev->Sender << " for LockId# " << lockId << " LockNode# " << lockNode);
+
+    if (!lockId) {
+        return;
+    }
+
+    if (lockNode != SelfId().NodeId()) {
+        auto* node = ProxyNodes.FindPtr(lockNode);
+        if (!node) {
+            return;
+        }
+
+        auto itLock = node->Locks.find(lockId);
+        if (itLock == node->Locks.end()) {
+            return;
+        }
+
+        auto& lock = itLock->second;
+        lock.NewSubscribers.erase(ev->Sender);
+        lock.RepliedSubscribers.erase(ev->Sender);
+
+        if (lock.Empty()) {
+            // We don't need this lock anymore, unsubscribe if the node is already connected
+            if (node->State == EProxyState::Connected) {
+                SendViaSession(
+                    node->Session, MakeLongTxServiceID(lockNode),
+                    new TEvLongTxService::TEvUnsubscribeLock(lockId, lockNode));
+            }
+            if (node->LockExpireQueue.Has(&lock)) {
+                node->LockExpireQueue.Remove(&lock);
+            }
+            node->CookieToLock.erase(lock.Cookie);
+            node->Locks.erase(itLock);
+        }
+
+        return;
+    }
+
+    auto it = Locks.find(lockId);
+    if (it == Locks.end()) {
+        return;
+    }
+
+    auto& lock = it->second;
+    if (ev->InterconnectSession) {
+        auto itSubscribers = lock.RemoteSubscribers.find(ev->InterconnectSession);
+        if (itSubscribers != lock.RemoteSubscribers.end()) {
+            itSubscribers->second.erase(ev->Sender);
+            if (itSubscribers->second.empty()) {
+                lock.RemoteSubscribers.erase(itSubscribers);
+                auto itSession = Sessions.find(ev->InterconnectSession);
+                if (itSession != Sessions.end()) {
+                    itSession->second.SubscribedLocks.erase(lockId);
+                }
+            }
+        }
+    } else {
+        lock.LocalSubscribers.erase(ev->Sender);
+    }
+}
+
+void TLongTxServiceActor::SendViaSession(const TActorId& sessionId, const TActorId& recipient,
+        IEventBase* event, ui32 flags, ui64 cookie)
+{
+    auto ev = MakeHolder<IEventHandle>(recipient, SelfId(), event, flags, cookie);
+    if (sessionId) {
+        ev->Rewrite(TEvInterconnect::EvForward, sessionId);
+    }
+    TActivationContext::Send(ev.Release());
+}
+
 void TLongTxServiceActor::SendReply(ERequestType type, TActorId sender, ui64 cookie,
         Ydb::StatusIds::StatusCode status, TStringBuf details)
 {
@@ -414,15 +753,25 @@ void TLongTxServiceActor::SendReplyUnavailable(ERequestType type, TActorId sende
     SendReply(type, sender, cookie, Ydb::StatusIds::UNAVAILABLE, details);
 }
 
-void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THolder<IEventHandle> ev) {
+TLongTxServiceActor::TProxyNodeState& TLongTxServiceActor::ConnectProxyNode(ui32 nodeId) {
     auto& node = ProxyNodes[nodeId];
-    if (node.State == EProxyState::Unknown) {
-        auto proxy = TActivationContext::InterconnectProxy(nodeId);
-        if (!proxy) {
-            return SendReplyUnavailable(type, ev->Sender, ev->Cookie, "Cannot forward request: node unknown");
+    if (node.NodeId == 0) {
+        node.NodeId = nodeId;
+    }
+    if (node.State == EProxyState::Disconnected) {
+        // Node will be left in Disconnected state if there's no proxy
+        if (auto proxy = TActivationContext::InterconnectProxy(nodeId)) {
+            Send(proxy, new TEvInterconnect::TEvConnectNode(), IEventHandle::FlagTrackDelivery, nodeId);
+            node.State = EProxyState::Connecting;
         }
-        Send(proxy, new TEvInterconnect::TEvConnectNode(), IEventHandle::FlagTrackDelivery, nodeId);
-        node.State = EProxyState::Connecting;
+    }
+    return node;
+}
+
+void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THolder<IEventHandle> ev) {
+    auto& node = ConnectProxyNode(nodeId);
+    if (node.State == EProxyState::Disconnected) {
+        return SendReplyUnavailable(type, ev->Sender, ev->Cookie, "Cannot forward request: node unknown");
     }
 
     ui64 cookie = ++LastCookie;
@@ -460,38 +809,60 @@ void TLongTxServiceActor::SendProxyRequest(ui32 nodeId, ERequestType type, THold
 }
 
 void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-    auto it = ProxyNodes.find(ev->Get()->NodeId);
-    if (it == ProxyNodes.end()) {
+    const ui32 nodeId = ev->Get()->NodeId;
+    TXLOG_DEBUG("Received TEvNodeConnected for NodeId# " << nodeId << " from session " << ev->Sender);
+
+    auto itNode = ProxyNodes.find(nodeId);
+    if (itNode == ProxyNodes.end()) {
         return;
     }
-    auto& node = it->second;
+
+    auto& node = itNode->second;
     if (node.State != EProxyState::Connecting) {
         return;
     }
+
     node.State = EProxyState::Connected;
     node.Session = ev->Sender;
+
     auto pending = std::move(node.Pending);
-    Y_VERIFY_DEBUG(node.Pending.empty());
+    node.Pending.clear();
     for (auto& req : pending) {
         req.Ev->Rewrite(TEvInterconnect::EvForward, node.Session);
         TActivationContext::Send(req.Ev.Release());
         req.Request->State = ERequestState::Sent;
     }
+
+    // Send subscription requests for all remote locks
+    for (auto& pr : node.Locks) {
+        const ui64 lockId = pr.first;
+        auto& lock = pr.second;
+        lock.Cookie = ++LastCookie;
+        node.CookieToLock[lock.Cookie] = lock.Cookie;
+        SendViaSession(
+            node.Session, MakeLongTxServiceID(nodeId),
+            new TEvLongTxService::TEvSubscribeLock(lockId, nodeId),
+            IEventHandle::FlagTrackDelivery, lock.Cookie);
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
-    OnNodeDisconnected(ev->Get()->NodeId, ev->Sender);
+    const ui32 nodeId = ev->Get()->NodeId;
+    TXLOG_DEBUG("Received TEvNodeDisconnected for NodeId# " << nodeId << " from session " << ev->Sender);
+    OnNodeDisconnected(nodeId, ev->Sender);
 }
 
 void TLongTxServiceActor::OnNodeDisconnected(ui32 nodeId, const TActorId& sender) {
-    auto it = ProxyNodes.find(nodeId);
-    if (it == ProxyNodes.end()) {
+    auto itNode = ProxyNodes.find(nodeId);
+    if (itNode == ProxyNodes.end()) {
         return;
     }
-    auto& node = it->second;
+
+    auto& node = itNode->second;
     if (node.Session && node.Session != sender) {
         return;
     }
+
     if (node.ActiveRequests) {
         NYql::TIssues issuesPending;
         issuesPending.AddIssue("Cannot forward request: node disconnected");
@@ -511,26 +882,116 @@ void TLongTxServiceActor::OnNodeDisconnected(ui32 nodeId, const TActorId& sender
             }
         };
 
-        for (auto& pr : node.ActiveRequests) {
+        auto active = std::move(node.ActiveRequests);
+        node.ActiveRequests.clear();
+        for (auto& pr : active) {
             auto& req = pr.second;
             const auto status = isRetriable(req) ? Ydb::StatusIds::UNAVAILABLE : Ydb::StatusIds::UNDETERMINED;
             const auto& issues = req.State == ERequestState::Pending ? issuesPending : issuesSent;
             SendReplyIssues(req.Type, req.Sender, req.Cookie, status, issues);
         }
     }
-    ProxyNodes.erase(it);
+
+    if (node.Pending) {
+        auto pending = std::move(node.Pending);
+        node.Pending.clear();
+    }
+
+    TMonotonic now = TActivationContext::Monotonic();
+
+    for (auto& pr : node.Locks) {
+        auto& lock = pr.second;
+        // For each lock remember the first time it became unavailable
+        if (lock.State != EProxyLockState::Unavailable) {
+            lock.State = EProxyLockState::Unavailable;
+            lock.ExpiresAt = now + RemoteLockTimeout;
+            node.LockExpireQueue.Add(&lock);
+        }
+        // Forget subscribe requests that have been in-flight
+        if (lock.Cookie != 0) {
+            node.CookieToLock.erase(lock.Cookie);
+            lock.Cookie = 0;
+        }
+    }
+
+    // See which locks are unavailable for more than timeout
+    while (auto* lock = node.LockExpireQueue.Top()) {
+        if (now < lock->ExpiresAt) {
+            break;
+        }
+        RemoveUnavailableLock(node, *lock);
+    }
+
+    if (node.Locks.empty()) {
+        // Remove an unnecessary node structure
+        ProxyNodes.erase(itNode);
+        return;
+    }
+
+    node.State = EProxyState::Disconnected;
+    node.Session = {};
+
+    // TODO: faster retries with exponential backoff?
+    Schedule(TDuration::MilliSeconds(100), new TEvPrivate::TEvReconnect(nodeId));
+}
+
+void TLongTxServiceActor::Handle(TEvPrivate::TEvReconnect::TPtr& ev) {
+    ui32 nodeId = ev->Get()->NodeId;
+
+    auto& node = ConnectProxyNode(nodeId);
+    if (node.State == EProxyState::Disconnected) {
+        // TODO: handle proxy disappearing from interconnect?
+    }
 }
 
 void TLongTxServiceActor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
-    if (ev->Get()->SourceType == TEvInterconnect::EvConnectNode) {
+    auto* msg = ev->Get();
+    TXLOG_DEBUG("Received TEvUndelivered from " << ev->Sender << " cookie " << ev->Cookie
+        << " type " << msg->SourceType
+        << " reason " << msg->Reason
+        << " session " << ev->InterconnectSession);
+
+    if (msg->SourceType == TEvInterconnect::EvConnectNode) {
         return OnNodeDisconnected(ev->Cookie, ev->Sender);
     }
-    auto nodeId = ev->Sender.NodeId();
-    auto it = ProxyNodes.find(nodeId);
-    if (it == ProxyNodes.end()) {
+
+    // InterconnectSession will be set if we received this notification from
+    // a remote node, as opposed to a local notification when message is not
+    // delivered to interconnect session itself. Session problems are handled
+    // by separate disconnect notifications.
+    // FIXME: currently interconnect mock is broken, so we assume all other
+    // undelivery notifications are coming over the network. It should be
+    // safe to do, since each request uses a unique cookie that is only valid
+    // while session is connected.
+    if (!ev->InterconnectSession && !InterconnectUndeliveryBroken) {
         return;
     }
-    auto& node = it->second;
+
+    auto nodeId = ev->Sender.NodeId();
+    auto itNode = ProxyNodes.find(nodeId);
+    if (itNode == ProxyNodes.end()) {
+        return;
+    }
+
+    auto& node = itNode->second;
+
+    if (msg->SourceType == TEvLongTxService::EvSubscribeLock) {
+        auto itCookie = node.CookieToLock.find(ev->Cookie);
+        if (itCookie == node.CookieToLock.end()) {
+            return;
+        }
+
+        ui64 lockId = itCookie->second;
+        auto itLock = node.Locks.find(lockId);
+        if (itLock == node.Locks.end()) {
+            return;
+        }
+
+        auto& lock = itLock->second;
+        RemoveUnavailableLock(node, lock);
+        return;
+    }
+
     auto itReq = node.ActiveRequests.find(ev->Cookie);
     if (itReq == node.ActiveRequests.end()) {
         return;
@@ -538,6 +999,38 @@ void TLongTxServiceActor::Handle(TEvents::TEvUndelivered::TPtr& ev) {
     auto& req = itReq->second;
     SendReplyUnavailable(req.Type, req.Sender, req.Cookie, "Cannot forward request: service unavailable");
     node.ActiveRequests.erase(itReq);
+}
+
+void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLockState& lock) {
+    const ui32 nodeId = node.NodeId;
+    const ui64 lockId = lock.LockId;
+
+    for (auto& pr : lock.RepliedSubscribers) {
+        Send(pr.first,
+            new TEvLongTxService::TEvSubscribeLockResult(
+                lockId, nodeId,
+                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+            0, pr.second);
+    }
+
+    for (auto& pr : lock.NewSubscribers) {
+        Send(pr.first,
+            new TEvLongTxService::TEvSubscribeLockResult(
+                lockId, nodeId,
+                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+            0, pr.second);
+    }
+
+    if (node.LockExpireQueue.Has(&lock)) {
+        node.LockExpireQueue.Remove(&lock);
+    }
+
+    if (lock.Cookie != 0) {
+        node.CookieToLock.erase(lock.Cookie);
+        lock.Cookie = 0;
+    }
+
+    node.Locks.erase(lockId);
 }
 
 } // namespace NLongTxService

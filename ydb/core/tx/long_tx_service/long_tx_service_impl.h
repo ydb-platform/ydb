@@ -2,6 +2,7 @@
 #include "long_tx_service.h"
 
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/util/intrusive_heap.h>
 #include <ydb/core/util/ulid.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -51,8 +52,14 @@ namespace NLongTxService {
             Sent,
         };
 
-        enum class EProxyState {
+        enum class EProxyLockState {
             Unknown,
+            Subscribed,
+            Unavailable,
+        };
+
+        enum class EProxyState {
+            Disconnected,
             Connecting,
             Connected,
         };
@@ -69,14 +76,46 @@ namespace NLongTxService {
             TProxyRequestState* Request = nullptr;
         };
 
+        struct TProxyLockState {
+            EProxyLockState State = EProxyLockState::Unknown;
+            ui64 LockId = 0;
+            ui64 Cookie = 0;
+            THashMap<TActorId, ui64> NewSubscribers;
+            THashMap<TActorId, ui64> RepliedSubscribers;
+            // Intrusive heap support
+            size_t HeapIndex = -1;
+            TMonotonic ExpiresAt;
+
+            bool Empty() const {
+                return NewSubscribers.empty() && RepliedSubscribers.empty();
+            }
+
+            struct THeapIndex {
+                size_t& operator()(TProxyLockState& value) const {
+                    return value.HeapIndex;
+                }
+            };
+
+            struct THeapLess {
+                bool operator()(const TProxyLockState& a, const TProxyLockState& b) const {
+                    return a.ExpiresAt < b.ExpiresAt;
+                }
+            };
+        };
+
         struct TProxyNodeState {
-            EProxyState State = EProxyState::Unknown;
+            EProxyState State = EProxyState::Disconnected;
+            ui32 NodeId = 0;
             // Currently connected interconnect session
             TActorId Session;
             // Cookie to an active request
             THashMap<ui64, TProxyRequestState> ActiveRequests;
             // Pending events, waiting for the node to become connected
             TVector<TProxyPendingRequest> Pending;
+            // Locks requested by local subscribers
+            THashMap<ui64, TProxyLockState> Locks;
+            TIntrusiveHeap<TProxyLockState, TProxyLockState::THeapIndex, TProxyLockState::THeapLess> LockExpireQueue;
+            THashMap<ui64, ui64> CookieToLock;
         };
 
         struct TAcquireSnapshotUserRequest {
@@ -103,12 +142,24 @@ namespace NLongTxService {
             bool FlushPending = false;
         };
 
+        struct TLockState {
+            ui64 RefCount = 0;
+
+            THashMap<TActorId, ui64> LocalSubscribers;
+            THashMap<TActorId, THashMap<TActorId, ui64>> RemoteSubscribers;
+        };
+
+        struct TSessionState {
+            THashSet<ui64> SubscribedLocks;
+        };
+
     private:
         struct TEvPrivate {
             enum EEv {
                 EvCommitFinished = EventSpaceBegin(TEvents::ES_PRIVATE),
                 EvAcquireSnapshotFlush,
                 EvAcquireSnapshotFinished,
+                EvReconnect,
             };
 
             struct TEvCommitFinished : public TEventLocal<TEvCommitFinished, EvCommitFinished> {
@@ -151,6 +202,53 @@ namespace NLongTxService {
                     , Issues(std::move(issues))
                 { }
             };
+
+            struct TEvReconnect : public TEventLocal<TEvReconnect, EvReconnect> {
+                const ui32 NodeId;
+
+                explicit TEvReconnect(ui32 nodeId)
+                    : NodeId(nodeId)
+                { }
+            };
+        };
+
+    private:
+        class TSessionSubscribeActor : public TActor<TSessionSubscribeActor> {
+            friend class TLongTxServiceActor;
+
+        public:
+            TSessionSubscribeActor(TLongTxServiceActor* self)
+                : TActor(&TThis::StateWork)
+                , Self(self)
+            { }
+
+            ~TSessionSubscribeActor() {
+                if (Self) {
+                    Self->SessionSubscribeActor = nullptr;
+                    Self = nullptr;
+                }
+            }
+
+            static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+                return NKikimrServices::TActivity::LONG_TX_SERVICE;
+            }
+
+            STFUNC(StateWork) {
+                Y_UNUSED(ctx);
+                switch (ev->GetTypeRewrite()) {
+                    hFunc(TEvInterconnect::TEvNodeConnected, Handle);
+                    hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+                    hFunc(TEvents::TEvUndelivered, Handle);
+                }
+            }
+
+            void Subscribe(const TActorId& sessionId);
+            void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev);
+            void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
+            void Handle(TEvents::TEvUndelivered::TPtr& ev);
+
+        private:
+            TLongTxServiceActor* Self;
         };
 
     public:
@@ -160,11 +258,22 @@ namespace NLongTxService {
             Y_UNUSED(Settings); // TODO
         }
 
+        ~TLongTxServiceActor() {
+            if (SessionSubscribeActor) {
+                SessionSubscribeActor->Self = nullptr;
+                SessionSubscribeActor = nullptr;
+            }
+        }
+
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
             return NKikimrServices::TActivity::LONG_TX_SERVICE;
         }
 
         void Bootstrap();
+
+    private:
+        TSessionState& SubscribeToSession(const TActorId& sessionId);
+        void OnSessionDisconnected(const TActorId& sessionId);
 
     private:
         STFUNC(StateWork) {
@@ -182,8 +291,14 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvAcquireReadSnapshot, Handle);
                 hFunc(TEvPrivate::TEvAcquireSnapshotFlush, Handle);
                 hFunc(TEvPrivate::TEvAcquireSnapshotFinished, Handle);
+                hFunc(TEvLongTxService::TEvRegisterLock, Handle);
+                hFunc(TEvLongTxService::TEvUnregisterLock, Handle);
+                hFunc(TEvLongTxService::TEvSubscribeLock, Handle);
+                hFunc(TEvLongTxService::TEvSubscribeLockResult, Handle);
+                hFunc(TEvLongTxService::TEvUnsubscribeLock, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+                hFunc(TEvPrivate::TEvReconnect, Handle);
                 hFunc(TEvents::TEvUndelivered, Handle);
             }
         }
@@ -200,20 +315,33 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvAcquireReadSnapshot::TPtr& ev);
         void Handle(TEvPrivate::TEvAcquireSnapshotFlush::TPtr& ev);
         void Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& ev);
+        void Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev);
+        void Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev);
+        void Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev);
+        void Handle(TEvLongTxService::TEvSubscribeLockResult::TPtr& ev);
+        void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
 
     private:
+        void SendViaSession(const TActorId& sessionId, const TActorId& recipient,
+                IEventBase* event, ui32 flags = 0, ui64 cookie = 0);
+
         void SendReply(ERequestType type, TActorId sender, ui64 cookie,
                 Ydb::StatusIds::StatusCode status, TStringBuf details);
         void SendReplyIssues(ERequestType type, TActorId sender, ui64 cookie,
                 Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
         void SendReplyUnavailable(ERequestType type, TActorId sender, ui64 cookie, TStringBuf details);
 
+        TProxyNodeState& ConnectProxyNode(ui32 nodeId);
         void SendProxyRequest(ui32 nodeId, ERequestType type, THolder<IEventHandle> ev);
 
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr& ev);
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev);
         void OnNodeDisconnected(ui32 nodeId, const TActorId& sender);
+        void Handle(TEvPrivate::TEvReconnect::TPtr& ev);
         void Handle(TEvents::TEvUndelivered::TPtr& ev);
+
+    private:
+        void RemoveUnavailableLock(TProxyNodeState& node, TProxyLockState& lock);
 
     private:
         void StartCommitActor(TTransaction& tx);
@@ -226,12 +354,15 @@ namespace NLongTxService {
     private:
         const TLongTxServiceSettings Settings;
         TString LogPrefix;
+        TSessionSubscribeActor* SessionSubscribeActor = nullptr;
         THashMap<TULID, TTransaction> Transactions;
         TULIDGenerator IdGenerator;
         THashMap<ui32, TProxyNodeState> ProxyNodes;
         THashMap<TString, TDatabaseSnapshotState> DatabaseSnapshots;
         THashMap<ui64, TAcquireSnapshotState> AcquireSnapshotInFlight;
         TString DefaultDatabaseName;
+        THashMap<ui64, TLockState> Locks;
+        THashMap<TActorId, TSessionState> Sessions;
         ui64 LastCookie = 0;
     };
 

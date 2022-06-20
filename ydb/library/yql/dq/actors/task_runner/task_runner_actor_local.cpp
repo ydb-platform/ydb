@@ -113,7 +113,6 @@ private:
     }
 
     void PassAway() override {
-        TaskRunner = nullptr;
         if (MemoryQuota) {
             MemoryQuota->TryReleaseQuota();
         }

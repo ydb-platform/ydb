@@ -1752,6 +1752,11 @@ private:
         Counters->TxProxyMon->TxExecuteTimeHgram->Collect(totalTime.MilliSeconds());
 
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+
+        if (UseFollowers) {
+            Send(MakePipePeNodeCacheID(true), new TEvPipeCache::TEvUnlink(0));
+        }
+
         TBase::PassAway();
     }
 

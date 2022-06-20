@@ -4,6 +4,7 @@
 #include <util/stream/str.h>
 #include <util/string/builder.h>
 #include <util/generic/size_literals.h>
+#include <util/generic/yexception.h>
 
 #include <thread>
 #include <mutex>
@@ -275,68 +276,84 @@ public:
         }
 
         TaskScheduler.Start();
+
+        InitCurl();
     }
 
     ~THTTPMultiGateway() {
-        if (Handle)
-            curl_multi_wakeup(Handle);
-        Thread.join();
+        curl_multi_wakeup(Handle);
+        if (Thread.joinable()) {
+            Thread.join();
+        }
+        UninitCurl();
     }
+
 private:
     size_t MaxHandlers = 1024U;
     size_t MaxSimulatenousDownloadsSize = 8_GB;
     size_t BuffersSizePerStream = CURL_MAX_WRITE_SIZE << 1U;
 
-    static void Perform(const TWeakPtr& weak) {
-        OutputSize.store(0ULL);
-        curl_global_init(CURL_GLOBAL_ALL);
+    void InitCurl() {
+        const CURLcode globalInitResult = curl_global_init(CURL_GLOBAL_ALL);
+        if (globalInitResult == CURLE_OK) {
+            Handle = curl_multi_init();
+            if (!Handle) {
+                Cerr << "curl_multi_init error" << Endl;
+            }
+        } else {
+            Cerr << "curl_global_init error " << int(globalInitResult) << ": " << curl_easy_strerror(globalInitResult) << Endl;
+        }
+    }
 
-        if (const auto handle = curl_multi_init()) {
+    void UninitCurl() {
+        if (Handle) {
+            const CURLMcode multiCleanupResult = curl_multi_cleanup(Handle);
+            if (multiCleanupResult != CURLM_OK) {
+                Cerr << "curl_multi_cleanup error " << int(multiCleanupResult) << ": " << curl_multi_strerror(multiCleanupResult) << Endl;
+            }
+        }
+        curl_global_cleanup();
+    }
+
+    static void Perform(const TWeakPtr& weak, CURLM* handle) {
+        OutputSize.store(0ULL);
+
+        for (size_t handlers = 0U;;) {
             if (const auto& self = weak.lock()) {
-                self->Handle = handle;
+                handlers = self->FillHandlers();
+                self->PerformCycles->Inc();
+                self->OutputMemory->Set(OutputSize);
+            } else {
+                break;
             }
 
-            for (size_t handlers = 0U;;) {
+            int running = 0;
+            if (const auto c = curl_multi_perform(handle, &running); CURLM_OK != c) {
                 if (const auto& self = weak.lock()) {
-                    handlers = self->FillHandlers();
-                    self->PerformCycles->Inc();
-                    self->OutputMemory->Set(OutputSize);
-                } else {
-                    break;
+                    self->Fail(c);
                 }
+                break;
+            }
 
-                int running = 0;
-                if (const auto c = curl_multi_perform(handle, &running); CURLM_OK != c) {
+            if (running < int(handlers)) {
+                if (const auto& self = weak.lock()) {
+                    for (int messages = int(handlers) - running; messages;) {
+                        if (const auto msg = curl_multi_info_read(handle, &messages)) {
+                            if(msg->msg == CURLMSG_DONE) {
+                                self->Done(msg->easy_handle, msg->data.result);
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (const auto c = curl_multi_poll(handle, nullptr, 0, 1024, nullptr); CURLM_OK != c) {
                     if (const auto& self = weak.lock()) {
                         self->Fail(c);
                     }
                     break;
                 }
-
-                if (running < int(handlers)) {
-                    if (const auto& self = weak.lock()) {
-                        for (int messages = int(handlers) - running; messages;) {
-                            if (const auto msg = curl_multi_info_read(handle, &messages)) {
-                                if(msg->msg == CURLMSG_DONE) {
-                                    self->Done(msg->easy_handle, msg->data.result);
-                                }
-                            }
-                        }
-                    }
-                } else {
-                    if (const auto c = curl_multi_poll(handle, nullptr, 0, 1024, nullptr); CURLM_OK != c) {
-                        if (const auto& self = weak.lock()) {
-                            self->Fail(c);
-                        }
-                        break;
-                    }
-                }
             }
-
-            curl_multi_cleanup(handle);
         }
-
-        curl_global_cleanup();
     }
 
     size_t FillHandlers() {
@@ -505,6 +522,10 @@ private:
         THTTPMultiGateway::TWeakPtr Gateway;
     };
 
+    CURLM* GetHandle() const {
+        return Handle;
+    }
+
 private:
     CURLM* Handle = nullptr;
 
@@ -611,7 +632,11 @@ IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring::TDyna
 
     const auto gateway = std::make_shared<THTTPMultiGateway>(httpGatewaysCfg, std::move(counters));
     THTTPMultiGateway::Singleton = gateway;
-    gateway->Thread = std::thread(std::bind(&THTTPMultiGateway::Perform, THTTPMultiGateway::Singleton));
+    if (gateway->GetHandle()) {
+        gateway->Thread = std::thread(std::bind(&THTTPMultiGateway::Perform, THTTPMultiGateway::Singleton, gateway->GetHandle()));
+    } else {
+        ythrow yexception() << "Failed to initialize http gateway";
+    }
     return gateway;
 }
 

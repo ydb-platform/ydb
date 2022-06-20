@@ -21,6 +21,8 @@ public:
 
     virtual ~IHTTPGateway() = default;
 
+    // Makes http gateways.
+    // Throws on error.
     static TPtr Make(
         const THttpGatewayConfig* httpGatewaysCfg = nullptr,
         NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());

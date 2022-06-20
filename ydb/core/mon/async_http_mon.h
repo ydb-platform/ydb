@@ -35,10 +35,11 @@ protected:
     TActorId NodeProxyServiceActorId;
 
     struct TActorMonPageInfo {
-        NMonitoring::IMonPage* Page;
+        NMonitoring::TMonPagePtr Page;
         TString Path;
     };
 
+    TMutex Mutex;
     std::vector<TActorMonPageInfo> ActorMonPages;
     std::vector<TActorId> ActorServices;
 

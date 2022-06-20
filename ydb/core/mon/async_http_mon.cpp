@@ -179,11 +179,11 @@ class THttpMonLegacyActorRequest : public TActorBootstrapped<THttpMonLegacyActor
 public:
     NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr Event;
     THttpMonRequestContainer Container;
-    TActorMonPage* ActorMonPage;
+    TIntrusivePtr<TActorMonPage> ActorMonPage;
 
-    THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TActorMonPage* actorMonPage)
+    THttpMonLegacyActorRequest(NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr event, TIntrusivePtr<TActorMonPage> actorMonPage)
         : Event(std::move(event))
-        , Container(Event->Get()->Request, actorMonPage)
+        , Container(Event->Get()->Request, actorMonPage.Get())
         , ActorMonPage(actorMonPage)
     {}
 
@@ -372,8 +372,8 @@ public:
 // receives all requests for one actor page and converts them to request-actors
 class THttpMonServiceLegacyActor : public TActorBootstrapped<THttpMonServiceLegacyActor> {
 public:
-    THttpMonServiceLegacyActor(TActorMonPage* actorMonPage)
-        : ActorMonPage(actorMonPage)
+    THttpMonServiceLegacyActor(TIntrusivePtr<TActorMonPage> actorMonPage)
+        : ActorMonPage(std::move(actorMonPage))
     {
     }
 
@@ -391,7 +391,7 @@ public:
         }
     }
 
-    TActorMonPage* ActorMonPage;
+    TIntrusivePtr<TActorMonPage> ActorMonPage;
 };
 
 // receives everyhing not related to actor communcation, converts them to request-actors
@@ -647,6 +647,7 @@ TAsyncHttpMon::TAsyncHttpMon(TConfig config)
 
 void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
     if (actorSystem) {
+        TGuard<TMutex> g(Mutex);
         ActorSystem = actorSystem;
         Register(new TIndexRedirectMonPage(IndexMonPage));
         Register(new NMonitoring::TVersionMonPage);
@@ -698,6 +699,7 @@ void TAsyncHttpMon::Start(TActorSystem* actorSystem) {
 void TAsyncHttpMon::Stop() {
     IndexMonPage->ClearPages(); // it's required to avoid loop-reference
     if (ActorSystem) {
+        TGuard<TMutex> g(Mutex);
         for (const TActorId& actorId : ActorServices) {
             ActorSystem->Send(actorId, new TEvents::TEvPoisonPill);
         }
@@ -719,7 +721,7 @@ NMonitoring::TIndexMonPage* TAsyncHttpMon::RegisterIndexPage(const TString& path
 
 void TAsyncHttpMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
     if (ActorSystem) {
-        TActorMonPage* actorMonPage = reinterpret_cast<TActorMonPage*>(pageInfo.Page);
+        TActorMonPage* actorMonPage = static_cast<TActorMonPage*>(pageInfo.Page.Get());
         auto actorId = ActorSystem->Register(
             new THttpMonServiceLegacyActor(actorMonPage),
             TMailboxType::ReadAsFilled,
@@ -730,7 +732,8 @@ void TAsyncHttpMon::RegisterActorMonPage(const TActorMonPageInfo& pageInfo) {
 }
 
 NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields fields) {
-    TActorMonPage* page = new TActorMonPage(
+    TGuard<TMutex> g(Mutex);
+    NMonitoring::TMonPagePtr page = new TActorMonPage(
         fields.RelPath,
         fields.Title,
         Config.Host,
@@ -743,12 +746,12 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         fields.Index->Register(page);
         fields.Index->SortPages();
     } else {
-        Register(page);
+        Register(page.Get());
     }
 
     TActorMonPageInfo pageInfo = {
         .Page = page,
-        .Path = GetPageFullPath(page),
+        .Path = GetPageFullPath(page.Get()),
     };
 
     if (ActorSystem && HttpProxyActorId) {
@@ -757,7 +760,7 @@ NMonitoring::IMonPage* TAsyncHttpMon::RegisterActorPage(TRegisterActorPageFields
         ActorMonPages.emplace_back(pageInfo);
     }
 
-    return page;
+    return page.Get();
 }
 
 NMonitoring::IMonPage* TAsyncHttpMon::RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {

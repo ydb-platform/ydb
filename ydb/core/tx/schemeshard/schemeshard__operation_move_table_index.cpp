@@ -438,23 +438,13 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved();
 
-                if (dstParentPath.IsUnderDeleting()) {
-                    checks
-                        .IsUnderDeleting()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else if (dstParentPath.IsUnderMoving()) {
-                    // it means that dstPath is free enough to be the move destination
-                    checks
-                        .IsUnderMoving()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else if (dstParentPath.IsUnderCreating()) {
-                    checks
-                        .IsUnderCreating()
-                        .IsUnderTheSameOperation(OperationId.GetTxId());
-                } else {
-                    checks
-                        .NotUnderOperation();
-                }
+            if (dstParentPath.IsUnderOperation()) {
+                checks
+                    .IsUnderTheSameOperation(OperationId.GetTxId());
+            } else {
+                checks
+                    .NotUnderOperation();
+            }
 
             if (!checks) {
                 TString explain = TStringBuilder() << "parent dst path fail checks"

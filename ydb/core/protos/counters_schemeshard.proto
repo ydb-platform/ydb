@@ -166,6 +166,7 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropBlobDepot = 135           [(CounterOpts) = {Name: "InFlightOps/DropBlobDepot"}];
 
     COUNTER_STATS_QUEUE_SIZE = 136                        [(CounterOpts) = {Name: "StatsQueueSize"}];
+    COUNTER_IN_FLIGHT_OPS_TxUpdateMainTableOnIndexMove = 137 [(CounterOpts) = {Name: "InFlightOps/UpdateMainTableOnIndexMove"}];
 }
 
 enum ECumulativeCounters {
@@ -266,6 +267,7 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropBlobDepot = 80             [(CounterOpts) = {Name: "FinishedOps/DropBlobDepot"}];
 
     COUNTER_STATS_WRITTEN = 81                            [(CounterOpts) = {Name: "StatsWritten"}];
+    COUNTER_FINISHED_OPS_TxUpdateMainTableOnIndexMove = 82 [(CounterOpts) = {Name: "FinishedOps/UpdateMainTableOnIndexMove"}];
 }
 
 enum EPercentileCounters {

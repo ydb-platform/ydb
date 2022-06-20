@@ -125,6 +125,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_drop_unsafe.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_mkdir.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_modify_acl.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_index.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_tables.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation_move_table_index.cpp

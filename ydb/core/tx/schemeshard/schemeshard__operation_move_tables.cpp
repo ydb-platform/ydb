@@ -8,37 +8,6 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
-namespace {
-
-
-NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst) {
-    NKikimrSchemeOp::TModifyScheme scheme;
-
-    scheme.SetWorkingDir(dst.Parent().PathString());
-    scheme.SetFailOnExist(true);
-    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
-    auto operation = scheme.MutableMoveTable();
-    operation->SetSrcPath(src.PathString());
-    operation->SetDstPath(dst.PathString());
-
-    return scheme;
-}
-
-NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst) {
-    NKikimrSchemeOp::TModifyScheme scheme;
-
-    scheme.SetWorkingDir(dst.Parent().PathString());
-    scheme.SetFailOnExist(true);
-    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex);
-    auto operation = scheme.MutableMoveTableIndex();
-    operation->SetSrcPath(src.PathString());
-    operation->SetDstPath(dst.PathString());
-
-    return scheme;
-}
-
-}
-
 namespace NKikimr {
 namespace NSchemeShard {
 

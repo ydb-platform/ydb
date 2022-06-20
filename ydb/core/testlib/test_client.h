@@ -390,6 +390,8 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const NKikimrSchemeOp::TTableDescription& update, const TString& userToken);
         TAutoPtr<NMsgBusProxy::TBusResponse> AlterTable(const TString& parent, const TString& alter, const TString& userToken);
 
+        TAutoPtr<NMsgBusProxy::TBusResponse> MoveIndex(const TString& table, const TString& src, const TString& dst, const TString& userToken);
+
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store);
         NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme);

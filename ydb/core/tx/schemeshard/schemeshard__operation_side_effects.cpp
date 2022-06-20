@@ -848,6 +848,14 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
                              << ", publications: " << operation->Publications.size()
                              << ", subscribers: " << operation->Subscribers.size());
 
+            for (const auto& pub : operation->Publications) {
+                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "Publication details: "
+                        << " tx: " << txId
+                        << ", " << pub.first
+                        << ", " << pub.second);
+            }
+
             ss->Publications[txId] = {
                 std::move(operation->Publications),
                 std::move(operation->Subscribers)

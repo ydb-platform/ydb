@@ -411,6 +411,184 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         SchemaVersionMissmatchWithIndexTest<UseNewEngine>(true);
     }
 
+    template <bool UseNewEngine>
+    void TouchIndexAfterMoveIndex(bool write, bool replace) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query1;
+        TString query2;
+        if (write) {
+            query1 = Q_(R"(
+                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            )");
+            query2 = query1;
+        } else {
+            query1 = Q1_(R"(
+                SELECT * FROM `/Root/KeyValue` VIEW `value_index` WHERE Value = "New";
+            )");
+            query2 = Q1_(R"(
+                SELECT * FROM `/Root/KeyValue` VIEW `moved_value_index` WHERE Value = "New";
+            )");
+
+        }
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            TString create_index_query = Q1_(R"(
+                ALTER TABLE `/Root/KeyValue` ADD INDEX value_index GLOBAL SYNC ON (`Value`);
+            )");
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        }
+
+        if (replace) {
+            TString create_index_query = Q1_(R"(
+                ALTER TABLE `/Root/KeyValue` ADD INDEX moved_value_index GLOBAL SYNC ON (`Value`);
+            )");
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(),
+                execSettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
+            auto reply = kikimr.GetTestClient().MoveIndex("/Root/KeyValue", "value_index", "moved_value_index", "root@builtin");
+            const NKikimrClient::TResponse &response = reply->Record;
+            UNIT_ASSERT_VALUES_EQUAL((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query2,
+                TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            if (write) {
+                auto commit = result.GetTransaction()->Commit().GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+            }
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query2,
+                TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto commit = result.GetTransaction()->Commit().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexRead) {
+        TouchIndexAfterMoveIndex<UseNewEngine>(false, false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexWrite) {
+        TouchIndexAfterMoveIndex<UseNewEngine>(true, false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexReadReplace) {
+        TouchIndexAfterMoveIndex<UseNewEngine>(false, true);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveIndexWriteReplace) {
+        TouchIndexAfterMoveIndex<UseNewEngine>(true, true);
+    }
+
+    template <bool UseNewEngine>
+    void TouchIndexAfterMoveTable(bool write) {
+        TKikimrRunner kikimr;
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        TString query1;
+        TString query2;
+        if (write) {
+            query1 = Q_(R"(
+                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            )");
+            query2 = Q_(R"(
+                UPSERT INTO [/Root/KeyValueMoved] (Key, Value) VALUES (10u, "New");
+            )");
+        } else {
+            query1 = Q1_(R"(
+                SELECT * FROM `/Root/KeyValue` VIEW `value_index` WHERE Value = "New";
+            )");
+            query2 = Q1_(R"(
+                SELECT * FROM `/Root/KeyValueMoved` VIEW `value_index` WHERE Value = "New";
+            )");
+
+        }
+
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.KeepInQueryCache(true);
+        execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+        {
+            TString create_index_query = Q1_(R"(
+                ALTER TABLE `/Root/KeyValue` ADD INDEX value_index GLOBAL SYNC ON (`Value`);
+            )");
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query1, TTxControl::BeginTx(),
+                execSettings).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
+            UNIT_ASSERT_VALUES_EQUAL(stats.compilation().from_cache(), false);
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/KeyValue` RENAME TO `/Root/KeyValueMoved`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteDataQuery(query2,
+                TTxControl::BeginTx(), execSettings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            auto commit = result.GetTransaction()->Commit().GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::SUCCESS, commit.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveTableRead) {
+        TouchIndexAfterMoveTable<UseNewEngine>(false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(TouchIndexAfterMoveTableWrite) {
+        TouchIndexAfterMoveTable<UseNewEngine>(true);
+    }
+
     void CheckInvalidationAfterDropCreateTable(bool withCompatSchema) {
         TKikimrRunner kikimr;
 

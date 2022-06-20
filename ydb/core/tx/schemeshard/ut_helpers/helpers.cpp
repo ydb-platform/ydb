@@ -391,6 +391,33 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
+    TEvSchemeShard::TEvModifySchemeTransaction* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, ui64 schemeShard, const TApplyIf& applyIf) {
+        THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
+        auto transaction = evTx->Record.AddTransaction();
+        transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+        SetApplyIf(*transaction, applyIf);
+
+        auto descr = transaction->MutableMoveIndex();
+        descr->SetTablePath(tablePath);
+        descr->SetSrcPath(srcPath);
+        descr->SetDstPath(dstPath);
+
+        return evTx.Release();
+    }
+
+    void AsyncMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, ui64 schemeShard) {
+        TActorId sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, schemeShard, sender, MoveIndexRequest(txId, tablePath, srcPath, dstPath, schemeShard));
+    }
+
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, const TVector<TEvSchemeShard::EStatus>& expectedResults) {
+        TestMoveIndex(runtime, TTestTxConfig::SchemeShard, txId, tablePath, src, dst, expectedResults);
+    }
+
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, const TVector<TEvSchemeShard::EStatus>& expectedResults) {
+        AsyncMoveIndex(runtime, txId, tablePath, src, dst, schemeShard);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
 
     TEvSchemeShard::TEvModifySchemeTransaction* LockRequest(ui64 txId, const TString &parentPath, const TString& name) {
         THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);

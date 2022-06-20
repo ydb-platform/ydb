@@ -208,6 +208,114 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
         });
     }
 
+    Y_UNIT_TEST(MoveIndex) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                      Name: "Table"
+                      Columns { Name: "key"   Type: "Uint64" }
+                      Columns { Name: "value0" Type: "Utf8" }
+                      Columns { Name: "value1" Type: "Utf8" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "Sync"
+                      KeyColumnNames: ["value0"]
+                    }
+                    IndexDescription {
+                      Name: "Async"
+                      KeyColumnNames: ["value1"]
+                      Type: EIndexTypeGlobalAsync
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                                 {NLs::PathExist});
+            }
+
+            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Sync", "MovedSync");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Async", "MovedAsync");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(5),
+                            NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
+
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/MovedSync", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobal),
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/MovedAsync", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalAsync),
+                            NLs::IndexKeys({"value1"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+            }
+        });
+    }
+
+    Y_UNIT_TEST(ReplaceIndex) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            TPathVersion pathVersion;
+            {
+                TInactiveZone inactive(activeZone);
+                TestCreateIndexedTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    TableDescription {
+                      Name: "Table"
+                      Columns { Name: "key"   Type: "Uint64" }
+                      Columns { Name: "value0" Type: "Utf8" }
+                      Columns { Name: "value1" Type: "Utf8" }
+                      KeyColumnNames: ["key"]
+                    }
+                    IndexDescription {
+                      Name: "Sync"
+                      KeyColumnNames: ["value0"]
+                    }
+                    IndexDescription {
+                      Name: "Sync1"
+                      KeyColumnNames: ["value1"]
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
+                pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
+                                                 {NLs::PathExist});
+            }
+
+            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Sync", "Sync1");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(5),
+                            NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"})});
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Sync1", true, true, true),
+                           {NLs::PathExist,
+                            NLs::IndexKeys({"value0"}),
+                            NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Table/Sync", true, true, true),
+                           {NLs::PathNotExist});
+            }
+        });
+    }
+
     Y_UNIT_TEST(Replace) {
         TTestWithReboots t(true);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
@@ -239,7 +347,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                     }
                 )");
                 t.TestEnv->TestWaitNotification(runtime, {t.TxId, t.TxId - 1});
-
 
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot"),
                                                  {NLs::PathExist});

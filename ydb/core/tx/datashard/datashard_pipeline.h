@@ -163,6 +163,7 @@ public:
     bool HasFinalizeBuilIndex() const { return SchemaTx && SchemaTx->IsFinalizeBuildIndex(); }
     bool HasDropIndexNotice() const { return SchemaTx && SchemaTx->IsDropIndexNotice(); }
     bool HasMove() const { return SchemaTx && SchemaTx->IsMove(); }
+    bool HasMoveIndex() const { return SchemaTx && SchemaTx->IsMoveIndex(); }
     bool HasCreateCdcStream() const { return SchemaTx && SchemaTx->IsCreateCdcStream(); }
     bool HasAlterCdcStream() const { return SchemaTx && SchemaTx->IsAlterCdcStream(); }
     bool HasDropCdcStream() const { return SchemaTx && SchemaTx->IsDropCdcStream(); }

@@ -845,6 +845,8 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
             return CreateFinalizeBuildIndexMainTable(NextPartId(), txState);
         case TTxState::ETxType::TxDropTableIndexAtMainTable:
             return CreateDropTableIndexAtMainTable(NextPartId(), txState);
+        case TTxState::ETxType::TxUpdateMainTableOnIndexMove:
+            return CreateUpdateMainTableOnIndexMove(NextPartId(), txState);
         case TTxState::ETxType::TxCreateLockForIndexBuild:
             return CreateLockForIndexBuild(NextPartId(), txState);
         case TTxState::ETxType::TxDropLock:
@@ -1090,6 +1092,8 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
         return CreateMoveTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex:
         return CreateMoveTableIndex(NextPartId(), tx);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
+        Y_FAIL("imposible");
 
     // Replication
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateReplication:
@@ -1148,6 +1152,8 @@ TVector<ISubOperationBase::TPtr> TOperation::ConstructParts(const TTxTransaction
         return CreateConsistentMoveTable(NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         return CreateConsistentAlterTable(NextPartId(), tx, context);
+    case NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex:
+        return CreateConsistentMoveIndex(NextPartId(), tx, context);
 
     default:
         return {ConstructPart(opType, tx)};

@@ -285,6 +285,9 @@ TVector<ISubOperationBase::TPtr> CreateDropIndex(TOperationId id, const TTxTrans
 ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropTableIndexAtMainTable(TOperationId id, TTxState::ETxState state);
 
+ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateUpdateMainTableOnIndexMove(TOperationId id, TTxState::ETxState state);
+
 /// CDC
 // Create
 TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
@@ -441,9 +444,13 @@ ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, const TTxTransaction& 
 ISubOperationBase::TPtr CreateAlterLogin(TOperationId id, TTxState::ETxState state);
 
 TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
+TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId id, const TTxTransaction& tx, TOperationContext& context);
 
 ISubOperationBase::TPtr CreateMoveTable(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateMoveTable(TOperationId id, TTxState::ETxState state);
+
+ISubOperationBase::TPtr CreateMoveIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateMoveIndex(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateMoveTableIndex(TOperationId id, TTxState::ETxState state);

@@ -109,7 +109,7 @@ public:
                 Y_VERIFY(dstIndexPath.IsResolved());
 
                 auto remap = move->AddReMapIndexes();
-                PathIdFromPathId(srcIndexPath->PathId, remap->MutablePathId());
+                PathIdFromPathId(srcIndexPath->PathId, remap->MutableSrcPathId());
                 PathIdFromPathId(dstIndexPath->PathId, remap->MutableDstPathId());
             }
 

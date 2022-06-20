@@ -112,7 +112,8 @@ struct TTxState {
         item(TxDropReplication, 67) \
         item(TxCreateBlobDepot, 68) \
         item(TxAlterBlobDepot, 69) \
-        item(TxDropBlobDepot, 70)
+        item(TxDropBlobDepot, 70) \
+        item(TxUpdateMainTableOnIndexMove, 71)
 
     // TX_STATE_TYPE_ENUM
 
@@ -340,6 +341,7 @@ struct TTxState {
         case TxDropSequence:
         case TxDropReplication:
         case TxDropBlobDepot:
+        case TxUpdateMainTableOnIndexMove:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -422,6 +424,7 @@ struct TTxState {
         case TxFinalizeBuildIndex:
         case TxDropTableIndexAtMainTable: // just increments schemaversion at main table
         case TxDropCdcStreamAtTable:
+        case TxUpdateMainTableOnIndexMove:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:
@@ -506,6 +509,7 @@ struct TTxState {
         case TxDropLock:
         case TxDropTableIndexAtMainTable:
         case TxDropCdcStreamAtTable:
+        case TxUpdateMainTableOnIndexMove:
             return false;
         case TxAlterPQGroup:
         case TxAlterTable:

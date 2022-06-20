@@ -301,6 +301,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpMoveTableIndex:
             Y_FAIL("no implementation for ESchemeOpMoveTableIndex");
 
+        case NKikimrSchemeOp::ESchemeOpMoveIndex:
+            Y_FAIL("no implementation for ESchemeOpMoveIndex");
+
         case NKikimrSchemeOp::ESchemeOpCreateSequence:
         case NKikimrSchemeOp::ESchemeOpAlterSequence:
             return *modifyScheme.MutableSequence()->MutableName();
@@ -666,6 +669,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 auto dstDir = ToString(ExtractParent(descr.GetDstPath()));
                 toResolve.Path = SplitPath(dstDir);
                 toResolve.RequiredAccess = NACLib::EAccessRights::CreateTable;
+                ResolveForACL.push_back(toResolve);
+            }
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpMoveIndex: {
+            auto& descr = pbModifyScheme.GetMoveIndex();
+            {
+                auto toResolve = TPathToResolve(pbModifyScheme.GetOperationType());
+                toResolve.Path = SplitPath(descr.GetTablePath());
+                toResolve.RequiredAccess = NACLib::EAccessRights::AlterSchema;
                 ResolveForACL.push_back(toResolve);
             }
             break;

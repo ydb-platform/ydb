@@ -988,7 +988,7 @@ TUserTable::TPtr TDataShard::CreateUserTable(TTransactionContext& txc,
 THashMap<TPathId, TPathId> TDataShard::GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move) {
     THashMap<TPathId, TPathId> remap;
     for (const auto& item: move.GetReMapIndexes()) {
-        const auto prevId = PathIdFromPathId(item.GetPathId());
+        const auto prevId = PathIdFromPathId(item.GetSrcPathId());
         const auto newId = PathIdFromPathId(item.GetDstPathId());
         remap[prevId] = newId;
     }
@@ -1040,6 +1040,81 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     NIceDb::TNiceDb db(txc.DB);
     PersistMoveUserTable(db, prevId.LocalPathId, newId.LocalPathId, *newTableInfo);
     PersistOwnerPathId(newId.OwnerId, txc);
+
+    return newTableInfo;
+}
+
+TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxDataShard::TMoveIndex& move,
+    const TActorContext& ctx, TTransactionContext& txc)
+{
+    const auto pathId = PathIdFromPathId(move.GetPathId());
+
+    Y_VERIFY(GetPathOwnerId() == pathId.OwnerId);
+    Y_VERIFY(TableInfos.contains(pathId.LocalPathId));
+
+    const auto version = move.GetTableSchemaVersion();
+    Y_VERIFY(version);
+
+    auto newTableInfo = AlterTableSchemaVersion(ctx, txc, pathId, version, false);
+
+    NKikimrSchemeOp::TTableDescription schema;
+    newTableInfo->GetSchema(schema);
+
+    if (move.GetReMapIndex().HasReplacedPathId()) {
+        const auto oldPathId = PathIdFromPathId(move.GetReMapIndex().GetReplacedPathId());
+        newTableInfo->Indexes.erase(oldPathId);
+
+        size_t id = 0;
+        bool found = false;
+        for (auto& indexDesc: *schema.MutableTableIndexes()) {
+            Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
+            auto pathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
+            if (oldPathId == pathId) {
+                found = true;
+                break;
+            } else {
+                id++;
+            }
+        }
+
+        if (found) {
+            schema.MutableTableIndexes()->DeleteSubrange(id, 1);
+        }
+    }
+
+    const auto remapPrevId = PathIdFromPathId(move.GetReMapIndex().GetSrcPathId());
+    const auto remapNewId = PathIdFromPathId(move.GetReMapIndex().GetDstPathId());
+    Y_VERIFY(move.GetReMapIndex().HasDstName());
+    const auto dstIndexName = move.GetReMapIndex().GetDstName();
+
+    for (auto& indexDesc: *schema.MutableTableIndexes()) {
+        Y_VERIFY(indexDesc.HasPathOwnerId() && indexDesc.HasLocalPathId());
+        auto prevPathId = TPathId(indexDesc.GetPathOwnerId(), indexDesc.GetLocalPathId());
+        if (remapPrevId != prevPathId) {
+            continue;
+        }
+
+        indexDesc.SetPathOwnerId(remapNewId.OwnerId);
+        indexDesc.SetLocalPathId(remapNewId.LocalPathId);
+
+        newTableInfo->Indexes[remapNewId] = newTableInfo->Indexes[prevPathId];
+        newTableInfo->Indexes.erase(prevPathId);
+
+        Y_VERIFY(move.GetReMapIndex().HasDstName());
+        indexDesc.SetName(dstIndexName);
+        newTableInfo->Indexes[remapNewId].Name = dstIndexName;
+    }
+
+    newTableInfo->SetSchema(schema);
+
+    AddUserTable(pathId, newTableInfo);
+
+    if (newTableInfo->NeedSchemaSnapshots()) {
+        AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
+    }
+
+    NIceDb::TNiceDb db(txc.DB);
+    PersistUserTable(db, pathId.LocalPathId, *newTableInfo);
 
     return newTableInfo;
 }

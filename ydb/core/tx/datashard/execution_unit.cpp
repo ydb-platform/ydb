@@ -124,6 +124,8 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateAlterCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::DropCdcStream:
         return CreateDropCdcStreamUnit(dataShard, pipeline);
+    case EExecutionUnitKind::MoveIndex:
+        return CreateMoveIndexUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }

@@ -268,6 +268,8 @@ void NTableState::UpdatePartitioningForTableModification(TOperationId operationI
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxDropTableIndexAtMainTable) {
         commonShardOp = TTxState::ConfigureParts;
+    } else if (txState.TxType == TTxState::TxUpdateMainTableOnIndexMove) {
+        commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable) {
         commonShardOp = TTxState::ConfigureParts;
     } else if (txState.TxType == TTxState::TxAlterCdcStreamAtTable) {
@@ -568,6 +570,32 @@ void IncParentDirAlterVersionWithRepublish(const TOperationId& opId, const TPath
         NIceDb::TNiceDb db(context.GetDB());
         context.SS->PersistPathDirAlterVersion(db, parent.Base());
     }
+}
+
+NKikimrSchemeOp::TModifyScheme MoveTableTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst) {
+    NKikimrSchemeOp::TModifyScheme scheme;
+
+    scheme.SetWorkingDir(dst.Parent().PathString());
+    scheme.SetFailOnExist(true);
+    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTable);
+    auto operation = scheme.MutableMoveTable();
+    operation->SetSrcPath(src.PathString());
+    operation->SetDstPath(dst.PathString());
+
+    return scheme;
+}
+
+NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& src, NKikimr::NSchemeShard::TPath& dst) {
+    NKikimrSchemeOp::TModifyScheme scheme;
+
+    scheme.SetWorkingDir(dst.Parent().PathString());
+    scheme.SetFailOnExist(true);
+    scheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveTableIndex);
+    auto operation = scheme.MutableMoveTableIndex();
+    operation->SetSrcPath(src.PathString());
+    operation->SetDstPath(dst.PathString());
+
+    return scheme;
 }
 
 }

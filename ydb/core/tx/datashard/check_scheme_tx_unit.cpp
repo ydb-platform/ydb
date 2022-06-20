@@ -34,6 +34,7 @@ private:
     bool CheckFinalizeBuildIndex(TActiveTransaction *activeTx);
     bool CheckDropIndexNotice(TActiveTransaction *activeTx);
     bool CheckMoveTable(TActiveTransaction *activeTx);
+    bool CheckMoveIndex(TActiveTransaction *activeTx);
     bool CheckCreateCdcStream(TActiveTransaction *activeTx);
     bool CheckAlterCdcStream(TActiveTransaction *activeTx);
     bool CheckDropCdcStream(TActiveTransaction *activeTx);
@@ -354,6 +355,9 @@ bool TCheckSchemeTxUnit::CheckSchemeTx(TActiveTransaction *activeTx)
     case TSchemaOperation::ETypeMoveTable:
         res = CheckMoveTable(activeTx);
         break;
+    case TSchemaOperation::ETypeMoveIndex:
+        res = CheckMoveIndex(activeTx);
+        break;
     case TSchemaOperation::ETypeCreateCdcStream:
         res = CheckCreateCdcStream(activeTx);
         break;
@@ -670,6 +674,20 @@ bool TCheckSchemeTxUnit::CheckMoveTable(TActiveTransaction *activeTx) {
     }
 
     return CheckSchemaVersion(activeTx, mv);
+}
+
+bool TCheckSchemeTxUnit::CheckMoveIndex(TActiveTransaction *activeTx) {
+    if (HasDuplicate(activeTx, "MoveIndex", &TPipeline::HasMoveIndex)) {
+        return false;
+    }
+
+    const auto &mv = activeTx->GetSchemeTx().GetMoveIndex();
+    if (!HasPathId(activeTx, mv, "MoveIndex")) {
+        return false;
+    }
+
+    auto ret = CheckSchemaVersion(activeTx, mv);
+    return ret;
 }
 
 bool TCheckSchemeTxUnit::CheckCreateCdcStream(TActiveTransaction *activeTx) {

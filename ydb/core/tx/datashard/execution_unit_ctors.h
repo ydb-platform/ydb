@@ -58,6 +58,7 @@ THolder<TExecutionUnit> CreateDropVolatileSnapshotUnit(TDataShard &dataShard, TP
 THolder<TExecutionUnit> CreateInitiateBuildIndexUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateFinalizeBuildIndexUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateDropIndexNoticeUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateMoveIndexUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateMoveTableUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateCreateCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);

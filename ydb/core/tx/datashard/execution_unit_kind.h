@@ -62,6 +62,7 @@ enum class EExecutionUnitKind : ui32 {
     CreateCdcStream,
     AlterCdcStream,
     DropCdcStream,
+    MoveIndex,
     Count,
     Unspecified
 };

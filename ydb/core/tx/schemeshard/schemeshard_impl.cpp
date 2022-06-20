@@ -1279,6 +1279,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterSequence:
     case TTxState::TxAlterReplication:
     case TTxState::TxAlterBlobDepot:
+    case TTxState::TxUpdateMainTableOnIndexMove:
         return TPathElement::EPathState::EPathStateAlter;
     case TTxState::TxDropTable:
     case TTxState::TxDropPQGroup:

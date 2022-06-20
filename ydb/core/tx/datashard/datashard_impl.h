@@ -1440,6 +1440,8 @@ public:
     static THashMap<TPathId, TPathId> GetRemapIndexes(const NKikimrTxDataShard::TMoveTable& move);
     TUserTable::TPtr MoveUserTable(TOperation::TPtr op, const NKikimrTxDataShard::TMoveTable& move,
         const TActorContext& ctx, TTransactionContext& txc);
+    TUserTable::TPtr MoveUserIndex(TOperation::TPtr op, const NKikimrTxDataShard::TMoveIndex& move,
+        const TActorContext& ctx, TTransactionContext& txc);
     void DropUserTable(TTransactionContext& txc, ui64 tableId);
 
     ui32 GetLastLocalTid() const { return LastLocalTid; }

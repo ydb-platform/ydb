@@ -327,6 +327,10 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             continue;
         }
 
+        if (!childPath->IsCreateFinished()) {
+            continue;
+        }
+
         switch (childPath->PathType) {
         case NKikimrSchemeOp::EPathTypeTableIndex:
             Self->DescribeTableIndex(childPathId, childName, *entry->AddTableIndexes());

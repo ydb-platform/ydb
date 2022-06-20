@@ -1526,6 +1526,23 @@ namespace Tests {
         return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
     }
 
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::MoveIndex(const TString& table, const TString& src, const TString& dst, const TString& userToken) {
+        TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
+        auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
+        op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+        auto descr = op->MutableMoveIndex();
+        descr->SetTablePath(table);
+        descr->SetSrcPath(src);
+        descr->SetDstPath(dst);
+        TAutoPtr<NBus::TBusMessage> reply;
+        if (userToken) {
+            request->Record.SetSecurityToken(userToken);
+        }
+        NBus::EMessageStatus status = SendAndWaitCompletion(request.Release(), reply);
+        UNIT_ASSERT_VALUES_EQUAL(status, NBus::MESSAGE_OK);
+        return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
+    }
+
     TAutoPtr<NMsgBusProxy::TBusResponse> TClient::AlterTable(const TString& parent, const TString& alter, const TString& userToken) {
         NKikimrSchemeOp::TTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(alter, &table);

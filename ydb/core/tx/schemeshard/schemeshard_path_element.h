@@ -515,6 +515,14 @@ public:
         return PathState == EPathState::EPathStateMigrated;
     }
 
+    bool IsUnderMoving() const {
+        return PathState == EPathState::EPathStateMoving;
+    }
+
+    bool IsUnderCreating() const {
+        return PathState == EPathState::EPathStateCreate;
+    }
+
     bool PlannedToCreate() const {
         return PathState == EPathState::EPathStateCreate;
     }

@@ -248,6 +248,12 @@ namespace NSchemeShardUT_Private {
     void TestMoveTable(TTestActorRuntime& runtime, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
     void TestMoveTable(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& srcMove, const TString& dstMove, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
 
+    // move index
+    TEvTx* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, ui64 schemeShard = TTestTxConfig::SchemeShard, const TApplyIf& applyIf = {});
+    void AsyncMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, ui64 schemeShard = TTestTxConfig::SchemeShard);
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcMove, const TString& dstMove, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& srcMove, const TString& dstMove, const TVector<TEvSchemeShard::EStatus>& expectedResults = {NKikimrScheme::StatusAccepted});
+
     // locks
     TEvTx* LockRequest(ui64 txId, const TString &parentPath, const TString& name);
     void AsyncLock(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& parentPath, const TString& name);

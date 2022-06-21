@@ -706,6 +706,7 @@ void TAsyncHttpMon::Stop() {
         ActorSystem->Send(NodeProxyServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpMonServiceActorId, new TEvents::TEvPoisonPill);
         ActorSystem->Send(HttpProxyActorId, new TEvents::TEvPoisonPill);
+        ActorSystem = nullptr;
     }
 }
 

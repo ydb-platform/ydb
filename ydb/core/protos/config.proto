@@ -697,7 +697,7 @@ message TFeatureFlags {
     optional bool EnableImplicitScanQueryInScripts = 61 [default = true];
     optional bool EnablePredicateExtractForScanQueries = 62 [default = true];
     optional bool AllowVDiskDefrag = 63 [default = true];
-    optional bool EnableAsyncHttpMon = 64 [default = false];
+    optional bool EnableAsyncHttpMon = 64 [default = true];
     optional bool EnableChangefeeds = 65 [default = true];
 }
 

@@ -876,5 +876,63 @@ Y_UNIT_TEST_SUITE(LWTraceTrace) {
         } reader;
         mngr.ReadDepot("Query1", reader);
     }
+
+    Y_UNIT_TEST(ShouldResetFailedForksCounterUponShuttleParking) {
+        TManager mngr(*Singleton<TProbeRegistry>(), true);
+        TQuery q;
+        bool parsed = NProtoBuf::TextFormat::ParseFromString(R"END(
+            Blocks {
+                ProbeDesc {
+                    Name: "NoParam"
+                    Provider: "LWTRACE_UT_PROVIDER"
+                }
+                Action {
+                    RunLogShuttleAction {
+                        MaxTrackLength: 100
+                        ShuttlesCount: 2
+                    }
+                }
+            }
+        )END", &q);
+
+        UNIT_ASSERT(parsed);
+        mngr.New("Query1", q);
+
+        struct {
+            ui32 cnt = 0;
+            void Push(TThread::TId, const TTrackLog&) {
+                ++cnt;
+            }
+        } reader;
+
+        {
+            // Run shuttle ans fail fork
+            TOrbit initial;
+            TOrbit fork1;
+            TOrbit fork2;
+
+            LWTRACK(NoParam, initial);
+            UNIT_ASSERT_VALUES_EQUAL(initial.HasShuttles(), true);
+            UNIT_ASSERT_VALUES_EQUAL(initial.Fork(fork1), true);
+            LWTRACK(IntParam, fork1, 1);
+            UNIT_ASSERT_VALUES_EQUAL(fork1.Fork(fork2), false);
+            initial.Join(fork1);
+        }
+
+        mngr.ReadDepot("Query1", reader);
+        UNIT_ASSERT_VALUES_EQUAL(reader.cnt, 0);
+
+        reader.cnt = 0;
+
+        {
+            TOrbit initial;
+
+            LWTRACK(NoParam, initial);
+            UNIT_ASSERT_VALUES_EQUAL(initial.HasShuttles(), true);
+        }
+
+        mngr.ReadDepot("Query1", reader);
+        UNIT_ASSERT_VALUES_EQUAL(reader.cnt, 1);
+    }
 #endif // LWTRACE_DISABLE
 }

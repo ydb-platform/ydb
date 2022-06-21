@@ -201,6 +201,7 @@ namespace NLWTrace {
     template <class TDepot>
     void TLogShuttle<TDepot>::Clear() {
         TrackLog.Clear();
+        AtomicSet(ForkFailed, 0);
     }
 
     template <class TDepot>

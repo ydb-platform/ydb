@@ -448,6 +448,12 @@ namespace NLWTrace {
             template <class TReader>
             void ExtractItems(TReader& r) {
                 ReadItems(r);
+                for (TItem *i = OldBuffer->GetFront(), *e = OldBuffer->GetBack();; OldBuffer->Inc(i)) {
+                    i->Clear();
+                    if (i == e) {
+                        break;
+                    }
+                }
                 OldBuffer->Clear();
             }
         };

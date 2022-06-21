@@ -239,6 +239,47 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT_NO_DIFF(ss.Str(), NResource::Find("/histograms.json"));
     }
 
+    Y_UNIT_TEST(HistogramsFabric) {
+        TMetricRegistry registry(TLabels{{"common", "label"}});
+        bool called = false;
+
+        auto collector = [&]() {
+            called = true;
+            return ExponentialHistogram(5, 2);
+        };
+
+        THistogram* h1 = registry.HistogramCounter(
+                {{"sensor", "readTimeMillis"}},
+                collector);
+
+        UNIT_ASSERT_VALUES_EQUAL(called, true);
+        called = false;
+
+        h1 = registry.HistogramCounter(
+            {{"sensor", "readTimeMillis"}},
+            collector);
+
+        UNIT_ASSERT_VALUES_EQUAL(called, false);
+
+        THistogram* h2 = registry.HistogramRate(
+            {{"sensor", "writeTimeMillis"}},
+            ExplicitHistogram({1, 5, 15, 20, 25}));
+
+        for (i64 i = 0; i < 100; i++) {
+            h1->Record(i);
+            h2->Record(i);
+        }
+
+        TStringStream ss;
+        {
+            auto encoder = EncoderJson(&ss, 2);
+            registry.Accept(TInstant::Zero(), encoder.Get());
+        }
+        ss << '\n';
+
+        UNIT_ASSERT_NO_DIFF(ss.Str(), NResource::Find("/histograms.json"));
+    }
+
     Y_UNIT_TEST(StreamingEncoderTest) {
         const TString expected {
             "{\"commonLabels\":{\"common\":\"label\"},"

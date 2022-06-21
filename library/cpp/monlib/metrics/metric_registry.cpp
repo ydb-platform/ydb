@@ -124,12 +124,28 @@ namespace NMonitoring {
         return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(collector), false);
     }
 
+    THistogram* TMetricRegistry::HistogramCounter(TLabels labels, std::function<IHistogramCollectorPtr()> supplier) {
+        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(supplier), false);
+    }
+
+    THistogram* TMetricRegistry::HistogramCounter(TLabels labels, nullptr_t) {
+        return HistogramCounter(std::move(labels), IHistogramCollectorPtr(nullptr));
+    }
+
     THistogram* TMetricRegistry::HistogramRate(TLabels labels, IHistogramCollectorPtr collector) {
         return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
     }
 
     THistogram* TMetricRegistry::HistogramRate(ILabelsPtr labels, IHistogramCollectorPtr collector) {
         return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(collector), true);
+    }
+
+    THistogram* TMetricRegistry::HistogramRate(TLabels labels, std::function<IHistogramCollectorPtr()> supplier) {
+        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(supplier), true);
+    }
+
+    THistogram* TMetricRegistry::HistogramRate(TLabels labels, nullptr_t) {
+        return HistogramRate(std::move(labels), IHistogramCollectorPtr(nullptr));
     }
 
     void TMetricRegistry::Reset() {

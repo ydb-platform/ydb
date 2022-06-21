@@ -86,6 +86,22 @@ namespace NMonitoring {
                 TLabels labels,
                 IHistogramCollectorPtr collector);
 
+        THistogram* HistogramCounter(
+                TLabels labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector);
+
+        THistogram* HistogramRate(
+                TLabels labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector);
+
+        THistogram* HistogramCounter(
+                TLabels labels,
+                nullptr_t);
+
+        THistogram* HistogramRate(
+                TLabels labels,
+                nullptr_t);
+
         /**
          * Set all registered metrics to zero
          */

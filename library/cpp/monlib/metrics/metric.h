@@ -362,6 +362,12 @@ namespace NMonitoring {
         {
         }
 
+        THistogram(std::function<IHistogramCollectorPtr()> makeHistogramCollector, bool isRate)
+            : IHistogram(isRate)
+            , Collector_(makeHistogramCollector())
+        {
+        }
+
         void Record(double value) override {
             Collector_->Collect(value);
         }

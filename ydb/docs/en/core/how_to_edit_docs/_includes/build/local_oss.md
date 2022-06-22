@@ -12,7 +12,7 @@ yfm -i <source_dir> -o <output_dir> --allowHTML
 
 Where:
 
-- `source_dir` is the directory where the contents of [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs) is cloned.
+- `source_dir` is the directory where the contents of [{{ ydb-doc-repo }}]({{ ydb-doc-repo }}) is cloned.
 - `output_dir` is the output directory for HTML files.
 
 Building the documentation takes a few seconds and there should be no errors logged to the stdout.

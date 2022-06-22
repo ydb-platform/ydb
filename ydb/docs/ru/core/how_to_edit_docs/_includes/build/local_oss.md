@@ -11,7 +11,7 @@ yfm -i <source_dir> -o <output_dir> --allowHTML
 ```
 
 Где: 
-- `source_dir` - директория, куда склонировано содержимое [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
+- `source_dir` - директория, куда склонировано содержимое [{{ ydb-doc-repo }}]({{ ydb-doc-repo }})
 - `output_dir` - директория, куда будет выполнена генерация HTML-файлов
 
 Сборка занимает несколько секунд, и не должна выводить сообщений об ошибках в лог (stdout).

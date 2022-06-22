@@ -159,6 +159,7 @@ namespace NSQLTranslationV1 {
             return IntoHeading;
         }
 
+        bool IsAlreadyDeclared(const TString& varName) const;
         void DeclareVariable(const TString& varName, const TNodePtr& typeNode);
 
         bool AddExport(TPosition symbolPos, const TString& symbolName);

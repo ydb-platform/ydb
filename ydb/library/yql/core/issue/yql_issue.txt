@@ -616,3 +616,7 @@ ids {
   code: DQ_GATEWAY_NEED_FALLBACK_ERROR
   severity: S_ERROR
 }
+ids {
+  code: YQL_DUPLICATE_DECLARE
+  severity: S_WARNING
+}

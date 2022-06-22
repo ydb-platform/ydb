@@ -9007,8 +9007,13 @@ bool TSqlQuery::DeclareStatement(const TRule_declare_stmt& stmt) {
         Ctx.Error(varPos) << "Can not use anonymous name '" << varName << "' in DECLARE statement";
         return false;
     }
-    varName = PushNamedAtom(varPos, varName);
-    Ctx.DeclareVariable(varName, typeNode);
+
+    if (Ctx.IsAlreadyDeclared(varName)) {
+        Ctx.Warning(varPos, TIssuesIds::YQL_DUPLICATE_DECLARE) << "Duplicate declaration of '" << varName << "' will be ignored";
+    } else {
+        PushNamedAtom(varPos, varName);
+        Ctx.DeclareVariable(varName, typeNode);
+    }
     return true;
 }
 
@@ -10096,7 +10101,8 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
             }
 
             TNodePtr typeNode = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", { BuildLiteralRawString(Ctx.Pos(), type) });
-            varName = PushNamedAtom(Ctx.Pos(), varName);
+            PushNamedAtom(Ctx.Pos(), varName);
+            // no duplicates are possible at this stage
             Ctx.DeclareVariable(varName, typeNode);
         }
     }

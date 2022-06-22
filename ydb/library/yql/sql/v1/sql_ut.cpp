@@ -4297,15 +4297,16 @@ Y_UNIT_TEST_SUITE(ExternalDeclares) {
         UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
     }
 
-    Y_UNIT_TEST(DeclareOverridesExteralDeclares) {
+    Y_UNIT_TEST(NoDeclareOverrides) {
         NSQLTranslation::TTranslationSettings settings;
         settings.DeclaredNamedExprs["foo"] = "String";
         auto res = SqlToYqlWithSettings("declare $foo as Int32; select $foo;", settings);
         UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT_NO_DIFF(Err2Str(res), "<main>:1:9: Warning: Duplicate declaration of '$foo' will be ignored, code: 4536\n");
 
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "declare") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'Int32)))__"));
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'String)))__"));
             }
         };
 

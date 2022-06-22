@@ -10076,6 +10076,31 @@ TSourcePtr TSqlQuery::Build(const TRule_multiple_column_assignment& stmt) {
 }
 
 TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
+    if (Mode == NSQLTranslation::ESqlMode::QUERY) {
+        // inject externally declared named expressions
+        for (auto [name, type] : Ctx.Settings.DeclaredNamedExprs) {
+            if (name.empty()) {
+                Error() << "Empty names for externally declared expressions are not allowed";
+                return nullptr;
+            }
+            TString varName = "$" + name;
+            if (IsAnonymousName(varName)) {
+                Error() << "Externally declared name '" << name << "' is anonymous";
+                return nullptr;
+            }
+
+            auto parsed = ParseType(type, *Ctx.Pool, Ctx.Issues, Ctx.Pos());
+            if (!parsed) {
+                Error() << "Failed to parse type for externally declared name '" << name << "'";
+                return nullptr;
+            }
+
+            TNodePtr typeNode = BuildBuiltinFunc(Ctx, Ctx.Pos(), "ParseType", { BuildLiteralRawString(Ctx.Pos(), type) });
+            varName = PushNamedAtom(Ctx.Pos(), varName);
+            Ctx.DeclareVariable(varName, typeNode);
+        }
+    }
+
     const auto& query = ast.GetRule_sql_query();
     TVector<TNodePtr> blocks;
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {

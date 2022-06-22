@@ -4276,3 +4276,52 @@ Y_UNIT_TEST_SUITE(FlexibleTypes) {
         UNIT_ASSERT(SqlToYql(q).IsOk());
     }
 }
+
+Y_UNIT_TEST_SUITE(ExternalDeclares) {
+    Y_UNIT_TEST(BasicUsage) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.DeclaredNamedExprs["foo"] = "String";
+        auto res = SqlToYqlWithSettings("select $foo;", settings);
+        UNIT_ASSERT(res.IsOk());
+        UNIT_ASSERT(res.Issues.Size() == 0);
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "declare") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'String)))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("declare"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
+    }
+
+    Y_UNIT_TEST(DeclareOverridesExteralDeclares) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.DeclaredNamedExprs["foo"] = "String";
+        auto res = SqlToYqlWithSettings("declare $foo as Int32; select $foo;", settings);
+        UNIT_ASSERT(res.IsOk());
+
+        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
+            if (word == "declare") {
+                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find(R"__((declare $foo (DataType 'Int32)))__"));
+            }
+        };
+
+        TWordCountHive elementStat = {{TString("declare"), 0}};
+        VerifyProgram(res, elementStat, verifyLine);
+
+        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["declare"]);
+    }
+
+    Y_UNIT_TEST(DeclaresWithInvalidTypesFails) {
+        NSQLTranslation::TTranslationSettings settings;
+        settings.DeclaredNamedExprs["foo"] = "List<BadType>";
+        auto res = SqlToYqlWithSettings("select 1;", settings);
+        UNIT_ASSERT(!res.Root);
+        UNIT_ASSERT_NO_DIFF(Err2Str(res),
+            "<main>:0:5: Error: Unknown type: 'BadType'\n"
+            "<main>: Error: Failed to parse type for externally declared name 'foo'\n");
+    }
+}

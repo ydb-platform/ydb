@@ -282,7 +282,7 @@ TNodePtr TContext::UniversalAlias(const TString& baseName, TNodePtr&& node) {
 }
 
 void TContext::DeclareVariable(const TString& varName, const TNodePtr& typeNode) {
-    Variables.emplace(varName, typeNode);
+    Variables[varName] = typeNode;
 }
 
 bool TContext::AddExport(TPosition pos, const TString& name) {

@@ -95,7 +95,7 @@ public:
                     .Seal().Build()
             );
 
-            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); useCoro && *useCoro && !s3ReadObject.Object().Format().Ref().IsAtom({"raw", "json_list"}))
+            if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && !s3ReadObject.Object().Format().Ref().IsAtom({"raw", "json_list"}))
                 return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3ParseSettings>()
                         .Paths(s3ReadObject.Object().Paths())

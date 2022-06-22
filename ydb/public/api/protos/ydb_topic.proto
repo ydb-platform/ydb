@@ -89,23 +89,29 @@ message StreamWriteMessage {
     message InitRequest {
         // Full path of topic to write to.
         string path = 1;
-        // Message group identifier of client data stream.
-        string message_group_id = 2;
+        // Producer identifier of client data stream.
+        // Used for message deduplication by sequence numbers.
+        string producer_id = 2;
         // User metadata attached to this write session.
         // Reader will get this session meta data with each message read.
         map<string, string> write_session_meta = 3;
-        // If partition mapping is not provided, partition is chosen by server.
-        oneof partition_mapping {
+        // Option for setting order on messages.
+        // If neither is set, no guarantees on ordering or partitions to write to.
+        oneof partitioning {
+            // All messages with given pair (producer_id, message_group_id) go to single partition in order of writes.
+            string message_group_id = 4;
             // Explicit partition id to write to.
-            // If not set, then it is chosen by server instead.
-            int64 partition_id = 4;
+            int64 partition_id = 5;
         }
+        // Explicitly request for last sequential number
+        // It may be expensive, if producer wrote to many partitions before.
+        bool get_last_seq_no = 6;
     }
 
     // Response for handshake.
     message InitResponse {
-        // Last persisted message's sequence number for this message group.
-        // Zero for new message group.
+        // Last persisted message's sequence number for this producer.
+        // Zero for new producer.
         int64 last_seq_no = 1;
         // Unique identifier of write session. Used for debug purposes.
         string session_id = 2;
@@ -135,6 +141,13 @@ message StreamWriteMessage {
             bytes data = 3;
             // Uncompressed size of client message body.
             int64 uncompressed_size = 4;
+            // Per-message override for respective write session settings.
+            oneof partitioning {
+                // All messages with given pair (producer_id, message_group_id) go to single partition in order of writes.
+                string message_group_id = 5;
+                // Explicit partition id to write to.
+                int64 partition_id = 6;
+            }
         }
     }
 
@@ -199,19 +212,19 @@ message StreamWriteMessage {
 // StreamRead
 
 
-// Within a StreamRead session delivered messages are separated by partition.
-// Reads from a single partition are represented by a partition session.
-message PartitionSession {
-    // Identitifier of partition session. Unique inside one RPC call.
-    int64 partition_session_id = 1;
-    // Topic path of partition.
-    string path = 2;
-    // Partition identifier.
-    int64 partition_id = 3;
-}
-
 // Messages for bidirectional streaming rpc StreamRead
 message StreamReadMessage {
+    // Within a StreamRead session delivered messages are separated by partition.
+    // Reads from a single partition are represented by a partition session.
+    message PartitionSession {
+        // Identitifier of partition session. Unique inside one RPC call.
+        int64 partition_session_id = 1;
+        // Topic path of partition.
+        string path = 2;
+        // Partition identifier.
+        int64 partition_id = 3;
+    }
+
     // Client-server message for read session. Contains one of:
     //     InitRequest - handshake request.
     //     ReadRequest - request for data.
@@ -336,9 +349,8 @@ message StreamReadMessage {
             // Uncompressed size of client message body.
             int64 uncompressed_size = 6;
 
-            // Filled if partition_key / hash was used on message write.
-            string partition_key = 7;
-            bytes explicit_hash = 8;
+            // Filled if message_group_id was set on message write.
+            string message_group_id = 7;
         }
 
         // Representation of sequence of client messages from one write session.
@@ -346,8 +358,8 @@ message StreamReadMessage {
             // List of client messages.
             repeated MessageData message_data = 1;
 
-            // Source identifier provided by client for this batch of client messages.
-            string message_group_id = 2;
+            // Producer identifier provided by client for this batch of client messages.
+            string producer_id = 2;
             // Client metadata attached to write session, the same for all messages in batch.
             map<string, string> write_session_meta = 3;
 
@@ -524,6 +536,26 @@ message AlterConsumer {
     map<string, string> alter_attributes = 6;
 }
 
+// Partitioning settings for topic.
+message PartitioningSettings {
+    // Minimum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    int64 min_active_partitions = 1;
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    int64 partition_count_limit = 2;
+}
+
+// Partitioning settings for topic.
+message AlterPartitioningSettings {
+    // Minimum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    optional int64 set_min_active_partitions = 1;
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    optional int64 set_partition_count_limit = 3;
+}
+
 
 // Create topic request sent from client to server.
 message CreateTopicRequest {
@@ -531,41 +563,35 @@ message CreateTopicRequest {
     // Topic path.
     string path = 2;
 
-    // Partitioning settings.
-    oneof partitioning {
-        // Uniform partitioning case.
-        // How many partitions in topic. Must be less than database limit. Default limit - 10.
-        int64 uniform_partitions = 3;
-        // 4 reserved for partition_at_keys
-    }
-    reserved 4; // partition_at_keys inside partitions oneof
+    // Settings for partitioning
+    PartitioningSettings partitioning_settings = 3;
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
     //
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
-    google.protobuf.Duration retention_period = 5;
+    google.protobuf.Duration retention_period = 4;
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Zero value means infinite limit.
-    int64 retention_storage_mb = 6;
+    int64 retention_storage_mb = 5;
 
-    reserved 7; // supported_format.
+    reserved 6; // supported_format.
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
-    SupportedCodecs supported_codecs = 8;
+    SupportedCodecs supported_codecs = 7;
     // Partition write speed in bytes per second. Must be less than database limit.
     // Zero value means default limit: 1 MB per second.
-    int64 partition_write_speed_bytes_per_second = 9;
+    int64 partition_write_speed_bytes_per_second = 8;
     // Burst size for write in partition, in bytes. Must be less than database limit.
     // Zero value means default limit: 1 MB.
-    int64 partition_write_burst_bytes = 10;
+    int64 partition_write_burst_bytes = 9;
 
     // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
-    map<string, string> attributes = 11;
+    map<string, string> attributes = 10;
 
     // List of consumers for this topic.
-    repeated Consumer consumers = 12;
+    repeated Consumer consumers = 11;
 }
 
 // Create topic response sent from server to client.
@@ -602,9 +628,10 @@ message DescribeTopicResult {
 
     // Settings of topic.
 
-    // Partitioning description.
-    int64 partitions_count = 2;
-    reserved 3; // partition_at_keys
+    // Settings for partitioning
+    PartitioningSettings partitioning_settings = 2;
+    // Partitions description.
+    repeated PartitionInfo partitions = 3;
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
@@ -631,6 +658,17 @@ message DescribeTopicResult {
 
     // List of consumers for this topic.
     repeated Consumer consumers = 11;
+
+    message PartitionInfo {
+        // Partition identifier.
+        int64 partition_id = 1;
+        // Is partition open for write.
+        bool active = 2;
+        // Ids of partitions which was formed when this partition was split or merged.
+        repeated int64 child_partition_ids = 3;
+        // Ids of partitions from which this partition was formed by split or merge.
+        repeated int64 parent_partition_ids = 4;
+    }
 }
 
 
@@ -640,43 +678,37 @@ message AlterTopicRequest {
     // Topic path.
     string path = 2;
 
-    // Partitioning setting.
-    oneof set_partitioning {
-        // How many uniform partitions in topic. Must less than database limit. Default limit - 10.
-        int64 uniform_partitions = 3;
-        // 4 reserved for partition_at_keys
-    }
-    reserved 4; // partition_at_keys inside partitions oneof
+    AlterPartitioningSettings set_partitioning_settings = 3; // partitioning_settings
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
     //
     // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Default limit - 36 hours.
-    google.protobuf.Duration set_retention_period = 5;
+    google.protobuf.Duration set_retention_period = 4;
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
-    optional int64 set_retention_storage_mb = 6;
+    optional int64 set_retention_storage_mb = 5;
 
-    reserved 7; // supported_format.
+    reserved 6; // supported_format.
     // List of allowed codecs for writers.
     // Writes with codec not from this list are forbidden.
-    SupportedCodecs set_supported_codecs = 8;
+    SupportedCodecs set_supported_codecs = 7;
 
     // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
-    optional int64 set_partition_write_speed_bytes_per_second = 9;
+    optional int64 set_partition_write_speed_bytes_per_second = 8;
     // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
-    optional int64 set_partition_write_burst_bytes = 10;
+    optional int64 set_partition_write_burst_bytes = 9;
 
     // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
-    map<string, string> alter_attributes = 11;
+    map<string, string> alter_attributes = 10;
 
     // Add consumers.
-    repeated Consumer add_consumers = 12;
+    repeated Consumer add_consumers = 11;
     // Remove consumers (by its names)
-    repeated string drop_consumers = 13;
+    repeated string drop_consumers = 12;
     // Alter consumers
-    repeated AlterConsumer alter_consumers = 14;
+    repeated AlterConsumer alter_consumers = 13;
 }
 
 // Update topic response sent from server to client.

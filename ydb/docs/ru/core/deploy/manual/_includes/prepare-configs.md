@@ -4,7 +4,8 @@
  * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml) - для crossDC кластера из 9 нод 
  * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml) - для crossDC кластера из 3 нод 
 
-1. В секции host_configs укажите все диски и их тип на каждой из нод кластера. Возможные варианты типов дисков:
+1\. В секции host_configs укажите все диски и их тип на каждой из нод кластера.
+
 ```text
 host_configs:
 - drive:
@@ -12,10 +13,12 @@ host_configs:
     type: SSD
   host_config_id: 1
 ```
+
+Возможные варианты типов дисков:
  * ROT (rotational) - HDD диски
  * SSD - SSD или NVMe диски
 
-2. В секции `hosts` укажите FQDN всех нод, их конфигурацию и расположение по датацентрам (`data_center`) и стойкам (`rack`)
+2\. В секции `hosts` укажите FQDN всех нод, их конфигурацию и расположение по датацентрам (`data_center`) и стойкам (`rack`)
 ```text
 hosts:
 - host: node1.ydb.tech

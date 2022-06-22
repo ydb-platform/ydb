@@ -6,7 +6,7 @@ Download a sample config for the appropriate failure model of your cluster:
 * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-9-nodes.yaml): For a cross-datacenter cluster consisting of 9 nodes.
 * [mirror-3dc](https://github.com/ydb-platform/ydb/blob/main/ydb/deploy/yaml_config_examples/mirror-3dc-3-nodes.yaml): For a cross-datacenter cluster consisting of 3 nodes.
 
-1. In the host_configs section, specify all disks and their types on each cluster node. Possible disk types:
+1\. In the host_configs section, specify all disks and their types on each cluster node.
 
 ```text
 host_configs:
@@ -16,10 +16,11 @@ host_configs:
   host_config_id: 1
 ```
 
+Possible disk types are:
 * ROT (rotational): HDD.
 * SSD: SSD or NVMe.
 
-2. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`.
+2\. In the `hosts` section, specify the FQDN of each node, their configuration and location in a `data_center` or `rack`.
 
 ```text
 hosts:

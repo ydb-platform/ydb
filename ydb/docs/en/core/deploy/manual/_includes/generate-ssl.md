@@ -6,7 +6,7 @@ You can use existing TLS certificates. It's important that certificates support 
 
 {% endnote %}
 
-## Create a CA key {# generate-ca}
+### Create CA key and certificate {# generate-ca}
 
 Create a directory named `secure` to store the CA key and one named `certs` for certificates and node keys:
 

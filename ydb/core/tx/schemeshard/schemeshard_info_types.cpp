@@ -2038,7 +2038,7 @@ TOlapStoreInfo::TOlapStoreInfo(
     }
 }
 
-TOlapTableInfo::TOlapTableInfo(
+TColumnTableInfo::TColumnTableInfo(
         ui64 alterVersion,
         NKikimrSchemeOp::TColumnTableDescription&& description,
         NKikimrSchemeOp::TColumnTableSharding&& sharding,

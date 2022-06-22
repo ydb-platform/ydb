@@ -60,7 +60,7 @@ IActor* CreateComputeActor(
         return options.Factory->Get(task, {});
     };
 
-    if (computeActorType.empty() || computeActorType == "old") {
+    if (computeActorType.empty() || computeActorType == "old" || computeActorType == "sync") {
         return NYql::NDq::CreateDqComputeActor(
             executerId,
             operationId,

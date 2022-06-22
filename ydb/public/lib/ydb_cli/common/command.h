@@ -146,6 +146,14 @@ public:
             return false;
         }
 
+        bool IsVersionForceCheckCommand() {
+            return HasArgs({ "version", "--check" });
+        }
+
+        bool IsSetVersionCheckCommand() {
+            return HasArgs({ "version", "--enable-checks" }) || HasArgs({ "version", "--disable-checks" });
+        }
+
         bool IsUpdateCommand() {
             TString lastArg = ArgV[ArgC - 1];
             if (lastArg == "update") {
@@ -297,6 +305,22 @@ public:
                 }
             }
             return result;
+        }
+
+        bool HasArgs(std::vector<TString> args) {
+            for (const auto& arg : args) {
+                bool found = false;
+                for (int i = 0; i < ArgC; ++i) {
+                    if (ArgV[i] == arg) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    return false;
+                }
+            }
+            return true;
         }
     };
 

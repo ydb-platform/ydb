@@ -283,7 +283,7 @@ protected:
             return nullptr; // this field is already provided in AppConfig, so we don't overwrite it
         }
 
-        if (config.ParseResult->Has(optname)) {
+        if (optname && config.ParseResult->Has(optname)) {
             const bool success = ParsePBFromFile(config.ParseResult->Get(optname), res = (AppConfig.*mutableConfig)());
             Y_VERIFY(success);
         } else if ((BaseConfig.*hasConfig)()) {
@@ -455,6 +455,7 @@ protected:
         OPTION("incrhuge-file", IncrHugeConfig);
         OPTION("alloc-file", AllocatorConfig);
         OPTION("yq-file", YandexQueryConfig);
+        OPTION(nullptr, TracingConfig);
 
         if (!AppConfig.HasAllocatorConfig()) {
             AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());

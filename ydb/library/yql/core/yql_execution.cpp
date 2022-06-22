@@ -7,6 +7,7 @@
 
 #include <util/string/builder.h>
 #include <util/string/join.h>
+#include <util/system/env.h>
 #include <util/generic/queue.h>
 
 
@@ -24,10 +25,12 @@ public:
         struct TItem : public TIntrusiveListItem<TItem> {
             TExprNode* Node = nullptr;
             IDataProvider* DataProvider = nullptr;
+            NThreading::TFuture<void> Future;
         };
 
         using TQueueType = TIntrusiveListWithAutoDelete<TState::TItem, TDelete>;
         TQueueType Completed;
+        TQueueType Inflight;
         NThreading::TPromise<void> Promise;
         bool HasResult = false;
     };
@@ -40,6 +43,7 @@ public:
         : Types(types)
         , Writer(writer)
         , WithFinalize(withFinalize)
+        , DeterministicMode(GetEnv("YQL_DETERMINISTIC_MODE"))
     {
         Rewind();
     }
@@ -459,29 +463,74 @@ public:
         SubscribeAsyncFuture(node, dataProvider, future);
     }
 
+    static void ProcessFutureResultQueue(TStatePtr state) {
+        NThreading::TPromise<void> promiseToSet;
+        bool hasResult = false;
+
+        TGuard<TAdaptiveLock> guard(state->Lock);
+        while (!state->Inflight.Empty()) {
+            auto* first = state->Inflight.Front();
+            if (first->Future.HasValue()) {
+                state->Inflight.PopFront();
+                state->Completed.PushBack(first);
+                hasResult = true;
+            } else {
+                break;
+            }
+        }
+        guard.Release();
+
+        if (hasResult && !state->HasResult) {
+            state->HasResult = true;
+            promiseToSet = state->Promise;
+        }
+
+        if (promiseToSet.Initialized()) {
+            promiseToSet.SetValue();
+        }
+    }
+
+    static void ProcessAsyncFutureResult(TStatePtr state, TAutoPtr<TState::TItem> item) {
+        NThreading::TPromise<void> promiseToSet;
+        {
+            TGuard<TAdaptiveLock> guard(state->Lock);
+            state->Completed.PushBack(item.Release());
+            if (!state->HasResult) {
+                state->HasResult = true;
+                promiseToSet = state->Promise;
+            }
+        }
+
+        if (promiseToSet.Initialized()) {
+            promiseToSet.SetValue();
+        }
+    }
+
     void SubscribeAsyncFuture(const TExprNode::TPtr& node, IDataProvider* dataProvider, const NThreading::TFuture<void>& future)
     {
         auto state = State;
-        future.Subscribe([state, node=node.Get(), dataProvider](const NThreading::TFuture<void>& future) {
-            YQL_ENSURE(!future.HasException());
-            TAutoPtr<TState::TItem> item(new TState::TItem);
-            item->Node = node;
-            item->DataProvider = dataProvider;
+        if (DeterministicMode) {
+            TAutoPtr<TState::TItem> item = new TState::TItem;
+            item->Node = node.Get(); item->DataProvider = dataProvider; item->Future = future;
 
-            NThreading::TPromise<void> promiseToSet;
-            {
-                TGuard<TAdaptiveLock> guard(state->Lock);
-                state->Completed.PushBack(item.Release());
-                if (!state->HasResult) {
-                    state->HasResult = true;
-                    promiseToSet = state->Promise;
-                }
-            }
+            TGuard<TAdaptiveLock> guard(state->Lock);
+            state->Inflight.PushBack(item.Release());
+        }
 
-            if (promiseToSet.Initialized()) {
-                promiseToSet.SetValue();
-            }
-        });
+        if (DeterministicMode) {
+            future.Subscribe([state](const NThreading::TFuture<void>& future) {
+                YQL_ENSURE(!future.HasException());
+                ProcessFutureResultQueue(state);
+            });
+        } else {
+            future.Subscribe([state, node=node.Get(), dataProvider](const NThreading::TFuture<void>& future) {
+                YQL_ENSURE(!future.HasException());
+
+                TAutoPtr<TState::TItem> item = new TState::TItem;
+                item->Node = node; item->DataProvider = dataProvider;
+                ProcessAsyncFutureResult(state, item.Release());
+            });
+        }
     }
 
     void StartNode(TStringBuf category, const TExprNode& node) {
@@ -645,6 +694,8 @@ private:
     TNodeOnNodeOwnedMap CollectingNodes;
     THashMap<ui64, TIntrusivePtr<IDataProvider>> ProvidersCache;
     TExprNode::TListType FreshPendingNodes;
+
+    bool DeterministicMode;
 };
 
 IGraphTransformer::TStatus ValidateExecution(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& types, TNodeSet& visited);

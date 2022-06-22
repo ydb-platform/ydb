@@ -844,8 +844,8 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     THashMap<TString, ui32> SchemaPresetByName;
     THashMap<TString, ui32> TtlSettingsPresetByName;
 
-    THashSet<TPathId> OlapTables;
-    THashSet<TPathId> OlapTablesUnderOperation;
+    THashSet<TPathId> ColumnTables;
+    THashSet<TPathId> ColumnTablesUnderOperation;
 
     TOlapStoreInfo() = default;
     TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description,
@@ -853,8 +853,8 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
             TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
 };
 
-struct TOlapTableInfo : TSimpleRefCount<TOlapTableInfo> {
-    using TPtr = TIntrusivePtr<TOlapTableInfo>;
+struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
+    using TPtr = TIntrusivePtr<TColumnTableInfo>;
 
     ui64 AlterVersion = 0;
     TPtr AlterData;
@@ -869,8 +869,8 @@ struct TOlapTableInfo : TSimpleRefCount<TOlapTableInfo> {
     // Current list of column shards
     TVector<ui64> ColumnShards;
 
-    TOlapTableInfo() = default;
-    TOlapTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
+    TColumnTableInfo() = default;
+    TColumnTableInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnTableDescription&& description,
             NKikimrSchemeOp::TColumnTableSharding&& sharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnTable>&& alterBody = Nothing());
 

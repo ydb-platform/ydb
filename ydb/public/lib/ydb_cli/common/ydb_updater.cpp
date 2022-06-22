@@ -50,21 +50,22 @@ TYdbUpdater::~TYdbUpdater() {
 }
 
 bool TYdbUpdater::CheckIfUpdateNeeded(bool forceRequest) {
+    if (!forceRequest && !IsCheckEnabled()) {
+        return false;
+    }
     if (!forceRequest && Config.Has("outdated") && Config["outdated"].GetBoolean()) {
         return true;
     }
-
     if (!forceRequest && !IsTimeToCheckForUpdate()) {
         return false;
     }
 
-    Config["last_check"] = TInstant::Now().Seconds();
-    ConfigChanged = true;
+    SetConfigValue("last_check", TInstant::Now().Seconds());
 
-    if (GetLatestVersion() && MyVersion != LatestVersion) {
-        Config["outdated"] = true;
-        ConfigChanged = true;
-        return true;
+    if (GetLatestVersion()) {
+        bool isOutdated = MyVersion != LatestVersion;
+        SetConfigValue("outdated", isOutdated);
+        return isOutdated;
     }
     return false;
 }
@@ -128,9 +129,18 @@ int TYdbUpdater::Update(bool forceUpdate) {
     tmpPathToBinary.RenameTo(fsPathToBinary);
     Cout << "New binary renamed to " << fsPathToBinary.GetPath() << Endl;
 
-    Config["outdated"] = false;
-    ConfigChanged = true;
+    SetConfigValue("outdated", true);
     return EXIT_SUCCESS;
+}
+
+void TYdbUpdater::SetCheckVersion(bool value) {
+    SetConfigValue("check_version", value);
+}
+
+template <typename T>
+void TYdbUpdater::SetConfigValue(const TString& name, const T& value) {
+    Config[name] = value;
+    ConfigChanged = true;
 }
 
 void TYdbUpdater::LoadConfig() {
@@ -167,6 +177,13 @@ void TYdbUpdater::SaveConfig() {
     catch (const yexception& e) {
         Cerr << "(!) Couldn't save config to file. " << e.what() << Endl;
     }
+}
+
+bool TYdbUpdater::IsCheckEnabled() {
+    if (Config.Has("check_version") && !Config["check_version"].GetBoolean()) {
+        return false;
+    }
+    return true;
 }
 
 bool TYdbUpdater::IsTimeToCheckForUpdate() {

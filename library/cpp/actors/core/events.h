@@ -97,6 +97,7 @@ namespace NActors {
                 InvokeResult,
                 CoroTimeout,
                 InvokeQuery,
+                Wilson,
                 End,
 
                 // Compatibility section

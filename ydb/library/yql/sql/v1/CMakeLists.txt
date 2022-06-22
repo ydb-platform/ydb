@@ -17,6 +17,7 @@ target_link_libraries(yql-sql-v1 PUBLIC
   library-cpp-charset
   library-cpp-enumbitset
   cpp-yson-node
+  library-cpp-json
   yql-core-sql_types
   library-yql-minikql
   yql-public-udf

@@ -97,7 +97,7 @@ namespace NWilson {
             Raw = p[2];
         }
 
-        void Serialize(TSerializedTraceId* out) const {
+        void Serialize(TSerializedTraceId *out) const {
             auto p = reinterpret_cast<ui64*>(*out);
             p[0] = TraceId[0];
             p[1] = TraceId[1];

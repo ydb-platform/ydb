@@ -16,4 +16,5 @@ target_link_libraries(cpp-actors-wilson PUBLIC
 )
 target_sources(cpp-actors-wilson PRIVATE
   ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_span.cpp
+  ${CMAKE_SOURCE_DIR}/library/cpp/actors/wilson/wilson_uploader.cpp
 )

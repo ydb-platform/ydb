@@ -57,7 +57,9 @@ namespace NKikimr::NBlobDepot {
             Y_VERIFY(info);
             Y_VERIFY(info->BlobDepotId);
             TabletId = *info->BlobDepotId;
-            ConnectToBlobDepot();
+            if (TabletId) {
+                ConnectToBlobDepot();
+            }
             
             for (auto& ev : std::exchange(PendingEventQ, {})) {
                 TActivationContext::Send(ev.release());

@@ -19,6 +19,10 @@
 
 #include <util/generic/queue.h>
 
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
+
 using namespace NActors;
 
 namespace NYql::NDq {
@@ -32,11 +36,12 @@ class TLocalTaskRunnerActor
 public:
     static constexpr char ActorName[] = "YQL_DQ_TASK_RUNNER";
 
-    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, const TString& traceId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
+    TLocalTaskRunnerActor(ITaskRunnerActor::ICallbacks* parent, const TTaskRunnerFactory& factory, const TTxId& txId, ui64 taskId, THashSet<ui32>&& inputChannelsWithDisabledCheckpoints, THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota)
         : TActor<TLocalTaskRunnerActor>(&TLocalTaskRunnerActor::Handler)
         , Parent(parent)
         , Factory(factory)
-        , TraceId(traceId)
+        , TxId(txId)
+        , TaskId(taskId)
         , InputChannelsWithDisabledCheckpoints(std::move(inputChannelsWithDisabledCheckpoints))
         , MemoryQuota(std::move(memoryQuota))
     { }
@@ -149,6 +154,7 @@ private:
         THashMap<ui32, ui64> sourcesFreeSpace;
         if (!ev->Get()->CheckpointOnly) {
             res = TaskRunner->Run();
+            LOG_D("Resume execution, run status: " << res);
         }
         if (res == ERunStatus::PendingInput) {
             for (auto& channelId : inputMap) {
@@ -178,7 +184,7 @@ private:
                     TaskRunner->GetSink(sinkId)->Push(NDqProto::TCheckpoint(ev->Get()->CheckpointRequest->Checkpoint));
                 }
             } catch (const std::exception& e) {
-                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Sprintf("Failed to save state: %s", e.what()));
+                LOG_E("Failed to save state: " << e.what());
                 mkqlProgramState = nullptr;
             }
         }
@@ -357,8 +363,8 @@ private:
 
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev, const NActors::TActorContext& ctx) {
         ParentId = ev->Sender;
-        TaskRunner = Factory(ev->Get()->Task, [](const TString& message) {
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, message);
+        TaskRunner = Factory(ev->Get()->Task, [this](const TString& message) {
+            LOG_D(message);
         });
 
         auto& inputs = ev->Get()->Task.GetInputs();
@@ -396,10 +402,10 @@ private:
     }
 
     THolder<TEvDq::TEvAbortExecution> GetError(const NKikimr::TMemoryLimitExceededException&) {
-        const auto err = TStringBuilder() << "Mkql memory limit exceeded"
+        const TString err = TStringBuilder() << "Mkql memory limit exceeded"
             << ", limit: " << (MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : -1)
             << ", canAllocateExtraMemory: " << (MemoryQuota ? MemoryQuota->GetCanAllocateExtraMemory() : 0);
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Sprintf("TMemoryLimitExceededException: %s", err.c_str()));
+        LOG_E("TMemoryLimitExceededException: " << err);
         TIssue issue(err);
         SetIssueCode(TIssuesIds::KIKIMR_PRECONDITION_FAILED, issue);
         return MakeHolder<TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::OVERLOADED, TVector<TIssue>{issue});
@@ -412,7 +418,8 @@ private:
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
     TTaskRunnerFactory Factory;
-    TString TraceId;
+    const TTxId TxId;
+    const ui64 TaskId;
     THashSet<ui32> Inputs;
     THashSet<ui32> Sources;
     TIntrusivePtr<NDq::IDqTaskRunner> TaskRunner;
@@ -427,11 +434,12 @@ struct TLocalTaskRunnerActorFactory: public ITaskRunnerActorFactory {
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
-        const TString& traceId,
+        const TTxId& txId,
+        ui64 taskId,
         THashSet<ui32>&& inputChannelsWithDisabledCheckpoints,
         THolder<NYql::NDq::TDqMemoryQuota>&& memoryQuota) override
     {
-        auto* actor = new TLocalTaskRunnerActor(parent, Factory, traceId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
+        auto* actor = new TLocalTaskRunnerActor(parent, Factory, txId, taskId, std::move(inputChannelsWithDisabledCheckpoints), std::move(memoryQuota));
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)

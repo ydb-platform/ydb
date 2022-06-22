@@ -105,6 +105,8 @@ public:
         if (enableYq) {
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQL_PROXY, NActors::NLog::PRI_DEBUG);
             Server_->GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPUTE, NActors::NLog::PRI_DEBUG);
+            Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQ_CONTROL_PLANE_STORAGE, NActors::NLog::PRI_DEBUG);
+            Server_->GetRuntime()->SetLogPriority(NKikimrServices::YQ_CONTROL_PLANE_PROXY, NActors::NLog::PRI_DEBUG);
         }
 
         NGrpc::TServerOptions grpcOption;

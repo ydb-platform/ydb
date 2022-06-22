@@ -1,4 +1,4 @@
-#include "credentials.h"
+#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/plain_status/status.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/grpc_connections/grpc_connections.h>

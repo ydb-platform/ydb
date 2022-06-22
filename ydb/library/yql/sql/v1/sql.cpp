@@ -23,6 +23,7 @@
 #include <ydb/library/yql/core/yql_atom_enums.h>
 
 #include <library/cpp/charset/ci_string.h>
+#include <library/cpp/json/json_reader.h>
 
 #include <ydb/library/yql/utils/utf8.h>
 
@@ -869,6 +870,7 @@ private:
 
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, bool allowBinding, TString& service, TDeferredAtom& cluster, bool& isBinding);
     bool ApplyTableBinding(const TString& binding, TTableRef& tr, TTableHints& hints);
+    bool ParsePartitionedByBinding(const TString& name, const TString& value, TVector<TString>& columns);
     bool StructLiteralItem(TVector<TNodePtr>& labels, const TRule_expr& label, TVector<TNodePtr>& values, const TRule_expr& value);
 protected:
     NSQLTranslation::ESqlMode Mode;
@@ -1464,6 +1466,8 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
         return false;
     }
 
+    const bool emitObject = bindSettings.ClusterType == PqProviderName || !Ctx.S3BindingsAsTableHints;
+
     // ordered map ensures AST stability
     TMap<TString, TString> kvs(bindSettings.Settings.begin(), bindSettings.Settings.end());
     auto pullSettingOrFail = [&](const TString& name, TString& value) -> bool {
@@ -1477,7 +1481,6 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
         return true;
     };
 
-    TString func = "object";
     TString cluster;
     TString path;
     TString format;
@@ -1489,7 +1492,6 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
         return false;
     }
 
-    MergeHints(hints, GetTableFuncHints(func));
     if (auto it = kvs.find("schema"); it != kvs.end()) {
         TNodePtr schema = BuildQuotedAtom(Ctx.Pos(), it->second);
 
@@ -1500,22 +1502,83 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
         kvs.erase(it);
     }
 
-    TVector<TTableArg> args;
-    for (auto& arg : { path, format }) {
-        args.emplace_back();
-        args.back().Expr = BuildLiteralRawString(Ctx.Pos(), arg);
-    }
-
-    for (auto& [key, value] : kvs) {
-        YQL_ENSURE(!key.empty());
-        args.emplace_back();
-        args.back().Expr = BuildLiteralRawString(Ctx.Pos(), value);
-        args.back().Expr->SetLabel(key);
+    if (auto it = kvs.find("partitioned_by"); it != kvs.end()) {
+        TVector<TString> columns;
+        if (!ParsePartitionedByBinding(it->first, it->second, columns)) {
+            return false;
+        }
+        TVector<TNodePtr> hintValue;
+        for (auto& column : columns) {
+            hintValue.push_back(BuildQuotedAtom(Ctx.Pos(), column));
+        }
+        hints[it->first] = std::move(hintValue);
+        kvs.erase(it);
     }
 
     tr.Service = bindSettings.ClusterType;
     tr.Cluster = TDeferredAtom(Ctx.Pos(), cluster);
-    tr.Keys = BuildTableKeys(Ctx.Pos(), tr.Service, tr.Cluster, func, args);
+    if (emitObject) {
+        TString func = "object";
+        MergeHints(hints, GetTableFuncHints(func));
+        TVector<TTableArg> args;
+        for (auto& arg : { path, format }) {
+            args.emplace_back();
+            args.back().Expr = BuildLiteralRawString(Ctx.Pos(), arg);
+        }
+
+        for (auto& [key, value] : kvs) {
+            YQL_ENSURE(!key.empty());
+            args.emplace_back();
+            args.back().Expr = BuildLiteralRawString(Ctx.Pos(), value);
+            args.back().Expr->SetLabel(key);
+        }
+
+        tr.Keys = BuildTableKeys(Ctx.Pos(), tr.Service, tr.Cluster, func, args);
+    } else {
+        // put format back to hints
+        kvs["format"] = format;
+
+        for (auto& [key, value] : kvs) {
+            YQL_ENSURE(!key.empty());
+            hints[key] = { BuildQuotedAtom(Ctx.Pos(), value) };
+        }
+
+        const TString view = "";
+        tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), path), "");
+    }
+
+    return true;
+}
+
+bool TSqlTranslation::ParsePartitionedByBinding(const TString& name, const TString& value, TVector<TString>& columns) {
+    using namespace NJson;
+    TJsonValue json;
+    bool throwOnError = false;
+    if (!ReadJsonTree(value, &json, throwOnError)) {
+        Ctx.Error() << "Binding setting " << name << " is not a valid JSON";
+        return false;
+    }
+
+    const TJsonValue::TArray* arr = nullptr;
+    if (!json.GetArrayPointer(&arr)) {
+        Ctx.Error() << "Binding setting " << name << ": expecting array";
+        return false;
+    }
+
+    if (arr->empty()) {
+        Ctx.Error() << "Binding setting " << name << ": expecting non-empty array";
+        return false;
+    }
+
+    for (auto& item : *arr) {
+        TString str;
+        if (!item.GetString(&str)) {
+            Ctx.Error() << "Binding setting " << name << ": expecting non-empty array of strings";
+            return false;
+        }
+        columns.push_back(std::move(str));
+    }
+
     return true;
 }
 
@@ -9746,6 +9809,8 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansicurrentrow") {
             Ctx.AnsiCurrentRow = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiCurrentRow");
+        } else if (normalizedPragma == "s3bindingsastablehints") {
+            Ctx.S3BindingsAsTableHints = true;
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

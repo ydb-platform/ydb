@@ -2088,22 +2088,6 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     return ctx.NewCallable(input->Pos(), "EquiJoin", std::move(equiJoinArgs));
 }
 
-TStringBuf GetEmptyCollectionName(ETypeAnnotationKind kind) {
-    switch (kind) {
-        case ETypeAnnotationKind::Flow:
-        case ETypeAnnotationKind::Stream:   return "EmptyIterator";
-        case ETypeAnnotationKind::List:     return "List";
-        case ETypeAnnotationKind::Optional: return "Nothing";
-        case ETypeAnnotationKind::Dict:     return "Dict";
-        default: break;
-    }
-    return {};
-}
-
-TStringBuf GetEmptyCollectionName(const TTypeAnnotationNode* type) {
-    return GetEmptyCollectionName(type->GetKind());
-}
-
 template <bool Ordered>
 TExprNode::TPtr SimpleFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     const TCoFlatMapBase self(node);

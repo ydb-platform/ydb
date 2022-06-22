@@ -100,12 +100,12 @@ namespace NLs {
     TCheckFunc HasTtlDisabled();
     TCheckFunc IsBackupTable(bool value);
 
-    TCheckFunc HasOlapTableSchemaPreset(const TString& presetName);
-    TCheckFunc HasOlapTableSchemaVersion(ui64 schemaVersion);
-    TCheckFunc HasOlapTableTtlSettingsVersion(ui64 ttlSettingsVersion);
-    TCheckFunc HasOlapTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
-    TCheckFunc HasOlapTableTtlSettingsDisabled();
-    TCheckFunc HasOlapTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
+    TCheckFunc HasColumnTableSchemaPreset(const TString& presetName);
+    TCheckFunc HasColumnTableSchemaVersion(ui64 schemaVersion);
+    TCheckFunc HasColumnTableTtlSettingsVersion(ui64 ttlSettingsVersion);
+    TCheckFunc HasColumnTableTtlSettingsEnabled(const TString& columnName, const TDuration& expireAfter);
+    TCheckFunc HasColumnTableTtlSettingsDisabled();
+    TCheckFunc HasColumnTableTtlSettingsTiering(ui32 tierNo, const TString& tierName, const TString& columnName,
                                               const TDuration& evictAfter);
 
     TCheckFunc CheckPartCount(const TString& name, ui32 partCount, ui32 maxParts, ui32 tabletCount, ui32 groupCount,

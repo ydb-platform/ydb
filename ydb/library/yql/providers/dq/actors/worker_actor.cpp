@@ -236,7 +236,7 @@ private:
         }
 
         NActors::IActor* actor;
-        std::tie(Actor, actor) = TaskRunnerActorFactory->Create(this, TraceId);
+        std::tie(Actor, actor) = TaskRunnerActorFactory->Create(this, TraceId, Task.GetId());
         TaskRunnerActor = RegisterLocalChild(actor);
         TDqTaskRunnerMemoryLimits limits; // used for local mode only
         limits.ChannelBufferSize = 20_MB;

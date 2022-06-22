@@ -345,8 +345,8 @@ public:
 
         // TODO: make a new FinishPropose method or something like that
         alterData->AlterBody.Clear();
-        alterData->OlapTables = storeInfo->OlapTables;
-        alterData->OlapTablesUnderOperation = storeInfo->OlapTablesUnderOperation;
+        alterData->ColumnTables = storeInfo->ColumnTables;
+        alterData->ColumnTablesUnderOperation = storeInfo->ColumnTablesUnderOperation;
         context.SS->OlapStores[pathId] = alterData;
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
@@ -474,7 +474,7 @@ public:
             TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores[pathId];
             Y_VERIFY(storeInfo);
 
-            for (TPathId tablePathId : storeInfo->OlapTables) {
+            for (TPathId tablePathId : storeInfo->ColumnTables) {
                 TablesToUpdate.emplace_back(tablePathId);
             }
 
@@ -497,10 +497,10 @@ public:
                 continue; // ignore tables that are dropped
             }
 
-            if (!context.SS->OlapTables.contains(pathId)) {
+            if (!context.SS->ColumnTables.contains(pathId)) {
                 continue; // ignore tables that don't exist
             }
-            TOlapTableInfo::TPtr tableInfo = context.SS->OlapTables.at(pathId);
+            TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(pathId);
             if (tableInfo->AlterData) {
                 continue; // ignore tables that have some alter
             }
@@ -642,7 +642,7 @@ public:
         Y_VERIFY(context.SS->OlapStores.contains(path->PathId));
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path->PathId);
 
-        if (!storeInfo->OlapTablesUnderOperation.empty()) {
+        if (!storeInfo->ColumnTablesUnderOperation.empty()) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, "Store has unfinished table operations");
             return result;
         }

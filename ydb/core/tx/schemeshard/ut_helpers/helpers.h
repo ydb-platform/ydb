@@ -151,10 +151,10 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropOlapStore);
 
     // olap table
-    GENERIC_HELPERS(CreateOlapTable);
-    GENERIC_HELPERS(AlterOlapTable);
-    GENERIC_HELPERS(DropOlapTable);
-    DROP_BY_PATH_ID_HELPERS(DropOlapTable);
+    GENERIC_HELPERS(CreateColumnTable);
+    GENERIC_HELPERS(AlterColumnTable);
+    GENERIC_HELPERS(DropColumnTable);
+    DROP_BY_PATH_ID_HELPERS(DropColumnTable);
 
     // sequence
     GENERIC_HELPERS(CreateSequence);

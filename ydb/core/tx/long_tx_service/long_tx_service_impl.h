@@ -294,7 +294,7 @@ namespace NLongTxService {
                 hFunc(TEvLongTxService::TEvRegisterLock, Handle);
                 hFunc(TEvLongTxService::TEvUnregisterLock, Handle);
                 hFunc(TEvLongTxService::TEvSubscribeLock, Handle);
-                hFunc(TEvLongTxService::TEvSubscribeLockResult, Handle);
+                hFunc(TEvLongTxService::TEvLockStatus, Handle);
                 hFunc(TEvLongTxService::TEvUnsubscribeLock, Handle);
                 hFunc(TEvInterconnect::TEvNodeConnected, Handle);
                 hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
@@ -318,7 +318,7 @@ namespace NLongTxService {
         void Handle(TEvLongTxService::TEvRegisterLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev);
         void Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev);
-        void Handle(TEvLongTxService::TEvSubscribeLockResult::TPtr& ev);
+        void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev);
         void Handle(TEvLongTxService::TEvUnsubscribeLock::TPtr& ev);
 
     private:

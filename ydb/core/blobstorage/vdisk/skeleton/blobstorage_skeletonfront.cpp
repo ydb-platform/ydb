@@ -473,7 +473,7 @@ namespace NKikimr {
                         errorReason = "queue overflow";
                         ++*SkeletonFrontOverflow;
                     }
-                    front.ReplyFunc(std::move(converted), ctx, status, errorReason, now, feedback.first);
+                    front.ReplyFunc(std::exchange(converted, nullptr), ctx, status, errorReason, now, feedback.first);
                 }
                 return converted;
             }

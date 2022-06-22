@@ -32,56 +32,77 @@ TExprBase DqRewriteTakeSortToTopSort(TExprBase node, TExprContext& ctx, const TP
     }
     auto take = node.Cast<TCoTake>();
 
-    auto maybeSkip = take.Input().Maybe<TCoSkip>();
-    auto maybeSort = maybeSkip ? maybeSkip.Cast().Input().Maybe<TCoSort>() : take.Input().Maybe<TCoSort>();
-
-    if (!maybeSort) {
-        return node;
-    }
-    auto sort = maybeSort.Cast();
-
-    if (!IsSingleConsumer(sort, parents)) {
-        return node;
-    }
-
     if (!IsDqPureExpr(take.Count())) {
         return node;
     }
 
+    auto input = take.Input();
+
+    auto maybeSkip = input.Maybe<TCoSkip>();
     if (maybeSkip) {
-        auto skip = maybeSkip.Cast();
+        input = maybeSkip.Cast().Input();
 
-        if (!IsSingleConsumer(skip, parents)) {
+        if (!IsSingleConsumer(maybeSkip.Cast(), parents)) {
             return node;
         }
 
-        if (!IsDqPureExpr(skip)) {
+        if (!IsDqPureExpr(maybeSkip.Cast().Count())) {
             return node;
         }
+    }
 
-        return Build<TCoTake>(ctx, node.Pos())
+    auto maybeExtractMembers = input.Maybe<TCoExtractMembers>();
+    if (maybeExtractMembers) {
+        input = maybeExtractMembers.Cast().Input();
+
+        if (!IsSingleConsumer(maybeExtractMembers.Cast(), parents)) {
+            return node;
+        }
+    }
+
+    auto maybeSort = input.Maybe<TCoSort>();
+    if (!maybeSort) {
+        return node;
+    }
+
+    auto sort = maybeSort.Cast();
+    if (!IsSingleConsumer(sort, parents)) {
+        return node;
+    }
+
+    auto topSortCount = take.Count();
+    if (maybeSkip) {
+        topSortCount = Build<TCoPlus>(ctx, node.Pos())
+            .Left(take.Count())
+            .Right(maybeSkip.Cast().Count())
+            .Done();
+    }
+
+    TExprBase result = Build<TCoTopSort>(ctx, node.Pos())
+        .Input(sort.Input())
+        .KeySelectorLambda(sort.KeySelectorLambda())
+        .SortDirections(sort.SortDirections())
+        .Count(topSortCount)
+        .Done();
+
+    if (maybeSkip) {
+        result = Build<TCoTake>(ctx, node.Pos())
             .Input<TCoSkip>()
-                .Input<TCoTopSort>()
-                    .Input(sort.Input())
-                    .KeySelectorLambda(sort.KeySelectorLambda())
-                    .SortDirections(sort.SortDirections())
-                    .Count<TCoPlus>()
-                        .Left(take.Count())
-                        .Right(skip.Count())
-                        .Build()
-                    .Build()
-                .Count(skip.Count())
+                .Input(result)
+                .Count(maybeSkip.Cast().Count())
                 .Build()
             .Count(take.Count())
             .Done();
     }
 
-    return Build<TCoTopSort>(ctx, node.Pos())
-        .Input(sort.Input())
-        .KeySelectorLambda(sort.KeySelectorLambda())
-        .SortDirections(sort.SortDirections())
-        .Count(take.Count())
-        .Done();
+    if (maybeExtractMembers) {
+        result = Build<TCoExtractMembers>(ctx, node.Pos())
+            .Input(result)
+            .Members(maybeExtractMembers.Cast().Members())
+            .Done();
+    }
+
+    return result;
 }
 
 /*

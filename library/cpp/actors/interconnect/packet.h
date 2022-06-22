@@ -117,7 +117,7 @@ struct TEventHolder : TNonCopyable {
     ui32 EventSerializedSize;
     ui32 EventActuallySerialized;
     mutable NLWTrace::TOrbit Orbit;
-    std::optional<NWilson::TSpan> Span;
+    NWilson::TSpan Span;
 
     ui32 Fill(IEventHandle& ev);
 
@@ -136,9 +136,10 @@ struct TEventHolder : TNonCopyable {
         const TActorId& r = d.Recipient;
         const TActorId& s = d.Sender;
         const TActorId *f = ForwardRecipient ? &ForwardRecipient : nullptr;
+        Span.EndError("nondelivery");
         auto ev = Event
-            ? std::make_unique<IEventHandle>(r, s, Event.Release(), d.Flags, d.Cookie, f, NWilson::TTraceId(d.TraceId))
-            : std::make_unique<IEventHandle>(d.Type, d.Flags, r, s, std::move(Buffer), d.Cookie, f, NWilson::TTraceId(d.TraceId));
+            ? std::make_unique<IEventHandle>(r, s, Event.Release(), d.Flags, d.Cookie, f, Span)
+            : std::make_unique<IEventHandle>(d.Type, d.Flags, r, s, std::move(Buffer), d.Cookie, f, Span);
         NActors::TActivationContext::Send(ev->ForwardOnNondelivery(NActors::TEvents::TEvUndelivered::Disconnected, unsure));
     }
 
@@ -146,7 +147,7 @@ struct TEventHolder : TNonCopyable {
         Event.Reset();
         Buffer.Reset();
         Orbit.Reset();
-        Span.reset();
+        Span = {};
     }
 };
 

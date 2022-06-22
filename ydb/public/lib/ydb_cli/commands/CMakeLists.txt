@@ -30,6 +30,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_proto
   cpp-client-ydb_scheme
   cpp-client-ydb_table
+  ydb_types-credentials-login
 )
 target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp

@@ -566,6 +566,84 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, TExprNode::TPt
     return ctx.ChangeChild(*equiJoin, inputsCount, std::move(newJoinTree));
 }
 
+TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
+    if (!predicate->IsCallable("Or")) {
+        return predicate;
+    }
+
+    if (predicate->ChildrenSize() == 1) {
+        return predicate->HeadPtr();
+    }
+
+    // try to extract common And parts from Or
+    TVector<TExprNode::TListType> andParts;
+    for (ui32 i = 0; i < predicate->ChildrenSize(); ++i) {
+        TExprNode::TListType res;
+        GatherAndTerms(predicate->ChildPtr(i), res);
+        andParts.emplace_back(std::move(res));
+    }
+
+    THashMap<const TExprNode*, ui32> commonParts;
+    for (ui32 j = 0; j < andParts[0].size(); ++j) {
+        commonParts[andParts[0][j].Get()] = j;
+    }
+
+    for (ui32 i = 1; i < andParts.size(); ++i) {
+        THashSet<const TExprNode*> found;
+        for (ui32 j = 0; j < andParts[i].size(); ++j) {
+            found.insert(andParts[i][j].Get());
+        }
+
+        // remove
+        for (auto it = commonParts.begin(); it != commonParts.end();) {
+            if (found.contains(it->first)) {
+                ++it;
+            }
+            else {
+                commonParts.erase(it++);
+            }
+        }
+    }
+
+    if (commonParts.size() == 0) {
+        return predicate;
+    }
+
+    // rebuild commonParts in order of original And
+    TVector<ui32> idx;
+    for (const auto& x : commonParts) {
+        idx.push_back(x.second);
+    }
+
+    Sort(idx);
+    TExprNode::TListType andArgs;
+    for (ui32 i : idx) {
+        andArgs.push_back(andParts[0][i]);
+    }
+
+    TExprNode::TListType orArgs;
+    for (ui32 i = 0; i < andParts.size(); ++i) {
+        TExprNode::TListType restAndArgs;
+        for (ui32 j = 0; j < andParts[i].size(); ++j) {
+            if (commonParts.contains(andParts[i][j].Get())) {
+                continue;
+            }
+
+            restAndArgs.push_back(andParts[i][j]);
+        }
+
+        if (restAndArgs.size() >= 1) {
+            orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
+        }
+    }
+
+    if (orArgs.size() >= 1) {
+        andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
+    }
+
+    return ctx.NewCallable(predicate->Pos(), "And", std::move(andArgs));
+}
+
 TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ctx, const TParentsMap& parentsMap) {
     auto equiJoin = node.Input();
     auto structType = equiJoin.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()
@@ -681,6 +759,7 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
             }
         }
 
+        predicate = PreparePredicate(predicate, ctx);
         TExprNode::TListType andTerms;
         GatherAndTerms(std::move(predicate), andTerms);
         TExprNode::TPtr ret;

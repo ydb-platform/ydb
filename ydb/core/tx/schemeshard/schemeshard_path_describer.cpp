@@ -368,9 +368,9 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
     }
 }
 
-void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl) {
-    const TOlapTableInfo::TPtr tableInfo = *Self->OlapTables.FindPtr(pathId);
-    Y_VERIFY(tableInfo, "OlapTable not found");
+void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {
+    const TColumnTableInfo::TPtr tableInfo = *Self->ColumnTables.FindPtr(pathId);
+    Y_VERIFY(tableInfo, "ColumnTable not found");
     const TOlapStoreInfo::TPtr storeInfo = *Self->OlapStores.FindPtr(tableInfo->OlapStorePathId);
     Y_VERIFY(storeInfo, "OlapStore not found");
     Y_UNUSED(pathEl);
@@ -827,7 +827,7 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> TPathDescriber::Describe
             DescribeOlapStore(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypeColumnTable:
-            DescribeOlapTable(base->PathId, base);
+            DescribeColumnTable(base->PathId, base);
             break;
         case NKikimrSchemeOp::EPathTypePersQueueGroup:
             DescribePersQueueGroup(base->PathId, base);

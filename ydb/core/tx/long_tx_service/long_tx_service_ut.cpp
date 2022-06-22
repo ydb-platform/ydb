@@ -253,11 +253,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvSubscribeLock(987, node1)),
                 0, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender1);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender1);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 987u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
         }
 
         {
@@ -265,11 +265,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvSubscribeLock(987, node1)),
                 1, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 987u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(),node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
         }
 
         {
@@ -277,11 +277,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 new IEventHandle(service1, sender1,
                     new TEvLongTxService::TEvSubscribeLock(123, node1)),
                 0, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender1);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender1);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED);
         }
 
         {
@@ -289,11 +289,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvSubscribeLock(123, node1)),
                 1, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED);
         }
 
         {
@@ -302,19 +302,19 @@ Y_UNIT_TEST_SUITE(LongTxService) {
         }
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender1);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender1);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
         }
 
         {
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 123u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND);
         }
 
         // Block all cross-node TEvSubscribeLock messages and disconnect instead
@@ -348,11 +348,11 @@ Y_UNIT_TEST_SUITE(LongTxService) {
                 new IEventHandle(service2, sender2,
                     new TEvLongTxService::TEvSubscribeLock(234, node1)),
                 1, true);
-            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvSubscribeLockResult>(sender2);
+            auto ev = runtime.GrabEdgeEventRethrow<TEvLongTxService::TEvLockStatus>(sender2);
             const auto* msg = ev->Get();
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockId(), 234u);
             UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetLockNode(), node1);
-            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetResult(), NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE);
+            UNIT_ASSERT_VALUES_EQUAL(msg->Record.GetStatus(), NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE);
         }
 
         // We expect multiple disconnects before unavailable result is returned

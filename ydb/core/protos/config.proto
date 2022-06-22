@@ -1489,6 +1489,12 @@ message TCompactionConfig {
     optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
 }
 
+message TTracingConfig {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional string RootCA = 3;
+}
+
 // This message is used to upload custom service configs
 // to CMS. Config name is used to identify owner and
 // data format.
@@ -1560,6 +1566,7 @@ message TAppConfig {
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
+    optional TTracingConfig TracingConfig = 55;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

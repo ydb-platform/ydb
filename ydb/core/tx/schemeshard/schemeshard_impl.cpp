@@ -1249,7 +1249,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxCreateRtmrVolume:
     case TTxState::TxCreateTableIndex:
     case TTxState::TxCreateOlapStore:
-    case TTxState::TxCreateOlapTable:
+    case TTxState::TxCreateColumnTable:
     case TTxState::TxCreateCdcStream:
     case TTxState::TxCreateSequence:
     case TTxState::TxCreateReplication:
@@ -1271,7 +1271,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxAlterSolomonVolume:
     case TTxState::TxDropTableIndexAtMainTable:
     case TTxState::TxAlterOlapStore:
-    case TTxState::TxAlterOlapTable:
+    case TTxState::TxAlterColumnTable:
     case TTxState::TxAlterCdcStream:
     case TTxState::TxAlterCdcStreamAtTable:
     case TTxState::TxCreateCdcStreamAtTable:
@@ -1293,7 +1293,7 @@ TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, T
     case TTxState::TxDropSolomonVolume:
     case TTxState::TxDropTableIndex:
     case TTxState::TxDropOlapStore:
-    case TTxState::TxDropOlapTable:
+    case TTxState::TxDropColumnTable:
     case TTxState::TxDropCdcStream:
     case TTxState::TxDropSequence:
     case TTxState::TxDropReplication:
@@ -2918,7 +2918,7 @@ void TSchemeShard::PersistOlapStoreAlterRemove(NIceDb::TNiceDb& db, TPathId path
     PersistOlapStoreRemove(db, pathId, true);
 }
 
-void TSchemeShard::PersistOlapTable(NIceDb::TNiceDb& db, TPathId pathId, const TOlapTableInfo& tableInfo, bool isAlter)
+void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter)
 {
     Y_VERIFY(IsLocalId(pathId));
 
@@ -2928,62 +2928,62 @@ void TSchemeShard::PersistOlapTable(NIceDb::TNiceDb& db, TPathId pathId, const T
     Y_VERIFY(tableInfo.Sharding.SerializeToString(&serializedSharding));
 
     if (isAlter) {
-        db.Table<Schema::OlapTablesAlters>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::OlapTablesAlters::AlterVersion>(tableInfo.AlterVersion),
-            NIceDb::TUpdate<Schema::OlapTablesAlters::Description>(serialized),
-            NIceDb::TUpdate<Schema::OlapTablesAlters::Sharding>(serializedSharding));
+        db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterVersion>(tableInfo.AlterVersion),
+            NIceDb::TUpdate<Schema::ColumnTablesAlters::Description>(serialized),
+            NIceDb::TUpdate<Schema::ColumnTablesAlters::Sharding>(serializedSharding));
         if (tableInfo.AlterBody) {
             TString serializedAlterBody;
             Y_VERIFY(tableInfo.AlterBody->SerializeToString(&serializedAlterBody));
-            db.Table<Schema::OlapTablesAlters>().Key(pathId.LocalPathId).Update(
-                NIceDb::TUpdate<Schema::OlapTablesAlters::AlterBody>(serializedAlterBody));
+            db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
+                NIceDb::TUpdate<Schema::ColumnTablesAlters::AlterBody>(serializedAlterBody));
         }
     } else {
-        db.Table<Schema::OlapTables>().Key(pathId.LocalPathId).Update(
-            NIceDb::TUpdate<Schema::OlapTables::AlterVersion>(tableInfo.AlterVersion),
-            NIceDb::TUpdate<Schema::OlapTables::Description>(serialized),
-            NIceDb::TUpdate<Schema::OlapTables::Sharding>(serializedSharding));
+        db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
+            NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
+            NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
+            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding));
     }
 }
 
-void TSchemeShard::PersistOlapTableRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter)
+void TSchemeShard::PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter)
 {
     Y_VERIFY(IsLocalId(pathId));
 
     if (isAlter) {
-        db.Table<Schema::OlapTablesAlters>().Key(pathId.LocalPathId).Delete();
+        db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Delete();
         return;
     }
 
-    if (!OlapTables.contains(pathId)) {
+    if (!ColumnTables.contains(pathId)) {
         return;
     }
 
-    auto tableInfo = OlapTables.at(pathId);
+    auto tableInfo = ColumnTables.at(pathId);
     if (tableInfo->AlterData) {
-        PersistOlapTableAlterRemove(db, pathId);
+        PersistColumnTableAlterRemove(db, pathId);
     }
 
     // Unlink table from olap store
     if (OlapStores.contains(tableInfo->OlapStorePathId)) {
         auto storeInfo = OlapStores.at(tableInfo->OlapStorePathId);
-        storeInfo->OlapTablesUnderOperation.erase(pathId);
-        storeInfo->OlapTables.erase(pathId);
+        storeInfo->ColumnTablesUnderOperation.erase(pathId);
+        storeInfo->ColumnTables.erase(pathId);
     }
 
-    db.Table<Schema::OlapTables>().Key(pathId.LocalPathId).Delete();
-    OlapTables.erase(pathId);
+    db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Delete();
+    ColumnTables.erase(pathId);
     DecrementPathDbRefCount(pathId);
 }
 
-void TSchemeShard::PersistOlapTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TOlapTableInfo& tableInfo)
+void TSchemeShard::PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo)
 {
-    PersistOlapTable(db, pathId, tableInfo, true);
+    PersistColumnTable(db, pathId, tableInfo, true);
 }
 
-void TSchemeShard::PersistOlapTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
+void TSchemeShard::PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId)
 {
-    PersistOlapTableRemove(db, pathId, true);
+    PersistColumnTableRemove(db, pathId, true);
 }
 
 void TSchemeShard::PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo)
@@ -3577,9 +3577,9 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 generalVersion += result.GetColumnStoreVersion();
                 break;
             case NKikimrSchemeOp::EPathType::EPathTypeColumnTable: {
-                Y_VERIFY_S(OlapTables.contains(pathId),
+                Y_VERIFY_S(ColumnTables.contains(pathId),
                            "no olap table with id: " << pathId << ", at schemeshard: " << SelfTabletId());
-                auto tableInfo = OlapTables.at(pathId);
+                auto tableInfo = ColumnTables.at(pathId);
 
                 result.SetColumnTableVersion(tableInfo->AlterVersion);
                 generalVersion += result.GetColumnTableVersion();
@@ -4437,7 +4437,7 @@ void TSchemeShard::DropNode(TPathElement::TPtr node, TStepId step, TTxId txId, N
             PersistOlapStoreRemove(db, node->PathId);
             break;
         case TPathElement::EPathType::EPathTypeColumnTable:
-            PersistOlapTableRemove(db, node->PathId);
+            PersistColumnTableRemove(db, node->PathId);
             break;
         case TPathElement::EPathType::EPathTypeSubDomain:
         case TPathElement::EPathType::EPathTypeExtSubDomain:

@@ -448,7 +448,7 @@ public:
         return PathType == EPathType::EPathTypeColumnStore;
     }
 
-    bool IsOlapTable() const {
+    bool IsColumnTable() const {
         return PathType == EPathType::EPathTypeColumnTable;
     }
 

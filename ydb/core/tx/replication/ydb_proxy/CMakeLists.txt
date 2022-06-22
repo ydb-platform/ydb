@@ -20,6 +20,7 @@ target_link_libraries(tx-replication-ydb_proxy PUBLIC
   cpp-client-ydb_scheme
   cpp-client-ydb_table
   client-ydb_types-credentials
+  ydb_types-credentials-login
 )
 target_sources(tx-replication-ydb_proxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/replication/ydb_proxy/ydb_proxy.cpp

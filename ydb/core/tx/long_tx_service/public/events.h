@@ -28,7 +28,7 @@ namespace NLongTxService {
             EvRegisterLock,
             EvUnregisterLock,
             EvSubscribeLock,
-            EvSubscribeLockResult,
+            EvLockStatus,
             EvUnsubscribeLock,
             EvEnd,
         };
@@ -224,17 +224,17 @@ namespace NLongTxService {
             }
         };
 
-        struct TEvSubscribeLockResult
-            : TEventPB<TEvSubscribeLockResult, NKikimrLongTxService::TEvSubscribeLockResult, EvSubscribeLockResult>
+        struct TEvLockStatus
+            : TEventPB<TEvLockStatus, NKikimrLongTxService::TEvLockStatus, EvLockStatus>
         {
-            using EResult = NKikimrLongTxService::TEvSubscribeLockResult::EResult;
+            using EStatus = NKikimrLongTxService::TEvLockStatus::EStatus;
 
-            TEvSubscribeLockResult() = default;
+            TEvLockStatus() = default;
 
-            TEvSubscribeLockResult(ui64 lockId, ui32 lockNode, EResult result) {
+            TEvLockStatus(ui64 lockId, ui32 lockNode, EStatus status) {
                 Record.SetLockId(lockId);
                 Record.SetLockNode(lockNode);
-                Record.SetResult(result);
+                Record.SetStatus(status);
             }
         };
 

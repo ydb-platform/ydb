@@ -174,7 +174,7 @@ private:
 
 
         const bool enableComputeActor = Settings->EnableComputeActor.Get().GetOrElse(false);
-        const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("old");
+        const TString computeActorType = Settings->ComputeActorType.Get().GetOrElse("sync");
 
         auto resourceAllocator = RegisterChild(CreateResourceAllocator(
             GwmActorId, SelfId(), ControlId, workerCount,

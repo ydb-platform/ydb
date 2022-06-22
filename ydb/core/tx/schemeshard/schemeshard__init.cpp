@@ -3332,9 +3332,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         !txState->SourcePathId &&
                         txState->TxType != TTxState::TxForceDropSubDomain &&
                         txState->TxType != TTxState::TxForceDropExtSubDomain &&
-                        txState->TxType != TTxState::TxCreateOlapTable &&
-                        txState->TxType != TTxState::TxAlterOlapTable &&
-                        txState->TxType != TTxState::TxDropOlapTable &&
+                        txState->TxType != TTxState::TxCreateColumnTable &&
+                        txState->TxType != TTxState::TxAlterColumnTable &&
+                        txState->TxType != TTxState::TxDropColumnTable &&
                         txState->TxType != TTxState::TxCreateSequence &&
                         txState->TxType != TTxState::TxAlterSequence &&
                         txState->TxType != TTxState::TxDropSequence &&
@@ -3737,7 +3737,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_SYS_VIEW_PROCESSOR_COUNT].Add(1);
                 break;
             case ETabletType::ColumnShard:
-                Self->TabletCounters->Simple()[COUNTER_OLAP_COLUMN_SHARDS].Add(1);
+                Self->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
                 break;
             case ETabletType::SequenceShard:
                 Self->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Add(1);
@@ -3825,8 +3825,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 Self->TabletCounters->Simple()[COUNTER_SOLOMON_VOLUME_COUNT].Add(1);
             } else if (path->IsOlapStore()) {
                 Self->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Add(1);
-            } else if (path->IsOlapTable()) {
-                Self->TabletCounters->Simple()[COUNTER_OLAP_TABLE_COUNT].Add(1);
+            } else if (path->IsColumnTable()) {
+                Self->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Add(1);
             } else if (path->IsSequence()) {
                 Self->TabletCounters->Simple()[COUNTER_SEQUENCE_COUNT].Add(1);
             } else if (path->IsReplication()) {
@@ -4380,28 +4380,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read olap tables
         {
-            auto rowset = db.Table<Schema::OlapTables>().Select();
+            auto rowset = db.Table<Schema::ColumnTables>().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::OlapTables::PathId>());
-                ui64 alterVersion = rowset.GetValue<Schema::OlapTables::AlterVersion>();
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTables::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::ColumnTables::AlterVersion>();
                 NKikimrSchemeOp::TColumnTableDescription description;
-                Y_VERIFY(description.ParseFromString(rowset.GetValue<Schema::OlapTables::Description>()));
+                Y_VERIFY(description.ParseFromString(rowset.GetValue<Schema::ColumnTables::Description>()));
                 NKikimrSchemeOp::TColumnTableSharding sharding;
-                Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::OlapTables::Sharding>()));
+                Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::ColumnTables::Sharding>()));
 
-                TOlapTableInfo::TPtr tableInfo = new TOlapTableInfo(alterVersion, std::move(description), std::move(sharding));
-                Self->OlapTables[pathId] = tableInfo;
+                TColumnTableInfo::TPtr tableInfo = new TColumnTableInfo(alterVersion, std::move(description), std::move(sharding));
+                Self->ColumnTables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
 
                 auto itStore = Self->OlapStores.find(tableInfo->OlapStorePathId);
                 if (itStore != Self->OlapStores.end()) {
-                    itStore->second->OlapTables.insert(pathId);
+                    itStore->second->ColumnTables.insert(pathId);
                     if (pathsUnderOperation.contains(pathId)) {
-                        itStore->second->OlapTablesUnderOperation.insert(pathId);
+                        itStore->second->ColumnTablesUnderOperation.insert(pathId);
                     }
                 }
 
@@ -4413,28 +4413,28 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         // Read olap tables (alters)
         {
-            auto rowset = db.Table<Schema::OlapTablesAlters>().Select();
+            auto rowset = db.Table<Schema::ColumnTablesAlters>().Select();
             if (!rowset.IsReady()) {
                 return false;
             }
 
             while (!rowset.EndOfSet()) {
-                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::OlapTablesAlters::PathId>());
-                ui64 alterVersion = rowset.GetValue<Schema::OlapTablesAlters::AlterVersion>();
+                TPathId pathId = Self->MakeLocalId(rowset.GetValue<Schema::ColumnTablesAlters::PathId>());
+                ui64 alterVersion = rowset.GetValue<Schema::ColumnTablesAlters::AlterVersion>();
                 NKikimrSchemeOp::TColumnTableDescription description;
-                Y_VERIFY(description.ParseFromString(rowset.GetValue<Schema::OlapTablesAlters::Description>()));
+                Y_VERIFY(description.ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Description>()));
                 NKikimrSchemeOp::TColumnTableSharding sharding;
-                Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::OlapTablesAlters::Sharding>()));
+                Y_VERIFY(sharding.ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::Sharding>()));
                 TMaybe<NKikimrSchemeOp::TAlterColumnTable> alterBody;
-                if (rowset.HaveValue<Schema::OlapTablesAlters::AlterBody>()) {
-                    Y_VERIFY(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::OlapTablesAlters::AlterBody>()));
+                if (rowset.HaveValue<Schema::ColumnTablesAlters::AlterBody>()) {
+                    Y_VERIFY(alterBody.ConstructInPlace().ParseFromString(rowset.GetValue<Schema::ColumnTablesAlters::AlterBody>()));
                 }
 
-                TOlapTableInfo::TPtr alterData = new TOlapTableInfo(alterVersion, std::move(description), std::move(sharding), std::move(alterBody));
+                TColumnTableInfo::TPtr alterData = new TColumnTableInfo(alterVersion, std::move(description), std::move(sharding), std::move(alterBody));
 
-                Y_VERIFY_S(Self->OlapTables.contains(pathId),
+                Y_VERIFY_S(Self->ColumnTables.contains(pathId),
                     "Cannot load alter for olap table " << pathId);
-                Self->OlapTables[pathId]->AlterData = alterData;
+                Self->ColumnTables[pathId]->AlterData = alterData;
 
                 if (!rowset.Next()) {
                     return false;

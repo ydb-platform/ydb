@@ -1,4 +1,5 @@
 #include "wilson_span.h"
+#include "wilson_uploader.h"
 #include <library/cpp/actors/core/log.h>
 #include <google/protobuf/text_format.h>
 
@@ -53,11 +54,7 @@ namespace NWilson {
 
     void TSpan::Send() {
         if (TlsActivationContext) {
-            NProtoBuf::TextFormat::Printer p;
-            p.SetSingleLineMode(true);
-            TString s;
-            p.PrintToString(Data->Span, &s);
-            LOG_DEBUG_S(*TlsActivationContext, 430 /* WILSON */, s);
+            TActivationContext::Send(new IEventHandle(MakeWilsonUploaderId(), {}, new TEvWilson(&Data->Span)));
         }
     }
 

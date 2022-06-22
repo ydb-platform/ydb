@@ -80,17 +80,17 @@ message TEvSubscribeLock {
     optional uint32 LockNode = 2;
 }
 
-message TEvSubscribeLockResult {
-    enum EResult {
-        RESULT_UNSPECIFIED = 0;
-        RESULT_LOCK_SUBSCRIBED = 1;
-        RESULT_LOCK_NOT_FOUND = 2;
-        RESULT_LOCK_UNAVAILABLE = 3;
+message TEvLockStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUBSCRIBED = 1;
+        STATUS_NOT_FOUND = 2;
+        STATUS_UNAVAILABLE = 3;
     }
 
     optional uint64 LockId = 1;
     optional uint32 LockNode = 2;
-    optional EResult Result = 3;
+    optional EStatus Status = 3;
 }
 
 message TEvUnsubscribeLock {

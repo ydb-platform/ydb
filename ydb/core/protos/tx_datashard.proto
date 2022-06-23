@@ -1461,26 +1461,47 @@ message TEvGetCompactTableStatsResult {
 //
 // The TEvRead message starts a new read request with given queries
 // and starts streaming a single resultset in the requested format.
-// The TEvRead contains number of bytes/rows (quota) the client can handle,
-// the server is allowed to reply with multiple TEvReadResult messages
-// within the quota. To update quota user uses TEvReadAck message.
+// The TEvRead contains number of rows (hard limit) and bytes (soft limit)
+// the client can handle, the server is allowed to reply with multiple TEvReadResult
+// messages within the quota. To update quota user uses TEvReadAck message.
 //
 // The protocol works as follows:
 // 1. Optionally user obtains LockTxId from TxProxy.
+//
 // 2. Optionally user obtains snapshot version.
+//
 // 3. User starts reading by sending TEvRead to the shard.
+//
 // 4. Shard replies with TEvReadResult, which contains:
-//    - ReadId which is the same as in TEvRead
+//    - ReadId which is the same as in TEvRead. Shard gives no guarantee
+//    that the ReadId will be valid any time.
 //    - Snapshot version, which is useful when it wasn't specified in TEvRead.
-//    Shard gives no guarantee that the ReadId will be valid any time.
 //    - SeqNo that should be used by user in TEvReadAck
 //    - ContinuationToken, which user can use to restart the read.
-// 5. User reads until the end using TEvReadAck to update the quota.
-// 6. User stops reading by TEvReadCancel.
+//
+// 5. On each TEvReadResult except the last one user sends TEvReadAck to update quota and continue reading.
+// * If user has already received multiple TEvReadResult messages, it is allowed to send
+// single TEvReadAck with SeqNo from the last result.
+// * If user received final TEvReadResult or  TEvReadResult with error he should not send any reply.
+// Note that server will stop sending TEvReadResult messages only if last sent result contains either
+// Finished or LimitReached field set. Otherwise until there is no disconnect, user can rely that
+// he will receive more TEvReadResult messages. Though to improve latency it's a good practice
+// to send TEvReadAck before exhausting quota.
+//
+// 6. User either receives TEvReadResult with Finished field set or TEvReadResult with error
+// or stops reading hisself using TEvReadCancel.
 //
 // TEvReadResult is valid only if its Status is equal to Ydb::StatusIds::SUCCESS.
 // In case of any other status code iterator has been invalidated and further
 // usage of its ReadId will result in either non-success status code.
+//
+// Shard is allowed to send TEvReadResult without actual results, but with LimitReached field set.
+// E.g. it happens when initial TEvRead has too small quota to read at least single row.
+// Receiving TEvReadResult with LimitReached set means that shard will not read more rows until
+// user sends ACK with extended quota.
+//
+// User must detect disconnect and after it happened ignore possible results from the shard.
+// Instead new read must be started using ContinuationToken from last successful TEvReadResult.
 message TEvRead {
     // User must always provide unique ReadId
     // Note that shard distinguishes equal ReadId's
@@ -1511,6 +1532,12 @@ message TEvRead {
     optional EScanDataFormat ResultFormat = 6;
 
     // Limits the total number of rows or bytes client currently can handle
+    // MaxRows is hard limit: shard must never violate it
+    // MaxBytes is soft limit: shard stops only after crossing the limit, i.e.
+    // if n rows are within MaxBytes and n+1 is not - shard returns n+1 rows.
+    //
+    // Note that because of this result will always contain at least one row
+    // independent on quota.
     optional uint32 MaxRows = 7;
     optional uint32 MaxBytes = 8;
 
@@ -1547,12 +1574,11 @@ message TReadContinuationToken {
     optional bytes LastProcessedKey = 2;
 }
 
-// Every TEvRead and TEvReadNext produces a result
+// Every TEvRead and TEvReadAck produces a result
 // The result may be partial, in which case client may continue streaming more
-// results using TEvReadNext.
+// results using TEvReadAck.
 //
-// Note the condition that everything has been read: FirstUnprocessedQuery equals to
-// the size of Queries from TEvRead and LastProcessedKey is not set.
+// Note the condition that everything has been read: Finished field is set.
 message TEvReadResult {
     message TArrowBatch {
         optional bytes Schema = 1;
@@ -1567,7 +1593,7 @@ message TEvReadResult {
     // same as ReadId from the TEvRead
     optional uint64 ReadId = 1;
 
-    // Specifies SeqNo for the next TEvReadNext call
+    // Specifies SeqNo for the next TEvReadAck call
     optional uint64 SeqNo = 2;
 
     optional TStatus Status = 3;
@@ -1594,9 +1620,14 @@ message TEvReadResult {
     }
 }
 
+// After handling ReadResult with specified SeqNo user is ready to handle at most
+// MaxRows and MaxBytes. But keep in mind that until shard handles this message
+// it can send data based on previous quota.
 message TEvReadAck {
     optional uint64 ReadId = 1;
     optional uint64 SeqNo = 2;
+
+    // see comment for same fields in TEvRead
     optional uint32 MaxRows = 3;
     optional uint32 MaxBytes = 4;
 };

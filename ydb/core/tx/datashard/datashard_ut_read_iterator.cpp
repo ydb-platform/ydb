@@ -24,7 +24,8 @@ using TCellVec = std::vector<TCell>;
 void CreateTable(Tests::TServer::TPtr server,
                  TActorId sender,
                  const TString &root,
-                 const TString &name)
+                 const TString &name,
+                 bool withFollower = false)
 {
     TVector<TShardedTableOptions::TColumn> columns = {
         {"key1", "Uint32", true, false},
@@ -36,6 +37,9 @@ void CreateTable(Tests::TServer::TPtr server,
     auto opts = TShardedTableOptions()
         .Shards(1)
         .Columns(columns);
+
+    if (withFollower)
+        opts.Followers(1);
 
     CreateShardedTable(server, sender, root, name, opts);
 }
@@ -275,7 +279,8 @@ struct TTableInfo {
 };
 
 struct TTestHelper {
-    TTestHelper() {
+    TTestHelper(bool withFollower = false) {
+        WithFollower = withFollower;
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -294,7 +299,7 @@ struct TTestHelper {
         auto& table1 = Tables["table-1"];
         table1.Name = "table-1";
         {
-            CreateTable(Server, Sender, "/Root", "table-1");
+            CreateTable(Server, Sender, "/Root", "table-1", WithFollower);
             ExecSQL(Server, Sender, R"(
                 UPSERT INTO [/Root/table-1]
                 (key1, key2, key3, value)
@@ -316,7 +321,7 @@ struct TTestHelper {
             table1.OwnerId = ownerId;
             table1.UserTable = tables["table-1"];
 
-            table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetPipeConfigWithRetries());
+            table1.ClientId = runtime.ConnectToPipe(table1.TabletId, Sender, 0, GetTestPipeConfig());
         }
 
         auto& table2 = Tables["movies"];
@@ -339,7 +344,7 @@ struct TTestHelper {
             table2.OwnerId = ownerId;
             table2.UserTable = tables["movies"];
 
-            table2.ClientId = runtime.ConnectToPipe(table2.TabletId, Sender, 0, GetPipeConfigWithRetries());
+            table2.ClientId = runtime.ConnectToPipe(table2.TabletId, Sender, 0, GetTestPipeConfig());
         }
     }
 
@@ -426,7 +431,7 @@ struct TTestHelper {
             Sender,
             request,
             0,
-            GetPipeConfigWithRetries(),
+            GetTestPipeConfig(),
             table.ClientId);
 
         return WaitReadResult();
@@ -450,7 +455,7 @@ struct TTestHelper {
             table.TabletId,
             Sender, request,
             0,
-            GetPipeConfigWithRetries(),
+            GetTestPipeConfig(),
             table.ClientId);
     }
 
@@ -465,19 +470,27 @@ struct TTestHelper {
             Sender,
             request,
             0,
-            GetPipeConfigWithRetries(),
+            GetTestPipeConfig(),
             table.ClientId);
     }
 
+    NTabletPipe::TClientConfig GetTestPipeConfig() {
+        auto config = GetPipeConfigWithRetries();
+        if (WithFollower)
+            config.ForceFollower = true;
+        return config;
+    }
+
 public:
+    bool WithFollower = false;
     Tests::TServer::TPtr Server;
     TActorId Sender;
 
     THashMap<TString, TTableInfo> Tables;
 };
 
-void TestReadKey(NKikimrTxDataShard::EScanDataFormat format) {
-    TTestHelper helper;
+void TestReadKey(NKikimrTxDataShard::EScanDataFormat format, bool withFollower = false) {
+    TTestHelper helper(withFollower);
 
     for (ui32 k: {1, 3, 5}) {
         auto request = helper.GetBaseReadRequest("table-1", 1, format);
@@ -1235,6 +1248,10 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto readResult3 = helper.WaitReadResult();
         UNIT_ASSERT(readResult3);
         UNIT_ASSERT_VALUES_EQUAL(readResult3->Record.GetStatus().GetCode(), Ydb::StatusIds::BAD_SESSION);
+    }
+
+    Y_UNIT_TEST(ShouldReadFromFollower) {
+        TestReadKey(NKikimrTxDataShard::CELLVEC, true);
     }
 };
 

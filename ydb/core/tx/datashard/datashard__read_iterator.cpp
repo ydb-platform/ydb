@@ -713,7 +713,28 @@ private:
 
         state.Reverse = record.GetReverse();
 
+        // note that we must call SyncSchemeOnFollower before we do any kind of checks
+        if (Self->IsFollower()) {
+            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+            TString errMessage;
+
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+                finished = false;
+                return;
+            }
+
+            if (status != NKikimrTxDataShard::TError::OK) {
+                SetStatusError(
+                    Result->Record,
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    "Follower not ready");
+                finished = true;
+                return;
+            }
+        }
+
         if (state.PathId.OwnerId != Self->TabletID()) {
+            // owner is schemeshard, read user table
             if (state.PathId.OwnerId != Self->GetPathOwnerId()) {
                 SetStatusError(
                     Result->Record,
@@ -788,6 +809,7 @@ private:
 
             userTableInfo->Stats.AccessTime = TAppData::TimeProvider->Now();
         } else {
+            // DS is owner, read system table
             if (state.PathId.LocalPathId >= TDataShard::Schema::MinLocalTid) {
                 SetStatusError(
                     Result->Record,
@@ -842,23 +864,6 @@ private:
         }
 
         if (Self->IsFollower()) {
-            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
-            TString errMessage;
-
-            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
-                finished = false;
-                return;
-            }
-
-            if (status != NKikimrTxDataShard::TError::OK) {
-                SetStatusError(
-                    Result->Record,
-                    Ydb::StatusIds::INTERNAL_ERROR,
-                    "Follower not ready");
-                finished = true;
-                return;
-            }
-
             if (!state.ReadVersion.IsMax()) {
                 // check that follower has this version
                 NIceDb::TNiceDb db(txc.DB);

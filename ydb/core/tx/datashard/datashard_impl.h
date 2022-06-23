@@ -2407,6 +2407,10 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadColumnsRequest, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
+            HFuncTraced(TEvDataShard::TEvRead, Handle);
+            HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
+            HFuncTraced(TEvDataShard::TEvReadAck, Handle);
+            HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()

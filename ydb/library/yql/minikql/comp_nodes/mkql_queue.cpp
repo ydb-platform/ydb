@@ -323,14 +323,17 @@ private:
             case EPreserveState::Done:
                 return NUdf::EFetchStatus::Finish;
             case EPreserveState::Feed:
+            case EPreserveState::Yield:
                 break;
             default:
+                Y_VERIFY(Outpace > 0);
                 Buffer.PopFront();
                 --Outpace;
         }
         for (NUdf::TUnboxedValue item; State != EPreserveState::Emit && Outpace <= OutpaceGoal;) {
             switch (Stream.Fetch(item)) {
             case NUdf::EFetchStatus::Yield:
+                State = EPreserveState::Yield;
                 return NUdf::EFetchStatus::Yield;
             case NUdf::EFetchStatus::Finish:
                 State = EPreserveState::Emit;
@@ -343,6 +346,8 @@ private:
                 ++Outpace;
                 if (Outpace > OutpaceGoal) {
                     State = EPreserveState::GoOn;
+                } else {
+                    State = EPreserveState::Feed;
                 }
             }
         }
@@ -358,6 +363,7 @@ private:
     enum class EPreserveState {
         Feed,
         GoOn,
+        Yield,
         Emit,
         Done
     };

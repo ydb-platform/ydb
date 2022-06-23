@@ -63,6 +63,28 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvCommitBlobSeqResult);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvResolve);
         BLOBDEPOT_EVENT_PB(EvResolveResult, Status, ErrorReason);
+
+        template<typename TEvent>
+        struct TResponseFor {};
+
+        template<> struct TResponseFor<TEvApplyConfig> { using Type = TEvApplyConfigResult; };
+        template<> struct TResponseFor<TEvRegisterAgent> { using Type = TEvRegisterAgentResult; };
+        template<> struct TResponseFor<TEvAllocateIds> { using Type = TEvAllocateIdsResult; };
+        template<> struct TResponseFor<TEvBlock> { using Type = TEvBlockResult; };
+        template<> struct TResponseFor<TEvQueryBlocks> { using Type = TEvQueryBlocksResult; };
+        template<> struct TResponseFor<TEvCommitBlobSeq> { using Type = TEvCommitBlobSeqResult; };
+        template<> struct TResponseFor<TEvResolve> { using Type = TEvResolveResult; };
+
+        template<typename TRequestEvent, typename... TArgs>
+        static auto MakeResponseFor(TAutoPtr<TEventHandle<TRequestEvent>>& ev, TActorId selfId, TArgs&&... args) {
+            auto event = std::make_unique<typename TResponseFor<TRequestEvent>::Type>(std::forward<TArgs>(args)...);
+            auto *record = &event->Record;
+            auto handle = std::make_unique<IEventHandle>(ev->Sender, selfId, event.release(), 0, ev->Cookie);
+            if (ev->InterconnectSession) {
+                handle->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+            }
+            return std::make_pair(std::move(handle), record);
+        }
     };
 
 } // NKikimr

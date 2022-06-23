@@ -43,11 +43,11 @@ namespace NKikimr::NBlobDepot {
         agent.ExpirationTimestamp = TInstant::Max();
         OnAgentConnect(agent);
 
-        auto response = std::make_unique<TEvBlobDepot::TEvRegisterAgentResult>();
-        auto& record = response->Record;
-        record.SetGeneration(Executor()->Generation());
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(ev, SelfId());
+
+        record->SetGeneration(Executor()->Generation());
         for (const auto& [k, v] : ChannelKinds) {
-            auto *proto = record.AddChannelKinds();
+            auto *proto = record->AddChannelKinds();
             proto->SetChannelKind(k);
             for (const ui32 channel : v.IndexToChannel) {
                 auto *cg = proto->AddChannelGroups();
@@ -56,7 +56,7 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        SendResponseToAgent(*ev, std::move(response));
+        TActivationContext::Send(response.release());
     }
 
     void TBlobDepot::OnAgentConnect(TAgentInfo& agent) {
@@ -66,16 +66,18 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BD04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
-        auto response = std::make_unique<TEvBlobDepot::TEvAllocateIdsResult>(ev->Get()->Record.GetChannelKind(),
+
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(ev, SelfId(), ev->Get()->Record.GetChannelKind(),
             Executor()->Generation());
-        auto& record = response->Record;
-        if (const auto it = ChannelKinds.find(record.GetChannelKind()); it != ChannelKinds.end()) {
+
+        if (const auto it = ChannelKinds.find(record->GetChannelKind()); it != ChannelKinds.end()) {
             auto& nextBlobSeqId = it->second.NextBlobSeqId;
-            record.SetRangeBegin(nextBlobSeqId);
+            record->SetRangeBegin(nextBlobSeqId);
             nextBlobSeqId += PreallocatedIdCount;
-            record.SetRangeEnd(nextBlobSeqId);
+            record->SetRangeEnd(nextBlobSeqId);
         }
-        SendResponseToAgent(*ev, std::move(response));
+
+        TActivationContext::Send(response.release());
     }
 
     TBlobDepot::TAgentInfo& TBlobDepot::GetAgent(const TActorId& pipeServerId) {
@@ -86,14 +88,6 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(agentIt != Agents.end());
         Y_VERIFY(agentIt->second.ConnectedAgent == pipeServerId);
         return agentIt->second;
-    }
-
-    void TBlobDepot::SendResponseToAgent(IEventHandle& request, std::unique_ptr<IEventBase> response) {
-        auto handle = std::make_unique<IEventHandle>(request.Sender, SelfId(), response.release(), 0, request.Cookie);
-        if (request.InterconnectSession) {
-            handle->Rewrite(TEvInterconnect::EvForward, request.InterconnectSession);
-        }
-        TActivationContext::Send(handle.release());
     }
 
     void TBlobDepot::InitChannelKinds() {

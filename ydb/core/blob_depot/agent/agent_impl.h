@@ -15,7 +15,60 @@ namespace NKikimr::NBlobDepot {
         XX(EvPatch) \
         // END
 
-    class TBlobDepotAgent : public TActor<TBlobDepotAgent> {
+    class TBlobDepotAgent;
+
+    struct TRequestContext {
+        virtual ~TRequestContext() = default;
+
+        template<typename T>
+        T& Obtain() {
+            T *sp = static_cast<T*>(this);
+            Y_VERIFY_DEBUG(sp == dynamic_cast<T*>(this));
+            return *sp;
+        }
+
+        using TPtr = std::shared_ptr<TRequestContext>;
+    };
+
+    struct TTabletDisconnected {};
+
+    class TRequestSender {
+        THashMap<ui64, TRequestContext::TPtr> RequestsInFlight;
+
+    protected:
+        TBlobDepotAgent& Agent;
+
+    public:
+        using TResponse = std::variant<
+            // internal events
+            TTabletDisconnected,
+
+            // tablet responses
+            TEvBlobDepot::TEvRegisterAgentResult*,
+            TEvBlobDepot::TEvAllocateIdsResult*,
+            TEvBlobDepot::TEvBlockResult*,
+            TEvBlobDepot::TEvQueryBlocksResult*,
+            TEvBlobDepot::TEvCommitBlobSeqResult*,
+            TEvBlobDepot::TEvResolveResult*,
+
+            // underlying DS proxy responses
+            TEvBlobStorage::TEvGetResult*
+        >;
+
+    public:
+        TRequestSender(TBlobDepotAgent& agent);
+        virtual ~TRequestSender();
+        void RegisterRequest(ui64 id, TRequestContext::TPtr context);
+        void OnRequestComplete(ui64 id, TResponse response);
+
+    protected:
+        virtual void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) = 0;
+    };
+
+    class TBlobDepotAgent
+        : public TActor<TBlobDepotAgent>
+        , public TRequestSender
+    {
         const ui32 VirtualGroupId;
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
@@ -23,7 +76,9 @@ namespace NKikimr::NBlobDepot {
     public:
         TBlobDepotAgent(ui32 virtualGroupId)
             : TActor(&TThis::StateFunc)
+            , TRequestSender(*this)
             , VirtualGroupId(virtualGroupId)
+            , BlocksManager(CreateBlocksManager())
         {
             Y_VERIFY(TGroupID(VirtualGroupId).ConfigurationType() == EGroupConfigurationType::Virtual);
         }
@@ -42,6 +97,8 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
+
+            hFunc(TEvBlobStorage::TEvGetResult, Handle);
 
             ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
         );
@@ -67,53 +124,31 @@ namespace NKikimr::NBlobDepot {
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // BlobDepot communications
-
-        using TRequestCompleteCallback = std::function<bool(IEventBase*)>;
-
-        class TRequestSender {
-            THashSet<ui64> IdsInFlight;
-
-        protected:
-            TBlobDepotAgent& Agent;
-
-        public:
-            TRequestSender(TBlobDepotAgent& agent)
-                : Agent(agent)
-            {}
-
-            ~TRequestSender() {
-                for (const ui64 id : IdsInFlight) {
-                    const size_t num = Agent.RequestInFlight.erase(id);
-                    Y_VERIFY(num);
-                }
-            }
-
-            void RegisterRequest(ui64 id) {
-                const auto [_, inserted] = IdsInFlight.insert(id);
-                Y_VERIFY(inserted);
-            }
-
-            void OnRequestComplete(ui64 id) {
-                const size_t num = IdsInFlight.erase(id);
-                Y_VERIFY(num);
-            }
-        };
-
-        struct TRequestInFlight {
-            TRequestSender *Sender;
-            TRequestCompleteCallback Callback;
-        };
+        // BlobDepot and other actor communications
 
         ui64 NextRequestId = 1;
-        THashMap<ui64, TRequestInFlight> RequestInFlight;
+        THashMap<ui64, TRequestSender*> TabletRequestInFlight;
+        THashMap<ui64, TRequestSender*> OtherRequestInFlight;
 
-        void RegisterRequest(ui64 id, TRequestSender *sender, TRequestCompleteCallback callback);
+        void RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context, bool toBlobDepotTablet);
 
         template<typename TEvent>
         void HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev);
 
+        template<typename TEvent>
+        void HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev);
+
+        void HandleResponse(TAutoPtr<IEventHandle> ev, TRequestSender::TResponse response, THashMap<ui64, TRequestSender*>& map);
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        struct TAllocateIdsContext : TRequestContext {
+            NKikimrBlobDepot::TChannelKind::E ChannelKind;
+
+            TAllocateIdsContext(NKikimrBlobDepot::TChannelKind::E channelKind)
+                : ChannelKind(channelKind)
+            {}
+        };
 
         bool Registered = false;
         ui32 BlobDepotGeneration = 0;
@@ -123,11 +158,15 @@ namespace NKikimr::NBlobDepot {
         void ConnectToBlobDepot();
         void OnDisconnect();
 
-        void Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestCompleteCallback callback);
-        void Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestCompleteCallback callback);
-        void Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestCompleteCallback callback);
+        void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override;
+        void HandleRegisterAgentResult(TRequestContext::TPtr context, TEvBlobDepot::TEvRegisterAgentResult& msg);
+        void HandleAllocateIdsResult(TRequestContext::TPtr context, TEvBlobDepot::TEvAllocateIdsResult& msg);
 
-        void Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestCompleteCallback callback);
+        void Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context);
+        void Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
+        void Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
+
+        void Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -146,7 +185,7 @@ namespace NKikimr::NBlobDepot {
             std::deque<TAllocatedId> IdQ;
             static constexpr size_t PreallocatedIdCount = 2;
 
-            std::pair<TLogoBlobID, ui32> Allocate(TBlobDepotAgent& agent, ui32 size, ui32 type) {
+            std::pair<TLogoBlobID, ui32> Allocate(TBlobDepotAgent& agent, EBlobType type, ui32 part, ui32 size) {
                 if (IdQ.empty()) {
                     return {};
                 }
@@ -156,10 +195,7 @@ namespace NKikimr::NBlobDepot {
                 if (item.Begin == item.End) {
                     IdQ.pop_front();
                 }
-                static constexpr ui32 typeBits = 24 - TCGSI::IndexBits;
-                Y_VERIFY(type < (1 << typeBits));
-                const ui32 cookie = cgsi.Index << typeBits | type;
-                const TLogoBlobID id(agent.TabletId, cgsi.Generation, cgsi.Step, cgsi.Channel, size, cookie);
+                auto id = cgsi.MakeBlobId(agent.TabletId, type, part, size);
                 const auto [channel, groupId] = ChannelGroups[ChannelToIndex[cgsi.Channel]];
                 Y_VERIFY_DEBUG(channel == cgsi.Channel);
                 return {id, groupId};
@@ -175,23 +211,41 @@ namespace NKikimr::NBlobDepot {
         struct TExecutingQueries {};
         struct TPendingBlockChecks {};
 
-        class TExecutingQuery
-            : public TIntrusiveListItem<TExecutingQuery, TExecutingQueries>
-            , public TIntrusiveListItem<TExecutingQuery, TPendingBlockChecks>
+        class TQuery
+            : public TIntrusiveListItem<TQuery, TExecutingQueries>
+            , public TIntrusiveListItem<TQuery, TPendingBlockChecks>
             , public TRequestSender
         {
+            friend class TBlobDepotAgent;
+
+            struct TReadContext {
+                TQuery *Query;
+                ui64 Tag;
+                TString Buffer;
+                ui64 Size;
+                NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
+                THashMap<ui64, ui64> ReadsToOffset;
+            };
+            std::list<TReadContext> Reads;
+
         protected:
             std::unique_ptr<IEventHandle> Event; // original query event
             const ui64 QueryId;
 
         public:
-            TExecutingQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
+            TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
                 : TRequestSender(agent)
                 , Event(std::move(event))
                 , QueryId(RandomNumber<ui64>())
             {}
 
-            virtual ~TExecutingQuery() = default;
+            virtual ~TQuery() {
+                for (const auto& read : Reads) {
+                    for (const auto& [id, _] : read.ReadsToOffset) {
+                        Agent.ReadsInFlight.erase(id);
+                    }
+                }
+            }
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
@@ -199,34 +253,55 @@ namespace NKikimr::NBlobDepot {
             ui64 GetQueryId() const { return QueryId; }
             virtual void Initiate() = 0;
 
-            virtual void OnUpdateBlock() {}
+            virtual void OnUpdateBlock(bool /*success*/) {}
+            virtual void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus /*status*/, TString /*dataOrErrorReason*/) {}
 
         public:
             struct TDeleter {
-                static void Destroy(TExecutingQuery *query) { delete query; }
+                static void Destroy(TQuery *query) { delete query; }
             };
         };
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEventQ;
-        TIntrusiveListWithAutoDelete<TExecutingQuery, TExecutingQuery::TDeleter, TExecutingQueries> ExecutingQueries;
+        TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
 
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
-        TExecutingQuery *CreateExecutingQuery(TAutoPtr<IEventHandle> ev);
-        template<ui32 EventType> TExecutingQuery *CreateExecutingQuery(std::unique_ptr<IEventHandle> ev);
+        TQuery *CreateQuery(TAutoPtr<IEventHandle> ev);
+        template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blocks
 
-        struct TBlockInfo {
-            ui32 BlockedGeneration;
-            TMonotonic ExpirationTimestamp; // not valid after
-            bool RefreshInFlight = false;
-            TIntrusiveList<TExecutingQuery, TPendingBlockChecks> PendingBlockChecks;
-        };
+        class TBlocksManager;
+        struct TBlocksManagerDeleter { void operator ()(TBlocksManager*) const; };
+        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, TBlocksManagerDeleter>;
+        TBlocksManagerPtr BlocksManager;
 
-        std::unordered_map<ui64, TBlockInfo> Blocks;
+        TBlocksManagerPtr CreateBlocksManager();
 
-        NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, ui32 generation, TExecutingQuery *query);
+        NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, ui32 generation, TQuery *query,
+            ui32 *blockedGeneration = nullptr);
+
+        ui32 GetBlockForTablet(ui64 tabletId);
+
+        void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic expirationTimestamp);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Reading
+
+        ui64 NextReadId = 1;
+        THashMap<ui64, std::list<TQuery::TReadContext>::iterator> ReadsInFlight;
+
+        bool IssueRead(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>& values, ui64 offset, ui64 size,
+            NKikimrBlobStorage::EGetHandleClass getHandleClass, bool mustRestoreFirst, TQuery *query, ui64 tag,
+            bool vg, TString *error);
+
+        void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Status flags
+
+        TStorageStatusFlags GetStorageStatusFlags() const;
     };
 
 } // NKikimr::NBlobDepot

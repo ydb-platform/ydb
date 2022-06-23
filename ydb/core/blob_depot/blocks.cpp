@@ -75,22 +75,17 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
-            auto event = std::make_unique<TEvBlobDepot::TEvBlockResult>(NKikimrProto::OK, std::nullopt);
-            auto& responseRecord = event->Record;
-            auto response = std::make_unique<IEventHandle>(ev->Sender, Self->SelfId(), event.release(), 0, ev->Cookie);
-            if (ev->InterconnectSession) {
-                response->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
-            }
-
             const auto& record = ev->Get()->Record;
+            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(ev, Self->SelfId(), NKikimrProto::OK, std::nullopt);
+
             if (!record.HasTabletId() || !record.HasBlockedGeneration()) {
-                responseRecord.SetStatus(NKikimrProto::ERROR);
-                responseRecord.SetErrorReason("incorrect protobuf");
+                responseRecord->SetStatus(NKikimrProto::ERROR);
+                responseRecord->SetErrorReason("incorrect protobuf");
             } else {
                 const ui64 tabletId = record.GetTabletId();
                 const ui32 blockedGeneration = record.GetBlockedGeneration();
                 if (const auto it = Blocks.find(tabletId); it != Blocks.end() && blockedGeneration <= it->second) {
-                    responseRecord.SetStatus(NKikimrProto::ERROR);
+                    responseRecord->SetStatus(NKikimrProto::ERROR);
                 } else {
                     TAgentInfo& agent = Self->GetAgent(ev->Recipient);
                     Self->Execute(std::make_unique<TTxUpdateBlock>(Self, tabletId, blockedGeneration,
@@ -102,7 +97,16 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
-            (void)ev;
+            const auto& record = ev->Get()->Record;
+            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(ev, Self->SelfId());
+            responseRecord->SetTimeToLiveMs(15000); // FIXME
+
+            for (const ui64 tabletId : record.GetTabletIds()) {
+                const auto it = Blocks.find(tabletId);
+                responseRecord->AddBlockedGenerations(it != Blocks.end() ? it->second : 0);
+            }
+
+            TActivationContext::Send(response.release());
         }
     };
 

@@ -590,6 +590,10 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvPQDescribeTopicRequest, PreHandle);
         HFunc(TEvDiscoverPQClustersRequest, PreHandle);
         HFunc(TEvCoordinationSessionRequest, PreHandle);
+        HFunc(TEvDropTopicRequest, PreHandle);
+        HFunc(TEvCreateTopicRequest, PreHandle);
+        HFunc(TEvAlterTopicRequest, PreHandle);
+        HFunc(TEvDescribeTopicRequest, PreHandle);
 
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 

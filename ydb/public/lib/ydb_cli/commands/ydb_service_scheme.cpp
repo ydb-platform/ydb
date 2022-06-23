@@ -159,6 +159,7 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::Table:
         return DescribeTable(driver);
     case NScheme::ESchemeEntryType::PqGroup:
+    case NScheme::ESchemeEntryType::Topic:
         return DescribeStream(driver);
     default:
         WarnAboutTableOptions();

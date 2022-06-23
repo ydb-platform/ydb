@@ -3,6 +3,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
@@ -29,7 +30,7 @@ enum Codec {
 message SupportedCodecs {
     // List of supported codecs.
     // See enum Codec above for values.
-    repeated int32 codecs = 1;
+    repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
 }
 
 // Represents range [start, end).
@@ -540,20 +541,20 @@ message AlterConsumer {
 message PartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
-    int64 min_active_partitions = 1;
+    int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    int64 partition_count_limit = 2;
+    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
 }
 
 // Partitioning settings for topic.
 message AlterPartitioningSettings {
     // Minimum partition count auto merge would stop working at.
     // Zero value means default - 1.
-    optional int64 set_min_active_partitions = 1;
+    optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
     // Limit for total partition count, including active (open for write) and read-only partitions.
     // Zero value means default - 100.
-    optional int64 set_partition_count_limit = 3;
+    optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
 }
 
 
@@ -574,7 +575,7 @@ message CreateTopicRequest {
     google.protobuf.Duration retention_period = 4;
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
     // Zero value means infinite limit.
-    int64 retention_storage_mb = 5;
+    int64 retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
 
     reserved 6; // supported_format.
     // List of allowed codecs for writers.
@@ -582,16 +583,16 @@ message CreateTopicRequest {
     SupportedCodecs supported_codecs = 7;
     // Partition write speed in bytes per second. Must be less than database limit.
     // Zero value means default limit: 1 MB per second.
-    int64 partition_write_speed_bytes_per_second = 8;
+    int64 partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
     // Burst size for write in partition, in bytes. Must be less than database limit.
     // Zero value means default limit: 1 MB.
-    int64 partition_write_burst_bytes = 9;
+    int64 partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
 
     // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
     map<string, string> attributes = 10;
 
     // List of consumers for this topic.
-    repeated Consumer consumers = 11;
+    repeated Consumer consumers = 11 [(Ydb.size).le = 3000];
 }
 
 // Create topic response sent from server to client.
@@ -678,7 +679,7 @@ message AlterTopicRequest {
     // Topic path.
     string path = 2;
 
-    AlterPartitioningSettings set_partitioning_settings = 3; // partitioning_settings
+    AlterPartitioningSettings alter_partitioning_settings = 3; // partitioning_settings
 
     // Retention settings.
     // Currently, only one limit may be set, so other should not be set.
@@ -687,7 +688,7 @@ message AlterTopicRequest {
     // Default limit - 36 hours.
     google.protobuf.Duration set_retention_period = 4;
     // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
-    optional int64 set_retention_storage_mb = 5;
+    optional int64 set_retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
 
     reserved 6; // supported_format.
     // List of allowed codecs for writers.
@@ -695,20 +696,20 @@ message AlterTopicRequest {
     SupportedCodecs set_supported_codecs = 7;
 
     // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
-    optional int64 set_partition_write_speed_bytes_per_second = 8;
+    optional int64 set_partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
     // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
-    optional int64 set_partition_write_burst_bytes = 9;
+    optional int64 set_partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
 
     // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
     // Leave the value blank to drop an attribute.
     map<string, string> alter_attributes = 10;
 
     // Add consumers.
-    repeated Consumer add_consumers = 11;
+    repeated Consumer add_consumers = 11 [(Ydb.size).le = 3000];
     // Remove consumers (by its names)
-    repeated string drop_consumers = 12;
+    repeated string drop_consumers = 12 [(Ydb.size).le = 3000];
     // Alter consumers
-    repeated AlterConsumer alter_consumers = 13;
+    repeated AlterConsumer alter_consumers = 13 [(Ydb.size).le = 3000];
 }
 
 // Update topic response sent from server to client.

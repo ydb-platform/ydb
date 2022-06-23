@@ -17,6 +17,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
         o << colors.WhiteColor();
         break;
     case NScheme::ESchemeEntryType::PqGroup:
+    case NScheme::ESchemeEntryType::Topic:
         o << colors.BrownColor();
         break;
     case NScheme::ESchemeEntryType::SubDomain:
@@ -31,6 +32,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     case NScheme::ESchemeEntryType::CoordinationNode:
         o << colors.YellowColor();
         break;
+
     default:
         o << colors.RedColor();
     }
@@ -73,7 +75,8 @@ TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
     case NScheme::ESchemeEntryType::ColumnTable:
         return "column-table";
     case NScheme::ESchemeEntryType::PqGroup:
-        return "pq-group";
+    case NScheme::ESchemeEntryType::Topic:
+        return "topic";
     case NScheme::ESchemeEntryType::SubDomain:
         return "sub-domain";
     case NScheme::ESchemeEntryType::RtmrVolume:

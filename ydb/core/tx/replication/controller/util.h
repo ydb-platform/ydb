@@ -29,6 +29,7 @@ inline TMaybe<TReplication::ETargetKind> TryTargetKindFromEntryType(NYdb::NSchem
     case NYdb::NScheme::ESchemeEntryType::Sequence:
     case NYdb::NScheme::ESchemeEntryType::Replication:
     case NYdb::NScheme::ESchemeEntryType::ColumnTable:
+    case NYdb::NScheme::ESchemeEntryType::Topic:
         return Nothing();
     }
 }

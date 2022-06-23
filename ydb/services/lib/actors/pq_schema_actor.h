@@ -24,6 +24,25 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& localDc = TString()
     );
 
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+        const TString& name,
+        const Ydb::Topic::CreateTopicRequest& request,
+        NKikimrSchemeOp::TModifyScheme& modifyScheme,
+        const TActorContext& ctx,
+        TString& error,
+        const TString& path,
+        const TString& database = TString(),
+        const TString& localDc = TString()
+    );
+
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+        const Ydb::Topic::AlterTopicRequest& request,
+        NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr,
+        const TActorContext& ctx,
+        TString& error
+    );
+
+
     struct TClientServiceType {
         TString Name;
         ui32 MaxCount;

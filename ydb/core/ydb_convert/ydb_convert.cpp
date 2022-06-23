@@ -787,6 +787,10 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TDirEntry& from, Ydb::Scheme::
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
         to->set_type(static_cast<Ydb::Scheme::Entry::Type>(NKikimrSchemeOp::EPathTypeSubDomain));
         break;
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        to->set_type(Ydb::Scheme::Entry::TOPIC);
+        break;
+
     default:
         to->set_type(static_cast<Ydb::Scheme::Entry::Type>(from.GetPathType()));
     }
@@ -812,6 +816,10 @@ void ConvertDirectoryEntry(const NKikimrSchemeOp::TPathDescription& from, Ydb::S
     case NKikimrSchemeOp::EPathTypeExtSubDomain:
         to->set_size_bytes(from.GetDomainDescription().GetDiskSpaceUsage().GetTables().GetTotalSize());
         break;
+    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+        to->set_type(Ydb::Scheme::Entry::TOPIC);
+        break;
+
     default:
         break;
     }

@@ -58,6 +58,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TClientServiceTypes& supportedClientServiceTypes,
         const TActorContext& ctx
     ) {
+
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.consumer_name(), ctx);
         if(consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
             return TStringBuilder() << "consumer '" << rr.consumer_name() << "' has illegal symbols";
@@ -116,6 +117,98 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
         return "";
     }
+
+
+    void ProcessAlterConsumer(Ydb::Topic::Consumer& consumer, const Ydb::Topic::AlterConsumer& alter) {
+        if (alter.has_set_important()) {
+            consumer.set_important(alter.set_important());
+        }
+        if (alter.has_set_read_from()) {
+            consumer.mutable_read_from()->CopyFrom(alter.set_read_from());
+        }
+        if (alter.has_set_supported_codecs()) {
+            consumer.mutable_supported_codecs()->CopyFrom(alter.set_supported_codecs());
+        }
+        for (auto& pair : alter.alter_attributes()) {
+            (*consumer.mutable_attributes())[pair.first] = pair.second;
+        }
+    }
+
+    TString AddReadRuleToConfig(
+        NKikimrPQ::TPQTabletConfig* config,
+        const Ydb::Topic::Consumer& rr,
+        const TClientServiceTypes& supportedClientServiceTypes,
+        const TActorContext& ctx
+    ) {
+        auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), ctx);
+        if (consumerName.find("/") != TString::npos || consumerName.find("|") != TString::npos) {
+            return TStringBuilder() << "consumer '" << rr.name() << "' has illegal symbols";
+        }
+        if (consumerName.empty()) {
+            return TStringBuilder() << "consumer with empty name is forbidden";
+        }
+        {
+            TString migrationError = ReadRuleServiceTypeMigration(config, ctx);
+            if (migrationError) {
+                return migrationError;
+            }
+        }
+
+        config->AddReadRules(consumerName);
+
+        if (rr.read_from().seconds() < 0) {
+            return TStringBuilder() << "starting_message_timestamp_ms in read_rule can't be negative, provided " << rr.read_from().seconds();
+        }
+        config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
+
+        config->AddConsumerFormatVersions(0);
+        TString service_type;
+        const auto& pqConfig = AppData(ctx)->PQConfig;
+        if (!pqConfig.GetDisallowDefaultClientServiceType()) {
+            const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
+            service_type = defaultCientServiceType;
+        }
+        ui32 version = 0;
+        for (auto& pair : rr.attributes()) {
+            if (pair.first == "_version") {
+                try {
+                    if (!pair.second.empty())
+                        version = FromString<ui32>(pair.second);
+                } catch(...) {
+                    return TStringBuilder() << "Attribute for consumer '" << rr.name() << "' _version is " << pair.second << ", which is not ui32";
+                }
+            } else if (pair.first == "_service_type") {
+                if (!pair.second.empty()) {
+                    if (!supportedClientServiceTypes.contains(pair.second)) {
+                        return TStringBuilder() << "Unknown _service_type '" << pair.second
+                                                << "' for consumer '" << rr.name() << "'";
+                    }
+                    service_type = pair.second;
+                }
+            }
+        }
+        if (service_type.empty()) {
+            return TStringBuilder() << "service type cannot be empty for consumer '" << rr.name() << "'";
+        }
+        config->AddReadRuleServiceTypes(service_type);
+        config->AddReadRuleVersions(version);
+
+        auto ct = config->AddConsumerCodecs();
+
+        for(const auto& codec : rr.supported_codecs().codecs()) {
+            if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
+                return TStringBuilder() << "Unknown codec for consumer '" << rr.name() << "' with value " << codec;
+            }
+            ct->AddIds(codec - 1);
+            ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
+        }
+
+        if (rr.important())
+            config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+
+        return "";
+    }
+
 
     TString RemoveReadRuleFromConfig(
         NKikimrPQ::TPQTabletConfig* config,
@@ -180,7 +273,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (config.GetReadRules().size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
-                                     << MAX_SUPPORTED_CODECS_COUNT << ", provided " << config.GetReadRules().size();
+                                     << MAX_READ_RULES_COUNT << ", provided " << config.GetReadRules().size();
             return false;
         }
 
@@ -217,6 +310,129 @@ namespace NKikimr::NGRpcProxy::V1 {
         return res;
     }
 
+
+    Ydb::StatusIds::StatusCode ProcessAttributes(const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& attributes, NKikimrSchemeOp::TPersQueueGroupDescription* pqDescr, TString& error, bool alter) {
+
+        auto config = pqDescr->MutablePQTabletConfig();
+        auto partConfig = config->MutablePartitionConfig();
+
+        for (auto& pair : attributes) {
+            if (pair.first == "_partitions_per_tablet") {
+                try {
+                    if (!alter)
+                        pqDescr->SetPartitionPerTablet(FromString<ui32>(pair.second));
+                    if (pqDescr->GetPartitionPerTablet() > 20) {
+                        error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is greater than 20";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
+                } catch(...) {
+                    error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is not ui32";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+            } else if (pair.first == "_allow_unauthenticated_read") {
+                if (pair.second.empty()) {
+                    config->SetRequireAuthRead(true);
+                } else  {
+                    try {
+                        config->SetRequireAuthRead(!FromString<bool>(pair.second));
+                    } catch(...) {
+                        error = TStringBuilder() << "Attribute allow_unauthenticated_read is " << pair.second << ", which is not bool";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
+                }
+            } else if (pair.first == "_allow_unauthenticated_write") {
+                if (pair.second.empty()) {
+                    config->SetRequireAuthWrite(true);
+                } else  {
+                    try {
+                        config->SetRequireAuthWrite(!FromString<bool>(pair.second));
+                    } catch(...) {
+                        error = TStringBuilder() << "Attribute allow_unauthenticated_write is " << pair.second << ", which is not bool";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
+                }
+            } else if (pair.first == "_abc_slug") {
+                config->SetAbcSlug(pair.second);
+            }  else if (pair.first == "_federation_account") {
+                config->SetFederationAccount(pair.second);
+            } else if (pair.first == "_abc_id") {
+                try {
+                    config->SetAbcId(FromString<ui32>(pair.second));
+                } catch(...) {
+                    error = TStringBuilder() << "Attribute abc_id is " << pair.second << ", which is not integer";
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+            } else if (pair.first == "_max_partition_storage_size") {
+                if (pair.second.empty()) {
+                    partConfig->SetMaxSizeInPartition(Max<i64>());
+                } else {
+                    try {
+                        i64 size = FromString<i64>(pair.second);
+                        if (size < 0) {
+                            error = TStringBuilder() << "_max_partiton_strorage_size can't be negative, provided " << size;
+                            return Ydb::StatusIds::BAD_REQUEST;
+                        }
+
+                        partConfig->SetMaxSizeInPartition(size ? size : Max<i64>());
+
+                    } catch(...) {
+                        error = TStringBuilder() << "Attribute _max_partition_storage_size is " << pair.second << ", which is not ui64";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
+                }
+            }  else if (pair.first == "_message_group_seqno_retention_period_ms") {
+                partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
+                if (!pair.second.empty()) {
+                    try {
+                        i64 ms = FromString<i64>(pair.second);
+                        if (ms < 0) {
+                            error = TStringBuilder() << "_message_group_seqno_retention_period_ms can't be negative, provided " << ms;
+                            return Ydb::StatusIds::BAD_REQUEST;
+                        }
+
+                        if (ms > DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS) {
+                            error = TStringBuilder() <<
+                                "message_group_seqno_retention_period_ms (provided " << ms <<
+                                ") must be less then default limit for database " <<
+                                DEFAULT_MAX_DATABASE_MESSAGEGROUP_SEQNO_RETENTION_PERIOD_MS;
+                            return Ydb::StatusIds::BAD_REQUEST;
+                        }
+                        if (ms > 0) {
+                            partConfig->SetSourceIdLifetimeSeconds(ms > 999 ? ms / 1000 : 1);
+                        }
+                    } catch(...) {
+                        error = TStringBuilder() << "Attribute " << pair.first << " is " << pair.second << ", which is not ui64";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
+                }
+
+            } else if (pair.first == "_max_partition_message_groups_seqno_stored") {
+                partConfig->SetSourceIdMaxCounts(NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts());
+                if (!pair.second.empty()) {
+                    try {
+                        i64 count = FromString<i64>(pair.second);
+                        if (count < 0) {
+                            error = TStringBuilder() << pair.first << "can't be negative, provided " << count;
+                            return Ydb::StatusIds::BAD_REQUEST;
+                        }
+                        if (count > 0) {
+                            partConfig->SetSourceIdMaxCounts(count);
+                        }
+                    } catch(...) {
+                        error = TStringBuilder() << "Attribute " << pair.first << " is " << pair.second << ", which is not ui64";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
+                }
+            } else {
+                error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+        }
+        return Ydb::StatusIds::SUCCESS;
+
+    }
+
+
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
             const TString& name, const Ydb::PersQueue::V1::TopicSettings& settings,
             NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
@@ -242,49 +458,11 @@ namespace NKikimr::NGRpcProxy::V1 {
         if (!alter)
             pqDescr->SetPartitionPerTablet(2);
 
-        for (auto& pair : settings.attributes()) {
-            if (pair.first == "_partitions_per_tablet") {
-                try {
-                    if (!alter)
-                        pqDescr->SetPartitionPerTablet(FromString<ui32>(pair.second));
-                    if (pqDescr->GetPartitionPerTablet() > 20) {
-                        error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is greater than 20";
-                        return Ydb::StatusIds::BAD_REQUEST;
-                    }
-                } catch(...) {
-                    error = TStringBuilder() << "Attribute partitions_per_tablet is " << pair.second << ", which is not ui32";
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
-            } else if (pair.first == "_allow_unauthenticated_read") {
-                try {
-                    config->SetRequireAuthRead(!FromString<bool>(pair.second));
-                } catch(...) {
-                    error = TStringBuilder() << "Attribute allow_unauthenticated_read is " << pair.second << ", which is not bool";
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
-            } else if (pair.first == "_allow_unauthenticated_write") {
-                try {
-                    config->SetRequireAuthWrite(!FromString<bool>(pair.second));
-                } catch(...) {
-                    error = TStringBuilder() << "Attribute allow_unauthenticated_write is " << pair.second << ", which is not bool";
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
-            } else if (pair.first == "_abc_slug") {
-                config->SetAbcSlug(pair.second);
-            }  else if (pair.first == "_federation_account") {
-                config->SetFederationAccount(pair.second);
-            } else if (pair.first == "_abc_id") {
-                try {
-                    config->SetAbcId(!FromString<ui32>(pair.second));
-                } catch(...) {
-                    error = TStringBuilder() << "Attribute abc_id is " << pair.second << ", which is not integer";
-                    return Ydb::StatusIds::BAD_REQUEST;
-                }
-            } else {
-                error = TStringBuilder() << "Attribute " << pair.first << " is not supported";
-                return Ydb::StatusIds::BAD_REQUEST;
-            }
+        auto res = ProcessAttributes(settings.attributes(), pqDescr, error, alter);
+        if (res != Ydb::StatusIds::SUCCESS) {
+            return res;
         }
+
         bool local = !settings.client_write_disabled();
 
         auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
@@ -433,7 +611,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (settings.read_rules().size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
-                                     << MAX_SUPPORTED_CODECS_COUNT << ", provided " << settings.read_rules().size();
+                                     << MAX_READ_RULES_COUNT << ", provided " << settings.read_rules().size();
             return Ydb::StatusIds::BAD_REQUEST;
         }
 
@@ -537,5 +715,314 @@ namespace NKikimr::NGRpcProxy::V1 {
         CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
         return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
     }
+
+
+
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+            const TString& name, const Ydb::Topic::CreateTopicRequest& request,
+            NKikimrSchemeOp::TModifyScheme& modifyScheme, const TActorContext& ctx,
+            TString& error, const TString& path, const TString& database, const TString& localDc
+    ) {
+        const auto& pqConfig = AppData(ctx)->PQConfig;
+
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
+        auto pqDescr = modifyScheme.MutableCreatePersQueueGroup();
+
+        pqDescr->SetName(name);
+        ui32 parts = 1;
+        if (request.has_partitioning_settings()) {
+            if (request.partitioning_settings().min_active_partitions() < 0) {
+                error = TStringBuilder() << "Partitions count must be positive, provided " << request.partitioning_settings().min_active_partitions();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+            parts = request.partitioning_settings().min_active_partitions();
+            if (parts == 0) parts = 1;
+        }
+
+        pqDescr->SetTotalGroupCount(parts);
+
+        auto config = pqDescr->MutablePQTabletConfig();
+        auto partConfig = config->MutablePartitionConfig();
+
+        config->SetRequireAuthWrite(true);
+        config->SetRequireAuthRead(true);
+        pqDescr->SetPartitionPerTablet(2);
+
+        partConfig->SetMaxCountInPartition(Max<i32>());
+
+        partConfig->SetSourceIdLifetimeSeconds(NKikimrPQ::TPartitionConfig().GetSourceIdLifetimeSeconds());
+        partConfig->SetSourceIdMaxCounts(NKikimrPQ::TPartitionConfig().GetSourceIdMaxCounts());
+
+        auto res = ProcessAttributes(request.attributes(), pqDescr, error, false);
+        if (res != Ydb::StatusIds::SUCCESS) {
+            return res;
+        }
+
+        bool local = true; // TODO: check here cluster;
+
+        auto topicPath = NKikimr::JoinPath({modifyScheme.GetWorkingDir(), name});
+        if (!pqConfig.GetTopicsAreFirstClassCitizen()) {
+            auto converter = NPersQueue::TTopicNameConverter::ForFederation(
+                    pqConfig.GetRoot(), pqConfig.GetTestDatabaseRoot(), name, path, database, local, localDc,
+                    config->GetFederationAccount()
+            );
+
+            if (!converter->IsValid()) {
+                error = TStringBuilder() << "Bad topic: " << converter->GetReason();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+            config->SetLocalDC(local);
+            config->SetDC(converter->GetCluster());
+            config->SetProducer(converter->GetLegacyProducer());
+            config->SetTopic(converter->GetLegacyLogtype());
+            config->SetIdent(converter->GetLegacyProducer());
+        }
+
+        config->SetTopicName(name);
+        config->SetTopicPath(topicPath);
+
+        //Sets legacy 'logtype'.
+
+
+        const auto& channelProfiles = pqConfig.GetChannelProfiles();
+        if (channelProfiles.size() > 2) {
+            partConfig->SetNumChannels(channelProfiles.size() - 2); // channels 0,1 are reserved in tablet
+            partConfig->MutableExplicitChannelProfiles()->CopyFrom(channelProfiles);
+        }
+        if (request.has_retention_period()) {
+            if (request.retention_period().seconds() <= 0) {
+                error = TStringBuilder() << "retention_period must be not negative, provided " <<
+                        request.retention_period().DebugString();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+            partConfig->SetLifetimeSeconds(request.retention_period().seconds());
+        } else {
+            partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
+        }
+
+        if (request.retention_storage_mb())
+            partConfig->SetStorageLimitBytes(request.retention_storage_mb() * 1024 * 1024);
+
+        if (local) {
+            auto partSpeed = request.partition_write_speed_bytes_per_second();
+            if (partSpeed == 0) {
+                partSpeed = DEFAULT_PARTITION_SPEED;
+            }
+            partConfig->SetWriteSpeedInBytesPerSecond(partSpeed);
+
+            const auto& burstSpeed = request.partition_write_burst_bytes();
+            if (burstSpeed == 0) {
+                partConfig->SetBurstSize(partSpeed);
+            } else {
+                partConfig->SetBurstSize(burstSpeed);
+            }
+        }
+        config->SetFormatVersion(0);
+
+        auto ct = config->MutableCodecs();
+        for(const auto& codec : request.supported_codecs().codecs()) {
+            if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
+                error = TStringBuilder() << "Unknown codec with value " << codec;
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+            ct->AddIds(codec - 1);
+            ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
+        }
+
+        if (request.consumers_size() > MAX_READ_RULES_COUNT) {
+            error = TStringBuilder() << "consumers count cannot be more than "
+                                     << MAX_READ_RULES_COUNT << ", provided " << request.consumers_size();
+            return Ydb::StatusIds::BAD_REQUEST;
+        }
+
+        {
+            error = ReadRuleServiceTypeMigration(config, ctx);
+            if (error) {
+                return Ydb::StatusIds::INTERNAL_ERROR;
+            }
+        }
+
+        const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
+
+
+        for (const auto& rr : request.consumers()) {
+            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            if (!error.Empty()) {
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+        }
+
+        CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
+        return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
+    }
+
+
+
+    Ydb::StatusIds::StatusCode FillProposeRequestImpl(
+            const Ydb::Topic::AlterTopicRequest& request,
+            NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, const TActorContext& ctx,
+            TString& error
+    ) {
+        if (request.has_alter_partitioning_settings() && request.alter_partitioning_settings().has_set_min_active_partitions()) {
+            auto parts = request.alter_partitioning_settings().set_min_active_partitions();
+            if (parts == 0) parts = 1;
+            pqDescr.SetTotalGroupCount(parts);
+        }
+
+
+        auto config = pqDescr.MutablePQTabletConfig();
+        auto partConfig = config->MutablePartitionConfig();
+
+        auto res = ProcessAttributes(request.alter_attributes(), &pqDescr, error, true);
+        if (res != Ydb::StatusIds::SUCCESS) {
+            return res;
+        }
+
+        bool local = true; //todo: check locality
+
+        if (request.has_set_retention_period()) {
+            if (request.set_retention_period().seconds() < 0) {
+                error = TStringBuilder() << "retention_period must be not negative, provided " <<
+                        request.set_retention_period().DebugString();
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+            if (request.set_retention_period().seconds() > 0) {
+                partConfig->SetLifetimeSeconds(request.set_retention_period().seconds());
+            } else {
+                partConfig->SetLifetimeSeconds(TDuration::Days(1).Seconds());
+            }
+        }
+
+
+        if (request.has_set_retention_storage_mb()) {
+            partConfig->ClearStorageLimitBytes();
+            if (request.set_retention_storage_mb())
+                partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
+        }
+
+        if (local) {
+            if (request.has_set_partition_write_speed_bytes_per_second()) {
+                auto partSpeed = request.set_partition_write_speed_bytes_per_second();
+                if (partSpeed == 0) {
+                    partSpeed = DEFAULT_PARTITION_SPEED;
+                }
+                partConfig->SetWriteSpeedInBytesPerSecond(partSpeed);
+            }
+
+            if (request.has_set_partition_write_burst_bytes()) {
+                const auto& burstSpeed = request.set_partition_write_burst_bytes();
+                if (burstSpeed == 0) {
+                    partConfig->SetBurstSize(partConfig->GetWriteSpeedInBytesPerSecond());
+                } else {
+                    partConfig->SetBurstSize(burstSpeed);
+                }
+            }
+        }
+
+        if (request.has_set_supported_codecs()) {
+            config->ClearCodecs();
+            auto ct = config->MutableCodecs();
+            for(const auto& codec : request.set_supported_codecs().codecs()) {
+                if ((!Ydb::Topic::Codec_IsValid(codec) && codec < Ydb::Topic::CODEC_CUSTOM) || codec == 0) {
+                    error = TStringBuilder() << "Unknown codec with value " << codec;
+                    return Ydb::StatusIds::BAD_REQUEST;
+                }
+                ct->AddIds(codec - 1);
+                ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
+            }
+        }
+        {
+            error = ReadRuleServiceTypeMigration(config, ctx);
+            if (error) {
+                return Ydb::StatusIds::INTERNAL_ERROR;
+            }
+        }
+
+
+        const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
+
+
+        std::vector<Ydb::Topic::Consumer> consumers;
+
+        i32 dropped = 0;
+
+        for (ui32 i = 0; i < config->ReadRulesSize(); ++i) {
+            TString oldName = config->GetReadRules(i);
+            TString name = NPersQueue::ConvertOldConsumerName(oldName, ctx);
+            bool erase = false;
+            bool important = false;
+            for (auto consumer: request.drop_consumers()) {
+                if (consumer == name || consumer == oldName) {
+                    erase = true;
+                    ++dropped;
+                    break;
+                }
+            }
+            if (erase) continue;
+            for (auto imp : partConfig->GetImportantClientId()) {
+                if (imp == oldName) {
+                    important = true;
+                    break;
+                }
+            }
+            consumers.push_back(Ydb::Topic::Consumer{});
+            auto& consumer = consumers.back();
+            consumer.set_name(name);
+            consumer.set_important(important);
+            consumer.mutable_read_from()->set_seconds(config->GetReadFromTimestampsMs(i) / 1000);
+            (*consumer.mutable_attributes())["_service_type"] = config->GetReadRuleServiceTypes(i);
+            (*consumer.mutable_attributes())["_version"] = TStringBuilder() << config->GetReadRuleVersions(i);
+            for (ui32 codec : config->GetConsumerCodecs(i).GetIds()) {
+                consumer.mutable_supported_codecs()->add_codecs(codec + 1);
+            }
+        }
+
+        for (auto& cons : request.add_consumers()) {
+            consumers.push_back(cons);
+        }
+
+        if (dropped != request.drop_consumers_size()) {
+            error = "some consumers in drop_consumers are missing already";
+            return Ydb::StatusIds::NOT_FOUND;
+        }
+
+        for (const auto& alter : request.alter_consumers()) {
+            auto name = alter.name();
+            auto oldName = NPersQueue::ConvertOldConsumerName(name, ctx);
+            bool found = false;
+            for (auto& consumer : consumers) {
+                if (consumer.name() == name || consumer.name() == oldName) {
+                    found = true;
+                    ProcessAlterConsumer(consumer, alter);
+                    break;
+                }
+            }
+            if (!found) {
+                error = TStringBuilder() << "consumer '" << name << "' in alter_consumers is missing";
+                return Ydb::StatusIds::NOT_FOUND;
+            }
+        }
+
+        config->ClearReadRules();
+        partConfig->ClearImportantClientId();
+        config->ClearConsumerCodecs();
+        config->ClearReadFromTimestampsMs();
+        config->ClearConsumerFormatVersions();
+        config->ClearReadRuleServiceTypes();
+        config->ClearReadRuleGenerations();
+        config->ClearReadRuleVersions();
+
+        for (const auto& rr : consumers) {
+            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            if (!error.Empty()) {
+                return Ydb::StatusIds::BAD_REQUEST;
+            }
+        }
+
+        bool hasDuplicates = CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
+        return error.empty() ? Ydb::StatusIds::SUCCESS : (hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST);
+    }
+
+
 
 }

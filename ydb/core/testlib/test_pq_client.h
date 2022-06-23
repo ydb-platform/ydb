@@ -295,13 +295,15 @@ struct TRequestReadPQ {
         ui32 partition,
         ui64 startOffset,
         ui32 count,
-        const TString& user
+        const TString& user,
+        ui64 readTimestampMs = 0
     )
         : Topic(topic)
         , Partition(partition)
         , StartOffset(startOffset)
         , Count(count)
         , User(user)
+        , ReadTimestampMs(readTimestampMs)
     {}
 
     TString Topic;
@@ -309,6 +311,7 @@ struct TRequestReadPQ {
     ui64 StartOffset;
     ui32 Count;
     TString User;
+    ui64 ReadTimestampMs;
 
     THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
         THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
@@ -319,6 +322,7 @@ struct TRequestReadPQ {
         read->SetOffset(StartOffset);
         read->SetCount(Count);
         read->SetClientId(User);
+        read->SetReadTimestampMs(ReadTimestampMs);
         return request;
     }
 };
@@ -1144,7 +1148,7 @@ public:
 
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
             UNIT_ASSERT(response->Record.GetPartitionResponse().HasCmdReadResult());
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
+            if (readCount > 0) UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
         }
 
         TReadDebugInfo info;
@@ -1164,7 +1168,7 @@ public:
 
 
     TReadDebugInfo ReadFromPQ(const TString& topic, ui32 partition, ui64 startOffset, ui32 count, ui32 readCount, const TString& ticket = "") {
-        return ReadFromPQ({topic, partition, startOffset, count, "user"}, readCount, ticket);
+        return ReadFromPQ({topic, partition, startOffset, count, "user", 0}, readCount, ticket);
     }
 
     void SetClientOffsetPQ(

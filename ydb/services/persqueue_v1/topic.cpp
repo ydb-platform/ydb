@@ -122,17 +122,16 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         "TopicService/"#NAME, logger, getCounterBlock("topic", #NAME))->Run();
 
     ADD_REQUEST(DropTopic, TopicService, DropTopicRequest, DropTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQDropTopicRequest(ctx));
+            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvDropTopicRequest(ctx));
         })
-
     ADD_REQUEST(CreateTopic, TopicService, CreateTopicRequest, CreateTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQCreateTopicRequest(ctx));
+            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvCreateTopicRequest(ctx));
         })
     ADD_REQUEST(AlterTopic, TopicService, AlterTopicRequest, AlterTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQAlterTopicRequest(ctx));
+            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvAlterTopicRequest(ctx));
         })
     ADD_REQUEST(DescribeTopic, TopicService, DescribeTopicRequest, DescribeTopicResponse, {
-            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvPQDescribeTopicRequest(ctx));
+            ActorSystem->Send(GRpcRequestProxy, new NGRpcService::TEvDescribeTopicRequest(ctx));
         })
 
 #undef ADD_REQUEST

@@ -699,6 +699,7 @@ message TFeatureFlags {
     optional bool AllowVDiskDefrag = 63 [default = true];
     optional bool EnableAsyncHttpMon = 64 [default = true];
     optional bool EnableChangefeeds = 65 [default = true];
+    optional bool EnableKqpScanQueryStreamLookup = 66 [default = false];
 }
 
 

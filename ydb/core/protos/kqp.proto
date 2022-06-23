@@ -574,3 +574,10 @@ message TEvRemoteScanDataAck {
 
 message TEvKillScanTablet {
 }
+
+message TKqpStreamLookupSettings {
+     optional NKqpProto.TKqpPhyTable Table = 1;
+     repeated uint32 KeyColumnTypes = 2;
+     repeated TKqpColumnMetadataProto Columns = 3;
+     optional TKqpSnapshot Snapshot = 4;
+}

@@ -12,6 +12,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt.h>
 #include <ydb/library/yql/dq/tasks/dq_task_program.h>
 #include <ydb/library/yql/providers/common/mkql/yql_type_mkql.h>
+#include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -81,8 +82,9 @@ void FillTable(const TKqpTable& table, NKqpProto::TKqpPhyTable& tableProto) {
     tableProto.SetVersion(FromString<ui64>(table.Version()));
 }
 
+template <typename TProto>
 void FillColumns(const TCoAtomList& columns, const TKikimrTableMetadata& tableMeta,
-    NKqpProto::TKqpPhyTableOperation& opProto, bool allowSystemColumns)
+    TProto& opProto, bool allowSystemColumns)
 {
     for (const auto& columnNode : columns) {
         TString columnName(columnNode);
@@ -329,74 +331,6 @@ void FillOlapProgram(const TCoLambda& process, const TKikimrTableMetadata& table
     CompileOlapProgram(process, tableMeta, readProto);
 }
 
-void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-    NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx)
-{
-    auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
-    YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
-        << PrintKqpStageOnly(connection.Output().Stage(), ctx));
-
-    auto outputIndex = FromString<ui32>(connection.Output().Index().Value());
-
-    connectionProto.SetStageIndex(*inputStageIndex);
-    connectionProto.SetOutputIndex(outputIndex);
-
-    if (connection.Maybe<TDqCnUnionAll>()) {
-        connectionProto.MutableUnionAll();
-        return;
-    }
-
-    if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
-        auto& shuffleProto = *connectionProto.MutableHashShuffle();
-        for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
-            shuffleProto.AddKeyColumns(TString(keyColumn));
-        }
-        return;
-    }
-
-    if (connection.Maybe<TDqCnMap>()) {
-        connectionProto.MutableMap();
-        return;
-    }
-
-    if (connection.Maybe<TDqCnBroadcast>()) {
-        connectionProto.MutableBroadcast();
-        return;
-    }
-
-    if (connection.Maybe<TDqCnResult>()) {
-        connectionProto.MutableResult();
-        return;
-    }
-
-    if (connection.Maybe<TDqCnValue>()) {
-        connectionProto.MutableValue();
-        return;
-    }
-
-    if (connection.Maybe<TKqpCnMapShard>()) {
-        connectionProto.MutableMapShard();
-        return;
-    }
-
-    if (connection.Maybe<TKqpCnShuffleShard>()) {
-        connectionProto.MutableShuffleShard();
-        return;
-    }
-
-    if (auto maybeMerge = connection.Maybe<TDqCnMerge>()) {
-        auto& mergeProto = *connectionProto.MutableMerge();
-        for (const auto& sortColumn : maybeMerge.Cast().SortColumns()) {
-            auto newSortColumn = mergeProto.AddSortColumns();
-            newSortColumn->SetColumn(sortColumn.Column().StringValue());
-            newSortColumn->SetAscending(sortColumn.SortDirection().Value() == TTopSortSettings::AscendingSort);
-        }
-        return;
-    }
-
-    YQL_ENSURE(false, "Unexpected connection type: " << connection.CallableName());
-}
-
 class TKqpQueryCompiler : public IKqpQueryCompiler {
 public:
     TKqpQueryCompiler(const TString& cluster, const TIntrusivePtr<TKikimrTablesData> tablesData,
@@ -460,6 +394,14 @@ public:
     }
 
 private:
+    NKikimr::NMiniKQL::TType* CompileType(TProgramBuilder& pgmBuilder, const TTypeAnnotationNode& inputType) {
+        TStringStream errorStream;
+
+        auto type = NCommon::BuildType(inputType, pgmBuilder, errorStream);
+        Y_ENSURE(type, "Failed to compile type: " << errorStream.Str());
+        return type;
+    }
+
     void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
         const TMap<ui64, ui32>& stagesMap)
     {
@@ -661,11 +603,7 @@ private:
             }
 
             YQL_ENSURE(itemType);
-            TStringStream errorStream;
-            auto type = NCommon::BuildType(*itemType, pgmBuilder, errorStream);
-            YQL_ENSURE(type);
-
-            ExportTypeToProto(type, *resultProto.MutableItemType());
+            ExportTypeToProto(CompileType(pgmBuilder, *itemType), *resultProto.MutableItemType());
 
             TMaybeNode<TCoAtomList> maybeColumnHints;
             if (connection.Maybe<TDqCnResult>()) {
@@ -685,6 +623,99 @@ private:
                 }
             }
         }
+    }
+
+    void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
+        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx)
+    {
+        auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
+        YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
+            << PrintKqpStageOnly(connection.Output().Stage(), ctx));
+
+        auto outputIndex = FromString<ui32>(connection.Output().Index().Value());
+
+        connectionProto.SetStageIndex(*inputStageIndex);
+        connectionProto.SetOutputIndex(outputIndex);
+
+        if (connection.Maybe<TDqCnUnionAll>()) {
+            connectionProto.MutableUnionAll();
+            return;
+        }
+
+        if (auto maybeShuffle = connection.Maybe<TDqCnHashShuffle>()) {
+            auto& shuffleProto = *connectionProto.MutableHashShuffle();
+            for (const auto& keyColumn : maybeShuffle.Cast().KeyColumns()) {
+                shuffleProto.AddKeyColumns(TString(keyColumn));
+            }
+            return;
+        }
+
+        if (connection.Maybe<TDqCnMap>()) {
+            connectionProto.MutableMap();
+            return;
+        }
+
+        if (connection.Maybe<TDqCnBroadcast>()) {
+            connectionProto.MutableBroadcast();
+            return;
+        }
+
+        if (connection.Maybe<TDqCnResult>()) {
+            connectionProto.MutableResult();
+            return;
+        }
+
+        if (connection.Maybe<TDqCnValue>()) {
+            connectionProto.MutableValue();
+            return;
+        }
+
+        if (connection.Maybe<TKqpCnMapShard>()) {
+            connectionProto.MutableMapShard();
+            return;
+        }
+
+        if (connection.Maybe<TKqpCnShuffleShard>()) {
+            connectionProto.MutableShuffleShard();
+            return;
+        }
+
+        if (auto maybeMerge = connection.Maybe<TDqCnMerge>()) {
+            auto& mergeProto = *connectionProto.MutableMerge();
+            for (const auto& sortColumn : maybeMerge.Cast().SortColumns()) {
+                auto newSortColumn = mergeProto.AddSortColumns();
+                newSortColumn->SetColumn(sortColumn.Column().StringValue());
+                newSortColumn->SetAscending(sortColumn.SortDirection().Value() == TTopSortSettings::AscendingSort);
+            }
+            return;
+        }
+
+        if (auto maybeStreamLookup = connection.Maybe<TKqpCnStreamLookup>()) {
+            TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+            auto& streamLookupProto = *connectionProto.MutableStreamLookup();
+            auto streamLookup = maybeStreamLookup.Cast();
+            auto tableMeta = TablesData->ExistingTable(Cluster, streamLookup.Table().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            FillTable(streamLookup.Table(), *streamLookupProto.MutableTable());
+            FillColumns(streamLookup.Columns(), *tableMeta, streamLookupProto, true);
+
+            const auto lookupKeysType = streamLookup.LookupKeysType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(lookupKeysType, "Empty stream lookup keys type");
+            YQL_ENSURE(lookupKeysType->GetKind() == ETypeAnnotationKind::List, "Unexpected stream lookup keys type");
+            const auto lookupKeysItemType = lookupKeysType->Cast<TListExprType>()->GetItemType();
+            streamLookupProto.SetLookupKeysType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *lookupKeysItemType), TypeEnv));
+
+            const auto resultType = streamLookup.Ref().GetTypeAnn();
+            YQL_ENSURE(resultType, "Empty stream lookup result type");
+            YQL_ENSURE(resultType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected stream lookup result type");
+            const auto resultItemType = resultType->Cast<TStreamExprType>()->GetItemType();
+            streamLookupProto.SetResultType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *resultItemType), TypeEnv));
+
+            return;
+        }
+
+        YQL_ENSURE(false, "Unexpected connection type: " << connection.CallableName());
     }
 
 private:

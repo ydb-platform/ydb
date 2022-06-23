@@ -422,13 +422,13 @@ public:
                 Y_VERIFY(!transform->TransformInput);
                 Y_VERIFY(!transform->TransformOutput);
 
-                TStringBuilder err;
-                transform->TransformInputType = NCommon::ParseTypeFromYson(TStringBuf{transformDesc.GetInputType()}, *pb, err.Out);
-                YQL_ENSURE(transform->TransformInputType, "Can't parse transform input type: " << err);
+                auto inputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{transformDesc.GetInputType()}, typeEnv);
+                YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
+                transform->TransformInputType = static_cast<TType*>(inputTypeNode);
 
-                err.clear();
-                TType* outputType = NCommon::ParseTypeFromYson(TStringBuf{transformDesc.GetOutputType()}, *pb, err.Out);
-                YQL_ENSURE(outputType, "Can't parse transform output type: " << err);
+                auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{transformDesc.GetOutputType()}, typeEnv);
+                YQL_ENSURE(outputTypeNode, "Failed to deserialize transform output type");
+                TType* outputType = static_cast<TType*>(outputTypeNode);
                 YQL_ENSURE(outputType->IsSameType(*ProgramParsed.InputItemTypes[i]));
                 LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
                     << transformDesc.GetType() << " with input type: " << *transform->TransformInputType
@@ -488,13 +488,13 @@ public:
                 Y_VERIFY(!transform->TransformInput);
                 Y_VERIFY(!transform->TransformOutput);
 
-                TStringBuilder err;
-                transform->TransformOutputType = NCommon::ParseTypeFromYson(TStringBuf{transformDesc.GetOutputType()}, *pb, err.Out);
-                YQL_ENSURE(transform->TransformOutputType, "Can't parse transform output type: " << err);
+                auto outputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{transformDesc.GetOutputType()}, typeEnv);
+                YQL_ENSURE(outputTypeNode, "Failed to deserialize transform output type");
+                transform->TransformOutputType = static_cast<TType*>(outputTypeNode);
 
-                err.clear();
-                TType* inputType = NCommon::ParseTypeFromYson(TStringBuf{transformDesc.GetInputType()}, *pb, err.Out);
-                YQL_ENSURE(inputType, "Can't parse transform input type: " << err);
+                auto inputTypeNode = NMiniKQL::DeserializeNode(TStringBuf{transformDesc.GetInputType()}, typeEnv);
+                YQL_ENSURE(inputTypeNode, "Failed to deserialize transform input type");
+                TType* inputType = static_cast<TType*>(inputTypeNode);
                 YQL_ENSURE(inputType->IsSameType(*ProgramParsed.OutputItemTypes[i]));
                 LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
                     << transformDesc.GetType() << " with input type: " << *inputType

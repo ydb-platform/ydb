@@ -223,12 +223,22 @@ private:
 private:
     // TODO: Get rid of ResolveTables & TableKeys, get table information from phy tx proto.
     void ResolveTables() {
+        auto addTable = [](const auto& proto, auto& tables) {
+            auto& table = tables.GetOrAddTable(MakeTableId(proto.GetTable()), proto.GetTable().GetPath());
+            for (auto& column : proto.GetColumns()) {
+                table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
+            }
+        };
+
         for (auto& tx : Transactions) {
             for (auto& stage : tx.Body->GetStages()) {
                 for (auto& op : stage.GetTableOps()) {
-                    auto& table = TableKeys.GetOrAddTable(MakeTableId(op.GetTable()), op.GetTable().GetPath());
-                    for (auto& column : op.GetColumns()) {
-                        table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
+                    addTable(op, TableKeys);
+                }
+
+                for (const auto& input : stage.GetInputs()) {
+                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                        addTable(input.GetStreamLookup(), TableKeys);
                     }
                 }
             }

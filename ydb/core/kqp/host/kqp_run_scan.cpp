@@ -86,6 +86,12 @@ public:
                 for (const auto& tableOp: stage.GetTableOps()) {
                     tablesSet.insert(tableOp.GetTable().GetPath());
                 }
+
+                for (const auto& input : stage.GetInputs()) {
+                    if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                        tablesSet.insert(input.GetStreamLookup().GetTable().GetPath());
+                    }
+                }
             }
         }
         TVector<TString> tables(tablesSet.begin(), tablesSet.end());

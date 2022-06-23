@@ -69,14 +69,14 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
 
 struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
     void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) override final {
-        OnTransformError(outputIndex, issues, isFatal);
+        OnOutputTransformError(outputIndex, issues, isFatal);
     }
 
     void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
         OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
-    virtual void OnTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
+    virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
     virtual void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 };
 
@@ -1416,18 +1416,38 @@ protected:
     }
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {
-        Y_VERIFY(SourcesMap.FindPtr(ev->Get()->InputIndex));
+        Y_VERIFY(SourcesMap.FindPtr(ev->Get()->InputIndex) || InputTransformsMap.FindPtr(ev->Get()->InputIndex));
         ContinueExecute();
     }
 
     void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
-        if (!ev->Get()->IsFatal) {
-            SourcesMap.at(ev->Get()->InputIndex).IssuesBuffer.Push(ev->Get()->Issues);
+        if (SourcesMap.FindPtr(ev->Get()->InputIndex)) {
+            OnSourceError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+        } else if (InputTransformsMap.FindPtr(ev->Get()->InputIndex)) {
+            OnInputTransformError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+        } else {
+            YQL_ENSURE(false, "Unexpected input index: " << ev->Get()->InputIndex);
+        }
+    }
+
+    void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) {
+        if (!isFatal) {
+            SourcesMap.at(inputIndex).IssuesBuffer.Push(issues);
             return;
         }
 
-        CA_LOG_E("Source[" << ev->Get()->InputIndex << "] fatal error: " << ev->Get()->Issues.ToString());
-        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, ev->Get()->Issues);
+        CA_LOG_E("Source[" << inputIndex << "] fatal error: " << issues.ToOneLineString());
+        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
+    }
+
+    void OnInputTransformError(ui64 inputIndex, const TIssues& issues, bool isFatal) {
+        if (!isFatal) {
+            InputTransformsMap.at(inputIndex).IssuesBuffer.Push(issues);
+            return;
+        }
+
+        CA_LOG_E("InputTransform[" << inputIndex << "] fatal error: " << issues.ToOneLineString());
+        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
     }
 
     void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
@@ -1440,7 +1460,7 @@ protected:
         InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
     }
 
-    void OnTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
+    void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
         if (!isFatal) {
             OutputTransformsMap.at(outputIndex).IssuesBuffer.Push(issues);
             return;

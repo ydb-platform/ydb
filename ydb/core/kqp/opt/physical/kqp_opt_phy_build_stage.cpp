@@ -383,4 +383,67 @@ TExprBase KqpBuildLookupTableStage(TExprBase node, TExprContext& ctx) {
         .Done();
 }
 
+NYql::NNodes::TExprBase KqpBuildStreamLookupTableStages(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx) {
+    if (!node.Maybe<TKqlStreamLookupTable>()) {
+        return node;
+    }
+
+    const auto& lookup = node.Cast<TKqlStreamLookupTable>();
+
+    TMaybeNode<TKqpCnStreamLookup> cnStreamLookup;
+    if (IsDqPureExpr(lookup.LookupKeys())) {
+        YQL_ENSURE(lookup.LookupKeys().Ref().GetTypeAnn()->GetKind() == ETypeAnnotationKind::List,
+            "" << lookup.LookupKeys().Ref().Dump());
+
+        cnStreamLookup = Build<TKqpCnStreamLookup>(ctx, lookup.Pos())
+            .Output()
+                .Stage<TDqStage>()
+                    .Inputs()
+                    .Build()
+                    .Program()
+                        .Args({})
+                        .Body<TCoIterator>()
+                            .List(lookup.LookupKeys())
+                            .Build()
+                        .Build()
+                    .Settings(TDqStageSettings().BuildNode(ctx, lookup.Pos()))
+                    .Build()
+                .Index().Build("0")
+            .Build()
+            .Table(lookup.Table())
+            .Columns(lookup.Columns())
+            .LookupKeysType(ExpandType(lookup.Pos(), *lookup.LookupKeys().Ref().GetTypeAnn(), ctx))
+            .Done();
+
+    } else if (lookup.LookupKeys().Maybe<TDqCnUnionAll>()) {
+        auto output = lookup.LookupKeys().Cast<TDqCnUnionAll>().Output();
+
+        cnStreamLookup = Build<TKqpCnStreamLookup>(ctx, lookup.Pos())
+            .Output(output)
+            .Table(lookup.Table())
+            .Columns(lookup.Columns())
+            .LookupKeysType(ExpandType(lookup.Pos(), *output.Ref().GetTypeAnn(), ctx))
+            .Done();
+    } else {
+        return node;
+    }
+
+    return Build<TDqCnUnionAll>(ctx, node.Pos())
+        .Output()
+            .Stage<TDqStage>()
+            .Inputs()
+                .Add(cnStreamLookup.Cast())
+                .Build()
+            .Program()
+                .Args({"stream_lookup_output"})
+                .Body<TCoToStream>()
+                    .Input("stream_lookup_output")
+                    .Build()
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, node.Pos()))
+            .Build()
+            .Index().Build("0")
+        .Build().Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt

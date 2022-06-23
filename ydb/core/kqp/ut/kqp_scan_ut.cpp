@@ -1939,6 +1939,35 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         CompareYson("[[%false]]", StreamResultToYson(result));
     }
+
+    Y_UNIT_TEST_TWIN(StreamLookup, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        CreateSampleTables(kikimr);
+
+        {
+            auto result = db.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/EightShard` (Key, Text, Data) VALUES
+                (1u, "Value1",  1),
+                (2u, "Value2",  1),
+                (3u, "Value3",  1),
+                (4u, "Value4",  1),
+                (5u, "Value5",  1);
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.StreamExecuteScanQuery(R"(
+                PRAGMA kikimr.UseNewEngine = "true";
+                PRAGMA kikimr.OptEnablePredicateExtract = "false";
+                $keys = SELECT Key FROM `/Root/EightShard`;
+                SELECT * FROM `/Root/KeyValue` WHERE Key IN $keys ORDER BY Key;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", StreamResultToYson(result));
+        }
+    }
 }
 
 } // namespace NKqp

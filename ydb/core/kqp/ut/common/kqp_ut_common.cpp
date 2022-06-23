@@ -110,6 +110,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetKeepSnapshotTimeout(settings.KeepSnapshotTimeout);
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
+    ServerSettings->SetEnableKqpScanQueryStreamLookup(true);
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
 

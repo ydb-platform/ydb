@@ -492,22 +492,6 @@ void CheckLeaseExtension(TTestActorRuntime &runtime,
     }
 }
 
-TString AddrToString(const struct sockaddr *sa)
-{
-    char str[INET6_ADDRSTRLEN];
-    switch(sa->sa_family) {
-        case AF_INET:
-            inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr), str, INET6_ADDRSTRLEN);
-            break;
-        case AF_INET6:
-            inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr), str, INET6_ADDRSTRLEN);
-            break;
-        default:
-            return "unknown";
-    }
-    return str;
-}
-
 void CheckResolveNode(TTestActorRuntime &runtime,
                       TActorId sender,
                       ui32 nodeId,
@@ -521,7 +505,7 @@ void CheckResolveNode(TTestActorRuntime &runtime,
     UNIT_ASSERT(reply);
 
     UNIT_ASSERT_VALUES_EQUAL(reply->NodeId, nodeId);
-    UNIT_ASSERT_VALUES_EQUAL(AddrToString(reply->Address->Addr()), addr);
+    UNIT_ASSERT_VALUES_EQUAL(reply->Addresses[0].GetAddress(), addr);
 }
 
 void CheckResolveUnknownNode(TTestActorRuntime &runtime,
@@ -536,7 +520,7 @@ void CheckResolveUnknownNode(TTestActorRuntime &runtime,
     UNIT_ASSERT(reply);
 
     UNIT_ASSERT_VALUES_EQUAL(reply->NodeId, nodeId);
-    UNIT_ASSERT(!reply->Address);
+    UNIT_ASSERT(reply->Addresses.empty());
 }
 
 void GetNameserverNodesList(TTestActorRuntime &runtime,

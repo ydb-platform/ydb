@@ -17,6 +17,8 @@ namespace NInterconnect {
         TAddress();
         TAddress(const char* addr, ui16 port);
         TAddress(const TString& addr, ui16 port);
+        TAddress(in_addr addr, ui16 port);
+        TAddress(in6_addr addr, ui16 port);
         TAddress(NAddr::IRemoteAddr& addr);
         int GetFamily() const;
         socklen_t Size() const;

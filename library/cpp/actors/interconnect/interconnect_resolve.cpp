@@ -41,7 +41,11 @@ namespace NActors {
         void Bootstrap() {
             TMaybe<TString> errorText;
             if (auto addr = ExtractDefaultAddr(errorText)) {
-                return SendAddrAndDie(std::move(addr));
+                if (NodeId) {
+                    return SendLocalNodeInfoAndDie({{*addr}});
+                } else {
+                    return SendAddressInfoAndDie(std::move(addr));
+                }
             }
 
             if (errorText) {
@@ -55,8 +59,10 @@ namespace NActors {
             }
 
             Send(MakeDnsResolverActorId(),
-                    new TEvDns::TEvGetAddr(Host, AF_UNSPEC),
-                    IEventHandle::FlagTrackDelivery);
+                NodeId
+                    ? static_cast<IEventBase*>(new TEvDns::TEvGetHostByName(Host, AF_UNSPEC))
+                    : static_cast<IEventBase*>(new TEvDns::TEvGetAddr(Host, AF_UNSPEC)),
+                IEventHandle::FlagTrackDelivery);
 
             if (Deadline != TInstant::Max()) {
                 Schedule(Deadline, new TEvents::TEvWakeup);
@@ -69,6 +75,7 @@ namespace NActors {
             sFunc(TEvents::TEvWakeup, HandleTimeout);
             sFunc(TEvents::TEvUndelivered, HandleUndelivered);
             hFunc(TEvDns::TEvGetAddrResult, Handle);
+            hFunc(TEvDns::TEvGetHostByNameResult, Handle);
         });
 
         void HandleTimeout() {
@@ -81,23 +88,40 @@ namespace NActors {
 
         void Handle(TEvDns::TEvGetAddrResult::TPtr& ev) {
             if (auto addr = ExtractAddr(ev->Get())) {
-                return SendAddrAndDie(std::move(addr));
+                SendAddressInfoAndDie(std::move(addr));
+            } else {
+                SendErrorAndDie(ev->Get()->ErrorText);
             }
-
-            SendErrorAndDie(ev->Get()->ErrorText);
         }
 
-        void SendAddrAndDie(NAddr::IRemoteAddrPtr addr) {
-            if (NodeId) {
-                auto reply = new TEvLocalNodeInfo;
-                reply->NodeId = *NodeId;
-                reply->Address = std::move(addr);
-                TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply));
+        void Handle(TEvDns::TEvGetHostByNameResult::TPtr& ev) {
+            auto& msg = *ev->Get();
+            if (msg.Status) {
+                SendErrorAndDie(msg.ErrorText);
             } else {
-                auto reply = new TEvAddressInfo;
-                reply->Address = std::move(addr);
-                TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply));
+                std::vector<NInterconnect::TAddress> addresses;
+                for (const auto& ipv6 : msg.AddrsV6) {
+                    addresses.emplace_back(ipv6, Port);
+                }
+                for (const auto& ipv4 : msg.AddrsV4) {
+                    addresses.emplace_back(ipv4, Port);
+                }
+                SendLocalNodeInfoAndDie(std::move(addresses));
             }
+        }
+
+        void SendAddressInfoAndDie(NAddr::IRemoteAddrPtr addr) {
+            auto reply = new TEvAddressInfo;
+            reply->Address = std::move(addr);
+            TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply));
+            PassAway();
+        }
+
+        void SendLocalNodeInfoAndDie(std::vector<NInterconnect::TAddress> addresses) {
+            auto reply = std::make_unique<TEvLocalNodeInfo>();
+            reply->NodeId = *NodeId;
+            reply->Addresses = std::move(addresses);
+            TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, reply.release()));
             PassAway();
         }
 

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_pg.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NYql {
@@ -1020,34 +1021,9 @@ TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNod
             .Build());
     }
 
-    auto tree = ctx.Builder(pos)
-        .List()
-            .Atom(0, "Cross")
-            .Atom(1, "0")
-            .Atom(2, "1")
-            .List(3)
-            .Seal()
-            .List(4)
-            .Seal()
-            .List(5)
-            .Seal()
-        .Seal()
-        .Build();
-
+    auto tree = MakeCrossJoin(pos, ctx.NewAtom(pos, "0"), ctx.NewAtom(pos, "1"), ctx);
     for (ui32 i = 2; i < joinGroups.size(); ++i) {
-        tree = ctx.Builder(pos)
-            .List()
-                .Atom(0, "Cross")
-                .Add(1, tree)
-                .Atom(2, ToString(i))
-                .List(3)
-                .Seal()
-                .List(4)
-                .Seal()
-                .List(5)
-                .Seal()
-            .Seal()
-            .Build();
+        tree = MakeCrossJoin(pos, tree, ctx.NewAtom(pos, ToString(i)), ctx);
     }
 
     args.push_back(tree);

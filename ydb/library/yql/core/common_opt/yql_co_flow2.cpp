@@ -412,78 +412,221 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
     }
 }
 
-TExprNode::TPtr AddLinkToJoinTree(TExprNode::TPtr joinTree, TStringBuf label1, TStringBuf column1, TStringBuf label2, TStringBuf column2,
-    TExprContext& ctx, TMaybe<ui32>& found1, TMaybe<ui32>& found2, bool& updated) {
-    YQL_ENSURE(joinTree->Child(0)->Content() == "Cross" || joinTree->Child(0)->Content() == "Inner");
-    auto children = joinTree->ChildrenList();
+class TJoinTreeRebuilder {
+public:
+    TJoinTreeRebuilder(TExprNode::TPtr joinTree, TStringBuf label1, TStringBuf column1, TStringBuf label2, TStringBuf column2,
+        TExprContext& ctx)
+        : JoinTree(joinTree)
+        , Labels{ label1, label2 }
+        , Columns{ column1, column2 }
+        , Ctx(ctx)
+    {}
 
-    auto& left = children[1];
-    if (!left->IsAtom()) {
-        left = AddLinkToJoinTree(left, label1, column1, label2, column2, ctx, found1, found2, updated);
-        if (found1) {
-            found1 = 1u;
+    TExprNode::TPtr Run() {
+        auto pos = JoinTree->Pos();
+        GatherCross(JoinTree);
+        auto inCross1 = FindPtr(CrossJoins, Labels[0]);
+        auto inCross2 = FindPtr(CrossJoins, Labels[1]);
+        auto joinTree = JoinTree;
+        if (inCross1 || inCross2) {
+            if (inCross1 && inCross2) {
+                // make them a leaf
+                joinTree  = MakeCrossJoin(pos, Ctx.NewAtom(pos, Labels[0]), Ctx.NewAtom(pos, Labels[1]), Ctx);
+                for (auto label : CrossJoins) {
+                    if (label != Labels[0] && label != Labels[1]) {
+                        joinTree = MakeCrossJoin(pos, joinTree, Ctx.NewAtom(pos, label), Ctx);
+                    }
+                }
+
+                joinTree = AddRestJoins(pos, joinTree, nullptr);
+            } else if (inCross1) {
+                // leaf with table1 and subtree with table2
+                auto rest = FindRestJoin(Labels[1]);
+                YQL_ENSURE(rest);
+                joinTree = MakeCrossJoin(pos, Ctx.NewAtom(pos, Labels[0]), rest, Ctx);
+                for (auto label : CrossJoins) {
+                    if (label != Labels[0]) {
+                        joinTree = MakeCrossJoin(pos, joinTree, Ctx.NewAtom(pos, label), Ctx);
+                    }
+                }
+
+                joinTree = AddRestJoins(pos, joinTree, rest);
+            } else {
+                // leaf with table2 and subtree with table1
+                auto rest = FindRestJoin(Labels[0]);
+                YQL_ENSURE(rest);
+                joinTree = MakeCrossJoin(pos, Ctx.NewAtom(pos, Labels[1]), rest, Ctx);
+                for (auto label : CrossJoins) {
+                    if (label != Labels[1]) {
+                        joinTree = MakeCrossJoin(pos, joinTree, Ctx.NewAtom(pos, label), Ctx);
+                    }
+                }
+
+                joinTree = AddRestJoins(pos, joinTree, rest);
+            }
         }
 
-        if (found2) {
-            found2 = 1u;
-        }
-    } else {
-        if (left->Content() == label1) {
-            found1 = 1u;
-        }
-
-        if (left->Content() == label2) {
-            found2 = 1u;
-        }
+        auto newJoinTree = std::get<0>(AddLink(joinTree));
+        YQL_ENSURE(Updated);
+        return newJoinTree;
     }
 
-    auto& right = children[2];
-    if (!right->IsAtom()) {
-        right = AddLinkToJoinTree(right, label1, column1, label2, column2, ctx, found1, found2, updated);
-        if (found1) {
-            found1 = 2u;
-        }
-
-        if (found2) {
-            found2 = 2u;
-        }
-    } else {
-        if (right->Content() == label1) {
-            found1 = 2u;
-        }
-
-        if (right->Content() == label2) {
-            found2 = 2u;
-        }
-    }
-
-    if (found1 && found2) {
-        if (!updated) {
-            if (joinTree->Child(0)->Content() == "Cross") {
-                children[0] = ctx.NewAtom(joinTree->Pos(), "Inner");
+private:
+    TExprNode::TPtr AddRestJoins(TPositionHandle pos, TExprNode::TPtr joinTree, TExprNode::TPtr exclude) {
+        for (auto join : RestJoins) {
+            if (join == exclude) {
+                continue;
             }
 
-            if (*found1 == 2u) {
-                std::swap(label1, label2);
-                std::swap(column1, column2);
+            joinTree = MakeCrossJoin(pos, joinTree, join, Ctx);
+        }
+
+        return joinTree;
+    }
+
+    TExprNode::TPtr FindRestJoin(TStringBuf label) {
+        for (auto join : RestJoins) {
+            if (HasTable(join, label)) {
+                return join;
             }
+        }
 
-            auto link1 = children[3]->ChildrenList();
-            link1.push_back(ctx.NewAtom(joinTree->Pos(), label1));
-            link1.push_back(ctx.NewAtom(joinTree->Pos(), column1));
-            children[3] = ctx.ChangeChildren(*children[3], std::move(link1));
+        return nullptr;
+    }
 
-            auto link2 = children[4]->ChildrenList();
-            link2.push_back(ctx.NewAtom(joinTree->Pos(), label2));
-            link2.push_back(ctx.NewAtom(joinTree->Pos(), column2));
-            children[4] = ctx.ChangeChildren(*children[4], std::move(link2));
+    bool HasTable(TExprNode::TPtr joinTree, TStringBuf label) {
+        auto left = joinTree->ChildPtr(1);
+        if (left->IsAtom()) {
+            if (left->Content() == label) {
+                return true;
+            }
+        } else {
+            if (HasTable(left, label)) {
+                return true;
+            }
+        }
 
-            updated = true;
+        auto right = joinTree->ChildPtr(2);
+        if (right->IsAtom()) {
+            if (right->Content() == label) {
+                return true;
+            }
+        } else {
+            if (HasTable(right, label)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void GatherCross(TExprNode::TPtr joinTree) {
+        auto type = joinTree->Child(0)->Content();
+        if (type != "Cross") {
+            RestJoins.push_back(joinTree);
+            return;
+        }
+
+        auto left = joinTree->ChildPtr(1);
+        if (left->IsAtom()) {
+            CrossJoins.push_back(left->Content());
+        } else {
+            GatherCross(left);
+        }
+
+        auto right = joinTree->ChildPtr(2);
+        if (right->IsAtom()) {
+            CrossJoins.push_back(right->Content());
+        } else {
+            GatherCross(right);
         }
     }
 
-    return ctx.ChangeChildren(*joinTree, std::move(children));
-}
+    std::tuple<TExprNode::TPtr, TMaybe<ui32>, TMaybe<ui32>> AddLink(TExprNode::TPtr joinTree) {
+        YQL_ENSURE(joinTree->Child(0)->Content() == "Cross" || joinTree->Child(0)->Content() == "Inner");
+        auto children = joinTree->ChildrenList();
+
+        TMaybe<ui32> found1;
+        TMaybe<ui32> found2;
+        auto& left = children[1];
+        if (!left->IsAtom()) {
+            TMaybe<ui32> leftFound1, leftFound2;
+            std::tie(left, leftFound1, leftFound2) = AddLink(left);
+            if (leftFound1) {
+                found1 = 1u;
+            }
+
+            if (leftFound2) {
+                found2 = 1u;
+            }
+        } else {
+            if (left->Content() == Labels[0]) {
+                found1 = 1u;
+            }
+
+            if (left->Content() == Labels[1]) {
+                found2 = 1u;
+            }
+        }
+
+        auto& right = children[2];
+        if (!right->IsAtom()) {
+            TMaybe<ui32> rightFound1, rightFound2;
+            std::tie(right, rightFound1, rightFound2) = AddLink(right);
+            if (rightFound1) {
+                found1 = 2u;
+            }
+
+            if (rightFound2) {
+                found2 = 2u;
+            }
+        } else {
+            if (right->Content() == Labels[0]) {
+                found1 = 2u;
+            }
+
+            if (right->Content() == Labels[1]) {
+                found2 = 2u;
+            }
+        }
+
+        if (found1 && found2) {
+            if (!Updated) {
+                if (joinTree->Child(0)->Content() == "Cross") {
+                    children[0] = Ctx.NewAtom(joinTree->Pos(), "Inner");
+                }
+
+                ui32 index1 = *found1 - 1; // 0/1
+                ui32 index2 = 1 - index1;
+
+                auto link1 = children[3]->ChildrenList();
+                link1.push_back(Ctx.NewAtom(joinTree->Pos(), Labels[index1]));
+                link1.push_back(Ctx.NewAtom(joinTree->Pos(), Columns[index1]));
+                children[3] = Ctx.ChangeChildren(*children[3], std::move(link1));
+
+                auto link2 = children[4]->ChildrenList();
+                link2.push_back(Ctx.NewAtom(joinTree->Pos(), Labels[index2]));
+                link2.push_back(Ctx.NewAtom(joinTree->Pos(), Columns[index2]));
+                children[4] = Ctx.ChangeChildren(*children[4], std::move(link2));
+
+                Updated = true;
+            }
+        }
+
+        return { Ctx.ChangeChildren(*joinTree, std::move(children)), found1, found2 };
+    }
+
+private:
+    TVector<TStringBuf> CrossJoins;
+    TVector<TExprNode::TPtr> RestJoins;
+
+    bool Updated = false;
+
+    TExprNode::TPtr JoinTree;
+    TStringBuf Labels[2];
+    TStringBuf Columns[2];
+    TExprContext& Ctx;
+};
 
 TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
     const TJoinLabels& labels, ui32 index1, ui32 index2,  const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
@@ -559,10 +702,8 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, TExprNode::TPt
         return equiJoin;
     }
 
-    TMaybe<ui32> found1, found2;
-    bool updated = false;
-    auto newJoinTree = AddLinkToJoinTree(joinTree, label1, column1, label2, column2, ctx, found1, found2, updated);
-    YQL_ENSURE(updated);
+    TJoinTreeRebuilder rebuilder(joinTree, label1, column1, label2, column2, ctx);
+    auto newJoinTree = rebuilder.Run();
     return ctx.ChangeChild(*equiJoin, inputsCount, std::move(newJoinTree));
 }
 

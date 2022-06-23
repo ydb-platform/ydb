@@ -34,6 +34,15 @@ message SelfCheckResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message NodeCheckRequest {
+    Ydb.Operations.OperationParams operation_params = 1; // basic operation params, including timeout
+}
+
+message NodeCheckResponse {
+    // After successfull completion must contain SelfCheckResult.
+    Ydb.Operations.Operation operation = 1;
+}
+
 message SelfCheck {
     // Describes the result of self-check performed.
     enum Result {

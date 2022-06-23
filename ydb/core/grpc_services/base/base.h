@@ -215,7 +215,8 @@ struct TRpcServices {
         EvListYndxRateLimiterResources,
         EvDescribeYndxRateLimiterResource,
         EvAcquireYndxRateLimiterResource,
-        EvGrpcRuntimeRequest // !!! DO NOT ADD NEW REQUEST !!!
+        EvGrpcRuntimeRequest,
+        EvNodeCheckRequest // !!! DO NOT ADD NEW REQUEST !!!
     };
 
     struct TEvGrpcNextReply : public TEventLocal<TEvGrpcNextReply, TRpcServices::EvGrpcStreamIsReady> {

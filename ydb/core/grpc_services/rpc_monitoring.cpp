@@ -76,5 +76,57 @@ void DoSelfCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvide
     TActivationContext::AsActorContext().Register(new TSelfCheckRPC(p.release()));
 }
 
+class TNodeCheckRPC : public TRpcRequestActor<TNodeCheckRPC, TEvNodeCheckRequest, true> {
+public:
+    using TRpcRequestActor::TRpcRequestActor;
+
+    THolder<NHealthCheck::TEvSelfCheckResult> Result;
+    Ydb::StatusIds_StatusCode Status = Ydb::StatusIds::SUCCESS;
+
+    void Bootstrap() {
+        THolder<NHealthCheck::TEvNodeCheckRequest> request = MakeHolder<NHealthCheck::TEvNodeCheckRequest>();
+        request->Request = *GetProtoRequest();
+        Send(NHealthCheck::MakeHealthCheckID(), request.Release());
+        Become(&TThis::StateWait);
+    }
+
+    STATEFN(StateWait) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(NHealthCheck::TEvSelfCheckResult, Handle);
+        }
+    }
+
+    void Handle(NHealthCheck::TEvSelfCheckResult::TPtr& ev) {
+        Status = Ydb::StatusIds::SUCCESS;
+        Result = ev->Release();
+        ReplyAndPassAway();
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        Status = Ydb::StatusIds::UNAVAILABLE;
+        ReplyAndPassAway();
+    }
+
+    void ReplyAndPassAway() {
+        TResponse response;
+        Ydb::Operations::Operation& operation = *response.mutable_operation();
+        operation.set_ready(true);
+        operation.set_status(Status);
+        if (Result) {
+            operation.mutable_result()->PackFrom(Result->Result);
+        }
+        return Reply(response);
+    }
+};
+
+// void DoNodeCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+//     TActivationContext::AsActorContext().Register(new TNodeCheckRPC(p.release()));
+// }
+
+void TGRpcRequestProxy::Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Register(new TNodeCheckRPC(ev->Release().Release()));
+}
+
 } // namespace NGRpcService
 } // namespace NKikimr

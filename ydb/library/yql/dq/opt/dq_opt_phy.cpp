@@ -170,6 +170,10 @@ TExprBase DqPushMembersFilterToStage(TExprBase node, TExprContext& ctx, IOptimiz
         return node;
     }
 
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TMembersFilter::idx_Input, std::move(connToPushableStage)));
+    }
+
     auto lambda = Build<TCoLambda>(ctx, filter.Pos())
             .Args({"stream"})
             .template Body<TMembersFilter>()
@@ -272,6 +276,32 @@ TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& o
     return newStage;
 }
 
+TExprNode::TPtr DqBuildPushableStage(const NNodes::TDqConnection& connection, TExprContext& ctx) {
+    auto stage = connection.Output().Stage().Cast<TDqStage>();
+    auto program = stage.Program();
+    if (GetStageOutputsCount(stage) < 2 || program.Body().Maybe<TDqReplicate>()) {
+        return {};
+    }
+
+    auto newStage = Build<TDqStage>(ctx, stage.Pos())
+        .Inputs()
+            .Add(connection)
+            .Build()
+        .Program()
+            .Args({"arg"})
+            .Body("arg")
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, stage.Pos()))
+        .Done();
+
+    auto output = Build<TDqOutput>(ctx, connection.Pos())
+        .Stage(newStage)
+        .Index().Build(BuildAtom("0", connection.Output().Index().Pos(), ctx))
+        .Done();
+
+    return ctx.ChangeChild(connection.Ref(), TDqConnection::idx_Output, output.Ptr());
+}
+
 TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& connection, TCoLambda& lambda,
     const TVector<TDqConnection>& lambdaInputs, TExprContext& ctx, IOptimizationContext& optCtx)
 {
@@ -283,7 +313,7 @@ TMaybeNode<TDqConnection> DqPushLambdaToStageUnionAll(const TDqConnection& conne
 
     auto output = Build<TDqOutput>(ctx, connection.Pos())
         .Stage(newStage.Cast())
-        .Index(connection.Output().Index())
+        .Index().Build(connection.Output().Index())
         .Done();
 
     return TDqConnection(ctx.ChangeChild(connection.Ref(), TDqConnection::idx_Output, output.Ptr()));
@@ -316,6 +346,10 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
 
     if (!IsDqPureExpr(flatmap.Lambda())) {
         return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
     }
 
     auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
@@ -368,6 +402,10 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
         return node;
     }
 
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), BaseLMap::idx_Input, std::move(connToPushableStage)));
+    }
+
     auto lambda = Build<TCoLambda>(ctx, lmap.Lambda().Pos())
         .Args({"stream"})
         .template Body<TCoToStream>()
@@ -383,6 +421,28 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
         return node;
     }
 
+    const TTypeAnnotationNode* lmapItemTy = GetSeqItemType(lmap.Ref().GetTypeAnn()); 
+    if (lmapItemTy->GetKind() == ETypeAnnotationKind::Variant) {
+        // preserve typing by Mux'ing several stage outputs into one
+        const auto variantItemTy = lmapItemTy->template Cast<TVariantExprType>();
+        const auto stageOutputNum = variantItemTy->GetUnderlyingType()->template Cast<TTupleExprType>()->GetSize();
+        TVector<TExprBase> muxParts;
+        muxParts.reserve(stageOutputNum);
+        for (auto i = 0U; i < stageOutputNum; i++) {
+            const auto muxPart = Build<TDqCnUnionAll>(ctx, lmap.Lambda().Pos())
+                .Output()
+                    .Stage(result.Output().Stage().Cast())
+                    .Index().Build(i)
+                .Build()
+                .Done();
+            muxParts.emplace_back(muxPart);
+        }
+        return Build<TCoMux>(ctx, result.Cast().Pos())
+            .template Input<TExprList>()
+                .Add(muxParts)
+            .Build()
+            .Done();
+    }
     return result.Cast();
 }
 
@@ -418,6 +478,10 @@ TExprBase DqPushCombineToStage(TExprBase node, TExprContext& ctx, IOptimizationC
         !CanPushDqExpr(combine.FinishHandlerLambda(), dqUnion))
     {
         return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoCombineByKey::idx_Input, std::move(connToPushableStage)));
     }
 
     auto lambda = Build<TCoLambda>(ctx, combine.Pos())
@@ -732,6 +796,10 @@ TExprBase DqBuildTopSortStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         return node;
     }
 
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTopSort::idx_Input, std::move(connToPushableStage)));
+    }
+
     auto result = dqUnion.Output().Stage().Program().Body();
 
     auto sortKeySelector = topSort.KeySelectorLambda();
@@ -878,6 +946,9 @@ TExprBase DqBuildSortStage(TExprBase node, TExprContext& ctx, IOptimizationConte
 
     TMaybeNode<TDqStage> outerStage;
     if (canMerge && IsMergeConnectionApplicable(sortKeyTypes)) {
+        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoSortBase::idx_Input, std::move(connToPushableStage)));
+        }
         auto lambda = Build<TCoLambda>(ctx, sort.Pos())
             .Args({"stream"})
             .Body<TCoSort>()
@@ -998,6 +1069,10 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
         return node;
     }
 
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTake::idx_Input, std::move(connToPushableStage)));
+    }
+
     auto result = dqUnion.Output().Stage().Program().Body();
     auto stage = dqUnion.Output().Stage();
 
@@ -1060,6 +1135,10 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
         return node;
     }
 
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTake::idx_Input, std::move(connToPushableStage)));
+    }
+
     auto lambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"stream"})
         .Body<TCoTake>()
@@ -1111,6 +1190,10 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
     auto dqUnion = node.Cast<TCoLength>().List().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
+    }
+
+    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoLength::idx_List, std::move(connToPushableStage)));
     }
 
     auto zero = Build<TCoUint64>(ctx, node.Pos())
@@ -1475,6 +1558,10 @@ TExprBase DqBuildHasItems(TExprBase node, TExprContext& ctx, IOptimizationContex
 
     auto unionAll = hasItems.List().Cast<TDqCnUnionAll>();
 
+    if (auto connToPushableStage = DqBuildPushableStage(unionAll, ctx)) {
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoHasItems::idx_List, std::move(connToPushableStage)));
+    }
+
     // Add LIMIT 1 via Take
     auto takeProgram = Build<TCoLambda>(ctx, node.Pos())
         .Args({"take_arg"})
@@ -1565,6 +1652,12 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
 
     if (!output.Stage().Maybe<TDqStage>()) {
         return node;
+    }
+    if (auto connToPushableStage = DqBuildPushableStage(unionAll, ctx)) {
+        return TExprBase(ctx.ChangeChild(
+            *node.Raw(), 
+            node.Maybe<TCoToOptional>() ? TCoToOptional::idx_List : TCoHead::idx_Input, 
+            std::move(connToPushableStage)));
     }
 
     auto stage = output.Stage().Cast<TDqStage>();

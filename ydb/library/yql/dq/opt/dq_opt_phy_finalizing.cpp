@@ -1,4 +1,5 @@
 #include "dq_opt_phy_finalizing.h"
+#include "ydb/library/yql/core/yql_opt_utils.h"
 
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -12,10 +13,7 @@ using namespace NNodes;
 
 namespace {
 
-// returns new DqStage and list of added output indexes
-std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage, const TCoAtom& indexAtom,
-    const TVector<TCoLambda>& lambdas, TExprContext& ctx)
-{
+ui32 GetStageOutputsCount(const TDqStage& stage, const TCoAtom& indexAtom, TExprContext& ctx) {
     auto result = stage.Program().Body();
     auto resultType = result.Ref().GetTypeAnn();
 
@@ -35,6 +33,20 @@ std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage
     } else {
         outputsCount = 1;
     }
+    return outputsCount;
+}
+
+// returns new DqStage and list of added output indexes
+std::pair<TDqStage, TVector<TCoAtom>> ReplicateStageOutput(const TDqStage& stage, const TCoAtom& indexAtom,
+    const TVector<TCoLambda>& lambdas, TExprContext& ctx)
+{
+    auto result = stage.Program().Body();
+    auto resultType = result.Ref().GetTypeAnn();
+
+    const TTypeAnnotationNode* resultItemType = GetSeqItemType(resultType);
+
+    ui32 index = FromString<ui32>(indexAtom.Value());
+    ui32 outputsCount = GetStageOutputsCount(stage, indexAtom, ctx);
 
     YQL_CLOG(TRACE, CoreDq) << "replicate stage (#" << stage.Ref().UniqueId() << ", " << index << "), outputs: "
         << outputsCount << ", about to add " << lambdas.size() << " copies." << Endl << PrintDqStageOnly(stage, ctx);
@@ -259,6 +271,45 @@ TExprNode::TPtr ReplicateDqOutput(TExprNode::TPtr&& input, const TMultiUsedConne
     return ctx.ReplaceNodes(std::move(input), replaces);
 }
 
+TExprNode::TPtr ReplaceStageForConsumer(TDqStage newStage, const TExprNode* consumer, TExprNode::TPtr&& input, 
+    TExprContext& ctx, bool skipFirstUsage, const TExprNode* dqConnection, const TVector<TCoAtom>& outputlIndices = {}) {
+    bool isStageConsumer = TMaybeNode<TDqStage>(consumer).IsValid();
+    auto consumerNode = isStageConsumer
+        ? TDqStage(consumer).Inputs().Raw()
+        : consumer;
+
+    ui32 usageIdx = 0;
+    TExprNode::TPtr newConsumer = ctx.ShallowCopy(*consumerNode);
+    for (size_t childIndex = 0; childIndex < newConsumer->ChildrenSize(); ++childIndex) {
+        TExprBase child(newConsumer->Child(childIndex));
+
+        if (child.Raw() == dqConnection) {
+            if (skipFirstUsage && usageIdx == 0) {
+                // Keep first (any of) usage as is.
+                skipFirstUsage = false;
+                continue;
+            }
+
+            const auto newIdx = outputlIndices.empty() ? BuildAtom("0", dqConnection->Pos(), ctx) : outputlIndices[usageIdx];
+            auto newOutput = Build<TDqOutput>(ctx, child.Pos())
+                .Stage(newStage)
+                .Index(newIdx)
+                .Done();
+
+            auto newConnection = ctx.ChangeChild(child.Ref(), TDqConnection::idx_Output, newOutput.Ptr());
+
+            newConsumer = ctx.ChangeChild(*newConsumer, childIndex, std::move(newConnection));
+            ++usageIdx;
+        }
+    }
+
+    if (isStageConsumer) {
+        newConsumer = ctx.ChangeChild(*consumer, TDqStage::idx_Inputs, std::move(newConsumer));
+    }
+
+    return ctx.ReplaceNode(std::move(input), *consumer, newConsumer);
+}
+
 TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedConnection& muConnection,
     TExprContext& ctx)
 {
@@ -271,6 +322,28 @@ TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedC
 
     auto& consumers = muConnection.Consumers;
     YQL_ENSURE(consumers.size() > 1);
+    if (GetStageOutputsCount(dqStage, outputIndex, ctx) > 1 && !dqStage.Program().Body().Maybe<TDqReplicate>()) {
+        // create a stage with single output, which is used by multiple consumers
+        auto newStage = Build<TDqStage>(ctx, dqStage.Pos())
+            .Inputs()
+                .Add(muConnection.Connection)
+                .Build()
+            .Program()
+                .Args({"arg"})
+                .Body("arg")
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, dqStage.Pos()))
+            .Done();
+        TNodeSet processed;
+        for (const auto& consumer : consumers) {
+            if (processed.contains(consumer)) {
+                continue;
+            }
+            processed.insert(consumer);
+            input = ReplaceStageForConsumer(newStage, consumer, std::move(input), ctx, /* skipFirstUsage = */ false, muConnection.Connection.Raw());
+        }
+        return input;
+    }
 
     // NOTE: Only handle one consumer at a time, as there might be dependencies between them.
     // Ensure stable order by processing connection with minimal ID
@@ -297,41 +370,7 @@ TExprNode::TPtr ReplicateDqConnection(TExprNode::TPtr&& input, const TMultiUsedC
 
     auto [newStage, newAdditionalIndexes] = ReplicateStageOutput(dqStage, outputIndex, lambdas, ctx);
 
-    bool isStageConsumer = TMaybeNode<TDqStage>(consumer).IsValid();
-    auto consumerNode = isStageConsumer
-        ? TDqStage(consumer).Inputs().Raw()
-        : consumer;
-
-    ui32 usageIdx = 0;
-    bool skipUsage = isLastConsumer;
-    TExprNode::TPtr newConsumer = ctx.ShallowCopy(*consumerNode);
-    for (size_t childIndex = 0; childIndex < newConsumer->ChildrenSize(); ++childIndex) {
-        TExprBase child(newConsumer->Child(childIndex));
-
-        if (child.Raw() == muConnection.Connection.Raw()) {
-            if (skipUsage && usageIdx == 0) {
-                // Keep first (any of) usage as is.
-                skipUsage = false;
-                continue;
-            }
-
-            auto newOutput = Build<TDqOutput>(ctx, child.Pos())
-                .Stage(newStage)
-                .Index(newAdditionalIndexes[usageIdx])
-                .Done();
-
-            auto newConnection = ctx.ChangeChild(child.Ref(), TDqConnection::idx_Output, newOutput.Ptr());
-
-            newConsumer = ctx.ChangeChild(*newConsumer, childIndex, std::move(newConnection));
-            ++usageIdx;
-        }
-    }
-
-    if (isStageConsumer) {
-        newConsumer = ctx.ChangeChild(*consumer, TDqStage::idx_Inputs, std::move(newConsumer));
-    }
-
-    auto result = ctx.ReplaceNode(std::move(input), *consumer, newConsumer);
+    auto result = ReplaceStageForConsumer(newStage, consumer, std::move(input), ctx, /* skipFirstUsage = */ isLastConsumer, muConnection.Connection.Raw(), newAdditionalIndexes);
     return ctx.ReplaceNode(std::move(result), dqStage.Ref(), newStage.Ptr());
 }
 

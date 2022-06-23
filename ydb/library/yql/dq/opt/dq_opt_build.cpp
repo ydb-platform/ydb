@@ -109,6 +109,37 @@ void MakeConsumerReplaces(
     TNodeOnNodeOwnedMap& replaces,
     TExprContext& ctx)
 {
+    if (!dqStage.Program().Body().Maybe<TDqReplicate>()) {
+        for (ui32 i = 0; i < consumers.size(); ++i) {
+            TVector<TCoArgument> newArgs;
+            newArgs.reserve(dqStage.Inputs().Size());
+            TNodeOnNodeOwnedMap argsMap;
+            CollectArgsReplaces(dqStage, newArgs, argsMap, ctx);
+            auto newStage = Build<TDqStage>(ctx, dqStage.Pos())
+                .InitFrom(dqStage) 
+                .Program()
+                    .Args(newArgs)
+                    .Body<TCoFlatMap>()
+                        .Input(ctx.ReplaceNodes(dqStage.Program().Body().Ptr(), argsMap))
+                        .Lambda()
+                            .Args({"arg"})
+                            .template Body<TCoGuess>()
+                                .Variant("arg")
+                                .Index(consumers[i].Index())
+                            .Build()
+                        .Build()
+                    .Build()
+                    .Build()
+                .Settings(TDqStageSettings().BuildNode(ctx, dqStage.Pos()))
+                .Done().Ptr();
+            auto newOutput = Build<TDqOutput>(ctx, dqStage.Pos())
+                .Stage(newStage)
+                .Index().Build(0)
+                .Done().Ptr();
+            replaces.emplace(consumers[i].Raw(), newOutput);
+        }
+        return;
+    }
     auto replicate = dqStage.Program().Body().Cast<TDqReplicate>();
 
     TVector<TExprBase> stageResults;

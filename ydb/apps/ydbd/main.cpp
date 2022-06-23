@@ -3,11 +3,10 @@
 #include <ydb/core/driver_lib/run/main.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/ymq/actor/auth_factory.h>
-#include <ydb/core/yq/libs/audit/mock/yq_mock_audit_service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service.h>
-#include <ydb/library/pdisk_io/aio.h>
+#include <ydb/core/yq/libs/audit/mock/yq_mock_audit_service.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
-#include <ydb/library/yql/parser/pg_wrapper/comp_factory.h>
+#include <ydb/library/pdisk_io/aio.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 
 
@@ -23,7 +22,6 @@ int main(int argc, char **argv) {
     factories->IoContextFactory = std::make_shared<NKikimr::NPDisk::TIoContextFactoryOSS>();
     factories->SqsAuthFactory = std::make_shared<NKikimr::NSQS::TAuthFactory>();
     factories->DataStreamsAuthFactory = std::make_shared<NKikimr::NHttpProxy::TAuthFactory>();
-    factories->AdditionalComputationNodeFactories = { NYql::GetPgFactory() };
 
     return ParameterizedMain(argc, argv, std::move(factories));
 }

@@ -16,6 +16,7 @@ target_link_libraries(ydbd PUBLIC
   yutil
   cpp-lfalloc-yt
   library-cpp-cpuid_check
+  yql-sql-pg_dummy
   run
   ydb-core-protos
   ydb-core-security
@@ -24,8 +25,7 @@ target_link_libraries(ydbd PUBLIC
   ydb-library-keys
   ydb-library-pdisk_io
   ydb-library-security
-  yql-parser-pg_wrapper
-  yql-sql-pg
+  client-ydb_persqueue_public-codecs
   common-clickhouse-client
   datetime_udf
   datetime2_udf
@@ -48,7 +48,6 @@ target_link_libraries(ydbd PUBLIC
   url_udf
   yson2_udf
   dsv_udf
-  client-ydb_persqueue_public-codecs
 )
 target_link_options(ydbd PRIVATE
   -Wl,-no_deduplicate

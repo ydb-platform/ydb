@@ -516,8 +516,21 @@ static void PureColumnListStr(const TRule_pure_column_list& node, TTranslation& 
 }
 
 static bool NamedNodeImpl(const TRule_bind_parameter& node, TString& name, TTranslation& ctx) {
-    // bind_parameter: DOLLAR an_id_or_type;
-    auto id = Id(node.GetRule_an_id_or_type2(), ctx);
+    // bind_parameter: DOLLAR (an_id_or_type | TRUE | FALSE);
+    TString id;
+    switch (node.GetBlock2().Alt_case()) {
+        case TRule_bind_parameter::TBlock2::kAlt1:
+            id = Id(node.GetBlock2().GetAlt1().GetRule_an_id_or_type1(), ctx);
+            break;
+        case TRule_bind_parameter::TBlock2::kAlt2:
+            id = ctx.Token(node.GetBlock2().GetAlt2().GetToken1());
+            break;
+        case TRule_bind_parameter::TBlock2::kAlt3:
+            id = ctx.Token(node.GetBlock2().GetAlt3().GetToken1());
+            break;
+        default:
+            Y_FAIL("You should change implementation according to grammar changes");
+    }
     auto dollar = ctx.Token(node.GetToken1());
     if (id.empty()) {
         ctx.Error() << "Empty symbol name is not allowed";

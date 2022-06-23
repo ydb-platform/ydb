@@ -1682,6 +1682,11 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
     Y_UNIT_TEST(UseShouldWorkAsColumnName) {
         UNIT_ASSERT(SqlToYql("select use from (select 1 as use);").IsOk());
     }
+
+    Y_UNIT_TEST(TrueFalseWorkAfterDollar) {
+        UNIT_ASSERT(SqlToYql("$ true = false; SELECT $ true or false;").IsOk());
+        UNIT_ASSERT(SqlToYql("$False = 0; SELECT $False;").IsOk());
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

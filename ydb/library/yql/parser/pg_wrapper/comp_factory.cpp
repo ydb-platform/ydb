@@ -2085,7 +2085,7 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret) {
     if (ustr == "YEAR") {
         ret = INTERVAL_MASK(YEAR);
     } else if (ustr == "MONTH") {
-        ret = INTERVAL_MASK(YEAR);
+        ret = INTERVAL_MASK(MONTH);
     } else if (ustr == "DAY") {
         ret = INTERVAL_MASK(DAY);
     } else if (ustr == "HOUR") {

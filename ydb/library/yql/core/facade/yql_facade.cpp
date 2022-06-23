@@ -183,9 +183,10 @@ TProgramPtr TProgramFactory::Create(
 TProgramPtr TProgramFactory::Create(
         const TString& filename,
         const TString& sourceCode,
-        const TString& sessionId)
+        const TString& sessionId,
+        bool hidden)
 {
-    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom ?
+    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && !hidden ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -198,7 +199,7 @@ TProgramPtr TProgramFactory::Create(
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
         UserDataTable_, CredentialTables_, UserCredentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_,
-        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_);
+        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, hidden);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -223,7 +224,8 @@ TProgram::TProgram(
         const TString& sourceCode,
         const TString& sessionId,
         const TString& runner,
-        bool enableRangeComputeFor
+        bool enableRangeComputeFor,
+        bool hidden
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -249,6 +251,7 @@ TProgram::TProgram(
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
+    , Hidden_(hidden)
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -764,7 +767,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = false;
+    TypeCtx_->IsReadOnly = Hidden_;
 
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
@@ -838,7 +841,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = false;
+    TypeCtx_->IsReadOnly = Hidden_;
 
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
@@ -996,6 +999,7 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             FallbackCounter ++;
             // don't execute recapture again
             ExprCtx_->Step.Done(TExprStep::Recapture);
+            BeforeFallback();
             return AsyncTransformWithFallback(false);
         }
         return res;
@@ -1124,7 +1128,7 @@ TMaybe<TString> TProgram::GetTasksInfo() {
     }
 }
 
-TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
+TMaybe<TString> TProgram::GetStatistics(bool totalOnly, THashMap<TString, TStringBuf> extraYsons) {
     if (!TypeCtx_) {
         return Nothing();
     }
@@ -1173,6 +1177,13 @@ TMaybe<TString> TProgram::GetStatistics(bool totalOnly) {
         }
 
     writer.OnEndMap(); // system
+
+    // extra
+    for (const auto &[k, extraYson] : extraYsons) {
+        writer.OnKeyedItem(k);
+        writer.OnRaw(extraYson);
+        hasStatistics = true;
+    }
 
     // Footer
     writer.OnEndMap();
@@ -1273,6 +1284,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     if (DiagnosticFormat_) {
         typeAnnotationContext->Diagnostics = true;
     }
+    typeAnnotationContext->Hidden = Hidden_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning
@@ -1295,6 +1307,9 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             ProgressWriter_,
             OperationOptions_
         );
+        if (Hidden_ && !dp.SupportsHidden) {
+            continue;
+        }
 
         providerNames.insert(dp.Names.begin(), dp.Names.end());
         DataProviders_.emplace_back(dp);

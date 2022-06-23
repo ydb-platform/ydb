@@ -410,6 +410,10 @@ message TDqGatewayConfig {
     repeated string DefaultAnalyzeQueryForUsers = 4;
 
     repeated TAttr DefaultSettings = 102;
+
+    optional uint32 WithHiddenPercentage = 5 [default = 0];
+    repeated TDefaultAutoByHourPercentage WithHiddenByHour = 6;
+    repeated string NoWithHiddenForUsers = 7;
 }
 
 /////////////////////////////// Yql Core ///////////////////////////////

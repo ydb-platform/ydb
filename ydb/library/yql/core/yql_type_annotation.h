@@ -235,6 +235,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
 
     std::optional<bool> InitializeResult;
+    bool Hidden = false;
 
     template <typename T>
     T GetRandom() const noexcept;

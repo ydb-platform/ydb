@@ -35,6 +35,7 @@
 #include <util/system/hp_timer.h>
 #include <util/thread/singleton.h>
 
+#include <map>
 #include <optional>
 #include <variant>
 
@@ -369,16 +370,21 @@ class TExecutor
     bool LeaseUsed = false;
     // This flag marks when TEvLeaseExtend message is already pending
     bool LeaseExtendPending = false;
+    // This flag is enabled when LeaseDuration is changed and needs to be persisted again
+    bool LeaseDurationUpdated = false;
     TDuration LeaseDuration;
     TMonotonic LeaseEnd;
     // Counts the number of times an unused lease has been extended
     size_t UnusedLeaseExtensions = 0;
+    // Counts the number of times LeaseDuration was increased
+    size_t LeaseDurationIncreases = 0;
 
     struct TLeaseCommit {
         const ui32 Step;
         const TMonotonic Start;
         TMonotonic LeaseEnd;
         TVector<std::function<void()>> Callbacks;
+        std::multimap<TMonotonic, TLeaseCommit*>::iterator ByEndIterator;
 
         TLeaseCommit(ui32 step, TMonotonic start, TMonotonic leaseEnd)
             : Step(step)
@@ -388,6 +394,7 @@ class TExecutor
     };
 
     TList<TLeaseCommit> LeaseCommits;
+    std::multimap<TMonotonic, TLeaseCommit*> LeaseCommitsByEnd;
 
     using TActivationQueue = TOneOneQueueInplace<TSeat *, 64>;
     THolder<TActivationQueue, TActivationQueue::TPtrCleanDestructor> ActivationQueue;
@@ -610,6 +617,7 @@ public:
     void DetachTablet(const TActorContext &ctx) override;
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
 
+    TLeaseCommit* AttachLeaseCommit(TLogCommit* commit, bool force = false);
     TLeaseCommit* EnsureReadOnlyLease(TMonotonic at);
     void ConfirmReadOnlyLease(TMonotonic at) override;
     void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) override;

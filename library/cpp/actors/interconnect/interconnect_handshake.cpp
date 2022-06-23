@@ -861,6 +861,7 @@ namespace NActors {
                 int err = 0;
                 Socket = NInterconnect::TStreamSocket::Make(address.GetFamily(), &err);
                 if (err == EAFNOSUPPORT) {
+                    Socket.Reset();
                     continue;
                 } else if (*Socket == -1) {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "System error: failed to create socket");

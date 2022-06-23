@@ -16,8 +16,8 @@ struct TPartitionId {
     ui64 AssignId;
 
     bool operator < (const TPartitionId& rhs) const {
-        return std::make_tuple(AssignId, Partition, DiscoveryConverter->GetInternalName()) <
-               std::make_tuple(rhs.AssignId, rhs.Partition, rhs.DiscoveryConverter->GetInternalName());
+        return std::make_tuple(AssignId, Partition, DiscoveryConverter->GetOriginalPath()) <
+               std::make_tuple(rhs.AssignId, rhs.Partition, rhs.DiscoveryConverter->GetOriginalPath());
     }
 };
 

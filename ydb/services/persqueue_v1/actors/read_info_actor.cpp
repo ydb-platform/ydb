@@ -98,7 +98,7 @@ void TReadInfoActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TActorC
 
     NKikimrClient::TPersQueueRequest proto;
     proto.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->SetClientId(ClientId);
-    for (auto& t : TopicAndTablets) {
+    for (auto& [_, t] : TopicAndTablets) {
         proto.MutableMetaRequest()->MutableCmdGetReadSessionsInfo()->AddTopic(t.TopicNameConverter->GetClientsideName());
     }
 

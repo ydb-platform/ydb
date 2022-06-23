@@ -60,7 +60,7 @@ private:
 
     TActorId AuthInitActor;
 
-    TTopicTabletsPairs TopicAndTablets;
+    TTopicInitInfoMap TopicAndTablets;
 
     TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
 

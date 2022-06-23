@@ -71,11 +71,11 @@ struct TEvPQProxy {
 
 
     struct TEvAuthResultOk : public NActors::TEventLocal<TEvAuthResultOk, EvAuthResultOk> {
-        TEvAuthResultOk(const TTopicTabletsPairs&& topicAndTablets)
+        TEvAuthResultOk(const TTopicInitInfoMap&& topicAndTablets)
             : TopicAndTablets(std::move(topicAndTablets))
         { }
 
-        TTopicTabletsPairs TopicAndTablets;
+        TTopicInitInfoMap TopicAndTablets;
     };
 
     struct TEvSessionSetPreferredCluster : public NActors::TEventLocal<TEvSessionSetPreferredCluster, EvSessionSetPreferredCluster> {

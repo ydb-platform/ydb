@@ -302,6 +302,7 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
 
     {
         TString error;
+
         auto status = FillProposeRequestImpl(name, GetProtoRequest()->settings(), modifyScheme, ctx, false, error,
                                              workingDir, proposal.Record.GetDatabaseName(), LocalCluster);
         if (!error.empty()) {
@@ -312,7 +313,6 @@ void TCreateTopicActor::FillProposeRequest(TEvTxUserProxy::TEvProposeTransaction
 
     const auto& pqDescr = modifyScheme.GetCreatePersQueueGroup();
     const auto& config = pqDescr.GetPQTabletConfig();
-
     if (!LocalCluster.empty() && config.GetLocalDC() && config.GetDC() != LocalCluster) {
         Request_->RaiseIssue(FillIssue(TStringBuilder() << "Local cluster is not correct - provided '" << config.GetDC()
                                     << "' instead of " << LocalCluster, Ydb::PersQueue::ErrorCode::BAD_REQUEST));

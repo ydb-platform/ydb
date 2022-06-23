@@ -35,6 +35,6 @@ namespace NKikimr::NGRpcProxy {
         TString FolderId;
     };
 
-    using TTopicTabletsPairs = TVector<TTopicInitInfo>;
+    using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
 
 } //    namespace NKikimr::NGRpcProxy

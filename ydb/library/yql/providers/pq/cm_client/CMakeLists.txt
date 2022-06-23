@@ -7,20 +7,20 @@
 
 
 
-add_library(pq-cm_client-interface)
-target_link_libraries(pq-cm_client-interface PUBLIC
+add_library(providers-pq-cm_client)
+target_link_libraries(providers-pq-cm_client PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-threading-future
-  client-ydb_types-credentials
   yql-public-issue
+  client-ydb_types-credentials
   tools-enum_parser-enum_serialization_runtime
 )
-target_sources(pq-cm_client-interface PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/interface/client.cpp
+target_sources(providers-pq-cm_client PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.cpp
 )
-generate_enum_serilization(pq-cm_client-interface
-  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/interface/client.h
+generate_enum_serilization(providers-pq-cm_client
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/cm_client/client.h
   INCLUDE_HEADERS
-  ydb/library/yql/providers/pq/cm_client/interface/client.h
+  ydb/library/yql/providers/pq/cm_client/client.h
 )

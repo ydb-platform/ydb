@@ -20,6 +20,7 @@ target_link_libraries(yq-libs-test_connection PUBLIC
   libs-config-protos
   yq-libs-control_plane_storage
   libs-test_connection-events
+  providers-pq-cm_client
   providers-solomon-async_io
 )
 target_sources(yq-libs-test_connection PRIVATE

@@ -48,7 +48,7 @@ target_link_libraries(yq-libs-init PUBLIC
   providers-dq-worker_manager
   dq-worker_manager-interface
   providers-pq-async_io
-  pq-cm_client-interface
+  providers-pq-cm_client
   pq-gateway-native
   providers-pq-provider
   providers-s3-actors

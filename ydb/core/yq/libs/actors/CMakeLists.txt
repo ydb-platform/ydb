@@ -67,7 +67,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   providers-dq-provider
   dq-provider-exec
   dq-worker_manager-interface
-  pq-cm_client-interface
+  providers-pq-cm_client
   providers-pq-provider
   providers-pq-task_meta
   providers-s3-provider

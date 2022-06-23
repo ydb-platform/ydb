@@ -11,7 +11,7 @@
 #include <ydb/library/folder_service/proto/config.pb.h>
 #include <ydb/core/yq/libs/config/protos/audit.pb.h>
 
-#include <ydb/library/yql/providers/pq/cm_client/interface/client.h>
+#include <ydb/library/yql/providers/pq/cm_client/client.h>
 
 #include <library/cpp/actors/core/actor.h>
 

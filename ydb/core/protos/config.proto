@@ -1044,7 +1044,7 @@ message TTableServiceConfig {
     }
 
     message TSessionBalancerSettings {
-        optional bool Enabled = 1 [default = false];
+        optional bool Enabled = 1 [default = true];
         // MaxSessionsShutdownInFlightSize option determines the number of sessions
         // that we can keep in shutdown state at the moment.
         optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 3];

@@ -423,15 +423,39 @@ public:
     {}
 
     TExprNode::TPtr Run() {
-        auto pos = JoinTree->Pos();
-        GatherCross(JoinTree);
+        auto joinTree = RotateCrossJoin(JoinTree->Pos(), JoinTree);
+        auto newJoinTree = std::get<0>(AddLink(joinTree));
+        YQL_ENSURE(Updated);
+        return newJoinTree;
+    }
+
+private:
+    TExprNode::TPtr RotateCrossJoin(TPositionHandle pos, TExprNode::TPtr joinTree) {
+        if (joinTree->Child(0)->Content() != "Cross") {
+            auto children = joinTree->ChildrenList();
+            auto& left = children[1];
+            auto& right = children[2];
+
+            if (!left->IsAtom()) {
+                left = RotateCrossJoin(pos, left);
+            }
+
+            if (!right->IsAtom()) {
+                right = RotateCrossJoin(pos, right);
+            }
+
+            return Ctx.ChangeChildren(*joinTree, std::move(children));
+        }
+
+        CrossJoins.clear();
+        RestJoins.clear();
+        GatherCross(joinTree);
         auto inCross1 = FindPtr(CrossJoins, Labels[0]);
         auto inCross2 = FindPtr(CrossJoins, Labels[1]);
-        auto joinTree = JoinTree;
         if (inCross1 || inCross2) {
             if (inCross1 && inCross2) {
                 // make them a leaf
-                joinTree  = MakeCrossJoin(pos, Ctx.NewAtom(pos, Labels[0]), Ctx.NewAtom(pos, Labels[1]), Ctx);
+                joinTree = MakeCrossJoin(pos, Ctx.NewAtom(pos, Labels[0]), Ctx.NewAtom(pos, Labels[1]), Ctx);
                 for (auto label : CrossJoins) {
                     if (label != Labels[0] && label != Labels[1]) {
                         joinTree = MakeCrossJoin(pos, joinTree, Ctx.NewAtom(pos, label), Ctx);
@@ -466,12 +490,9 @@ public:
             }
         }
 
-        auto newJoinTree = std::get<0>(AddLink(joinTree));
-        YQL_ENSURE(Updated);
-        return newJoinTree;
+        return joinTree;
     }
 
-private:
     TExprNode::TPtr AddRestJoins(TPositionHandle pos, TExprNode::TPtr joinTree, TExprNode::TPtr exclude) {
         for (auto join : RestJoins) {
             if (join == exclude) {

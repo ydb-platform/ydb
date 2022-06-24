@@ -21,15 +21,15 @@ namespace NYdb::NConsoleClient {
         TVector<NPersQueue::ECodec> SupportedCodecs_;
     };
 
-    class TCommandStream : public TClientCommandTree {
+    class TCommandTopic : public TClientCommandTree {
     public:
-        TCommandStream();
+        TCommandTopic();
     };
 
 
-    class TCommandStreamCreate : public TYdbCommand, public TCommandWithStreamName, public TCommandWithSupportedCodecs {
+    class TCommandTopicCreate : public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
     public:
-        TCommandStreamCreate();
+        TCommandTopicCreate();
         void Config(TConfig &config) override;
         void Parse(TConfig &config) override;
         int Run(TConfig &config) override;
@@ -39,9 +39,9 @@ namespace NYdb::NConsoleClient {
         ui32 PartitionsCount_;
     };
 
-    class TCommandStreamAlter : public TYdbCommand, public TCommandWithStreamName, public TCommandWithSupportedCodecs {
+    class TCommandTopicAlter : public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
     public:
-        TCommandStreamAlter();
+        TCommandTopicAlter();
         void Config(TConfig &config) override;
         void Parse(TConfig &config) override;
         int Run(TConfig &config) override;
@@ -52,22 +52,22 @@ namespace NYdb::NConsoleClient {
         NYdb::NPersQueue::TAlterTopicSettings PrepareAlterSettings(NYdb::NPersQueue::TDescribeTopicResult &describeResult);
     };
 
-    class TCommandStreamDrop : public TYdbCommand, public TCommandWithStreamName {
+    class TCommandTopicDrop : public TYdbCommand, public TCommandWithTopicName {
     public:
-        TCommandStreamDrop();
+        TCommandTopicDrop();
         void Config(TConfig &config) override;
         void Parse(TConfig &config) override;
         int Run(TConfig &config) override;
     };
 
-    class TCommandStreamConsumer : public TClientCommandTree {
+    class TCommandTopicConsumer : public TClientCommandTree {
     public:
-        TCommandStreamConsumer();
+        TCommandTopicConsumer();
     };
 
-    class TCommandStreamConsumerAdd : public TYdbCommand, public TCommandWithStreamName {
+    class TCommandTopicConsumerAdd : public TYdbCommand, public TCommandWithTopicName {
     public:
-        TCommandStreamConsumerAdd();
+        TCommandTopicConsumerAdd();
         void Config(TConfig &config) override;
         void Parse(TConfig &config) override;
         int Run(TConfig &config) override;
@@ -78,9 +78,9 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> StartingMessageTimestamp_;
     };
 
-    class TCommandStreamConsumerDrop : public TYdbCommand, public TCommandWithStreamName {
+    class TCommandTopicConsumerDrop : public TYdbCommand, public TCommandWithTopicName {
     public:
-        TCommandStreamConsumerDrop();
+        TCommandTopicConsumerDrop();
         void Config(TConfig &config) override;
         void Parse(TConfig &config) override;
         int Run(TConfig &config) override;

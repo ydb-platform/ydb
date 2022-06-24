@@ -1,4 +1,4 @@
-#include "ydb_service_stream.h"
+#include "ydb_service_topic.h"
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/command.h>
@@ -66,38 +66,38 @@ namespace NYdb::NConsoleClient {
         return SupportedCodecs_;
     }
 
-    TCommandStream::TCommandStream()
-        : TClientCommandTree("stream", {}, "DataStreams service operations") {
-        AddCommand(std::make_unique<TCommandStreamCreate>());
-        AddCommand(std::make_unique<TCommandStreamAlter>());
-        AddCommand(std::make_unique<TCommandStreamDrop>());
-        AddCommand(std::make_unique<TCommandStreamConsumer>());
+    TCommandTopic::TCommandTopic()
+        : TClientCommandTree("topic", {}, "TopicService operations") {
+        AddCommand(std::make_unique<TCommandTopicCreate>());
+        AddCommand(std::make_unique<TCommandTopicAlter>());
+        AddCommand(std::make_unique<TCommandTopicDrop>());
+        AddCommand(std::make_unique<TCommandTopicConsumer>());
     }
 
-    TCommandStreamCreate::TCommandStreamCreate()
-        : TYdbCommand("create", {}, "Create stream command") {}
+    TCommandTopicCreate::TCommandTopicCreate()
+        : TYdbCommand("create", {}, "Create topic command") {}
 
-    void TCommandStreamCreate::Config(TConfig &config) {
+    void TCommandTopicCreate::Config(TConfig &config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Total partitions count for stream")
+        config.Opts->AddLongOption("partitions-count", "Total partitions count for topic")
                 .DefaultValue(1)
                 .StoreResult(&PartitionsCount_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in stream is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration in hours for which data in topic is stored")
                 .DefaultValue(18)
                 .Optional()
                 .StoreResult(&RetentionPeriodHours_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<stream-path>", "New stream name");
+        SetFreeArgTitle(0, "<topic-path>", "New topic path");
         AddAllowedCodecs(config, AllowedCodecs);
     }
 
-    void TCommandStreamCreate::Parse(TConfig &config) {
+    void TCommandTopicCreate::Parse(TConfig &config) {
         TYdbCommand::Parse(config);
-        ParseStreamName(config, 0);
+        ParseTopicName(config, 0);
         ParseCodecs();
     }
 
-    int TCommandStreamCreate::Run(TConfig &config) {
+    int TCommandTopicCreate::Run(TConfig &config) {
         TDriver driver = CreateDriver(config);
         NYdb::NPersQueue::TPersQueueClient persQueueClient(driver);
 
@@ -111,32 +111,32 @@ namespace NYdb::NConsoleClient {
         }
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
 
-        auto status = persQueueClient.CreateTopic(StreamName, settings).GetValueSync();
+        auto status = persQueueClient.CreateTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }
 
-    TCommandStreamAlter::TCommandStreamAlter() : TYdbCommand("alter", {}, "Alter stream command") {}
+    TCommandTopicAlter::TCommandTopicAlter() : TYdbCommand("alter", {}, "Alter topic command") {}
 
-    void TCommandStreamAlter::Config(TConfig &config) {
+    void TCommandTopicAlter::Config(TConfig &config) {
         TYdbCommand::Config(config);
-        config.Opts->AddLongOption("partitions-count", "Total partitions count for stream")
+        config.Opts->AddLongOption("partitions-count", "Total partitions count for topic")
                 .StoreResult(&PartitionsCount_);
-        config.Opts->AddLongOption("retention-period-hours", "Duration for which data in stream is stored")
+        config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")
                 .Optional()
                 .StoreResult(&RetentionPeriodHours_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<stream-path>", "Stream to alter");
+        SetFreeArgTitle(0, "<topic-path>", "Topic to alter");
         AddAllowedCodecs(config, AllowedCodecs);
     }
 
-    void TCommandStreamAlter::Parse(TConfig &config) {
+    void TCommandTopicAlter::Parse(TConfig &config) {
         TYdbCommand::Parse(config);
-        ParseStreamName(config, 0);
+        ParseTopicName(config, 0);
         ParseCodecs();
     }
 
-    NYdb::NPersQueue::TAlterTopicSettings TCommandStreamAlter::PrepareAlterSettings(
+    NYdb::NPersQueue::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
             NYdb::NPersQueue::TDescribeTopicResult &describeResult) {
         auto settings = NYdb::NPersQueue::TAlterTopicSettings();
         settings.SetSettings(describeResult.TopicSettings());
@@ -157,7 +157,7 @@ namespace NYdb::NConsoleClient {
         return settings;
     }
 
-    int TCommandStreamAlter::Run(TConfig &config) {
+    int TCommandTopicAlter::Run(TConfig &config) {
         if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined()) {
             return EXIT_SUCCESS;
         }
@@ -165,48 +165,48 @@ namespace NYdb::NConsoleClient {
         TDriver driver = CreateDriver(config);
         NYdb::NPersQueue::TPersQueueClient persQueueClient(driver);
 
-        auto describeResult = persQueueClient.DescribeTopic(StreamName).GetValueSync();
+        auto describeResult = persQueueClient.DescribeTopic(TopicName).GetValueSync();
         ThrowOnError(describeResult);
 
         auto settings = PrepareAlterSettings(describeResult);
-        auto result = persQueueClient.AlterTopic(StreamName, settings).GetValueSync();
+        auto result = persQueueClient.AlterTopic(TopicName, settings).GetValueSync();
         ThrowOnError(result);
         return EXIT_SUCCESS;
     }
 
-    TCommandStreamDrop::TCommandStreamDrop() : TYdbCommand("drop", {}, "Drop stream command") {}
+    TCommandTopicDrop::TCommandTopicDrop() : TYdbCommand("drop", {}, "Drop topic command") {}
 
-    void TCommandStreamDrop::Parse(TConfig &config) {
+    void TCommandTopicDrop::Parse(TConfig &config) {
         TYdbCommand::Parse(config);
-        ParseStreamName(config, 0);
+        ParseTopicName(config, 0);
     }
 
-    void TCommandStreamDrop::Config(TConfig &config) {
+    void TCommandTopicDrop::Config(TConfig &config) {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<stream-path>", "Stream which will be dropped");
+        SetFreeArgTitle(0, "<topic-path>", "Topic which will be dropped");
     }
 
-    int TCommandStreamDrop::Run(TConfig &config) {
+    int TCommandTopicDrop::Run(TConfig &config) {
         TDriver driver = CreateDriver(config);
         NPersQueue::TPersQueueClient persQueueClient(driver);
 
         auto settings = NYdb::NPersQueue::TDropTopicSettings();
-        TStatus status = persQueueClient.DropTopic(StreamName, settings).GetValueSync();
+        TStatus status = persQueueClient.DropTopic(TopicName, settings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }
 
-    TCommandStreamConsumer::TCommandStreamConsumer() : TClientCommandTree("consumer", {}, "Consumer operations") {
-        AddCommand(std::make_unique<TCommandStreamConsumerAdd>());
-        AddCommand(std::make_unique<TCommandStreamConsumerDrop>());
+    TCommandTopicConsumer::TCommandTopicConsumer() : TClientCommandTree("consumer", {}, "Consumer operations") {
+        AddCommand(std::make_unique<TCommandTopicConsumerAdd>());
+        AddCommand(std::make_unique<TCommandTopicConsumerDrop>());
     }
 
-    TCommandStreamConsumerAdd::TCommandStreamConsumerAdd() : TYdbCommand("add", {}, "Consumer add operation") {}
+    TCommandTopicConsumerAdd::TCommandTopicConsumerAdd() : TYdbCommand("add", {}, "Consumer add operation") {}
 
-    void TCommandStreamConsumerAdd::Config(TConfig &config) {
+    void TCommandTopicConsumerAdd::Config(TConfig &config) {
         TYdbCommand::Parse(config);
-        config.Opts->AddLongOption("consumer-name", "New consumer for stream")
+        config.Opts->AddLongOption("consumer-name", "New consumer for topic")
                 .Required()
                 .StoreResult(&ConsumerName_);
         config.Opts->AddLongOption("service-type", "Service type of reader")
@@ -216,15 +216,15 @@ namespace NYdb::NConsoleClient {
                 .Optional()
                 .StoreResult(&StartingMessageTimestamp_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<stream-path>", "Stream for which consumer will be added");
+        SetFreeArgTitle(0, "<topic-path>", "topic for which consumer will be added");
     }
 
-    void TCommandStreamConsumerAdd::Parse(TConfig &config) {
+    void TCommandTopicConsumerAdd::Parse(TConfig &config) {
         TYdbCommand::Parse(config);
-        ParseStreamName(config, 0);
+        ParseTopicName(config, 0);
     }
 
-    int TCommandStreamConsumerAdd::Run(TConfig &config) {
+    int TCommandTopicConsumerAdd::Run(TConfig &config) {
         TDriver driver = CreateDriver(config);
         NPersQueue::TPersQueueClient persQueueClient(driver);
 
@@ -239,35 +239,35 @@ namespace NYdb::NConsoleClient {
 
         auto addReadRuleSettings = NYdb::NPersQueue::TAddReadRuleSettings();
         addReadRuleSettings.ReadRule(readRuleSettings);
-        TStatus status = persQueueClient.AddReadRule(StreamName, addReadRuleSettings).GetValueSync();
+        TStatus status = persQueueClient.AddReadRule(TopicName, addReadRuleSettings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }
 
-    TCommandStreamConsumerDrop::TCommandStreamConsumerDrop() : TYdbCommand("drop", {}, "Consumer drop operation") {}
+    TCommandTopicConsumerDrop::TCommandTopicConsumerDrop() : TYdbCommand("drop", {}, "Consumer drop operation") {}
 
-    void TCommandStreamConsumerDrop::Config(TConfig &config) {
+    void TCommandTopicConsumerDrop::Config(TConfig &config) {
         TYdbCommand::Config(config);
         config.Opts->AddLongOption("consumer-name", "Consumer which will be dropped")
                 .Required()
                 .StoreResult(&ConsumerName_);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<stream-path>", "Stream from which consumer will be dropped");
+        SetFreeArgTitle(0, "<topic-path>", "Topic from which consumer will be dropped");
     }
 
-    void TCommandStreamConsumerDrop::Parse(TConfig &config) {
+    void TCommandTopicConsumerDrop::Parse(TConfig &config) {
         TYdbCommand::Parse(config);
-        ParseStreamName(config, 0);
+        ParseTopicName(config, 0);
     }
 
-    int TCommandStreamConsumerDrop::Run(TConfig &config) {
+    int TCommandTopicConsumerDrop::Run(TConfig &config) {
         TDriver driver = CreateDriver(config);
         NPersQueue::TPersQueueClient persQueueClient(driver);
 
         NYdb::NPersQueue::TRemoveReadRuleSettings removeReadRuleSettings = NYdb::NPersQueue::TRemoveReadRuleSettings();
         removeReadRuleSettings.ConsumerName(ConsumerName_);
 
-        TStatus status = persQueueClient.RemoveReadRule(StreamName, removeReadRuleSettings).GetValueSync();
+        TStatus status = persQueueClient.RemoveReadRule(TopicName, removeReadRuleSettings).GetValueSync();
         ThrowOnError(status);
         return EXIT_SUCCESS;
     }

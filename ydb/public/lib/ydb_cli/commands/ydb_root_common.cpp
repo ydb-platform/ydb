@@ -7,7 +7,7 @@
 #include "ydb_service_scheme.h"
 #include "ydb_service_scripting.h"
 #include "ydb_service_table.h"
-#include "ydb_service_stream.h"
+#include "ydb_service_topic.h"
 #include "ydb_tools.h"
 #include "ydb_yql.h"
 
@@ -37,7 +37,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TClientSettings& settin
     AddCommand(std::make_unique<TCommandConfig>());
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandYql>());
-    AddCommand(std::make_unique<TCommandStream>());
+    AddCommand(std::make_unique<TCommandTopic>());
     AddCommand(std::make_unique<TCommandWorkload>());
 }
 

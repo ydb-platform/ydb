@@ -382,11 +382,11 @@ protected:
     TString Path;
 };
 
-class TCommandWithStreamName {
+class TCommandWithTopicName {
 protected:
-    void ParseStreamName(const TClientCommand::TConfig& config, const size_t argPos);
+    void ParseTopicName(const TClientCommand::TConfig& config, const size_t argPos);
 
-    TString StreamName;
+    TString TopicName;
 };
 
 }

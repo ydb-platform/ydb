@@ -1356,7 +1356,7 @@ protected:
             Y_VERIFY(AsyncIoFactory);
             const auto& outputDesc = Task.GetOutputs(outputIndex);
             const ui64 i = outputIndex; // Crutch for clang
-            CA_LOG_D("Create sink for output " << i << " " << outputDesc.ShortDebugString());
+            CA_LOG_D("Create sink for output " << i << " " << outputDesc);
             std::tie(sink.AsyncOutput, sink.Actor) = AsyncIoFactory->CreateDqSink(
                 IDqAsyncIoFactory::TSinkArguments {
                     .OutputDesc = outputDesc,

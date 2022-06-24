@@ -23,24 +23,46 @@ TVector<TString> GetPath(const TStringBuf& key) {
 }
 
 i64 GetIntOrThrow(const NSc::TValue& json, const TString& error) {
-    if (json.IsIntNumber()) {
+    if (json.IsNumber()) {
         return json.GetIntNumber();
     }
+
+    if (TStringBuf str = json.GetString(TStringBuf())) {
+        {
+            i64 result = 0;
+            if (TryFromString<i64>(str, result)) {
+                return result;
+            }
+        }
+        {
+            ui64 result = 0;
+            if (TryFromString<ui64>(str, result)) {
+                return result;
+            }
+        }
+        {
+            double result = 0;
+            if (TryFromString<double>(str, result)) {
+                return result;
+            }
+        }
+    }
+
     ythrow yexception() << error;
 }
 
 TString GetStringOrThrow(const NSc::TValue& json, const TString& error) {
-    if (json.IsString()) {
+    if (json.IsString() || json.IsIntNumber() || json.IsNumber()) {
         return json.ForceString();
     }
     ythrow yexception() << error;
 }
 
 i64 GetBoolOrThrow(const NSc::TValue& json, const TString& error) {
-    if (json.IsBool()) {
-        return json.GetBool();
+    if (json.IsNull()) {
+        ythrow yexception() << error;
     }
-    ythrow yexception() << error;
+    return json.IsTrue();
 }
 
 EIntervalUnit ToIntervalUnit(const TString& unit) {
@@ -432,7 +454,6 @@ ExplicitPartitioningConfig ParsePartitioningRules(const TString& config, const s
     }
 
     if (!config) {
-        result.Enabled = true;
         for (const auto& columnName: partitionBy) {
             result.LocationTemplate += "/" + columnName + "=${" +  columnName + "}";
         }
@@ -466,10 +487,9 @@ ExplicitPartitioningConfig ParsePartitioningRules(const TString& config, const s
 
 std::vector<ExpandedPartitioningRule> ExpandPartitioningRules(const ExplicitPartitioningConfig& config, int pathsLimit) {
     if (!config.Enabled) {
-        return {};
-    }
-    if (config.Rules.empty()) {
-        return {ExpandedPartitioningRule{.Path=config.LocationTemplate}};
+        return config.LocationTemplate
+                ? std::vector{ExpandedPartitioningRule{.Path=config.LocationTemplate}}
+                : std::vector<ExpandedPartitioningRule>{};
     }
     auto now = TInstant::Now();
     TMap<TString, std::vector<ColumnWithValue>> result;

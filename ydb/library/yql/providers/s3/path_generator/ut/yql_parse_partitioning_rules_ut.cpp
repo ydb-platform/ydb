@@ -94,10 +94,50 @@ Y_UNIT_TEST_SUITE(TParseTests) {
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
-                "projection.city.values" : 23,
+                "projection.city.values" : null,
                 "storage.location.template" : "/${city}/"
             }
         )", {"city"}), yexception, "The values must be a string");
+    }
+
+    Y_UNIT_TEST(SuccessParseInteger) {
+        auto result = ParsePartitioningRules(R"(
+            {
+                "projection.enabled" : true,
+                "projection.id.type" : "integer",
+                "projection.id.min" : "5",
+                "projection.id.max" : "6",
+                "storage.location.template" : "/${id}/"
+            }
+        )", {"id"});
+        UNIT_ASSERT_VALUES_EQUAL(result.Enabled, true);
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${id}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
+        const auto& rule = result.Rules.front();
+        UNIT_ASSERT_VALUES_EQUAL(rule.Type, EType::INTEGER);
+        UNIT_ASSERT_VALUES_EQUAL(rule.Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(rule.Min, 5);
+        UNIT_ASSERT_VALUES_EQUAL(rule.Max, 6);
+    }
+
+    Y_UNIT_TEST(SuccessDisableProjection) {
+        auto result = ParsePartitioningRules(R"(
+            {
+                "projection.enabled" : false,
+                "projection.id.type" : "integer",
+                "projection.id.min" : "5",
+                "projection.id.max" : "6",
+                "storage.location.template" : "/${id}/"
+            }
+        )", {"id"});
+        UNIT_ASSERT_VALUES_EQUAL(result.Enabled, false);
+        UNIT_ASSERT_VALUES_EQUAL(result.LocationTemplate, "/${id}/");
+        UNIT_ASSERT_VALUES_EQUAL(result.Rules.size(), 1);
+        const auto& rule = result.Rules.front();
+        UNIT_ASSERT_VALUES_EQUAL(rule.Type, EType::INTEGER);
+        UNIT_ASSERT_VALUES_EQUAL(rule.Name, "id");
+        UNIT_ASSERT_VALUES_EQUAL(rule.Min, 5);
+        UNIT_ASSERT_VALUES_EQUAL(rule.Max, 6);
     }
 
 }

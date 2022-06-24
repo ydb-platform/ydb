@@ -52,10 +52,18 @@ namespace NKikimr::NPersQueueTests {
         std::optional<TString> codec,
         std::optional<bool> reconnectOnFailure
     ) {
-        Y_UNUSED(codec);
         auto settings = TWriteSessionSettings().Path(topic).MessageGroupId(sourceId);
         if (partitionGroup) settings.PartitionGroupId(*partitionGroup);
         settings.RetryPolicy((reconnectOnFailure && *reconnectOnFailure) ? NYdb::NPersQueue::IRetryPolicy::GetDefaultPolicy() : NYdb::NPersQueue::IRetryPolicy::GetNoRetryPolicy());
+        if (codec) {
+            if (*codec == "raw")
+                settings.Codec(ECodec::RAW);
+            if (*codec == "zstd")
+                settings.Codec(ECodec::ZSTD);
+            if (*codec == "lzop")
+                settings.Codec(ECodec::LZOP);
+        }
+        settings.MaxMemoryUsage(1024*1024*1024*1024ll);
         return CreateSimpleWriter(driver, settings);
     }
 

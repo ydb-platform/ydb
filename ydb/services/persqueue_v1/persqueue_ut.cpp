@@ -39,6 +39,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
 
 
 namespace NKikimr::NPersQueueTests {
@@ -3213,11 +3214,80 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             auto status = TopicStubP_->DescribeTopic(&rcontext, request, &response);
 
             UNIT_ASSERT(status.ok());
-            Ydb::Topic::DescribeTopicResult res;
-            response.operation().result().UnpackTo(&res);
-            Cerr << response << "\n" << res << "\n";
+            Ydb::Topic::DescribeTopicResult descrRes;
+            response.operation().result().UnpackTo(&descrRes);
+            Cerr << response << "\n" << descrRes << "\n";
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-            UNIT_ASSERT_VALUES_EQUAL(res.DebugString(), res1.DebugString());
+            UNIT_ASSERT_VALUES_EQUAL(descrRes.DebugString(), res1.DebugString());
+
+
+            {
+                NYdb::TDriverConfig driverCfg;
+                driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+                std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+                auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
+
+                auto res = topicClient.DescribeTopic("/Root/PQ/" + topic3);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+                auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
+                Cerr << res2 << "\n";
+                UNIT_ASSERT_VALUES_EQUAL(descrRes.DebugString(), res2.DebugString());
+                {
+                    NYdb::NTopic::TCreateTopicSettings settings;
+                    settings.PartitioningSettings(1,1)
+                        .AppendSupportedCodecs((NYdb::NTopic::ECodec)10010)
+                        .PartitionWriteSpeedBytesPerSecond(1024)
+                        .AppendSupportedCodecs(NYdb::NTopic::ECodec::GZIP)
+                        .AddAttribute("_partitions_per_tablet", "10")
+                        .BeginAddConsumer("consumer").ReadFrom(TInstant::Seconds(112233))
+                                                     .Important(true)
+                                                     .AddAttribute("_version", "5")
+                        .EndAddConsumer()
+                        .AppendSupportedCodecs((NYdb::NTopic::ECodec)10011);
+
+                    auto res = topicClient.CreateTopic("/Root/PQ/" + topic3 + "2", settings);
+                    res.Wait();
+                    Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                }
+
+                {
+                    NYdb::NTopic::TAlterTopicSettings settings;
+                    settings.AlterPartitioningSettings(2,2)
+                        .AppendSetSupportedCodecs((NYdb::NTopic::ECodec)10022)
+                        .SetPartitionWriteSpeedBytesPerSecond(102400)
+                        .SetRetentionPeriod(TDuration::Days(2))
+                        .BeginAlterAttributes().Add("_partitions_per_tablet", "")
+                                               .Drop("_abc_id")
+                        .EndAlterAttributes()
+                        .BeginAlterConsumer("consumer").SetReadFrom(TInstant::Seconds(1122))
+                                                       .BeginAlterAttributes().Alter("_version", "5")
+                                                       .EndAlterAttributes()
+                        .EndAlterConsumer()
+                        .AppendSetSupportedCodecs((NYdb::NTopic::ECodec)10020);
+
+                    auto res = topicClient.AlterTopic("/Root/PQ/" + topic3 + "2", settings);
+                    res.Wait();
+                    Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                    UNIT_ASSERT(res.GetValue().IsSuccess());
+                }
+
+                res = topicClient.DescribeTopic("/Root/PQ/" + topic3 + "2");
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+                res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
+                Cerr << "ANOTHER TOPIC: " << res2 << "\n";
+                auto& description = res.GetValue().GetTopicDescription();
+                UNIT_ASSERT_VALUES_EQUAL(description.GetTotalPartitionsCount(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+                TVector<NYdb::NTopic::ECodec> codecs = {(NYdb::NTopic::ECodec)10022, (NYdb::NTopic::ECodec)10020};
+                UNIT_ASSERT_VALUES_EQUAL(description.GetSupportedCodecs(), codecs);
+                UNIT_ASSERT_VALUES_EQUAL(description.GetEffectivePermissions().size(), 0);
+            }
+
         }
         {
             Ydb::Topic::DropTopicRequest request;

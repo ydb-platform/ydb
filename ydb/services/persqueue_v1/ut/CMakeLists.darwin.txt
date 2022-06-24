@@ -30,6 +30,8 @@ target_link_libraries(ydb-services-persqueue_v1-ut PUBLIC
   ydb_persqueue_core-ut-ut_utils
   cpp-client-ydb_persqueue_public
   cpp-client-ydb_table
+  cpp-client-ydb_topic
+  cpp-client-ydb_proto
 )
 target_link_options(ydb-services-persqueue_v1-ut PRIVATE
   -Wl,-no_deduplicate

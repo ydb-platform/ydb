@@ -2989,6 +2989,14 @@ void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev,
         Pipeline.AddCandidateOp(op);
         PlanQueue.Progress(ctx);
     }
+
+    switch (ev->Get()->SourceType) {
+        case TEvents::TEvSubscribe::EventType:
+            ReadIteratorsOnNodeDisconnected(ev->Sender, ctx);
+            break;
+        default:
+            ;
+    }
 }
 
 void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
@@ -3001,6 +3009,8 @@ void TDataShard::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev,
 
     Pipeline.ProcessDisconnected(nodeId);
     PlanQueue.Progress(ctx);
+
+    ReadIteratorsOnNodeDisconnected(ev->Sender, ctx);
 }
 
 void TDataShard::Handle(TEvDataShard::TEvMigrateSchemeShardRequest::TPtr& ev,
@@ -3184,6 +3194,22 @@ private:
 
 void TDataShard::Handle(TEvDataShard::TEvGetRemovedRowVersions::TPtr& ev, const TActorContext& ctx) {
     Execute(new TTxGetRemovedRowVersions(this, std::move(ev)), ctx);
+}
+
+void SendViaSession(const TActorId& sessionId,
+                    const TActorId& target,
+                    const TActorId& src,
+                    IEventBase* event,
+                    ui32 flags,
+                    ui64 cookie)
+{
+    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
+
+    if (sessionId) {
+        ev->Rewrite(TEvInterconnect::EvForward, sessionId);
+    }
+
+    TActivationContext::Send(ev.Release());
 }
 
 } // NDataShard

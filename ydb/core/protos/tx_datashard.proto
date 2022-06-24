@@ -1479,9 +1479,8 @@ message TEvGetCompactTableStatsResult {
 //    - SeqNo that should be used by user in TEvReadAck
 //    - ContinuationToken, which user can use to restart the read.
 //
-// 5. On each TEvReadResult user sends TEvReadAck to update quota and continue reading.
-// * If user has already received multiple TEvReadResult messages, he is allowed to send
-// single TEvReadAck with SeqNo from the last result.
+// 5. Client must ack results, it is allowed to send single ack on multiple results
+// at once using SeqNo from the last result. Note that currently ack is rather quota update.
 // * If user has received final TEvReadResult, he is allowed to not send TEvReadAck, though sending message is
 // not a protocol violation.
 // * If user has received TEvReadResult with error he should not send any reply.
@@ -1509,6 +1508,9 @@ message TEvGetCompactTableStatsResult {
 //
 // User must detect disconnect and after it happened ignore possible results from the shard.
 // Instead new read must be started using ContinuationToken from last successful TEvReadResult.
+// Note that current DS implementation uses interconnect session from originating TEvRead message,
+// it sends all results via this session and detects disconnect based on the session. Though client
+// is allowed to send ACK via any sessions.
 message TEvRead {
     // User must always provide unique ReadId
     // Note that shard distinguishes equal ReadId's

@@ -279,13 +279,20 @@ struct TTableInfo {
 };
 
 struct TTestHelper {
-    TTestHelper(bool withFollower = false) {
+    explicit TTestHelper(bool withFollower = false) {
         WithFollower = withFollower;
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false);
+        init(serverSettings);
+    }
 
+    explicit TTestHelper(const TServerSettings& serverSettings) {
+        init(serverSettings);
+    }
+
+    void init(const TServerSettings& serverSettings) {
         Server = new TServer(serverSettings);
 
         auto &runtime = *Server->GetRuntime();
@@ -429,15 +436,21 @@ struct TTestHelper {
 
     std::unique_ptr<TEvDataShard::TEvReadResult> SendRead(
         const TString& tableName,
-        TEvDataShard::TEvRead* request)
+        TEvDataShard::TEvRead* request,
+        ui32 node = 0,
+        TActorId sender = {})
     {
+        if (!sender) {
+            sender = Sender;
+        }
+
         const auto& table = Tables[tableName];
         auto &runtime = *Server->GetRuntime();
         runtime.SendToPipe(
             table.TabletId,
-            Sender,
+            sender,
             request,
-            0,
+            node,
             GetTestPipeConfig(),
             table.ClientId);
 
@@ -448,8 +461,14 @@ struct TTestHelper {
         const TString& tableName,
         const NKikimrTxDataShard::TEvReadResult& readResult,
         ui64 rows,
-        ui64 bytes)
+        ui64 bytes,
+        ui32 node = 0,
+        TActorId sender = {})
     {
+        if (!sender) {
+            sender = Sender;
+        }
+
         const auto& table = Tables[tableName];
         auto* request = new TEvDataShard::TEvReadAck();
         request->Record.SetReadId(readResult.GetReadId());
@@ -460,8 +479,9 @@ struct TTestHelper {
         auto &runtime = *Server->GetRuntime();
         runtime.SendToPipe(
             table.TabletId,
-            Sender, request,
-            0,
+            sender,
+            request,
+            node,
             GetTestPipeConfig(),
             table.ClientId);
     }
@@ -1474,6 +1494,56 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     Y_UNIT_TEST(ShouldReadFromFollower) {
         TestReadKey(NKikimrTxDataShard::CELLVEC, true);
     }
+
+    Y_UNIT_TEST(ShouldStopWhenDisconnected) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetNodeCount(20);
+
+        const ui32 node = 13;
+
+        TTestHelper helper(serverSettings);
+
+        ui32 continueCounter = 0;
+        helper.Server->GetRuntime()->SetObserverFunc([&continueCounter](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvDataShard::EvReadContinue) {
+                ++continueCounter;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto& table = helper.Tables["table-1"];
+        auto prevClient = table.ClientId;
+
+        auto &runtime = *helper.Server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor(node);
+
+        // we need to connect from another node
+        table.ClientId = runtime.ConnectToPipe(table.TabletId, sender, node, GetPipeConfigWithRetries());
+        UNIT_ASSERT(table.ClientId);
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        AddKeyQuery(*request1, {3, 3, 3});
+        AddKeyQuery(*request1, {1, 1, 1});
+
+        // set quota so that DS hangs waiting for ACK
+        request1->Record.SetMaxRows(1);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release(), node, sender);
+
+        runtime.DisconnectNodes(node, node + 1, false);
+
+        // restore our nodeId=0 client
+        table.ClientId = prevClient;
+        helper.SendReadAck("table-1", readResult1->Record, 3, 10000); // DS must ignore it
+
+        auto readResult2 = helper.WaitReadResult(TDuration::MilliSeconds(10));
+        UNIT_ASSERT(!readResult2);
+        UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
+    }
 };
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
@@ -1562,7 +1632,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
     Y_UNIT_TEST(ShouldCalculateQuota) {
-        NDataShard::TReadIteratorState state;
+        NDataShard::TReadIteratorState state({});
         state.Quota.Rows = 100;
         state.Quota.Bytes = 1000;
         state.ConsumeSeqNo(10, 100); // seqno1

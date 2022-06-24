@@ -1531,7 +1531,10 @@ public:
 
     bool CheckChangesQueueOverflow() const;
 
+    void DeleteReadIterator(const TReadIteratorId& readId);
+    void DeleteReadIterator(TReadIteratorsMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
+    void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
 
 private:
     ///
@@ -2250,6 +2253,7 @@ private:
     TReplicatedTableState* EnsureReplicatedTable(const TPathId& pathId);
 
     TReadIteratorsMap ReadIterators;
+    THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
 protected:
     // Redundant init state required by flat executor implementation
@@ -2605,5 +2609,12 @@ void SetStatusError(T &rec,
     issue->set_severity(severity);
     issue->set_message(msg);
 }
+
+void SendViaSession(const TActorId& sessionId,
+                    const TActorId& target,
+                    const TActorId& src,
+                    IEventBase* event,
+                    ui32 flags = 0,
+                    ui64 cookie = 0);
 
 }}

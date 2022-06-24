@@ -663,15 +663,18 @@ public:
             return;
         }
 
+        Y_VERIFY(it->second);
+        auto& state = *it->second;
+
         if (!Result) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TTxRead::Execute() finished without Result, aborting");
-            Self->ReadIterators.erase(it);
+            Self->DeleteReadIterator(it);
 
             Result.reset(new TEvDataShard::TEvReadResult());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
             Result->Record.SetReadId(readId.ReadId);
-            ctx.Send(Sender, Result.release());
+            SendViaSession(state.SessionId, Sender, Self->SelfId(), Result.release());
             return;
         }
 
@@ -679,14 +682,11 @@ public:
         auto& record = Result->Record;
         if (record.HasStatus()) {
             record.SetReadId(readId.ReadId);
-            if (it->second) {
-                auto& state = *it->second;
-                record.SetSeqNo(state.SeqNo + 1);
-            }
-            ctx.Send(Sender, Result.release());
+            record.SetSeqNo(state.SeqNo + 1);
+            SendViaSession(state.SessionId, Sender, Self->SelfId(), Result.release());
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TTxRead::Execute() finished with error, aborting");
-            Self->ReadIterators.erase(it);
+            Self->DeleteReadIterator(it);
             return;
         }
 
@@ -694,7 +694,7 @@ public:
         Y_ASSERT(BlockBuilder);
 
         Reader->FillResult(*Result);
-        ctx.Send(Sender, Result.release());
+        SendViaSession(state.SessionId, Sender, Self->SelfId(), Result.release());
 
         // note that we save the state only when there're unread queries
         if (Reader->HasUnreadQueries()) {
@@ -709,7 +709,7 @@ public:
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " finished in read");
-            Self->ReadIterators.erase(it);
+            Self->DeleteReadIterator(it);
         }
     }
 
@@ -1094,30 +1094,30 @@ public:
             return;
         }
 
+        Y_VERIFY(it->second);
+        auto& state = *it->second;
+
         if (!Result) {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TTxReadContinue::Execute() finished without Result, aborting");
-            Self->ReadIterators.erase(it);
+            Self->DeleteReadIterator(it);
 
             Result.reset(new TEvDataShard::TEvReadResult());
             SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Iterator aborted");
             Result->Record.SetReadId(readId.ReadId);
-            ctx.Send(request->Reader, Result.release());
+            SendViaSession(state.SessionId, request->Reader, Self->SelfId(), Result.release());
             return;
         }
 
         // error happened and status set
         auto& record = Result->Record;
         if (record.HasStatus()) {
-            if (it->second) {
-                auto& state = *it->second;
-                record.SetSeqNo(state.SeqNo + 1);
-            }
+            record.SetSeqNo(state.SeqNo + 1);
             record.SetReadId(readId.ReadId);
-            ctx.Send(request->Reader, Result.release());
+            SendViaSession(state.SessionId, request->Reader, Self->SelfId(), Result.release());
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " TTxReadContinue::Execute() finished with error, aborting");
-            Self->ReadIterators.erase(it);
+            Self->DeleteReadIterator(it);
             return;
         }
 
@@ -1125,7 +1125,7 @@ public:
         Y_ASSERT(BlockBuilder);
 
         Reader->FillResult(*Result);
-        ctx.Send(request->Reader, Result.release());
+        SendViaSession(state.SessionId, request->Reader, Self->SelfId(), Result.release());
 
         if (Reader->HasUnreadQueries()) {
             Y_ASSERT(it->second);
@@ -1142,7 +1142,7 @@ public:
         } else {
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
                 << " finished in ReadContinue");
-            Self->ReadIterators.erase(it);
+            Self->DeleteReadIterator(it);
         }
     }
 };
@@ -1168,7 +1168,25 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
         return;
     }
 
-    ReadIterators.emplace(readId, new TReadIteratorState());
+    TActorId sessionId;
+    if (readId.Sender.NodeId() != SelfId().NodeId()) {
+        Y_VERIFY_DEBUG(ev->InterconnectSession);
+        THashMap<TActorId, TReadIteratorSession>::insert_ctx sessionsInsertCtx;
+        auto itSession = ReadIteratorSessions.find(ev->InterconnectSession, sessionsInsertCtx);
+        if (itSession == ReadIteratorSessions.end()) {
+            Send(ev->InterconnectSession, new TEvents::TEvSubscribe, IEventHandle::FlagTrackDelivery);
+            itSession = ReadIteratorSessions.emplace_direct(
+                sessionsInsertCtx,
+                ev->InterconnectSession,
+                TReadIteratorSession());
+        }
+
+        auto& session = itSession->second;
+        session.Iterators.insert(readId);
+        sessionId = ev->InterconnectSession;
+    }
+
+    ReadIterators.emplace(readId, new TReadIteratorState(sessionId));
     Executor()->Execute(new TTxRead(this, ev), ctx);
 }
 
@@ -1233,9 +1251,9 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
         std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
         SetStatusError(result->Record, Ydb::StatusIds::BAD_SESSION, issueStr);
         result->Record.SetReadId(readId.ReadId);
-        ctx.Send(ev->Sender, result.release());
+        SendViaSession(state.SessionId, readId.Sender, SelfId(), result.release());
 
-        ReadIterators.erase(it); // abort
+        DeleteReadIterator(it);
         return;
     }
 
@@ -1271,7 +1289,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " ReadCancel: " << record);
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
-    ReadIterators.erase(readId);
+    DeleteReadIterator(readId);
 }
 
 void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx) {
@@ -1286,10 +1304,47 @@ void TDataShard::CancelReadIterators(Ydb::StatusIds::StatusCode code, const TStr
         result->Record.SetReadId(iterator.first.ReadId);
         result->Record.SetSeqNo(state->SeqNo + 1);
 
-        ctx.Send(readIteratorId.Sender, result.release());
+        SendViaSession(state->SessionId, readIteratorId.Sender, SelfId(), result.release());
     }
 
     ReadIterators.clear();
+    ReadIteratorSessions.clear();
+}
+
+void TDataShard::DeleteReadIterator(const TReadIteratorId& readId) {
+    auto it = ReadIterators.find(readId);
+    if (it != ReadIterators.end())
+        DeleteReadIterator(it);
+}
+
+void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
+    const auto& state = it->second;
+    if (state->SessionId) {
+        auto itSession = ReadIteratorSessions.find(state->SessionId);
+        if (itSession != ReadIteratorSessions.end()) {
+            auto& session = itSession->second;
+            session.Iterators.erase(it->first);
+        }
+    }
+    ReadIterators.erase(it);
+}
+
+void TDataShard::ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx) {
+    auto itSession = ReadIteratorSessions.find(sessionId);
+    if (itSession == ReadIteratorSessions.end())
+        return;
+
+    const auto& session = itSession->second;
+    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, TabletID()
+        << " closed session# " << sessionId << ", iterators# " << session.Iterators.size());
+
+    for (const auto& readId: session.Iterators) {
+        // we don't send anything to client, because it's up
+        // to client to detect disconnect
+        ReadIterators.erase(readId);
+    }
+
+    ReadIteratorSessions.erase(itSession);
 }
 
 } // NKikimr::NDataShard

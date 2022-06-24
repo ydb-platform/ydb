@@ -131,8 +131,9 @@ public:
 private:
     void TryExecuteNext() {
         TGuard<TMutex> lock(Mutex);
-        if (!Queue.empty() && (!DeterministicMode || Queue.size() == 1)) {
+        if (!Queue.empty() && (!DeterministicMode || Inflight == 0)) {
             auto request = std::move(Queue.front()); Queue.pop_front();
+            Inflight++;
             lock.Release();
 
             auto weak = weak_from_this();
@@ -146,6 +147,11 @@ private:
                     }
 
                     if (auto ptr = weak.lock()) {
+                        {
+                            TGuard<TMutex> lock(ptr->Mutex);
+                            ptr->Inflight--;
+                        }
+
                         ptr->TryExecuteNext();
                     }
                 });
@@ -157,6 +163,7 @@ private:
     const bool DeterministicMode;
     TMutex Mutex;
     TList<TRequest> Queue;
+    int Inflight = 0;
 };
 
 class TDqGatewayLocal : public IDqGateway {

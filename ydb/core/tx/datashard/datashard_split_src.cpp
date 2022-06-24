@@ -196,6 +196,8 @@ public:
             Self->SplitSrcSnapshotSender.AddDst(dstTablet);
         }
 
+        Self->CancelReadIterators(Ydb::StatusIds::OVERLOADED, "Shard splitted", ctx);
+
         return true;
     }
 

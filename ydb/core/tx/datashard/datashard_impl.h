@@ -1531,6 +1531,8 @@ public:
 
     bool CheckChangesQueueOverflow() const;
 
+    void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
+
 private:
     ///
     class TLoanReturnTracker {

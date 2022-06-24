@@ -143,6 +143,7 @@ public:
     TVector<TQuota> ReadStats; // each index corresponds to SeqNo-1
 
     ui64 SeqNo = 0;
+    ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey = 0;
 };

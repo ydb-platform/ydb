@@ -543,7 +543,6 @@ private:
     }
 
     std::tuple<TExprNode::TPtr, TMaybe<ui32>, TMaybe<ui32>> AddLink(TExprNode::TPtr joinTree) {
-        YQL_ENSURE(joinTree->Child(0)->Content() == "Cross" || joinTree->Child(0)->Content() == "Inner");
         auto children = joinTree->ChildrenList();
 
         TMaybe<ui32> found1;
@@ -594,6 +593,8 @@ private:
             if (!Updated) {
                 if (joinTree->Child(0)->Content() == "Cross") {
                     children[0] = Ctx.NewAtom(joinTree->Pos(), "Inner");
+                } else {
+                    YQL_ENSURE(joinTree->Child(0)->Content() == "Inner");
                 }
 
                 ui32 index1 = *found1 - 1; // 0/1

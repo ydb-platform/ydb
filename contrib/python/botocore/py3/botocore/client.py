@@ -839,6 +839,10 @@ class BaseClient:
             f"'{self.__class__.__name__}' object has no attribute '{item}'"
         )
 
+    def close(self):
+        """Closes underlying endpoint connections."""
+        self._endpoint.close()
+
     def _register_handlers(self):
         # Register the handler required to sign requests.
         service_id = self.meta.service_model.service_id.hyphenize()

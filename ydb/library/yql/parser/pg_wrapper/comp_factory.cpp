@@ -420,10 +420,10 @@ public:
         : TBaseComputation(mutables)
         , Name(name)
         , Id(id)
-        , ArgNodes(std::move(argNodes))
-        , ArgTypes(std::move(argTypes))
         , ProcDesc(NPg::LookupProc(id))
         , RetTypeDesc(NPg::LookupType(ProcDesc.ResultType))
+        , ArgNodes(std::move(argNodes))
+        , ArgTypes(std::move(argTypes))
     {
         Zero(FInfo);
         Y_ENSURE(Id);

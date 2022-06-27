@@ -869,6 +869,72 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
     return cleanedInputs;
 }
 
+TExprNode::TPtr BuildMinus(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TExprNode::TPtr& predicate, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("Filter")
+            .Add(0, left)
+            .Lambda(1)
+                .Param("x")
+                .Callable(0, "Not")
+                    .Callable(0, "HasItems")
+                        .Callable(0, "Filter")
+                            .Add(0, right)
+                            .Lambda(1)
+                                .Param("y")
+                                .Callable("Coalesce")
+                                    .Callable(0, "FromPg")
+                                        .Apply(0, predicate)
+                                            .With(0)
+                                                .Callable("FlattenMembers")
+                                                    .List(0)
+                                                        .Atom(0, "")
+                                                        .Arg(1,"x")
+                                                    .Seal()
+                                                    .List(1)
+                                                        .Atom(0, "")
+                                                        .Arg(1, "y")
+                                                    .Seal()
+                                                .Seal()
+                                            .Done()
+                                        .Seal()
+                                    .Seal()
+                                    .Callable(1, "Bool")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr BuildScalarMinus(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right,
+    const TExprNode::TPtr& coalescedPredicate, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("If")
+            .Callable(0, "Or")
+                .Callable(0, "Not")
+                    .Add(0, coalescedPredicate)
+                .Seal()
+                .Callable(1, "==")
+                    .Callable(0, "Length")
+                        .Add(0, right)
+                    .Seal()
+                    .Callable(1, "Uint64")
+                        .Atom(0, "0")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Add(1, left)
+            .Callable(2, "EmptyList")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle pos, const TExprNode::TListType& cleanedInputs,
     const TExprNode::TPtr& joinOps, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> groupForIndex;
@@ -890,94 +956,79 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             // current = join current & with
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
-            auto cartesian = ctx.Builder(pos)
-                    .Callable("FlatMap")
-                        .Add(0, current)
-                        .Lambda(1)
-                            .Param("x")
-                            .Callable("Map")
-                                .Add(0, with)
-                                .Lambda(1)
-                                    .Param("y")
-                                    .Callable("FlattenMembers")
-                                        .List(0)
-                                            .Atom(0, "")
-                                            .Arg(1,"x")
-                                        .Seal()
-                                        .List(1)
-                                            .Atom(0, "")
-                                            .Arg(1, "y")
-                                        .Seal()
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-            auto buildMinus = [&](auto left, auto right) {
-                return ctx.Builder(pos)
-                    .Callable("Filter")
-                        .Add(0, left)
-                        .Lambda(1)
-                            .Param("x")
-                            .Callable(0, "Not")
-                                .Callable(0, "HasItems")
-                                    .Callable(0, "Filter")
-                                        .Add(0, right)
-                                        .Lambda(1)
-                                            .Param("y")
-                                            .Callable("Coalesce")
-                                                .Callable(0, "FromPg")
-                                                    .Apply(0, join->Tail().TailPtr())
-                                                        .With(0)
-                                                            .Callable("FlattenMembers")
-                                                                .List(0)
-                                                                    .Atom(0, "")
-                                                                    .Arg(1,"x")
-                                                                .Seal()
-                                                                .List(1)
-                                                                    .Atom(0, "")
-                                                                    .Arg(1, "y")
-                                                                .Seal()
-                                                            .Seal()
-                                                        .Done()
-                                                    .Seal()
-                                                .Seal()
-                                                .Callable(1, "Bool")
-                                                    .Atom(0, "0")
-                                                .Seal()
-                                            .Seal()
-                                        .Seal()
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
-            };
-
-            TExprNode::TPtr filteredCartesian;
-            if (joinType != "cross") {
-                filteredCartesian = BuildFilter(pos, cartesian, join->Tail().TailPtr(), {}, {}, ctx, optCtx);
-            }
-
+            auto cartesian = JoinColumns(pos, current, with, nullptr, 0, ctx);
             if (joinType == "cross") {
                 current = cartesian;
-            } else if (joinType == "inner") {
+                continue;
+            }
+
+            auto predicate = join->Tail().TailPtr();
+            if (!IsDepended(predicate->Tail(), predicate->Head().Head())) {
+                auto coalescedPredicate = ctx.Builder(pos)
+                    .Callable("Coalesce")
+                        .Callable(0, "FromPg")
+                            .Add(0, predicate->TailPtr())
+                        .Seal()
+                        .Callable(1, "Bool")
+                            .Atom(0, "0")
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                auto main = ctx.Builder(pos)
+                    .Callable("If")
+                        .Add(0, coalescedPredicate)
+                        .Add(1, cartesian)
+                        .Callable(2, "EmptyList")
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                if (joinType == "inner") {
+                    current = main;
+                } else if (joinType == "left") {
+                    current = ctx.Builder(pos)
+                        .Callable("UnionAll")
+                            .Add(0, main)
+                            .Add(1, BuildScalarMinus(pos, current, with, coalescedPredicate, ctx))
+                        .Seal()
+                        .Build();
+                } else if (joinType == "right") {
+                    current = ctx.Builder(pos)
+                        .Callable("UnionAll")
+                            .Add(0, main)
+                            .Add(1, BuildScalarMinus(pos, with, current, coalescedPredicate, ctx))
+                        .Seal()
+                        .Build();
+                } else {
+                    YQL_ENSURE(joinType == "full");
+                    current = ctx.Builder(pos)
+                        .Callable("UnionAll")
+                            .Add(0, main)
+                            .Add(1, BuildScalarMinus(pos, current, with, coalescedPredicate, ctx))
+                            .Add(2, BuildScalarMinus(pos, with, current, coalescedPredicate, ctx))
+                        .Seal()
+                        .Build();
+                }
+
+                continue;
+            }
+
+            auto filteredCartesian = BuildFilter(pos, cartesian, predicate, {}, {}, ctx, optCtx);
+            if (joinType == "inner") {
                 current = filteredCartesian;
             } else if (joinType == "left") {
                 current = ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
-                        .Add(1, buildMinus(current, with))
+                        .Add(1, BuildMinus(pos, current, with, predicate, ctx))
                     .Seal()
                     .Build();
             } else if (joinType == "right") {
                 current = ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
-                        .Add(1, buildMinus(with, current))
+                        .Add(1, BuildMinus(pos, with, current, predicate, ctx))
                     .Seal()
                     .Build();
             } else {
@@ -985,8 +1036,8 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                 current = ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
-                        .Add(1, buildMinus(current, with))
-                        .Add(2, buildMinus(with, current))
+                        .Add(1, BuildMinus(pos, current, with, predicate, ctx))
+                        .Add(2, BuildMinus(pos, with, current, predicate, ctx))
                     .Seal()
                     .Build();
             }

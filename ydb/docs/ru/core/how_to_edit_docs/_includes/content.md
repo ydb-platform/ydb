@@ -267,7 +267,7 @@ OpenSource документация по {{ ydb-short-name }} поддержив
 Существуют ситуации, когда URL ресурса имеет самостоятельную ценность, и должен быть отображен в документации, например, в случае публикации ссылок на репозиторий в github. В таких случаях его необходимо дублировать как внутри квадратных скобок, так и внутри обычных, так как YFM, в отличие от стандартного Markdown, не распознает автоматом URL в тексте:
 
 ``` md
-Github репозиторий {{ ydb-short-name }}: [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
+Github репозиторий {{ ydb-short-name }}: [{{ ydb-doc-repo }}]({{ ydb-doc-repo }})
 ```
 
 ## Картинки {#pictures}

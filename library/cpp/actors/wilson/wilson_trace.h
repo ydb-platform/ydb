@@ -15,13 +15,13 @@ namespace NWilson {
         using TTrace = std::array<ui64, 2>;
 
         TTrace TraceId; // Random id of topmost client request
+        ui64 SpanId;
         union {
             struct {
-                ui64 SpanId : 48; // Span id of part of request currently being executed
-                ui64 Verbosity : 4;
-                ui64 TimeToLive : 12;
+                ui32 Verbosity : 4;
+                ui32 TimeToLive : 12;
             };
-            ui64 Raw;
+            ui32 Raw;
         };
 
     private:
@@ -59,7 +59,7 @@ namespace NWilson {
         }
 
     public:
-        using TSerializedTraceId = char[sizeof(TTrace) + sizeof(ui64)];
+        using TSerializedTraceId = char[sizeof(TTrace) + sizeof(ui64) + sizeof(ui32)];
 
     public:
         TTraceId(ui64) // NBS stub
@@ -68,46 +68,66 @@ namespace NWilson {
 
         TTraceId() {
             TraceId.fill(0);
+            SpanId = 0;
             Raw = 0;
         }
 
         explicit TTraceId(TTrace traceId)
             : TraceId(traceId)
         {
+            SpanId = 0;
             Raw = 0;
         }
 
         // allow move semantic
         TTraceId(TTraceId&& other)
             : TraceId(other.TraceId)
+            , SpanId(other.SpanId)
             , Raw(other.Raw)
         {
             other.TraceId.fill(0);
+            other.SpanId = 0;
+            other.Raw = 0;
         }
 
         // explicit copy
         explicit TTraceId(const TTraceId& other)
             : TraceId(other.TraceId)
+            , SpanId(other.SpanId)
             , Raw(other.Raw)
         {}
 
         TTraceId(const TSerializedTraceId& in) {
-            auto p = reinterpret_cast<const ui64*>(in);
-            TraceId = {p[0], p[1]};
-            Raw = p[2];
+            const char *p = in;
+            memcpy(TraceId.data(), p, sizeof(TraceId));
+            p += sizeof(TraceId);
+            memcpy(&SpanId, p, sizeof(SpanId));
+            p += sizeof(SpanId);
+            memcpy(&Raw, p, sizeof(Raw));
+            p += sizeof(Raw);
+            Y_VERIFY_DEBUG(p - in == sizeof(TSerializedTraceId));
         }
 
         void Serialize(TSerializedTraceId *out) const {
-            auto p = reinterpret_cast<ui64*>(*out);
-            p[0] = TraceId[0];
-            p[1] = TraceId[1];
-            p[2] = Raw;
+            char *p = *out;
+            memcpy(p, TraceId.data(), sizeof(TraceId));
+            p += sizeof(TraceId);
+            memcpy(p, &SpanId, sizeof(SpanId));
+            p += sizeof(SpanId);
+            memcpy(p, &Raw, sizeof(Raw));
+            p += sizeof(Raw);
+            Y_VERIFY_DEBUG(p - *out == sizeof(TSerializedTraceId));
         }
 
         TTraceId& operator=(TTraceId&& other) {
-            TraceId = other.TraceId;
-            other.TraceId.fill(0);
-            Raw = other.Raw;
+            if (this != &other) {
+                TraceId = other.TraceId;
+                SpanId = other.SpanId;
+                Raw = other.Raw;
+                other.TraceId.fill(0);
+                other.SpanId = 0;
+                other.Raw = 0;
+            }
             return *this;
         }
 
@@ -142,7 +162,7 @@ namespace NWilson {
         }
 
         friend bool operator==(const TTraceId& x, const TTraceId& y) {
-            return x.TraceId == y.TraceId && x.Raw == y.Raw;
+            return x.TraceId == y.TraceId && x.SpanId == y.SpanId && x.Raw == y.Raw;
         }
 
         ui8 GetVerbosity() const {
@@ -151,7 +171,7 @@ namespace NWilson {
 
         const void *GetTraceIdPtr() const { return TraceId.data(); }
         static constexpr size_t GetTraceIdSize() { return sizeof(TTrace); }
-        const void *GetSpanIdPtr() const { return &Raw; }
+        const void *GetSpanIdPtr() const { return &SpanId; }
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
 
         // for compatibility with NBS

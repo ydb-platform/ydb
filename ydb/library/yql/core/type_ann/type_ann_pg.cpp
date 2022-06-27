@@ -1412,18 +1412,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                 isError = true;
                 return false;
             }
-
-            for (auto& x : inputs) {
-                if (x.External) {
-                    for (const auto& i : x.Type->GetItems()) {
-                        if (!i->GetName().StartsWith("_yql_")) {
-                            x.UsedExternalColumns.insert(TString(i->GetName()));
-                        }
-                    }
-                }
-            }
-        }
-        else if (node->IsCallable("PgQualifiedStar")) {
+        } else if (node->IsCallable("PgQualifiedStar")) {
             if (!hasStar || !qualifiedRefs) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()), "Star is not allowed here"));
                 isError = true;
@@ -1679,6 +1668,10 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
             }
 
             if (hasStar && *hasStar) {
+                if (x.External) {
+                    continue;
+                }
+
                 for (ui32 i = 0; i < x.Type->GetSize(); ++i) {
                     auto item = x.Type->GetItems()[i];
                     if (!item->GetName().StartsWith("_yql_")) {
@@ -1749,6 +1742,10 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
             for (ui32 pass = 0; pass < 2; ++pass) {
                 for (const auto& x : inputs) {
                     if (!pass == x.External) {
+                        continue;
+                    }
+
+                    if (x.External) {
                         continue;
                     }
 

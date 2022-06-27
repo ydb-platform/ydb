@@ -239,7 +239,7 @@ void TAddReadRuleActor::ModifyPersqueueConfig(
     TString error = AddReadRuleToConfig(pqConfig, rule, serviceTypes, ctx);
     bool hasDuplicates = false;
     if (error.Empty()) {
-        hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
+        hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error, ctx);
     }
 
     if (!error.Empty()) {

@@ -51,7 +51,7 @@ namespace NKikimr::NGRpcProxy::V1 {
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx);
 
     // Returns true if have duplicated read rules
-    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes, TString& error);
+    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes, TString& error, const TActorContext& ctx);
 
     TString AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,
@@ -361,9 +361,25 @@ namespace NKikimr::NGRpcProxy::V1 {
             return this->SendProposeRequest(ctx);
         }
 
+        void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const TActorContext& ctx) {
+            auto msg = ev->Get();
+            const auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(ev->Get()->Record.GetStatus());
+
+            if (status ==  TEvTxUserProxy::TResultStatus::ExecError && msg->Record.GetSchemeShardStatus() == NKikimrScheme::EStatus::StatusPreconditionFailed)
+            {
+                return TBase::ReplyWithError(Ydb::StatusIds::OVERLOADED,
+                                                         Ydb::PersQueue::ErrorCode::ERROR,
+                                                         TStringBuilder() << "Topic with name " << TBase::GetTopicPath(ctx) << " has another alter in progress",
+                                                         ctx);
+            }
+
+            return TBase::TBase::Handle(ev, ctx);
+        }
+
         void StateWork(TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             switch (ev->GetTypeRewrite()) {
-            default: TBase::StateWork(ev, ctx);
+                HFunc(TEvTxUserProxy::TEvProposeTransactionStatus, Handle);
+                default: TBase::StateWork(ev, ctx);
             }
         }
 

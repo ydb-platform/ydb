@@ -3035,8 +3035,14 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         (*request.mutable_alter_attributes())["_allow_unauthenticated_read"] = "true";
 
         (*request.mutable_alter_attributes())["_partitions_per_tablet"] = "5";
-        alter(request, Ydb::StatusIds::SUCCESS, false);
 
+        rr->mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_LZOP);
+
+        alter(request, Ydb::StatusIds::BAD_REQUEST, false);
+
+        rr->mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_CUSTOM + 5);
+
+        alter(request, Ydb::StatusIds::SUCCESS, false);
 
         request = Ydb::Topic::AlterTopicRequest{};
         request.set_path(TStringBuilder() << "/Root/PQ/" << topic3);

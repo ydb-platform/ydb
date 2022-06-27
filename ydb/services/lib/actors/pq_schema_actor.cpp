@@ -269,7 +269,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
     bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config,
                               const TClientServiceTypes& supportedClientServiceTypes,
-                              TString& error) {
+                              TString& error, const TActorContext& ctx) {
 
         if (config.GetReadRules().size() > MAX_READ_RULES_COUNT) {
             error = TStringBuilder() << "read rules count cannot be more than "
@@ -297,6 +297,25 @@ namespace NKikimr::NGRpcProxy::V1 {
             if (count > limit) {
                 error = TStringBuilder() << "Count of consumers with service type '" << type << "' is limited for " << limit << " for stream\n";
                 return false;
+            }
+        }
+        if (config.GetCodecs().IdsSize() > 0) {
+            for (ui32 i = 0; i < config.ConsumerCodecsSize(); ++i) {
+                TString name = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);
+
+                auto& consumerCodecs = config.GetConsumerCodecs(i);
+                if (consumerCodecs.IdsSize() > 0) {
+                    THashSet<i64> codecs;
+                    for (auto& cc : consumerCodecs.GetIds()) {
+                        codecs.insert(cc);
+                    }
+                    for (auto& cc : config.GetCodecs().GetIds()) {
+                        if (codecs.find(cc) == codecs.end()) {
+                            error = TStringBuilder() << "for consumer '" << name << "' got unsupported codec " << (cc+1) << " which is suppored by topic";
+                            return false;
+                        }
+                    }
+                }
             }
         }
 
@@ -712,7 +731,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
+        CheckReadRulesConfig(*config, supportedClientServiceTypes, error, ctx);
         return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
     }
 
@@ -852,7 +871,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
+        CheckReadRulesConfig(*config, supportedClientServiceTypes, error, ctx);
         return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
     }
 
@@ -1019,7 +1038,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        bool hasDuplicates = CheckReadRulesConfig(*config, supportedClientServiceTypes, error);
+        bool hasDuplicates = CheckReadRulesConfig(*config, supportedClientServiceTypes, error, ctx);
         return error.empty() ? Ydb::StatusIds::SUCCESS : (hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST);
     }
 

@@ -35,4 +35,5 @@ target_sources(core-sys_view-processor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_aggregate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_summary.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_interval_metrics.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/processor/tx_top_partitions.cpp
 )

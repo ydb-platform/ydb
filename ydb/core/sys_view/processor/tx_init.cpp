@@ -10,8 +10,8 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
     TTxType GetTxType() const override { return TXTYPE_INIT; }
 
-    template <typename TSchema, typename TEntry>
-    bool LoadResults(NIceDb::TNiceDb& db, TResultMap<TEntry>& results) {
+    template <typename TSchema, typename TMap>
+    bool LoadQueryResults(NIceDb::TNiceDb& db, TMap& results) {
         results.clear();
 
         auto rowset = db.Table<TSchema>().Range().Select();
@@ -27,7 +27,8 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
             auto key = std::make_pair(intervalEnd, rank);
             auto& result = results[key];
-            if constexpr (std::is_same<TEntry, TQueryToMetrics>::value) {
+
+            if constexpr (std::is_same<typename TMap::mapped_type, TQueryToMetrics>::value) {
                 result.Text = std::move(text);
                 if (data) {
                     Y_PROTOBUF_SUPPRESS_NODISCARD result.Metrics.ParseFromString(data);
@@ -46,10 +47,42 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         SVLOG_D("[" << Self->TabletID() << "] Loading results: "
             << "table# " << TSchema::TableId
-            << ", results count# " << results.size());
+            << ", result count# " << results.size());
 
         return true;
     };
+
+    template <typename S>
+    bool LoadPartitionResults(NIceDb::TNiceDb& db, TSelf::TResultPartitionsMap& results) {
+        results.clear();
+        auto rowset = db.Table<S>().Range().Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        while (!rowset.EndOfSet()) {
+            ui64 intervalEnd = rowset.template GetValue<typename S::IntervalEnd>();
+            ui32 rank = rowset.template GetValue<typename S::Rank>();
+            TString data = rowset.template GetValue<typename S::Data>();
+
+            auto key = std::make_pair(intervalEnd, rank);
+            auto& result = results[key];
+            if (data) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD result.ParseFromString(data);
+            }
+
+            if (!rowset.Next()) {
+                return false;
+            }
+        }
+
+        SVLOG_D("[" << Self->TabletID() << "] Loading results: "
+            << "table# " << S::TableId
+            << ", result count# " << results.size());
+
+        return true;
+    };
+
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         SVLOG_D("[" << Self->TabletID() << "] TTxInit::Execute");
@@ -72,6 +105,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             auto cpuTimeOneHourRowset = db.Table<Schema::TopByCpuTimeOneHour>().Range().Select();
             auto reqUnitsOneMinuteRowset = db.Table<Schema::TopByRequestUnitsOneMinute>().Range().Select();
             auto reqUnitsOneHourRowset = db.Table<Schema::TopByRequestUnitsOneHour>().Range().Select();
+            auto intervalPartitionTopsRowset = db.Table<Schema::IntervalPartitionTops>().Range().Select();
+            auto topPartitionsOneMinuteRowset = db.Table<Schema::TopPartitionsOneMinute>().Range().Select();
+            auto topPartitionsOneHourRowset = db.Table<Schema::TopPartitionsOneHour>().Range().Select();
 
             if (!sysParamsRowset.IsReady() ||
                 !intervalSummariesRowset.IsReady() ||
@@ -87,7 +123,10 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 !cpuTimeOneMinuteRowset.IsReady() ||
                 !cpuTimeOneHourRowset.IsReady() ||
                 !reqUnitsOneMinuteRowset.IsReady() ||
-                !reqUnitsOneHourRowset.IsReady())
+                !reqUnitsOneHourRowset.IsReady() ||
+                !intervalPartitionTopsRowset.IsReady() ||
+                !topPartitionsOneMinuteRowset.IsReady() ||
+                !topPartitionsOneHourRowset.IsReady())
             {
                 return false;
             }
@@ -251,7 +290,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                         Self->ByRequestUnitsHour.emplace_back(std::move(query));
                         break;
                     default:
-                        SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected stats type: " << type);
+                        SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected query stats type: " << type);
                 }
 
                 ++queryCount;
@@ -269,7 +308,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             std::sort(Self->ByRequestUnitsMinute.begin(), Self->ByRequestUnitsMinute.end(), TopQueryCompare);
             std::sort(Self->ByRequestUnitsHour.begin(), Self->ByRequestUnitsHour.end(), TopQueryCompare);
 
-            SVLOG_D("[" << Self->TabletID() << "] Loading interval tops: "
+            SVLOG_D("[" << Self->TabletID() << "] Loading interval query tops: "
                 << "total query count# " << queryCount);
         }
 
@@ -320,28 +359,84 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
         }
 
         // Metrics...
-        if (!LoadResults<Schema::MetricsOneMinute, TQueryToMetrics>(db, Self->MetricsOneMinute))
+        if (!LoadQueryResults<Schema::MetricsOneMinute>(db, Self->MetricsOneMinute))
             return false;
-        if (!LoadResults<Schema::MetricsOneHour, TQueryToMetrics>(db, Self->MetricsOneHour))
+        if (!LoadQueryResults<Schema::MetricsOneHour>(db, Self->MetricsOneHour))
             return false;
 
         // TopBy...
-        using TStats = NKikimrSysView::TQueryStats;
-        if (!LoadResults<Schema::TopByDurationOneMinute, TStats>(db, Self->TopByDurationOneMinute))
+        if (!LoadQueryResults<Schema::TopByDurationOneMinute>(db, Self->TopByDurationOneMinute))
             return false;
-        if (!LoadResults<Schema::TopByDurationOneHour, TStats>(db, Self->TopByDurationOneHour))
+        if (!LoadQueryResults<Schema::TopByDurationOneHour>(db, Self->TopByDurationOneHour))
             return false;
-        if (!LoadResults<Schema::TopByReadBytesOneMinute, TStats>(db, Self->TopByReadBytesOneMinute))
+        if (!LoadQueryResults<Schema::TopByReadBytesOneMinute>(db, Self->TopByReadBytesOneMinute))
             return false;
-        if (!LoadResults<Schema::TopByReadBytesOneHour, TStats>(db, Self->TopByReadBytesOneHour))
+        if (!LoadQueryResults<Schema::TopByReadBytesOneHour>(db, Self->TopByReadBytesOneHour))
             return false;
-        if (!LoadResults<Schema::TopByCpuTimeOneMinute, TStats>(db, Self->TopByCpuTimeOneMinute))
+        if (!LoadQueryResults<Schema::TopByCpuTimeOneMinute>(db, Self->TopByCpuTimeOneMinute))
             return false;
-        if (!LoadResults<Schema::TopByCpuTimeOneHour, TStats>(db, Self->TopByCpuTimeOneHour))
+        if (!LoadQueryResults<Schema::TopByCpuTimeOneHour>(db, Self->TopByCpuTimeOneHour))
             return false;
-        if (!LoadResults<Schema::TopByRequestUnitsOneMinute, TStats>(db, Self->TopByRequestUnitsOneMinute))
+        if (!LoadQueryResults<Schema::TopByRequestUnitsOneMinute>(db, Self->TopByRequestUnitsOneMinute))
             return false;
-        if (!LoadResults<Schema::TopByRequestUnitsOneHour, TStats>(db, Self->TopByRequestUnitsOneHour))
+        if (!LoadQueryResults<Schema::TopByRequestUnitsOneHour>(db, Self->TopByRequestUnitsOneHour))
+            return false;
+
+        // IntervalPartitionTops
+        {
+            Self->PartitionTopMinute.clear();
+            Self->PartitionTopMinute.reserve(TOP_PARTITIONS_COUNT);
+            Self->PartitionTopHour.clear();
+            Self->PartitionTopHour.reserve(TOP_PARTITIONS_COUNT);
+
+            auto rowset = db.Table<Schema::IntervalPartitionTops>().Range().Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            size_t partCount = 0;
+            while (!rowset.EndOfSet()) {
+                ui32 type = rowset.GetValue<Schema::IntervalPartitionTops::TypeCol>();
+                TString data = rowset.GetValue<Schema::IntervalPartitionTops::Data>();
+
+                if (data) {
+                    auto partition = MakeHolder<NKikimrSysView::TTopPartitionsInfo>();
+                    Y_PROTOBUF_SUPPRESS_NODISCARD partition->ParseFromString(data);
+
+                    switch ((NKikimrSysView::EStatsType)type) {
+                        case NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE:
+                            Self->PartitionTopMinute.emplace_back(std::move(partition));
+                            break;
+                        case NKikimrSysView::TOP_PARTITIONS_ONE_HOUR:
+                            Self->PartitionTopHour.emplace_back(std::move(partition));
+                            break;
+                        default:
+                            SVLOG_CRIT("[" << Self->TabletID() << "] ignoring unexpected partition stats type: " << type);
+                    }
+                    ++partCount;
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            auto compare = [] (const auto& l, const auto& r) {
+                return l->GetCPUCores() == r->GetCPUCores() ?
+                    l->GetTabletId() < r->GetTabletId() : l->GetCPUCores() > r->GetCPUCores();
+            };
+
+            std::sort(Self->PartitionTopMinute.begin(), Self->PartitionTopMinute.end(), compare);
+            std::sort(Self->PartitionTopHour.begin(), Self->PartitionTopHour.end(), compare);
+
+            SVLOG_D("[" << Self->TabletID() << "] Loading interval partition tops: "
+                << "partition count# " << partCount);
+        }
+
+        // TopPartitions...
+        if (!LoadPartitionResults<Schema::TopPartitionsOneMinute>(db, Self->TopPartitionsOneMinute))
+            return false;
+        if (!LoadPartitionResults<Schema::TopPartitionsOneHour>(db, Self->TopPartitionsOneHour))
             return false;
 
         auto deadline = Self->IntervalEnd + Self->TotalInterval;

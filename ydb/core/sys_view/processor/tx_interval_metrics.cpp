@@ -52,7 +52,7 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
                 NIceDb::TUpdate<Schema::IntervalMetrics::Metrics>(serialized));
         }
 
-        auto fillTops = [&] (TTop& minuteTop, TTop& hourTop,
+        auto fillTops = [&] (TQueryTop& minuteTop, TQueryTop& hourTop,
             NKikimrSysView::EStatsType minuteType, NKikimrSysView::EStatsType hourType,
             const NProtoBuf::RepeatedPtrField<NKikimrSysView::TQueryStats>& queryStats)
         {
@@ -102,14 +102,16 @@ struct TSysViewProcessor::TTxIntervalMetrics : public TTxBase {
         db.Table<Schema::NodesToRequest>().Key(NodeId).Delete();
 
         if (Self->NodesInFlight.empty() && Self->NodesToRequest.empty()) {
-            Self->PersistResults(db);
-        } else {
-            Self->SendRequests();
+            Self->PersistQueryResults(db);
         }
         return true;
     }
 
     void Complete(const TActorContext&) override {
+        if (!Self->NodesToRequest.empty()) {
+            Self->SendRequests();
+        }
+
         SVLOG_D("[" << Self->TabletID() << "] TTxIntervalMetrics::Complete");
     }
 };

@@ -21,4 +21,5 @@ target_link_libraries(core-sys_view-partition_stats PUBLIC
 )
 target_sources(core-sys_view-partition_stats PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/partition_stats/partition_stats.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/sys_view/partition_stats/top_partitions.cpp
 )

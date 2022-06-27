@@ -123,6 +123,8 @@ enum EStatsType {
     METRICS_ONE_HOUR = 8;
     TOP_REQUEST_UNITS_ONE_MINUTE = 9;
     TOP_REQUEST_UNITS_ONE_HOUR = 10;
+    TOP_PARTITIONS_ONE_MINUTE = 11;
+    TOP_PARTITIONS_ONE_HOUR = 12;
 }
 
 message TEvGetQueryStats {
@@ -549,4 +551,52 @@ message TEvSendDbCountersResponse {
     optional string Database = 1;
     optional uint64 Generation = 2; // confirmed generation
 }
+
+// ---- Top partitions
+
+message TTopPartitionsKey {
+    optional uint64 IntervalEndUs = 1;
+    optional uint64 Rank = 2;
+}
+
+message TTopPartitionsInfo {
+    optional fixed64 TabletId = 1;
+    optional string Path = 2;
+    optional uint64 PeakTimeUs = 3;
+    optional double CPUCores = 4;
+    optional uint32 NodeId = 5;
+    optional uint64 DataSize = 6;
+    optional uint64 RowCount = 7;
+    optional uint64 IndexSize = 8;
+    optional uint32 InFlightTxCount = 9;
+}
+
+message TTopPartitionsEntry {
+    optional TTopPartitionsKey Key = 1;
+    optional TTopPartitionsInfo Info = 2;
+}
+
+message TEvGetTopPartitionsRequest {
+    optional TTopPartitionsKey From = 1;
+    optional bool InclusiveFrom = 2;
+
+    optional TTopPartitionsKey To = 3;
+    optional bool InclusiveTo = 4;
+
+    optional EStatsType Type = 5;
+}
+
+message TEvGetTopPartitionsResponse {
+    repeated TTopPartitionsEntry Entries = 1;
+    optional TTopPartitionsKey Next = 2;
+    optional bool LastBatch = 3;
+    optional bool Overloaded = 4;
+}
+
+// partitions stats collector -> SVP
+message TEvSendTopPartitions {
+    repeated TTopPartitionsInfo Partitions = 1;
+    optional uint64 TimeUs = 2;
+}
+
 

@@ -216,6 +216,9 @@ private:
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
         RegisterOlapTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
+
+        RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
     }
 
 private:

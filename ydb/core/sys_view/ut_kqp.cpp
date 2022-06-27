@@ -49,31 +49,30 @@ void CreateTenants(TTestEnv& env, bool extSchemeShard = true) {
     CreateTenant(env, "Tenant2", extSchemeShard);
 }
 
-void CreateTables(TTestEnv& env) {
+void CreateTable(auto& session, const TString& name, ui64 partitionCount = 1) {
+    auto desc = TTableBuilder()
+        .AddNullableColumn("Key", EPrimitiveType::Uint64)
+        .AddNullableColumn("Value", EPrimitiveType::String)
+        .SetPrimaryKeyColumns({"Key"})
+        .Build();
+
+    auto settings = TCreateTableSettings();
+    settings.PartitioningPolicy(TPartitioningPolicy().UniformPartitions(partitionCount));
+
+    session.CreateTable(name, std::move(desc), std::move(settings)).GetValueSync();
+}
+
+void CreateTables(TTestEnv& env, ui64 partitionCount = 1) {
     TTableClient client(env.GetDriver());
     auto session = client.CreateSession().GetValueSync().GetSession();
 
-    NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE `Root/Table0` (
-            Key Uint64,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-    )").GetValueSync());
-
+    CreateTable(session, "Root/Table0", partitionCount);
     NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
         REPLACE INTO `Root/Table0` (Key, Value) VALUES
             (0u, "Z");
     )", TTxControl::BeginTx().CommitTx()).GetValueSync());
 
-    NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE `Root/Tenant1/Table1` (
-            Key Uint64,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-    )").GetValueSync());
-
+    CreateTable(session, "Root/Tenant1/Table1", partitionCount);
     NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
         REPLACE INTO `Root/Tenant1/Table1` (Key, Value) VALUES
             (1u, "A"),
@@ -81,14 +80,7 @@ void CreateTables(TTestEnv& env) {
             (3u, "C");
     )", TTxControl::BeginTx().CommitTx()).GetValueSync());
 
-    NKqp::AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE `Root/Tenant2/Table2` (
-            Key Uint64,
-            Value String,
-            PRIMARY KEY (Key)
-        );
-    )").GetValueSync());
-
+    CreateTable(session, "Root/Tenant2/Table2", partitionCount);
     NKqp::AssertSuccessResult(session.ExecuteDataQuery(R"(
         REPLACE INTO `Root/Tenant2/Table2` (Key, Value) VALUES
             (4u, "D"),
@@ -96,9 +88,9 @@ void CreateTables(TTestEnv& env) {
     )", TTxControl::BeginTx().CommitTx()).GetValueSync());
 }
 
-void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true) {
+void CreateTenantsAndTables(TTestEnv& env, bool extSchemeShard = true, ui64 partitionCount = 1) {
     CreateTenants(env, extSchemeShard);
-    CreateTables(env);
+    CreateTables(env, partitionCount);
 }
 
 void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1) {
@@ -1151,6 +1143,198 @@ Y_UNIT_TEST_SUITE(SystemView) {
         }
     }
 
+    size_t GetRowCount(TTableClient& client, const TString& name) {
+        TStringBuilder query;
+        query << "SELECT * FROM `" << name << "`";
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+        UNIT_ASSERT(node.IsList());
+        return node.AsList().size();
+    }
+
+    ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
+        TStringBuilder query;
+        query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+        UNIT_ASSERT(node.IsList());
+        UNIT_ASSERT(node.AsList().size() == 1);
+        auto row = node.AsList()[0];
+        UNIT_ASSERT(row.IsList());
+        UNIT_ASSERT(row.AsList().size() == 1);
+        auto value = row.AsList()[0];
+        UNIT_ASSERT(value.IsList());
+        UNIT_ASSERT(value.AsList().size() == 1);
+        return value.AsList()[0].AsUint64();
+    }
+
+    Y_UNIT_TEST(TopPartitionsFields) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        auto nowUs = TInstant::Now().MicroSeconds();
+
+        TTestEnv env(1, 4, 0, true);
+        CreateTenantsAndTables(env);
+
+        TTableClient client(env.GetDriver());
+        size_t rowCount = 0;
+        for (size_t iter = 0; iter < 30 && !rowCount; ++iter) {
+            rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
+            if (!rowCount) {
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+        ui64 intervalEnd = GetIntervalEnd(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
+
+        TStringBuilder query;
+        query << R"(
+            SELECT
+                IntervalEnd,
+                Rank,
+                TabletId,
+                Path,
+                PeakTime,
+                CPUCores,
+                NodeId,
+                DataSize,
+                RowCount,
+                IndexSize,
+                InFlightTxCount
+            FROM `/Root/Tenant1/.sys/top_partitions_one_minute`)"
+            << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp)";
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+
+        TYsonFieldChecker check(ysonString, 11);
+        check.Uint64(intervalEnd); // IntervalEnd
+        check.Uint64(1); // Rank
+        check.Uint64Greater(0); // TabletId
+        check.String("/Root/Tenant1/Table1"); // Path
+        check.Uint64GreaterOrEquals(nowUs); // PeakTime
+        check.DoubleGreaterOrEquals(0.); // CPUCores
+        check.Uint64Greater(0); // NodeId
+        check.Uint64Greater(0); // DataSize
+        check.Uint64(3); // RowCount
+        check.Uint64(0); // IndexSize
+        check.Uint64(0); // InFlightTxCount
+    }
+
+    Y_UNIT_TEST(TopPartitionsTables) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        constexpr ui64 partitionCount = 5;
+
+        TTestEnv env(1, 4, 0, true);
+        CreateTenantsAndTables(env, true, partitionCount);
+
+        TTableClient client(env.GetDriver());
+        size_t rowCount = 0;
+        for (size_t iter = 0; iter < 30 && rowCount < partitionCount; ++iter) {
+            rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
+            if (rowCount < partitionCount) {
+                Sleep(TDuration::Seconds(1));
+            }
+        }
+        auto check = [&] (const TString& name) {
+            ui64 intervalEnd = GetIntervalEnd(client, name);
+            TStringBuilder query;
+            query << "SELECT Rank ";
+            query << "FROM `" << name << "` ";
+            query << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) ";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            NKqp::CompareYson("[[[1u]];[[2u]];[[3u]];[[4u]];[[5u]]]", NKqp::StreamResultToYson(it));
+        };
+        check("/Root/Tenant1/.sys/top_partitions_one_minute");
+        check("/Root/Tenant1/.sys/top_partitions_one_hour");
+    }
+
+    Y_UNIT_TEST(TopPartitionsRanges) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        constexpr ui64 partitionCount = 5;
+
+        TTestEnv env(1, 4, 0, true);
+        CreateTenantsAndTables(env, true, partitionCount);
+
+        TTableClient client(env.GetDriver());
+        size_t rowCount = 0;
+        for (size_t iter = 0; iter < 30 && rowCount < partitionCount; ++iter) {
+            rowCount = GetRowCount(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
+            if (rowCount < partitionCount) {
+                Sleep(TDuration::Seconds(5));
+            }
+        }
+        ui64 intervalEnd = GetIntervalEnd(client, "/Root/Tenant1/.sys/top_partitions_one_minute");
+        {
+            TStringBuilder query;
+            query << "SELECT IntervalEnd, Rank ";
+            query << "FROM `/Root/Tenant1/.sys/top_partitions_one_minute` ";
+            query << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) ";
+            query << "AND Rank > 3u";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TStringBuilder result;
+            result << "[";
+            result << "[[" << intervalEnd << "u];[4u]];";
+            result << "[[" << intervalEnd << "u];[5u]];";
+            result << "]";
+            NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
+        }
+        {
+            TStringBuilder query;
+            query << "SELECT IntervalEnd, Rank ";
+            query << "FROM `/Root/Tenant1/.sys/top_partitions_one_minute` ";
+            query << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) ";
+            query << "AND Rank >= 3u";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TStringBuilder result;
+            result << "[";
+            result << "[[" << intervalEnd << "u];[3u]];";
+            result << "[[" << intervalEnd << "u];[4u]];";
+            result << "[[" << intervalEnd << "u];[5u]];";
+            result << "]";
+            NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
+        }
+        {
+            TStringBuilder query;
+            query << "SELECT IntervalEnd, Rank ";
+            query << "FROM `/Root/Tenant1/.sys/top_partitions_one_minute` ";
+            query << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) ";
+            query << "AND Rank < 3u";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TStringBuilder result;
+            result << "[";
+            result << "[[" << intervalEnd << "u];[1u]];";
+            result << "[[" << intervalEnd << "u];[2u]];";
+            result << "]";
+            NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
+        }
+        {
+            TStringBuilder query;
+            query << "SELECT IntervalEnd, Rank ";
+            query << "FROM `/Root/Tenant1/.sys/top_partitions_one_minute` ";
+            query << "WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp) ";
+            query << "AND Rank <= 3u";
+            auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TStringBuilder result;
+            result << "[";
+            result << "[[" << intervalEnd << "u];[1u]];";
+            result << "[[" << intervalEnd << "u];[2u]];";
+            result << "[[" << intervalEnd << "u];[3u]];";
+            result << "]";
+            NKqp::CompareYson(result, NKqp::StreamResultToYson(it));
+        }
+    }
+
     Y_UNIT_TEST(OldEngineSystemView) {
         TTestEnv env;
         CreateRootTable(env);
@@ -1345,7 +1529,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 16);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 18);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -1363,7 +1547,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 10);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 12);
 
             THashSet<TString> names;
             for (const auto& child : children) {

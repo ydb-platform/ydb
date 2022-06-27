@@ -66,6 +66,10 @@ struct TEvSysView {
         EvGetStorageStatsRequest,
         EvGetStorageStatsResponse,
 
+        EvSendTopPartitions,
+        EvGetTopPartitionsRequest,
+        EvGetTopPartitionsResponse,
+
         EvEnd,
     };
 
@@ -360,6 +364,24 @@ struct TEvSysView {
 
     struct TEvGetStorageStatsResponse
         : TEventPB<TEvGetStorageStatsResponse, NKikimrSysView::TEvGetStorageStatsResponse, EvGetStorageStatsResponse>
+    {};
+
+    struct TEvSendTopPartitions : public TEventPB<
+        TEvSendTopPartitions,
+        NKikimrSysView::TEvSendTopPartitions,
+        EvSendTopPartitions>
+    {};
+
+    struct TEvGetTopPartitionsRequest : public TEventPB<
+        TEvGetTopPartitionsRequest,
+        NKikimrSysView::TEvGetTopPartitionsRequest,
+        EvGetTopPartitionsRequest>
+    {};
+
+    struct TEvGetTopPartitionsResponse : public TEventPB<
+        TEvGetTopPartitionsResponse,
+        NKikimrSysView::TEvGetTopPartitionsResponse,
+        EvGetTopPartitionsResponse>
     {};
 };
 

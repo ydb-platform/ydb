@@ -11,8 +11,8 @@ namespace NSysView {
 TSysViewProcessor::TSysViewProcessor(const TActorId& tablet, TTabletStorageInfo* info, EProcessorMode processorMode)
     : TActor(&TThis::StateInit)
     , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-    , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 6 : 60))
-    , CollectInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 3 : 30))
+    , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 1 : 60))
+    , CollectInterval(TotalInterval / 2)
     , ExternalGroup(new NMonitoring::TDynamicCounters)
 {
     InternalGroups["kqp_serverless"] = new NMonitoring::TDynamicCounters;
@@ -70,8 +70,8 @@ void TSysViewProcessor::PersistIntervalEnd(NIceDb::TNiceDb& db) {
 }
 
 template <typename TSchema>
-void TSysViewProcessor::PersistTopResults(NIceDb::TNiceDb& db,
-    TTop& top, TResultStatsMap& results, TInstant intervalEnd)
+void TSysViewProcessor::PersistQueryTopResults(NIceDb::TNiceDb& db,
+    TQueryTop& top, TResultStatsMap& results, TInstant intervalEnd)
 {
     ui64 intervalEndUs = intervalEnd.MicroSeconds();
     ui32 rank = 0;
@@ -95,14 +95,14 @@ void TSysViewProcessor::PersistTopResults(NIceDb::TNiceDb& db,
         }
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistTopResults: "
+    SVLOG_D("[" << TabletID() << "] PersistQueryTopResults: "
         << "table id# " << TSchema::TableId
         << ", interval end# " << intervalEnd
         << ", query count# " << top.size()
         << ", persisted# " << rank);
 }
 
-void TSysViewProcessor::PersistResults(NIceDb::TNiceDb& db) {
+void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {
     std::vector<std::pair<ui64, TQueryHash>> sorted;
     sorted.reserve(QueryMetrics.size());
     for (const auto& [queryHash, metrics] : QueryMetrics) {
@@ -128,31 +128,67 @@ void TSysViewProcessor::PersistResults(NIceDb::TNiceDb& db) {
             NIceDb::TUpdate<Schema::MetricsOneMinute::Data>(serialized));
     }
 
-    SVLOG_D("[" << TabletID() << "] PersistResults: "
+    SVLOG_D("[" << TabletID() << "] PersistQueryResults: "
         << "interval end# " << IntervalEnd
         << ", query count# " << sorted.size());
 
     // TODO: metrics one hour?
 
-    PersistTopResults<Schema::TopByDurationOneMinute>(
+    PersistQueryTopResults<Schema::TopByDurationOneMinute>(
         db, ByDurationMinute, TopByDurationOneMinute, IntervalEnd);
-    PersistTopResults<Schema::TopByReadBytesOneMinute>(
+    PersistQueryTopResults<Schema::TopByReadBytesOneMinute>(
         db, ByReadBytesMinute, TopByReadBytesOneMinute, IntervalEnd);
-    PersistTopResults<Schema::TopByCpuTimeOneMinute>(
+    PersistQueryTopResults<Schema::TopByCpuTimeOneMinute>(
         db, ByCpuTimeMinute, TopByCpuTimeOneMinute, IntervalEnd);
-    PersistTopResults<Schema::TopByRequestUnitsOneMinute>(
+    PersistQueryTopResults<Schema::TopByRequestUnitsOneMinute>(
         db, ByRequestUnitsMinute, TopByRequestUnitsOneMinute, IntervalEnd);
 
     auto hourEnd = EndOfHourInterval(IntervalEnd);
 
-    PersistTopResults<Schema::TopByDurationOneHour>(
+    PersistQueryTopResults<Schema::TopByDurationOneHour>(
         db, ByDurationHour, TopByDurationOneHour, hourEnd);
-    PersistTopResults<Schema::TopByReadBytesOneHour>(
+    PersistQueryTopResults<Schema::TopByReadBytesOneHour>(
         db, ByReadBytesHour, TopByReadBytesOneHour, hourEnd);
-    PersistTopResults<Schema::TopByCpuTimeOneHour>(
+    PersistQueryTopResults<Schema::TopByCpuTimeOneHour>(
         db, ByCpuTimeHour, TopByCpuTimeOneHour, hourEnd);
-    PersistTopResults<Schema::TopByRequestUnitsOneHour>(
+    PersistQueryTopResults<Schema::TopByRequestUnitsOneHour>(
         db, ByRequestUnitsHour, TopByRequestUnitsOneHour, hourEnd);
+}
+
+template <typename TSchema>
+void TSysViewProcessor::PersistPartitionTopResults(NIceDb::TNiceDb& db,
+    TPartitionTop& top, TResultPartitionsMap& results, TInstant intervalEnd)
+{
+    ui64 intervalEndUs = intervalEnd.MicroSeconds();
+    ui32 rank = 0;
+
+    for (const auto& partition : top) {
+        auto key = std::make_pair(intervalEndUs, ++rank);
+        auto& info = results[key];
+        info.CopyFrom(*partition);
+
+        TString data;
+        Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&data);
+        db.Table<TSchema>().Key(key).Update(
+            NIceDb::TUpdate<typename TSchema::Data>(data));
+    }
+
+    SVLOG_D("[" << TabletID() << "] PersistPartitionTopResults: "
+        << "table id# " << TSchema::TableId
+        << ", partition interval end# " << intervalEnd
+        << ", partition count# " << top.size());
+}
+
+void TSysViewProcessor::PersistPartitionResults(NIceDb::TNiceDb& db) {
+    auto intervalEnd = IntervalEnd + TotalInterval;
+
+    PersistPartitionTopResults<Schema::TopPartitionsOneMinute>(
+        db, PartitionTopMinute, TopPartitionsOneMinute, intervalEnd);
+
+    auto hourEnd = EndOfHourInterval(intervalEnd);
+
+    PersistPartitionTopResults<Schema::TopPartitionsOneHour>(
+        db, PartitionTopHour, TopPartitionsOneHour, hourEnd);
 }
 
 void TSysViewProcessor::ScheduleAggregate() {
@@ -182,18 +218,18 @@ void TSysViewProcessor::ScheduleSendNavigate() {
     Schedule(SendNavigateInterval, new TEvPrivate::TEvSendNavigate);
 }
 
-template <typename TSchema, typename TEntry>
-void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db,
-    TResultMap<TEntry>& metricsMap, TDuration historySize)
-{
+template <typename TSchema, typename TMap>
+void TSysViewProcessor::CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize) {
     auto past = IntervalEnd - historySize;
-    auto key = std::make_pair(past.MicroSeconds(), 0);
+    typename TMap::key_type key;
+    key.first = past.MicroSeconds();
+    key.second = 0;
 
-    auto bound = metricsMap.lower_bound(key);
-    for (auto it = metricsMap.begin(); it != bound; ++it) {
+    auto bound = results.lower_bound(key);
+    for (auto it = results.begin(); it != bound; ++it) {
         db.Table<TSchema>().Key(it->first).Delete();
     }
-    metricsMap.erase(metricsMap.begin(), bound);
+    results.erase(results.begin(), bound);
 }
 
 TInstant TSysViewProcessor::EndOfHourInterval(TInstant intervalEnd) {
@@ -218,8 +254,6 @@ void TSysViewProcessor::ClearIntervalSummaries(NIceDb::TNiceDb& db) {
 }
 
 void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
-    // TODO: efficient delete?
-
     ClearIntervalSummaries(db);
 
     for (const auto& [queryHash, _] : QueryMetrics) {
@@ -233,22 +267,32 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     NodesToRequest.clear();
     NodesInFlight.clear();
 
-    auto clearTop = [&] (NKikimrSysView::EStatsType type, TTop& top) {
+    auto clearQueryTop = [&] (NKikimrSysView::EStatsType type, TQueryTop& top) {
         for (const auto& query : top) {
             db.Table<Schema::IntervalTops>().Key((ui32)type, query.Hash).Delete();
         }
         top.clear();
     };
 
-    clearTop(NKikimrSysView::TOP_DURATION_ONE_MINUTE, ByDurationMinute);
-    clearTop(NKikimrSysView::TOP_READ_BYTES_ONE_MINUTE, ByReadBytesMinute);
-    clearTop(NKikimrSysView::TOP_CPU_TIME_ONE_MINUTE, ByCpuTimeMinute);
-    clearTop(NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE, ByRequestUnitsMinute);
+    auto clearPartitionTop = [&] (NKikimrSysView::EStatsType type, TPartitionTop& top) {
+        for (const auto& partition : top) {
+            db.Table<Schema::IntervalPartitionTops>().Key((ui32)type, partition->GetTabletId()).Delete();
+        }
+        top.clear();
+    };
+
+    clearQueryTop(NKikimrSysView::TOP_DURATION_ONE_MINUTE, ByDurationMinute);
+    clearQueryTop(NKikimrSysView::TOP_READ_BYTES_ONE_MINUTE, ByReadBytesMinute);
+    clearQueryTop(NKikimrSysView::TOP_CPU_TIME_ONE_MINUTE, ByCpuTimeMinute);
+    clearQueryTop(NKikimrSysView::TOP_REQUEST_UNITS_ONE_MINUTE, ByRequestUnitsMinute);
+
+    clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE, PartitionTopMinute);
 
     CurrentStage = COLLECT;
     PersistStage(db);
 
     auto oldHourEnd = EndOfHourInterval(IntervalEnd);
+    auto partitionOldHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
 
     auto now = ctx.Now();
     auto intervalSize = TotalInterval.MicroSeconds();
@@ -257,12 +301,17 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     PersistIntervalEnd(db);
 
     auto newHourEnd = EndOfHourInterval(IntervalEnd);
+    auto partitionNewHourEnd = EndOfHourInterval(IntervalEnd + TotalInterval);
 
     if (oldHourEnd != newHourEnd) {
-        clearTop(NKikimrSysView::TOP_DURATION_ONE_HOUR, ByDurationHour);
-        clearTop(NKikimrSysView::TOP_READ_BYTES_ONE_HOUR, ByReadBytesHour);
-        clearTop(NKikimrSysView::TOP_CPU_TIME_ONE_HOUR, ByCpuTimeHour);
-        clearTop(NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR, ByRequestUnitsHour);
+        clearQueryTop(NKikimrSysView::TOP_DURATION_ONE_HOUR, ByDurationHour);
+        clearQueryTop(NKikimrSysView::TOP_READ_BYTES_ONE_HOUR, ByReadBytesHour);
+        clearQueryTop(NKikimrSysView::TOP_CPU_TIME_ONE_HOUR, ByCpuTimeHour);
+        clearQueryTop(NKikimrSysView::TOP_REQUEST_UNITS_ONE_HOUR, ByRequestUnitsHour);
+    }
+
+    if (partitionOldHourEnd != partitionNewHourEnd) {
+        clearPartitionTop(NKikimrSysView::TOP_PARTITIONS_ONE_HOUR, PartitionTopHour);
     }
 
     SVLOG_D("[" << TabletID() << "] Reset: interval end# " << IntervalEnd);
@@ -270,18 +319,20 @@ void TSysViewProcessor::Reset(NIceDb::TNiceDb& db, const TActorContext& ctx) {
     const auto minuteHistorySize = TotalInterval * ONE_MINUTE_BUCKET_COUNT;
     const auto hourHistorySize = ONE_HOUR_BUCKET_SIZE * ONE_HOUR_BUCKET_COUNT;
 
-    CutHistory<Schema::MetricsOneMinute, TQueryToMetrics>(db, MetricsOneMinute, minuteHistorySize);
-    CutHistory<Schema::MetricsOneHour, TQueryToMetrics>(db, MetricsOneHour, hourHistorySize);
+    CutHistory<Schema::MetricsOneMinute>(db, MetricsOneMinute, minuteHistorySize);
+    CutHistory<Schema::MetricsOneHour>(db, MetricsOneHour, hourHistorySize);
 
-    using TStats = NKikimrSysView::TQueryStats;
-    CutHistory<Schema::TopByDurationOneMinute, TStats>(db, TopByDurationOneMinute, minuteHistorySize);
-    CutHistory<Schema::TopByDurationOneHour, TStats>(db, TopByDurationOneHour, hourHistorySize);
-    CutHistory<Schema::TopByReadBytesOneMinute, TStats>(db, TopByReadBytesOneMinute, minuteHistorySize);
-    CutHistory<Schema::TopByReadBytesOneHour, TStats>(db, TopByReadBytesOneHour, hourHistorySize);
-    CutHistory<Schema::TopByCpuTimeOneMinute, TStats>(db, TopByCpuTimeOneMinute, minuteHistorySize);
-    CutHistory<Schema::TopByCpuTimeOneHour, TStats>(db, TopByCpuTimeOneHour, hourHistorySize);
-    CutHistory<Schema::TopByRequestUnitsOneMinute, TStats>(db, TopByRequestUnitsOneMinute, minuteHistorySize);
-    CutHistory<Schema::TopByRequestUnitsOneHour, TStats>(db, TopByRequestUnitsOneHour, hourHistorySize);
+    CutHistory<Schema::TopByDurationOneMinute>(db, TopByDurationOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopByDurationOneHour>(db, TopByDurationOneHour, hourHistorySize);
+    CutHistory<Schema::TopByReadBytesOneMinute>(db, TopByReadBytesOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopByReadBytesOneHour>(db, TopByReadBytesOneHour, hourHistorySize);
+    CutHistory<Schema::TopByCpuTimeOneMinute>(db, TopByCpuTimeOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopByCpuTimeOneHour>(db, TopByCpuTimeOneHour, hourHistorySize);
+    CutHistory<Schema::TopByRequestUnitsOneMinute>(db, TopByRequestUnitsOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopByRequestUnitsOneHour>(db, TopByRequestUnitsOneHour, hourHistorySize);
+
+    CutHistory<Schema::TopPartitionsOneMinute>(db, TopPartitionsOneMinute, minuteHistorySize);
+    CutHistory<Schema::TopPartitionsOneHour>(db, TopPartitionsOneHour, hourHistorySize);
 }
 
 void TSysViewProcessor::SendRequests() {
@@ -349,14 +400,28 @@ void TSysViewProcessor::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
 
 void TSysViewProcessor::Handle(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
     const auto& record = ev->Get()->Record;
-    auto type = record.GetType();
 
     if (PendingRequests.size() >= PendingRequestsLimit) {
+        auto type = record.GetType();
         if (type == NKikimrSysView::METRICS_ONE_MINUTE || type == NKikimrSysView::METRICS_ONE_HOUR) {
-            ReplyOverloaded<TEvSysView::TEvGetQueryMetricsResponse>(ev);
+            ReplyOverloaded<TEvSysView::TEvGetQueryMetricsResponse>(ev->Sender);
         } else {
-            ReplyOverloaded<TEvSysView::TEvGetQueryStatsResponse>(ev);
+            ReplyOverloaded<TEvSysView::TEvGetQueryStatsResponse>(ev->Sender);
         }
+        return;
+    }
+
+    PendingRequests.push(std::move(ev));
+
+    if (!ProcessInFly) {
+        Send(SelfId(), new TEvPrivate::TEvProcess());
+        ProcessInFly = true;
+    }
+}
+
+void TSysViewProcessor::Handle(TEvSysView::TEvGetTopPartitionsRequest::TPtr& ev) {
+    if (PendingRequests.size() >= PendingRequestsLimit) {
+        ReplyOverloaded<TEvSysView::TEvGetTopPartitionsResponse>(ev->Sender);
         return;
     }
 
@@ -375,7 +440,7 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvProcess::TPtr&) {
         return;
     }
 
-    TEvSysView::TEvGetQueryMetricsRequest::TPtr request = std::move(PendingRequests.front());
+    TVariantRequestPtr request = std::move(PendingRequests.front());
     PendingRequests.pop();
 
     if (!PendingRequests.empty()) {
@@ -383,31 +448,71 @@ void TSysViewProcessor::Handle(TEvPrivate::TEvProcess::TPtr&) {
         ProcessInFly = true;
     }
 
-    const auto& record = request->Get()->Record;
-    auto type = record.GetType();
+    if (auto* req = std::get_if<TEvSysView::TEvGetTopPartitionsRequest::TPtr>(&request)) {
+        Reply<TResultPartitionsMap,
+            TEvSysView::TEvGetTopPartitionsRequest,
+            TEvSysView::TEvGetTopPartitionsResponse>(*req);
 
-    if (type == NKikimrSysView::METRICS_ONE_MINUTE || type == NKikimrSysView::METRICS_ONE_HOUR) {
-        Reply<TQueryToMetrics, TEvSysView::TEvGetQueryMetricsResponse>(request);
+    } else if (auto* req = std::get_if<TEvSysView::TEvGetQueryMetricsRequest::TPtr>(&request)) {
+        const auto& record = (*req)->Get()->Record;
+        auto type = record.GetType();
+
+        if (type == NKikimrSysView::METRICS_ONE_MINUTE || type == NKikimrSysView::METRICS_ONE_HOUR) {
+            Reply<TResultMetricsMap,
+                TEvSysView::TEvGetQueryMetricsRequest,
+                TEvSysView::TEvGetQueryMetricsResponse>(*req);
+        } else {
+            Reply<TResultStatsMap,
+                TEvSysView::TEvGetQueryMetricsRequest,
+                TEvSysView::TEvGetQueryStatsResponse>(*req);
+        }
     } else {
-        Reply<NKikimrSysView::TQueryStats, TEvSysView::TEvGetQueryStatsResponse>(request);
+        Y_FAIL("unknown SVP request");
     }
 }
 
-template <typename TResponse>
-void TSysViewProcessor::ReplyOverloaded(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
-    auto response = MakeHolder<TResponse>();
-    response->Record.SetOverloaded(true);
-    Send(ev->Sender, std::move(response));
+void TSysViewProcessor::EntryToProto(NKikimrSysView::TQueryMetricsEntry& dst, const TQueryToMetrics& src) {
+    dst.MutableMetrics()->CopyFrom(src.Metrics);
+    dst.SetQueryText(src.Text);
 }
 
-template <typename TEntry, typename TResponse>
-void TSysViewProcessor::Reply(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
+void TSysViewProcessor::EntryToProto(NKikimrSysView::TQueryStatsEntry& dst, const NKikimrSysView::TQueryStats& src) {
+    dst.MutableStats()->CopyFrom(src);
+}
+
+void TSysViewProcessor::EntryToProto(NKikimrSysView::TTopPartitionsEntry& dst, const NKikimrSysView::TTopPartitionsInfo& src) {
+    dst.MutableInfo()->CopyFrom(src);
+}
+
+template <typename TResponse>
+void TSysViewProcessor::ReplyOverloaded(const TActorId& sender) {
+    auto response = MakeHolder<TResponse>();
+    response->Record.SetOverloaded(true);
+    Send(sender, std::move(response));
+}
+
+template <typename TMap, typename TRequest, typename TResponse>
+void TSysViewProcessor::Reply(typename TRequest::TPtr& ev) {
     const auto& record = ev->Get()->Record;
     auto response = MakeHolder<TResponse>();
     response->Record.SetLastBatch(true);
 
-    TResultMap<TEntry>* entries = nullptr;
-    if constexpr (std::is_same<TEntry, TQueryToMetrics>::value) {
+    using TEntry = typename TMap::mapped_type;
+    TMap* entries = nullptr;
+    if constexpr (std::is_same<TEntry, NKikimrSysView::TTopPartitionsInfo>::value) {
+        switch (record.GetType()) {
+            case NKikimrSysView::TOP_PARTITIONS_ONE_MINUTE:
+                entries = &TopPartitionsOneMinute;
+                break;
+            case NKikimrSysView::TOP_PARTITIONS_ONE_HOUR:
+                entries = &TopPartitionsOneHour;
+                break;
+            default:
+                SVLOG_CRIT("[" << TabletID() << "] unexpected stats type: " << (size_t)record.GetType());
+                Send(ev->Sender, std::move(response));
+                return;
+        }
+    } else if constexpr (std::is_same<TEntry, TQueryToMetrics>::value) {
         switch (record.GetType()) {
             case NKikimrSysView::METRICS_ONE_MINUTE:
                 entries = &MetricsOneMinute;
@@ -458,7 +563,6 @@ void TSysViewProcessor::Reply(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
     auto from = entries->begin();
     auto to = entries->end();
 
-    TString fromStr("[]");
     if (record.HasFrom()) {
         auto key = std::make_pair(record.GetFrom().GetIntervalEndUs(), record.GetFrom().GetRank());
         if (!record.HasInclusiveFrom() || record.GetInclusiveFrom()) {
@@ -466,14 +570,8 @@ void TSysViewProcessor::Reply(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
         } else {
             from = entries->upper_bound(key);
         }
-        TStringBuilder str;
-        str << "[" << record.GetFrom().GetIntervalEndUs()
-            << ", " << record.GetFrom().GetRank()
-            << ", " << (record.GetInclusiveFrom() ? "inc]" : "exc]");
-        fromStr = str;
     }
 
-    TString toStr("[]");
     if (record.HasTo()) {
         auto key = std::make_pair(record.GetTo().GetIntervalEndUs(), record.GetTo().GetRank());
         if (!record.HasInclusiveTo() || !record.GetInclusiveTo()) {
@@ -481,33 +579,19 @@ void TSysViewProcessor::Reply(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
         } else {
             to = entries->upper_bound(key);
         }
-        TStringBuilder str;
-        str << "[" << record.GetTo().GetIntervalEndUs()
-            << ", " << record.GetTo().GetRank()
-            << ", " << (record.GetInclusiveTo() ? "inc]" : "exc]");
-        toStr = str;
     }
 
-    TString nextStr("[]");
     size_t size = 0;
     size_t count = 0;
     for (auto it = from; it != to; ++it) {
         const auto& key = it->first;
 
         auto& entry = *response->Record.AddEntries();
-
         auto& entryKey = *entry.MutableKey();
         entryKey.SetIntervalEndUs(key.first);
         entryKey.SetRank(key.second);
 
-        if constexpr (std::is_same<TEntry, TQueryToMetrics>::value) {
-            const auto& metrics = it->second;
-            entry.MutableMetrics()->CopyFrom(metrics.Metrics);
-            entry.SetQueryText(metrics.Text);
-        } else {
-            const auto& stats = it->second;
-            entry.MutableStats()->CopyFrom(stats);
-        }
+        EntryToProto(entry, it->second);
 
         size += entry.ByteSizeLong();
         ++count;
@@ -517,19 +601,22 @@ void TSysViewProcessor::Reply(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev) {
             next->SetIntervalEndUs(key.first);
             next->SetRank(key.second + 1);
             response->Record.SetLastBatch(false);
-
-            TStringBuilder str;
-            str << "[" << next->GetIntervalEndUs()
-                << ", " << next->GetRank()
-                << "]";
-            nextStr = str;
             break;
         }
     }
 
-    SVLOG_D("[" << TabletID() << "] Reply to TEvGetQueryMetricsRequest: "
-        << "from# " << fromStr
-        << ", to# " << toStr
+    TString rangeStr, nextStr;
+    google::protobuf::TextFormat::Printer range;
+    range.SetSingleLineMode(true);
+    range.PrintToString(record, &rangeStr);
+    if (response->Record.HasNext()) {
+        google::protobuf::TextFormat::Printer next;
+        next.SetSingleLineMode(true);
+        next.PrintToString(response->Record.GetNext(), &nextStr);
+    }
+
+    SVLOG_D("[" << TabletID() << "] Reply batch: "
+        << "range# " << rangeStr
         << ", rows# " << count
         << ", bytes# " << size
         << ", next# " << nextStr);
@@ -622,7 +709,7 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 str << Endl;
             }
             {
-                auto printTop = [&str] (const TTop& top) {
+                auto printTop = [&str] (const TQueryTop& top) {
                     for (const auto& query : top) {
                         str << "  Hash: " << query.Hash
                             << ", Value: " << query.Value
@@ -675,6 +762,10 @@ bool TSysViewProcessor::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                     << "  Count: " << TopByRequestUnitsOneMinute.size() << Endl << Endl;
                 str << "TopByRequestUnitsOneHour" << Endl
                     << "  Count: " << TopByRequestUnitsOneHour.size() << Endl << Endl;
+                str << "TopPartitionsOneMinute" << Endl
+                    << "  Count: " << TopPartitionsOneMinute.size() << Endl << Endl;
+                str << "TopPartitionsOneHour" << Endl
+                    << "  Count: " << TopPartitionsOneHour.size() << Endl << Endl;
             }
         }
     }

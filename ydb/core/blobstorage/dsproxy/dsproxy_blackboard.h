@@ -81,6 +81,7 @@ struct TBlobState {
     NKikimrProto::EReplyStatus Status = NKikimrProto::UNKNOWN;
     bool IsChanged = false;
     bool IsDone = false;
+    std::vector<std::pair<ui64, ui32>> *ExtraBlockChecks = nullptr;
 
     void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
     void AddNeeded(ui64 begin, ui64 size);
@@ -127,13 +128,16 @@ struct TDiskPutRequest {
     EPutReason Reason;
     bool IsHandoff;
     ui8 BlobIdx;
+    std::vector<std::pair<ui64, ui32>> *ExtraBlockChecks;
 
-    TDiskPutRequest(const TLogoBlobID &id, TString buffer, EPutReason reason, bool isHandoff, ui8 blobIdx = 0)
+    TDiskPutRequest(const TLogoBlobID &id, TString buffer, EPutReason reason, bool isHandoff,
+            std::vector<std::pair<ui64, ui32>> *extraBlockChecks, ui8 blobIdx = 0)
         : Id(id)
         , Buffer(std::move(buffer))
         , Reason(reason)
         , IsHandoff(isHandoff)
         , BlobIdx(blobIdx)
+        , ExtraBlockChecks(extraBlockChecks)
     {}
 };
 
@@ -151,7 +155,8 @@ struct TGroupDiskRequests {
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const TIntervalSet<i32> &intervalSet);
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift, const ui32 size);
     void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
-        TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx = 0);
+        TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
+        ui8 blobIdx = 0);
 };
 
 struct TBlackboard;
@@ -194,7 +199,7 @@ struct TBlackboard {
     {}
 
     void AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize);
-    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData);
+    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData, std::vector<std::pair<ui64, ui32>> *extraBlockChecks);
     void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0);
     void MoveBlobStateToDone(const TLogoBlobID &id);
     void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data);

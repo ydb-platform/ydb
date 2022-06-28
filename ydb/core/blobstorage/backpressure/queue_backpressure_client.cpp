@@ -66,6 +66,8 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
         return "<unknown>";
     }
 
+    bool ExtraBlockChecksSupport = false;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_QUEUE_ACTOR;
@@ -453,7 +455,7 @@ private:
             case EState::READY:
                 QLOG_NOTICE_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
-                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false));
+                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false));
                 Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
                 DrainStatus(status, ctx);
                 break;
@@ -551,7 +553,8 @@ private:
 
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrProto::NOTREADY) {
-            ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true));
+            ExtraBlockChecksSupport = record.GetExtraBlockChecksSupport();
+            ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true, ExtraBlockChecksSupport));
             if (record.HasExpectedMsgId()) {
                 Queue.SetMessageId(NBackpressure::TMessageId(record.GetExpectedMsgId()));
             }
@@ -758,7 +761,7 @@ private:
             << " RemoteVDisk# " << RemoteVDisk
             << " VDiskId# " << VDiskId
             << " IsConnected# " << isConnected);
-        ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected));
+        ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected, isConnected && ExtraBlockChecksSupport));
     }
 
 #define QueueRequestHFunc(TEvType) \

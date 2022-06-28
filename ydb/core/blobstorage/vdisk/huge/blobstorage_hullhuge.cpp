@@ -201,7 +201,8 @@ namespace NKikimr {
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
             ctx.Send(HugeKeeperCtx->SkeletonId,
                     new TEvHullLogHugeBlob(WriteId, Item->LogoBlobId, Item->Ingress, DiskAddr,
-                        Item->IgnoreBlock, Item->SenderId, Item->Cookie, std::move(Item->Result)));
+                        Item->IgnoreBlock, Item->SenderId, Item->Cookie, std::move(Item->Result),
+                        &Item->ExtraBlockChecks));
             LOG_DEBUG(ctx, BS_HULLHUGE,
                       VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                             "Writer: finish: id# %s diskAddr# %s",

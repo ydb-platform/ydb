@@ -890,6 +890,7 @@ struct TEvBlobStorage {
         const ETactic Tactic;
         mutable NLWTrace::TOrbit Orbit;
         ui32 RestartCounter = 0;
+        std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,

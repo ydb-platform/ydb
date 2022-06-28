@@ -16,11 +16,14 @@ namespace NKikimr {
         TVDiskID VDiskId;
         NKikimrBlobStorage::EVDiskQueueId QueueId;
         bool IsConnected;
+        bool ExtraBlockChecksSupport;
 
-        TEvProxyQueueState(const TVDiskID &vDiskId, NKikimrBlobStorage::EVDiskQueueId queueId, bool isConnected)
+        TEvProxyQueueState(const TVDiskID &vDiskId, NKikimrBlobStorage::EVDiskQueueId queueId, bool isConnected,
+                bool extraBlockChecksSupport)
             : VDiskId(vDiskId)
             , QueueId(queueId)
             , IsConnected(isConnected)
+            , ExtraBlockChecksSupport(extraBlockChecksSupport)
         {}
 
         TString ToString() const {
@@ -28,6 +31,7 @@ namespace NKikimr {
             str << "{VDiskId# " << VDiskId.ToString();
             str << " QueueId# " << static_cast<ui32>(QueueId);
             str << " IsConnected# " << (IsConnected ? "true" : "false");
+            str << " ExtraBlockChecksSupport# " << (ExtraBlockChecksSupport ? "true" : "false");
             str << "}";
             return str.Str();
         }

@@ -45,9 +45,10 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
         NWilson::TTraceId TraceId;
         NLWTrace::TOrbit Orbit;
         bool Replied = false;
+        std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
 
         TMultiPutItemInfo(TLogoBlobID id, const TString& buffer, TActorId recipient, ui64 cookie,
-                NWilson::TTraceId traceId, NLWTrace::TOrbit &&orbit)
+                NWilson::TTraceId traceId, NLWTrace::TOrbit &&orbit, std::vector<std::pair<ui64, ui32>> extraBlockChecks)
             : BlobId(id)
             , Buffer(buffer)
             , BufferSize(buffer.size())
@@ -55,6 +56,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
             , Cookie(cookie)
             , TraceId(std::move(traceId))
             , Orbit(std::move(orbit))
+            , ExtraBlockChecks(std::move(extraBlockChecks))
         {}
     };
 
@@ -91,6 +93,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
     bool IsAccelerateScheduled;
 
     const bool IsMultiPutMode;
+
+    bool RequireExtraBlockChecks = false;
 
     void SanityCheck() {
         if (RequestsSent <= MaxSaneRequests) {
@@ -458,11 +462,13 @@ public:
         , IsAccelerated(false)
         , IsAccelerateScheduled(false)
         , IsMultiPutMode(false)
+        , RequireExtraBlockChecks(!ev->ExtraBlockChecks.empty())
     {
         if (ev->Orbit.HasShuttles()) {
             RootCauseTrack.IsOn = true;
         }
-        ItemsInfo.emplace_back(ev->Id, ev->Buffer, source, cookie, NWilson::TTraceId(), std::move(ev->Orbit));
+        ItemsInfo.emplace_back(ev->Id, ev->Buffer, source, cookie, NWilson::TTraceId(), std::move(ev->Orbit),
+            std::move(ev->ExtraBlockChecks));
         LWPROBE(DSProxyBlobPutTactics, ItemsInfo[0].BlobId.TabletID(), Info->GroupID, ItemsInfo[0].BlobId.ToString(),
                 Tactic, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass));
         ReportBytes(ItemsInfo[0].Buffer.capacity() + sizeof(*this));
@@ -507,17 +513,22 @@ public:
     {
         Y_VERIFY_DEBUG(events.size() <= MaxBatchedPutRequests);
         for (auto &ev : events) {
-            Deadline = Max(Deadline, ev->Get()->Deadline);
-            if (ev->Get()->Orbit.HasShuttles()) {
+            auto& msg = *ev->Get();
+            Deadline = Max(Deadline, msg.Deadline);
+            if (msg.Orbit.HasShuttles()) {
                 RootCauseTrack.IsOn = true;
             }
+            if (!msg.ExtraBlockChecks.empty()) {
+                RequireExtraBlockChecks = true;
+            }
             ItemsInfo.emplace_back(
-                ev->Get()->Id,
-                ev->Get()->Buffer,
+                msg.Id,
+                msg.Buffer,
                 ev->Sender,
                 ev->Cookie,
                 std::move(ev->TraceId),
-                std::move(ev->Get()->Orbit)
+                std::move(msg.Orbit),
+                std::move(msg.ExtraBlockChecks)
             );
             LWPROBE(DSProxyBlobPutTactics, ItemsInfo.back().BlobId.TabletID(), Info->GroupID,
                     ItemsInfo.back().BlobId.ToString(), Tactic, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass));

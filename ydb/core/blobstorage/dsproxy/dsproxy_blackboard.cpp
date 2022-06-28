@@ -346,9 +346,11 @@ void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &i
 }
 
 void TGroupDiskRequests::AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
-        TDiskPutRequest::EPutReason putReason, bool isHandoff, ui8 blobIdx) {
+        TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
+        ui8 blobIdx) {
     Y_VERIFY(diskOrderNumber < DiskRequestsForOrderNumber.size());
-    DiskRequestsForOrderNumber[diskOrderNumber].PutsToSend.emplace_back(id, buffer, putReason, isHandoff, blobIdx);
+    DiskRequestsForOrderNumber[diskOrderNumber].PutsToSend.emplace_back(id, buffer, putReason, isHandoff,
+        extraBlockChecks, blobIdx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -378,13 +380,17 @@ void TBlackboard::AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize) {
     }
 }
 
-void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData) {
+void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData,
+        std::vector<std::pair<ui64, ui32>> *extraBlockChecks) {
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() == 0);
     Y_VERIFY(id.BlobSize() != 0);
     TBlobState &state = BlobStates[id];
-    if (!bool(state.Id)) {
+    if (!state.Id) {
         state.Init(id, *Info);
+        state.ExtraBlockChecks = extraBlockChecks;
+    } else {
+        Y_VERIFY(state.ExtraBlockChecks == extraBlockChecks);
     }
     state.AddPartToPut(partIdx, partData);
 }

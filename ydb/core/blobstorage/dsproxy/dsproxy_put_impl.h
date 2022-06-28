@@ -44,7 +44,31 @@ private:
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
-    TBatchedVec<TLogoBlobID> BlobIds;
+    struct TBlobInfo {
+        TLogoBlobID Id;
+        std::vector<std::pair<ui64, ui32>> ExtraBlockChecks;
+
+        void Output(IOutputStream& s) const {
+            s << Id;
+            if (!ExtraBlockChecks.empty()) {
+                s << "{";
+                for (auto it = ExtraBlockChecks.begin(); it != ExtraBlockChecks.end(); ++it) {
+                    if (it != ExtraBlockChecks.begin()) {
+                        s << ", ";
+                    }
+                    s << it->first << ":" << it->second;
+                }
+                s << "}";
+            }
+        }
+
+        TString ToString() const {
+            TStringStream s;
+            Output(s);
+            return s.Str();
+        }
+    };
+    TBatchedVec<TBlobInfo> Blobs;
 
     TStackVec<bool, MaxBatchedPutRequests * TypicalDisksInSubring> ReceivedVPutResponses;
     TStackVec<bool, MaxBatchedPutRequests * TypicalDisksInSubring> ReceivedVMultiPutResponses;
@@ -52,6 +76,8 @@ private:
     bool IsInitialized = false;
 
     TString ErrorDescription;
+
+    friend void ::Out<TBlobInfo>(IOutputStream&, const TBlobInfo&);
 
 public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
@@ -66,10 +92,10 @@ public:
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
         , Tactic(ev->Tactic)
-        , BlobIds({ev->Id})
+        , Blobs({{ev->Id, std::move(ev->ExtraBlockChecks)}})
     {
-        Y_VERIFY(BlobIds.size());
-        Y_VERIFY(BlobIds.size() <= MaxBatchedPutRequests);
+        Y_VERIFY(Blobs.size());
+        Y_VERIFY(Blobs.size() <= MaxBatchedPutRequests);
     }
 
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
@@ -88,13 +114,14 @@ public:
     {
         Y_VERIFY(events.size(), "TEvPut vector is empty");
         for (auto &ev : events) {
-            Y_VERIFY(ev->Get()->HandleClass == putHandleClass);
-            Y_VERIFY(ev->Get()->Tactic == tactic);
-            BlobIds.push_back(ev->Get()->Id);
-            Deadline = Max(Deadline, ev->Get()->Deadline);
+            auto& msg = *ev->Get();
+            Y_VERIFY(msg.HandleClass == putHandleClass);
+            Y_VERIFY(msg.Tactic == tactic);
+            Blobs.push_back({msg.Id, std::move(msg.ExtraBlockChecks)});
+            Deadline = Max(Deadline, msg.Deadline);
         }
-        Y_VERIFY(BlobIds.size());
-        Y_VERIFY(BlobIds.size() <= MaxBatchedPutRequests);
+        Y_VERIFY(Blobs.size());
+        Y_VERIFY(Blobs.size() <= MaxBatchedPutRequests);
     }
 
     NKikimrBlobStorage::EPutHandleClass GetPutHandleClass() const {
@@ -109,17 +136,17 @@ public:
     void GenerateInitialRequests(TLogContext &logCtx, TBatchedVec<TDataPartSet> &partSets,
             TDeque<std::unique_ptr<TVPutEvent>> &outVPuts) {
         Y_UNUSED(logCtx);
-        Y_VERIFY_S(partSets.size() == BlobIds.size(), "partSets.size# " << partSets.size()
-                << " BlobIds.size# " << BlobIds.size());
+        Y_VERIFY_S(partSets.size() == Blobs.size(), "partSets.size# " << partSets.size()
+                << " Blobs.size# " << Blobs.size());
         const ui32 totalParts = Info->Type.TotalPartCount();
-        for (ui64 blobIdx = 0; blobIdx < BlobIds.size(); ++blobIdx) {
-            TLogoBlobID &blobId = BlobIds[blobIdx];
+        for (ui64 blobIdx = 0; blobIdx < Blobs.size(); ++blobIdx) {
+            TBlobInfo& blob = Blobs[blobIdx];
             for (ui32 i = 0; i < totalParts; ++i) {
                 REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(partSets[blobIdx].Parts[i].OwnedString.Data(),
                         partSets[blobIdx].Parts[i].OwnedString.Size());
-                Blackboard.AddPartToPut(blobId, i, partSets[blobIdx].Parts[i].OwnedString);
+                Blackboard.AddPartToPut(blob.Id, i, partSets[blobIdx].Parts[i].OwnedString, &blob.ExtraBlockChecks);
             }
-            Blackboard.MarkBlobReadyToPut(blobId, blobIdx);
+            Blackboard.MarkBlobReadyToPut(blob.Id, blobIdx);
         }
 
         TPutResultVec putResults;
@@ -322,7 +349,7 @@ public:
         }
 
         Step(logCtx, outVPutEvents, outPutResults);
-        Y_VERIFY_S(DoneBlobs == BlobIds.size() || requests > responses,
+        Y_VERIFY_S(DoneBlobs == Blobs.size() || requests > responses,
                 "No put result while"
                 << " Type# " << putType
                 << " DoneBlobs# " << DoneBlobs
@@ -420,13 +447,21 @@ protected:
                 if constexpr (isVPut) {
                     auto vPut = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vDiskId, false, &cookie,
                             Deadline, Blackboard.PutHandleClass);
+                    auto& record = vPut->Record;
+                    if (put.ExtraBlockChecks) {
+                        for (const auto& [tabletId, generation] : *put.ExtraBlockChecks) {
+                            auto *p = record.AddExtraBlockChecks();
+                            p->SetTabletId(tabletId);
+                            p->SetGeneration(generation);
+                        }
+                    }
                     R_LOG_DEBUG_SX(logCtx, "BPP20", "Send put to orderNumber# " << diskOrderNumber << " idx# " << idx
                             << " vPut# " << vPut->ToString());
                     outVPutEvents.push_back(std::move(vPut));
                     ++VPutRequests;
                     ReceivedVPutResponses.push_back(false);
                 } else if constexpr (isVMultiPut) {
-                    outVPutEvents.back()->AddVPut(put.Id, put.Buffer, &cookie);
+                    outVPutEvents.back()->AddVPut(put.Id, put.Buffer, &cookie, put.ExtraBlockChecks);
                 }
 
                 if (put.IsHandoff) {

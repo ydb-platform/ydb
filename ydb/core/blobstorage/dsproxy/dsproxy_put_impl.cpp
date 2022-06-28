@@ -59,15 +59,15 @@ void TPutImpl::PrepareOneReply(NKikimrProto::EReplyStatus status, TLogoBlobID bl
 void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx, TString errorReason,
         TPutResultVec &outPutResults) {
     A_LOG_DEBUG_SX(logCtx, "BPP34", "PrepareReply status# " << status << " errorReason# " << errorReason);
-    for (ui64 idx = 0; idx < BlobIds.size(); ++idx) {
+    for (ui64 idx = 0; idx < Blobs.size(); ++idx) {
         if (IsDone[idx]) {
-            A_LOG_DEBUG_SX(logCtx, "BPP35", "blob# " << BlobIds[idx].ToString() <<
+            A_LOG_DEBUG_SX(logCtx, "BPP35", "blob# " << Blobs[idx].ToString() <<
                 " idx# " << idx << " is sent, skipped");
             continue;
         }
 
-        outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(status, BlobIds[idx], StatusFlags, Info->GroupID,
-                    ApproximateFreeSpaceShare));
+        outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(status, Blobs[idx].Id, StatusFlags,
+            Info->GroupID, ApproximateFreeSpaceShare));
         outPutResults.back().second->ErrorReason = errorReason;
 
         NLog::EPriority priority = GetPriorityForReply(Info->PutErrorMuteChecker, status);
@@ -87,7 +87,7 @@ void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
     for (auto item : finished) {
         auto &[blobId, state] = *item;
         const ui64 idx = state.BlobIdx;
-        Y_VERIFY(blobId == BlobIds[idx], "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
+        Y_VERIFY(blobId == Blobs[idx].Id, "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
             idx, state.ToString().c_str(), Blackboard.ToString().c_str());
         Y_VERIFY(!IsDone[idx]);
         Y_VERIFY(state.Status != NKikimrProto::UNKNOWN);
@@ -126,7 +126,7 @@ TString TPutImpl::DumpFullState() const {
     str << Endl;
     str << " Blackboard# " << Blackboard.ToString();
     str << Endl;
-    str << " BlobIds# " << BlobIds.ToString();
+    str << " Blobs# " << Blobs.ToString();
     str << Endl;
     str << "IsDone# " << IsDone.ToString();
     str << Endl;
@@ -147,12 +147,16 @@ TString TPutImpl::DumpFullState() const {
 }
 
 bool TPutImpl::MarkBlobAsSent(ui64 idx) {
-    Y_VERIFY(idx < BlobIds.size());
+    Y_VERIFY(idx < Blobs.size());
     Y_VERIFY(!IsDone[idx]);
-    Blackboard.MoveBlobStateToDone(BlobIds[idx]);
+    Blackboard.MoveBlobStateToDone(Blobs[idx].Id);
     IsDone[idx] = true;
     DoneBlobs++;
     return true;
 }
 
 }//NKikimr
+
+Y_DECLARE_OUT_SPEC(, NKikimr::TPutImpl::TBlobInfo, stream, value) {
+    value.Output(stream);
+}

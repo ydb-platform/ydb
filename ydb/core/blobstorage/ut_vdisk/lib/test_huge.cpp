@@ -60,7 +60,7 @@ public:
                          new TEvHullWriteHugeBlob(TActorId(), 0, logoBlobId, TIngress(),
                                 TRope(abcdefghkj),
                                 false, NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                                std::make_unique<TEvBlobStorage::TEvVPutResult>()));
+                                std::make_unique<TEvBlobStorage::TEvVPutResult>(), nullptr));
                 State = 1;
                 return false;
             }

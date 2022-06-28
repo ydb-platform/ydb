@@ -836,7 +836,8 @@ namespace NKikimr {
 
         TRope GetItemBuffer(ui64 itemIdx) const;
 
-        void AddVPut(const TLogoBlobID &logoBlobId, const TString &buffer, ui64 *cookie) {
+        void AddVPut(const TLogoBlobID &logoBlobId, const TString &buffer, ui64 *cookie,
+                std::vector<std::pair<ui64, ui32>> *extraBlockChecks) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
@@ -844,6 +845,13 @@ namespace NKikimr {
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);
+            }
+            if (extraBlockChecks) {
+                for (const auto& [tabletId, generation] : *extraBlockChecks) {
+                    auto *p = item->AddExtraBlockChecks();
+                    p->SetTabletId(tabletId);
+                    p->SetGeneration(generation);
+                }
             }
         }
 
@@ -2361,6 +2369,7 @@ namespace NKikimr {
 
         TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status) {
             Record.SetStatus(status);
+            Record.SetExtraBlockChecksSupport(true);
         }
     };
 

@@ -356,6 +356,11 @@ message TEvVInplacePatchResult {
 }
 
 message TEvVPut {
+    message TExtraBlockCheck {
+        optional fixed64 TabletId = 1;
+        optional uint32 Generation = 2;
+    }
+
     optional NKikimrProto.TLogoBlobID BlobID = 1;
     optional bytes Buffer = 2;
 
@@ -368,6 +373,8 @@ message TEvVPut {
     optional EPutHandleClass HandleClass = 9;
     optional TMsgQoS MsgQoS = 10;
     optional TTimestamps Timestamps = 23;
+
+    repeated TExtraBlockCheck ExtraBlockChecks = 11;
 }
 
 message TEvVPutResult {
@@ -393,6 +400,8 @@ message TVMultiPutItem {
 
     optional uint64 FullDataSize = 3;
     optional uint64 Cookie = 4;
+
+    repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 5;
 }
 
 message TEvVMultiPut {
@@ -630,6 +639,7 @@ message TEvVCheckReadinessResult {
     //optional bool SupportProtoWithPayload = 2;
     optional TMessageId ExpectedMsgId = 3;
     optional TVDiskCostSettings CostSettings = 4;
+    optional bool ExtraBlockChecksSupport = 5;
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 

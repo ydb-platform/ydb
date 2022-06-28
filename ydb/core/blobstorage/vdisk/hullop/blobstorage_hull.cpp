@@ -161,7 +161,8 @@ namespace NKikimr {
     THullCheckStatus THull::CheckLogoBlob(
             const TActorContext &ctx,
             const TLogoBlobID &id,
-            bool ignoreBlock)
+            bool ignoreBlock,
+            const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks)
     {
         // check blocked
         if (!ignoreBlock) {
@@ -173,6 +174,18 @@ namespace NKikimr {
                     return {NKikimrProto::BLOCKED, "blocked", 0, false};
                 case TBlocksCache::EStatus::BLOCKED_INFLIGH:
                     return {NKikimrProto::BLOCKED, "blocked", res.Lsn, true};
+            }
+
+            for (const auto& item : extraBlockChecks) {
+                auto res = BlocksCache.IsBlocked(item.GetTabletId(), {item.GetGeneration(), 0});
+                switch (res.Status) {
+                    case TBlocksCache::EStatus::OK:
+                        break;
+                    case TBlocksCache::EStatus::BLOCKED_PERS:
+                        return {NKikimrProto::BLOCKED, "blocked", 0, false};
+                    case TBlocksCache::EStatus::BLOCKED_INFLIGH:
+                        return {NKikimrProto::BLOCKED, "blocked", res.Lsn, true};
+                }
             }
         }
 

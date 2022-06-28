@@ -21,6 +21,7 @@ namespace NKikimr {
         const bool IgnoreBlock;
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
+        NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
 
         TEvHullWriteHugeBlob(const TActorId &senderId,
                              ui64 cookie,
@@ -29,7 +30,8 @@ namespace NKikimr {
                              TRope&& data,
                              bool ignoreBlock,
                              NKikimrBlobStorage::EPutHandleClass handleClass,
-                             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result)
+                             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
+                             NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks)
             : SenderId(senderId)
             , Cookie(cookie)
             , LogoBlobId(logoBlobId)
@@ -38,7 +40,11 @@ namespace NKikimr {
             , IgnoreBlock(ignoreBlock)
             , HandleClass(handleClass)
             , Result(std::move(result))
-        {}
+        {
+            if (extraBlockChecks) {
+                ExtraBlockChecks.Swap(extraBlockChecks);
+            }
+        }
 
         ui64 ByteSize() const {
             return Data.GetSize();
@@ -64,6 +70,7 @@ namespace NKikimr {
         const TActorId OrigClient;
         const ui64 OrigCookie;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
+        NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> ExtraBlockChecks;
 
         TEvHullLogHugeBlob(ui64 writeId,
                            const TLogoBlobID &logoBlobID,
@@ -72,7 +79,8 @@ namespace NKikimr {
                            bool ignoreBlock,
                            const TActorId &origClient,
                            ui64 origCookie,
-                           std::unique_ptr<TEvBlobStorage::TEvVPutResult> result)
+                           std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
+                           NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks)
             : WriteId(writeId)
             , LogoBlobID(logoBlobID)
             , Ingress(ingress)
@@ -81,8 +89,11 @@ namespace NKikimr {
             , OrigClient(origClient)
             , OrigCookie(origCookie)
             , Result(std::move(result))
-
-        {}
+        {
+            if (extraBlockChecks) {
+                ExtraBlockChecks.Swap(extraBlockChecks);
+            }
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////

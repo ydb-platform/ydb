@@ -333,7 +333,8 @@ void TStrategyBase::PreparePutsForPartPlacement(TLogContext &logCtx, TBlobState 
                     << " blob Id# " << partId.ToString());
             Y_VERIFY(state.Parts[record.PartIdx].Data.IsMonolith());
             groupDiskRequests.AddPut(disk.OrderNumber, partId, state.Parts[record.PartIdx].Data.GetMonolith(),
-                    TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx), state.BlobIdx);
+                    TDiskPutRequest::ReasonInitial, info.Type.IsHandoffInSubgroup(record.VDiskIdx),
+                    state.ExtraBlockChecks, state.BlobIdx);
             disk.DiskParts[record.PartIdx].Situation = TBlobState::ESituation::Sent;
         }
     }

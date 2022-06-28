@@ -205,7 +205,8 @@ namespace NKikimr {
         Y_VERIFY(Sessions);
         auto *msg = ev->Get();
         Y_VERIFY(Topology);
-        Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected);
+        Sessions->QueueConnectUpdate(Topology->GetOrderNumber(msg->VDiskId), msg->QueueId, msg->IsConnected,
+            msg->ExtraBlockChecksSupport, *Topology);
         if (msg->IsConnected && (CurrentStateFunc() == &TThis::StateEstablishingSessions ||
                 CurrentStateFunc() == &TThis::StateEstablishingSessionsTimeout)) {
             SwitchToWorkWhenGoodToGo();

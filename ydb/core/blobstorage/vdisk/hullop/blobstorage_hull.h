@@ -92,7 +92,8 @@ namespace NKikimr {
         THullCheckStatus CheckLogoBlob(
                 const TActorContext &ctx,
                 const TLogoBlobID &id,
-                bool ignoreBlock);
+                bool ignoreBlock,
+                const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks);
 
         void AddLogoBlob(
                 const TActorContext &ctx,

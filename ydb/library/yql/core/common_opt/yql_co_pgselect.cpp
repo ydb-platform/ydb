@@ -794,7 +794,7 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
 }
 
 TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::TPtr& from, const TUsedColumns& usedColumns,
-    TVector<TString>& inputAliases, TExprContext& ctx) {
+    TVector<TString>& inputAliases, THashMap<TString, ui32>& memberToInput, TExprContext& ctx) {
     TExprNode::TListType cleanedInputs;
     for (ui32 i = 0; i < from->Tail().ChildrenSize(); ++i) {
         auto list = from->Tail().Child(i)->HeadPtr();
@@ -847,6 +847,7 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
                                     continue;
                                 }
 
+                                memberToInput[x.first] = i;
                                 auto listBuilder = parent.List(index++);
                                 listBuilder.Atom(0, x.first);
                                 listBuilder.Callable(1, "Member")
@@ -935,8 +936,176 @@ TExprNode::TPtr BuildScalarMinus(TPositionHandle pos, const TExprNode::TPtr& lef
         .Build();
 }
 
+TExprNode::TPtr BuildConstPredicateJoin(TPositionHandle pos, TStringBuf joinType, const TExprNode::TPtr& predicate,
+    const TExprNode::TPtr& cartesian, const TExprNode::TPtr& left, const TExprNode::TPtr& right, TExprContext& ctx) {
+    auto coalescedPredicate = ctx.Builder(pos)
+        .Callable("Coalesce")
+            .Callable(0, "FromPg")
+                .Add(0, predicate->TailPtr())
+            .Seal()
+            .Callable(1, "Bool")
+                .Atom(0, "0")
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto main = ctx.Builder(pos)
+        .Callable("If")
+            .Add(0, coalescedPredicate)
+            .Add(1, cartesian)
+            .Callable(2, "EmptyList")
+            .Seal()
+        .Seal()
+        .Build();
+
+    if (joinType == "inner") {
+        return main;
+    } else if (joinType == "left") {
+        return ctx.Builder(pos)
+            .Callable("UnionAll")
+                .Add(0, main)
+                .Add(1, BuildScalarMinus(pos, left, right, coalescedPredicate, ctx))
+            .Seal()
+            .Build();
+    } else if (joinType == "right") {
+        return ctx.Builder(pos)
+            .Callable("UnionAll")
+                .Add(0, main)
+                .Add(1, BuildScalarMinus(pos, right, left, coalescedPredicate, ctx))
+            .Seal()
+            .Build();
+    } else {
+        YQL_ENSURE(joinType == "full");
+        return ctx.Builder(pos)
+            .Callable("UnionAll")
+            .Add(0, main)
+            .Add(1, BuildScalarMinus(pos, left, right, coalescedPredicate, ctx))
+            .Add(2, BuildScalarMinus(pos, right, left , coalescedPredicate, ctx))
+            .Seal()
+            .Build();
+    }
+}
+
+TExprNode::TPtr BuildSingleInputPredicateJoin(TPositionHandle pos, TStringBuf joinType, const TExprNode::TPtr& predicate,
+    const TExprNode::TPtr& left, const TExprNode::TPtr& right, TExprContext& ctx) {
+    auto filteredLeft = ctx.Builder(pos)
+        .Callable("Filter")
+            .Add(0, left)
+            .Lambda(1)
+                .Param("row")
+                .Callable("Coalesce")
+                    .Callable(0, "FromPg")
+                        .Apply(0, predicate)
+                            .With(0, "row")
+                        .Seal()
+                    .Seal()
+                    .Callable(1, "Bool")
+                        .Atom(0, "0")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto main = JoinColumns(pos, filteredLeft, right, nullptr, 0, ctx);
+
+    auto extraLeft = [&]() {
+        return ctx.Builder(pos)
+            .Callable("Filter")
+                .Add(0, left)
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("Not")
+                        .Callable(0, "Coalesce")
+                            .Callable(0, "FromPg")
+                                .Apply(0, predicate)
+                                    .With(0, "row")
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "Bool")
+                                .Atom(0, "0")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    };
+
+    auto extraRight = [&]() {
+        return ctx.Builder(pos)
+            .Callable("If")
+                .Callable(0, "Not")
+                    .Callable(0, "HasItems")
+                        .Add(0, main)
+                    .Seal()
+                .Seal()
+                .Add(1, right)
+                .Callable(2, "EmptyList")
+                .Seal()
+            .Seal()
+            .Build();
+    };
+
+    if (joinType == "inner") {
+        return main;
+    } else if (joinType == "left") {
+        return ctx.Builder(pos)
+            .Callable("UnionAll")
+                .Add(0, main)
+                .Add(1, extraLeft())
+            .Seal()
+            .Build();
+    } else if (joinType == "right") {
+        return ctx.Builder(pos)
+            .Callable("UnionAll")
+                .Add(0, main)
+                .Add(1, extraRight())
+            .Seal()
+            .Build();
+    } else {
+        YQL_ENSURE(joinType == "full");
+        return ctx.Builder(pos)
+            .Callable("UnionAll")
+                .Add(0, main)
+                .Add(1, extraLeft())
+                .Add(2, extraRight())
+            .Seal()
+            .Build();
+    }
+}
+
+bool GatherJoinInputs(const TExprNode& root, const TExprNode& row, ui32 rightInputIndex, const THashMap<TString, ui32>& memberToInput,
+    bool& hasLeftInput, bool& hasRightInput) {
+    hasLeftInput = false;
+    hasRightInput = false;
+    TParentsMap parents;
+    GatherParents(root, parents);
+    auto parentsOverRow = parents.find(&row);
+    if (parentsOverRow == parents.end()) {
+        return true;
+    }
+
+    for (const auto& p : parentsOverRow->second) {
+        if (!p->IsCallable("Member")) {
+            return false;
+        }
+
+        auto name = p->Child(1)->Content();
+        auto inputPtr = memberToInput.FindPtr(name);
+        YQL_ENSURE(inputPtr);
+        if (*inputPtr == rightInputIndex) {
+            hasRightInput = true;
+        } else {
+            hasLeftInput = true;
+        }
+    }
+
+    return true;
+}
+
 std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle pos, const TExprNode::TListType& cleanedInputs,
-    const TExprNode::TPtr& joinOps, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TExprNode::TPtr& joinOps, const THashMap<TString, ui32>& memberToInput, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> groupForIndex;
     TExprNode::TListType joinGroups;
 
@@ -964,54 +1133,28 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
             auto predicate = join->Tail().TailPtr();
             if (!IsDepended(predicate->Tail(), predicate->Head().Head())) {
-                auto coalescedPredicate = ctx.Builder(pos)
-                    .Callable("Coalesce")
-                        .Callable(0, "FromPg")
-                            .Add(0, predicate->TailPtr())
-                        .Seal()
-                        .Callable(1, "Bool")
-                            .Atom(0, "0")
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                auto main = ctx.Builder(pos)
-                    .Callable("If")
-                        .Add(0, coalescedPredicate)
-                        .Add(1, cartesian)
-                        .Callable(2, "EmptyList")
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                if (joinType == "inner") {
-                    current = main;
-                } else if (joinType == "left") {
-                    current = ctx.Builder(pos)
-                        .Callable("UnionAll")
-                            .Add(0, main)
-                            .Add(1, BuildScalarMinus(pos, current, with, coalescedPredicate, ctx))
-                        .Seal()
-                        .Build();
-                } else if (joinType == "right") {
-                    current = ctx.Builder(pos)
-                        .Callable("UnionAll")
-                            .Add(0, main)
-                            .Add(1, BuildScalarMinus(pos, with, current, coalescedPredicate, ctx))
-                        .Seal()
-                        .Build();
-                } else {
-                    YQL_ENSURE(joinType == "full");
-                    current = ctx.Builder(pos)
-                        .Callable("UnionAll")
-                            .Add(0, main)
-                            .Add(1, BuildScalarMinus(pos, current, with, coalescedPredicate, ctx))
-                            .Add(2, BuildScalarMinus(pos, with, current, coalescedPredicate, ctx))
-                        .Seal()
-                        .Build();
-                }
-
+                current = BuildConstPredicateJoin(pos, joinType, predicate, cartesian, current, with, ctx);
                 continue;
+            }
+
+            // collect inputs from predicate
+            bool hasLeftInput;
+            bool hasRightInput;
+            if (GatherJoinInputs(predicate->Tail(), predicate->Head().Head(), inputIndex - 1, memberToInput, hasLeftInput, hasRightInput)) {
+                if (hasLeftInput && !hasRightInput) {
+                    current = BuildSingleInputPredicateJoin(pos, joinType, predicate, current, with, ctx);
+                    continue;
+                } else if (!hasLeftInput && hasRightInput) {
+                    auto reverseJoinType = joinType;
+                    if (reverseJoinType == "left") {
+                        reverseJoinType = "right";
+                    } else if (reverseJoinType == "right") {
+                        reverseJoinType = "left";
+                    }
+
+                    current = BuildSingleInputPredicateJoin(pos, reverseJoinType, predicate, with, current, ctx);
+                    continue;
+                }
             }
 
             auto filteredCartesian = BuildFilter(pos, cartesian, predicate, {}, {}, ctx, optCtx);
@@ -1858,13 +2001,14 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 // fill index of input for each column
                 FillInputIndices(from, finalExtTypes, usedColumns, optCtx);
 
-                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, ctx);
+                THashMap<TString, ui32> memberToInput;
+                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, memberToInput, ctx);
                 if (cleanedInputs.size() == 1) {
                     list = cleanedInputs.front();
                 } else {
                     TVector<ui32> groupForIndex;
                     TExprNode::TListType joinGroups;
-                    std::tie(groupForIndex, joinGroups) = BuildJoinGroups(node->Pos(), cleanedInputs, joinOps, ctx, optCtx);
+                    std::tie(groupForIndex, joinGroups) = BuildJoinGroups(node->Pos(), cleanedInputs, joinOps, memberToInput, ctx, optCtx);
                     if (joinGroups.size() == 1) {
                         list = joinGroups.front();
                     } else {

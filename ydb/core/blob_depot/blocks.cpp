@@ -3,7 +3,7 @@
 
 namespace NKikimr::NBlobDepot {
 
-    class TBlobDepot::TBlocksManager::TImpl {
+    class TBlobDepot::TBlocksManager {
         TBlobDepot *Self;
         THashMap<ui64, ui32> Blocks;
 
@@ -28,8 +28,7 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                TImpl& impl = *Self->BlocksManager.Impl;
-                const auto [it, inserted] = impl.Blocks.emplace(TabletId, BlockedGeneration);
+                const auto [it, inserted] = Self->BlocksManager->Blocks.emplace(TabletId, BlockedGeneration);
                 RaceDetected = !inserted && BlockedGeneration <= it->second;
                 if (RaceDetected) {
                     Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::RACE);
@@ -48,13 +47,13 @@ namespace NKikimr::NBlobDepot {
                 if (RaceDetected) {
                     TActivationContext::Send(Response.release());
                 } else {
-                    Self->BlocksManager.Impl->OnBlockCommitted(TabletId, BlockedGeneration, std::move(Response));
+                    Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, std::move(Response));
                 }
             }
         };
 
     public:
-        TImpl(TBlobDepot *self)
+        TBlocksManager(TBlobDepot *self)
             : Self(self)
         {}
 
@@ -64,14 +63,6 @@ namespace NKikimr::NBlobDepot {
 
         void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, std::unique_ptr<IEventHandle> response) {
             (void)tabletId, (void)blockedGeneration, (void)response;
-        }
-
-        void OnAgentConnect(TAgentInfo& agent) {
-            (void)agent;
-        }
-
-        void OnAgentDisconnect(TAgentInfo& agent) {
-            (void)agent;
         }
 
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
@@ -113,31 +104,24 @@ namespace NKikimr::NBlobDepot {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TBlocksManager wrapper
 
-    TBlobDepot::TBlocksManager::TBlocksManager(TBlobDepot *self)
-        : Impl(std::make_unique<TImpl>(self))
-    {}
-
-    TBlobDepot::TBlocksManager::~TBlocksManager()
-    {}
-
-    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 generation) {
-        Impl->AddBlockOnLoad(tabletId, generation);
+    TBlobDepot::TBlocksManagerPtr TBlobDepot::CreateBlocksManager() {
+        return TBlocksManagerPtr(new TBlocksManager(this));
     }
 
-    void TBlobDepot::TBlocksManager::OnAgentConnect(TAgentInfo& agent) {
-        Impl->OnAgentConnect(agent);
+    void TBlobDepot::TBlocksManagerDeleter::operator ()(TBlocksManager *object) const {
+        delete object;
     }
 
-    void TBlobDepot::TBlocksManager::OnAgentDisconnect(TAgentInfo& agent) {
-        Impl->OnAgentDisconnect(agent);
+    void TBlobDepot::AddBlockOnLoad(ui64 tabletId, ui32 generation) {
+        BlocksManager->AddBlockOnLoad(tabletId, generation);
     }
 
-    void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
-        return Impl->Handle(ev);
+    void TBlobDepot::Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
+        return BlocksManager->Handle(ev);
     }
 
-    void TBlobDepot::TBlocksManager::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
-        return Impl->Handle(ev);
+    void TBlobDepot::Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
+        return BlocksManager->Handle(ev);
     }
 
 } // NKikimr::NBlobDepot

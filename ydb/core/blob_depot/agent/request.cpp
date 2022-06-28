@@ -43,7 +43,7 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "HandleTabletResponse", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA12, "HandleTabletResponse", (VirtualGroupId, VirtualGroupId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()));
         auto *event = ev->Get();
         HandleResponse(reinterpret_cast<TAutoPtr<IEventHandle>&>(ev), event, TabletRequestInFlight);
@@ -58,7 +58,7 @@ namespace NKikimr::NBlobDepot {
 
     template<typename TEvent>
     void TBlobDepotAgent::HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "HandleOtherResponse", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "HandleOtherResponse", (VirtualGroupId, VirtualGroupId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()));
         auto *event = ev->Get();
         HandleResponse(ev, event, OtherRequestInFlight);

@@ -4,7 +4,7 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvApplyConfig", (TabletId, TabletID()), (Msg, ev->Get()->Record));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "TEvApplyConfig", (TabletId, TabletID()), (Msg, ev->Get()->Record));
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;

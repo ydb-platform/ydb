@@ -22,11 +22,12 @@ namespace NKikimr::NBlobDepot {
         TBlobDepot(TActorId tablet, TTabletStorageInfo *info)
             : TActor(&TThis::StateInit)
             , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-            , BlocksManager(this)
+            , BlocksManager(CreateBlocksManager())
+            , GarbageCollectionManager(CreateGarbageCollectionManager())
         {}
 
         void HandlePoison() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "HandlePoison", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "HandlePoison", (TabletId, TabletID()));
             Become(&TThis::StateZombie);
             Send(Tablet(), new TEvents::TEvPoison);
         }
@@ -70,7 +71,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnActivateExecutor(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "OnActivateExecutor", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "OnActivateExecutor", (TabletId, TabletID()));
 
             ExecuteTxInitSchema();
 
@@ -81,14 +82,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnDetach(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "OnDetach", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "OnDetach", (TabletId, TabletID()));
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "OnTabletDead", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "OnTabletDead", (TabletId, TabletID()));
             PassAway();
         }
 
@@ -118,8 +119,10 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
                 hFunc(TEvBlobDepot::TEvResolve, Handle);
 
-                hFunc(TEvBlobDepot::TEvBlock, BlocksManager.Handle);
-                hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager.Handle);
+                hFunc(TEvBlobDepot::TEvBlock, Handle);
+                hFunc(TEvBlobDepot::TEvQueryBlocks, Handle);
+
+                hFunc(TEvBlobDepot::TEvCollectGarbage, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
@@ -157,30 +160,43 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blocks
 
-        class TBlocksManager {
-            class TImpl;
-            std::unique_ptr<TImpl> Impl;
+        class TBlocksManager;
+        struct TBlocksManagerDeleter { void operator ()(TBlocksManager *object) const; };
+        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, TBlocksManagerDeleter>;
+        TBlocksManagerPtr BlocksManager;
 
-        public:
-            TBlocksManager(TBlobDepot *self);
-            ~TBlocksManager();
-            void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration);
-            void OnAgentConnect(TAgentInfo& agent);
-            void OnAgentDisconnect(TAgentInfo& agent);
+        TBlocksManagerPtr CreateBlocksManager();
 
-            void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
-            void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
-        };
+        void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration);
 
-        TBlocksManager BlocksManager;
+        void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
+        void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Garbage collection
+
+        class TGarbageCollectionManager;
+        struct TGarbageCollectionManagerDeleter { void operator ()(TGarbageCollectionManager *object) const; };
+        using TGarbageCollectionManagerPtr = std::unique_ptr<TGarbageCollectionManager, TGarbageCollectionManagerDeleter>;
+        TGarbageCollectionManagerPtr GarbageCollectionManager;
+
+        TGarbageCollectionManagerPtr CreateGarbageCollectionManager();
+
+        void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Key operation
 
-        struct TKeyValue {
+        struct TDataValue {
+            TString Meta;
+            TCGSI Location;
+            ui32 Checksum;
+            ui64 TotalDataLen;
+            EKeepState KeepState;
+            bool Public;
         };
 
-        std::map<TString, TKeyValue> Data;
+        std::map<TString, TDataValue> Data;
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
 

@@ -54,27 +54,36 @@ namespace NKikimr::NBlobDepot {
         }
 
         void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
+            if (auto *p = std::get_if<TEvBlobDepot::TEvQueryBlocksResult*>(&response)) {
+                Handle(std::move(context), (*p)->Record);
+            } else if (std::holds_alternative<TTabletDisconnected>(response)) {
+                IssueOnUpdateBlock(context, false);
+            } else {
+                Y_FAIL("unexpected response type");
+            }
+        }
+
+        void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
+            auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
+            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA01, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
+                (Msg, msg), (TabletId, queryBlockContext.TabletId));
+            auto& block = Blocks[queryBlockContext.TabletId];
+            Y_VERIFY(msg.BlockedGenerationsSize() == 1);
+            const ui32 newBlockedGeneration = msg.GetBlockedGenerations(0);
+            Y_VERIFY(block.BlockedGeneration <= newBlockedGeneration);
+            block.BlockedGeneration = newBlockedGeneration;
+            block.ExpirationTimestamp = queryBlockContext.Timestamp + TDuration::MilliSeconds(msg.GetTimeToLiveMs());
+            IssueOnUpdateBlock(context, true);
+        }
+
+        void IssueOnUpdateBlock(const TRequestContext::TPtr& context, bool success) {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
             auto& block = Blocks[queryBlockContext.TabletId];
-
-            if (auto *p = std::get_if<TEvBlobDepot::TEvQueryBlocksResult*>(&response)) {
-                auto& msg = **p;
-                STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC08, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
-                    (Msg, msg.Record), (TabletId, queryBlockContext.TabletId));
-                Y_VERIFY(msg.Record.BlockedGenerationsSize() == 1);
-                const ui32 newBlockedGeneration = msg.Record.GetBlockedGenerations(0);
-                Y_VERIFY(block.BlockedGeneration <= newBlockedGeneration);
-                block.BlockedGeneration = newBlockedGeneration;
-                block.ExpirationTimestamp = queryBlockContext.Timestamp + TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs());
-            } else {
-                Y_VERIFY(std::holds_alternative<TTabletDisconnected>(response));
-            }
-
             TIntrusiveList<TQuery, TPendingBlockChecks> temp;
             temp.Swap(block.PendingBlockChecks);
             for (auto it = temp.begin(); it != temp.end(); ) {
                 const auto current = it++;
-                current->OnUpdateBlock(!std::holds_alternative<TTabletDisconnected>(response));
+                current->OnUpdateBlock(success);
             }
         }
 

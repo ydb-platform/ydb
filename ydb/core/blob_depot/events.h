@@ -19,6 +19,8 @@ namespace NKikimr {
             EvPushNotify,
             EvQueryBlocks,
             EvQueryBlocksResult,
+            EvCollectGarbage,
+            EvCollectGarbageResult,
             EvCommitBlobSeq,
             EvCommitBlobSeqResult,
             EvResolve,
@@ -59,6 +61,8 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotify);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvQueryBlocks);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvQueryBlocksResult);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvCollectGarbage);
+        BLOBDEPOT_EVENT_PB(EvCollectGarbageResult, Status, ErrorReason);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvCommitBlobSeq);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvCommitBlobSeqResult);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvResolve);
@@ -72,6 +76,7 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvAllocateIds> { using Type = TEvAllocateIdsResult; };
         template<> struct TResponseFor<TEvBlock> { using Type = TEvBlockResult; };
         template<> struct TResponseFor<TEvQueryBlocks> { using Type = TEvQueryBlocksResult; };
+        template<> struct TResponseFor<TEvCollectGarbage> { using Type = TEvCollectGarbageResult; };
         template<> struct TResponseFor<TEvCommitBlobSeq> { using Type = TEvCommitBlobSeqResult; };
         template<> struct TResponseFor<TEvResolve> { using Type = TEvResolveResult; };
 

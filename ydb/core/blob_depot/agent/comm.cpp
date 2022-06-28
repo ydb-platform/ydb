@@ -3,12 +3,12 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDAC01, "TEvClientConnected", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "TEvClientConnected", (VirtualGroupId, VirtualGroupId),
             (Msg, ev->Get()->ToString()));
     }
 
     void TBlobDepotAgent::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC02, "TEvClientDestroyed", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA03, "TEvClientDestroyed", (VirtualGroupId, VirtualGroupId),
             (Msg, ev->Get()->ToString()));
         PipeId = {};
         OnDisconnect();
@@ -24,12 +24,12 @@ namespace NKikimr::NBlobDepot {
         IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::Log);
     }
 
-    void TBlobDepotAgent::HandleRegisterAgentResult(TRequestContext::TPtr /*context*/, TEvBlobDepot::TEvRegisterAgentResult& msg) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC06, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
-            (Msg, msg.Record));
+    void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA04, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
+            (Msg, msg));
         Registered = true;
-        BlobDepotGeneration = msg.Record.GetGeneration();
-        for (const auto& kind : msg.Record.GetChannelKinds()) {
+        BlobDepotGeneration = msg.GetGeneration();
+        for (const auto& kind : msg.GetChannelKinds()) {
             auto& v = ChannelKinds[kind.GetChannelKind()];
             v.ChannelGroups.clear();
             v.IndexToChannel.clear();
@@ -46,7 +46,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::E channelKind) {
         auto& kind = ChannelKinds[channelKind];
 
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC09, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA05, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
             (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(channelKind)),
             (IdAllocInFlight, kind.IdAllocInFlight), (IdQ.size, kind.IdQ.size()),
             (PreallocatedIdCount, kind.PreallocatedIdCount), (PipeId, PipeId));
@@ -58,20 +58,20 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepotAgent::HandleAllocateIdsResult(TRequestContext::TPtr context, TEvBlobDepot::TEvAllocateIdsResult& msg) {
+    void TBlobDepotAgent::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg) {
         auto& allocateIdsContext = context->Obtain<TAllocateIdsContext>();
         auto& kind = ChannelKinds[allocateIdsContext.ChannelKind];
 
         Y_VERIFY(kind.IdAllocInFlight);
         kind.IdAllocInFlight = false;
 
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC07, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
-            (Msg, msg.Record));
-        Y_VERIFY(msg.Record.GetChannelKind() == allocateIdsContext.ChannelKind);
-        Y_VERIFY(msg.Record.GetGeneration() == BlobDepotGeneration);
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA06, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
+            (Msg, msg));
+        Y_VERIFY(msg.GetChannelKind() == allocateIdsContext.ChannelKind);
+        Y_VERIFY(msg.GetGeneration() == BlobDepotGeneration);
 
-        if (msg.Record.HasRangeBegin() && msg.Record.HasRangeEnd()) {
-            kind.IdQ.push_back({BlobDepotGeneration, msg.Record.GetRangeBegin(), msg.Record.GetRangeEnd()});
+        if (msg.HasRangeBegin() && msg.HasRangeEnd()) {
+            kind.IdQ.push_back({BlobDepotGeneration, msg.GetRangeBegin(), msg.GetRangeEnd()});
 
             // FIXME notify waiting requests about new ids
 
@@ -83,7 +83,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::OnDisconnect() {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDAC04, "OnDisconnect", (VirtualGroupId, VirtualGroupId));
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA07, "OnDisconnect", (VirtualGroupId, VirtualGroupId));
 
         for (auto& [id, sender] : std::exchange(TabletRequestInFlight, {})) {
             sender->OnRequestComplete(id, TTabletDisconnected{});
@@ -97,14 +97,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
-        std::visit([&](auto&& item) {
-            using T = std::decay_t<decltype(item)>;
-            if constexpr (std::is_same_v<T, TEvBlobDepot::TEvRegisterAgentResult*>) {
-                HandleRegisterAgentResult(std::move(context), *item);
-            } else if constexpr (std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>) {
-                HandleAllocateIdsResult(std::move(context), *item);
+        std::visit([&](auto&& response) {
+            using T = std::decay_t<decltype(response)>;
+            if constexpr (std::is_same_v<T, TEvBlobDepot::TEvRegisterAgentResult*>
+                    || std::is_same_v<T, TEvBlobDepot::TEvAllocateIdsResult*>) {
+                Handle(std::move(context), response->Record);
             } else if constexpr (!std::is_same_v<T, TTabletDisconnected>) {
-                Y_FAIL();
+                Y_FAIL_S("unexpected response received Type# " << TypeName<T>());
             }
         }, response);
     }
@@ -123,7 +122,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextRequestId++;
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDAC03, "Issue", (VirtualGroupId, VirtualGroupId), (Id, id), (Msg, ev->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA08, "Issue", (VirtualGroupId, VirtualGroupId), (Id, id), (Msg, ev->ToString()));
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id);
         RegisterRequest(id, sender, std::move(context), true);
     }

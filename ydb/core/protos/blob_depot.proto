@@ -86,6 +86,23 @@ message TEvQueryBlocksResult {
     optional uint32 TimeToLiveMs = 2; // TTL starting since sending TEvQueryBlocks at agent
 }
 
+message TEvCollectGarbage {
+    repeated NKikimrProto.TLogoBlobID Keep = 1;
+    repeated NKikimrProto.TLogoBlobID DoNotKeep = 2;
+    optional uint64 TabletId = 3;
+    optional uint32 Generation = 4;
+    optional uint32 PerGenerationCounter = 5;
+    optional uint32 Channel = 6;
+    optional bool Hard = 7;
+    optional uint32 CollectGeneration = 8;
+    optional uint64 CollectStep = 9;
+}
+
+message TEvCollectGarbageResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+}
+
 message TEvCommitBlobSeq {
     message TItem {
         optional TBlobLocator BlobLocator = 1; // GroupId and Generation are for validation purposes

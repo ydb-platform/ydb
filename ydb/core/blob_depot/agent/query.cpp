@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
             PendingEventQ.emplace_back(ev.Release());
         } else {
             auto *query = CreateQuery(ev);
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "new query", (VirtualGroupId, VirtualGroupId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "new query", (VirtualGroupId, VirtualGroupId),
                 (QueryId, query->GetQueryId()), (Name, query->GetName()));
             if (!TabletId) {
                 query->EndWithError(NKikimrProto::ERROR, "group is in error state");
@@ -30,7 +30,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA02, "query ends with error", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA10, "query ends with error", (VirtualGroupId, Agent.VirtualGroupId),
             (QueryId, QueryId), (Status, status), (ErrorReason, errorReason));
 
         std::unique_ptr<IEventBase> response;
@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA02, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA11, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
             (QueryId, QueryId), (Response, response->ToString()));
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         delete this;

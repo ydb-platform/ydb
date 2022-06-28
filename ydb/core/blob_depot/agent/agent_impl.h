@@ -48,6 +48,7 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvAllocateIdsResult*,
             TEvBlobDepot::TEvBlockResult*,
             TEvBlobDepot::TEvQueryBlocksResult*,
+            TEvBlobDepot::TEvCollectGarbageResult*,
             TEvBlobDepot::TEvCommitBlobSeqResult*,
             TEvBlobDepot::TEvResolveResult*,
 
@@ -159,12 +160,13 @@ namespace NKikimr::NBlobDepot {
         void OnDisconnect();
 
         void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override;
-        void HandleRegisterAgentResult(TRequestContext::TPtr context, TEvBlobDepot::TEvRegisterAgentResult& msg);
-        void HandleAllocateIdsResult(TRequestContext::TPtr context, TEvBlobDepot::TEvAllocateIdsResult& msg);
+        void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvRegisterAgentResult& msg);
+        void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg);
 
         void Issue(NKikimrBlobDepot::TEvBlock msg, TRequestSender *sender, TRequestContext::TPtr context);
         void Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
         void Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
+        void Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context);
 
         void Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
 

@@ -3,7 +3,7 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDR01, "TEvResolve", (TabletId, TabletID()), (Msg, ev->Get()->ToString()),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "TEvResolve", (TabletId, TabletID()), (Msg, ev->Get()->ToString()),
             (Sender, ev->Sender), (Recipient, ev->Recipient), (Cookie, ev->Cookie));
 
         // collect records if needed
@@ -15,7 +15,7 @@ namespace NKikimr::NBlobDepot {
                 response->Record.SetStatus(NKikimrProto::OVERRUN);
             }
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDR02, "sending TEvResolveResult", (TabletId, TabletID()), (Msg, response->Record));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "sending TEvResolveResult", (TabletId, TabletID()), (Msg, response->Record));
 
             auto handle = std::make_unique<IEventHandle>(ev->Sender, SelfId(), response.release(), 0, ev->Cookie);
             if (ev->InterconnectSession) {

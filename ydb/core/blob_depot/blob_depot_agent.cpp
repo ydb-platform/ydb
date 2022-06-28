@@ -3,13 +3,13 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BD01, "TEvServerConnected", (TabletId, TabletID()), (Msg, ev->Get()->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (TabletId, TabletID()), (Msg, ev->Get()->ToString()));
         const auto [it, inserted] = PipeServerToNode.emplace(ev->Get()->ServerId, std::nullopt);
         Y_VERIFY(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BD02, "TEvServerDisconnected", (TabletId, TabletID()), (Msg, ev->Get()->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (TabletId, TabletID()), (Msg, ev->Get()->ToString()));
         const auto it = PipeServerToNode.find(ev->Get()->ServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         if (const auto& nodeId = it->second) {
@@ -25,8 +25,7 @@ namespace NKikimr::NBlobDepot {
         PipeServerToNode.erase(it);
     }
 
-    void TBlobDepot::OnAgentDisconnect(TAgentInfo& agent) {
-        BlocksManager.OnAgentDisconnect(agent);
+    void TBlobDepot::OnAgentDisconnect(TAgentInfo& /*agent*/) {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
@@ -36,7 +35,7 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(!it->second || *it->second == nodeId);
         it->second = nodeId;
         auto& agent = Agents[nodeId];
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BD03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, ev->Get()->Record),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, ev->Get()->Record),
             (NodeId, nodeId), (PipeServerId, it->first));
         agent.ConnectedAgent = it->first;
         agent.ConnectedNodeId = nodeId;
@@ -59,12 +58,11 @@ namespace NKikimr::NBlobDepot {
         TActivationContext::Send(response.release());
     }
 
-    void TBlobDepot::OnAgentConnect(TAgentInfo& agent) {
-        BlocksManager.OnAgentConnect(agent);
+    void TBlobDepot::OnAgentConnect(TAgentInfo& /*agent*/) {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BD04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
 
         auto [response, record] = TEvBlobDepot::MakeResponseFor(ev, SelfId(), ev->Get()->Record.GetChannelKind(),

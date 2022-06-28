@@ -29,6 +29,18 @@
 # FILE_INCLUDE - include all file data into licenses text file
 # =======================
 
+KEEP     COPYRIGHT_SERVICE_LABEL 3782c9399af9718cb85783105b7784ae
+BELONGS ya.make
+    License text:
+           Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
+        Software Foundation, Inc.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        INSTALL [4:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 3e6f7a2dce9d6519bf3f2a9eae7e5b6b
 BELONGS ya.make
     License text:
@@ -110,18 +122,6 @@ BELONGS ya.make
         lib/nghttp2_submit.c [4:4]
         lib/nghttp2_version.c [4:4]
 
-KEEP     COPYRIGHT_SERVICE_LABEL 71499817b900aaf04d853fdffdc657b0
-BELONGS ya.make
-    License text:
-           Copyright (C) 1994-1996, 1999-2002, 2004-2016 Free Software
-        Foundation, Inc.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        INSTALL [4:5]
-
 KEEP     COPYRIGHT_SERVICE_LABEL 7e2d5f433f62e38814cee9a67e1c3cd0
 BELONGS ya.make
     License text:
@@ -192,6 +192,19 @@ BELONGS ya.make
         lib/nghttp2_map.c [4:5]
         lib/nghttp2_map.h [4:5]
 
+KEEP     COPYRIGHT_SERVICE_LABEL bc9503ec48dfbffaed72fd039643c15f
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 nghttp3 contributors
+         * Copyright (c) 2022 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp2_extpri.c [4:5]
+        lib/nghttp2_extpri.h [4:5]
+
 KEEP     COPYRIGHT_SERVICE_LABEL c812bfe524d8bc74ad8cf40a45902020
 BELONGS ya.make
     License text:
@@ -204,3 +217,16 @@ BELONGS ya.make
     Files with this license:
         lib/nghttp2_map.c [4:5]
         lib/nghttp2_map.h [4:5]
+
+KEEP     COPYRIGHT_SERVICE_LABEL d89f9db9c9889910b44184610d7947e1
+BELONGS ya.make
+    License text:
+         * Copyright (c) 2022 nghttp3 contributors
+         * Copyright (c) 2022 nghttp2 contributors
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        lib/nghttp2_extpri.c [4:5]
+        lib/nghttp2_extpri.h [4:5]

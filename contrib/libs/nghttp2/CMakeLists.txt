@@ -23,6 +23,7 @@ target_sources(contrib-libs-nghttp2 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_buf.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_callbacks.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_debug.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_extpri.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_frame.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/nghttp2_hd_huffman.c

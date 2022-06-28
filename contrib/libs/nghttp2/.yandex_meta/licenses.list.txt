@@ -1,6 +1,6 @@
 ====================COPYRIGHT====================
-   Copyright (C) 1994-1996, 1999-2002, 2004-2016 Free Software
-Foundation, Inc.
+   Copyright (C) 1994-1996, 1999-2002, 2004-2017, 2020-2021 Free
+Software Foundation, Inc.
 
 
 ====================COPYRIGHT====================
@@ -34,6 +34,11 @@ Foundation, Inc.
 ====================COPYRIGHT====================
  * Copyright (c) 2017 ngtcp2 contributors
  * Copyright (c) 2012 nghttp2 contributors
+
+
+====================COPYRIGHT====================
+ * Copyright (c) 2022 nghttp3 contributors
+ * Copyright (c) 2022 nghttp2 contributors
 
 
 ====================COPYRIGHT====================

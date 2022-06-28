@@ -33,7 +33,6 @@ target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/counting_events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/decommit_3dc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/defrag.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/donor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/encryption.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/gc_quorum_3dc.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/incorrect_queries.cpp

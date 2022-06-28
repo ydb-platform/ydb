@@ -1456,6 +1456,7 @@ private:
             }
             settings.EndOfQueryCommit = sqlAutoCommit;
             settings.Flags.insert("DisableEmitStartsWith");
+            settings.Flags.insert("FlexibleTypes");
 
             ui16 actualSyntaxVersion = 0;
             astRes = NSQLTranslation::SqlToYql(query, settings, nullptr, &actualSyntaxVersion);

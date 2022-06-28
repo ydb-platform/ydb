@@ -38,7 +38,7 @@ class TBlobStorageGroupMultiCollectRequest
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
         const TEvBlobStorage::TEvCollectGarbageResult &res = *ev->Get();
-        R_LOG_ERROR_S("BPMC1", "Handle TEvCollectGarbageResult"
+        A_LOG_LOG_S(true, PriorityForStatusResult(res.Status), "BPMC1", "Handle TEvCollectGarbageResult"
             << " status# " << NKikimrProto::EReplyStatus_Name(res.Status)
             << " FlagRequestsInFlight# " << FlagRequestsInFlight
             << " CollectRequestsInFlight " << CollectRequestsInFlight);

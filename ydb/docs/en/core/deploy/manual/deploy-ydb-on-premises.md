@@ -1,10 +1,10 @@
-## Deploy {{ ydb-short-name }} On-Premises {# deploy-on-premise}
+# Deploy {{ ydb-short-name }} On-Premises
 
 This document describes how to deploy a multi-tenant {{ ydb-short-name }} cluster on multiple servers.
 
-## Before you start {# before-start}
+## Before you start {#before-start}
 
-### Prerequisites {# requirements}
+### Prerequisites {#requirements}
 
 Make sure you have SSH access to all servers. This is necessary to install the binaries, configuration files and run the {{ ydb-short-name }} executable file.
 Your network configuration must allow TCP connections on the following ports (by default):
@@ -22,7 +22,7 @@ Select the servers and disks to be used for data storage:
 
 Run each static node on a separate server.
 
-## Create a system user and a group to run {{ ydb-short-name }} under {# create-user}
+## Create a system user and a group to run {{ ydb-short-name }} under {#create-user}
 
 On each server where {{ ydb-short-name }} will be running, execute:
 
@@ -37,7 +37,7 @@ To make sure the {{ ydb-short-name }} server has access to block store disks to 
 sudo usermod -aG disk ydb
 ```
 
-## Prepare and format disks on each server {# prepare-disks}
+## Prepare and format disks on each server {#prepare-disks}
 
 {% note warning %}
 
@@ -151,7 +151,7 @@ Prepare the configuration files, depending on the network communication mode cho
 
 {% endlist %}
 
-## Start static nodes {# start-storage}
+## Start static nodes {#start-storage}
 
 {% list tabs %}
 
@@ -203,7 +203,7 @@ Prepare the configuration files, depending on the network communication mode cho
 
 {% endlist %}
 
-## Initialize the cluster {# initialize-cluster}
+## Initialize the cluster {#initialize-cluster}
 
 On one of the cluster nodes, run the commands:
 
@@ -215,7 +215,7 @@ echo $?
 
 The command execution code should be zero.
 
-## Creating the first database {# create-fist-db}
+## Creating the first database {#create-fist-db}
 
 To work with tables, you need to create at least one database and run a process serving this database (a dynamic node).
 
@@ -224,7 +224,7 @@ export LD_LIBRARY_PATH=/opt/ydb/lib
 /opt/ydb/bin/ydbd admin database /Root/testdb create ssd:1
 ```
 
-## Start the DB dynamic node {# start-dynnode}
+## Start the DB dynamic node {#start-dynnode}
 
 {% list tabs %}
 
@@ -287,7 +287,7 @@ export LD_LIBRARY_PATH=/opt/ydb/lib
 
 {% endlist %}
 
-## Test the created database {# try-first-db}
+## Test the created database {#try-first-db}
 
 1. Install the YDB CLI as described in [Installing the YDB CLI](../../reference/ydb-cli/install.md)
 2. Create a `test_table`:

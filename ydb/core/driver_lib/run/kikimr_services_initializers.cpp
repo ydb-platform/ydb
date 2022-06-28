@@ -173,6 +173,7 @@
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
 #include <library/cpp/actors/util/affinity.h>
+#include <library/cpp/actors/wilson/wilson_uploader.h>
 
 #include <library/cpp/logger/global/global.h>
 #include <library/cpp/logger/log.h>
@@ -790,6 +791,12 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             //IC_Load::InitializeService(setup, appData, maxNode);
         }
+    }
+
+    if (Config.HasTracingConfig()) {
+        const auto& tracing = Config.GetTracingConfig();
+        setup->LocalServices.emplace_back(NWilson::MakeWilsonUploaderId(), TActorSetupCmd(NWilson::CreateWilsonUploader(
+            tracing.GetHost(), tracing.GetPort(), tracing.GetRootCA()), TMailboxType::ReadAsFilled, appData->BatchPoolId));
     }
 }
 

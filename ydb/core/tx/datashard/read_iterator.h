@@ -38,6 +38,11 @@ struct TReadIteratorId {
     }
 };
 
+struct TReadIteratorSession {
+    TReadIteratorSession() = default;
+    THashSet<TReadIteratorId, TReadIteratorId::THash> Iterators;
+};
+
 struct TReadIteratorState {
     enum class EState {
         Init,
@@ -58,7 +63,9 @@ struct TReadIteratorState {
     };
 
 public:
-    TReadIteratorState() = default;
+    explicit TReadIteratorState(const TActorId& sessionId)
+        : SessionId(sessionId)
+    {}
 
     bool IsExhausted() const { return State == EState::Exhausted; }
 
@@ -142,7 +149,9 @@ public:
     TQuota Quota;
     TVector<TQuota> ReadStats; // each index corresponds to SeqNo-1
 
+    TActorId SessionId;
     ui64 SeqNo = 0;
+    ui64 LastAckSeqNo = 0;
     ui32 FirstUnprocessedQuery = 0;
     TString LastProcessedKey = 0;
 };

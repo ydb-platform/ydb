@@ -42,3 +42,11 @@
         name##_.push_back(value); \
         return static_cast<TSelf&>(*this); \
     }
+
+#define FLUENT_SETTING_OPTIONAL_VECTOR(type, name) \
+    TMaybe<TVector<type>> name##_; \
+    TSelf& Append##name(const type& value) { \
+        if (!name##_) name##_ = TVector<type>{}; \
+        name##_->push_back(value); \
+        return static_cast<TSelf&>(*this); \
+    }

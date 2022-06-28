@@ -59,13 +59,11 @@ namespace NActors {
             TEventHolder& event = Pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev) + (Params.UseExtendedTraceFmt ? sizeof(TEventDescr2) : sizeof(TEventDescr1));
             OutputQueueSize += bytes;
-            event.Span.emplace(static_cast<ui8>(15) /*verbosity*/, NWilson::ERelation::ChildOf,
-                NWilson::TTraceId(ev.TraceId), now, "InInterconnectQueue");
-            if (*event.Span) {
-                auto& span = *event.Span;
-                span
+            if (auto span = NWilson::TSpan(static_cast<ui8>(15) /*verbosity*/, NWilson::ERelation::ChildOf,
+                    NWilson::TTraceId(ev.TraceId), now, "InInterconnectQueue")) {
+                event.Span = std::move(span
                     .Attribute("OutputQueueItems", static_cast<i64>(Queue.size()))
-                    .Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
+                    .Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize)));
             }
             return std::make_pair(bytes, &event);
         }

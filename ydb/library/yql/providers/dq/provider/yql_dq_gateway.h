@@ -79,7 +79,7 @@ public:
     }
 };
 
-TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port, int threads);
+TIntrusivePtr<IDqGateway> CreateDqGateway(const TString& host, int port);
 TIntrusivePtr<IDqGateway> CreateDqGateway(const NProto::TDqConfig& config);
 
 } // namespace NYql

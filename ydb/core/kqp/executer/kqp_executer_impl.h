@@ -381,6 +381,14 @@ protected:
             auto& channelDesc = *inputDesc.AddChannels();
             static_cast<TDerived*>(this)->FillChannelDesc(channelDesc, TasksGraph.GetChannel(channel));
         }
+
+        if (input.Transform) {
+            auto* transformProto = inputDesc.MutableTransform();
+            transformProto->SetType(input.Transform->Type);
+            transformProto->SetInputType(input.Transform->InputType);
+            transformProto->SetOutputType(input.Transform->OutputType);
+            *transformProto->MutableSettings() = input.Transform->Settings;
+        }
     }
 
     void FillOutputDesc(NYql::NDqProto::TTaskOutput& outputDesc, const TTaskOutput& output) {

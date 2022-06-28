@@ -37,6 +37,10 @@ private:
             HFunc(NKikimr::NGRpcService::TEvPQAddReadRuleRequest, Handle);
             HFunc(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest, Handle);
             HFunc(NKikimr::NGRpcService::TEvPQDescribeTopicRequest, Handle);
+            HFunc(NKikimr::NGRpcService::TEvDropTopicRequest, Handle);
+            HFunc(NKikimr::NGRpcService::TEvCreateTopicRequest, Handle);
+            HFunc(NKikimr::NGRpcService::TEvAlterTopicRequest, Handle);
+            HFunc(NKikimr::NGRpcService::TEvDescribeTopicRequest, Handle);
 
             hFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
         }
@@ -49,6 +53,10 @@ private:
     void Handle(NKikimr::NGRpcService::TEvPQAddReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcService::TEvPQRemoveReadRuleRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NKikimr::NGRpcService::TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NGRpcService::TEvDropTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NGRpcService::TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NGRpcService::TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NKikimr::NGRpcService::TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev);
 

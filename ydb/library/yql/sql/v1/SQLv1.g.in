@@ -238,7 +238,7 @@ literal_value:
   | EMPTY_ACTION
 ;
 
-bind_parameter: DOLLAR an_id_or_type;
+bind_parameter: DOLLAR (an_id_or_type | TRUE | FALSE);
 opt_bind_parameter: bind_parameter QUESTION?;
 
 bind_parameter_list: bind_parameter (COMMA bind_parameter)*;

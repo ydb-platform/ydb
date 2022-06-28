@@ -66,6 +66,7 @@ message TYtClusterConfig {
     optional bool Default = 3 [default = false]; // Default cluster
     optional string YTToken = 4; // token to use at YT servers
     optional string YTName = 5; // YT cluster name
+    optional bool EnabledYtQlQueries = 6 [default = true]; // Allow to handle YtQl queries
 
     repeated TAttr Settings = 100;
 }
@@ -409,6 +410,10 @@ message TDqGatewayConfig {
     repeated string DefaultAnalyzeQueryForUsers = 4;
 
     repeated TAttr DefaultSettings = 102;
+
+    optional uint32 WithHiddenPercentage = 5 [default = 0];
+    repeated TDefaultAutoByHourPercentage WithHiddenByHour = 6;
+    repeated string NoWithHiddenForUsers = 7;
 }
 
 /////////////////////////////// Yql Core ///////////////////////////////

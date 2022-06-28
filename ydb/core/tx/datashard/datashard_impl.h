@@ -1531,6 +1531,11 @@ public:
 
     bool CheckChangesQueueOverflow() const;
 
+    void DeleteReadIterator(const TReadIteratorId& readId);
+    void DeleteReadIterator(TReadIteratorsMap::iterator it);
+    void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
+    void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
+
 private:
     ///
     class TLoanReturnTracker {
@@ -2248,6 +2253,7 @@ private:
     TReplicatedTableState* EnsureReplicatedTable(const TPathId& pathId);
 
     TReadIteratorsMap ReadIterators;
+    THashMap<TActorId, TReadIteratorSession> ReadIteratorSessions;
 
 protected:
     // Redundant init state required by flat executor implementation
@@ -2407,6 +2413,10 @@ protected:
             HFuncTraced(TEvDataShard::TEvReadColumnsRequest, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerConnected, Handle);
             HFuncTraced(TEvTabletPipe::TEvServerDisconnected, Handle);
+            HFuncTraced(TEvDataShard::TEvRead, Handle);
+            HFuncTraced(TEvDataShard::TEvReadContinue, Handle);
+            HFuncTraced(TEvDataShard::TEvReadAck, Handle);
+            HFuncTraced(TEvDataShard::TEvReadCancel, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::StateWorkAsFollower unhandled event type: " << ev->GetTypeRewrite()
@@ -2599,5 +2609,12 @@ void SetStatusError(T &rec,
     issue->set_severity(severity);
     issue->set_message(msg);
 }
+
+void SendViaSession(const TActorId& sessionId,
+                    const TActorId& target,
+                    const TActorId& src,
+                    IEventBase* event,
+                    ui32 flags = 0,
+                    ui64 cookie = 0);
 
 }}

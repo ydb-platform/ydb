@@ -191,19 +191,7 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
         topicPath.SkipPrefix("/");
         Database = databaseBuf;
     }
-/*
-   if (!isRootDb) {
-        for (auto& rootDb: rootDatabases) {
-            TStringBuf rootBuf(rootDb);
-            if (!databaseBuf.empty() && IsPathPrefix(databaseBuf, rootBuf) || IsPathPrefix(topicPath, rootBuf)) {
-                isRootDb = true;
-                root = rootDb;
-                topicPath.SkipPrefix(rootBuf);
-                break;
-            }
-        }
-    }
-*/
+
     OriginalTopic = topicPath;
     if (!isRootDb && Database.Defined()) {
         // Topic with valid non-root database. Parse as 'modern' name. Primary path is path in database.
@@ -239,9 +227,8 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
 TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& ydbDatabaseRootOverride
 ) {
-
+    Y_VERIFY_S(Valid, Reason.c_str());
     auto* res = new TTopicNameConverter(FstClass, PQPrefix, pqTabletConfig, ydbDatabaseRootOverride);
-    res->InternalName = InternalName;
     return TTopicConverterPtr(res);
 }
 
@@ -510,6 +497,14 @@ TString TDiscoveryConverter::GetPrimaryPath() const {
     CHECK_VALID_AND_RETURN(PrimaryPath);
 }
 
+TString TDiscoveryConverter::GetOriginalPath() const {
+    if (!OriginalPath.empty()) {
+        return OriginalPath;
+    } else {
+        return GetPrimaryPath();
+    }
+}
+
 const TMaybe<TString>& TDiscoveryConverter::GetSecondaryPath(const TString& database) {
     if (!database.empty()) {
         SetDatabase(database);
@@ -536,13 +531,6 @@ void TDiscoveryConverter::SetDatabase(const TString& database) {
     }
     FullModernPath = SecondaryPath.GetRef();
     PendingDatabase = false;
-}
-
-TString TDiscoveryConverter::GetInternalName() const {
-    if (InternalName.empty()) {
-        return GetPrimaryPath();
-    }
-    CHECK_VALID_AND_RETURN(InternalName);
 }
 
 const TString& TDiscoveryConverter::GetOriginalTopic() const {
@@ -655,6 +643,7 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
         Y_VERIFY(!res->Dc.empty());
         Y_VERIFY(!res->FullLegacyName.empty());
         res->Account = *res->Account_;
+        res->InternalName = res->FullLegacyName;
     }
     return res;
 }
@@ -702,6 +691,7 @@ void TTopicNameConverter::BuildInternals(const NKikimrPQ::TPQTabletConfig& confi
         ClientsideName = path;
         ShortClientsideName = path;
         FullModernName = path;
+        InternalName = PrimaryPath;
     } else {
         SetDatabase(*Database);
         Y_VERIFY(!FullLegacyName.empty());
@@ -716,6 +706,7 @@ void TTopicNameConverter::BuildInternals(const NKikimrPQ::TPQTabletConfig& confi
             LegacyProducer = Account;
         }
         Y_VERIFY(!FullModernName.empty());
+        InternalName = FullLegacyName;
     }
 }
 
@@ -730,15 +721,13 @@ const TString& TTopicNameConverter::GetModernName() const {
 TString TTopicNameConverter::GetShortLegacyName() const {
     CHECK_VALID_AND_RETURN(ShortLegacyName);
 }
-//
-//TString TTopicNameConverter::GetFullLegacyName() const {
-//    if (FstClass) {
-//        return TString("");
-//    }
-//    CHECK_VALID_AND_RETURN(FullLegacyName);
-//}
+
+TString TTopicNameConverter::GetInternalName() const {
+    CHECK_VALID_AND_RETURN(InternalName);
+}
 
 const TString& TTopicNameConverter::GetClientsideName() const {
+    Y_VERIFY_S(Valid, Reason.c_str());
     Y_VERIFY(!ClientsideName.empty());
     return ClientsideName;
 }
@@ -789,6 +778,7 @@ TString TTopicNameConverter::GetTopicForSrcIdHash() const {
 }
 
 TString TTopicNameConverter::GetSecondaryPath() const {
+    Y_VERIFY_S(Valid, Reason.c_str());
     if (!FstClass) {
         Y_VERIFY(SecondaryPath.Defined());
         return *SecondaryPath;
@@ -829,7 +819,7 @@ TTopicsToConverter TTopicsListController::GetReadTopicsList(
                                              << "': " << converter->GetReason();
             return;
         }
-        result.Topics[converter->GetInternalName()] = converter;
+        result.Topics[converter->GetOriginalPath()] = converter;
         result.ClientTopics[topic].push_back(converter);
     };
 

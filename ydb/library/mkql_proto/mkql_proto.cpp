@@ -5,6 +5,7 @@
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <ydb/library/yql/public/decimal/yql_decimal.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 
@@ -267,6 +268,9 @@ void ExportTypeToProtoImpl(TType* type, Ydb::Type& res) {
             auto pgType = static_cast<TPgType*>(type);
             auto t = res.mutable_pg_type();
             t->set_oid(pgType->GetTypeId());
+            t->set_typmod(-1);
+            const i32 typlen = NYql::NPg::LookupType(pgType->GetTypeId()).TypeLen;
+            t->set_typlen(typlen);
             break;
         }
 
@@ -456,12 +460,12 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, NK
 
         case TType::EKind::Pg: {
             if (!value) {
-                // do not set Text and Bytes fields
+                // do not set Bytes field
                 return;
             }
             auto pgType = static_cast<TPgType*>(type);
-            auto textValue = NYql::NCommon::PgValueToString(value, pgType->GetTypeId());
-            res.SetText(textValue);
+            auto binaryValue = NYql::NCommon::PgValueToNativeBinary(value, pgType->GetTypeId());
+            res.SetBytes(binaryValue);
             break;
         }
 
@@ -563,7 +567,7 @@ void ExportValueToProtoImpl(TType* type, const NUdf::TUnboxedValuePod& value, Yd
 
         case TType::EKind::Pg: {
             if (!value) {
-                // do not set Text and Bytes fields
+                // do not set Text field
                 return;
             }
             auto pgType = static_cast<TPgType*>(type);
@@ -1261,11 +1265,10 @@ NUdf::TUnboxedValue TProtoImporter::ImportValueFromProto(const TType* type, cons
 
         case TType::EKind::Pg: {
             auto pgType = static_cast<const TPgType*>(type);
-            MKQL_ENSURE(!value.HasBytes(), "Pg binary format is not supported");
-            if (!value.HasText() && !value.HasBytes()) {
+            if (!value.HasBytes()) {
                 return NUdf::TUnboxedValue();
             }
-            return NYql::NCommon::PgValueFromString(value.GetText(), pgType->GetTypeId());
+            return NYql::NCommon::PgValueFromNativeBinary(value.GetBytes(), pgType->GetTypeId());
         }
 
         case TType::EKind::Optional: {

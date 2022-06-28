@@ -832,59 +832,67 @@ namespace NActors {
                 Now() + ResolveTimeout);
 
             // extract address from the result
-            NInterconnect::TAddress address;
+            std::vector<NInterconnect::TAddress> addresses;
             if (!ev) {
                 ResolveTimedOut = true;
                 if (auto peerNodeInfo = GetPeerNodeInfo(); peerNodeInfo && peerNodeInfo->Address) {
-                    address = {peerNodeInfo->Address, peerNodeInfo->Port};
+                    addresses.emplace_back(peerNodeInfo->Address, peerNodeInfo->Port);
                 } else {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve timed out and no static address defined", true);
                 }
             } else if (auto *p = ev->CastAsLocal<TEvLocalNodeInfo>()) {
-                if (!p->Address) {
+                addresses = std::move(p->Addresses);
+                if (addresses.empty()) {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
                 }
-                address = {*p->Address};
             } else if (auto *p = ev->CastAsLocal<TEvInterconnect::TEvNodeAddress>()) {
                 const auto& r = p->Record;
                 if (!r.HasAddress() || !r.HasPort()) {
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: no address returned", true);
                 }
-                address = {r.GetAddress(), static_cast<ui16>(r.GetPort())};
+                addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
             } else {
                 Y_VERIFY(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
                 Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain, true);
             }
 
-            // create the socket with matching address family
-            Socket = NInterconnect::TStreamSocket::Make(address.GetFamily());
-            if (*Socket == -1) {
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "System error: failed to create socket");
-            }
+            for (const NInterconnect::TAddress& address : addresses) {
+                // create the socket with matching address family
+                int err = 0;
+                Socket = NInterconnect::TStreamSocket::Make(address.GetFamily(), &err);
+                if (err == EAFNOSUPPORT) {
+                    Socket.Reset();
+                    continue;
+                } else if (*Socket == -1) {
+                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "System error: failed to create socket");
+                }
 
-            // extract peer address
-            if (updatePeerAddr) {
-                PeerAddr = address.ToString();
-            }
+                // extract peer address
+                if (updatePeerAddr) {
+                    PeerAddr = address.ToString();
+                }
 
-            // set up socket parameters
-            SetupSocket();
+                // set up socket parameters
+                SetupSocket();
 
-            // start connecting
-            switch (int err = -Socket->Connect(address)) {
-                case 0: // successful connection
-                    break;
-
-                case EINPROGRESS: // connection in progress
+                // start connecting
+                err = -Socket->Connect(address);
+                if (err == EINPROGRESS) {
                     WaitPoller(false, true, "WaitConnect");
                     err = Socket->GetConnectStatus();
-                    if (err) {
-                        Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, Sprintf("Connection failed: %s", strerror(err)), true);
-                    }
-                    break;
+                }
 
-                default:
+                // check if connection succeeded
+                if (err) {
+                    Socket.Reset();
+                    PollerToken.Reset();
+                } else {
                     break;
+                }
+            }
+
+            if (!Socket) {
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Couldn't connect to any resolved address", true);
             }
 
             auto it = LastLogNotice.find(PeerNodeId);

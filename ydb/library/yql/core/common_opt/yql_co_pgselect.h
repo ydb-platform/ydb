@@ -7,7 +7,7 @@ namespace NYql {
 TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
 TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx,
-    ui32 subLinkId, const TExprNode::TPtr& outer);
+    ui32 subLinkId, const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases);
 
 TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx);

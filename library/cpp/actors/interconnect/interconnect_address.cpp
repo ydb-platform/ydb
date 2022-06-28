@@ -70,6 +70,18 @@ namespace NInterconnect {
         : TAddress(addr.data(), port)
     {}
 
+    TAddress::TAddress(in_addr addr, ui16 port) {
+        Addr.Ipv4.sin_family = AF_INET;
+        Addr.Ipv4.sin_port = htons(port);
+        Addr.Ipv4.sin_addr = addr;
+    }
+
+    TAddress::TAddress(in6_addr addr, ui16 port) {
+        Addr.Ipv6.sin6_family = AF_INET6;
+        Addr.Ipv6.sin6_port = htons(port);
+        Addr.Ipv6.sin6_addr = addr;
+    }
+
     TString TAddress::GetAddress() const {
         const void *src;
         socklen_t size;

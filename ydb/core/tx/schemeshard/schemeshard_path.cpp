@@ -332,12 +332,12 @@ const TPath::TChecker& TPath::TChecker::IsOlapStore(TPath::TChecker::EStatus sta
     return *this;
 }
 
-const TPath::TChecker& TPath::TChecker::IsOlapTable(TPath::TChecker::EStatus status) const {
+const TPath::TChecker& TPath::TChecker::IsColumnTable(TPath::TChecker::EStatus status) const {
     if (Failed) {
         return *this;
     }
 
-    if (Path.Base()->IsOlapTable()) {
+    if (Path.Base()->IsColumnTable()) {
         return *this;
     }
 

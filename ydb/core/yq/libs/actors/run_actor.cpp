@@ -858,44 +858,47 @@ private:
         LOG_D("Executer: " << ExecuterId << ", Controller: " << ControlId << ", ResultIdActor: " << resultId << ", CheckPointCoordinatior " << CheckpointCoordinatorId);
     }
 
-    void SetupDqSettings(::google::protobuf::RepeatedPtrField< ::NYql::TAttr>& dqSettings) const {
-        auto attr = dqSettings.Add();
-        attr->SetName("MaxTasksPerStage");
-        attr->SetValue("500");
+    void SetupDqSettings(NYql::TDqGatewayConfig& dqGatewaysConfig) const {
+        ::google::protobuf::RepeatedPtrField<::NYql::TAttr>& dqSettings = *dqGatewaysConfig.MutableDefaultSettings();
 
-        attr = dqSettings.Add();
-        attr->SetName("MaxTasksPerOperation");
-        attr->SetValue(ToString(MaxTasksPerOperation));
+        // Copy settings from config
+        // They are stronger than settings from this function.
+        dqSettings = Params.GatewaysConfig.GetDq().GetDefaultSettings();
 
-        attr = dqSettings.Add();
-        attr->SetName("EnableComputeActor");
-        attr->SetValue("1");
+        THashSet<TString> settingsInConfig;
+        for (const auto& s : dqSettings) {
+            settingsInConfig.insert(s.GetName());
+        }
 
-        TString queryTimeoutMs = (Params.QueryType == YandexQuery::QueryContent::STREAMING) ? "0" : ToString(TDuration::Days(7).MilliSeconds());
-        attr = dqSettings.Add();
-        attr->SetName("_TableTimeout");
-        attr->SetValue(queryTimeoutMs);
+        auto apply = [&](const TString& name, const TString& value) {
+            if (!settingsInConfig.contains(name)) {
+                auto* attr = dqSettings.Add();
+                attr->SetName(name);
+                attr->SetValue(value);
+            }
+        };
 
-        attr = dqSettings.Add();
-        attr->SetName("_EnablePrecompute");
-        attr->SetValue("0"); // TODO: enable together with removing TEmptyGateway
-
-        attr = dqSettings.Add();
-        attr->SetName("_LiteralTimeout");
-        attr->SetValue(queryTimeoutMs);
+        apply("MaxTasksPerStage", "500");
+        apply("MaxTasksPerOperation", ToString(MaxTasksPerOperation));
+        apply("EnableComputeActor", "1");
+        apply("ComputeActorType", "async");
+        apply("_EnablePrecompute", "0"); // TODO: enable together with removing TEmptyGateway
 
         switch (Params.QueryType) {
-        case YandexQuery::QueryContent::STREAMING:
+        case YandexQuery::QueryContent::STREAMING: {
             // - turn on check that query has one graph.
-            attr = dqSettings.Add();
-            attr->SetName("_OneGraphPerQuery");
-            attr->SetValue("1");
+            apply("_OneGraphPerQuery", "1");
+            apply("_TableTimeout", "0");
+            apply("_LiteralTimeout", "0");
             break;
-        case YandexQuery::QueryContent_QueryType_ANALYTICS:
-            attr = dqSettings.Add();
-            attr->SetName("AnalyticsHopping");
-            attr->SetValue("1");
+        }
+        case YandexQuery::QueryContent::ANALYTICS: {
+            apply("AnalyticsHopping", "1");
+            const TString queryTimeoutMs = ToString(TDuration::Days(7).MilliSeconds());
+            apply("_TableTimeout", queryTimeoutMs);
+            apply("_LiteralTimeout", queryTimeoutMs);
             break;
+        }
         default:
             Y_UNREACHABLE();
         }
@@ -1068,7 +1071,7 @@ private:
     bool CompileQuery() {
         LOG_D("Compiling query ...");
         NYql::TGatewaysConfig gatewaysConfig;
-        SetupDqSettings(*gatewaysConfig.MutableDq()->MutableDefaultSettings());
+        SetupDqSettings(*gatewaysConfig.MutableDq());
         // the main idea of having Params.GatewaysConfig is to copy clusters only
         // but in this case we have to copy S3 provider limits
         *gatewaysConfig.MutableS3() = Params.GatewaysConfig.GetS3();

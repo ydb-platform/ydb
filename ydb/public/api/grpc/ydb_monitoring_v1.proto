@@ -8,4 +8,6 @@ import "ydb/public/api/protos/ydb_monitoring.proto";
 service MonitoringService {
     // Gets the health status of the database.
     rpc SelfCheck(Monitoring.SelfCheckRequest) returns (Monitoring.SelfCheckResponse);
+    // Checks current node health
+    rpc NodeCheck(Monitoring.NodeCheckRequest) returns (Monitoring.NodeCheckResponse);
 }

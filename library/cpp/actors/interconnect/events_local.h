@@ -232,7 +232,7 @@ namespace NActors {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvLocalNodeInfo, "Network: TEvLocalNodeInfo")
 
         ui32 NodeId;
-        NAddr::IRemoteAddrPtr Address;
+        std::vector<NInterconnect::TAddress> Addresses;
     };
 
     struct TEvBunchOfEventsToDestroy : TEventLocal<TEvBunchOfEventsToDestroy, ui32(ENetwork::BunchOfEventsToDestroy)> {

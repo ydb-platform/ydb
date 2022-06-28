@@ -101,4 +101,10 @@ IGraphTransformer::TStatus LocalUnorderedOptimize(TExprNode::TPtr input, TExprNo
     const std::function<bool(const TExprNode*)>& stopTraverse, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
 
 std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lambda, TExprContext& ctx, TTypeAnnotationContext* typeCtx);
+
+TStringBuf GetEmptyCollectionName(ETypeAnnotationKind kind);
+inline TStringBuf GetEmptyCollectionName(const TTypeAnnotationNode* type) {
+    return GetEmptyCollectionName(type->GetKind());
+}
+
 }

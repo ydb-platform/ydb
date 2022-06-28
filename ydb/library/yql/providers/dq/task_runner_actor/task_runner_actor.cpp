@@ -45,11 +45,13 @@ public:
         ITaskRunnerActor::ICallbacks* parent,
         const NTaskRunnerProxy::IProxyFactory::TPtr& factory,
         const ITaskRunnerInvoker::TPtr& invoker,
-        const TString& traceId,
+        const TTxId& txId,
+        ui64 taskId,
         TWorkerRuntimeData* runtimeData)
         : TActor<TTaskRunnerActor>(&TTaskRunnerActor::Handler)
         , Parent(parent)
-        , TraceId(traceId)
+        , TraceId(TStringBuilder() << txId)
+        , TaskId(taskId)
         , Factory(factory)
         , Invoker(invoker)
         , Local(Invoker->IsLocal())
@@ -58,6 +60,7 @@ public:
         , RuntimeData(runtimeData)
         , ClusterName(RuntimeData ? RuntimeData->ClusterName : "local")
     {
+        Y_UNUSED(TaskId);
         if (RuntimeData) {
             RuntimeData->OnWorkerStart(TraceId);
         }
@@ -560,7 +563,8 @@ private:
 
     NActors::TActorId ParentId;
     ITaskRunnerActor::ICallbacks* Parent;
-    TString TraceId;
+    const TString TraceId;
+    const ui64 TaskId;
     NTaskRunnerProxy::IProxyFactory::TPtr Factory;
     NTaskRunnerProxy::ITaskRunner::TPtr TaskRunner;
     ITaskRunnerInvoker::TPtr Invoker;
@@ -586,11 +590,12 @@ public:
 
     std::tuple<ITaskRunnerActor*, NActors::IActor*> Create(
         ITaskRunnerActor::ICallbacks* parent,
-        const TString& traceId,
+        const TTxId& txId,
+        ui64 taskId,
         THashSet<ui32>&&,
         THolder<NYql::NDq::TDqMemoryQuota>&&) override
     {
-        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, InvokerFactory->Create(), traceId, RuntimeData);
+        auto* actor = new TTaskRunnerActor(parent, ProxyFactory, InvokerFactory->Create(), txId, taskId, RuntimeData);
         return std::make_tuple(
             static_cast<ITaskRunnerActor*>(actor),
             static_cast<NActors::IActor*>(actor)

@@ -385,42 +385,26 @@ IGraphTransformer::TStatus TryConvertToImpl(TExprContext& ctx, TExprNode::TPtr& 
             auto pos = from->FindItem(newField->GetName());
             TExprNode::TPtr field;
             if (!pos) {
-                if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::Null) {
+                switch (newField->GetItemType()->GetKind()) {
+                case ETypeAnnotationKind::Null:
+                case ETypeAnnotationKind::EmptyList:
+                case ETypeAnnotationKind::EmptyDict:
+                case ETypeAnnotationKind::Void:
                     field = ctx.Builder(node->Pos())
-                        .Callable("Null")
-                        .Seal()
-                    .Build();
-                } else if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::Optional) {
+                        .Callable(ToString(newField->GetItemType()->GetKind())).Seal()
+                        .Build();
+                    break;
+                case ETypeAnnotationKind::Optional:
+                case ETypeAnnotationKind::List:
+                case ETypeAnnotationKind::Dict:
+                case ETypeAnnotationKind::Pg:
                     field = ctx.Builder(node->Pos())
-                        .Callable("Nothing")
+                        .Callable(GetEmptyCollectionName(newField->GetItemType()->GetKind()))
                             .Add(0, ExpandType(node->Pos(), *newField->GetItemType(), ctx))
                         .Seal()
                         .Build();
-                } else if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::List) {
-                    field = ctx.Builder(node->Pos())
-                        .Callable("List")
-                            .Add(0, ExpandType(node->Pos(), *newField->GetItemType(), ctx))
-                        .Seal()
-                        .Build();
-                } else if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::Dict) {
-                    field = ctx.Builder(node->Pos())
-                        .Callable("Dict")
-                            .Add(0, ExpandType(node->Pos(), *newField->GetItemType(), ctx))
-                        .Seal()
-                        .Build();
-                } else if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::EmptyList) {
-                    field = ctx.Builder(node->Pos())
-                        .Callable("EmptyList").Seal()
-                        .Build();
-                } else if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::EmptyDict) {
-                    field = ctx.Builder(node->Pos())
-                        .Callable("EmptyDict").Seal()
-                        .Build();
-                } else if (newField->GetItemType()->GetKind() == ETypeAnnotationKind::Void) {
-                    field = ctx.Builder(node->Pos())
-                        .Callable("Void").Seal()
-                        .Build();
-                } else {
+                    break;
+                default:
                     if (raiseIssues) {
                         ctx.AddError(TIssue(node->Pos(ctx), TStringBuilder() <<
                                 "Can't find  '" << newField->GetName() << ": " << *newField->GetItemType() << "' in " << sourceType));

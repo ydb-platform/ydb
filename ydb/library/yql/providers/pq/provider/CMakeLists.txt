@@ -37,7 +37,7 @@ target_link_libraries(providers-pq-provider PUBLIC
   providers-dq-expr_nodes
   providers-dq-interface
   dq-provider-exec
-  pq-cm_client-interface
+  providers-pq-cm_client
   providers-pq-common
   providers-pq-expr_nodes
   providers-pq-proto

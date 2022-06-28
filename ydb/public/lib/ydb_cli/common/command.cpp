@@ -373,8 +373,8 @@ void TCommandWithPath::AdjustPath(const TClientCommand::TConfig& config) {
     NConsoleClient::AdjustPath(Path, config);
 }
 
-void TCommandWithStreamName::ParseStreamName(const TClientCommand::TConfig &config, const size_t argPos) {
-    StreamName = config.ParseResult->GetFreeArgs()[argPos];
+void TCommandWithTopicName::ParseTopicName(const TClientCommand::TConfig &config, const size_t argPos) {
+    TopicName = config.ParseResult->GetFreeArgs()[argPos];
 }
 
 }

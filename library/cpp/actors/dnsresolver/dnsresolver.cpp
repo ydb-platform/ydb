@@ -264,7 +264,7 @@ namespace NDnsResolver {
             auto reqCtx = MakeIntrusive<TRequestContext>(
                 this, TActivationContext::ActorSystem(), SelfId(), ev->Sender, ev->Cookie, ERequestType::GetHostByName);
             PushCallback([this, reqCtx = std::move(reqCtx), name = std::move(msg->Name), family = msg->Family] () mutable {
-                StartGetHostByName(std::move(reqCtx), std::move(name), family);
+                StartGetAddrInfo(std::move(reqCtx), std::move(name), family);
             });
         }
 
@@ -273,18 +273,28 @@ namespace NDnsResolver {
             auto reqCtx = MakeIntrusive<TRequestContext>(
                 this, TActivationContext::ActorSystem(), SelfId(), ev->Sender, ev->Cookie, ERequestType::GetAddr);
             PushCallback([this, reqCtx = std::move(reqCtx), name = std::move(msg->Name), family = msg->Family] () mutable {
-                StartGetHostByName(std::move(reqCtx), std::move(name), family);
+                StartGetAddrInfo(std::move(reqCtx), std::move(name), family);
             });
         }
 
-        void StartGetHostByName(TRequestContext::TPtr reqCtx, TString name, int family) noexcept {
+        void StartGetAddrInfo(TRequestContext::TPtr reqCtx, TString name, int family) noexcept {
             reqCtx->Ref();
-            ares_gethostbyname(AresChannel, name.c_str(), family,
-                &TThis::GetHostByNameAresCallback, reqCtx.Get());
+            ares_addrinfo_hints hints;
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_flags = ARES_AI_NOSORT;
+            hints.ai_family = family;
+            ares_getaddrinfo(AresChannel, name.c_str(), nullptr, &hints, &TThis::GetAddrInfoAresCallback, reqCtx.Get());
         }
 
     private:
-        static void GetHostByNameAresCallback(void* arg, int status, int timeouts, struct hostent* info) {
+        static void GetAddrInfoAresCallback(void* arg, int status, int timeouts, ares_addrinfo *result) {
+            struct TDeleter {
+                void operator ()(ares_addrinfo *ptr) const {
+                    ares_freeaddrinfo(ptr);
+                }
+            };
+            std::unique_ptr<ares_addrinfo, TDeleter> ptr(result);
+
             Y_UNUSED(timeouts);
             TRequestContext::TPtr reqCtx(static_cast<TRequestContext*>(arg));
             reqCtx->UnRef();
@@ -297,22 +307,20 @@ namespace NDnsResolver {
             switch (reqCtx->Type) {
                 case ERequestType::GetHostByName: {
                     auto result = MakeHolder<TEvDns::TEvGetHostByNameResult>();
-                    if (status == 0) {
-                        switch (info->h_addrtype) {
-                            case AF_INET: {
-                                for (int i = 0; info->h_addr_list[i] != nullptr; ++i) {
-                                    result->AddrsV4.emplace_back(*(struct in_addr*)(info->h_addr_list[i]));
+                    if (status == ARES_SUCCESS) {
+                        for (auto *node = ptr->nodes; node; node = node->ai_next) {
+                            switch (node->ai_family) {
+                                case AF_INET: {
+                                    result->AddrsV4.emplace_back(((sockaddr_in*)node->ai_addr)->sin_addr);
+                                    break;
                                 }
-                                break;
-                            }
-                            case AF_INET6: {
-                                for (int i = 0; info->h_addr_list[i] != nullptr; ++i) {
-                                    result->AddrsV6.emplace_back(*(struct in6_addr*)(info->h_addr_list[i]));
+                                case AF_INET6: {
+                                    result->AddrsV6.emplace_back(((sockaddr_in6*)node->ai_addr)->sin6_addr);
+                                    break;
                                 }
-                                break;
+                                default:
+                                    Y_FAIL("unknown address family in ares callback");
                             }
-                            default:
-                                Y_FAIL("unknown address family in ares callback");
                         }
                     } else {
                         result->ErrorText = ares_strerror(status);
@@ -325,17 +333,18 @@ namespace NDnsResolver {
 
                 case ERequestType::GetAddr: {
                     auto result = MakeHolder<TEvDns::TEvGetAddrResult>();
-                    if (status == 0 && Y_UNLIKELY(info->h_addr_list[0] == nullptr)) {
+                    if (status == ARES_SUCCESS && Y_UNLIKELY(ptr->nodes == nullptr)) {
                         status = ARES_ENODATA;
                     }
-                    if (status == 0) {
-                        switch (info->h_addrtype) {
+                    if (status == ARES_SUCCESS) {
+                        auto *node = ptr->nodes;
+                        switch (node->ai_family) {
                             case AF_INET: {
-                                result->Addr = *(struct in_addr*)(info->h_addr_list[0]);
+                                result->Addr = ((sockaddr_in*)node->ai_addr)->sin_addr;
                                 break;
                             }
                             case AF_INET6: {
-                                result->Addr = *(struct in6_addr*)(info->h_addr_list[0]);
+                                result->Addr = ((sockaddr_in6*)node->ai_addr)->sin6_addr;
                                 break;
                             }
                             default:

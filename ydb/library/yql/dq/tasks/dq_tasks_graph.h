@@ -102,6 +102,15 @@ enum class TTaskInputType {
     Merge
 };
 
+struct TTransform {
+    TString Type;
+
+    TString InputType;
+    TString OutputType;
+
+    ::google::protobuf::Any Settings;
+};
+
 template <class TInputMeta>
 struct TTaskInput {
     std::variant<std::monostate, TMergeTaskInput> ConnectionInfo;
@@ -109,6 +118,7 @@ struct TTaskInput {
     TMaybe<::google::protobuf::Any> SourceSettings;
     TString SourceType;
     TInputMeta Meta;
+    TMaybe<TTransform> Transform;
 
     TTaskInputType Type() const {
         return static_cast<TTaskInputType>(ConnectionInfo.index());
@@ -125,15 +135,6 @@ struct TTaskOutputType {
         Sink,
         COMMON_TASK_OUTPUT_TYPE_END
     };
-};
-
-struct TTransform {
-    TString Type;
-
-    TString InputType;
-    TString OutputType;
-
-    ::google::protobuf::Any Settings;
 };
 
 template <class TOutputMeta>

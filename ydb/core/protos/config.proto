@@ -699,6 +699,7 @@ message TFeatureFlags {
     optional bool AllowVDiskDefrag = 63 [default = true];
     optional bool EnableAsyncHttpMon = 64 [default = true];
     optional bool EnableChangefeeds = 65 [default = true];
+    optional bool EnableKqpScanQueryStreamLookup = 66 [default = false];
 }
 
 
@@ -1043,7 +1044,7 @@ message TTableServiceConfig {
     }
 
     message TSessionBalancerSettings {
-        optional bool Enabled = 1 [default = false];
+        optional bool Enabled = 1 [default = true];
         // MaxSessionsShutdownInFlightSize option determines the number of sessions
         // that we can keep in shutdown state at the moment.
         optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 3];
@@ -1489,6 +1490,12 @@ message TCompactionConfig {
     optional TBorrowedCompactionConfig BorrowedCompactionConfig = 2;
 }
 
+message TTracingConfig {
+    optional string Host = 1;
+    optional uint32 Port = 2;
+    optional string RootCA = 3;
+}
+
 // This message is used to upload custom service configs
 // to CMS. Config name is used to identify owner and
 // data format.
@@ -1560,6 +1567,7 @@ message TAppConfig {
     optional TCompactionConfig CompactionConfig = 52;
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
+    optional TTracingConfig TracingConfig = 55;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

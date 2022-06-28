@@ -2,6 +2,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/map.h>
 
 namespace google::protobuf {
     class Arena;
@@ -64,6 +65,10 @@ namespace NSQLTranslation {
 
         THashMap<TString, TTableBindingSettings> PrivateBindings;
         THashMap<TString, TTableBindingSettings> ScopedBindings;
+
+        // each (name, type) entry in this map is equivalent to
+        // DECLARE $name AS type;
+        TMap<TString, TString> DeclaredNamedExprs;
 
         ESqlMode Mode;
         TString DefaultCluster;

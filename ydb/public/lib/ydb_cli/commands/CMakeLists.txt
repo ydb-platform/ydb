@@ -30,6 +30,7 @@ target_link_libraries(clicommands PUBLIC
   cpp-client-ydb_proto
   cpp-client-ydb_scheme
   cpp-client-ydb_table
+  ydb_types-credentials-login
 )
 target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/stock_workload.cpp
@@ -42,7 +43,7 @@ target_sources(clicommands PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_operation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_scheme.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_scripting.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_topic.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_service_table.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_tools.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/ydb_workload.cpp

@@ -158,6 +158,10 @@ namespace NYql::NDqs {
 
             // Sinks
             if (auto maybeDqOutputsList = stage.Outputs()) {
+                TScopedAlloc alloc;
+                TTypeEnvironment typeEnv(alloc);
+                TProgramBuilder pgmBuilder(typeEnv, *FunctionRegistry);
+
                 auto dqOutputsList = maybeDqOutputsList.Cast();
                 for (const auto& output : dqOutputsList) {
                     const ui64 index = FromString(output.Ptr()->Child(TDqOutputAnnotationBase::idx_Index)->Content());
@@ -179,12 +183,20 @@ namespace NYql::NDqs {
                         YQL_ENSURE(!sinkSettings.type_url().empty(), "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings for its dq sink node");
                         YQL_ENSURE(sinkType, "Data sink provider \"" << dataSinkName << "\" did't fill dq sink settings type for its dq sink node");
                     } else if (output.Maybe<NNodes::TDqTransform>()) {
+                        TStringStream errorStream;
+
                         auto transform = output.Cast<NNodes::TDqTransform>();
                         outputTransform.Type = transform.Type();
-                        const auto inputType = transform.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        outputTransform.InputType = NCommon::WriteTypeToYson(inputType);
-                        const auto outputType = transform.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-                        outputTransform.OutputType = NCommon::WriteTypeToYson(outputType);
+                        const auto inputTypeAnnotation = transform.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        auto inputType = NCommon::BuildType(*inputTypeAnnotation, pgmBuilder, errorStream);
+                        Y_ENSURE(inputType, "Failed to build transform input type: " << errorStream.Str());
+                        outputTransform.InputType = NKikimr::NMiniKQL::SerializeNode(inputType, typeEnv);
+
+                        errorStream.clear();
+                        const auto outputTypeAnnotation = transform.OutputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+                        auto outputType = NCommon::BuildType(*outputTypeAnnotation, pgmBuilder, errorStream);
+                        Y_ENSURE(outputType, "Failed to build transform output type: " << errorStream.Str());
+                        outputTransform.OutputType = NKikimr::NMiniKQL::SerializeNode(outputType, typeEnv);
                         dqIntegration->FillTransformSettings(transform.Ref(), outputTransform.Settings);
                     } else {
                         YQL_ENSURE(false, "Unknown stage output type");

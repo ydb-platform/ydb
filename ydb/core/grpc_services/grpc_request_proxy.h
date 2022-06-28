@@ -65,7 +65,12 @@ protected:
     void Handle(TEvPQDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDiscoverPQClustersRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLoginRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvNodeCheckRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvCoordinationSessionRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDropTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;
 };

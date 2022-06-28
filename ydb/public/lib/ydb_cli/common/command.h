@@ -133,31 +133,19 @@ public:
         }
 
         bool IsVersionCommand() {
-            TString lastArg = ArgV[ArgC - 1];
-            if (lastArg == "version") {
-                return true;
-            }
-            if (ArgC > 1) {
-                TString penultimateArg = ArgV[ArgC - 2];
-                if (penultimateArg == "version" && lastArg == "--semantic") {
-                    return true;
-                }
-            }
-            return false;
+            return HasArgs({ "version" });
+        }
+
+        bool IsVersionForceCheckCommand() {
+            return HasArgs({ "version", "--check" });
+        }
+
+        bool IsSetVersionCheckCommand() {
+            return HasArgs({ "version", "--enable-checks" }) || HasArgs({ "version", "--disable-checks" });
         }
 
         bool IsUpdateCommand() {
-            TString lastArg = ArgV[ArgC - 1];
-            if (lastArg == "update") {
-                return true;
-            }
-            if (ArgC > 1) {
-                TString penultimateArg = ArgV[ArgC - 2];
-                if (penultimateArg == "update" && (lastArg == "--force" || lastArg == "-f")) {
-                    return true;
-                }
-            }
-            return false;
+            return HasArgs({ "update" });
         }
 
         bool IsInitCommand() {
@@ -298,6 +286,22 @@ public:
             }
             return result;
         }
+
+        bool HasArgs(std::vector<TString> args) {
+            for (const auto& arg : args) {
+                bool found = false;
+                for (int i = 0; i < ArgC; ++i) {
+                    if (ArgV[i] == arg) {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    return false;
+                }
+            }
+            return true;
+        }
     };
 
     virtual ~TClientCommand() {}
@@ -358,11 +362,11 @@ protected:
     TString Path;
 };
 
-class TCommandWithStreamName {
+class TCommandWithTopicName {
 protected:
-    void ParseStreamName(const TClientCommand::TConfig& config, const size_t argPos);
+    void ParseTopicName(const TClientCommand::TConfig& config, const size_t argPos);
 
-    TString StreamName;
+    TString TopicName;
 };
 
 }

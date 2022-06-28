@@ -32,6 +32,12 @@ namespace NSQLTranslation {
             *actualSyntaxVersion = parsedSettings.SyntaxVersion;
         }
 
+        if (!parsedSettings.DeclaredNamedExprs.empty() && (parsedSettings.PgParser || parsedSettings.SyntaxVersion != 1)) {
+            result.Issues.AddIssue(NYql::YqlIssue(NYql::TPosition(), NYql::TIssuesIds::DEFAULT_ERROR,
+                "Externally declared named expressions are only supported in V1 syntax"));
+            return result;
+        }
+
         if (parsedSettings.PgParser) {
             return NSQLTranslationPG::PGToYql(query, parsedSettings);
         }

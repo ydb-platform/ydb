@@ -367,7 +367,7 @@ void TReadSessionActor<UseMigrationProtocol>::Die(const TActorContext& ctx) {
 
         if (!p.second.Released) {
             // ToDo[counters]
-            auto it = TopicCounters.find(p.second.Partition.DiscoveryConverter->GetInternalName());
+            auto it = TopicCounters.find(p.second.Topic->GetInternalName());
             Y_VERIFY(it != TopicCounters.end());
             it->second.PartitionsInfly.Dec();
             it->second.PartitionsReleased.Inc();
@@ -520,10 +520,10 @@ void TReadSessionActor<UseMigrationProtocol>::DropPartition(typename THashMap<ui
     bool res = ActualPartitionActors.erase(it->second.Actor);
     Y_VERIFY(res);
 
-    if (--NumPartitionsFromTopic[it->second.Partition.DiscoveryConverter->GetInternalName()] == 0) {
+    if (--NumPartitionsFromTopic[it->second.Topic->GetInternalName()] == 0) {
         //ToDo[counters]
-        bool res = TopicCounters.erase(it->second.Partition.DiscoveryConverter->GetInternalName());
-        Y_VERIFY(res);
+        bool res_ = TopicCounters.erase(it->second.Topic->GetInternalName());
+        Y_VERIFY(res_);
     }
 
     if (SessionsActive) {
@@ -715,7 +715,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         auto topicIter = TopicsList.ClientTopics.find(topic.topic());
         Y_VERIFY(!topicIter.IsEnd());
         for (const auto& converter: topicIter->second) {
-            const auto internalName = converter->GetInternalName();
+            const auto internalName = converter->GetOriginalPath();
             for (i64 pg: topic.partition_group_ids()) {
                 if (pg < 0) {
                     CloseSession("partition group id must be nonnegative number", PersQueue::ErrorCode::BAD_REQUEST,
@@ -918,8 +918,21 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
         Y_VERIFY(!BalancersInitStarted);
         BalancersInitStarted = true;
 
-        for (auto& t : ev->Get()->TopicAndTablets) { // ToDo - return something from Init and Auth Actor (Full Path - ?)
-            auto& topicHolder = Topics[t.TopicNameConverter->GetInternalName()];
+        for (auto& [name, t] : ev->Get()->TopicAndTablets) { // ToDo - return something from Init and Auth Actor (Full Path - ?)
+            auto internalName = t.TopicNameConverter->GetInternalName();
+            auto topicGrIter = TopicGroups.find(name);
+            if (!topicGrIter.IsEnd()) {
+                auto value = std::move(topicGrIter->second);
+                TopicGroups.erase(topicGrIter);
+                TopicGroups.insert(std::make_pair(internalName, std::move(value)));
+            }
+            auto rtfsIter = ReadFromTimestamp.find(name);
+            if (!rtfsIter.IsEnd()) {
+                auto value = std::move(rtfsIter->second);
+                ReadFromTimestamp.erase(rtfsIter);
+                ReadFromTimestamp[internalName] = value;
+            }
+            auto& topicHolder = Topics[internalName];
             topicHolder.TabletID = t.TabletID;
             topicHolder.FullConverter = t.TopicNameConverter;
             topicHolder.CloudId = t.CloudId;
@@ -948,7 +961,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvAuthResultOk
 
         ctx.Schedule(CHECK_ACL_DELAY, new TEvents::TEvWakeup());
     } else {
-        for (auto& t : ev->Get()->TopicAndTablets) {
+        for (auto& [name, t] : ev->Get()->TopicAndTablets) {
             if (Topics.find(t.TopicNameConverter->GetInternalName()) == Topics.end()) {
                 CloseSession(
                         TStringBuilder() << "list of topics changed - new topic '"
@@ -1688,7 +1701,16 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             Y_VERIFY(csize < Max<i32>());
 
             auto jt = ReadFromTimestamp.find(it->second.Topic->GetInternalName());
-            Y_VERIFY(jt != ReadFromTimestamp.end());
+            if (jt == ReadFromTimestamp.end()) {
+                LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << "Error searching for topic: " <<  it->second.Topic->GetInternalName()
+                            << " (" << it->second.Topic->GetPrintableString() << ")");
+                for (const auto& [k, v] : ReadFromTimestamp) {
+                    const auto& kk = k;
+                    LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << "Have topic: " << kk);
+                }
+                CloseSession(TStringBuilder() << "Internal error", PersQueue::ErrorCode::ERROR, ctx);
+                return;
+            }
             ui64 readTimestampMs = Max(ReadTimestampMs, jt->second);
 
             TAutoPtr<TEvPQProxy::TEvRead> read = new TEvPQProxy::TEvRead(Reads.front()->Guid, ccount, csize, MaxTimeLagMs, readTimestampMs);

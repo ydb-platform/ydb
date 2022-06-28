@@ -7,7 +7,7 @@
 В результате исполнения описанных ниже шагов вы получите запущенную на локальной машине базу данных YDB, с которой можно соединиться по следующим реквизитам:
 
 - [Эндпоинт](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
-- [Размещение базы данных](../../../concepts/connect.md#database): `/Root/test`
+- [Путь базы данных](../../../concepts/connect.md#database): `/Root/test`
 - [Аутентификация](../../../concepts/connect.md#auth-modes): Анонимная (без аутентификации)
 
 ## Установка {#install}
@@ -62,7 +62,7 @@ curl https://binaries.ydb.tech/local_scripts/install.sh | bash
 
 ## Выполнение запросов через YDB CLI {#cli}
 
-[Установите YDB CLI](../../../reference/ydb-cli/install.md) и выполнить запросы, как описано в статье [YDB CLI - Начало работы](../../cli.md), используя эндпоинт и размещение базы данных в [начале данной статьи](#conn), например:
+[Установите YDB CLI](../../../reference/ydb-cli/install.md) и выполнить запросы, как описано в статье [YDB CLI - Начало работы](../../cli.md), используя эндпоинт и путь базы данных в [начале данной статьи](#conn), например:
 
 ```bash
 ydb -e grpc://localhost:2136 -d /Root/test scheme ls

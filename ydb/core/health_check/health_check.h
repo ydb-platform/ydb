@@ -9,6 +9,7 @@ namespace NHealthCheck {
 enum EEv {
     // requests
     EvSelfCheckRequest = EventSpaceBegin(TKikimrEvents::ES_HEALTH_CHECK),
+    EvNodeCheckRequest,
 
     // replies
     EvSelfCheckResult = EvSelfCheckRequest + 512,
@@ -21,6 +22,10 @@ static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_HEALTH_CHECK), "expect EvE
 struct TEvSelfCheckRequest : TEventLocal<TEvSelfCheckRequest, EvSelfCheckRequest> {
     Ydb::Monitoring::SelfCheckRequest Request;
     TString Database;
+};
+
+struct TEvNodeCheckRequest : TEventLocal<TEvNodeCheckRequest, EvNodeCheckRequest> {
+    Ydb::Monitoring::NodeCheckRequest Request;
 };
 
 struct TEvSelfCheckResult : TEventLocal<TEvSelfCheckResult, EvSelfCheckResult> {

@@ -276,7 +276,7 @@ Text inside the square brackets displayed when rendering documentation should be
 There are situations when the URL of a resource has its own value and should be displayed in the documentation, for example, when publishing links to a repository on Github. In this case, it must be duplicated inside both square and regular brackets, since YFM, unlike standard Markdown, does not automatically recognize URLs in text:
 
 ```md
-{{ ydb-short-name }} repository on Github: [https://github.com/ydb-platform/ydb/tree/master/docs](https://github.com/ydb-platform/ydb/tree/master/docs)
+{{ ydb-short-name }} repository on Github: [{{ ydb-doc-repo }}]({{ ydb-doc-repo }})
 ```
 
 ## Images {#pictures}

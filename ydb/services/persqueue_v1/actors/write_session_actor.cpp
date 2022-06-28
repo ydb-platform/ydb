@@ -411,6 +411,11 @@ void TWriteSessionActor::Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActo
     Y_VERIFY(description.PartitionsSize() > 0);
     Y_VERIFY(description.HasPQTabletConfig());
     InitialPQTabletConfig = description.GetPQTabletConfig();
+    if (!DiscoveryConverter->IsValid()) {
+        errorReason = Sprintf("Internal server error with topic '%s', Marker# PQ503", DiscoveryConverter->GetPrintableString().c_str());
+        CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
+        return;
+    }
     FullConverter = DiscoveryConverter->UpgradeToFullConverter(InitialPQTabletConfig,
                                                                AppData(ctx)->PQConfig.GetTestDatabaseRoot());
     InitAfterDiscovery(ctx);
@@ -1122,8 +1127,9 @@ void TWriteSessionActor::LogSession(const TActorContext& ctx) {
             ctx, NKikimrServices::PQ_WRITE_PROXY,
             "write session:  cookie=" << Cookie << " sessionId=" << OwnerCookie << " userAgent=\"" << UserAgent
                                       << "\" ip=" << PeerName << " proto=v1 "
-                                      << " topic=" << DiscoveryConverter->GetInternalName()
-                                      << " durationSec=" << (ctx.Now() - StartTime).Seconds());
+                                      << " topic=" << InitRequest.topic()
+                                      << " durationSec=" << (ctx.Now() - StartTime).Seconds()
+    );
 
     LogSessionDeadline = ctx.Now() + TDuration::Hours(1) + TDuration::Seconds(rand() % 60);
 }

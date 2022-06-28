@@ -248,13 +248,7 @@ void TReplicationSourceOffsetsServer::Handle(TEvDataShard::TEvReplicationSourceO
 }
 
 void TReplicationSourceOffsetsServer::SendViaSession(const TActorId& sessionId, const TActorId& target, IEventBase* event, ui32 flags, ui64 cookie) {
-    THolder<IEventHandle> ev = MakeHolder<IEventHandle>(target, SelfId(), event, flags, cookie);
-
-    if (sessionId) {
-        ev->Rewrite(TEvInterconnect::EvForward, sessionId);
-    }
-
-    TActivationContext::Send(ev.Release());
+    NDataShard::SendViaSession(sessionId, target, SelfId(), event, flags, cookie);
 }
 
 void TReplicationSourceOffsetsServer::Handle(TEvents::TEvUndelivered::TPtr& ev) {

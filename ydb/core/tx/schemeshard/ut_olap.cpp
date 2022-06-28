@@ -103,19 +103,19 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLs(runtime, "/MyRoot/OlapStore/MyDir", false, NLs::PathExist);
 
         TString tableSchema = R"(
-            Name: "OlapTable"
+            Name: "ColumnTable"
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/MyDir/OlapTable", false, NLs::All(
+        TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::All(
             NLs::PathExist,
-            NLs::HasOlapTableSchemaPreset("default")));
+            NLs::HasColumnTableSchemaPreset("default")));
 
         // Missing column from schema preset
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableMissingDataColumn"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableMissingDataColumn"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 KeyColumnNames: "timestamp"
@@ -124,8 +124,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
 
         // Extra column not in schema preset
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableExtraColumn"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableExtraColumn"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -136,8 +136,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
 
         // Different column order
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableDifferentColumnOrder"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableDifferentColumnOrder"
             Schema {
                 Columns { Name: "data" Type: "Utf8" }
                 Columns { Name: "timestamp" Type: "Timestamp" }
@@ -147,8 +147,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
 
         // Extra key column
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableExtraKeyColumn"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableExtraKeyColumn"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -159,8 +159,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
 
         // Unknown key column
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableUnknownKeyColumn"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableUnknownKeyColumn"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -170,8 +170,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
 
         // Different data column type
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableDataColumnType"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableDataColumnType"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "String" }
@@ -181,8 +181,8 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )", {NKikimrScheme::StatusSchemeError});
 
         // Repeating preset schema should succeed
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
-            Name: "OlapTableExplicitSchema"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+            Name: "ColumnTableExplicitSchema"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
                 Columns { Name: "data" Type: "Utf8" }
@@ -193,17 +193,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         // Creating table with directories should succeed
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
             Name: "DirA/DirB/NestedTable"
         )");
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore/DirA/DirB/NestedTable", false, NLs::All(
             NLs::PathExist,
-            NLs::HasOlapTableSchemaPreset("default")));
+            NLs::HasColumnTableSchemaPreset("default")));
 
         // Additional storage tier in schema
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", R"(
             Name: "TableWithTiers"
             Schema {
                 Columns { Name: "timestamp" Type: "Timestamp" }
@@ -235,15 +235,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
-            Name: "OlapTable"
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
             SchemaPresetName: "default"
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
             NLs::PathExist,
-            NLs::HasOlapTableSchemaPreset("default")));
+            NLs::HasColumnTableSchemaPreset("default")));
     }
 
     Y_UNIT_TEST(CreateDropTable) {
@@ -277,16 +277,16 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TestLs(runtime, "/MyRoot/OlapStore/MyDir", false, NLs::PathExist);
 
         TString tableSchema = R"(
-            Name: "OlapTable"
+            Name: "ColumnTable"
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", tableSchema);
         env.TestWaitNotification(runtime, txId);
-        TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/OlapStore/MyDir/OlapTable"));
-        TestDropOlapTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", "OlapTable");
+        TestLsPathId(runtime, 4, NLs::PathStringEqual("/MyRoot/OlapStore/MyDir/ColumnTable"));
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/OlapStore/MyDir", "ColumnTable");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/MyDir/OlapTable", false, NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/OlapStore/MyDir/ColumnTable", false, NLs::PathNotExist);
         TestLsPathId(runtime, 4, NLs::PathStringEqual(""));
 
         TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore", {NKikimrScheme::StatusNameConflict});
@@ -332,14 +332,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema1);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema1);
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore/Table1", false, NLs::All(
-            NLs::HasOlapTableSchemaPreset("default"),
-            NLs::HasOlapTableSchemaVersion(1),
-            NLs::HasOlapTableTtlSettingsVersion(1),
-            NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+            NLs::HasColumnTableSchemaPreset("default"),
+            NLs::HasColumnTableSchemaVersion(1),
+            NLs::HasColumnTableTtlSettingsVersion(1),
+            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
 
         TString tableSchema2 = R"(
             Name: "Table2"
@@ -348,14 +348,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema2);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema2);
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore/Table2", false, NLs::All(
-            NLs::HasOlapTableSchemaPreset("default"),
-            NLs::HasOlapTableSchemaVersion(1),
-            NLs::HasOlapTableTtlSettingsVersion(1),
-            NLs::HasOlapTableTtlSettingsDisabled()));
+            NLs::HasColumnTableSchemaPreset("default"),
+            NLs::HasColumnTableSchemaVersion(1),
+            NLs::HasColumnTableTtlSettingsVersion(1),
+            NLs::HasColumnTableTtlSettingsDisabled()));
 
         TString tableSchema3 = R"(
             Name: "Table3"
@@ -367,15 +367,15 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema3);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema3);
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore/Table3", false, NLs::All(
-            NLs::HasOlapTableSchemaPreset("default"),
-            NLs::HasOlapTableSchemaVersion(1),
-            NLs::HasOlapTableTtlSettingsVersion(1),
-            NLs::HasOlapTableTtlSettingsTiering(0, "tier0", "timestamp", TDuration::Seconds(300)),
-            NLs::HasOlapTableTtlSettingsTiering(1, "tier1", "timestamp", TDuration::Seconds(600))));
+            NLs::HasColumnTableSchemaPreset("default"),
+            NLs::HasColumnTableSchemaVersion(1),
+            NLs::HasColumnTableTtlSettingsVersion(1),
+            NLs::HasColumnTableTtlSettingsTiering(0, "tier0", "timestamp", TDuration::Seconds(300)),
+            NLs::HasColumnTableTtlSettingsTiering(1, "tier1", "timestamp", TDuration::Seconds(600))));
 
         TString tableSchema4 = R"(
             Name: "Table4"
@@ -387,7 +387,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4,
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema4,
                             {NKikimrScheme::StatusInvalidParameter});
     }
 
@@ -414,7 +414,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TString tableSchemaX = R"(
-            Name: "OlapTable"
+            Name: "ColumnTable"
             TtlSettings {
                 Enabled {
                     ExpireAfterSeconds: 300
@@ -422,11 +422,11 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX,
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchemaX,
                             {NKikimrScheme::StatusInvalidParameter});
 
         TString tableSchema = R"(
-            Name: "OlapTable"
+            Name: "ColumnTable"
             TtlSettings {
                 Enabled {
                     ColumnName: "timestamp"
@@ -435,14 +435,14 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-            NLs::HasOlapTableSchemaPreset("default"),
-            NLs::HasOlapTableSchemaVersion(1),
-            NLs::HasOlapTableTtlSettingsVersion(1),
-            NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+            NLs::HasColumnTableSchemaPreset("default"),
+            NLs::HasColumnTableSchemaVersion(1),
+            NLs::HasColumnTableTtlSettingsVersion(1),
+            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
 
         TestAlterOlapStore(runtime, ++txId, "/MyRoot", R"(
             Name: "OlapStore"
@@ -480,7 +480,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TString tableSchema = R"(
-            Name: "OlapTable"
+            Name: "ColumnTable"
             TtlSettings {
                 Enabled {
                     ColumnName: "timestamp"
@@ -489,17 +489,17 @@ Y_UNIT_TEST_SUITE(TOlap) {
             }
         )";
 
-        TestCreateOlapTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-            NLs::HasOlapTableSchemaPreset("default"),
-            NLs::HasOlapTableSchemaVersion(1),
-            NLs::HasOlapTableTtlSettingsVersion(1),
-            NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+            NLs::HasColumnTableSchemaPreset("default"),
+            NLs::HasColumnTableSchemaVersion(1),
+            NLs::HasColumnTableTtlSettingsVersion(1),
+            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
 
-        TestAlterOlapTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
-            Name: "OlapTable"
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
             AlterTtlSettings {
                 Enabled {
                     ColumnName: "timestamp"
@@ -509,22 +509,22 @@ Y_UNIT_TEST_SUITE(TOlap) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-            NLs::HasOlapTableSchemaPreset("default"),
-            NLs::HasOlapTableSchemaVersion(1),
-            NLs::HasOlapTableTtlSettingsVersion(2),
-            NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+            NLs::HasColumnTableSchemaPreset("default"),
+            NLs::HasColumnTableSchemaVersion(1),
+            NLs::HasColumnTableTtlSettingsVersion(2),
+            NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
 
-        TestAlterOlapTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
-            Name: "OlapTable"
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
             AlterTtlSettings {
                 Disabled {}
             }
         )", {NKikimrScheme::StatusInvalidParameter});
 
         // TODO: support TTL <-> Tiering changes
-        TestAlterOlapTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
-            Name: "OlapTable"
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
+            Name: "ColumnTable"
             AlterTtlSettings {
                 Tiering {
                     Tiers {

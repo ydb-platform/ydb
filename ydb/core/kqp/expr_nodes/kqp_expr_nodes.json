@@ -149,6 +149,11 @@
             "Match": {"Type": "Callable", "Name": "KqpLookupTable"}
         },
         {
+            "Name": "TKqlStreamLookupTable",
+            "Base": "TKqlLookupTableBase",
+            "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"}
+        },
+        {
             "Name": "TKqlTableEffect",
             "Base": "TExprBase",
             "Match": {"Type": "CallableBase"},
@@ -325,6 +330,16 @@
             "Name": "TKqpCnShuffleShard",
             "Base": "TDqConnection",
             "Match": {"Type": "Callable", "Name": "KqpCnShuffleShard"}
+        },
+        {
+            "Name": "TKqpCnStreamLookup",
+            "Base": "TKqpConnection",
+            "Match": {"Type": "Callable", "Name": "KqpCnStreamLookup"},
+            "Children": [
+                {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
+                {"Index": 2, "Name": "Columns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "LookupKeysType", "Type": "TExprBase"}
+            ]
         },
         {
             "Name": "TKqpProgram",

@@ -60,7 +60,7 @@ struct TProcessorSchema : NIceDb::Schema {
             ByDuration, ByReadBytes, ByCpuTime, ByRequestUnits>;
     };
 
-#define RESULT_TABLE(TableName, TableID)                                 \
+#define RESULT_QUERY_TABLE(TableName, TableID)                           \
     struct TableName : Table<TableID> {                                  \
         struct IntervalEnd : Column<1, NScheme::NTypeIds::Timestamp> {}; \
         struct Rank        : Column<2, NScheme::NTypeIds::Uint32> {};    \
@@ -71,18 +71,44 @@ struct TProcessorSchema : NIceDb::Schema {
         using TColumns = TableColumns<IntervalEnd, Rank, Text, Data>;    \
     };
 
-    RESULT_TABLE(MetricsOneMinute, 6)
-    RESULT_TABLE(MetricsOneHour, 7)
-    RESULT_TABLE(TopByDurationOneMinute, 8)
-    RESULT_TABLE(TopByDurationOneHour, 9)
-    RESULT_TABLE(TopByReadBytesOneMinute, 10)
-    RESULT_TABLE(TopByReadBytesOneHour, 11)
-    RESULT_TABLE(TopByCpuTimeOneMinute, 12)
-    RESULT_TABLE(TopByCpuTimeOneHour, 13)
-    RESULT_TABLE(TopByRequestUnitsOneMinute, 14)
-    RESULT_TABLE(TopByRequestUnitsOneHour, 15)
+    RESULT_QUERY_TABLE(MetricsOneMinute, 6)
+    RESULT_QUERY_TABLE(MetricsOneHour, 7)
+    RESULT_QUERY_TABLE(TopByDurationOneMinute, 8)
+    RESULT_QUERY_TABLE(TopByDurationOneHour, 9)
+    RESULT_QUERY_TABLE(TopByReadBytesOneMinute, 10)
+    RESULT_QUERY_TABLE(TopByReadBytesOneHour, 11)
+    RESULT_QUERY_TABLE(TopByCpuTimeOneMinute, 12)
+    RESULT_QUERY_TABLE(TopByCpuTimeOneHour, 13)
+    RESULT_QUERY_TABLE(TopByRequestUnitsOneMinute, 14)
+    RESULT_QUERY_TABLE(TopByRequestUnitsOneHour, 15)
 
-#undef RESULT_TABLE
+#undef RESULT_QUERY_TABLE
+
+    struct IntervalPartitionTops : Table<16> {
+        struct TypeCol  : Column<1, NScheme::NTypeIds::Uint32> {
+            static TString GetColumnName(const TString&) { return "Type"; }
+        };
+        struct TabletId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct Data     : Column<3, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TypeCol, TabletId>;
+        using TColumns = TableColumns<TypeCol, TabletId, Data>;
+    };
+
+#define RESULT_PARTITION_TABLE(TableName, TableID)                       \
+    struct TableName : Table<TableID> {                                  \
+        struct IntervalEnd : Column<1, NScheme::NTypeIds::Timestamp> {}; \
+        struct Rank        : Column<2, NScheme::NTypeIds::Uint32> {};    \
+        struct Data        : Column<3, NScheme::NTypeIds::String> {};    \
+                                                                         \
+        using TKey = TableKey<IntervalEnd, Rank>;                        \
+        using TColumns = TableColumns<IntervalEnd, Rank, Data>;          \
+    };
+
+    RESULT_PARTITION_TABLE(TopPartitionsOneMinute, 17)
+    RESULT_PARTITION_TABLE(TopPartitionsOneHour, 18)
+
+#undef RESULT_PARTITION_TABLE
 
     using TTables = SchemaTables<
         SysParams,
@@ -99,7 +125,10 @@ struct TProcessorSchema : NIceDb::Schema {
         TopByCpuTimeOneMinute,
         TopByCpuTimeOneHour,
         TopByRequestUnitsOneMinute,
-        TopByRequestUnitsOneHour
+        TopByRequestUnitsOneHour,
+        IntervalPartitionTops,
+        TopPartitionsOneMinute,
+        TopPartitionsOneHour
     >;
 
     using TSettings = SchemaSettings<

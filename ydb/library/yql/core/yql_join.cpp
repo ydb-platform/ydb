@@ -1539,4 +1539,20 @@ TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi
 template TExprNode::TPtr MakeDictForJoin<true>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 template TExprNode::TPtr MakeDictForJoin<false>(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 
+TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .List()
+            .Atom(0, "Cross")
+            .Add(1, left)
+            .Add(2, right)
+            .List(3)
+            .Seal()
+            .List(4)
+            .Seal()
+            .List(5)
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 } // namespace NYql

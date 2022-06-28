@@ -1394,4 +1394,17 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> ReplaceDependsOn(TExprNode::TPtr lam
     return {placeHolder, lambda};
 }
 
+TStringBuf GetEmptyCollectionName(ETypeAnnotationKind kind) {
+    switch (kind) {
+        case ETypeAnnotationKind::Flow:
+        case ETypeAnnotationKind::Stream:   return "EmptyIterator";
+        case ETypeAnnotationKind::List:     return "List";
+        case ETypeAnnotationKind::Optional: return "Nothing";
+        case ETypeAnnotationKind::Dict:     return "Dict";
+        case ETypeAnnotationKind::Pg:       return "Nothing";
+        default: break;
+    }
+    return {};
+}
+
 }

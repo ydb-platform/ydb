@@ -5,7 +5,7 @@ default:
   ydb: true
   example_cluster: ydbtest
   feature_secondary_index: true 
-  feature_changefeed: true 
+  # feature_changefeed: true 
   feature_replace: true
   feature_upsert: true
   feature_join: true
@@ -30,5 +30,7 @@ default:
   ydb-cli: ydb
   k8s: Kubernetes
   oss: true
+
+  ydb-doc-repo: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
 
   corporate-paste: https://www.paste.example.com

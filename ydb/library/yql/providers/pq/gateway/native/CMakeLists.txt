@@ -12,14 +12,14 @@ target_link_libraries(pq-gateway-native PUBLIC
   contrib-libs-cxxsupp
   yutil
   common-token_accessor-client
+  providers-common-metrics
+  providers-common-proto
+  providers-pq-cm_client
+  providers-pq-provider
   library-yql-utils
   cpp-client-ydb_datastreams
   cpp-client-ydb_driver
   cpp-client-ydb_persqueue_core
-  providers-common-metrics
-  providers-common-proto
-  pq-cm_client-interface
-  providers-pq-provider
 )
 target_sources(pq-gateway-native PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/gateway/native/yql_pq_gateway.cpp

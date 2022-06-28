@@ -16,12 +16,20 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         return { new TAppData(0, 0, 0, 0, { }, nullptr, nullptr, nullptr, nullptr), nullptr, nullptr };
     }
 
+    void WaitForBootstrap(TTestActorRuntime &runtime) {
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        UNIT_ASSERT(runtime.DispatchEvents(options));
+    }
+
     void TestCollector(size_t batchSize) {
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
 
-        auto collector = CreatePartitionStatsCollector(batchSize);
+        auto collector = CreatePartitionStatsCollector(TPathId(), 0, batchSize);
         auto collectorId = runtime.Register(collector.Release());
+        WaitForBootstrap(runtime);
+
         auto sender = runtime.AllocateEdgeActor();
 
         auto domainKey = TPathId(1, 1);
@@ -175,8 +183,10 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
 
-        auto collector = CreatePartitionStatsCollector(1, 0);
+        auto collector = CreatePartitionStatsCollector(TPathId(), 0, 1, 0);
         auto collectorId = runtime.Register(collector.Release());
+        WaitForBootstrap(runtime);
+
         auto sender = runtime.AllocateEdgeActor();
 
         auto domainKey = TPathId(1, 1);

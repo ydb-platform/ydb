@@ -1,5 +1,6 @@
 #include "partition_stats.h"
 
+#include <ydb/core/sys_view/common/common.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
@@ -14,19 +15,40 @@ namespace NSysView {
 
 using namespace NActors;
 
-class TPartitionStatsCollector : public TActor<TPartitionStatsCollector> {
+class TPartitionStatsCollector : public TActorBootstrapped<TPartitionStatsCollector> {
 public:
+    using TBase = TActorBootstrapped<TPartitionStatsCollector>;
+
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::SYSTEM_VIEW_PART_STATS_COLLECTOR;
     }
 
-    explicit TPartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
-        : TActor(&TPartitionStatsCollector::StateWork)
+    explicit TPartitionStatsCollector(TPathId domainKey, ui64 sysViewProcessorId,
+        size_t batchSize, size_t pendingRequestsLimit)
+        : DomainKey(domainKey)
+        , SysViewProcessorId(sysViewProcessorId)
         , BatchSize(batchSize)
         , PendingRequestsLimit(pendingRequestsLimit)
     {}
 
-    STFUNC(StateWork) {
+    void Bootstrap() {
+        SVLOG_D("NSysView::TPartitionStatsCollector bootstrapped: "
+            << "domain key# " << DomainKey
+            << ", sysview processor id# " << SysViewProcessorId);
+
+        if (AppData()->UsePartitionStatsCollectorForTests) {
+            OverloadedPartitionBound = 0.0;
+            ProcessOverloadedInterval = TDuration::Seconds(1);
+        }
+
+        if (SysViewProcessorId) {
+            Schedule(ProcessOverloadedInterval, new TEvPrivate::TEvProcessOverloaded);
+        }
+
+        Become(&TThis::StateWork);
+    }
+
+    STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvSysView::TEvSetPartitioning, Handle);
             hFunc(TEvSysView::TEvRemoveTable, Handle);
@@ -34,10 +56,11 @@ public:
             hFunc(TEvSysView::TEvUpdateTtlStats, Handle);
             hFunc(TEvSysView::TEvGetPartitionStats, Handle);
             hFunc(TEvPrivate::TEvProcess, Handle);
+            hFunc(TEvPrivate::TEvProcessOverloaded, Handle);
+            IgnoreFunc(TEvPipeCache::TEvDeliveryProblem);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(ctx, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TPartitionStatsCollector: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                SVLOG_CRIT("NSysView::TPartitionStatsCollector: unexpected event " << ev->GetTypeRewrite());
         }
     }
 
@@ -45,11 +68,14 @@ private:
     struct TEvPrivate {
         enum EEv {
             EvProcess = EventSpaceBegin(TEvents::ES_PRIVATE),
+            EvProcessOverloaded,
 
             EvEnd
         };
 
         struct TEvProcess : public TEventLocal<TEvProcess, EvProcess> {};
+
+        struct TEvProcessOverloaded : public TEventLocal<TEvProcessOverloaded, EvProcessOverloaded> {};
     };
 
     void Handle(TEvSysView::TEvSetPartitioning::TPtr& ev) {
@@ -57,24 +83,36 @@ private:
         const auto& pathId = ev->Get()->PathId;
 
         auto& tables = DomainTables[domainKey];
-        auto it = tables.find(pathId);
-        if (it != tables.end()) {
-            auto& oldPartitions = it->second.Partitions;
-            THashMap<TShardIdx, NKikimrSysView::TPartitionStats> newPartitions;
+        auto tableFound = tables.Stats.find(pathId);
+        if (tableFound != tables.Stats.end()) {
+            auto& table = tableFound->second;
+
+            auto& oldPartitions = table.Partitions;
+            std::unordered_map<TShardIdx, NKikimrSysView::TPartitionStats> newPartitions;
+            std::unordered_set<TShardIdx> overloaded;
 
             for (auto shardIdx : ev->Get()->ShardIndices) {
                 auto old = oldPartitions.find(shardIdx);
                 if (old != oldPartitions.end()) {
                     newPartitions[shardIdx] = old->second;
+                    if (IsPartitionOverloaded(old->second)) {
+                        overloaded.insert(shardIdx);
+                    }
                 }
             }
 
+            if (!overloaded.empty()) {
+                tables.Overloaded[pathId].swap(overloaded);
+            } else {
+                tables.Overloaded.erase(pathId);
+            }
+
             oldPartitions.swap(newPartitions);
-            it->second.ShardIndices.swap(ev->Get()->ShardIndices);
-            it->second.Path = ev->Get()->Path;
+            table.ShardIndices.swap(ev->Get()->ShardIndices);
+            table.Path = ev->Get()->Path;
 
         } else {
-            auto& table = tables[pathId];
+            auto& table = tables.Stats[pathId];
             table.ShardIndices.swap(ev->Get()->ShardIndices);
             table.Path = ev->Get()->Path;
         }
@@ -85,7 +123,8 @@ private:
         const auto& pathId = ev->Get()->PathId;
 
         auto& tables = DomainTables[domainKey];
-        tables.erase(pathId);
+        tables.Stats.erase(pathId);
+        tables.Overloaded.erase(pathId);
     }
 
     void Handle(TEvSysView::TEvSendPartitionStats::TPtr& ev) {
@@ -94,13 +133,26 @@ private:
         const auto& shardIdx = ev->Get()->ShardIdx;
 
         auto& tables = DomainTables[domainKey];
-        auto it = tables.find(pathId);
-        if (it == tables.end()) {
+        auto tableFound = tables.Stats.find(pathId);
+        if (tableFound == tables.Stats.end()) {
             return;
         }
 
-        auto& oldStats = it->second.Partitions[shardIdx];
+        auto& table = tableFound->second;
+        auto& oldStats = table.Partitions[shardIdx];
         auto& newStats = ev->Get()->Stats;
+
+        if (IsPartitionOverloaded(newStats)) {
+            tables.Overloaded[pathId].insert(shardIdx);
+        } else {
+            auto overloadedFound = tables.Overloaded.find(pathId);
+            if (overloadedFound != tables.Overloaded.end()) {
+                overloadedFound->second.erase(shardIdx);
+                if (overloadedFound->second.empty()) {
+                    tables.Overloaded.erase(pathId);
+                }
+            }
+        }
 
         if (oldStats.HasTtlStats()) {
             newStats.MutableTtlStats()->Swap(oldStats.MutableTtlStats());
@@ -115,12 +167,12 @@ private:
         const auto& shardIdx = ev->Get()->ShardIdx;
 
         auto& tables = DomainTables[domainKey];
-        auto it = tables.find(pathId);
-        if (it == tables.end()) {
+        auto tableFound = tables.Stats.find(pathId);
+        if (tableFound == tables.Stats.end()) {
             return;
         }
 
-        it->second.Partitions[shardIdx].MutableTtlStats()->Swap(&ev->Get()->Stats);
+        tableFound->second.Partitions[shardIdx].MutableTtlStats()->Swap(&ev->Get()->Stats);
     }
 
     void Handle(TEvSysView::TEvGetPartitionStats::TPtr& ev) {
@@ -170,7 +222,7 @@ private:
             Send(request->Sender, std::move(result));
             return;
         }
-        auto& tables = itTables->second;
+        auto& tables = itTables->second.Stats;
 
         auto it = tables.begin();
         auto itEnd = tables.end();
@@ -290,26 +342,114 @@ private:
         Send(request->Sender, std::move(result));
     }
 
+    void Handle(TEvPrivate::TEvProcessOverloaded::TPtr&) {
+        if (!SysViewProcessorId) {
+            return;
+        }
+
+        Schedule(ProcessOverloadedInterval, new TEvPrivate::TEvProcessOverloaded);
+
+        auto domainFound = DomainTables.find(DomainKey);
+        if (domainFound == DomainTables.end()) {
+            SVLOG_D("NSysView::TPartitionStatsCollector: TEvProcessOverloaded: no tables");
+            return;
+        }
+        auto& domainTables = domainFound->second;
+
+        struct TPartition {
+            TPathId PathId;
+            TShardIdx ShardIdx;
+            double CPUCores;
+        };
+        std::vector<TPartition> sorted;
+
+        for (const auto& [pathId, shardIndices] : domainTables.Overloaded) {
+            for (const auto& shardIdx : shardIndices) {
+                auto& table = domainTables.Stats[pathId];
+                auto& partition = table.Partitions[shardIdx];
+                sorted.emplace_back(TPartition{pathId, shardIdx, partition.GetCPUCores()});
+            }
+        }
+
+        std::sort(sorted.begin(), sorted.end(),
+            [] (const auto& l, const auto& r) { return l.CPUCores > r.CPUCores; });
+
+        auto now = TActivationContext::Now();
+        auto nowUs = now.MicroSeconds();
+
+        size_t count = 0;
+        auto sendEvent = MakeHolder<TEvSysView::TEvSendTopPartitions>();
+        for (const auto& entry : sorted) {
+            auto& table = domainTables.Stats[entry.PathId];
+            auto& partition = table.Partitions[entry.ShardIdx];
+
+            auto* result = sendEvent->Record.AddPartitions();
+            result->SetTabletId(partition.GetTabletId());
+            result->SetPath(table.Path);
+            result->SetPeakTimeUs(nowUs);
+            result->SetCPUCores(partition.GetCPUCores());
+            result->SetNodeId(partition.GetNodeId());
+            result->SetDataSize(partition.GetDataSize());
+            result->SetRowCount(partition.GetRowCount());
+            result->SetIndexSize(partition.GetIndexSize());
+            result->SetInFlightTxCount(partition.GetInFlightTxCount());
+
+            if (++count == TOP_PARTITIONS_COUNT) {
+                break;
+            }
+        }
+
+        sendEvent->Record.SetTimeUs(nowUs);
+
+        SVLOG_D("NSysView::TPartitionStatsCollector: TEvProcessOverloaded "
+            << "top size# " << sorted.size()
+            << ", time# " << now);
+
+        Send(MakePipePeNodeCacheID(false),
+            new TEvPipeCache::TEvForward(sendEvent.Release(), SysViewProcessorId, true));
+    }
+
+    void PassAway() override {
+        Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
+        TBase::PassAway();
+    }
+
+    bool IsPartitionOverloaded(NKikimrSysView::TPartitionStats& stats) {
+        return stats.GetCPUCores() >= OverloadedPartitionBound;
+    }
+
 private:
+    const TPathId DomainKey;
+    const ui64 SysViewProcessorId;
     const size_t BatchSize;
     const size_t PendingRequestsLimit;
 
+    double OverloadedPartitionBound = 0.7;
+    TDuration ProcessOverloadedInterval = TDuration::Seconds(15);
+
     struct TTableStats {
-        THashMap<TShardIdx, NKikimrSysView::TPartitionStats> Partitions; // shardIdx -> stats
-        TVector<TShardIdx> ShardIndices;
+        std::unordered_map<TShardIdx, NKikimrSysView::TPartitionStats> Partitions; // shardIdx -> stats
+        std::vector<TShardIdx> ShardIndices;
         TString Path;
     };
 
-    using TDomainTables = TMap<TPathId, TTableStats>;
-    THashMap<TPathId, TDomainTables> DomainTables;
+    struct TDomainTables {
+        std::map<TPathId, TTableStats> Stats;
+        std::unordered_map<TPathId, std::unordered_set<TShardIdx>> Overloaded;
+    };
+    std::unordered_map<TPathId, TDomainTables> DomainTables;
 
     TQueue<TEvSysView::TEvGetPartitionStats::TPtr> PendingRequests;
     bool ProcessInFly = false;
 };
 
-THolder<IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit) {
-    return MakeHolder<TPartitionStatsCollector>(batchSize, pendingRequestsLimit);
+THolder<IActor> CreatePartitionStatsCollector(
+    TPathId domainKey, ui64 sysViewProcessorId, size_t batchSize, size_t pendingRequestsLimit)
+{
+    return MakeHolder<TPartitionStatsCollector>(
+        domainKey, sysViewProcessorId, batchSize, pendingRequestsLimit);
 }
+
 
 class TPartitionStatsScan : public TScanActorBase<TPartitionStatsScan> {
 public:

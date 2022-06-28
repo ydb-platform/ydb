@@ -16,14 +16,18 @@ target_link_libraries(core-blob_depot-agent PUBLIC
 )
 target_sources(core-blob_depot-agent PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_comm.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_query.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_put.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_get.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_block.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_discover.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_range.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_collect_garbage.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_status.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent_storage_patch.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/blocks.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/comm.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/query.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/read.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/request.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_put.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_get.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_block.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_discover.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_range.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_collect_garbage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_status.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/storage_patch.cpp
 )

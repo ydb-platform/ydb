@@ -15,10 +15,13 @@ namespace NDnsResolver {
         struct TMonCounters {
             NMonitoring::TDynamicCounters::TCounterPtr OutgoingInFlightV4;
             NMonitoring::TDynamicCounters::TCounterPtr OutgoingInFlightV6;
+            NMonitoring::TDynamicCounters::TCounterPtr OutgoingInFlightUnspec;
             NMonitoring::TDynamicCounters::TCounterPtr OutgoingErrorsV4;
             NMonitoring::TDynamicCounters::TCounterPtr OutgoingErrorsV6;
+            NMonitoring::TDynamicCounters::TCounterPtr OutgoingErrorsUnspec;
             NMonitoring::TDynamicCounters::TCounterPtr OutgoingTotalV4;
             NMonitoring::TDynamicCounters::TCounterPtr OutgoingTotalV6;
+            NMonitoring::TDynamicCounters::TCounterPtr OutgoingTotalUnspec;
 
             NMonitoring::TDynamicCounters::TCounterPtr IncomingInFlight;
             NMonitoring::TDynamicCounters::TCounterPtr IncomingErrors;
@@ -31,10 +34,13 @@ namespace NDnsResolver {
             TMonCounters(const NMonitoring::TDynamicCounterPtr& counters)
                 : OutgoingInFlightV4(counters->GetCounter("DnsResolver/Outgoing/InFlight/V4", false))
                 , OutgoingInFlightV6(counters->GetCounter("DnsResolver/Outgoing/InFlight/V6", false))
+                , OutgoingInFlightUnspec(counters->GetCounter("DnsResolver/Outgoing/InFlight/Unspec", false))
                 , OutgoingErrorsV4(counters->GetCounter("DnsResolver/Outgoing/Errors/V4", true))
                 , OutgoingErrorsV6(counters->GetCounter("DnsResolver/Outgoing/Errors/V6", true))
+                , OutgoingErrorsUnspec(counters->GetCounter("DnsResolver/Outgoing/Errors/Unspec", true))
                 , OutgoingTotalV4(counters->GetCounter("DnsResolver/Outgoing/Total/V4", true))
                 , OutgoingTotalV6(counters->GetCounter("DnsResolver/Outgoing/Total/V6", true))
+                , OutgoingTotalUnspec(counters->GetCounter("DnsResolver/Outgoing/Total/Unspec", true))
                 , IncomingInFlight(counters->GetCounter("DnsResolver/Incoming/InFlight", false))
                 , IncomingErrors(counters->GetCounter("DnsResolver/Incoming/Errors", true))
                 , IncomingTotal(counters->GetCounter("DnsResolver/Incoming/Total", true))
@@ -42,6 +48,45 @@ namespace NDnsResolver {
                 , CacheHits(counters->GetCounter("DnsResolver/Cache/Hits", true))
                 , CacheMisses(counters->GetCounter("DnsResolver/Cache/Misses", true))
             { }
+
+            const NMonitoring::TDynamicCounters::TCounterPtr& OutgoingInFlightByFamily(int family) const {
+                switch (family) {
+                    case AF_INET:
+                        return OutgoingInFlightV4;
+                    case AF_INET6:
+                        return OutgoingInFlightV6;
+                    case AF_UNSPEC:
+                        return OutgoingInFlightUnspec;
+                    default:
+                        Y_FAIL("Unexpected family %d", family);
+                }
+            }
+
+            const NMonitoring::TDynamicCounters::TCounterPtr& OutgoingErrorsByFamily(int family) const {
+                switch (family) {
+                    case AF_INET:
+                        return OutgoingErrorsV4;
+                    case AF_INET6:
+                        return OutgoingErrorsV6;
+                    case AF_UNSPEC:
+                        return OutgoingErrorsUnspec;
+                    default:
+                        Y_FAIL("Unexpected family %d", family);
+                }
+            }
+
+            const NMonitoring::TDynamicCounters::TCounterPtr& OutgoingTotalByFamily(int family) const {
+                switch (family) {
+                    case AF_INET:
+                        return OutgoingTotalV4;
+                    case AF_INET6:
+                        return OutgoingTotalV6;
+                    case AF_UNSPEC:
+                        return OutgoingTotalUnspec;
+                    default:
+                        Y_FAIL("Unexpected family %d", family);
+                }
+            }
         };
 
     public:
@@ -97,19 +142,13 @@ namespace NDnsResolver {
             WaitingRequests.erase(waitingIt);
 
             switch (waitingInfo.Family) {
+                case AF_UNSPEC:
                 case AF_INET6:
-                    if (ev->Get()->Status) {
-                        ProcessErrorV6(waitingInfo.Position, ev->Get()->Status, std::move(ev->Get()->ErrorText));
-                    } else {
-                        ProcessAddrsV6(waitingInfo.Position, std::move(ev->Get()->AddrsV6));
-                    }
-                    break;
-
                 case AF_INET:
                     if (ev->Get()->Status) {
-                        ProcessErrorV4(waitingInfo.Position, ev->Get()->Status, std::move(ev->Get()->ErrorText));
+                        ProcessError(waitingInfo.Family, waitingInfo.Position, ev->Get()->Status, std::move(ev->Get()->ErrorText));
                     } else {
-                        ProcessAddrsV4(waitingInfo.Position, std::move(ev->Get()->AddrsV4));
+                        ProcessAddrs(waitingInfo.Family, waitingInfo.Position, std::move(ev->Get()->AddrsV6), std::move(ev->Get()->AddrsV4));
                     }
                     break;
 
@@ -127,12 +166,12 @@ namespace NDnsResolver {
                     WaitingRequests.erase(waitingIt);
 
                     switch (waitingInfo.Family) {
+                        case AF_UNSPEC:
                         case AF_INET6:
-                            ProcessErrorV6(waitingInfo.Position, ARES_ENOTINITIALIZED, "Caching dns resolver cannot deliver to the underlying resolver");
-                            break;
                         case AF_INET:
-                            ProcessErrorV4(waitingInfo.Position, ARES_ENOTINITIALIZED, "Caching dns resolver cannot deliver to the underlying resolver");
+                            ProcessError(waitingInfo.Family, waitingInfo.Position, ARES_ENOTINITIALIZED, "Caching dns resolver cannot deliver to the underlying resolver");
                             break;
+
                         default:
                             Y_FAIL("Unexpected request family %d", waitingInfo.Family);
                     }
@@ -170,26 +209,30 @@ namespace NDnsResolver {
 
             switch (req->Family) {
                 case AF_UNSPEC:
+                    if (Options.AllowIPv6 && Options.AllowIPv4) {
+                        EnqueueRequest(AF_UNSPEC, std::move(req));
+                        return;
+                    }
                     if (Options.AllowIPv6) {
-                        EnqueueRequestIPv6(std::move(req));
+                        EnqueueRequest(AF_INET6, std::move(req));
                         return;
                     }
                     if (Options.AllowIPv4) {
-                        EnqueueRequestIPv4(std::move(req));
+                        EnqueueRequest(AF_INET, std::move(req));
                         return;
                     }
                     break;
 
                 case AF_INET6:
                     if (Options.AllowIPv6) {
-                        EnqueueRequestIPv6(std::move(req));
+                        EnqueueRequest(AF_INET6, std::move(req));
                         return;
                     }
                     break;
 
                 case AF_INET:
                     if (Options.AllowIPv4) {
-                        EnqueueRequestIPv4(std::move(req));
+                        EnqueueRequest(AF_INET, std::move(req));
                         return;
                     }
                     break;
@@ -198,7 +241,7 @@ namespace NDnsResolver {
             ReplyWithError(std::move(req), ARES_EBADFAMILY);
         }
 
-        void EnqueueRequestIPv6(THolder<TIncomingRequest> req) {
+        void EnqueueRequest(int family, THolder<TIncomingRequest> req) {
             auto now = TActivationContext::Now();
 
             auto& fullState = NameToState[req->Name];
@@ -206,25 +249,15 @@ namespace NDnsResolver {
                 *MonCounters->CacheSize = NameToState.size();
             }
 
-            auto& state = fullState.StateIPv6;
-            EnsureRequest(state, req->Name, AF_INET6, now);
+            auto& state = fullState.StateByFamily(family);
+            EnsureRequest(state, req->Name, family, now);
 
             if (state.IsHardExpired(now)) {
                 Y_VERIFY(state.Waiting);
                 if (MonCounters) {
                     ++*MonCounters->CacheMisses;
                 }
-                // We need to wait for ipv6 reply, schedule ipv4 request in parallel if needed
-                if (Options.AllowIPv4) {
-                    EnsureRequest(fullState.StateIPv4, req->Name, AF_INET, now);
-                }
                 state.WaitingRequests.PushBack(req.Release());
-                return;
-            }
-
-            // We want to retry AF_UNSPEC with IPv4 in some cases
-            if (req->Family == AF_UNSPEC && Options.AllowIPv4 && state.RetryUnspec()) {
-                EnqueueRequestIPv4(std::move(req));
                 return;
             }
 
@@ -235,43 +268,14 @@ namespace NDnsResolver {
             if (state.Status != 0) {
                 ReplyWithError(std::move(req), state.Status, state.ErrorText);
             } else {
-                ReplyWithAddrs(std::move(req), fullState.AddrsIPv6);
-            }
-        }
-
-        void EnqueueRequestIPv4(THolder<TIncomingRequest> req, bool isCacheMiss = false) {
-            auto now = TActivationContext::Now();
-
-            auto& fullState = NameToState[req->Name];
-            if (MonCounters) {
-                *MonCounters->CacheSize = NameToState.size();
-            }
-
-            auto& state = fullState.StateIPv4;
-            EnsureRequest(state, req->Name, AF_INET, now);
-
-            if (state.IsHardExpired(now)) {
-                Y_VERIFY(state.Waiting);
-                if (MonCounters && !isCacheMiss) {
-                    ++*MonCounters->CacheMisses;
-                }
-                state.WaitingRequests.PushBack(req.Release());
-                return;
-            }
-
-            if (MonCounters && !isCacheMiss) {
-                ++*MonCounters->CacheHits;
-            }
-
-            if (state.Status != 0) {
-                ReplyWithError(std::move(req), state.Status, state.ErrorText);
-            } else {
-                ReplyWithAddrs(std::move(req), fullState.AddrsIPv4);
+                ReplyWithAddrs(std::move(req), state.AddrsIPv6, state.AddrsIPv4);
             }
         }
 
     private:
         struct TFamilyState {
+            TVector<struct in6_addr> AddrsIPv6;
+            TVector<struct in_addr> AddrsIPv4;
             TIncomingRequestList WaitingRequests;
             TInstant SoftDeadline;
             TInstant HardDeadline;
@@ -285,13 +289,6 @@ namespace NDnsResolver {
 
             bool Needed() const {
                 return InSoftHeap || InHardHeap || Waiting;
-            }
-
-            bool RetryUnspec() const {
-                return (
-                    Status == ARES_ENODATA ||
-                    Status == ARES_EBADRESP ||
-                    Status == ARES_ETIMEOUT);
             }
 
             bool ServerReplied() const {
@@ -315,13 +312,38 @@ namespace NDnsResolver {
         };
 
         struct TState {
+            TFamilyState StateUnspec;
             TFamilyState StateIPv6;
             TFamilyState StateIPv4;
-            TVector<struct in6_addr> AddrsIPv6;
-            TVector<struct in_addr> AddrsIPv4;
 
             bool Needed() const {
-                return StateIPv6.Needed() || StateIPv4.Needed();
+                return StateUnspec.Needed() || StateIPv6.Needed() || StateIPv4.Needed();
+            }
+
+            const TFamilyState& StateByFamily(int family) const {
+                switch (family) {
+                    case AF_UNSPEC:
+                        return StateUnspec;
+                    case AF_INET6:
+                        return StateIPv6;
+                    case AF_INET:
+                        return StateIPv4;
+                    default:
+                        Y_FAIL("Unsupported family %d", family);
+                }
+            }
+
+            TFamilyState& StateByFamily(int family) {
+                switch (family) {
+                    case AF_UNSPEC:
+                        return StateUnspec;
+                    case AF_INET6:
+                        return StateIPv6;
+                    case AF_INET:
+                        return StateIPv4;
+                    default:
+                        Y_FAIL("Unsupported family %d", family);
+                }
             }
         };
 
@@ -366,16 +388,8 @@ namespace NDnsResolver {
             }
 
             if (MonCounters) {
-                switch (family) {
-                    case AF_INET6:
-                        ++*MonCounters->OutgoingInFlightV6;
-                        ++*MonCounters->OutgoingTotalV6;
-                        break;
-                    case AF_INET:
-                        ++*MonCounters->OutgoingInFlightV4;
-                        ++*MonCounters->OutgoingTotalV4;
-                        break;
-                }
+                ++*MonCounters->OutgoingInFlightByFamily(family);
+                ++*MonCounters->OutgoingTotalByFamily(family);
             }
 
             ui64 reqId = ++LastRequestId;
@@ -406,6 +420,14 @@ namespace NDnsResolver {
             }
         }
 
+        void PushSoftUnspec(TNameToState::iterator it, TInstant newDeadline) {
+            PushToHeap<&TState::StateUnspec, &TFamilyState::SoftDeadline, &TFamilyState::NextSoftDeadline, &TFamilyState::InSoftHeap>(SoftHeapUnspec, it, newDeadline);
+        }
+
+        void PushHardUnspec(TNameToState::iterator it, TInstant newDeadline) {
+            PushToHeap<&TState::StateUnspec, &TFamilyState::HardDeadline, &TFamilyState::NextHardDeadline, &TFamilyState::InHardHeap>(HardHeapUnspec, it, newDeadline);
+        }
+
         void PushSoftV6(TNameToState::iterator it, TInstant newDeadline) {
             PushToHeap<&TState::StateIPv6, &TFamilyState::SoftDeadline, &TFamilyState::NextSoftDeadline, &TFamilyState::InSoftHeap>(SoftHeapIPv6, it, newDeadline);
         }
@@ -422,162 +444,111 @@ namespace NDnsResolver {
             PushToHeap<&TState::StateIPv4, &TFamilyState::HardDeadline, &TFamilyState::NextHardDeadline, &TFamilyState::InHardHeap>(HardHeapIPv4, it, newDeadline);
         }
 
-        void ProcessErrorV6(TNameToState::iterator it, int status, TString errorText) {
+        void PushSoft(int family, TNameToState::iterator it, TInstant newDeadline) {
+            switch (family) {
+                case AF_UNSPEC:
+                    PushSoftUnspec(it, newDeadline);
+                    break;
+                case AF_INET6:
+                    PushSoftV6(it, newDeadline);
+                    break;
+                case AF_INET:
+                    PushSoftV4(it, newDeadline);
+                    break;
+                default:
+                    Y_FAIL("Unexpected family %d", family);
+            }
+        }
+
+        void PushHard(int family, TNameToState::iterator it, TInstant newDeadline) {
+            switch (family) {
+                case AF_UNSPEC:
+                    PushHardUnspec(it, newDeadline);
+                    break;
+                case AF_INET6:
+                    PushHardV6(it, newDeadline);
+                    break;
+                case AF_INET:
+                    PushHardV4(it, newDeadline);
+                    break;
+                default:
+                    Y_FAIL("Unexpected family %d", family);
+            }
+        }
+
+        void ProcessError(int family, TNameToState::iterator it, int status, TString errorText) {
             auto now = TActivationContext::Now();
             if (MonCounters) {
-                --*MonCounters->OutgoingInFlightV6;
-                ++*MonCounters->OutgoingErrorsV6;
+                --*MonCounters->OutgoingInFlightByFamily(family);
+                ++*MonCounters->OutgoingErrorsByFamily(family);
             }
 
-            auto& state = it->second.StateIPv6;
+            auto& state = it->second.StateByFamily(family);
             Y_VERIFY(state.Waiting, "Got error for a state we are not waiting");
             state.Waiting = false;
 
             // When we have a cached positive reply, don't overwrite it with spurious errors
             const bool serverReplied = TFamilyState::ServerReplied(status);
             if (!serverReplied && state.ServerReplied() && !state.IsHardExpired(now)) {
-                PushSoftV6(it, now + Options.SoftNegativeExpireTime);
+                PushSoft(family, it, now + Options.SoftNegativeExpireTime);
                 if (state.Status == ARES_SUCCESS) {
-                    SendAddrsV6(it);
+                    SendAddrs(family, it);
                 } else {
-                    SendErrorsV6(it, now);
+                    SendErrors(family, it);
                 }
                 return;
             }
 
             state.Status = status;
             state.ErrorText = std::move(errorText);
-            PushSoftV6(it, now + Options.SoftNegativeExpireTime);
+            PushSoft(family, it, now + Options.SoftNegativeExpireTime);
             if (serverReplied) {
                 // Server actually replied, so keep it cached for longer
-                PushHardV6(it, now + Options.HardPositiveExpireTime);
+                PushHard(family, it, now + Options.HardPositiveExpireTime);
             } else {
-                PushHardV6(it, now + Options.HardNegativeExpireTime);
+                PushHard(family, it, now + Options.HardNegativeExpireTime);
             }
 
-            SendErrorsV6(it, now);
+            SendErrors(family, it);
         }
 
-        void SendErrorsV6(TNameToState::iterator it, TInstant now) {
-            bool cleaned = false;
-            auto& state = it->second.StateIPv6;
-            while (state.WaitingRequests) {
-                THolder<TIncomingRequest> req(state.WaitingRequests.PopFront());
-                if (req->Family == AF_UNSPEC && Options.AllowIPv4 && state.RetryUnspec()) {
-                    if (!cleaned) {
-                        CleanupExpired(now);
-                        cleaned = true;
-                    }
-                    EnqueueRequestIPv4(std::move(req), /* isCacheMiss */ true);
-                } else {
-                    ReplyWithError(std::move(req), state.Status, state.ErrorText);
-                }
-            }
-        }
-
-        void ProcessErrorV4(TNameToState::iterator it, int status, TString errorText) {
-            auto now = TActivationContext::Now();
-            if (MonCounters) {
-                --*MonCounters->OutgoingInFlightV4;
-                ++*MonCounters->OutgoingErrorsV4;
-            }
-
-            auto& state = it->second.StateIPv4;
-            Y_VERIFY(state.Waiting, "Got error for a state we are not waiting");
-            state.Waiting = false;
-
-            // When we have a cached positive reply, don't overwrite it with spurious errors
-            const bool serverReplied = TFamilyState::ServerReplied(status);
-            if (!serverReplied && state.ServerReplied() && !state.IsHardExpired(now)) {
-                PushSoftV4(it, now + Options.SoftNegativeExpireTime);
-                if (state.Status == ARES_SUCCESS) {
-                    SendAddrsV4(it);
-                } else {
-                    SendErrorsV4(it);
-                }
-                return;
-            }
-
-            state.Status = status;
-            state.ErrorText = std::move(errorText);
-            PushSoftV4(it, now + Options.SoftNegativeExpireTime);
-            if (serverReplied) {
-                // Server actually replied, so keep it cached for longer
-                PushHardV4(it, now + Options.HardPositiveExpireTime);
-            } else {
-                PushHardV4(it, now + Options.HardNegativeExpireTime);
-            }
-
-            SendErrorsV4(it);
-        }
-
-        void SendErrorsV4(TNameToState::iterator it) {
-            auto& state = it->second.StateIPv4;
+        void SendErrors(int family, TNameToState::iterator it) {
+            auto& state = it->second.StateByFamily(family);
             while (state.WaitingRequests) {
                 THolder<TIncomingRequest> req(state.WaitingRequests.PopFront());
                 ReplyWithError(std::move(req), state.Status, state.ErrorText);
             }
         }
 
-        void ProcessAddrsV6(TNameToState::iterator it, TVector<struct in6_addr> addrs) {
-            if (Y_UNLIKELY(addrs.empty())) {
+        void ProcessAddrs(int family, TNameToState::iterator it, TVector<struct in6_addr> addrs6, TVector<struct in_addr> addrs4) {
+            if (Y_UNLIKELY(addrs6.empty() && addrs4.empty())) {
                 // Probably unnecessary: we don't want to deal with empty address lists
-                return ProcessErrorV6(it, ARES_ENODATA, ares_strerror(ARES_ENODATA));
+                return ProcessError(family, it, ARES_ENODATA, ares_strerror(ARES_ENODATA));
             }
 
             auto now = TActivationContext::Now();
             if (MonCounters) {
-                --*MonCounters->OutgoingInFlightV6;
+                --*MonCounters->OutgoingInFlightByFamily(family);
             }
 
-            auto& state = it->second.StateIPv6;
+            auto& state = it->second.StateByFamily(family);
             Y_VERIFY(state.Waiting, "Got reply for a state we are not waiting");
             state.Waiting = false;
 
             state.Status = ARES_SUCCESS;
-            it->second.AddrsIPv6 = std::move(addrs);
-            PushSoftV6(it, now + Options.SoftPositiveExpireTime);
-            PushHardV6(it, now + Options.HardPositiveExpireTime);
+            state.AddrsIPv6 = std::move(addrs6);
+            state.AddrsIPv4 = std::move(addrs4);
+            PushSoft(family, it, now + Options.SoftPositiveExpireTime);
+            PushHard(family, it, now + Options.HardPositiveExpireTime);
 
-            SendAddrsV6(it);
+            SendAddrs(family, it);
         }
 
-        void SendAddrsV6(TNameToState::iterator it) {
-            auto& state = it->second.StateIPv6;
+        void SendAddrs(int family, TNameToState::iterator it) {
+            auto& state = it->second.StateByFamily(family);
             while (state.WaitingRequests) {
                 THolder<TIncomingRequest> req(state.WaitingRequests.PopFront());
-                ReplyWithAddrs(std::move(req), it->second.AddrsIPv6);
-            }
-        }
-
-        void ProcessAddrsV4(TNameToState::iterator it, TVector<struct in_addr> addrs) {
-            if (Y_UNLIKELY(addrs.empty())) {
-                // Probably unnecessary: we don't want to deal with empty address lists
-                return ProcessErrorV4(it, ARES_ENODATA, ares_strerror(ARES_ENODATA));
-            }
-
-            auto now = TActivationContext::Now();
-            if (MonCounters) {
-                --*MonCounters->OutgoingInFlightV4;
-            }
-
-            auto& state = it->second.StateIPv4;
-            Y_VERIFY(state.Waiting, "Got reply for a state we are not waiting");
-            state.Waiting = false;
-
-            state.Status = ARES_SUCCESS;
-            it->second.AddrsIPv4 = std::move(addrs);
-            PushSoftV4(it, now + Options.SoftPositiveExpireTime);
-            PushHardV4(it, now + Options.HardPositiveExpireTime);
-
-            SendAddrsV4(it);
-        }
-
-        void SendAddrsV4(TNameToState::iterator it) {
-            auto& state = it->second.StateIPv4;
-            while (state.WaitingRequests) {
-                THolder<TIncomingRequest> req(state.WaitingRequests.PopFront());
-                ReplyWithAddrs(std::move(req), it->second.AddrsIPv4);
+                ReplyWithAddrs(std::move(req), state.AddrsIPv6, state.AddrsIPv4);
             }
         }
 
@@ -619,6 +590,8 @@ namespace NDnsResolver {
         }
 
         void CleanupExpired(TInstant now) {
+            DoCleanupExpired<&TState::StateUnspec, &TFamilyState::SoftDeadline, &TFamilyState::NextSoftDeadline, &TFamilyState::InSoftHeap>(SoftHeapUnspec, now);
+            DoCleanupExpired<&TState::StateUnspec, &TFamilyState::HardDeadline, &TFamilyState::NextHardDeadline, &TFamilyState::InHardHeap>(HardHeapUnspec, now);
             DoCleanupExpired<&TState::StateIPv6, &TFamilyState::SoftDeadline, &TFamilyState::NextSoftDeadline, &TFamilyState::InSoftHeap>(SoftHeapIPv6, now);
             DoCleanupExpired<&TState::StateIPv6, &TFamilyState::HardDeadline, &TFamilyState::NextHardDeadline, &TFamilyState::InHardHeap>(HardHeapIPv6, now);
             DoCleanupExpired<&TState::StateIPv4, &TFamilyState::SoftDeadline, &TFamilyState::NextSoftDeadline, &TFamilyState::InSoftHeap>(SoftHeapIPv4, now);
@@ -649,36 +622,24 @@ namespace NDnsResolver {
             }
         }
 
-        void ReplyWithAddrs(THolder<TIncomingRequest> req, const TVector<struct in6_addr>& addrs) {
+        void ReplyWithAddrs(THolder<TIncomingRequest> req, const TVector<struct in6_addr>& addrs6, const TVector<struct in_addr>& addrs4) {
             switch (req->Type) {
                 case EIncomingRequestType::GetHostByName: {
                     auto reply = MakeHolder<TEvDns::TEvGetHostByNameResult>();
-                    reply->AddrsV6 = addrs;
+                    reply->AddrsV6 = addrs6;
+                    reply->AddrsV4 = addrs4;
                     Send(req->Sender, reply.Release(), 0, req->Cookie);
                     break;
                 }
                 case EIncomingRequestType::GetAddr: {
-                    Y_VERIFY(!addrs.empty());
                     auto reply = MakeHolder<TEvDns::TEvGetAddrResult>();
-                    reply->Addr = addrs.front();
-                    Send(req->Sender, reply.Release(), 0, req->Cookie);
-                    break;
-                }
-            }
-        }
-
-        void ReplyWithAddrs(THolder<TIncomingRequest> req, const TVector<struct in_addr>& addrs) {
-            switch (req->Type) {
-                case EIncomingRequestType::GetHostByName: {
-                    auto reply = MakeHolder<TEvDns::TEvGetHostByNameResult>();
-                    reply->AddrsV4 = addrs;
-                    Send(req->Sender, reply.Release(), 0, req->Cookie);
-                    break;
-                }
-                case EIncomingRequestType::GetAddr: {
-                    Y_VERIFY(!addrs.empty());
-                    auto reply = MakeHolder<TEvDns::TEvGetAddrResult>();
-                    reply->Addr = addrs.front();
+                    if (!addrs6.empty()) {
+                        reply->Addr = addrs6.front();
+                    } else if (!addrs4.empty()) {
+                        reply->Addr = addrs4.front();
+                    } else {
+                        Y_FAIL("Unexpected reply with empty address list");
+                    }
                     Send(req->Sender, reply.Release(), 0, req->Cookie);
                     break;
                 }
@@ -698,6 +659,7 @@ namespace NDnsResolver {
 
         void DropPending(int status, const TString& errorText) {
             for (auto& [name, state] : NameToState) {
+                DropPending(state.StateUnspec.WaitingRequests, status, errorText);
                 DropPending(state.StateIPv6.WaitingRequests, status, errorText);
                 DropPending(state.StateIPv4.WaitingRequests, status, errorText);
             }
@@ -713,6 +675,8 @@ namespace NDnsResolver {
         const THolder<TMonCounters> MonCounters;
 
         TNameToState NameToState;
+        TStateHeap<&TState::StateUnspec, &TFamilyState::SoftDeadline> SoftHeapUnspec;
+        TStateHeap<&TState::StateUnspec, &TFamilyState::HardDeadline> HardHeapUnspec;
         TStateHeap<&TState::StateIPv6, &TFamilyState::SoftDeadline> SoftHeapIPv6;
         TStateHeap<&TState::StateIPv6, &TFamilyState::HardDeadline> HardHeapIPv6;
         TStateHeap<&TState::StateIPv4, &TFamilyState::SoftDeadline> SoftHeapIPv4;

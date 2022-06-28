@@ -59,6 +59,11 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, ui32 storagePools, bool 
     Server = new Tests::TServer(*Settings);
     Server->EnableGRpc(grpcPort);
 
+    auto* runtime = Server->GetRuntime();
+    for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
+        runtime->GetAppData(i).UsePartitionStatsCollectorForTests = true;
+    }
+
     Client = MakeHolder<Tests::TClient>(*Settings);
 
     Tenants = MakeHolder<Tests::TTenants>(Server);

@@ -159,6 +159,7 @@ namespace NSQLTranslationV1 {
             return IntoHeading;
         }
 
+        bool IsAlreadyDeclared(const TString& varName) const;
         void DeclareVariable(const TString& varName, const TNodePtr& typeNode);
 
         bool AddExport(TPosition symbolPos, const TString& symbolName);
@@ -271,6 +272,8 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
+        // TODO: drop after transition to new s3 binding schema
+        bool S3BindingsAsTableHints = false; // if set, convert bindings to table_hints, not arguments of MrObject
     };
 
     class TColumnRefScope {

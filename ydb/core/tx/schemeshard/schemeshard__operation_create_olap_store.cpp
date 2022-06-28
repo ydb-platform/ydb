@@ -219,7 +219,7 @@ void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
     storeInfo->Sharding.ClearColumnShards();
     for (ui64 i = 0; i < numColumnShards; ++i) {
         TShardIdx idx = ss->RegisterShardInfo(columnShardInfo);
-        ss->TabletCounters->Simple()[COUNTER_OLAP_COLUMN_SHARDS].Add(1);
+        ss->TabletCounters->Simple()[COUNTER_COLUMN_SHARDS].Add(1);
         txState.Shards.emplace_back(idx, ETabletType::ColumnShard, TTxState::CreateParts);
 
         storeInfo->ColumnShards[i] = idx;

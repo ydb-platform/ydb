@@ -100,14 +100,14 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxCreateOlapStore = 82          [(CounterOpts) = {Name: "InFlightOps/CreateOlapStore"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterOlapStore = 83           [(CounterOpts) = {Name: "InFlightOps/AlterOlapStore"}];
     COUNTER_IN_FLIGHT_OPS_TxDropOlapStore = 84            [(CounterOpts) = {Name: "InFlightOps/DropOlapStore"}];
-    COUNTER_IN_FLIGHT_OPS_TxCreateOlapTable = 85          [(CounterOpts) = {Name: "InFlightOps/CreateOlapTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxAlterOlapTable = 86           [(CounterOpts) = {Name: "InFlightOps/AlterOlapTable"}];
-    COUNTER_IN_FLIGHT_OPS_TxDropOlapTable = 87            [(CounterOpts) = {Name: "InFlightOps/DropOlapTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateColumnTable = 85        [(CounterOpts) = {Name: "InFlightOps/CreateColumnTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxAlterColumnTable = 86         [(CounterOpts) = {Name: "InFlightOps/AlterColumnTable"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropColumnTable = 87          [(CounterOpts) = {Name: "InFlightOps/DropColumnTable"}];
 
     COUNTER_OLAP_STORE_COUNT = 88                         [(CounterOpts) = {Name: "OlapStores"}];
-    COUNTER_OLAP_TABLE_COUNT = 89                         [(CounterOpts) = {Name: "OlapTables"}];
-    COUNTER_OLAP_META_SHARDS = 90                         [(CounterOpts) = {Name: "OlapMetaShards"}];
-    COUNTER_OLAP_COLUMN_SHARDS = 91                       [(CounterOpts) = {Name: "OlapColumnShards"}];
+    COUNTER_COLUMN_TABLE_COUNT = 89                       [(CounterOpts) = {Name: "ColumnTables"}];
+    COUNTER_DEPRECATED_90 = 90                            [(CounterOpts) = {Name: "OlapMetaShards"}];
+    COUNTER_COLUMN_SHARDS = 91                            [(CounterOpts) = {Name: "ColumnShards"}];
 
     COUNTER_DISK_SPACE_TABLES_DATA_BYTES = 92             [(CounterOpts) = {Name: "DiskSpaceTablesDataBytes"}];
     COUNTER_DISK_SPACE_TABLES_INDEX_BYTES = 93            [(CounterOpts) = {Name: "DiskSpaceTablesIndexBytes"}];
@@ -228,9 +228,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxCreateOlapStore = 50           [(CounterOpts) = {Name: "FinishedOps/CreateOlapStore"}];
     COUNTER_FINISHED_OPS_TxAlterOlapStore = 51            [(CounterOpts) = {Name: "FinishedOps/AlterOlapStore"}];
     COUNTER_FINISHED_OPS_TxDropOlapStore = 52             [(CounterOpts) = {Name: "FinishedOps/DropOlapStore"}];
-    COUNTER_FINISHED_OPS_TxCreateOlapTable = 53           [(CounterOpts) = {Name: "FinishedOps/CreateOlapTable"}];
-    COUNTER_FINISHED_OPS_TxAlterOlapTable = 54            [(CounterOpts) = {Name: "FinishedOps/AlterOlapTable"}];
-    COUNTER_FINISHED_OPS_TxDropOlapTable = 55             [(CounterOpts) = {Name: "FinishedOps/DropOlapTable"}];
+    COUNTER_FINISHED_OPS_TxCreateColumnTable = 53         [(CounterOpts) = {Name: "FinishedOps/CreateColumnTable"}];
+    COUNTER_FINISHED_OPS_TxAlterColumnTable = 54          [(CounterOpts) = {Name: "FinishedOps/AlterColumnTable"}];
+    COUNTER_FINISHED_OPS_TxDropColumnTable = 55           [(CounterOpts) = {Name: "FinishedOps/DropColumnTable"}];
 
 
     COUNTER_FINISHED_OPS_TxCreateCdcStream = 56           [(CounterOpts) = {Name: "FinishedOps/CreateCdcStream"}];

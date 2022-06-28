@@ -18,10 +18,8 @@ namespace NActors {
             return false;
         }
 
-        auto& span = *event.Span;
-        span.EndOk();
-        const NWilson::TTraceId traceId(span);
-        event.Span.reset();
+        const NWilson::TTraceId traceId(event.Span);
+        event.Span.EndOk();
 
         LWTRACK(SerializeToPacketEnd, event.Orbit, PeerNodeId, ChannelId, OutputQueueSize, task.GetDataSize());
         task.Orbit.Take(event.Orbit);

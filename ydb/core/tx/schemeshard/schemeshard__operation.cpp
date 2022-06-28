@@ -799,12 +799,12 @@ ISubOperationBase::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxSta
             return CreateAlterOlapStore(NextPartId(), txState);
         case TTxState::ETxType::TxDropOlapStore:
             return CreateDropOlapStore(NextPartId(), txState);
-        case TTxState::ETxType::TxCreateOlapTable:
-            return CreateNewOlapTable(NextPartId(), txState);
-        case TTxState::ETxType::TxAlterOlapTable:
-            return CreateAlterOlapTable(NextPartId(), txState);
-        case TTxState::ETxType::TxDropOlapTable:
-            return CreateDropOlapTable(NextPartId(), txState);
+        case TTxState::ETxType::TxCreateColumnTable:
+            return CreateNewColumnTable(NextPartId(), txState);
+        case TTxState::ETxType::TxAlterColumnTable:
+            return CreateAlterColumnTable(NextPartId(), txState);
+        case TTxState::ETxType::TxDropColumnTable:
+            return CreateDropColumnTable(NextPartId(), txState);
         case TTxState::ETxType::TxCreatePQGroup:
             return CreateNewPQ(NextPartId(), txState);
         case TTxState::ETxType::TxAlterPQGroup:
@@ -968,11 +968,11 @@ ISubOperationBase::TPtr TOperation::ConstructPart(NKikimrSchemeOp::EOperationTyp
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore:
         return CreateDropOlapStore(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable:
-        return CreateNewOlapTable(NextPartId(), tx);
+        return CreateNewColumnTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable:
-        return CreateAlterOlapTable(NextPartId(), tx);
+        return CreateAlterColumnTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable:
-        return CreateDropOlapTable(NextPartId(), tx);
+        return CreateDropColumnTable(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup:
         return CreateNewPQ(NextPartId(), tx);
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterPersQueueGroup:

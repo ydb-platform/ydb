@@ -12,7 +12,7 @@
 namespace NYdb::NPersQueue {
 
 const TVector<ECodec>& GetDefaultCodecs() {
-    static const TVector<ECodec> codecs = {ECodec::RAW, ECodec::GZIP, ECodec::LZOP};
+    static const TVector<ECodec> codecs = {};
     return codecs;
 }
 

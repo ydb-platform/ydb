@@ -4,6 +4,8 @@
 #include <ydb/core/grpc_services/service_monitoring.h>
 #include <ydb/core/grpc_services/base/base.h>
 
+#include <ydb/core/grpc_services/rpc_calls.h>
+
 namespace NKikimr {
 namespace NGRpcService {
 
@@ -49,7 +51,7 @@ void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro already defined
 #endif
-#define ADD_REQUEST(NAME, CB) \
+#define ADD_REQUEST_NEW(NAME, CB) \
      MakeIntrusive<TGRpcRequest<Monitoring::NAME##Request, Monitoring::NAME##Response, TGRpcMonitoringService>>   \
          (this, &Service_, CQ_,                                                                                   \
             [this](NGrpc::IRequestContextBase *ctx) {                                                             \
@@ -60,9 +62,23 @@ void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
             }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME,                            \
             #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
 
-    ADD_REQUEST(SelfCheck, DoSelfCheckRequest)
+    ADD_REQUEST_NEW(SelfCheck, DoSelfCheckRequest);
 
-#undef ADD_REQUEST
+#define ADD_REQUEST_OLD(NAME, IN, OUT, ACTION) \
+    MakeIntrusive<TGRpcRequest<Ydb::Monitoring::IN, Ydb::Monitoring::OUT, TGRpcMonitoringService>>(this, &Service_, CQ_, \
+        [this](NGrpc::IRequestContextBase* reqCtx) { \
+           NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer(), GetSdkBuildInfo(reqCtx)); \
+           ACTION; \
+        }, &Ydb::Monitoring::V1::MonitoringService::AsyncService::Request ## NAME, \
+        #NAME, logger, getCounterBlock("monitoring", #NAME))->Run();
+
+    ADD_REQUEST_OLD(NodeCheck, NodeCheckRequest, NodeCheckResponse, {
+        ActorSystem_->Send(GRpcRequestProxyId_, new TEvNodeCheckRequest(reqCtx));
+    });
+
+
+#undef ADD_REQUEST_NEW
+#undef ADD_REQUEST_OLD
 }
 
 } // namespace NGRpcService

@@ -468,9 +468,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
     if (0 == --lock.RefCount) {
         for (auto& pr : lock.LocalSubscribers) {
             Send(pr.first,
-                new TEvLongTxService::TEvSubscribeLockResult(
+                new TEvLongTxService::TEvLockStatus(
                     lockId, SelfId().NodeId(),
-                    NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND),
+                    NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND),
                 0, pr.second);
         }
         for (auto& prSession : lock.RemoteSubscribers) {
@@ -478,9 +478,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvUnregisterLock::TPtr& ev) 
             for (const auto& pr : prSession.second) {
                 SendViaSession(
                     sessionId, pr.first,
-                    new TEvLongTxService::TEvSubscribeLockResult(
+                    new TEvLongTxService::TEvLockStatus(
                         lockId, SelfId().NodeId(),
-                        NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND),
+                        NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND),
                     0, pr.second);
             }
             auto itSession = Sessions.find(sessionId);
@@ -501,9 +501,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
     if (!lockId) {
         SendViaSession(
             ev->InterconnectSession, ev->Sender,
-            new TEvLongTxService::TEvSubscribeLockResult(
+            new TEvLongTxService::TEvLockStatus(
                 lockId, lockNode,
-                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+                NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
             0, ev->Cookie);
         return;
     }
@@ -514,9 +514,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
         if (node.State == EProxyState::Disconnected) {
             // Looks like there's no proxy for this node
             Send(ev->Sender,
-                new TEvLongTxService::TEvSubscribeLockResult(
+                new TEvLongTxService::TEvLockStatus(
                     lockId, lockNode,
-                    NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+                    NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
                 0, ev->Cookie);
             return;
         }
@@ -528,9 +528,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
 
         if (lock.State == EProxyLockState::Subscribed) {
             Send(ev->Sender,
-                new TEvLongTxService::TEvSubscribeLockResult(
+                new TEvLongTxService::TEvLockStatus(
                     lockId, lockNode,
-                    NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED),
+                    NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
                 0, ev->Cookie);
             lock.RepliedSubscribers[ev->Sender] = ev->Cookie;
             return;
@@ -557,9 +557,9 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
     if (it == Locks.end()) {
         SendViaSession(
             ev->InterconnectSession, ev->Sender,
-            new TEvLongTxService::TEvSubscribeLockResult(
+            new TEvLongTxService::TEvLockStatus(
                 lockId, lockNode,
-                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_NOT_FOUND),
+                NKikimrLongTxService::TEvLockStatus::STATUS_NOT_FOUND),
             0, ev->Cookie);
         return;
     }
@@ -575,18 +575,18 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLock::TPtr& ev) {
 
     SendViaSession(
         ev->InterconnectSession, ev->Sender,
-        new TEvLongTxService::TEvSubscribeLockResult(
+        new TEvLongTxService::TEvLockStatus(
             lockId, lockNode,
-            NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED),
+            NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED),
         0, ev->Cookie);
 }
 
-void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLockResult::TPtr& ev) {
+void TLongTxServiceActor::Handle(TEvLongTxService::TEvLockStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
     ui64 lockId = record.GetLockId();
     ui32 lockNode = record.GetLockNode();
-    auto lockStatus = record.GetResult();
-    TXLOG_DEBUG("Received TEvSubscribeLockResult from " << ev->Sender
+    auto lockStatus = record.GetStatus();
+    TXLOG_DEBUG("Received TEvLockStatus from " << ev->Sender
             << " for LockId# " << lockId << " LockNode# " << lockNode
             << " LockStatus# " << lockStatus);
 
@@ -620,11 +620,11 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLockResult::TPtr&
     }
 
     // Special handling for successful lock subscriptions
-    if (lockStatus == NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_SUBSCRIBED) {
+    if (lockStatus == NKikimrLongTxService::TEvLockStatus::STATUS_SUBSCRIBED) {
         lock.State = EProxyLockState::Subscribed;
         for (auto& pr : lock.NewSubscribers) {
             Send(pr.first,
-                new TEvLongTxService::TEvSubscribeLockResult(lockId, lockNode, lockStatus),
+                new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
                 0, pr.second);
             lock.RepliedSubscribers[pr.first] = pr.second;
         }
@@ -636,13 +636,13 @@ void TLongTxServiceActor::Handle(TEvLongTxService::TEvSubscribeLockResult::TPtr&
 
     for (auto& pr : lock.RepliedSubscribers) {
         Send(pr.first,
-            new TEvLongTxService::TEvSubscribeLockResult(lockId, lockNode, lockStatus),
+            new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
             0, pr.second);
     }
 
     for (auto& pr : lock.NewSubscribers) {
         Send(pr.first,
-            new TEvLongTxService::TEvSubscribeLockResult(lockId, lockNode, lockStatus),
+            new TEvLongTxService::TEvLockStatus(lockId, lockNode, lockStatus),
             0, pr.second);
     }
 
@@ -1007,17 +1007,17 @@ void TLongTxServiceActor::RemoveUnavailableLock(TProxyNodeState& node, TProxyLoc
 
     for (auto& pr : lock.RepliedSubscribers) {
         Send(pr.first,
-            new TEvLongTxService::TEvSubscribeLockResult(
+            new TEvLongTxService::TEvLockStatus(
                 lockId, nodeId,
-                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+                NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
             0, pr.second);
     }
 
     for (auto& pr : lock.NewSubscribers) {
         Send(pr.first,
-            new TEvLongTxService::TEvSubscribeLockResult(
+            new TEvLongTxService::TEvLockStatus(
                 lockId, nodeId,
-                NKikimrLongTxService::TEvSubscribeLockResult::RESULT_LOCK_UNAVAILABLE),
+                NKikimrLongTxService::TEvLockStatus::STATUS_UNAVAILABLE),
             0, pr.second);
     }
 

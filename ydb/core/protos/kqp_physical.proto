@@ -208,6 +208,13 @@ message TKqpPhyCnMerge {
     repeated TKqpPhySortColumn SortColumns = 1;
 }
 
+message TKqpPhyCnStreamLookup {
+    TKqpPhyTable Table = 1;
+    repeated TKqpPhyColumn Columns = 2;
+    bytes LookupKeysType = 3;
+    bytes ResultType = 4;
+}
+
 message TKqpPhyConnection {
     uint32 StageIndex = 1;
     uint32 OutputIndex = 2;
@@ -222,6 +229,7 @@ message TKqpPhyConnection {
         TKqpPhyCnResult Result = 9;
         TKqpPhyCnValue Value = 10;
         TKqpPhyCnMerge Merge = 11;
+        TKqpPhyCnStreamLookup StreamLookup = 12;
     };
 }
 

@@ -987,7 +987,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString error = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx);
         bool hasDuplicates = false;
         if (error.Empty()) {
-            hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
+            hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error, ctx);
         }
 
         if (!error.Empty()) {

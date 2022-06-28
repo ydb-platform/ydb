@@ -15,6 +15,7 @@ message TBlobLocator {
     optional TBlobSeqId BlobSeqId = 2;
     optional uint32 Checksum = 3;
     optional uint64 TotalDataLen = 4;
+    optional uint32 FooterLen = 5;
 }
 
 message TValueChain {

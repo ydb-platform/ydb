@@ -23,7 +23,7 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
             auto ev = MakeHolder<IEventHandle>(1, 0, TActorId(), TActorId(), MakeIntrusive<TEventSerializedData>(payload, false), 0);
             auto& ch = scheduler.GetOutputChannel(channel);
             const bool wasWorking = ch.IsWorking();
-            ch.Push(*ev);
+            ch.Push(*ev, TInstant::Now());
             if (!wasWorking) {
                 scheduler.AddToHeap(ch, 0);
             }

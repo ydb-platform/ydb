@@ -535,6 +535,9 @@
         },
         "metrika-core": {
             "description": "Run metrika-core toolkit"
+        },
+        "quota_mover": {
+            "description": "Run quota mover cli"
         }
     },
     "toolchain": {
@@ -6493,6 +6496,28 @@
                     "default": true
                 }
             ]
+        },
+        "quota_mover": {
+            "tools": {
+                "quota_mover": {
+                    "bottle": "quota_mover",
+                    "executable": "quota_mover"
+                }
+            },
+            "platforms": [
+                {
+                    "host": {
+                        "os": "LINUX"
+                    },
+                    "default": true
+                },
+                {
+                    "host": {
+                        "os": "darwin"
+                    },
+                    "default": true
+                }
+            ]
         }
     },
     "bottles": {
@@ -6583,7 +6608,7 @@
         "arc": {
             "formula": {
                 "sandbox_id": [
-                    1327291879
+                    1349811236
                 ],
                 "match": "arc"
             },
@@ -7564,8 +7589,8 @@
         "gdbnew": {
             "formula": {
                 "sandbox_id": [
-                    1294905624,
-                    1322364102
+                    1351234419,
+                    1351262215
                 ],
                 "match": "GDB"
             },
@@ -7715,7 +7740,7 @@
         },
         "infractl": {
             "formula": {
-                "sandbox_id": 1344403256,
+                "sandbox_id": 1352440693,
                 "match": "infractl"
             },
             "executable": {
@@ -8046,7 +8071,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1349359846,
+                "sandbox_id": 1355903365,
                 "match": "horadric"
             },
             "executable": {
@@ -8189,7 +8214,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1349359767,
+                "sandbox_id": 1355902457,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -8215,8 +8240,8 @@
         "appteka": {
             "formula": {
                 "sandbox_id": [
-                    1245145483,
-                    1247481035
+                    1351396288,
+                    1351404983
                 ],
                 "match": "appteka"
             },
@@ -8576,7 +8601,7 @@
         },
         "yfm-docs": {
             "formula": {
-                "sandbox_id": 1285319405,
+                "sandbox_id": 1351149216,
                 "match": "yfm-docs"
             },
             "executable": {
@@ -8601,8 +8626,8 @@
         "sedem": {
             "formula": {
                 "sandbox_id": [
-                    1344724093,
-                    1344724080
+                    1353475422,
+                    1353475421
                 ],
                 "match": "bin/sedem"
             },
@@ -8765,7 +8790,7 @@
         },
         "skotty": {
             "formula": {
-                "sandbox_id": 1314138261,
+                "sandbox_id": 1349738508,
                 "match": "launcher"
             },
             "executable": {
@@ -8825,7 +8850,7 @@
         },
         "bigb_request": {
             "formula": {
-                "sandbox_id": 1349360006,
+                "sandbox_id": 1355901545,
                 "match": "bb_requester"
             },
             "executable": {
@@ -8836,7 +8861,7 @@
         },
         "bigb_hitlog_analyser": {
             "formula": {
-                "sandbox_id": 1349359827,
+                "sandbox_id": 1355902639,
                 "match": "hitlog_analyser"
             },
             "executable": {
@@ -8858,7 +8883,7 @@
         },
         "bigb_bb_cluster_analyzer": {
             "formula": {
-                "sandbox_id": 1349359843,
+                "sandbox_id": 1355902189,
                 "match": "bb_cluster_analyzer"
             },
             "executable": {
@@ -8904,7 +8929,7 @@
         },
         "caesar_yt_sync": {
             "formula": {
-                "sandbox_id": 1349359754,
+                "sandbox_id": 1355901775,
                 "match": "yt_sync"
             },
             "executable": {
@@ -8915,7 +8940,7 @@
         },
         "caesar_lookup_profile": {
             "formula": {
-                "sandbox_id": 1349359436,
+                "sandbox_id": 1355904102,
                 "match": "lookup_profile"
             },
             "executable": {
@@ -8926,7 +8951,7 @@
         },
         "exp_stats": {
             "formula": {
-                "sandbox_id": 1349359993,
+                "sandbox_id": 1355901780,
                 "match": "exp_stats"
             },
             "executable": {
@@ -8959,7 +8984,7 @@
         },
         "marketsre": {
             "formula": {
-                "sandbox_id": 1317842822,
+                "sandbox_id": 1350305363,
                 "match": "marketsre"
             },
             "executable": {
@@ -8970,7 +8995,7 @@
         },
         "caesar_profile_size_analyzer": {
             "formula": {
-                "sandbox_id": 1349359742,
+                "sandbox_id": 1355065965,
                 "match": "profile_size_analyzer"
             },
             "executable": {
@@ -9003,6 +9028,18 @@
             "executable": {
                 "metrika-core": [
                     "metrika-core"
+                ]
+            }
+        },
+        "quota_mover": {
+            "formula": {
+                "sandbox_id": 1351287754,
+                "match": "quota_mover"
+            },
+            "executable": {
+                "quota_mover": [
+                    "bin",
+                    "quota_mover"
                 ]
             }
         }

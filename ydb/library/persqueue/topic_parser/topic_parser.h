@@ -35,7 +35,7 @@ TString MakeConsumerPath(const TString& consumer);
     if (!Valid) {                         \
         return TString();                 \
     } else {                              \
-        Y_VERIFY(!result.empty());        \
+        Y_VERIFY_S(!result.empty(), OriginalTopic.c_str());        \
         return result;                    \
     }
 
@@ -96,6 +96,8 @@ public:
      */
     TString GetPrimaryPath() const;
 
+    TString GetOriginalPath() const;
+
     /** Second path if applicable:
      * Nothing for first class
      * Nothing for topic with explicitly specified non-root Database
@@ -107,22 +109,11 @@ public:
      */
     const TMaybe<TString>& GetSecondaryPath(const TString& databasePath);
 
-    /** Unique convertable name for internal purposes. Maybe uses hashing/for mappings.
-     * Single topic in any representation is supposed to have same internal name
-     * DO NOT use for business logic, such as sensors, SourceIds, etc
-     *
-     * /user-database/dir/my-topic
-     * OR
-     * /user-database/dir/.my-topic/mirrored-from-dc
-     *
-     * */
-    TString GetInternalName() const;
-
     /**
     Only for special cases.
     */
     void SetPrimaryPath(const TString& path) {
-        InternalName = PrimaryPath;
+        OriginalPath = PrimaryPath;
         PrimaryPath = path;
     }
 
@@ -148,8 +139,8 @@ protected:
     TString PQPrefix;
     //TVector<TString> RootDatabases;
 
+    TString OriginalPath;
     TString PrimaryPath;
-    TString InternalName;
     bool PendingDatabase = false;
     TMaybe<TString> SecondaryPath;
     TMaybe<TString> Account_;
@@ -236,6 +227,18 @@ public:
      * */
     const TString& GetModernName() const;
 
+    /** Unique convertable name for internal purposes. Maybe uses hashing/for mappings.
+     * Single topic in any representation is supposed to have same internal name
+     * DO NOT use for business logic, such as sensors, SourceIds, etc
+     *
+     * /user-database/dir/my-topic
+     * OR
+     * /user-database/dir/.my-topic/mirrored-from-dc
+     *
+     * */
+    TString GetInternalName() const;
+
+
     TString GetTopicForSrcId() const;
     TString GetTopicForSrcIdHash() const;
 
@@ -251,6 +254,7 @@ private:
     TString ClientsideName;
     TString ShortClientsideName;
     TString Account;
+    TString InternalName;
 };
 
 using TDiscoveryConverterPtr = std::shared_ptr<TDiscoveryConverter>;

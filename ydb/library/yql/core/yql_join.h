@@ -142,4 +142,6 @@ TExprNode::TPtr PrepareListForJoin(TExprNode::TPtr list, const TTypeAnnotationNo
 template<bool Squeeze = false>
 TExprNode::TPtr MakeDictForJoin(TExprNode::TPtr&& list, bool payload, bool multi, TExprContext& ctx);
 
+TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNode::TPtr right, TExprContext& ctx);
+
 }

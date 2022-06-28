@@ -13,13 +13,18 @@ public:
 
     bool CheckIfUpdateNeeded(bool forceRequest = false);
     int Update(bool forceUpdate);
+    void SetCheckVersion(bool value);
 
 private:
     void LoadConfig();
     void SaveConfig();
+    bool IsCheckEnabled();
     bool IsTimeToCheckForUpdate();
     bool IsVersionUpToDate();
     bool GetLatestVersion();
+
+    template<typename T>
+    void SetConfigValue(const TString& name, const T& value);
 
     NJson::TJsonValue Config;
     TString MyVersion;

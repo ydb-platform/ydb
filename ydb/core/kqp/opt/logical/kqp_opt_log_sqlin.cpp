@@ -17,7 +17,7 @@ using namespace NYql::NNodes;
 TExprBase KqpRewriteSqlInToEquiJoin(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrConfiguration::TPtr& config)
 {
-    if (!kqpCtx.IsDataQuery()) {
+    if (kqpCtx.IsScanQuery() && !kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup()) {
         return node;
     }
 

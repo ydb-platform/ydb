@@ -7,8 +7,8 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TOlapTableInfo::TPtr ParseParams(
-        const TPath& path, const TOlapTableInfo::TPtr& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
+TColumnTableInfo::TPtr ParseParams(
+        const TPath& path, const TColumnTableInfo::TPtr& tableInfo, const TOlapStoreInfo::TPtr& storeInfo,
         const NKikimrSchemeOp::TAlterColumnTable& alter, const TSubDomainInfo& subDomain,
         NKikimrScheme::EStatus& status, TString& errStr, TOperationContext& context)
 {
@@ -28,7 +28,7 @@ TOlapTableInfo::TPtr ParseParams(
         return nullptr;
     }
 
-    TOlapTableInfo::TPtr alterData = new TOlapTableInfo(*tableInfo);
+    TColumnTableInfo::TPtr alterData = new TColumnTableInfo(*tableInfo);
     alterData->AlterBody.ConstructInPlace(alter);
     ++alterData->AlterVersion;
 
@@ -90,7 +90,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TAlterOlapTable TConfigureParts"
+                << "TAlterColumnTable TConfigureParts"
                 << " operationId#" << OperationId;
     }
 
@@ -113,15 +113,15 @@ public:
                    << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPath path = TPath::Init(pathId, context.SS);
         TString pathString = path.PathString();
 
-        TOlapTableInfo::TPtr tableInfo = context.SS->OlapTables[pathId];
+        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables[pathId];
         Y_VERIFY(tableInfo);
-        TOlapTableInfo::TPtr alterInfo = tableInfo->AlterData;
+        TColumnTableInfo::TPtr alterInfo = tableInfo->AlterData;
         Y_VERIFY(alterInfo);
 
         auto olapStorePath = path.FindOlapStore();
@@ -196,7 +196,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TAlterOlapTable TPropose"
+                << "TAlterColumnTable TPropose"
                 << " operationId#" << OperationId;
     }
 
@@ -219,22 +219,22 @@ public:
                      << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TOlapTableInfo::TPtr tableInfo = context.SS->OlapTables[pathId];
+        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables[pathId];
         Y_VERIFY(tableInfo);
-        TOlapTableInfo::TPtr alterInfo = tableInfo->AlterData;
+        TColumnTableInfo::TPtr alterInfo = tableInfo->AlterData;
         Y_VERIFY(alterInfo);
         alterInfo->AlterBody.Clear();
-        context.SS->OlapTables[pathId] = alterInfo;
+        context.SS->ColumnTables[pathId] = alterInfo;
 
-        context.SS->PersistOlapTableAlterRemove(db, pathId);
-        context.SS->PersistOlapTable(db, pathId, *alterInfo);
+        context.SS->PersistColumnTableAlterRemove(db, pathId);
+        context.SS->PersistColumnTable(db, pathId, *alterInfo);
 
         auto parentDir = context.SS->PathsById.at(path->ParentPathId);
         if (parentDir->IsLikeDirectory()) {
@@ -262,7 +262,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -282,7 +282,7 @@ private:
 
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TAlterOlapTable TProposedWaitParts"
+                << "TAlterColumnTable TProposedWaitParts"
                 << " operationId#" << OperationId;
     }
 
@@ -299,7 +299,7 @@ public:
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -318,7 +318,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxAlterOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxAlterColumnTable);
 
         txState->ClearShardsInProgress();
 
@@ -347,7 +347,7 @@ public:
     }
 };
 
-class TAlterOlapTable: public TSubOperation {
+class TAlterColumnTable: public TSubOperation {
 private:
     const TOperationId OperationId;
     const TTxTransaction Transaction;
@@ -396,13 +396,13 @@ private:
     }
 
 public:
-    TAlterOlapTable(TOperationId id, const TTxTransaction& tx)
+    TAlterColumnTable(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
         , Transaction(tx)
     {
     }
 
-    TAlterOlapTable(TOperationId id, TTxState::ETxState state)
+    TAlterColumnTable(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
         , State(state)
     {
@@ -418,7 +418,7 @@ public:
         const TString& name = alter.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterOlapTable Propose"
+                     "TAlterColumnTable Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", opId: " << OperationId
                          << ", at schemeshard: " << ssId);
@@ -439,7 +439,7 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsOlapTable()
+                .IsColumnTable()
                 .NotUnderOperation();
 
             if (!checks) {
@@ -451,8 +451,8 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->OlapTables.contains(path.Base()->PathId));
-        TOlapTableInfo::TPtr tableInfo = context.SS->OlapTables.at(path.Base()->PathId);
+        Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
+        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
 
         TPath storePath = TPath::Init(tableInfo->OlapStorePathId, context.SS);
         {
@@ -491,18 +491,18 @@ public:
         }
 
         NKikimrScheme::EStatus status;
-        TOlapTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, *path.DomainInfo(), status, errStr, context);
+        TColumnTableInfo::TPtr alterData = ParseParams(path, tableInfo, storeInfo, alter, *path.DomainInfo(), status, errStr, context);
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
         }
 
-        Y_VERIFY(storeInfo->OlapTables.contains(path->PathId));
-        storeInfo->OlapTablesUnderOperation.insert(path->PathId);
+        Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
+        storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
 
         NIceDb::TNiceDb db(context.GetDB());
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterOlapTable, path->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxAlterColumnTable, path->PathId);
         txState.State = TTxState::ConfigureParts;
 
         // TODO: we need to know all shards where this table is currently active
@@ -528,7 +528,7 @@ public:
         storePath.Base()->LastTxId = OperationId.GetTxId();
         context.SS->PersistLastTxId(db, storePath.Base());
 
-        context.SS->PersistOlapTableAlter(db, path->PathId, *alterData);
+        context.SS->PersistColumnTableAlter(db, path->PathId, *alterData);
         context.SS->PersistTxState(db, OperationId);
 
         context.OnComplete.ActivateTx(OperationId);
@@ -539,12 +539,12 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TAlterOlapTable");
+        Y_FAIL("no AbortPropose for TAlterColumnTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterOlapTable AbortUnsafe"
+                     "TAlterColumnTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -558,13 +558,13 @@ public:
 namespace NKikimr {
 namespace NSchemeShard {
 
-ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, const TTxTransaction& tx) {
-    return new TAlterOlapTable(id, tx);
+ISubOperationBase::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction& tx) {
+    return new TAlterColumnTable(id, tx);
 }
 
-ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, TTxState::ETxState state) {
+ISubOperationBase::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TAlterOlapTable(id, state);
+    return new TAlterColumnTable(id, state);
 }
 
 }

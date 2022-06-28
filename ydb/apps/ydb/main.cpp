@@ -1,5 +1,5 @@
 #include "commands/ydb_root.h"
-#include <ydb/public/lib/ydb_cli/commands/ydb_service_stream.h>
+#include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
 TVector<NYdb::NPersQueue::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     return TVector<NYdb::NPersQueue::ECodec>{

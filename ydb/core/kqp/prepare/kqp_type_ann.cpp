@@ -1029,6 +1029,43 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns) {
+
+    if (!EnsureArgsCount(*node, 4, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TKqpCnStreamLookup::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!TDqOutput::Match(node->Child(TKqpCnStreamLookup::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TDqCnMerge::idx_Output)->Pos()),
+            TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpCnStreamLookup::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnStreamLookup::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+
+    TCoAtomList columns{node->ChildPtr(TKqlLookupTableBase::idx_Columns)};
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+    return TStatus::Ok;
+}
+
 } // namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cluster,
@@ -1097,6 +1134,10 @@ TAutoPtr<IGraphTransformer> CreateKqpTypeAnnotationTransformer(const TString& cl
 
             if (TKqpCnMapShard::Match(input.Get()) || TKqpCnShuffleShard::Match(input.Get())) {
                 return AnnotateDqConnection(input, ctx);
+            }
+
+            if (TKqpCnStreamLookup::Match(input.Get())) {
+                return AnnotateStreamLookupConnection(input, ctx, cluster, *tablesData, config->SystemColumnsEnabled());
             }
 
             if (TKqpTxResultBinding::Match(input.Get())) {

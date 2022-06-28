@@ -3,6 +3,7 @@
 #include <ydb/library/yql/core/type_ann/type_ann_pg.h>
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
 namespace NYql {
@@ -33,8 +34,8 @@ TSet<TString> ExtractExternalColumns(const TExprNode& select) {
         YQL_ENSURE(extTypes);
         for (const auto& input : extTypes->Tail().Children()) {
             auto type = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-            for (const auto& i : type->GetItems()) {
-                res.insert(NTypeAnnImpl::MakeAliasedColumn(input->Head().Content(), i->GetName()));
+            for (const auto& item : type->GetItems()) {
+                res.insert(NTypeAnnImpl::MakeAliasedColumn(input->Head().Content(), item->GetName()));
             }
         }
     }
@@ -147,7 +148,8 @@ void RewriteAggs(TExprNode::TPtr& lambda, const TAggregationMap& aggId, TExprCon
 
 std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
     const TExprNode::TPtr& list, const TExprNode::TPtr& lambda,
-    const TNodeMap<ui32>& subLinks, const TExprNode::TPtr& joins,
+    const TNodeMap<ui32>& subLinks, const TVector<TString>& inputAliases,
+    const TExprNode::TListType& cleanedInputs,
     const TAggregationMap* aggId, TExprContext& ctx, TOptimizeContext& optCtx) {
     auto newList = list;
     auto originalRow = lambda->Head().HeadPtr();
@@ -178,9 +180,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                 RewriteAggs(testLambda, *aggId, ctx, optCtx, true);
             }
 
-            TSet<TString> extColumns = ExtractExternalColumns(node->Tail());
+            auto extColumns = ExtractExternalColumns(node->Tail());
             if (extColumns.empty()) {
-                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, nullptr);
+                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
                 if (linkType == "exists") {
                     return ctx.Builder(node->Pos())
                         .Callable("ToPg")
@@ -294,7 +296,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                         .Build();
                 }
             } else {
-                auto colList = ctx.Builder(node->Pos())
+                auto fullColList = ctx.Builder(node->Pos())
                     .List()
                         .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
                             ui32 i = 0;
@@ -307,23 +309,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                     .Seal()
                     .Build();
 
-                auto outerList = ctx.Builder(node->Pos())
-                    .Callable("ExtractMembers")
-                        .Add(0, joins)
-                        .Add(1, colList)
-                    .Seal()
-                    .Build();
-
-                auto uniqueOuterList = ctx.Builder(node->Pos())
-                    .Callable("Aggregate")
-                        .Add(0, outerList)
-                        .Add(1, colList)
-                        .List(2)
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, uniqueOuterList);
+                auto select = ExpandPgSelectSublink(node->TailPtr(), ctx, optCtx, it->second, cleanedInputs, inputAliases);
 
                 auto exportsPtr = optCtx.Types->Modules->GetModule("/lib/yql/aggregate.yql");
                 YQL_ENSURE(exportsPtr);
@@ -461,9 +447,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                         .Add(0, select)
                         .List(1)
                             .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
-                                for (ui32 i = 0; i < colList->ChildrenSize(); ++i) {
+                                for (ui32 i = 0; i < fullColList->ChildrenSize(); ++i) {
                                     parent.Atom(i, TString("_yql_join_sublink_") + ToString(it->second) +
-                                        "_" + colList->Child(i)->Content());
+                                        "_" + fullColList->Child(i)->Content());
                                 }
 
                                 return parent;
@@ -473,7 +459,7 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                     .Seal()
                     .Build();
 
-                newList = JoinColumns(pos, newList, groupedSublink, colList, it->second, ctx);
+                newList = JoinColumns(pos, newList, groupedSublink, fullColList, it->second, ctx);
 
                 if (linkType == "exists") {
                     return ctx.Builder(node->Pos())
@@ -572,11 +558,13 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
     };
 }
 
-TExprNode::TPtr BuildFilter(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& filter, TExprContext& ctx, TOptimizeContext& optCtx) {
+TExprNode::TPtr BuildFilter(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& filter,
+    const TVector<TString>& inputAliases, const TExprNode::TListType& cleanedInputs, TExprContext& ctx, TOptimizeContext& optCtx) {
     TExprNode::TPtr actualList = list, actualFilter = filter;
     auto subLinks = GatherSubLinks(filter);
     if (!subLinks.empty()) {
-        std::tie(actualList, actualFilter) = RewriteSubLinks(filter->Pos(), list, filter, subLinks, list, nullptr, ctx, optCtx);
+        std::tie(actualList, actualFilter) = RewriteSubLinks(filter->Pos(), list, filter,
+            subLinks, inputAliases, cleanedInputs, nullptr, ctx, optCtx);
     }
 
     return ctx.Builder(pos)
@@ -805,11 +793,13 @@ void FillInputIndices(const TExprNode::TPtr& from, const TExprNode::TPtr& finalE
     }
 }
 
-TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::TPtr& from, const TUsedColumns& usedColumns, TExprContext& ctx) {
+TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::TPtr& from, const TUsedColumns& usedColumns,
+    TVector<TString>& inputAliases, TExprContext& ctx) {
     TExprNode::TListType cleanedInputs;
     for (ui32 i = 0; i < from->Tail().ChildrenSize(); ++i) {
         auto list = from->Tail().Child(i)->HeadPtr();
         const auto& inputAlias = from->Tail().Child(i)->Child(1)->Content();
+        inputAliases.push_back(TString(inputAlias));
         if (list->IsCallable("PgResolvedCall")) {
             const auto& columns = from->Tail().Child(i)->Tail();
             Y_ENSURE(!inputAlias.empty());
@@ -879,6 +869,72 @@ TExprNode::TListType BuildCleanedColumns(TPositionHandle pos, const TExprNode::T
     return cleanedInputs;
 }
 
+TExprNode::TPtr BuildMinus(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TExprNode::TPtr& predicate, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("Filter")
+            .Add(0, left)
+            .Lambda(1)
+                .Param("x")
+                .Callable(0, "Not")
+                    .Callable(0, "HasItems")
+                        .Callable(0, "Filter")
+                            .Add(0, right)
+                            .Lambda(1)
+                                .Param("y")
+                                .Callable("Coalesce")
+                                    .Callable(0, "FromPg")
+                                        .Apply(0, predicate)
+                                            .With(0)
+                                                .Callable("FlattenMembers")
+                                                    .List(0)
+                                                        .Atom(0, "")
+                                                        .Arg(1,"x")
+                                                    .Seal()
+                                                    .List(1)
+                                                        .Atom(0, "")
+                                                        .Arg(1, "y")
+                                                    .Seal()
+                                                .Seal()
+                                            .Done()
+                                        .Seal()
+                                    .Seal()
+                                    .Callable(1, "Bool")
+                                        .Atom(0, "0")
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr BuildScalarMinus(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right,
+    const TExprNode::TPtr& coalescedPredicate, TExprContext& ctx) {
+    return ctx.Builder(pos)
+        .Callable("If")
+            .Callable(0, "Or")
+                .Callable(0, "Not")
+                    .Add(0, coalescedPredicate)
+                .Seal()
+                .Callable(1, "==")
+                    .Callable(0, "Length")
+                        .Add(0, right)
+                    .Seal()
+                    .Callable(1, "Uint64")
+                        .Atom(0, "0")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Add(1, left)
+            .Callable(2, "EmptyList")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle pos, const TExprNode::TListType& cleanedInputs,
     const TExprNode::TPtr& joinOps, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> groupForIndex;
@@ -900,94 +956,79 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
             // current = join current & with
             auto join = groupTuple->Child(i);
             auto joinType = join->Child(0)->Content();
-            auto cartesian = ctx.Builder(pos)
-                    .Callable("FlatMap")
-                        .Add(0, current)
-                        .Lambda(1)
-                            .Param("x")
-                            .Callable("Map")
-                                .Add(0, with)
-                                .Lambda(1)
-                                    .Param("y")
-                                    .Callable("FlattenMembers")
-                                        .List(0)
-                                            .Atom(0, "")
-                                            .Arg(1,"x")
-                                        .Seal()
-                                        .List(1)
-                                            .Atom(0, "")
-                                            .Arg(1, "y")
-                                        .Seal()
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
-
-            auto buildMinus = [&](auto left, auto right) {
-                return ctx.Builder(pos)
-                    .Callable("Filter")
-                        .Add(0, left)
-                        .Lambda(1)
-                            .Param("x")
-                            .Callable(0, "Not")
-                                .Callable(0, "HasItems")
-                                    .Callable(0, "Filter")
-                                        .Add(0, right)
-                                        .Lambda(1)
-                                            .Param("y")
-                                            .Callable("Coalesce")
-                                                .Callable(0, "FromPg")
-                                                    .Apply(0, join->Tail().TailPtr())
-                                                        .With(0)
-                                                            .Callable("FlattenMembers")
-                                                                .List(0)
-                                                                    .Atom(0, "")
-                                                                    .Arg(1,"x")
-                                                                .Seal()
-                                                                .List(1)
-                                                                    .Atom(0, "")
-                                                                    .Arg(1, "y")
-                                                                .Seal()
-                                                            .Seal()
-                                                        .Done()
-                                                    .Seal()
-                                                .Seal()
-                                                .Callable(1, "Bool")
-                                                    .Atom(0, "0")
-                                                .Seal()
-                                            .Seal()
-                                        .Seal()
-                                    .Seal()
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                    .Seal()
-                    .Build();
-            };
-
-            TExprNode::TPtr filteredCartesian;
-            if (joinType != "cross") {
-                filteredCartesian = BuildFilter(pos, cartesian, join->Tail().TailPtr(), ctx, optCtx);
-            }
-
+            auto cartesian = JoinColumns(pos, current, with, nullptr, 0, ctx);
             if (joinType == "cross") {
                 current = cartesian;
-            } else if (joinType == "inner") {
+                continue;
+            }
+
+            auto predicate = join->Tail().TailPtr();
+            if (!IsDepended(predicate->Tail(), predicate->Head().Head())) {
+                auto coalescedPredicate = ctx.Builder(pos)
+                    .Callable("Coalesce")
+                        .Callable(0, "FromPg")
+                            .Add(0, predicate->TailPtr())
+                        .Seal()
+                        .Callable(1, "Bool")
+                            .Atom(0, "0")
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                auto main = ctx.Builder(pos)
+                    .Callable("If")
+                        .Add(0, coalescedPredicate)
+                        .Add(1, cartesian)
+                        .Callable(2, "EmptyList")
+                        .Seal()
+                    .Seal()
+                    .Build();
+
+                if (joinType == "inner") {
+                    current = main;
+                } else if (joinType == "left") {
+                    current = ctx.Builder(pos)
+                        .Callable("UnionAll")
+                            .Add(0, main)
+                            .Add(1, BuildScalarMinus(pos, current, with, coalescedPredicate, ctx))
+                        .Seal()
+                        .Build();
+                } else if (joinType == "right") {
+                    current = ctx.Builder(pos)
+                        .Callable("UnionAll")
+                            .Add(0, main)
+                            .Add(1, BuildScalarMinus(pos, with, current, coalescedPredicate, ctx))
+                        .Seal()
+                        .Build();
+                } else {
+                    YQL_ENSURE(joinType == "full");
+                    current = ctx.Builder(pos)
+                        .Callable("UnionAll")
+                            .Add(0, main)
+                            .Add(1, BuildScalarMinus(pos, current, with, coalescedPredicate, ctx))
+                            .Add(2, BuildScalarMinus(pos, with, current, coalescedPredicate, ctx))
+                        .Seal()
+                        .Build();
+                }
+
+                continue;
+            }
+
+            auto filteredCartesian = BuildFilter(pos, cartesian, predicate, {}, {}, ctx, optCtx);
+            if (joinType == "inner") {
                 current = filteredCartesian;
             } else if (joinType == "left") {
                 current = ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
-                        .Add(1, buildMinus(current, with))
+                        .Add(1, BuildMinus(pos, current, with, predicate, ctx))
                     .Seal()
                     .Build();
             } else if (joinType == "right") {
                 current = ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
-                        .Add(1, buildMinus(with, current))
+                        .Add(1, BuildMinus(pos, with, current, predicate, ctx))
                     .Seal()
                     .Build();
             } else {
@@ -995,8 +1036,8 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                 current = ctx.Builder(pos)
                     .Callable("UnionAll")
                         .Add(0, filteredCartesian)
-                        .Add(1, buildMinus(current, with))
-                        .Add(2, buildMinus(with, current))
+                        .Add(1, BuildMinus(pos, current, with, predicate, ctx))
+                        .Add(2, BuildMinus(pos, with, current, predicate, ctx))
                     .Seal()
                     .Build();
             }
@@ -1020,34 +1061,9 @@ TExprNode::TPtr BuildCrossJoinsBetweenGroups(TPositionHandle pos, const TExprNod
             .Build());
     }
 
-    auto tree = ctx.Builder(pos)
-        .List()
-            .Atom(0, "Cross")
-            .Atom(1, "0")
-            .Atom(2, "1")
-            .List(3)
-            .Seal()
-            .List(4)
-            .Seal()
-            .List(5)
-            .Seal()
-        .Seal()
-        .Build();
-
+    auto tree = MakeCrossJoin(pos, ctx.NewAtom(pos, "0"), ctx.NewAtom(pos, "1"), ctx);
     for (ui32 i = 2; i < joinGroups.size(); ++i) {
-        tree = ctx.Builder(pos)
-            .List()
-                .Atom(0, "Cross")
-                .Add(1, tree)
-                .Atom(2, ToString(i))
-                .List(3)
-                .Seal()
-                .List(4)
-                .Seal()
-                .List(5)
-                .Seal()
-            .Seal()
-            .Build();
+        tree = MakeCrossJoin(pos, tree, ctx.NewAtom(pos, ToString(i)), ctx);
     }
 
     args.push_back(tree);
@@ -1175,7 +1191,8 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow, const
 
 TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, TExprNode::TPtr list,
     const TExprNode::TPtr& groupBy, const TExprNode::TPtr& having, TExprNode::TPtr& projectionLambda,
-    const TExprNode::TPtr& finalExtTypes, TExprNode::TPtr joins, TExprContext& ctx, TOptimizeContext& optCtx) {
+    const TExprNode::TPtr& finalExtTypes, const TVector<TString>& inputAliases,
+    const TExprNode::TListType& cleanedInputs, TExprContext& ctx, TOptimizeContext& optCtx) {
     TAggs aggs;
     TAggregationMap aggId;
 
@@ -1187,7 +1204,7 @@ TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, TExprNode::TPtr list,
     auto projectionSubLinks = GatherSubLinks(projectionLambda);
     if (!projectionSubLinks.empty()) {
         std::tie(list, projectionLambda) = RewriteSubLinks(projectionLambda->Pos(), list, projectionLambda,
-            projectionSubLinks, joins, &aggId, ctx, optCtx);
+            projectionSubLinks, inputAliases, cleanedInputs, &aggId, ctx, optCtx);
     }
 
     if (aggs.empty() && !groupBy && !having) {
@@ -1320,7 +1337,7 @@ TExprNode::TPtr BuildGroupByAndHaving(TPositionHandle pos, TExprNode::TPtr list,
         auto havingSubLinks = GatherSubLinks(havingLambda);
         if (!havingSubLinks.empty()) {
             std::tie(list, havingLambda) = RewriteSubLinks(havingLambda->Pos(), list, havingLambda,
-                havingSubLinks, joins, &aggId, ctx, optCtx);
+                havingSubLinks, inputAliases, cleanedInputs, &aggId, ctx, optCtx);
         } else {
             RewriteAggs(havingLambda, aggId, ctx, optCtx, false);
         }
@@ -1738,8 +1755,61 @@ TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& lambda, const TExprNode::TP
         .Build();
 }
 
+TExprNode::TPtr JoinOuter(TPositionHandle pos, TExprNode::TPtr list,
+    const TExprNode::TPtr& finalExtTypes, const TExprNode::TListType& outerInputs,
+    const TVector<TString>& outerInputAliases,
+    TExprNode::TListType& cleanedInputs, TVector<TString>& inputAliases, TExprContext& ctx) {
+    YQL_ENSURE(finalExtTypes);
+    YQL_ENSURE(outerInputs.size() == finalExtTypes->Tail().ChildrenSize());
+    for (ui32 index = 0; index < finalExtTypes->Tail().ChildrenSize(); ++index) {
+        const auto& input = finalExtTypes->Tail().Child(index);
+        const auto& inputAlias = input->Head().Content();
+        YQL_ENSURE(inputAlias == outerInputAliases[index]);
+        inputAliases.push_back(TString(inputAlias));
+        cleanedInputs.push_back(outerInputs[index]);
+
+        auto type = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        if (type->GetSize() == 0) {
+            continue;
+        }
+
+        auto colList = ctx.Builder(pos)
+            .List()
+            .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
+                ui32 i = 0;
+                for (const auto& item : type->GetItems()) {
+                    parent.Atom(i++, NTypeAnnImpl::MakeAliasedColumn(inputAlias, item->GetName()));
+                }
+
+                return parent;
+            })
+            .Seal()
+            .Build();
+
+        auto outerInput = ctx.Builder(pos)
+            .Callable("ExtractMembers")
+            .Add(0, outerInputs[index])
+            .Add(1, colList)
+            .Seal()
+            .Build();
+
+        auto uniqueOuterInput = ctx.Builder(pos)
+            .Callable("Aggregate")
+            .Add(0, outerInput)
+            .Add(1, colList)
+            .List(2)
+            .Seal()
+            .Seal()
+            .Build();
+
+        list = JoinColumns(pos, list, uniqueOuterInput, nullptr, 0, ctx);
+    }
+
+    return list;
+}
+
 TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx,
-    TMaybe<ui32> subLinkId, const TExprNode::TPtr& outer) {
+    TMaybe<ui32> subLinkId, const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases) {
     auto order = optCtx.Types->LookupColumnOrder(*node);
     YQL_ENSURE(order);
     TExprNode::TListType columnsItems;
@@ -1775,8 +1845,12 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         } else {
             YQL_ENSURE(result);
             TExprNode::TPtr projectionLambda = BuildProjectionLambda(node->Pos(), result, subLinkId.Defined(), ctx);
+            TVector<TString> inputAliases;
+            TExprNode::TListType cleanedInputs;
             if (oneRow) {
                 list = BuildOneRow(node->Pos(), ctx);
+                inputAliases.push_back("");
+                cleanedInputs.push_back(list);
             } else {
                 // extract all used columns
                 auto usedColumns = GatherUsedColumns(result, joinOps, filter, having);
@@ -1784,7 +1858,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 // fill index of input for each column
                 FillInputIndices(from, finalExtTypes, usedColumns, optCtx);
 
-                auto cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, ctx);
+                cleanedInputs = BuildCleanedColumns(node->Pos(), from, usedColumns, inputAliases, ctx);
                 if (cleanedInputs.size() == 1) {
                     list = cleanedInputs.front();
                 } else {
@@ -1799,17 +1873,16 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 }
             }
 
-            if (outer) {
-                list = JoinColumns(node->Pos(), list, outer, nullptr, 0, ctx);
+            if (!outerInputs.empty()) {
+                list = JoinOuter(node->Pos(), list, finalExtTypes, outerInputs, outerInputAliases, cleanedInputs, inputAliases, ctx);
             }
 
-            auto joins = list;
             if (filter) {
-                list = BuildFilter(node->Pos(), list, filter->Tail().TailPtr(), ctx, optCtx);
+                list = BuildFilter(node->Pos(), list, filter->Tail().TailPtr(), inputAliases, cleanedInputs, ctx, optCtx);
             }
 
             list = BuildGroupByAndHaving(node->Pos(), list, groupBy, having, projectionLambda,
-                    finalExtTypes, joins, ctx, optCtx);
+                    finalExtTypes, inputAliases, cleanedInputs, ctx, optCtx);
 
             list = BuildWindows(node->Pos(), list, window, projectionLambda, ctx, optCtx);
 
@@ -1861,11 +1934,12 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 }
 
 TExprNode::TPtr ExpandPgSelect(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    return ExpandPgSelectImpl(node, ctx, optCtx, Nothing(), nullptr);
+    return ExpandPgSelectImpl(node, ctx, optCtx, Nothing(), {}, {});
 }
 
-TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx, ui32 subLinkId, const TExprNode::TPtr& outer) {
-    return ExpandPgSelectImpl(node, ctx, optCtx, subLinkId, outer);
+TExprNode::TPtr ExpandPgSelectSublink(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx, ui32 subLinkId,
+    const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases) {
+    return ExpandPgSelectImpl(node, ctx, optCtx, subLinkId, outerInputs, outerInputAliases);
 }
 
 TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {

@@ -366,7 +366,8 @@ private:
         CA_LOG_D("Got EvScanData, rows: " << rowsCount << ", bytes: " << bytes << ", finished: " << msg.Finished
                 << ", from: " << ev->Sender << ", shards remain: " << PendingShards.size()
                 << ", in flight shards " << InFlightShards.size()
-                << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimitter");
+                << ", LastKey " << PrintLastKey()
+                << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimiter");
 
         if (rowsCount == 0 && !msg.Finished && state->State != EShardState::PostRunning) {
             SendScanDataAck(state);

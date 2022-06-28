@@ -31,6 +31,7 @@ enum class ESchemeEntryType : i32 {
     ColumnTable = 13,
     Sequence = 15,
     Replication = 16,
+    Topic = 17
 };
 
 struct TSchemeEntry {

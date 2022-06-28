@@ -92,8 +92,6 @@ namespace NKikimr::NBlobDepot {
             PassAway();
         }
 
-        void SendResponseToAgent(IEventHandle& request, std::unique_ptr<IEventBase> response);
-
         void InitChannelKinds();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

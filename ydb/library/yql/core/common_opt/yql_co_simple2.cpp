@@ -13,7 +13,7 @@ namespace {
 using namespace NNodes;
 
 bool HasTotalOrder(const TTypeAnnotationNode& type) {
-    if (type.GetKind() == ETypeAnnotationKind::Optional) {
+    if (type.GetKind() == ETypeAnnotationKind::Optional || type.GetKind() == ETypeAnnotationKind::Pg) {
         return false; // may be null
     }
 

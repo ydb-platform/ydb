@@ -584,6 +584,7 @@ private:
                     case NKqpProto::TKqpPhyConnection::kHashShuffle:
                     case NKqpProto::TKqpPhyConnection::kUnionAll:
                     case NKqpProto::TKqpPhyConnection::kMerge:
+                    case NKqpProto::TKqpPhyConnection::kStreamLookup:
                         break;
                     default:
                         YQL_ENSURE(false, "Unexpected connection type: " << (ui32)input.GetTypeCase());
@@ -606,6 +607,7 @@ private:
                 }
 
                 case NKqpProto::TKqpPhyConnection::kMap:
+                case NKqpProto::TKqpPhyConnection::kStreamLookup:
                     partitionsCount = originStageInfo.Tasks.size();
                     break;
 
@@ -647,7 +649,7 @@ private:
                 YQL_ENSURE(false, "Unexpected stage type " << (int) stageInfo.Meta.TableKind);
             }
 
-            BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling);
+            BuildKqpStageChannels(TasksGraph, TableKeys, stageInfo, TxId, AppData()->EnableKqpSpilling, Request.Snapshot);
         }
 
         BuildKqpExecuterResults(*tx.Body, Results);

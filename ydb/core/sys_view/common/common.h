@@ -28,5 +28,7 @@ enum class EProcessorMode {
     FAST // fast mode for tests
 };
 
+constexpr size_t TOP_PARTITIONS_COUNT = 10;
+
 } // NSysView
 } // NKikimr

@@ -423,6 +423,11 @@ class URLLib3Session:
         transfer_encoding = ensure_bytes(transfer_encoding)
         return transfer_encoding.lower() == b'chunked'
 
+    def close(self):
+        self._manager.clear()
+        for manager in self._proxy_managers.values():
+            manager.clear()
+
     def send(self, request):
         try:
             proxy_url = self._proxy_config.proxy_url_for(request.url)

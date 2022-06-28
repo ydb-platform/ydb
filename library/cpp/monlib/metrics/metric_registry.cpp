@@ -128,8 +128,8 @@ namespace NMonitoring {
         return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(supplier), false);
     }
 
-    THistogram* TMetricRegistry::HistogramCounter(TLabels labels, nullptr_t) {
-        return HistogramCounter(std::move(labels), IHistogramCollectorPtr(nullptr));
+    THistogram* TMetricRegistry::HistogramCounter(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> supplier) {
+        return Metric<THistogram, EMetricType::HIST>(std::move(labels), std::move(supplier), false);
     }
 
     THistogram* TMetricRegistry::HistogramRate(TLabels labels, IHistogramCollectorPtr collector) {
@@ -144,8 +144,8 @@ namespace NMonitoring {
         return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(supplier), true);
     }
 
-    THistogram* TMetricRegistry::HistogramRate(TLabels labels, nullptr_t) {
-        return HistogramRate(std::move(labels), IHistogramCollectorPtr(nullptr));
+    THistogram* TMetricRegistry::HistogramRate(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> supplier) {
+        return Metric<THistogram, EMetricType::HIST_RATE>(std::move(labels), std::move(supplier), true);
     }
 
     void TMetricRegistry::Reset() {
@@ -214,12 +214,6 @@ namespace NMonitoring {
     void TMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {
         TWriteGuard g{*Lock_};
         Metrics_.erase(labels);
-    }
-
-    bool TMetricRegistry::HasMetric(const ILabels &labels) noexcept {
-        TReadGuard g{*Lock_};
-
-        return Metrics_.contains(labels);
     }
 
     void TMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {

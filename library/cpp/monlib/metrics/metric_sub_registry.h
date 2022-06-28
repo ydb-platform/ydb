@@ -79,6 +79,16 @@ public:
         return DelegatePtr_->HistogramRate(std::move(labels), std::move(collector));
     }
 
+    IHistogram* HistogramCounter(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> collector) override {
+        AddCommonLabels(labels.Get());
+        return DelegatePtr_->HistogramCounter(std::move(labels), std::move(collector));
+    }
+
+    IHistogram* HistogramRate(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> collector) override {
+        AddCommonLabels(labels.Get());
+        return DelegatePtr_->HistogramRate(std::move(labels), std::move(collector));
+    }
+
     void Accept(TInstant time, IMetricConsumer* consumer) const override {
         DelegatePtr_->Accept(time, consumer);
     }
@@ -98,15 +108,6 @@ public:
         }
         AddCommonLabels(&toRemove);
         DelegatePtr_->RemoveMetric(toRemove);
-    }
-
-    bool HasMetric(const ILabels &labels) noexcept override {
-        TLabelsImpl<TStringBuf> toCheck;
-        for (auto& l: labels) {
-            toCheck.Add(l);
-        }
-        AddCommonLabels(&toCheck);
-        return DelegatePtr_->HasMetric(toCheck);
     }
 
 private:

@@ -43,14 +43,14 @@ namespace NMonitoring {
         return Metric<TFakeHistogram, EMetricType::HIST>(std::move(labels), false);
     }
 
+    IHistogram* TFakeMetricRegistry::HistogramCounter(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> collector) {
+        Y_UNUSED(collector);
+        return Metric<TFakeHistogram, EMetricType::HIST>(std::move(labels), false);
+    }
+
     void TFakeMetricRegistry::RemoveMetric(const ILabels& labels) noexcept {
         TWriteGuard g{Lock_};
         Metrics_.erase(labels);
-    }
-
-    bool TFakeMetricRegistry::HasMetric(const ILabels &labels) noexcept {
-        TReadGuard g{Lock_};
-        return Metrics_.contains(labels);
     }
 
     void TFakeMetricRegistry::Accept(TInstant time, IMetricConsumer* consumer) const {
@@ -60,6 +60,11 @@ namespace NMonitoring {
     }
 
     IHistogram* TFakeMetricRegistry::HistogramRate(ILabelsPtr labels, IHistogramCollectorPtr collector) {
+        Y_UNUSED(collector);
+        return Metric<TFakeHistogram, EMetricType::HIST_RATE>(std::move(labels), true);
+    }
+
+    IHistogram* TFakeMetricRegistry::HistogramRate(ILabelsPtr labels, std::function<IHistogramCollectorPtr()> collector) {
         Y_UNUSED(collector);
         return Metric<TFakeHistogram, EMetricType::HIST_RATE>(std::move(labels), true);
     }

@@ -30,6 +30,14 @@ namespace NMonitoring {
         virtual IHistogram* HistogramRate(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) = 0;
+
+        virtual IHistogram* HistogramCounter(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector) = 0;
+
+        virtual IHistogram* HistogramRate(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector) = 0;
     };
 
     class IMetricSupplier {
@@ -44,7 +52,6 @@ namespace NMonitoring {
     public:
         virtual const TLabels& CommonLabels() const noexcept = 0;
         virtual void RemoveMetric(const ILabels& labels) noexcept = 0;
-        virtual bool HasMetric(const ILabels& labels) noexcept = 0;
     };
 
 
@@ -94,14 +101,6 @@ namespace NMonitoring {
                 TLabels labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector);
 
-        THistogram* HistogramCounter(
-                TLabels labels,
-                nullptr_t);
-
-        THistogram* HistogramRate(
-                TLabels labels,
-                nullptr_t);
-
         /**
          * Set all registered metrics to zero
          */
@@ -119,7 +118,6 @@ namespace NMonitoring {
         }
 
         void RemoveMetric(const ILabels& labels) noexcept override;
-        bool HasMetric(const ILabels &labels) noexcept override;
 
     private:
         TGauge* Gauge(ILabelsPtr labels) override;
@@ -138,6 +136,14 @@ namespace NMonitoring {
         THistogram* HistogramRate(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) override;
+
+        THistogram* HistogramCounter(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector) override;
+
+        THistogram* HistogramRate(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector) override;
 
     private:
         THolder<TRWMutex> Lock_ = MakeHolder<TRWMutex>();

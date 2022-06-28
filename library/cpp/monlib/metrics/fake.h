@@ -26,18 +26,25 @@ namespace NMonitoring {
         ILazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) override;
 
         IHistogram* HistogramCounter(
-        ILabelsPtr labels,
-        IHistogramCollectorPtr collector) override;
+                ILabelsPtr labels,
+                IHistogramCollectorPtr collector) override;
 
         IHistogram* HistogramRate(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) override;
+
+        IHistogram* HistogramCounter(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> collector) override;
+
+        IHistogram* HistogramRate(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> collector) override;
         void Accept(TInstant time, IMetricConsumer* consumer) const override;
         void Append(TInstant time, IMetricConsumer* consumer) const override;
 
         const TLabels& CommonLabels() const noexcept override;
         void RemoveMetric(const ILabels& labels) noexcept override;
-        bool HasMetric(const ILabels &labels) noexcept override;
 
     private:
         TRWMutex Lock_;

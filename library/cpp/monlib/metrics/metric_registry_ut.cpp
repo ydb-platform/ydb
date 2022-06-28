@@ -304,8 +304,8 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         registry.Gauge({{"foo", "bar"}});
         UNIT_ASSERT_EXCEPTION(registry.Counter({{"foo", "bar"}}), yexception);
 
-        registry.HistogramCounter({{"bar", "baz"}}, nullptr);
-        UNIT_ASSERT_EXCEPTION(registry.HistogramRate({{"bar", "baz"}}, nullptr), yexception);
+        registry.HistogramCounter({{"bar", "baz"}}, ExponentialHistogram(5, 2));
+        UNIT_ASSERT_EXCEPTION(registry.HistogramRate({{"bar", "baz"}}, ExponentialHistogram(5, 2)), yexception);
     }
 
     Y_UNIT_TEST(EncodeRegistryWithCommonLabels) {
@@ -381,15 +381,5 @@ Y_UNIT_TEST_SUITE(TMetricRegistryTest) {
         UNIT_ASSERT(commonLabels.size() == 1);
         UNIT_ASSERT(commonLabels[0].GetName() == "common");
         UNIT_ASSERT(commonLabels[0].GetValue() == "label");
-    }
-
-    Y_UNIT_TEST(HasMetricTest) {
-        TMetricRegistry registry;
-        TLabels labels{{"some", "labels"}};
-        TLabels anotherLabels{{"another", "label"}};
-
-        registry.Gauge(labels);
-        UNIT_ASSERT_EQUAL(registry.HasMetric(labels), true);
-        UNIT_ASSERT_EQUAL(registry.HasMetric(anotherLabels), false);
     }
 }

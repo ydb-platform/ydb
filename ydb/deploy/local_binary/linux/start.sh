@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # set -v
 if [[ $1 != "disk" && $1 != "ram" ]]; then
   echo Please specify 'disk' or 'ram' as the parameter

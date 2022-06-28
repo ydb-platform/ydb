@@ -11,12 +11,8 @@ find_package(OpenSSL REQUIRED)
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_ADX
-  -DS2N_BIKE_R3_AVX2
-  -DS2N_BIKE_R3_AVX512
-  -DS2N_BIKE_R3_PCLMUL
   -DS2N_CLONE_SUPPORTED
   -DS2N_FALL_THROUGH_SUPPORTED
-  -DS2N_KYBER512R3_AVX2_BMI2
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD_CTX_SET_PKEY_CTX
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
@@ -26,6 +22,10 @@ target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_FEATURES_AVAILABLE
   -DS2N_STACKTRACE
   -DS2N_CPUID_AVAILABLE
+  -DS2N_BIKE_R3_AVX2
+  -DS2N_BIKE_R3_AVX512
+  -DS2N_BIKE_R3_PCLMUL
+  -DS2N_KYBER512R3_AVX2_BMI2
 )
 target_include_directories(restricted-aws-s2n PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n
@@ -54,6 +54,11 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_avx512.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_vpclmul.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_fp_x64_asm.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt_avx2.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_shuffle_avx2.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_aes_gcm.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_chacha20_poly1305.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cbc_cipher_3des.c
@@ -141,19 +146,14 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/reduce.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/symmetric-fips202.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/verify.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_kem.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_reduce.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_shuffle_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq_random.c

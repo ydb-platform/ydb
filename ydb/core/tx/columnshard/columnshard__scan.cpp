@@ -170,7 +170,14 @@ private:
     bool ProduceResults() {
         Y_VERIFY(!Finished);
 
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Start producing result"
+            << ", at: " << ScanActorId
+            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
+
         if (ScanIterator->Finished()) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Producing result: scan iterator is finished"
+                << ", at: " << ScanActorId
+                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
             return false;
         }
 
@@ -221,6 +228,9 @@ private:
 
     void ContinueProcessingStep() {
         if (!ScanIterator) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan iterator is not initialized"
+                << ", at: " << ScanActorId
+                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
             return;
         }
 

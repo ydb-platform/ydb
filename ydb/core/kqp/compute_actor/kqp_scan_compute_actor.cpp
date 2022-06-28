@@ -282,7 +282,8 @@ private:
             return;
 
         CA_LOG_D("Got EvScanInitActor from " << scanActorId << ", gen: " << msg.GetGeneration()
-            << ", state: " << EShardStateToString(state->State) << ", stateGen: " << state->Generation);
+            << ", state: " << EShardStateToString(state->State) << ", stateGen: " << state->Generation
+            << ", tabletId: " << state->TabletId);
 
         YQL_ENSURE(state->Generation == msg.GetGeneration());
 
@@ -367,7 +368,8 @@ private:
                 << ", from: " << ev->Sender << ", shards remain: " << PendingShards.size()
                 << ", in flight shards " << InFlightShards.size()
                 << ", LastKey " << PrintLastKey()
-                << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimiter");
+                << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimiter"
+                << ", tabletId: " << state->TabletId);
 
         if (rowsCount == 0 && !msg.Finished && state->State != EShardState::PostRunning) {
             SendScanDataAck(state);
@@ -434,7 +436,8 @@ private:
 
         CA_LOG_W("Got EvScanError scan state: " << EShardStateToString(state->State)
             << " status: " << Ydb::StatusIds_StatusCode_Name(status)
-            << ", reason: " << issues.ToString());
+            << ", reason: " << issues.ToString()
+            << ", tablet id: " << state->TabletId);
 
         YQL_ENSURE(state->Generation == msg.GetGeneration());
 

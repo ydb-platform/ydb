@@ -94,6 +94,7 @@ bool CheckValueData(NScheme::TTypeId type, const TCell& cell, TString& err) {
     return ok;
 }
 
+
 // TODO: no mapping for DATE, DATETIME, TZ_*, YSON, JSON, UUID, JSON_DOCUMENT, DYNUMBER
 bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) {
     switch (type.id()) {
@@ -177,11 +178,15 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
 using TEvBulkUpsertRequest = TGrpcRequestOperationCall<Ydb::Table::BulkUpsertRequest,
     Ydb::Table::BulkUpsertResponse>;
 
+const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
+    return TEvBulkUpsertRequest::GetProtoRequest(req);
+}
+
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadRowsRPCPublic(TEvBulkUpsertRequest* request)
-        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
+    explicit TUploadRowsRPCPublic(IRequestOpCtx* request)
+        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()))
         , Request(request)
     {}
 
@@ -298,7 +303,7 @@ private:
 
 private:
     bool ReportCostInfoEnabled() const {
-        return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
+        return GetProtoRequest(Request.get())->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
 
     TString GetDatabase()override {
@@ -306,7 +311,7 @@ private:
     }
 
     const TString& GetTable() override {
-        return Request->GetProtoRequest()->table();
+        return GetProtoRequest(Request.get())->table();
     }
 
     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
@@ -339,7 +344,7 @@ private:
         if (!resolveResult) {
             TStringStream explanation;
             explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << Request->GetProtoRequest()->table()
+                        << " table '" << GetProtoRequest(Request.get())->table()
                         << "' has not been resolved yet";
 
             errorMessage = explanation.Str();
@@ -353,7 +358,7 @@ private:
                 TStringStream explanation;
                 explanation << "Access denied for " << userToken.GetUserSID()
                             << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << Request->GetProtoRequest()->table() << "'";
+                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
 
                 errorMessage = explanation.Str();
                 return false;
@@ -365,7 +370,7 @@ private:
     TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
         Y_UNUSED(errorMessage);
 
-        const auto& type = Request->GetProtoRequest()->Getrows().Gettype();
+        const auto& type = GetProtoRequest(Request.get())->Getrows().Gettype();
         const auto& rowType = type.Getlist_type();
         const auto& rowFields = rowType.Getitem().Getstruct_type().Getmembers();
 
@@ -395,7 +400,7 @@ private:
 
         // For each row in values
         TMemoryPool valueDataPool(256);
-        const auto& rows = Request->GetProtoRequest()->Getrows().Getvalue().Getitems();
+        const auto& rows = GetProtoRequest(Request.get())->Getrows().Getvalue().Getitems();
         for (const auto& r : rows) {
             valueDataPool.Clear();
 
@@ -436,25 +441,25 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvBulkUpsertRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TVector<std::pair<TSerializedCellVec, TString>> AllRows;
 };
 
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadColumnsRPCPublic(TEvBulkUpsertRequest* request)
-        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
+    explicit TUploadColumnsRPCPublic(IRequestOpCtx* request)
+        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()))
         , Request(request)
     {}
 
 private:
     bool ReportCostInfoEnabled() const {
-        return Request->GetProtoRequest()->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
+        return GetProtoRequest(Request.get())->operation_params().report_cost_info() == Ydb::FeatureFlag::ENABLED;
     }
 
     EUploadSource GetSourceType() const override {
-        auto* req = Request->GetProtoRequest();
+        auto* req = GetProtoRequest(Request.get());
         if (req->has_arrow_batch_settings()) {
             return EUploadSource::ArrowBatch;
         }
@@ -469,7 +474,7 @@ private:
     }
 
     const TString& GetTable() override {
-        return Request->GetProtoRequest()->table();
+        return GetProtoRequest(Request.get())->table();
     }
 
     const TVector<std::pair<TSerializedCellVec, TString>>& GetRows() const override {
@@ -477,13 +482,13 @@ private:
     }
 
     const TString& GetSourceData() const override {
-        return Request->GetProtoRequest()->data();
+        return GetProtoRequest(Request.get())->data();
     }
 
     const TString& GetSourceSchema() const override {
         static const TString none;
-        if (Request->GetProtoRequest()->has_arrow_batch_settings()) {
-            return Request->GetProtoRequest()->arrow_batch_settings().schema();
+        if (GetProtoRequest(Request.get())->has_arrow_batch_settings()) {
+            return GetProtoRequest(Request.get())->arrow_batch_settings().schema();
         }
         return none;
     }
@@ -514,7 +519,7 @@ private:
         if (!resolveResult) {
             TStringStream explanation;
             explanation << "Access denied for " << userToken.GetUserSID()
-                        << " table '" << Request->GetProtoRequest()->table()
+                        << " table '" << GetProtoRequest(Request.get())->table()
                         << "' has not been resolved yet";
 
             errorMessage = explanation.Str();
@@ -528,7 +533,7 @@ private:
                 TStringStream explanation;
                 explanation << "Access denied for " << userToken.GetUserSID()
                             << " with access " << NACLib::AccessRightsToString(access)
-                            << " to table '" << Request->GetProtoRequest()->table() << "'";
+                            << " to table '" << GetProtoRequest(Request.get())->table() << "'";
 
                 errorMessage = explanation.Str();
                 return false;
@@ -650,26 +655,35 @@ private:
     }
 
 private:
-    std::unique_ptr<TEvBulkUpsertRequest> Request;
+    std::unique_ptr<IRequestOpCtx> Request;
     TVector<std::pair<TSerializedCellVec, TString>> Rows;
 
     const Ydb::Formats::CsvSettings& GetCsvSettings() const {
-        return Request->GetProtoRequest()->csv_settings();
+        return GetProtoRequest(Request.get())->csv_settings();
     }
 };
 
 void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
-
-    auto* req = dynamic_cast<TEvBulkUpsertRequest*>(p.release());
-    Y_VERIFY(req != nullptr, "Wrong using of TGRpcRequestWrapper");
-    if (req->GetProtoRequest()->has_arrow_batch_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(req));
-    } else if (req->GetProtoRequest()->has_csv_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(req));
+    if (GetProtoRequest(p.get())->has_arrow_batch_settings()) {
+        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release()));
+    } else if (GetProtoRequest(p.get())->has_csv_settings()) {
+        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release()));
     } else {
-        TActivationContext::AsActorContext().Register(new TUploadRowsRPCPublic(req));
+        TActivationContext::AsActorContext().Register(new TUploadRowsRPCPublic(p.release()));
     }
 }
+
+template<>
+IActor* TEvBulkUpsertRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    if (GetProtoRequest(msg)->has_arrow_batch_settings()) {
+        return new TUploadColumnsRPCPublic(msg);
+    } else if (GetProtoRequest(msg)->has_csv_settings()) {
+        return new TUploadColumnsRPCPublic(msg);
+    } else {
+        return new TUploadRowsRPCPublic(msg);
+    }
+}
+
 
 } // namespace NKikimr
 } // namespace NGRpcService

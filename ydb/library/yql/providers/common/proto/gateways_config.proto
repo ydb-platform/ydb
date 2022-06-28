@@ -91,6 +91,18 @@ message TYtGatewayConfig {
     repeated TAttr DefaultSettings = 102;
 }
 
+/////////////////////////////// Grut ///////////////////////////////
+
+message TYtOrmClusterConfig {
+    optional string Name = 1;
+    optional string Cluster = 2; // Real cluster server name with port
+    optional bool Enabled = 3 [default = true]; // Allow to handle YTORM queries
+}
+
+message TYtOrmGatewayConfig {
+    repeated TYtOrmClusterConfig ClusterMapping = 1;
+}
+
 /////////////////////////////// Kikimr ///////////////////////////////
 
 message THostPort {
@@ -463,4 +475,5 @@ message TGatewaysConfig {
     optional TPqGatewayConfig Pq = 16;
     optional TS3GatewayConfig S3 = 17;
     optional THttpGatewayConfig HttpGateway = 18;
+    optional TYtOrmGatewayConfig YtOrm = 19;
 }

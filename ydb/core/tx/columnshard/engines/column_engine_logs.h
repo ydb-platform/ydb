@@ -150,6 +150,7 @@ public:
     const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
     const TColumnEngineStats& GetTotalStats() override;
     ui64 MemoryUsage() const override;
+    TSnapshot LastUpdate() const override { return LastSnapshot; }
 
     std::shared_ptr<TSelectInfo> Select(ui64 pathId, TSnapshot snapshot,
                                         const THashSet<ui32>& columnIds,

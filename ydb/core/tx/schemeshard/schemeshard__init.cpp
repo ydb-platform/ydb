@@ -2135,7 +2135,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
                 }
 
-                TTableInfo::TPartitionStats stats;
+                TPartitionStats stats;
 
                 stats.SeqNo = TMessageSeqNo(
                     rowSet.GetValue<Schema::TablePartitionStats::SeqNoGeneration>(),

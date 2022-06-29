@@ -339,6 +339,22 @@ struct TColumnEngineStats {
     TPortionsStats Inactive{};
     TPortionsStats Evicted{};
 
+    TPortionsStats Active() const {
+        return TPortionsStats {
+            .Portions = ActivePortions(),
+            .Blobs = ActiveBlobs(),
+            .Rows = ActiveRows(),
+            .Bytes = ActiveBytes(),
+            .RawBytes = ActiveRawBytes()
+        };
+    }
+
+    ui64 ActivePortions() const { return Inserted.Portions + Compacted.Portions + SplitCompacted.Portions; }
+    ui64 ActiveBlobs() const { return Inserted.Blobs + Compacted.Blobs + SplitCompacted.Blobs; }
+    ui64 ActiveRows() const { return Inserted.Rows + Compacted.Rows + SplitCompacted.Rows; }
+    ui64 ActiveBytes() const { return Inserted.Bytes + Compacted.Bytes + SplitCompacted.Bytes; }
+    ui64 ActiveRawBytes() const { return Inserted.RawBytes + Compacted.RawBytes + SplitCompacted.RawBytes; }
+
     void Clear() {
         *this = {};
     }
@@ -375,6 +391,7 @@ public:
     virtual const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const = 0;
     virtual const TColumnEngineStats& GetTotalStats() = 0;
     virtual ui64 MemoryUsage() const { return 0; }
+    virtual TSnapshot LastUpdate() const { return {}; }
 };
 
 }

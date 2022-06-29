@@ -8,7 +8,7 @@
 
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
-// TODO: temporarily reuse datashard TEvScan (KIKIMR-11069)
+// TODO: temporarily reuse datashard TEvScan (KIKIMR-11069) and TEvPeriodicTableStats
 #include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
@@ -268,6 +268,7 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
+    using TEvPeriodicTableStats = TEvDataShard::TEvPeriodicTableStats;
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

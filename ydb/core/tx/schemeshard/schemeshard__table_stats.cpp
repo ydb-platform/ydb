@@ -29,7 +29,7 @@ void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, 
 }
 
 auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId,
-    TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TTableInfo::TPartitionStats& stats)
+    TMaybe<ui32> nodeId, TMaybe<ui64> startTime, const TPartitionStats& stats)
 {
     auto ev = MakeHolder<NSysView::TEvSysView::TEvSendPartitionStats>(
         GetDomainKey(pathId), pathId, std::make_pair(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId())));
@@ -177,20 +177,21 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     ui64 dataSize = tableStats.GetDataSize();
     ui64 rowCount = tableStats.GetRowCount();
 
-    if (!Self->Tables.contains(pathId)) {
+    bool isDataShard = Self->Tables.contains(pathId);
+    bool isOlapStore = Self->OlapStores.contains(pathId);
+    if (!isDataShard && !isOlapStore) {
+        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
         return true;
     }
-
-    TTableInfo::TPtr table = Self->Tables[pathId];
 
     if (!Self->TabletIdToShardIdx.contains(datashardId)) {
+        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "No shardIdx for shard " << datashardId);
         return true;
     }
 
-    auto shardIdx = Self->TabletIdToShardIdx[datashardId];
-    const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
+    TShardIdx shardIdx = Self->TabletIdToShardIdx[datashardId];
 
-    TTableInfo::TPartitionStats newStats;
+    TPartitionStats newStats;
     newStats.SeqNo = TMessageSeqNo(rec.GetGeneration(), rec.GetRound());
 
     newStats.RowCount = tableStats.GetRowCount();
@@ -238,22 +239,46 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     }
     newStats.ShardState = rec.GetShardState();
 
-    auto oldAggrStats = table->GetStats().Aggregated;
-    table->UpdateShardStats(shardIdx, newStats);
-
-    if (!table->IsBackup) {
-        Self->UpdateBackgroundCompaction(shardIdx, newStats);
-        Self->UpdateShardMetrics(shardIdx, newStats);
-    }
-
-    if (!newStats.HasBorrowedData) {
-        Self->RemoveBorrowedCompaction(shardIdx);
-    }
+    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "Add stats from shard " << datashardId << ", pathId " << pathId.LocalPathId
+                << ": RowCount " << newStats.RowCount << ", DataSize " << newStats.DataSize);
 
     NIceDb::TNiceDb db(txc.DB);
 
-    if (!table->IsBackup && !table->IsShardsStatsDetached()) {
-        auto newAggrStats = table->GetStats().Aggregated;
+    TTableInfo::TPtr table;
+    TPartitionStats oldAggrStats;
+    TPartitionStats newAggrStats;
+    bool updateSubdomainInfo = false;
+
+    if (isDataShard) {
+        table = Self->Tables[pathId];
+        oldAggrStats = table->GetStats().Aggregated;
+        table->UpdateShardStats(shardIdx, newStats);
+
+        if (!table->IsBackup) {
+            Self->UpdateBackgroundCompaction(shardIdx, newStats);
+            Self->UpdateShardMetrics(shardIdx, newStats);
+        }
+
+        if (!newStats.HasBorrowedData) {
+            Self->RemoveBorrowedCompaction(shardIdx);
+        }
+
+        if (!table->IsBackup && !table->IsShardsStatsDetached()) {
+            newAggrStats = table->GetStats().Aggregated;
+            updateSubdomainInfo = true;
+        }
+
+        Self->PersistTablePartitionStats(db, pathId, shardIdx, table);
+    } else if (isOlapStore) {
+        TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
+        oldAggrStats = olapStore->GetStats().Aggregated;
+        olapStore->UpdateShardStats(shardIdx, newStats);
+        newAggrStats = olapStore->GetStats().Aggregated;
+        updateSubdomainInfo = true;
+    }
+
+    if (updateSubdomainInfo) {
         auto subDomainId = Self->ResolveDomainId(pathId);
         auto subDomainInfo = Self->ResolveDomainInfo(pathId);
         subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
@@ -265,8 +290,6 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
             Self->PublishToSchemeBoard(TTxId(), std::move(toPublish), ctx);
         }
     }
-
-    Self->PersistTablePartitionStats(db, pathId, shardIdx, table);
 
     if (AppData(ctx)->FeatureFlags.GetEnableSystemViews()) {
         TMaybe<ui32> nodeId;
@@ -283,6 +306,13 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
                 Self->SysPartitionStatsCollector,
                 Self->BuildStatsForCollector(pathId, shardIdx, datashardId, nodeId, startTime, newStats).Release());
         }
+    }
+
+    if (isOlapStore) {
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "Aggregated stats for pathId " << pathId.LocalPathId
+                    << ": RowCount " << newAggrStats.RowCount << ", DataSize " << newAggrStats.DataSize);
+        return true;
     }
 
     const auto& shardToPartition = table->GetShard2PartitionIdx();
@@ -310,6 +340,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
         Self->TabletCounters->Percentile()[COUNTER_NUM_SHARDS_BY_TTL_LAG].IncrementFor(lag->Seconds());
     }
 
+    const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
     if (table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge)) {
         TTxId txId = Self->GetCachedTxId(ctx);
@@ -434,7 +465,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvPeriodicTableStats::TPtr& ev, const T
 
     LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                "Got periodic table stats at tablet " << TabletID()
-                                                     << " from datashard " << datashardId
+                                                     << " from shard " << datashardId
                                                      << " pathId " << pathId
                                                      << " state '" << DatashardStateName(rec.GetShardState()) << "'"
                                                      << " dataSize " << dataSize

@@ -1288,12 +1288,16 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     }
 }
 
-void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newStats) {
+void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
+    Stats.UpdateShardStats(datashardIdx, newStats);
+}
+
+void TAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats) {
     // Ignore stats from unknown datashard (it could have been split)
-    if (!Stats.PartitionStats.contains(datashardIdx))
+    if (!PartitionStats.contains(datashardIdx))
         return;
 
-    TPartitionStats& oldStats = Stats.PartitionStats[datashardIdx];
+    TPartitionStats& oldStats = PartitionStats[datashardIdx];
 
     if (newStats.SeqNo <= oldStats.SeqNo) {
         // Ignore outdated message
@@ -1313,46 +1317,47 @@ void TTableInfo::UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newSt
         oldStats.RangeReadRows = 0;
     }
 
-    Stats.Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
-    Stats.Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
-    Stats.Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
-    Stats.Aggregated.LastAccessTime = Max(Stats.Aggregated.LastAccessTime, newStats.LastAccessTime);
-    Stats.Aggregated.LastUpdateTime = Max(Stats.Aggregated.LastUpdateTime, newStats.LastUpdateTime);
-    Stats.Aggregated.ImmediateTxCompleted += (newStats.ImmediateTxCompleted - oldStats.ImmediateTxCompleted);
-    Stats.Aggregated.PlannedTxCompleted += (newStats.PlannedTxCompleted - oldStats.PlannedTxCompleted);
-    Stats.Aggregated.TxRejectedByOverload += (newStats.TxRejectedByOverload - oldStats.TxRejectedByOverload);
-    Stats.Aggregated.TxRejectedBySpace += (newStats.TxRejectedBySpace - oldStats.TxRejectedBySpace);
-    Stats.Aggregated.InFlightTxCount += (newStats.InFlightTxCount - oldStats.InFlightTxCount);
+    Aggregated.RowCount += (newStats.RowCount - oldStats.RowCount);
+    Aggregated.DataSize += (newStats.DataSize - oldStats.DataSize);
+    Aggregated.IndexSize += (newStats.IndexSize - oldStats.IndexSize);
+    Aggregated.LastAccessTime = Max(Aggregated.LastAccessTime, newStats.LastAccessTime);
+    Aggregated.LastUpdateTime = Max(Aggregated.LastUpdateTime, newStats.LastUpdateTime);
+    Aggregated.ImmediateTxCompleted += (newStats.ImmediateTxCompleted - oldStats.ImmediateTxCompleted);
+    Aggregated.PlannedTxCompleted += (newStats.PlannedTxCompleted - oldStats.PlannedTxCompleted);
+    Aggregated.TxRejectedByOverload += (newStats.TxRejectedByOverload - oldStats.TxRejectedByOverload);
+    Aggregated.TxRejectedBySpace += (newStats.TxRejectedBySpace - oldStats.TxRejectedBySpace);
+    Aggregated.InFlightTxCount += (newStats.InFlightTxCount - oldStats.InFlightTxCount);
 
-    Stats.Aggregated.RowUpdates += (newStats.RowUpdates - oldStats.RowUpdates);
-    Stats.Aggregated.RowDeletes += (newStats.RowDeletes - oldStats.RowDeletes);
-    Stats.Aggregated.RowReads += (newStats.RowReads - oldStats.RowReads);
-    Stats.Aggregated.RangeReads += (newStats.RangeReads - oldStats.RangeReads);
-    Stats.Aggregated.RangeReadRows += (newStats.RangeReadRows - oldStats.RangeReadRows);
+    Aggregated.RowUpdates += (newStats.RowUpdates - oldStats.RowUpdates);
+    Aggregated.RowDeletes += (newStats.RowDeletes - oldStats.RowDeletes);
+    Aggregated.RowReads += (newStats.RowReads - oldStats.RowReads);
+    Aggregated.RangeReads += (newStats.RangeReads - oldStats.RangeReads);
+    Aggregated.RangeReadRows += (newStats.RangeReadRows - oldStats.RangeReadRows);
 
     i64 cpuUsageDelta = newStats.GetCurrentRawCpuUsage() - oldStats.GetCurrentRawCpuUsage();
-    i64 prevCpuUsage = Stats.Aggregated.GetCurrentRawCpuUsage();
+    i64 prevCpuUsage = Aggregated.GetCurrentRawCpuUsage();
     ui64 newAggregatedCpuUsage = std::max<i64>(0, prevCpuUsage + cpuUsageDelta);
     TInstant now = AppData()->TimeProvider->Now();
-    Stats.Aggregated.SetCurrentRawCpuUsage(newAggregatedCpuUsage, now);
-    Stats.Aggregated.Memory += (newStats.Memory - oldStats.Memory);
-    Stats.Aggregated.Network += (newStats.Network - oldStats.Network);
-    Stats.Aggregated.Storage += (newStats.Storage - oldStats.Storage);
-    Stats.Aggregated.ReadThroughput += (newStats.ReadThroughput - oldStats.ReadThroughput);
-    Stats.Aggregated.WriteThroughput += (newStats.WriteThroughput - oldStats.WriteThroughput);
-    Stats.Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
-    Stats.Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
+    Aggregated.SetCurrentRawCpuUsage(newAggregatedCpuUsage, now);
+    Aggregated.Memory += (newStats.Memory - oldStats.Memory);
+    Aggregated.Network += (newStats.Network - oldStats.Network);
+    Aggregated.Storage += (newStats.Storage - oldStats.Storage);
+    Aggregated.ReadThroughput += (newStats.ReadThroughput - oldStats.ReadThroughput);
+    Aggregated.WriteThroughput += (newStats.WriteThroughput - oldStats.WriteThroughput);
+    Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
+    Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
 
-    newStats.SaveCpuUsageHistory(oldStats);
+    auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
     oldStats = newStats;
-    Stats.PartitionStatsUpdated++;
+    oldStats.TopUsage = std::move(topUsage);
+    PartitionStatsUpdated++;
 
     // Rescan stats for aggregations only once in a while
-    if (Stats.PartitionStatsUpdated >= Stats.PartitionStats.size()) {
-        Stats.PartitionStatsUpdated = 0;
-        Stats.Aggregated.TxCompleteLag = TDuration();
-        for (const auto& ps : Stats.PartitionStats) {
-            Stats.Aggregated.TxCompleteLag = Max(Stats.Aggregated.TxCompleteLag, ps.second.TxCompleteLag);
+    if (PartitionStatsUpdated >= PartitionStats.size()) {
+        PartitionStatsUpdated = 0;
+        Aggregated.TxCompleteLag = TDuration();
+        for (const auto& ps : PartitionStats) {
+            Aggregated.TxCompleteLag = Max(Aggregated.TxCompleteLag, ps.second.TxCompleteLag);
         }
     }
 }

@@ -104,15 +104,15 @@ public:
     void SendWriteRequest(const TActorContext& ctx) {
         Y_VERIFY(WriteEv->PutStatus == NKikimrProto::UNKNOWN);
 
-        LOG_S_DEBUG("Writing inserted blob at tablet " << TabletId);
-
         auto& record = Proto(WriteEv.Get());
+        ui64 pathId = record.GetTableId();
+        ui64 writeId = record.GetWriteId();
         auto& srcData = record.GetData();
         TString meta;
         if (record.HasMeta()) {
             meta = record.GetMeta().GetSchema();
             if (meta.empty() || record.GetMeta().GetFormat() != NKikimrTxColumnShard::FORMAT_ARROW) {
-                LOG_S_DEBUG("Bad metadata for writing data at tablet " << TabletId);
+                LOG_S_INFO("Bad metadata for writeId " << writeId << " pathId " << pathId << " at tablet " << TabletId);
                 SendResultAndDie(ctx, NKikimrProto::ERROR);
             }
         }
@@ -125,7 +125,8 @@ public:
             batch = IndexInfo.PrepareForInsert(srcData, meta, strError);
         }
         if (!batch) {
-            LOG_S_DEBUG("Bad data to write (" << strError << ") at tablet " << TabletId);
+            LOG_S_INFO("Bad data for writeId " << writeId << ", pathId " << pathId
+                << " (" << strError << ") at tablet " << TabletId);
             SendResultAndDie(ctx, NKikimrProto::ERROR);
             return;
         }
@@ -136,8 +137,9 @@ public:
             data = NArrow::SerializeBatchNoCompression(batch);
         }
         if (data.size() > TLimits::MAX_BLOB_SIZE) {
-            LOG_S_DEBUG("Extracted data (" << data.size() << " bytes) is bigger than source ("
-                << srcData.size() << " bytes) and limit at tablet " << TabletId);
+            LOG_S_INFO("Extracted data (" << data.size() << " bytes) is bigger than source ("
+                << srcData.size() << " bytes) and limit, writeId " << writeId << " pathId " << pathId
+                << " at tablet " << TabletId);
 
             SendResultAndDie(ctx, NKikimrProto::ERROR);
             return;
@@ -156,7 +158,8 @@ public:
 
             meta.clear();
             if (!outMeta.SerializeToString(&meta)) {
-                LOG_S_ERROR("Canot set metadata for writing blob at tablet " << TabletId);
+                LOG_S_ERROR("Canot set metadata for blob, writeId " << writeId << " pathId " << pathId
+                    << " at tablet " << TabletId);
                 SendResultAndDie(ctx, NKikimrProto::ERROR);
                 return;
             }
@@ -173,7 +176,8 @@ public:
 
         Y_VERIFY(WriteEv->BlobId.BlobSize() == data.size());
 
-        LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew());
+        LOG_S_DEBUG("Writing " << WriteEv->BlobId.ToStringNew() << " writeId " << writeId << " pathId " << pathId
+            << " at tablet " << TabletId);
 
         if (BlobBatch.AllBlobWritesCompleted()) {
             SendResultAndDie(ctx, NKikimrProto::OK);
@@ -298,7 +302,7 @@ private:
     void SendResult(const TActorContext& ctx, NKikimrProto::EReplyStatus status) {
         SaveResourceUsage();
         if (WriteEv) {
-            LOG_S_DEBUG("Write Blob " << WriteEv->BlobId.ToStringNew() << " Status: " << status);
+            LOG_S_DEBUG("Written " << WriteEv->BlobId.ToStringNew() << " Status: " << status);
             WriteEv->PutStatus = status;
             WriteEv->BlobBatch = std::move(BlobBatch);
             WriteEv->YellowMoveChannels = TVector<ui32>(YellowMoveChannels.begin(), YellowMoveChannels.end());

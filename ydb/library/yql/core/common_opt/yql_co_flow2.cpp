@@ -9,7 +9,6 @@
 #include <ydb/library/yql/core/yql_type_helpers.h>
 
 #include <ydb/library/yql/utils/log/log.h>
-#include <util/string/type.h>
 
 namespace NYql {
 namespace {
@@ -112,40 +111,6 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
 
     auto ret = ctx.ChangeChild(node.Ref(), 0, std::move(newInput));
     return ret;
-}
-
-void GatherAndTerms(TExprNode::TPtr&& predicate, TExprNode::TListType& andTerms) {
-    if (!predicate->IsCallable("And")) {
-        andTerms.emplace_back(std::move(predicate));
-        return;
-    }
-
-    for (auto& child : predicate->ChildrenList()) {
-        GatherAndTerms(std::move(child), andTerms);
-    }
-}
-
-TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, TExprNode::TPtr exclude, TExprContext& ctx) {
-    TExprNode::TPtr prevAndNode = nullptr;
-    TNodeSet added;
-    for (const auto& otherAndTerm : andTerms) {
-        if (otherAndTerm == exclude) {
-            continue;
-        }
-
-        if (!added.insert(otherAndTerm.Get()).second) {
-            continue;
-        }
-
-        if (!prevAndNode) {
-            prevAndNode = otherAndTerm;
-        }
-        else {
-            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, otherAndTerm });
-        }
-    }
-
-    return prevAndNode;
 }
 
 TExprNode::TPtr ConstantPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate, bool ordered, TExprContext& ctx) {
@@ -650,30 +615,12 @@ private:
     TExprContext& Ctx;
 };
 
-TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
+TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNode::TPtr& predicate,
     const TJoinLabels& labels, ui32 index1, ui32 index2,  const TExprNode& row, const THashMap<TString, TString>& backRenameMap,
     const TParentsMap& parentsMap, TExprContext& ctx) {
     YQL_ENSURE(index1 != index2);
-    bool withCoalesce = false;
-    if (predicate->IsCallable("Coalesce")) {
-        if (predicate->Tail().IsCallable("Bool") && IsFalse(predicate->Tail().Head().Content())) {
-            withCoalesce = true;
-            predicate = predicate->HeadPtr();
-        } else {
-            return equiJoin;
-        }
-    }
-
-
     TExprNode::TPtr left, right;
-    if (predicate->IsCallable("==")) {
-        left = predicate->ChildPtr(0);
-        right = predicate->ChildPtr(1);
-    } else if (predicate->IsCallable("FromPg") && predicate->Head().IsCallable("PgResolvedOp") &&
-        (predicate->Head().Head().Content() == "=")) {
-        left = predicate->Head().ChildPtr(2);
-        right = predicate->Head().ChildPtr(3);
-    } else {
+    if (!IsEquality(predicate, left, right)) {
         return equiJoin;
     }
 
@@ -727,84 +674,6 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, TExprNode::TPt
     TJoinTreeRebuilder rebuilder(joinTree, label1, column1, label2, column2, ctx);
     auto newJoinTree = rebuilder.Run();
     return ctx.ChangeChild(*equiJoin, inputsCount, std::move(newJoinTree));
-}
-
-TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
-    if (!predicate->IsCallable("Or")) {
-        return predicate;
-    }
-
-    if (predicate->ChildrenSize() == 1) {
-        return predicate->HeadPtr();
-    }
-
-    // try to extract common And parts from Or
-    TVector<TExprNode::TListType> andParts;
-    for (ui32 i = 0; i < predicate->ChildrenSize(); ++i) {
-        TExprNode::TListType res;
-        GatherAndTerms(predicate->ChildPtr(i), res);
-        andParts.emplace_back(std::move(res));
-    }
-
-    THashMap<const TExprNode*, ui32> commonParts;
-    for (ui32 j = 0; j < andParts[0].size(); ++j) {
-        commonParts[andParts[0][j].Get()] = j;
-    }
-
-    for (ui32 i = 1; i < andParts.size(); ++i) {
-        THashSet<const TExprNode*> found;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            found.insert(andParts[i][j].Get());
-        }
-
-        // remove
-        for (auto it = commonParts.begin(); it != commonParts.end();) {
-            if (found.contains(it->first)) {
-                ++it;
-            }
-            else {
-                commonParts.erase(it++);
-            }
-        }
-    }
-
-    if (commonParts.size() == 0) {
-        return predicate;
-    }
-
-    // rebuild commonParts in order of original And
-    TVector<ui32> idx;
-    for (const auto& x : commonParts) {
-        idx.push_back(x.second);
-    }
-
-    Sort(idx);
-    TExprNode::TListType andArgs;
-    for (ui32 i : idx) {
-        andArgs.push_back(andParts[0][i]);
-    }
-
-    TExprNode::TListType orArgs;
-    for (ui32 i = 0; i < andParts.size(); ++i) {
-        TExprNode::TListType restAndArgs;
-        for (ui32 j = 0; j < andParts[i].size(); ++j) {
-            if (commonParts.contains(andParts[i][j].Get())) {
-                continue;
-            }
-
-            restAndArgs.push_back(andParts[i][j]);
-        }
-
-        if (restAndArgs.size() >= 1) {
-            orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
-        }
-    }
-
-    if (orArgs.size() >= 1) {
-        andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
-    }
-
-    return ctx.NewCallable(predicate->Pos(), "And", std::move(andArgs));
 }
 
 TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ctx, const TParentsMap& parentsMap) {
@@ -924,7 +793,8 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
 
         predicate = PreparePredicate(predicate, ctx);
         TExprNode::TListType andTerms;
-        GatherAndTerms(std::move(predicate), andTerms);
+        bool isPg;
+        GatherAndTerms(predicate, andTerms, isPg);
         TExprNode::TPtr ret;
         TExprNode::TPtr extraPredicate;
         auto joinSettings = equiJoin.Ref().Child(equiJoin.Ref().ChildrenSize() - 1);
@@ -951,7 +821,7 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
             if (inputs.size() == 0) {
                 YQL_CLOG(DEBUG, Core) << "ConstantPredicatePushdownOverEquiJoin";
                 ret = ConstantPredicatePushdownOverEquiJoin(equiJoin.Ptr(), andTerm, ordered, ctx);
-                extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, ctx);
+                extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
                 break;
             }
 
@@ -961,7 +831,7 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "SingleInputPredicatePushdownOverEquiJoin";
                     ret = newJoin;
-                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, ctx);
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
                     break;
                 }
             }
@@ -972,7 +842,7 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
                 if (newJoin != equiJoin.Ptr()) {
                     YQL_CLOG(DEBUG, Core) << "DecayCrossJoinIntoInner";
                     ret = newJoin;
-                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, ctx);
+                    extraPredicate = FuseAndTerms(node.Pos(), andTerms, andTerm, isPg, ctx);
                     break;
                 }
             }

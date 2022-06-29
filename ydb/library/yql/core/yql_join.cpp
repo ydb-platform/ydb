@@ -4,6 +4,7 @@
 
 #include <util/string/cast.h>
 #include <util/string/join.h>
+#include <util/string/type.h>
 
 namespace NYql {
 
@@ -1553,6 +1554,173 @@ TExprNode::TPtr MakeCrossJoin(TPositionHandle pos, TExprNode::TPtr left, TExprNo
             .Seal()
         .Seal()
         .Build();
+}
+
+TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
+    auto originalPredicate = predicate;
+    bool isPg = false;
+    if (predicate->IsCallable("ToPg")) {
+        isPg = true;
+        predicate = predicate->ChildPtr(0);
+    }
+
+    if (!predicate->IsCallable("Or")) {
+        return originalPredicate;
+    }
+
+    if (predicate->ChildrenSize() == 1) {
+        return originalPredicate;
+    }
+
+    // try to extract common And parts from Or
+    TVector<TExprNode::TListType> andParts;
+    for (ui32 i = 0; i < predicate->ChildrenSize(); ++i) {
+        TExprNode::TListType res;
+        bool isPg;
+        GatherAndTerms(predicate->ChildPtr(i), res, isPg);
+        YQL_ENSURE(!isPg); // direct child for Or
+        andParts.emplace_back(std::move(res));
+    }
+
+    THashMap<const TExprNode*, ui32> commonParts;
+    for (ui32 j = 0; j < andParts[0].size(); ++j) {
+        commonParts[andParts[0][j].Get()] = j;
+    }
+
+    for (ui32 i = 1; i < andParts.size(); ++i) {
+        THashSet<const TExprNode*> found;
+        for (ui32 j = 0; j < andParts[i].size(); ++j) {
+            found.insert(andParts[i][j].Get());
+        }
+
+        // remove
+        for (auto it = commonParts.begin(); it != commonParts.end();) {
+            if (found.contains(it->first)) {
+                ++it;
+            } else {
+                commonParts.erase(it++);
+            }
+        }
+    }
+
+    if (commonParts.size() == 0) {
+        return originalPredicate;
+    }
+
+    // rebuild commonParts in order of original And
+    TVector<ui32> idx;
+    for (const auto& x : commonParts) {
+        idx.push_back(x.second);
+    }
+
+    Sort(idx);
+    TExprNode::TListType andArgs;
+    for (ui32 i : idx) {
+        andArgs.push_back(andParts[0][i]);
+    }
+
+    TExprNode::TListType orArgs;
+    for (ui32 i = 0; i < andParts.size(); ++i) {
+        TExprNode::TListType restAndArgs;
+        for (ui32 j = 0; j < andParts[i].size(); ++j) {
+            if (commonParts.contains(andParts[i][j].Get())) {
+                continue;
+            }
+
+            restAndArgs.push_back(andParts[i][j]);
+        }
+
+        if (restAndArgs.size() >= 1) {
+            orArgs.push_back(ctx.NewCallable(predicate->Pos(), "And", std::move(restAndArgs)));
+        }
+    }
+
+    if (orArgs.size() >= 1) {
+        andArgs.push_back(ctx.NewCallable(predicate->Pos(), "Or", std::move(orArgs)));
+    }
+
+    auto ret = ctx.NewCallable(predicate->Pos(), "And", std::move(andArgs));
+    if (isPg) {
+        ret = ctx.NewCallable(predicate->Pos(), "ToPg", { ret });
+    }
+
+    return ret;
+}
+
+void GatherAndTermsImpl(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms) {
+    if (!predicate->IsCallable("And")) {
+        andTerms.emplace_back(predicate);
+        return;
+    }
+
+    for (ui32 i = 0; i < predicate->ChildrenSize(); ++i) {
+        GatherAndTermsImpl(predicate->ChildPtr(i), andTerms);
+    }
+}
+
+void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, bool& isPg) {
+    isPg = false;
+    if (predicate->IsCallable("ToPg")) {
+        isPg = true;
+        GatherAndTermsImpl(predicate->HeadPtr(), andTerms);
+    } else {
+        GatherAndTermsImpl(predicate, andTerms);
+    }
+}
+
+TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListType& andTerms, const TExprNode::TPtr& exclude, bool isPg, TExprContext& ctx) {
+    TExprNode::TPtr prevAndNode = nullptr;
+    TNodeSet added;
+    for (const auto& otherAndTerm : andTerms) {
+        if (otherAndTerm == exclude) {
+            continue;
+        }
+
+        if (!added.insert(otherAndTerm.Get()).second) {
+            continue;
+        }
+
+        if (!prevAndNode) {
+            prevAndNode = otherAndTerm;
+        } else {
+            prevAndNode = ctx.NewCallable(position, "And", { prevAndNode, otherAndTerm });
+        }
+    }
+
+    if (isPg) {
+        return ctx.NewCallable(position, "ToPg", { prevAndNode });
+    } else {
+        return prevAndNode;
+    }
+}
+
+bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPtr& right) {
+    if (predicate->IsCallable("Coalesce")) {
+        if (predicate->Tail().IsCallable("Bool") && IsFalse(predicate->Tail().Head().Content())) {
+            predicate = predicate->HeadPtr();
+        } else {
+            return false;
+        }
+    }
+
+    if (predicate->IsCallable("FromPg")) {
+        predicate = predicate->HeadPtr();
+    }
+
+    if (predicate->IsCallable("==")) {
+        left = predicate->ChildPtr(0);
+        right = predicate->ChildPtr(1);
+        return true;
+    }
+
+    if (predicate->IsCallable("PgResolvedOp") &&
+        (predicate->Head().Content() == "=")) {
+        left = predicate->ChildPtr(2);
+        right = predicate->ChildPtr(3);
+        return true;
+    }
+
+    return false;
 }
 
 } // namespace NYql

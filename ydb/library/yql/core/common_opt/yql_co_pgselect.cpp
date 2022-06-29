@@ -1104,6 +1104,67 @@ bool GatherJoinInputs(const TExprNode& root, const TExprNode& row, ui32 rightInp
     return true;
 }
 
+TExprNode::TPtr BuildEquiJoin(TPositionHandle pos, TStringBuf joinType, const TExprNode::TPtr& left, const TExprNode::TPtr& right,
+    const TExprNode::TListType& leftColumns, const TExprNode::TListType& rightColumns, TExprContext& ctx) {
+    auto join = ctx.Builder(pos)
+        .Callable("EquiJoin")
+            .List(0)
+                .Add(0, left)
+                .Atom(1, "a")
+            .Seal()
+            .List(1)
+                .Add(0, right)
+                .Atom(1, "b")
+            .Seal()
+            .List(2)
+                .Atom(0, to_title(TString(joinType)))
+                .Atom(1, "a")
+                .Atom(2, "b")
+                .List(3)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                        for (ui32 i = 0; i < leftColumns.size(); ++i) {
+                            parent.Atom(2 * i, "a");
+                            parent.Add(2* i + 1, leftColumns[i]);
+                        }
+
+                        return parent;
+                    })
+                .Seal()
+                .List(4)
+                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                        for (ui32 i = 0; i < rightColumns.size(); ++i) {
+                            parent.Atom(2 * i, "b");
+                            parent.Add(2 * i + 1, rightColumns[i]);
+                        }
+
+                        return parent;
+                    })
+                .Seal()
+                .List(5)
+                .Seal()
+            .Seal()
+            .List(3)
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, join)
+            .Lambda(1)
+                .Param("row")
+                .Callable("DivePrefixMembers")
+                    .Arg(0, "row")
+                    .List(1)
+                        .Atom(0, "a.")
+                        .Atom(1, "b.")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle pos, const TExprNode::TListType& cleanedInputs,
     const TExprNode::TPtr& joinOps, const THashMap<TString, ui32>& memberToInput, TExprContext& ctx, TOptimizeContext& optCtx) {
     TVector<ui32> groupForIndex;
@@ -1154,6 +1215,53 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
 
                     current = BuildSingleInputPredicateJoin(pos, reverseJoinType, predicate, with, current, ctx);
                     continue;
+                } else if (hasLeftInput && hasRightInput) {
+                    auto newPredicate = PreparePredicate(predicate->TailPtr(), ctx);
+                    TExprNode::TListType andTerms;
+                    bool isPg;
+                    GatherAndTerms(std::move(newPredicate), andTerms, isPg);
+                    bool bad = false;
+                    TExprNode::TListType leftColumns;
+                    TExprNode::TListType rightColumns;
+                    for (auto& andTerm : andTerms) {
+                        TExprNode::TPtr left, right;
+                        if (!IsEquality(andTerm, left, right)) {
+                            bad = true;
+                            break;
+                        }
+
+                        bool leftOnLeft;
+                        if (left->IsCallable("Member") && &left->Head() == &predicate->Head().Head()) {
+                            auto inputPtr = memberToInput.FindPtr(left->Child(1)->Content());
+                            YQL_ENSURE(inputPtr);
+                            leftOnLeft = (*inputPtr < inputIndex - 1);
+                            (leftOnLeft ? leftColumns : rightColumns).push_back(left->ChildPtr(1));
+                        } else {
+                            bad = true;
+                            break;
+                        }
+
+                        bool rightOnRight;
+                        if (right->IsCallable("Member") && &right->Head() == &predicate->Head().Head()) {
+                            auto inputPtr = memberToInput.FindPtr(right->Child(1)->Content());
+                            YQL_ENSURE(inputPtr);
+                            rightOnRight = (*inputPtr == inputIndex - 1);
+                            (rightOnRight ? rightColumns : leftColumns).push_back(right->ChildPtr(1));
+                        } else {
+                            bad = true;
+                            break;
+                        }
+
+                        if (leftOnLeft != rightOnRight) {
+                            bad = true;
+                            break;
+                        }
+                    }
+
+                    if (!bad) {
+                        current = BuildEquiJoin(pos, joinType, current, with, leftColumns, rightColumns, ctx);
+                        continue;
+                    }
                 }
             }
 

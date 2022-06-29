@@ -227,8 +227,10 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     ParseProfile();
 
     TClientCommandRootBase::Parse(config);
-    ParseDatabase(config);
-    ParseCaCerts(config);
+    if (!config.IsSystemCommand()) {
+        ParseDatabase(config);
+        ParseCaCerts(config);
+    }
     config.IsVerbose = IsVerbose;
 }
 
@@ -292,15 +294,11 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
     }
 
     if (Database.empty()) {
-        if (!config.IsSystemCommand()) {
-            throw TMisuseException()
-                << "Missing required option 'database'.";
-        }
+        throw TMisuseException()
+            << "Missing required option 'database'.";
     } else if (!Database.StartsWith('/')) {
-        if (!config.IsSystemCommand()) {
-            throw TMisuseException() << "Path to a database \"" << Database
-                << "\" is incorrect. It must be absolute and thus must begin with '/'.";
-        }
+        throw TMisuseException() << "Path to a database \"" << Database
+            << "\" is incorrect. It must be absolute and thus must begin with '/'.";
     }
     config.Database = Database;
 }

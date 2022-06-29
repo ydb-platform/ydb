@@ -70,6 +70,8 @@ public:
 
         int ArgC;
         char** ArgV;
+        int InitialArgC;
+        char** InitialArgV;
         NLastGetopt::TOpts* Opts;
         const NLastGetopt::TOptsParseResult* ParseResult;
         TVector<TString> Tokens;
@@ -110,6 +112,8 @@ public:
         TConfig(int argc, char** argv)
             : ArgC(argc)
             , ArgV(argv)
+            , InitialArgC(argc)
+            , InitialArgV(argv)
             , Opts(nullptr)
             , ParseResult(nullptr)
             , TabletId(0)
@@ -122,36 +126,36 @@ public:
             };
         }
 
-        bool IsHelpCommand() {
+        bool IsHelpCommand() const {
             TString lastArg = ArgV[ArgC - 1];
             return lastArg == "--help" || lastArg == "-h" || lastArg == "-?";
         }
 
-        bool IsSvnVersionCommand() {
+        bool IsSvnVersionCommand() const {
             TString lastArg = ArgV[ArgC - 1];
             return lastArg == "--svnrevision" || lastArg == "-V";
         }
 
-        bool IsVersionCommand() {
+        bool IsVersionCommand() const {
             return HasArgs({ "version" });
         }
 
-        bool IsVersionForceCheckCommand() {
+        bool IsVersionForceCheckCommand() const {
             return HasArgs({ "version", "--check" });
         }
 
-        bool IsSetVersionCheckCommand() {
+        bool IsSetVersionCheckCommand() const {
             return HasArgs({ "version", "--enable-checks" }) || HasArgs({ "version", "--disable-checks" });
         }
 
-        bool IsUpdateCommand() {
+        bool IsUpdateCommand() const {
             return HasArgs({ "update" });
         }
 
-        bool IsInitCommand() {
-            TString lastArg = ArgV[ArgC - 1];
-            if (lastArg == "init" && ArgC > 1) {
-                TString penultimateArg = ArgV[ArgC - 2];
+        bool IsInitCommand() const {
+            TString lastArg = InitialArgV[InitialArgC - 1];
+            if (lastArg == "init" && InitialArgC > 1) {
+                TString penultimateArg = InitialArgV[InitialArgC - 2];
                 if (penultimateArg.EndsWith("ydb") || penultimateArg.EndsWith("ydb.exe")) {
                     return true;
                 }
@@ -159,7 +163,7 @@ public:
             return false;
         }
 
-        bool IsProfileCommand() {
+        bool IsProfileCommand() const {
             for (int i = 1; i < 3; ++i) {
                 if (ArgC <= i) {
                     return false;
@@ -172,22 +176,22 @@ public:
             return false;
         }
 
-        bool IsLicenseCommand() {
+        bool IsLicenseCommand() const {
             TString lastArg = ArgV[ArgC - 1];
             return lastArg == "--license";
         }
 
-        bool IsCreditsCommand() {
+        bool IsCreditsCommand() const {
             TString lastArg = ArgV[ArgC - 1];
             return lastArg == "--credits";
         }
 
-        bool IsHelpExCommand() {
+        bool IsHelpExCommand() const {
             TString lastArg = ArgV[ArgC - 1];
             return lastArg == "--help-ex";
         }
 
-        bool IsSystemCommand() {
+        bool IsSystemCommand() const {
             return IsHelpCommand() || IsSvnVersionCommand() || IsUpdateCommand() || IsVersionCommand()
                 || IsInitCommand() || IsProfileCommand() || IsLicenseCommand() || IsCreditsCommand()
                 || IsHelpExCommand();
@@ -287,11 +291,11 @@ public:
             return result;
         }
 
-        bool HasArgs(std::vector<TString> args) {
+        bool HasArgs(const std::vector<TString>& args) const {
             for (const auto& arg : args) {
                 bool found = false;
-                for (int i = 0; i < ArgC; ++i) {
-                    if (ArgV[i] == arg) {
+                for (int i = 0; i < InitialArgC; ++i) {
+                    if (InitialArgV[i] == arg) {
                         found = true;
                         break;
                     }

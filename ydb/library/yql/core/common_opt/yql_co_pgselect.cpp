@@ -299,7 +299,9 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
 
                     auto filtered = ctx.Builder(node->Pos())
                         .Callable("Filter")
-                            .Add(0, select)
+                            .Callable(0, "Collect")
+                                .Add(0, select)
+                            .Seal()
                             .Add(1, filterLambda)
                         .Seal()
                         .Build();

@@ -210,9 +210,10 @@ message TKqpPhyCnMerge {
 
 message TKqpPhyCnStreamLookup {
     TKqpPhyTable Table = 1;
-    repeated TKqpPhyColumn Columns = 2;
-    bytes LookupKeysType = 3;
-    bytes ResultType = 4;
+    repeated string KeyColumns = 2;
+    repeated string Columns = 3;
+    bytes LookupKeysType = 4;
+    bytes ResultType = 5;
 }
 
 message TKqpPhyConnection {

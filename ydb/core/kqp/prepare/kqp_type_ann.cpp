@@ -1051,11 +1051,33 @@ TStatus AnnotateStreamLookupConnection(const TExprNode::TPtr& node, TExprContext
         return TStatus::Error;
     }
 
+    auto lookupKeysTypeNode = node->Child(TKqpCnStreamLookup::idx_LookupKeysType);
+    if (!EnsureType(*lookupKeysTypeNode, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto lookupKeysType = lookupKeysTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureListType(node->Pos(), *lookupKeysType, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto lookupKeyType = lookupKeysType->Cast<TListExprType>()->GetItemType();
+    if (!EnsureStructType(node->Pos(), *lookupKeyType, ctx)) {
+        return TStatus::Error;
+    }
+
+    const auto& lookupKeyColumns = lookupKeyType->Cast<TStructExprType>()->GetItems();
+    for (const auto& keyColumn : lookupKeyColumns) {
+        if (!table.second->GetKeyColumnIndex(TString(keyColumn->GetName()))) {
+            return TStatus::Error;
+        }
+    }
+
     if (!EnsureTupleOfAtoms(*node->Child(TKqpCnStreamLookup::idx_Columns), ctx)) {
         return TStatus::Error;
     }
 
-    TCoAtomList columns{node->ChildPtr(TKqlLookupTableBase::idx_Columns)};
+    TCoAtomList columns{node->ChildPtr(TKqpCnStreamLookup::idx_Columns)};
 
     auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
     if (!rowType) {

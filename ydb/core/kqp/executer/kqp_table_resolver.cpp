@@ -223,22 +223,22 @@ private:
 private:
     // TODO: Get rid of ResolveTables & TableKeys, get table information from phy tx proto.
     void ResolveTables() {
-        auto addTable = [](const auto& proto, auto& tables) {
-            auto& table = tables.GetOrAddTable(MakeTableId(proto.GetTable()), proto.GetTable().GetPath());
-            for (auto& column : proto.GetColumns()) {
-                table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
-            }
-        };
-
         for (auto& tx : Transactions) {
             for (auto& stage : tx.Body->GetStages()) {
                 for (auto& op : stage.GetTableOps()) {
-                    addTable(op, TableKeys);
+                    auto& table = TableKeys.GetOrAddTable(MakeTableId(op.GetTable()), op.GetTable().GetPath());
+                    for (auto& column : op.GetColumns()) {
+                        table.Columns.emplace(column.GetName(), TKqpTableKeys::TColumn());
+                    }
                 }
 
                 for (const auto& input : stage.GetInputs()) {
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup) {
-                        addTable(input.GetStreamLookup(), TableKeys);
+                        const auto& streamLookup = input.GetStreamLookup();
+                        auto& table = TableKeys.GetOrAddTable(MakeTableId(streamLookup.GetTable()), streamLookup.GetTable().GetPath());
+                        for (auto& column : input.GetStreamLookup().GetColumns()) {
+                            table.Columns.emplace(column, TKqpTableKeys::TColumn());
+                        }
                     }
                 }
             }

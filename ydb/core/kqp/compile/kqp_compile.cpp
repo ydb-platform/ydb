@@ -698,13 +698,24 @@ private:
             YQL_ENSURE(tableMeta);
 
             FillTable(streamLookup.Table(), *streamLookupProto.MutableTable());
-            FillColumns(streamLookup.Columns(), *tableMeta, streamLookupProto, true);
 
             const auto lookupKeysType = streamLookup.LookupKeysType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
             YQL_ENSURE(lookupKeysType, "Empty stream lookup keys type");
             YQL_ENSURE(lookupKeysType->GetKind() == ETypeAnnotationKind::List, "Unexpected stream lookup keys type");
             const auto lookupKeysItemType = lookupKeysType->Cast<TListExprType>()->GetItemType();
             streamLookupProto.SetLookupKeysType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *lookupKeysItemType), TypeEnv));
+
+            YQL_ENSURE(lookupKeysItemType->GetKind() == ETypeAnnotationKind::Struct);
+            const auto& lookupKeyColumns = lookupKeysItemType->Cast<TStructExprType>()->GetItems();
+            for (const auto keyColumn : lookupKeyColumns) {
+                YQL_ENSURE(tableMeta->Columns.FindPtr(keyColumn->GetName()), "Unknown column: " << keyColumn->GetName());
+                streamLookupProto.AddKeyColumns(TString(keyColumn->GetName()));
+            }
+
+            for (const auto& column : streamLookup.Columns()) {
+                YQL_ENSURE(tableMeta->Columns.FindPtr(column), "Unknown column: " << TString(column));
+                streamLookupProto.AddColumns(TString(column));
+            }
 
             const auto resultType = streamLookup.Ref().GetTypeAnn();
             YQL_ENSURE(resultType, "Empty stream lookup result type");

@@ -16,7 +16,7 @@ namespace NKqp {
 
 namespace {
 
-static constexpr TDuration RESOLVE_SHARDS_TIMEOUT = TDuration::Seconds(5);
+static constexpr TDuration SCHEME_CACHE_REQUEST_TIMEOUT = TDuration::Seconds(5);
 static constexpr TDuration RETRY_READ_TIMEOUT = TDuration::Seconds(10);
 
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
@@ -26,18 +26,15 @@ public:
         NKikimrKqp::TKqpStreamLookupSettings&& settings)
         : InputIndex(inputIndex), Input(input), ComputeActorId(computeActorId), TypeEnv(typeEnv)
         , HolderFactory(holderFactory), TableId(MakeTableId(settings.GetTable()))
-        , KeyColumnTypes(settings.GetKeyColumnTypes().begin(), settings.GetKeyColumnTypes().end())
         , Snapshot(settings.GetSnapshot().GetStep(), settings.GetSnapshot().GetTxId())
-        , ResolveTableShardsTimeout(RESOLVE_SHARDS_TIMEOUT)
+        , KeyPrefixColumns(settings.GetKeyColumns().begin(), settings.GetKeyColumns().end())
+        , Columns(settings.GetColumns().begin(), settings.GetColumns().end())
+        , SchemeCacheRequestTimeout(SCHEME_CACHE_REQUEST_TIMEOUT)
         , RetryReadTimeout(RETRY_READ_TIMEOUT) {
-
-        for (const auto& column : settings.GetColumns()) {
-            Columns.emplace_back(&column);
-        }
     };
 
     void Bootstrap() {
-        ResolveTableShards();
+        ResolveTable();
 
         Become(&TKqpStreamLookupActor::StateFunc);
     }
@@ -87,19 +84,27 @@ private:
         bool Retried;
     };
 
+    enum EEvSchemeCacheRequestTag : ui64 {
+        TableSchemeResolving,
+        TableShardsResolving
+    };
+
     struct TEvPrivate {
         enum EEv {
             EvRetryReadTimeout = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-            EvResolveTableShardsTimeout,
+            EvSchemeCacheRequestTimeout,
         };
 
-        struct TEvResolveTableShardsTimeout : public TEventLocal<TEvResolveTableShardsTimeout, EvResolveTableShardsTimeout> {
+        struct TEvSchemeCacheRequestTimeout : public TEventLocal<TEvSchemeCacheRequestTimeout, EvSchemeCacheRequestTimeout> {
+            TEvSchemeCacheRequestTimeout(EEvSchemeCacheRequestTag tag) : Tag(tag) {}
+
+            const EEvSchemeCacheRequestTag Tag;
         };
 
         struct TEvRetryReadTimeout : public TEventLocal<TEvRetryReadTimeout, EvRetryReadTimeout> {
             TEvRetryReadTimeout(ui64 readId) : ReadId(readId) {}
 
-            ui64 ReadId;
+            const ui64 ReadId;
         };
     };
 
@@ -133,8 +138,11 @@ private:
             auto row = HolderFactory.CreateDirectArrayHolder(Columns.size(), rowItems);
 
             for (ui32 colId = 0; colId < Columns.size(); ++colId) {
+                auto colIt = ColumnsByName.find(Columns[colId]);
+                YQL_ENSURE(colIt != ColumnsByName.end());
+                rowItems[colId] = NMiniKQL::GetCellValue(result[colId], colIt->second.PType);
+
                 totalDataSize += result[colId].Size();
-                rowItems[colId] = NMiniKQL::GetCellValue(result[colId], Columns[colId].TypeId);
             }
 
             batch.push_back(std::move(row));
@@ -143,8 +151,8 @@ private:
         NUdf::EFetchStatus status;
         NUdf::TUnboxedValue key;
         while ((status = Input.Fetch(key)) == NUdf::EFetchStatus::Ok) {
-            std::vector<TCell> keyCells(KeyColumnTypes.size());
-            for (ui32 colId = 0; colId < KeyColumnTypes.size(); ++colId) {
+            std::vector<TCell> keyCells(KeyPrefixColumns.size());
+            for (ui32 colId = 0; colId < KeyPrefixColumns.size(); ++colId) {
                 keyCells[colId] = MakeCell(KeyColumnTypes[colId], key.GetElement(colId), TypeEnv, /* copy */ true);
             }
 
@@ -165,9 +173,10 @@ private:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
                 hFunc(TEvDataShard::TEvReadResult, Handle);
                 hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-                hFunc(TEvPrivate::TEvResolveTableShardsTimeout, Handle);
+                hFunc(TEvPrivate::TEvSchemeCacheRequestTimeout, Handle);
                 hFunc(TEvPrivate::TEvRetryReadTimeout, Handle);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
@@ -184,10 +193,36 @@ private:
         }
 
         auto& resultSet = ev->Get()->Request->ResultSet;
-        YQL_ENSURE(resultSet.size() == 1, "Expected one result for range (-inf, +inf)");
+        YQL_ENSURE(resultSet.size() == 1, "Expected one result for range [NULL, +inf)");
         Partitioning = resultSet[0].KeyDescription->Partitioning;
 
         ProcessLookupKeys();
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        auto& resultSet = ev->Get()->Request->ResultSet;
+        YQL_ENSURE(resultSet.size() == 1, "Expected one result for table: " << TableId);
+        auto& result = resultSet[0];
+
+        if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+            return RuntimeError(TStringBuilder() << "Failed to resolve table: " << ToString(result.Status));
+        }
+
+        std::map<ui32, NKikimr::NScheme::TTypeId> keyColumnTypesByKeyOrder;
+        for (const auto& [_, column] : result.Columns) {
+            if (column.KeyOrder >= 0) {
+                keyColumnTypesByKeyOrder[column.KeyOrder] = column.PType;
+            }
+
+            ColumnsByName.emplace(column.Name, std::move(column));
+        }
+
+        KeyColumnTypes.resize(keyColumnTypesByKeyOrder.size());
+        for (const auto& [keyOrder, keyColumnType] : keyColumnTypesByKeyOrder) {
+            KeyColumnTypes[keyOrder] = keyColumnType;
+        }
+
+        ResolveTableShards();
     }
 
     void Handle(TEvDataShard::TEvReadResult::TPtr& ev) {
@@ -253,10 +288,22 @@ private:
         ResolveTableShards();
     }
 
-    void Handle(TEvPrivate::TEvResolveTableShardsTimeout::TPtr&) {
-        if (!Partitioning) {
-            RuntimeError(TStringBuilder() << "Failed to resolve shards for table: " << TableId
-                << " (request timeout exceeded)");
+    void Handle(TEvPrivate::TEvSchemeCacheRequestTimeout::TPtr& ev) {
+        switch (ev->Get()->Tag) {
+            case EEvSchemeCacheRequestTag::TableSchemeResolving:
+                if (ColumnsByName.empty()) {
+                    RuntimeError(TStringBuilder() << "Failed to resolve scheme for table: " << TableId
+                        << " (request timeout exceeded)");
+                }
+                break;
+            case EEvSchemeCacheRequestTag::TableShardsResolving:
+                if (!Partitioning) {
+                    RuntimeError(TStringBuilder() << "Failed to resolve shards for table: " << TableId
+                        << " (request timeout exceeded)");
+                }
+                break;
+            default:
+                RuntimeError(TStringBuilder() << "Unexpected tag for TEvSchemeCacheRequestTimeout: " << (ui64)ev->Get()->Tag);
         }
     }
 
@@ -278,25 +325,66 @@ private:
             const auto& key = UnprocessedKeys.front();
             YQL_ENSURE(key.Point);
 
-            auto partitionInfo = LowerBound(
-                Partitioning->begin(), Partitioning->end(), /* value */ true,
-                [&](const auto& partition, bool) {
-                    const int result = CompareBorders<true, false>(
-                        partition.Range->EndKeyPrefix.GetCells(), key.From,
-                        partition.Range->IsInclusive || partition.Range->IsPoint,
-                        key.InclusiveFrom || key.Point, KeyColumnTypes
-                    );
+            std::vector<ui64> shardIds;
+            if (KeyPrefixColumns.size() < KeyColumnTypes.size()) {
+                /* build range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf]) */
+                std::vector<TCell> fromCells(KeyColumnTypes.size());
+                fromCells.insert(fromCells.begin(), key.From.begin(), key.From.end());
+                std::vector<TCell> toCells(key.From.begin(), key.From.end());
 
-                    return (result < 0);
-                }
-            );
+                shardIds = GetRangePartitioning(TOwnedTableRange{std::move(fromCells), /* inclusiveFrom */ true,
+                     std::move(toCells), /* inclusiveTo */ false});
+            } else {
+                shardIds = GetRangePartitioning(key);
+            }
 
-            shardKeys[partitionInfo->ShardId].emplace_back(std::move(key));
+            for (auto shardId : shardIds) {
+                shardKeys[shardId].emplace_back(key);
+            }
         }
 
         for (auto& [shardId, keys] : shardKeys) {
             StartTableRead(shardId, std::move(keys));
         }
+    }
+
+    std::vector<ui64> GetRangePartitioning(const TOwnedTableRange& range) {
+        YQL_ENSURE(Partitioning);
+
+        auto it = LowerBound(Partitioning->begin(), Partitioning->end(), /* value */ true,
+            [&](const auto& partition, bool) {
+                const int result = CompareBorders<true, false>(
+                    partition.Range->EndKeyPrefix.GetCells(), range.From,
+                    partition.Range->IsInclusive || partition.Range->IsPoint,
+                    range.InclusiveFrom || range.Point, KeyColumnTypes
+                );
+
+                return (result < 0);
+            }
+        );
+
+        YQL_ENSURE(it != Partitioning->end());
+
+        std::vector<ui64> rangePartitions;
+        for (; it != Partitioning->end(); ++it) {
+            rangePartitions.push_back(it->ShardId);
+
+            if (range.Point) {
+                break;
+            }
+
+            auto cmp = CompareBorders<true, true>(
+                it->Range->EndKeyPrefix.GetCells(), range.To,
+                it->Range->IsInclusive || it->Range->IsPoint,
+                range.InclusiveTo || range.Point, KeyColumnTypes
+            );
+
+            if (cmp >= 0) {
+                break;
+            }
+        }
+
+        return rangePartitions;
     }
 
     TReadState& StartTableRead(ui64 shardId, std::vector<TOwnedTableRange>&& keys) {
@@ -317,7 +405,9 @@ private:
         record.MutableTableId()->SetSchemaVersion(TableId.SchemaVersion);
 
         for (const auto& column : Columns) {
-            record.AddColumns(column.Id);
+            auto colIt = ColumnsByName.find(column);
+            YQL_ENSURE(colIt != ColumnsByName.end());
+            record.AddColumns(colIt->second.Id);
         }
 
         for (auto& key : read.Keys) {
@@ -357,6 +447,19 @@ private:
         failedRead.SetFinished(TlsActivationContext->AsActorContext());
     }
 
+    void ResolveTable() {
+        TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
+        NSchemeCache::TSchemeCacheNavigate::TEntry entry;
+        entry.TableId = TableId;
+        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+        entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpTable;
+        request->ResultSet.emplace_back(entry);
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+
+        SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout(EEvSchemeCacheRequestTag::TableSchemeResolving)));
+    }
+
     void ResolveTableShards() {
         Partitioning.reset();
 
@@ -372,8 +475,8 @@ private:
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
 
-        ResolveTableShardsTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), ResolveTableShardsTimeout,
-            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvResolveTableShardsTimeout()));
+        SchemeCacheRequestTimeoutTimer = CreateLongTimer(TlsActivationContext->AsActorContext(), SchemeCacheRequestTimeout,
+            new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvSchemeCacheRequestTimeout(EEvSchemeCacheRequestTag::TableShardsResolving)));
     }
 
     bool AllReadsFinished() const {
@@ -413,16 +516,18 @@ private:
     const NMiniKQL::TTypeEnvironment& TypeEnv;
     const NMiniKQL::THolderFactory& HolderFactory;
     const TTableId TableId;
-    const TVector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
-    std::vector<NYql::TKikimrColumnMetadata> Columns;
     const IKqpGateway::TKqpSnapshot Snapshot;
+    const std::vector<TString> KeyPrefixColumns;
+    const std::vector<TString> Columns;
+    std::unordered_map<TString, TSysTables::TTableColumnInfo> ColumnsByName;
+    std::vector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
     std::deque<TOwnedCellVec> Results;
     std::unordered_map<ui64, TReadState> Reads;
     std::unordered_map<ui64, std::set<ui64>> ReadsPerShard;
     std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
     std::deque<TOwnedTableRange> UnprocessedKeys;
-    const TDuration ResolveTableShardsTimeout;
-    NActors::TActorId ResolveTableShardsTimeoutTimer;
+    const TDuration SchemeCacheRequestTimeout;
+    NActors::TActorId SchemeCacheRequestTimeoutTimer;
     const TDuration RetryReadTimeout;
 };
 

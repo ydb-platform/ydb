@@ -1968,6 +1968,50 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             CompareYson(R"([[[1u];["One"]];[[2u];["Two"]]])", StreamResultToYson(result));
         }
     }
+
+    Y_UNIT_TEST_TWIN(StreamLookupByPkPrefix, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        CreateSampleTables(kikimr);
+
+        {
+            kikimr.GetTestClient().CreateTable("/Root", R"(
+                Name: "TestTable"
+                Columns { Name: "Key1", Type: "Uint64" }
+                Columns { Name: "Key2", Type: "Uint64" }
+                Columns { Name: "Value", Type: "String" }
+                KeyColumnNames: ["Key1", "Key2"]
+                SplitBoundary {
+                    KeyPrefix {
+                        Tuple { Optional { Uint64: 2 } }
+                        Tuple { Optional { Uint64: 20 } }
+                    }
+                }
+            )");
+
+            auto result = db.CreateSession().GetValueSync().GetSession().ExecuteDataQuery(R"(
+            REPLACE INTO `/Root/TestTable` (Key1, Key2, Value) VALUES
+                (1u, 10, "Value1"),
+                (2u, 19, "Value2"),
+                (2u, 21, "Value2"),
+                (3u, 30, "Value3"),
+                (4u, 40, "Value4"),
+                (5u, 50, "Value5");
+            )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            auto result = db.StreamExecuteScanQuery(R"(
+                PRAGMA kikimr.UseNewEngine = "true";
+                PRAGMA kikimr.OptEnablePredicateExtract = "false";
+                $keys = SELECT Key FROM `/Root/KeyValue`;
+                SELECT * FROM `/Root/TestTable` WHERE Key1 IN $keys ORDER BY Key1, Key2;
+            )").GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([[[1u];[10u];["Value1"]];[[2u];[19u];["Value2"]];[[2u];[21u];["Value2"]]])", StreamResultToYson(result));
+        }
+    }
 }
 
 } // namespace NKqp

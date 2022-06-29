@@ -208,18 +208,16 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
     settings.MutableSnapshot()->SetTxId(snapshot.TxId);
 
     auto table = tableKeys.GetTable(MakeTableId(streamLookup.GetTable()));
-    for (const auto& keyColumnType : table.KeyColumnTypes) {
-        settings.AddKeyColumnTypes(keyColumnType);
+    for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
+        auto columnIt = table.Columns.find(keyColumn);
+        YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << keyColumn);
+        settings.AddKeyColumns(keyColumn);
     }
 
     for (const auto& column : streamLookup.GetColumns()) {
-        auto columnIt = table.Columns.find(column.GetName());
-        YQL_ENSURE(columnIt != table.Columns.end());
-
-        auto newColumn = settings.AddColumns();
-        newColumn->SetName(columnIt->first);
-        newColumn->SetId(columnIt->second.Id);
-        newColumn->SetTypeId(columnIt->second.Type);
+        auto columnIt = table.Columns.find(column);
+        YQL_ENSURE(columnIt != table.Columns.end(), "Unknown column: " << column);
+        settings.AddColumns(column);
     }
 
     TTransform streamLookupTransform;

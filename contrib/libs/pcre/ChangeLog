@@ -1,8 +1,25 @@
 ChangeLog for PCRE
 ------------------
 
-Note that the PCRE 8.xx series (PCRE1) is now in a bugfix-only state. All
-development is happening in the PCRE2 10.xx series.
+Note that the PCRE 8.xx series (PCRE1) is now at end of life. All development
+is happening in the PCRE2 10.xx series.
+
+
+Version 8.45 15-June-2021
+-------------------------
+
+This is the final release of PCRE1. A few minor tidies are included.
+
+1. CMakeLists.txt has two user-supplied patches applied, one to allow for the
+setting of MODULE_PATH, and the other to support the generation of pcre-config
+file and libpcre*.pc files.
+
+2. There was a memory leak if a compile error occurred when there were more
+than 20 named groups (Bugzilla #2613).
+
+3. Fixed some typos in code and documentation.
+
+4. Fixed a small (*MARK) bug in the interpreter (Bugzilla #2771).
 
 
 Version 8.44 12 February-2020
@@ -3022,7 +3039,7 @@ Version 7.7 07-May-08
 18. Changed CMakeLists.txt and cmake/FindReadline.cmake to arrange for the
     ncurses library to be included for pcretest when ReadLine support is
     requested, but also to allow for it to be overridden. This patch came from
-    Daniel Bergström.
+    Daniel BergstrÃ¶m.
 
 19. There was a typo in the file ucpinternal.h where f0_rangeflag was defined
     as 0x00f00000 instead of 0x00800000. Luckily, this would not have caused
@@ -3250,7 +3267,7 @@ Version 7.4 21-Sep-07
     windows.h file is present (where different names are used). [This was
     reversed later after testing - see 16 below.]
 
-8.  Changed all #include <config.h> to #include "config.h". There were also
+8.  Changed all #include <config.h> to #include "pcre_config.h". There were also
     some further <pcre.h> cases that I changed to "pcre.h".
 
 9.  When pcregrep was used with the --colour option, it missed the line ending
@@ -3294,7 +3311,7 @@ Version 7.3 28-Aug-07
 ---------------------
 
  1. In the rejigging of the build system that eventually resulted in 7.1, the
-    line "#include <pcre.h>" was included in pcre_internal.h. The use of angle
+    line "#include "pcre.h"" was included in pcre_internal.h. The use of angle
     brackets there is not right, since it causes compilers to look for an
     installed pcre.h, not the version that is in the source that is being
     compiled (which of course may be different). I have changed it back to:

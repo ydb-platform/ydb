@@ -40,14 +40,14 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.pcre.org/licence.txt, https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/pcre.LICENSE
     Files with this license:
-        ChangeLog [4755:4755]
+        ChangeLog [4772:4772]
     Scancode info:
         Original SPDX id: BSD-3-Clause
         Score           : 100.00
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        ChangeLog [4755:4755]
+        ChangeLog [4772:4772]
 
 KEEP     Public-Domain        18645a531a9d976f5e74253296440788
 BELONGS ya.make
@@ -85,7 +85,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README [402:402]
+        README [401:401]
 
 KEEP     BSD-3-Clause         5276af3fc24d12afb931e0faed359b1b
 BELONGS ya.make
@@ -192,7 +192,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        NEWS [566:566]
+        NEWS [572:572]
 
 KEEP     BSD-2-Clause         7b9b15809e143335a85813bb93b561a4
 BELONGS ya.make
@@ -335,7 +335,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        README [404:404]
+        README [403:403]
 
 SKIP     GPL-1.0-or-later     f7abe239790339a908564d9a088dde6d
 BELONGS ya.make
@@ -348,4 +348,4 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        ChangeLog [5831:5831]
+        ChangeLog [5848:5848]

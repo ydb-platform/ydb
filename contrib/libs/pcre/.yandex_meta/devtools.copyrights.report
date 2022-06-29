@@ -41,6 +41,18 @@ BELONGS ya.make
         sljit/sljitNativeTILEGX-encoder.c [4:4]
         sljit/sljitNativeTILEGX_64.c [4:4]
 
+KEEP     COPYRIGHT_SERVICE_LABEL 029b66de29e9893a9af854e4049ff264
+BELONGS ya.make
+    License text:
+        Copyright(c) 2009-2021 Zoltan Herczeg
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENCE [50:51]
+
 KEEP     COPYRIGHT_SERVICE_LABEL 1e873553d39834f61b495e45fcd01679
 BELONGS ya.make
     License text:
@@ -101,28 +113,14 @@ BELONGS ya.make
 KEEP     COPYRIGHT_SERVICE_LABEL 592125ca0e46e64eae2bb2293e947755
 BELONGS ya.make
     License text:
-        Copyright (c) 1997-2020 University of Cambridge
-        All rights reserved.
+                               Written by Philip Hazel
+                   Copyright (c) 1997-2020 University of Cambridge
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENCE [28:29]
-        pcre_compile.c [8:9]
         pcreposix.c [8:9]
-
-KEEP     COPYRIGHT_SERVICE_LABEL 64c2955fb8f56ebc1c115a3ff646424a
-BELONGS ya.make
-    License text:
-        Copyright(c) 2010-2020 Zoltan Herczeg
-        All rights reserved.
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        LICENCE [39:40]
 
 KEEP     COPYRIGHT_SERVICE_LABEL 71499817b900aaf04d853fdffdc657b0
 BELONGS ya.make
@@ -192,17 +190,19 @@ BELONGS ya.make
     Files with this license:
         pcre_internal.h [9:10]
 
-KEEP     COPYRIGHT_SERVICE_LABEL bb4b956e9b9ba5639adf745e37505086
+KEEP     COPYRIGHT_SERVICE_LABEL 97c1bd68d12fc7ffbf6b6583c204031e
 BELONGS ya.make
     License text:
-        Copyright(c) 2009-2020 Zoltan Herczeg
+        Copyright (c) 1997-2021 University of Cambridge
         All rights reserved.
     Scancode info:
         Original SPDX id: COPYRIGHT_SERVICE_LABEL
         Score           : 100.00
         Match type      : COPYRIGHT
     Files with this license:
-        LICENCE [50:51]
+        LICENCE [28:29]
+        pcre_compile.c [8:9]
+        pcre_exec.c [8:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL d2e7c83484cc274d175a441339febefd
 BELONGS ya.make
@@ -220,6 +220,18 @@ BELONGS ya.make
         pcre_jit_compile.c [8:9]
         pcre_valid_utf8.c [8:9]
         pcre_xclass.c [8:9]
+
+KEEP     COPYRIGHT_SERVICE_LABEL f210bdfe8075eda540c36de510ed81c0
+BELONGS ya.make
+    License text:
+        Copyright(c) 2010-2021 Zoltan Herczeg
+        All rights reserved.
+    Scancode info:
+        Original SPDX id: COPYRIGHT_SERVICE_LABEL
+        Score           : 100.00
+        Match type      : COPYRIGHT
+    Files with this license:
+        LICENCE [39:40]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f28a4750d9101477330316879bfef000
 BELONGS ya.make
@@ -282,18 +294,6 @@ BELONGS ya.make
         pcre_study.c [8:9]
         pcre_version.c [8:9]
         pcreposix.h [12:12]
-
-KEEP     COPYRIGHT_SERVICE_LABEL f465f31e662807282b11f7932c22f952
-BELONGS ya.make
-    License text:
-                               Written by Philip Hazel
-                   Copyright (c) 1997-2018 University of Cambridge
-    Scancode info:
-        Original SPDX id: COPYRIGHT_SERVICE_LABEL
-        Score           : 100.00
-        Match type      : COPYRIGHT
-    Files with this license:
-        pcre_exec.c [8:9]
 
 KEEP     COPYRIGHT_SERVICE_LABEL f739539008599df8a5179e14aed6a3a4
 BELONGS ya.make

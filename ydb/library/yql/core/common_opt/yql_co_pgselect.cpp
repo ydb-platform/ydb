@@ -273,60 +273,45 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                         .Seal()
                         .Build();
                 } else if (linkType == "any" || linkType == "all") {
-                    auto filterArg = ctx.NewArgument(node->Pos(), "linkRow");
+                    auto foldArg = ctx.NewArgument(node->Pos(), "linkRow");
+                    auto stateArg = ctx.NewArgument(node->Pos(), "state");
+                    auto foldArgs = ctx.NewArguments(node->Pos(), { foldArg, stateArg });
                     auto value = ctx.Builder(node->Pos())
                         .Callable("SingleMember")
-                            .Add(0, filterArg)
+                            .Add(0, foldArg)
                         .Seal()
                         .Build();
 
-                    auto filterArgs = ctx.NewArguments(node->Pos(), { filterArg });
-                    auto filterExpr = ctx.ReplaceNodes(testLambda->TailPtr(), {
+                    auto foldExpr = ctx.ReplaceNodes(testLambda->TailPtr(), {
                         {testLambda->Head().Child(0), originalRow},
                         {testLambda->Head().Child(1), value},
                         });
 
-                    if (linkType == "all") {
-                        filterExpr = ctx.Builder(node->Pos())
-                            .Callable("PgNot")
-                                .Add(0, filterExpr)
-                            .Seal()
-                            .Build();
-                    }
+                    foldExpr = ctx.Builder(node->Pos())
+                        .Callable((linkType == "all") ? "PgAnd" : "PgOr")
+                            .Add(0, foldExpr)
+                            .Add(1, stateArg)
+                        .Seal()
+                        .Build();
 
-                    filterExpr = AsFilterPredicate(node->Pos(), filterExpr, ctx);
-                    auto filterLambda = ctx.NewLambda(node->Pos(), std::move(filterArgs), std::move(filterExpr));
+                    auto foldLambda = ctx.NewLambda(node->Pos(), std::move(foldArgs), std::move(foldExpr));
 
-                    auto filtered = ctx.Builder(node->Pos())
-                        .Callable("Filter")
+                    auto result = ctx.Builder(node->Pos())
+                        .Callable("Fold")
                             .Callable(0, "Collect")
                                 .Add(0, select)
                             .Seal()
-                            .Add(1, filterLambda)
+                            .Callable(1, "PgConst")
+                                .Atom(0, (linkType == "all") ? "true" : "false")
+                                .Callable(1, "PgType")
+                                    .Atom(0, "bool")
+                                .Seal()
+                            .Seal()
+                            .Add(2, foldLambda)
                         .Seal()
                         .Build();
 
-                    auto take1 = ctx.Builder(node->Pos())
-                        .Callable("Take")
-                            .Add(0, filtered)
-                            .Callable(1, "Uint64")
-                                .Atom(0, "1")
-                            .Seal()
-                        .Seal()
-                        .Build();
-
-                    return ctx.Builder(node->Pos())
-                        .Callable("ToPg")
-                            .Callable(0, "==")
-                                .Callable(0, "Length")
-                                    .Add(0, take1)
-                                .Seal()
-                                .Callable(1, "Uint64")
-                                    .Atom(0, (linkType == "any") ? "1" : "0")
-                                .Seal()
-                            .Seal()
-                        .Seal()
-                        .Build();
+                    return result;
                 }
             } else {
                 auto fullColList = ctx.Builder(node->Pos())

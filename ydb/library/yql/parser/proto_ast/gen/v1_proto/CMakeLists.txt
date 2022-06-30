@@ -8,6 +8,9 @@
 
 
 add_library(proto_ast-gen-v1_proto)
+target_include_directories(proto_ast-gen-v1_proto PUBLIC
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_proto/org/antlr/codegen/templates/protobuf
+)
 target_link_libraries(proto_ast-gen-v1_proto PUBLIC
   contrib-libs-cxxsupp
   yutil

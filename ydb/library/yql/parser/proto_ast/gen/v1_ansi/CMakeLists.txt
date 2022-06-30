@@ -8,6 +8,9 @@
 
 
 add_library(proto_ast-gen-v1_ansi)
+target_include_directories(proto_ast-gen-v1_ansi PUBLIC
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1_ansi/org/antlr/codegen/templates/Cpp
+)
 target_link_libraries(proto_ast-gen-v1_ansi PUBLIC
   contrib-libs-cxxsupp
   yutil

@@ -8,6 +8,10 @@
 
 
 add_library(proto_ast-gen-jsonpath)
+target_include_directories(proto_ast-gen-jsonpath PUBLIC
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/Cpp
+  ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/jsonpath/org/antlr/codegen/templates/protobuf
+)
 target_link_libraries(proto_ast-gen-jsonpath PUBLIC
   contrib-libs-cxxsupp
   yutil

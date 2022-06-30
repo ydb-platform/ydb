@@ -36,6 +36,7 @@ protected:
     void ReportQueryAction(NKikimrKqp::EQueryAction action);
     void ReportQueryType(NKikimrKqp::EQueryType type);
 
+    void ReportSessionGracefulShutdownHit();
     void ReportSessionShutdownRequest();
     void ReportCreateSession(ui64 requestSize);
     void ReportPingSession(ui64 requestSize);
@@ -159,7 +160,7 @@ protected:
     NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedError;
     NMonitoring::TDynamicCounters::TCounterPtr WorkersClosedRequest;
     NMonitoring::TDynamicCounters::TCounterPtr ActiveWorkers;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerCV;
+    NMonitoring::TDynamicCounters::TCounterPtr SessionGracefulShutdownHit;
     NMonitoring::TDynamicCounters::TCounterPtr SessionBalancerShutdowns;
     NMonitoring::TDynamicCounters::TCounterPtr ProxyForwardedRequests;
 
@@ -263,6 +264,7 @@ public:
     explicit TKqpCounters(const NMonitoring::TDynamicCounterPtr& counters, const TActorContext* ctx = nullptr);
 
     void ReportProxyForwardedRequest(TKqpDbCountersPtr dbCounters);
+    void ReportSessionGracefulShutdownHit(TKqpDbCountersPtr dbCounters);
     void ReportSessionShutdownRequest(TKqpDbCountersPtr dbCounters);
     void ReportCreateSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);
     void ReportPingSession(TKqpDbCountersPtr dbCounters, ui64 requestSize);

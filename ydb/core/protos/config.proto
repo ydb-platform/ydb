@@ -1046,9 +1046,22 @@ message TTableServiceConfig {
 
     message TSessionBalancerSettings {
         optional bool Enabled = 1 [default = true];
+
+        enum EEnableTier  {
+            TIER_DISABLED = 1;
+            TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT = 2;
+            TIER_ENABLED_FOR_ALL = 3;
+        }
+
+        enum EBalancingStrategy {
+            BALANCE_BY_CPU = 1;
+            BALANCE_BY_COUNT = 2;
+            BALANCE_BY_CPU_AND_COUNT = 3;
+        }
+
         // MaxSessionsShutdownInFlightSize option determines the number of sessions
         // that we can keep in shutdown state at the moment.
-        optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 3];
+        optional uint32 MaxSessionsShutdownInFlightSize = 2 [default = 1];
         //         GREEN ZONE         YELLOW ZONE               RED ZONE
         //                     MinCV                   MaxCV
         //    < MinCV           |                        |     > MaxCV
@@ -1063,11 +1076,11 @@ message TTableServiceConfig {
         optional uint32 MaxCVTreshold = 4 [default = 20];
         // timeout (in milliseconds)
         // After HardSessionShutdownTimeoutMs session will be terminated.
-        optional uint32 HardSessionShutdownTimeoutMs = 5 [default = 5000];
+        optional uint32 HardSessionShutdownTimeoutMs = 5 [default = 30000];
         // timeout (in milliseconds)
         // After SoftSessionShutdownTimeoutMs milliseconds
         // session will not accept new query requests.
-        optional uint32 SoftSessionShutdownTimeoutMs = 6 [default = 1000];
+        optional uint32 SoftSessionShutdownTimeoutMs = 6 [default = 15000];
         // Minimum number of sessions on node to start balancing. If number of sessions on node
         // less than MinNodeSessions, balancer will not be able to kick session from node.
         optional uint32 MinNodeSessions = 7 [default = 10];
@@ -1079,6 +1092,9 @@ message TTableServiceConfig {
 
         optional uint32 BoardPublishIntervalMs = 10 [default = 1000];
         optional uint32 BoardLookupIntervalMs = 11 [default = 30000];
+        optional EEnableTier EnableTier = 12 [ default = TIER_DISABLED ];
+        optional EBalancingStrategy Strategy = 13 [ default = BALANCE_BY_COUNT ];
+        optional bool SupportRemoteSessionCreation = 14 [ default = false ];
     }
 
     message TQueryReplayConfig {

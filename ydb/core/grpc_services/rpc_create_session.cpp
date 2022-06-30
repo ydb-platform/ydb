@@ -66,6 +66,7 @@ private:
 
         if (Request().HasClientCapability(NYdb::YDB_CLIENT_CAPABILITY_SESSION_BALANCER)) {
             ev->Record.SetCanCreateRemoteSession(true);
+            ev->Record.SetSupportsBalancing(true);
         }
 
         SetDatabase(ev, Request());

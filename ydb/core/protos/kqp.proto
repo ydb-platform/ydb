@@ -313,6 +313,7 @@ message TEvCreateSessionRequest {
     // If flag is true, kqp proxy will create session  on the different node,
     // if flag is false, in this case proxy will create session locally.
     optional bool CanCreateRemoteSession = 4 [default = false];
+    optional bool SupportsBalancing = 5 [ default = false];
 }
 
 message TCreateSessionResponse {

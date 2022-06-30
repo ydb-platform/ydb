@@ -129,7 +129,7 @@ int TYdbUpdater::Update(bool forceUpdate) {
     tmpPathToBinary.RenameTo(fsPathToBinary);
     Cout << "New binary renamed to " << fsPathToBinary.GetPath() << Endl;
 
-    SetConfigValue("outdated", true);
+    SetConfigValue("outdated", false);
     return EXIT_SUCCESS;
 }
 

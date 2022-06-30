@@ -375,6 +375,19 @@ protected:
             status = ERunStatus::Finished;
         }
 
+        if (InputChannelsMap.empty() && SourcesMap.empty() && status == ERunStatus::PendingInput && ProcessOutputsState.LastPopReturnedNoData) {
+            // fix for situation when:
+            // a) stage receives data by itself (e.g. it has YtRead inside)
+            // b) last run finished with YIELD status
+            // c) last run returned NO data (=> guaranteed, that peer's free space is not less than before this run)
+            //
+            // n.b. if c) is not satisfied we will also call ContinueExecute on branch
+            // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent" 
+            // but idk what is the logic behind this
+            ContinueExecute();
+            return;
+        }
+
         if (status != ERunStatus::Finished) {
             // If the incoming channel's buffer was full at the moment when last ChannelDataAck event had been sent,
             // there will be no attempts to send a new piece of data from the other side of this channel.
@@ -1697,6 +1710,7 @@ protected:
         bool DataWasSent = false;
         bool AllOutputsFinished = true;
         ERunStatus LastRunStatus = ERunStatus::PendingInput;
+        bool LastPopReturnedNoData = false;
     };
     TProcessOutputsState ProcessOutputsState;
 

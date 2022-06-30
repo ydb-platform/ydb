@@ -407,6 +407,7 @@ private:
     }
 
     void OnPopFinished(NTaskRunnerActor::TEvChannelPopFinished::TPtr& ev, const NActors::TActorContext&) {
+        ProcessOutputsState.LastPopReturnedNoData = (ev->Get()->Data.size() == 0);
         if (ev->Get()->Stats) {
             TaskRunnerStats = std::move(ev->Get()->Stats);
         }

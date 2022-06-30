@@ -86,4 +86,4 @@ table_service_config:
 grpc_config:
   host: 127.0.0.1
 monitoring_config:
-  monitoring_address: localhost
+  monitoring_address: 127.0.0.1

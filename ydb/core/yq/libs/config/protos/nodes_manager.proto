@@ -10,4 +10,5 @@ message TNodesManagerConfig {
     bool Enabled = 1;
     uint32 Port = 2;
     string Host = 3;
+    string DataCenter = 4;
 }

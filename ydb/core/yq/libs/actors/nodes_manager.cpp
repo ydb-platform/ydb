@@ -42,6 +42,7 @@ public:
         const ::NYql::NCommon::TServiceCounters& serviceCounters,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
+        const TString& dataCenter,
         const TString& tenant,
         ui64 mkqlInitialMemoryLimit)
         : WorkerManagerCounters(workerManagerCounters)
@@ -53,6 +54,7 @@ public:
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
+        , DataCenter(dataCenter)
         , InternalServiceId(MakeInternalServiceActorId())
 
     {
@@ -96,32 +98,39 @@ private:
             ui64 memoryAllocated = AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic());
             TVector<TPeer> nodes;
             for (ui32 i = 0; i < count; ++i) {
-                TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0};
+                TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
                 bool selfPlacement = true;
                 if (!Peers.empty()) {
                     auto FirstPeer = NextPeer;
                     while (true) {
-                        if (NextPeer >= Peers.size()) {
+                        auto& nextNode = Peers[NextPeer];
+
+                        if (++NextPeer >= Peers.size()) {
                             NextPeer = 0;
                         }
 
-                        auto& nextNode = Peers[NextPeer];
-                        ++NextPeer;
-
-                        if (NextPeer == FirstPeer   // we closed loop w/o success, fallback to round robin then
-                            || nextNode.MemoryLimit == 0 // not limit defined for the node
-                            || nextNode.MemoryLimit > nextNode.MemoryAllocated + MkqlInitialMemoryLimit // memory is enough
+                        if (    (DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
+                             && (   nextNode.MemoryLimit == 0 // memory is NOT limited
+                                 || nextNode.MemoryLimit >= nextNode.MemoryAllocated + MkqlInitialMemoryLimit) // or enough
                         ) {
                             // adjust allocated size to place next tasks correctly, will be reset after next health check
                             nextNode.MemoryAllocated += MkqlInitialMemoryLimit;
+                            if (nextNode.NodeId == SelfId().NodeId()) {
+                                // eventually synced self allocation info
+                                memoryAllocated += MkqlInitialMemoryLimit;
+                            }
                             node = nextNode;
                             selfPlacement = false;
+                            break;
+                        }
+
+                        if (NextPeer == FirstPeer) {  // we closed loop w/o success, fallback to self placement then
                             break;
                         }
                     }
                 }
                 if (selfPlacement) {
-                    if (memoryLimit == 0 || memoryLimit > memoryAllocated + MkqlInitialMemoryLimit) {
+                    if (memoryLimit == 0 || memoryLimit >= memoryAllocated + MkqlInitialMemoryLimit) {
                         memoryAllocated += MkqlInitialMemoryLimit;
                     } else {
                         placementFailure = true;
@@ -190,6 +199,7 @@ private:
         node.set_memory_limit(AtomicGet(WorkerManagerCounters.MkqlMemoryLimit->GetAtomic()));
         node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
         node.set_interconnect_port(IcPort);
+        node.set_data_center(DataCenter);
         Send(InternalServiceId, new TEvInternalService::TEvHealthCheckRequest(request));
     }
 
@@ -211,9 +221,16 @@ private:
             nodesInfo.reserve(res.nodes().size());
 
             Peers.clear();
+            std::set<ui32> nodeIds; // may be not unique
             for (const auto& node : res.nodes()) {
+
+                if (nodeIds.contains(node.node_id())) {
+                    continue;
+                }
+                nodeIds.insert(node.node_id());
+
                 Peers.push_back({node.node_id(), node.instance_id() + "," + node.hostname(),
-                  node.active_workers(), node.memory_limit(), node.memory_allocated()});
+                  node.active_workers(), node.memory_limit(), node.memory_allocated(), node.data_center()});
 
                 if (node.interconnect_port()) {
                     nodesInfo.emplace_back(TEvInterconnect::TNodeInfo{
@@ -222,7 +239,7 @@ private:
                         node.hostname(), // host
                         node.hostname(), // resolveHost
                         static_cast<ui16>(node.interconnect_port()),
-                        /* NodeLocation = */{}});
+                        TNodeLocation(node.data_center())});
                 }
             }
 
@@ -251,6 +268,7 @@ private:
     NYq::TYqSharedResources::TPtr YqSharedResources;
 
     const ui32 IcPort; // Interconnect Port
+    TString DataCenter;
 
     struct TPeer {
         ui32 NodeId;
@@ -258,6 +276,7 @@ private:
         ui64 ActiveWorkers;
         ui64 MemoryLimit;
         ui64 MemoryAllocated;
+        TString DataCenter;
     };
     TVector<TPeer> Peers;
     ui32 ResourceIdPart = 0;
@@ -279,11 +298,12 @@ IActor* CreateNodesManager(
     const NConfig::TPrivateApiConfig& privateApiConfig,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
+    const TString& dataCenter,
     const TString& tenant,
     ui64 mkqlInitialMemoryLimit) {
     return new TNodesManagerActor(yqSharedResources, workerManagerCounters,
         timeProvider, randomProvider,
-        serviceCounters, privateApiConfig, icPort, tenant, mkqlInitialMemoryLimit);
+        serviceCounters, privateApiConfig, icPort, dataCenter, tenant, mkqlInitialMemoryLimit);
 }
 
 } // namespace NYq

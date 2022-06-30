@@ -76,6 +76,13 @@ namespace NActors {
         : TNodeLocation(ParseLocation(s))
     {}
 
+    TNodeLocation::TNodeLocation(const TString& DataCenter, const TString& Module, const TString& Rack, const TString& Unit) {
+        if (DataCenter) Items.emplace_back(TKeys::DataCenter, DataCenter);
+        if (Module)     Items.emplace_back(TKeys::Module, Module);
+        if (Rack)       Items.emplace_back(TKeys::Rack, Rack);
+        if (Unit)       Items.emplace_back(TKeys::Unit, Unit);
+    }
+
     NActorsInterconnect::TNodeLocation TNodeLocation::ParseLocation(const TString& s) {
         NActorsInterconnect::TNodeLocation res;
         const bool success = res.ParseFromString(s);

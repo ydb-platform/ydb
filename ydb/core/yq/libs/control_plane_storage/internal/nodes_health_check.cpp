@@ -22,6 +22,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const ui64 memoryLimit = node.memory_limit();
     const ui64 memoryAllocated = node.memory_allocated();
     const ui32 icPort = node.interconnect_port();
+    const TString dataCenter = node.data_center();
     const TString nodeAddress = node.node_address();
     const auto ttl = TDuration::Seconds(5);
     const auto deadline = startTime + ttl * 3;
@@ -47,6 +48,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         node->set_memory_limit(memoryLimit);
         node->set_memory_allocated(memoryAllocated);
         node->set_node_address(nodeAddress);
+        node->set_data_center(dataCenter);
     }
 
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(read)");
@@ -54,7 +56,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     readQueryBuilder.AddString("tenant", tenant);
     readQueryBuilder.AddText(
         "SELECT `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`, `" HOST_NAME_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, "
-        "`" MEMORY_ALLOCATED_COLUMN_NAME"`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "` FROM `" NODES_TABLE_NAME "`\n"
+        "`" MEMORY_ALLOCATED_COLUMN_NAME"`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME"`, `" DATA_CENTER_COLUMN_NAME "` FROM `" NODES_TABLE_NAME "`\n"
         "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
     );
 
@@ -73,6 +75,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
                     node->set_memory_allocated(*parser.ColumnParser(MEMORY_ALLOCATED_COLUMN_NAME).GetOptionalUint64());
                     node->set_interconnect_port(parser.ColumnParser(INTERCONNECT_PORT_COLUMN_NAME).GetOptionalUint32().GetOrElse(0));
                     node->set_node_address(*parser.ColumnParser(NODE_ADDRESS_COLUMN_NAME).GetOptionalString());
+                    node->set_data_center(*parser.ColumnParser(DATA_CENTER_COLUMN_NAME).GetOptionalString());
                 }
             }
         }
@@ -88,11 +91,15 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         writeQueryBuilder.AddUint64("memory_allocated", memoryAllocated);
         writeQueryBuilder.AddUint32("ic_port", icPort);
         writeQueryBuilder.AddString("node_address", nodeAddress);
+        writeQueryBuilder.AddString("data_center", dataCenter);
         writeQueryBuilder.AddText(
             "UPSERT INTO `" NODES_TABLE_NAME "`\n"
             "(`" TENANT_COLUMN_NAME "`, `" NODE_ID_COLUMN_NAME "`, `" INSTANCE_ID_COLUMN_NAME "`,\n"
-            "`" HOST_NAME_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`, `" MEMORY_LIMIT_COLUMN_NAME"`, `" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME "`, `" NODE_ADDRESS_COLUMN_NAME "`)\n"
-            "VALUES ($tenant ,$node_id, $instance_id, $hostname, $deadline, $active_workers, $memory_limit, $memory_allocated, $ic_port, $node_address);\n"
+            "`" HOST_NAME_COLUMN_NAME "`, `" EXPIRE_AT_COLUMN_NAME "`, `" ACTIVE_WORKERS_COLUMN_NAME"`,\n"
+            "`" MEMORY_LIMIT_COLUMN_NAME "`, `" MEMORY_ALLOCATED_COLUMN_NAME "`, `" INTERCONNECT_PORT_COLUMN_NAME "`,\n"
+            "`" NODE_ADDRESS_COLUMN_NAME "`, `" DATA_CENTER_COLUMN_NAME"`)\n"
+            "VALUES ($tenant ,$node_id, $instance_id, $hostname, $deadline, $active_workers, $memory_limit,\n"
+            "$memory_allocated, $ic_port, $node_address, $data_center);\n"
         );
         const auto writeQuery = writeQueryBuilder.Build();
         return std::make_pair(writeQuery.Sql, writeQuery.Params);

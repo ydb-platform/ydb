@@ -150,6 +150,7 @@ message NodeInfo {
     uint64 memory_allocated = 6;
     uint32 interconnect_port = 7;
     string node_address = 8;
+    string data_center = 9;
 }
 
 message NodesHealthCheckRequest {

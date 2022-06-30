@@ -63,6 +63,7 @@ namespace NYq {
 #define MEMORY_ALLOCATED_COLUMN_NAME "memory_allocated"
 #define INTERCONNECT_PORT_COLUMN_NAME "interconnect_port"
 #define NODE_ADDRESS_COLUMN_NAME "node_address"
+#define DATA_CENTER_COLUMN_NAME "data_center"
 
 #define HOST_NAME_COLUMN_NAME "hostname"
 #define OWNER_COLUMN_NAME "owner"

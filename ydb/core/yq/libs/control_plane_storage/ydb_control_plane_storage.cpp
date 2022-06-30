@@ -169,6 +169,7 @@ void TYdbControlPlaneStorageActor::CreateNodesTable()
         .AddNullableColumn(EXPIRE_AT_COLUMN_NAME, EPrimitiveType::Timestamp)
         .AddNullableColumn(INTERCONNECT_PORT_COLUMN_NAME, EPrimitiveType::Uint32)
         .AddNullableColumn(NODE_ADDRESS_COLUMN_NAME, EPrimitiveType::String)
+        .AddNullableColumn(DATA_CENTER_COLUMN_NAME, EPrimitiveType::String)
         .SetTtlSettings(EXPIRE_AT_COLUMN_NAME)
         .SetPrimaryKeyColumns({TENANT_COLUMN_NAME, NODE_ID_COLUMN_NAME})
         .Build();

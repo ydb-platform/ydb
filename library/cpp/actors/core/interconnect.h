@@ -57,6 +57,7 @@ namespace NActors {
         TNodeLocation() = default;
         TNodeLocation(const TNodeLocation&) = default;
         TNodeLocation(TNodeLocation&&) = default;
+        TNodeLocation(const TString& DataCenter, const TString& Module = "", const TString& Rack = "", const TString& Unit = "");
 
         // protobuf-parser ctor
         explicit TNodeLocation(const NActorsInterconnect::TNodeLocation& location);
@@ -79,6 +80,7 @@ namespace NActors {
         TString GetDataCenterId() const { return ToStringUpTo(TKeys::DataCenter); }
         TString GetModuleId() const { return ToStringUpTo(TKeys::Module); }
         TString GetRackId() const { return ToStringUpTo(TKeys::Rack); }
+        TString GetUnitId() const { return ToStringUpTo(TKeys::Unit); }
         TString ToString() const { return ToStringUpTo(TKeys::E(Max<int>())); }
         TString ToStringUpTo(TKeys::E upToKey) const;
 

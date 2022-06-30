@@ -643,6 +643,12 @@ protected:
             }
         }
 
+        if (config.ParseResult->Has("data-center")) {
+            if (AppConfig.HasYandexQueryConfig()) {
+                AppConfig.MutableYandexQueryConfig()->MutableNodesManager()->SetDataCenter(to_lower(DataCenter));
+            }
+        }
+
         // MessageBus options.
 
         if (!AppConfig.HasMessageBusConfig()) {

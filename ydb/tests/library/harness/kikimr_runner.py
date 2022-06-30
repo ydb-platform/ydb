@@ -48,10 +48,11 @@ def join(a, b):
 class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
     def __init__(self, node_idx, config_path, port_allocator, cluster_name, configurator,
                  udfs_dir=None, role='node', node_broker_port=None, tenant_affiliation=None, encryption_key=None,
-                 binary_path=None):
+                 binary_path=None, data_center=None):
 
         super(kikimr_node_interface.NodeInterface, self).__init__()
         self.node_id = node_idx
+        self.data_center = data_center
         self.__cwd = None
         self.__config_path = config_path
         self.__cluster_name = cluster_name
@@ -179,6 +180,11 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
         if self.sqs_port is not None:
             command.extend(["--sqs-port=%d" % self.sqs_port])
+
+        if self.data_center is not None:
+            command.append(
+                "--data-center=%s" % self.data_center
+            )
 
         logger.info('CFG_DIR_PATH="%s"', self.__config_path)
         logger.info("Final command: %s", ' '.join(command).replace(self.__config_path, '$CFG_DIR_PATH'))
@@ -357,6 +363,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
     def __register_node(self):
         node_index = next(self._node_index_allocator)
+        data_center = None
+        if isinstance(self.__configurator.dc_mapping, dict):
+            if node_index in self.__configurator.dc_mapping:
+                data_center = self.__configurator.dc_mapping[node_index]
         self._nodes[node_index] = KiKiMRNode(
             node_index,
             self.config_path,
@@ -365,6 +375,7 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             configurator=self.__configurator,
             udfs_dir=self.__common_udfs_dir,
             tenant_affiliation=self.__configurator.yq_tenant,
+            data_center=data_center,
         )
         return self._nodes[node_index]
 

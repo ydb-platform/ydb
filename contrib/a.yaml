@@ -13,7 +13,7 @@ arcanum:
             ship: 1
 
 ci:
-  secret: sec-01g0yrmp3aczsssce3ydrj2s60
+  secret: sec-01e0d4agf6pfvwdjwxp61n3fvg
   runtime:
     sandbox-owner: DEVTOOLS-LARGE
   autocheck:
@@ -110,3 +110,50 @@ ci:
         - contrib/tools/ragel6/bin
         - contrib/tools/watchman
         - contrib/tools/yasm/bin
+
+  actions:
+    check_pr-flow:
+      title: Contrib Quarantine Check  # Название в merge-требованиях в PR
+      flow: check_contrib-flow
+      triggers:
+        - on: pr # Запускать при обновлении пулл-реквеста
+          into: trunk
+
+  flows:
+    check_contrib-flow:
+      title: PR check
+      jobs:
+        check-revision:
+          title: PR check
+          task: common/misc/run_command # Описание задачи (https://a.yandex-team.ru/arc/trunk/arcadia/ci/registry/common/misc/run_command.yaml)
+          attempts:
+            max: 5
+            backoff: exp
+            initial-backoff: 30s
+            max-backoff: 5m
+            if-output: ${state.return_code != `4`}
+          input:
+            config:
+              fixed_sandbox_resources:
+                - key: mr_bin
+                  resource_id: 3263242702
+
+              secret_environment_variables:
+                - key: ARC_TOKEN
+                  secret_spec:
+                    key: arc_token
+
+                - key: YT_TOKEN
+                  secret_spec:
+                    key: yt_token
+
+                - key: GITHUB_TOKEN
+                  secret_spec:
+                    key: github_token
+
+              cmd_line: |
+                {mr_bin} \
+                  --revision-id ${context.target_revision.hash} \
+                  --pr-id ${context.launch_pull_request_info.pull_request.id} \
+                  --rule-violation-exit-code 4 \
+                  clickhouse java python remaining

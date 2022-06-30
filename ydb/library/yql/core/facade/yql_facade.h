@@ -62,7 +62,7 @@ public:
             const TString& filename,
             const TString& sourceCode,
             const TString& sessionId = TString(),
-            bool hidden = false);
+            EHiddenMode hiddenMode = EHiddenMode::Disable);
 
     void UnrepeatableRandom();
 private:
@@ -319,7 +319,7 @@ private:
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
-        bool hidden);
+        EHiddenMode hiddenMode);
 
     TTypeAnnotationContextPtr BuildTypeAnnotationContext(const TString& username);
     TTypeAnnotationContextPtr GetAnnotationContext() const;
@@ -394,7 +394,7 @@ private:
     const bool EnableRangeComputeFor_;
     i64 FallbackCounter = 0;
     std::function<void()> BeforeFallback = [](){};
-    bool Hidden_ = false;
+    const EHiddenMode HiddenMode_ = EHiddenMode::Disable;
 };
 
 } // namspace NYql

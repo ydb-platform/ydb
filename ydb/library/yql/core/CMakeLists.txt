@@ -76,3 +76,8 @@ generate_enum_serilization(library-yql-core
   INCLUDE_HEADERS
   ydb/library/yql/core/yql_atom_enums.h
 )
+generate_enum_serilization(library-yql-core
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/yql_type_annotation.h
+  INCLUDE_HEADERS
+  ydb/library/yql/core/yql_type_annotation.h
+)

@@ -184,9 +184,9 @@ TProgramPtr TProgramFactory::Create(
         const TString& filename,
         const TString& sourceCode,
         const TString& sessionId,
-        bool hidden)
+        EHiddenMode hiddenMode)
 {
-    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && !hidden ?
+    auto randomProvider = UseRepeatableRandomAndTimeProviders_ && !UseUnrepeatableRandom && hiddenMode == EHiddenMode::Disable ?
         CreateDeterministicRandomProvider(1) : CreateDefaultRandomProvider();
     auto timeProvider = UseRepeatableRandomAndTimeProviders_ ?
         CreateDeterministicTimeProvider(10000000) : CreateDefaultTimeProvider();
@@ -199,7 +199,7 @@ TProgramPtr TProgramFactory::Create(
     // make UserDataTable_ copy here
     return new TProgram(FunctionRegistry_, randomProvider, timeProvider, NextUniqueId_, DataProvidersInit_,
         UserDataTable_, CredentialTables_, UserCredentials_, moduleResolver, udfResolver, udfIndex, udfIndexPackageSet, FileStorage_,
-        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, hidden);
+        GatewaysConfig_, filename, sourceCode, sessionId, Runner_, EnableRangeComputeFor_, hiddenMode);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -225,7 +225,7 @@ TProgram::TProgram(
         const TString& sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
-        bool hidden
+        EHiddenMode hiddenMode
     )
     : FunctionRegistry_(functionRegistry)
     , RandomProvider_(randomProvider)
@@ -251,7 +251,7 @@ TProgram::TProgram(
     , ResultFormat_(NYson::EYsonFormat::Binary)
     , OutputFormat_(NYson::EYsonFormat::Pretty)
     , EnableRangeComputeFor_(enableRangeComputeFor)
-    , Hidden_(hidden)
+    , HiddenMode_(hiddenMode)
 {
     if (SessionId_.empty()) {
         SessionId_ = CreateGuidAsString();
@@ -767,7 +767,7 @@ TProgram::TFutureStatus TProgram::RunAsync(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = Hidden_;
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
 
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
@@ -841,7 +841,7 @@ TProgram::TFutureStatus TProgram::RunAsyncWithConfig(
     if (!ProvideAnnotationContext(username)->Initialize(*ExprCtx_) || !CollectUsedClusters()) {
         return NThreading::MakeFuture<TStatus>(IGraphTransformer::TStatus::Error);
     }
-    TypeCtx_->IsReadOnly = Hidden_;
+    TypeCtx_->IsReadOnly = (HiddenMode_ != EHiddenMode::Disable);
 
     for (const auto& dp : DataProviders_) {
         if (!dp.RemoteClusterProvider || !dp.RemoteRun) {
@@ -1284,7 +1284,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     if (DiagnosticFormat_) {
         typeAnnotationContext->Diagnostics = true;
     }
-    typeAnnotationContext->Hidden = Hidden_;
+    typeAnnotationContext->HiddenMode = HiddenMode_;
 
     if (UdfIndex_ && UdfIndexPackageSet_) {
         // setup default versions at the beginning
@@ -1307,7 +1307,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
             ProgressWriter_,
             OperationOptions_
         );
-        if (Hidden_ && !dp.SupportsHidden) {
+        if (HiddenMode_ != EHiddenMode::Disable && !dp.SupportsHidden) {
             continue;
         }
 

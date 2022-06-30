@@ -172,6 +172,13 @@ private:
     THashMap<ui64, TColumnOrder> Storage;
 };
 
+enum class EHiddenMode {
+    Disable /* "disable" */,
+    Force /* "force" */,
+    Debug /* "debug" */,
+    Auto /* "auto" */
+};
+
 struct TTypeAnnotationContext: public TThrRefBase {
     TIntrusivePtr<ITimeProvider> TimeProvider;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -235,7 +242,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     std::tuple<std::optional<ui64>, std::optional<double>, std::optional<TGUID>> CachedRandom;
 
     std::optional<bool> InitializeResult;
-    bool Hidden = false;
+    EHiddenMode HiddenMode = EHiddenMode::Disable;
 
     template <typename T>
     T GetRandom() const noexcept;

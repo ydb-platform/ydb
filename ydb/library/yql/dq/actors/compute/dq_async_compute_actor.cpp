@@ -20,7 +20,7 @@ bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
 } // anonymous namespace
 
 class TDqAsyncComputeActor : public TDqComputeActorBase<TDqAsyncComputeActor>
-                       , public NTaskRunnerActor::ITaskRunnerActor::ICallbacks
+                           , public NTaskRunnerActor::ITaskRunnerActor::ICallbacks
 {
     using TBase = TDqComputeActorBase<TDqAsyncComputeActor>;
 
@@ -90,8 +90,10 @@ private:
             hFunc(TEvDqCompute::TEvStateRequest, OnStateRequest);
             hFunc(NTaskRunnerActor::TEvStatistics, OnStatisticsResponse);
             hFunc(NTaskRunnerActor::TEvLoadTaskRunnerFromStateDone, OnTaskRunnerLoaded);
+            hFunc(TEvDqCompute::TEvInjectCheckpoint, OnInjectCheckpoint);
+            hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
             default:
-                TDqComputeActorBase<TDqAsyncComputeActor>::StateFuncBase(ev, ctx);
+                TBase::StateFuncBase(ev, ctx);
         };
 
         ReportEventElapsedTime();
@@ -262,7 +264,7 @@ private:
         if (TaskRunnerActor) {
             TaskRunnerActor->PassAway();
         }
-        NActors::IActor::PassAway();
+        TBase::PassAway();
     }
 
     TMaybe<NTaskRunnerActor::TCheckpointRequest> GetCheckpointRequest() {
@@ -326,6 +328,13 @@ private:
             ev->Record.SetTaskId(Task.GetId());
 
             Send(ExecuterId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery);
+        }
+
+        if (DeferredInjectCheckpointEvent) {
+            ForwardToCheckpoints(std::move(DeferredInjectCheckpointEvent));
+        }
+        if (DeferredRestoreFromCheckpointEvent) {
+            ForwardToCheckpoints(std::move(DeferredRestoreFromCheckpointEvent));
         }
 
         ContinueExecute();
@@ -547,10 +556,37 @@ private:
         Checkpoints->AfterStateLoading(std::move(ev->Get()->Error));
     }
 
+    template <class TEvPtr>
+    void ForwardToCheckpoints(TEvPtr&& ev) {
+        auto* x = reinterpret_cast<TAutoPtr<NActors::IEventHandle>*>(&ev);
+        Checkpoints->Receive(*x, TActivationContext::AsActorContext());
+        ev = nullptr;
+    }
+
+    void OnInjectCheckpoint(TEvDqCompute::TEvInjectCheckpoint::TPtr& ev) {
+        if (TypeEnv) {
+            ForwardToCheckpoints(std::move(ev));
+        } else {
+            Y_VERIFY(!DeferredInjectCheckpointEvent);
+            DeferredInjectCheckpointEvent = std::move(ev);
+        }
+    }
+
+    void OnRestoreFromCheckpoint(TEvDqCompute::TEvRestoreFromCheckpoint::TPtr& ev) {
+        if (TypeEnv) {
+            ForwardToCheckpoints(std::move(ev));
+        } else {
+            Y_VERIFY(!DeferredRestoreFromCheckpointEvent);
+            DeferredRestoreFromCheckpointEvent = std::move(ev);
+        }
+    }
+
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor = nullptr;
     NActors::TActorId TaskRunnerActorId;
     NTaskRunnerActor::ITaskRunnerActorFactory::TPtr TaskRunnerActorFactory;
+    TEvDqCompute::TEvInjectCheckpoint::TPtr DeferredInjectCheckpointEvent;
+    TEvDqCompute::TEvRestoreFromCheckpoint::TPtr DeferredRestoreFromCheckpointEvent;
 
     THashSet<ui64> FinishedOutputChannels;
     THashSet<ui64> FinishedSinks;

@@ -1429,6 +1429,73 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(ManyColumnShards, UseSessionActor) {
+        TPortManager tp;
+        ui16 mbusport = tp.GetPort(2134);
+        auto settings = Tests::TServerSettings(mbusport)
+            .SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetNodeCount(2);
+
+        Tests::TServer::TPtr server = new Tests::TServer(settings);
+
+        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableKqpScanQueryMultipleOlapShardsReads(true);
+        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
+
+        auto runtime = server->GetRuntime();
+        auto sender = runtime->AllocateEdgeActor();
+
+        InitRoot(server, sender);
+        EnableDebugLogging(runtime);
+
+        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", 1000, 1000);
+        ui32 insertRows = 0;
+        for(ui64 i = 0; i < 100; ++i) {
+            SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
+            insertRows += 2000;
+        }
+
+        ui64 result = 0;
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
+            switch (ev->GetTypeRewrite()) {
+                case NKqp::TKqpExecuterEvents::EvShardsResolveStatus: {
+
+                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvShardsResolveStatus>();
+                    for (auto& [shardId, nodeId]: msg->ShardNodes) {
+                        Cerr << "-- nodeId: " << nodeId << Endl;
+                        nodeId = runtime->GetNodeId(0);
+                    }
+                    break;
+                }
+
+                case NKqp::TKqpExecuterEvents::EvStreamData: {
+                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+
+                    Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
+                    Cerr.Flush();
+
+                    Y_ASSERT(record.GetResultSet().rows().size() == 1);
+                    Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
+                    result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
+
+                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
+                    resp->Record.SetEnough(false);
+                    resp->Record.SetSeqNo(ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record.GetSeqNo());
+                    resp->Record.SetFreeSpace(100);
+                    runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+
+        runtime->SetObserverFunc(captureEvents);
+        auto streamSender = runtime->AllocateEdgeActor();
+        SendRequest(*runtime, streamSender, MakeStreamRequest(streamSender, "SELECT COUNT(*) FROM `/Root/largeOlapStore/largeOlapTable`;", false));
+        auto ev = runtime->GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
+    }
+
     Y_UNIT_TEST_TWIN(ManyColumnShardsWithRestarts, UseSessionActor) {
         // remove this return when bug with scan is fixed.
         // todo: KIKIMR-15200
@@ -1443,6 +1510,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
+        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableKqpScanQueryMultipleOlapShardsReads(true);
         server->GetRuntime()->GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
         auto runtime = server->GetRuntime();

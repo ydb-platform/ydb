@@ -700,6 +700,7 @@ message TFeatureFlags {
     optional bool EnableAsyncHttpMon = 64 [default = true];
     optional bool EnableChangefeeds = 65 [default = true];
     optional bool EnableKqpScanQueryStreamLookup = 66 [default = false];
+    optional bool EnableKqpScanQueryMultipleOlapShardsReads = 67 [default = false];
 }
 
 

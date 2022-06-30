@@ -208,6 +208,9 @@ namespace NKikimr {
             // Not thread safe, only accessed by a single writer thread
             TPage* LastDroppedPage = nullptr;
 
+            // True when it is possible to rollback to this snapshot
+            bool RollbackSupported = true;
+
             // Disable all copy constructors
             TSnapshotContext(const TSnapshotContext&) = delete;
             TSnapshotContext& operator=(const TSnapshotContext&) = delete;
@@ -890,7 +893,7 @@ namespace NKikimr {
          *          other threads.
          */
         TSnapshot Snapshot() {
-            const_cast<TCowBTree*>(this)->CollectGarbage();
+            CollectGarbage();
 
             Y_VERIFY(CurrentEpoch < PageEpochMax, "Epoch overflow: too many snapshots");
 
@@ -910,6 +913,61 @@ namespace NKikimr {
          */
         TSnapshot UnsafeSnapshot() const {
             return TSnapshot(TTreeHandle(this), Root, Size_, InnerHeight_);
+        }
+
+        /**
+         * Rollback to a previously created snapshot
+         *
+         * Note that newer snapshots will continue to be valid, but
+         * rolling forward is undefined.
+         */
+        void RollbackTo(const TSnapshot& snapshot) {
+            CollectGarbage();
+
+            TSnapshotContext* context = snapshot.Tree.Context;
+            Y_VERIFY(context, "Cannot rollback to an invalid or an empty snapshot");
+            Y_VERIFY(context->RollbackSupported, "Cannot rollback to a newer snapshot");
+
+            Y_VERIFY(snapshot.Tree.Tree == this, "Cannot rollback to snapshot from a different tree");
+
+            TPage* prevRoot = Root;
+            ui64 epoch = context->Epoch;
+
+            // Restore tree state to the one stored in snapshot
+            Root = const_cast<TPage*>(snapshot.Root);
+            Size_ = snapshot.Size_;
+            InnerHeight_ = snapshot.InnerHeight_;
+            InsertPath.clear();
+
+            // Restore all dropped pages not newer than snapshot epoch
+            for (;;) {
+                TPage** nextDropped = &context->LastDroppedPage;
+                while (TPage* page = *nextDropped) {
+                    if (page->Epoch <= epoch) {
+                        // Remove it from the list of dropped pages
+                        Y_VERIFY_DEBUG(DroppedPages_ > 0);
+                        *nextDropped = page->NextDroppedPage;
+                        page->NextDroppedPage = nullptr;
+                        --DroppedPages_;
+                    } else {
+                        // Skip and inspect the next page
+                        nextDropped = &page->NextDroppedPage;
+                    }
+                }
+                context = context->Next;
+                if (!context) {
+                    break;
+                }
+                // All newer snapshots cannot be used for rollbacks, since
+                // some invariants of dropped page lists become invalid at
+                // future updates.
+                context->RollbackSupported = false;
+            }
+
+            // Drop newer pages, they will be added to the latest snapshot
+            if (prevRoot) {
+                DropNewerPageRecursive(prevRoot, epoch);
+            }
         }
 
     public:
@@ -1748,6 +1806,23 @@ namespace NKikimr {
         }
 
     private:
+        void DropNewerPageRecursive(TPage* page, ui64 epoch) {
+            if (page->Epoch <= epoch) {
+                return;
+            }
+
+            if (page->GetTag() == ETag::Inner) {
+                TInnerPage* inner = TInnerPage::From(page);
+                size_t count = inner->Count;
+                TEdge* edges = inner->Edges();
+                for (size_t index = 0; index <= count; ++index) {
+                    DropNewerPageRecursive(*edges++, epoch);
+                }
+            }
+
+            DropPage(page);
+        }
+
         void DropPageRecursive(TPage* page) {
             if (page->GetTag() == ETag::Inner) {
                 TInnerPage* inner = TInnerPage::From(page);

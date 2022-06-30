@@ -584,6 +584,89 @@ Y_UNIT_TEST_SUITE(TCowBTreeTest) {
         UNIT_ASSERT_VALUES_EQUAL(tree.DroppedPages(), 0u);
     }
 
+    void DoSnapshotRollback(bool earlyErase) {
+        using TTree = TCowBTree<ui64, ui64>;
+
+        TTree tree;
+        std::map<ui64, ui64> keys;
+
+        TVector<std::pair<TTree::TSnapshot, std::map<ui64, ui64>>> snapshots;
+        snapshots.emplace_back(tree.Snapshot(), keys);
+        TVector<std::pair<TTree::TSnapshot, std::map<ui64, ui64>>> snapshotsOld;
+
+        size_t count = NSan::PlainOrUnderSanitizer(1000000u, 200000u);
+        size_t snapshotEvery = count / 20;
+        size_t rollbackEvery = count / 10;
+
+        auto checkSnapshot = [&](const TTree::TSnapshot& snapshot, const std::map<ui64, ui64>& expected) {
+            auto itTree = snapshot.Iterator();
+            itTree.SeekFirst();
+            auto itMap = expected.begin();
+            while (itTree.IsValid()) {
+                ui64 key = itTree.GetKey();
+                ui64 value = itTree.GetValue();
+                UNIT_ASSERT_C(itMap != expected.end(), "Key " << key << " present in tree, but not in expected map");
+                UNIT_ASSERT_C(key == itMap->first && value == itMap->second, "Found " << key << " value " << value
+                    << ", but expected map has " << itMap->first << " value " << itMap->second);
+                itTree.Next();
+                ++itMap;
+            }
+            UNIT_ASSERT_C(itMap == expected.end(), "Expected " << itMap->first << " value " << itMap->second
+                << ", but not found in the tree");
+        };
+
+        for (size_t i = 0; i < count; ++i) {
+            ui64 key = RandomNumber<ui64>();
+            ui64 value = RandomNumber<ui64>();
+            if (keys.emplace(key, value).second) {
+                UNIT_ASSERT_C(
+                    tree.Emplace(key, value),
+                    "Unexpected failure to insert key " << key);
+            }
+            if (((i + 1) % snapshotEvery) == 0) {
+                // Create a new snapshot periodically
+                snapshots.emplace_back(tree.Snapshot(), keys);
+            }
+            if (((i + 1) % rollbackEvery) == 0) {
+                // Rollback to a random previous snapshot periodically
+                size_t index = RandomNumber<ui64>() % snapshots.size();
+                tree.RollbackTo(snapshots[index].first);
+                keys = snapshots[index].second;
+                for (size_t it = index + 1; it < snapshots.size(); ++it) {
+                    snapshotsOld.emplace_back(std::move(snapshots[it]));
+                }
+                snapshots.erase(snapshots.begin() + (index + 1), snapshots.end());
+                while (earlyErase && snapshotsOld.size() > 0) {
+                    checkSnapshot(snapshotsOld.back().first, snapshotsOld.back().second);
+                    snapshotsOld.pop_back();
+                    tree.CollectGarbage();
+                }
+            }
+        }
+
+        while (snapshotsOld.size() > 0) {
+            checkSnapshot(snapshotsOld.back().first, snapshotsOld.back().second);
+            snapshotsOld.pop_back();
+            tree.CollectGarbage();
+        }
+
+        while (snapshots.size() > 0) {
+            checkSnapshot(snapshots.back().first, snapshots.back().second);
+            snapshots.pop_back();
+            tree.CollectGarbage();
+        }
+
+        checkSnapshot(tree.UnsafeSnapshot(), keys);
+    }
+
+    Y_UNIT_TEST(SnapshotRollback) {
+        DoSnapshotRollback(false);
+    }
+
+    Y_UNIT_TEST(SnapshotRollbackEarlyErase) {
+        DoSnapshotRollback(true);
+    }
+
     Y_UNIT_TEST(IteratorDestructor) {
         using TTree = TCowBTree<ui64, ui64>;
 

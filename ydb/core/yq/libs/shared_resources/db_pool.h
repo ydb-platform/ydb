@@ -21,10 +21,12 @@ public:
 
     NActors::TActorId GetNextActor();
 
+    TString TablePathPrefix;
+
 private:
     friend class TDbPoolMap;
 
-    TDbPool(ui32 sessionsCount, const NYdb::NTable::TTableClient& tableClient, const NMonitoring::TDynamicCounterPtr& counters);
+    TDbPool(ui32 sessionsCount, const NYdb::NTable::TTableClient& tableClient, const NMonitoring::TDynamicCounterPtr& counters, const TString& tablePathPrefix);
 
     TMutex Mutex;
     TVector<NActors::TActorId> Actors;
@@ -41,7 +43,7 @@ class TDbPoolMap: public TThrRefBase {
 public:
     using TPtr = TIntrusivePtr<TDbPoolMap>;
 
-    TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount);
+    TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount, const TString& tablePathPrefix);
 
 private:
     friend class TDbPoolHolder;
@@ -73,7 +75,7 @@ public:
     ~TDbPoolHolder();
 
     void Reset(const NYq::NConfig::TDbPoolConfig& config);
-    TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount);
+    TDbPool::TPtr GetOrCreate(EDbPoolId poolId, ui32 sessionsCount, const TString& tablePathPrefix);
     NYdb::TDriver& GetDriver();
     TDbPoolMap::TPtr Get();
 

@@ -33,9 +33,11 @@
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
+#include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
 #include <ydb/core/yq/libs/ydb/util.h>
 #include <ydb/core/yq/libs/ydb/ydb.h>
+
 
 namespace NYq {
 
@@ -87,9 +89,78 @@ inline static bool HasManageAccess(TPermissions permissions, YandexQuery::Acl::V
     return HasAccessImpl(permissions, entityVisibility, entityUser, user, TPermissions::MANAGE_PRIVATE, TPermissions::MANAGE_PUBLIC);
 }
 
+TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler);
+
 LWTRACE_USING(YQ_CONTROL_PLANE_STORAGE_PROVIDER);
 
 using TRequestCountersPtr = TIntrusivePtr<TRequestCounters>;
+
+    template<typename T>
+    THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName)
+    {
+        THashMap<TString, T> entities;
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            T entity;
+            Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+            const TString name = entity.content().name();
+            if (auto it = entities.find(name); it != entities.end()) {
+                const auto visibility = entity.content().acl().visibility();
+                if (visibility == YandexQuery::Acl::PRIVATE) {
+                    entities[name] = std::move(entity);
+                }
+            } else {
+                entities[name] = std::move(entity);
+            }
+        }
+
+        return entities;
+    }
+
+    template<typename T>
+    TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName)
+    {
+        TVector<T> entities;
+        TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            Y_VERIFY(entities.emplace_back().ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
+        }
+        return entities;
+    }
+
+void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt);
+
+void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
+
+class TRequestCountersScope {
+    TRequestCountersPtr Counters;
+public:
+    TRequestCountersScope(TRequestCountersPtr counters, ui64 requestSize) : Counters(counters) {
+        StartTime = TInstant::Now();
+        Counters->InFly->Inc();
+        Counters->RequestBytes->Add(requestSize);
+    }
+
+    void Reply(const NYql::TIssues& issues, ui64 resultSize) {
+        Delta = TInstant::Now() - StartTime;
+        Counters->ResponseBytes->Add(resultSize);
+        Counters->InFly->Dec();
+        Counters->LatencyMs->Collect(Delta.MilliSeconds());
+        if (issues) {
+            Counters->Error->Inc();
+            for (const auto& issue : issues) {
+                NYql::WalkThroughIssues(issue, true, [&counters=Counters](const NYql::TIssue& err, ui16 level) {
+                    Y_UNUSED(level);
+                    counters->Issues->GetCounter(ToString(err.GetCode()), true)->Inc();
+                });
+            }
+        } else {
+            Counters->Ok->Inc();
+        }
+    }
+    TInstant StartTime;
+    TDuration Delta;
+};
 
 class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbControlPlaneStorageActor> {
     enum ERequestTypeScope {
@@ -240,7 +311,6 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     THashMap<TString, ui32> QueryQuotas;
     THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
     TInstant QuotasUpdatedAt = TInstant::Zero();
-    ui32 QuotaGeneration = 0;
     bool QuotasUpdating = false;
 
 public:
@@ -290,7 +360,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvNodesHealthCheckRequest, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
         hFunc(TEvQuotaService::TQuotaUsageRequest, Handle);
-        hFunc(TEvQuotaService::TQuotaUsageResponse, Handle);
+        hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
     )
 
     void Handle(TEvControlPlaneStorage::TEvCreateQueryRequest::TPtr& ev);
@@ -323,7 +393,6 @@ public:
     void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev);
 
     void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev);
-    void Handle(TEvQuotaService::TQuotaUsageResponse::TPtr& ev);
 
     template<typename T>
     NYql::TIssues ValidateConnection(T& ev, bool clickHousePasswordRequire = true)
@@ -385,10 +454,6 @@ private:
     */
     bool IsSuperUser(const TString& user);
 
-    void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt);
-
-    void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey);
-
     std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
         const TString& query,
         const NYdb::TParams& params,
@@ -425,39 +490,6 @@ private:
         const TVector<TValidationQuery>& validators = {},
         TTxSettings transactionMode = TTxSettings::SerializableRW(),
         bool retryOnTli = true);
-
-    template<typename T>
-    THashMap<TString, T> GetEntitiesWithVisibilityPriority(const TResultSet& resultSet, const TString& columnName)
-    {
-        THashMap<TString, T> entities;
-        TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            T entity;
-            Y_VERIFY(entity.ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
-            const TString name = entity.content().name();
-            if (auto it = entities.find(name); it != entities.end()) {
-                const auto visibility = entity.content().acl().visibility();
-                if (visibility == YandexQuery::Acl::PRIVATE) {
-                    entities[name] = std::move(entity);
-                }
-            } else {
-                entities[name] = std::move(entity);
-            }
-        }
-
-        return entities;
-    }
-
-    template<typename T>
-    TVector<T> GetEntities(const TResultSet& resultSet, const TString& columnName)
-    {
-        TVector<T> entities;
-        TResultSetParser parser(resultSet);
-        while (parser.TryNextRow()) {
-            Y_VERIFY(entities.emplace_back().ParseFromString(*parser.ColumnParser(columnName).GetOptionalString()));
-        }
-        return entities;
-    }
 
     template<class ResponseEvent, class Result, class RequestEventPtr>
     TFuture<bool> SendResponse(const TString& name,

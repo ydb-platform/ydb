@@ -252,6 +252,11 @@ struct TEvControlPlaneStorage {
         {
         }
 
+        explicit TControlPlaneResponse(const ProtoMessage& result, const NYql::TIssues& issues)
+            : Result(result), Issues(issues)
+        {
+        }
+
         size_t GetByteSize() const {
             return sizeof(*this)
                     + Result.ByteSizeLong()
@@ -275,6 +280,11 @@ struct TEvControlPlaneStorage {
             : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(issues)
         {
         }
+
+        explicit TControlPlaneNonAuditableResponse(const ProtoMessage& result, const NYql::TIssues& issues)
+            : TControlPlaneResponse<TControlPlaneNonAuditableResponse<ProtoMessage, EventType>, ProtoMessage, EventType>(result, issues)
+        {
+        }
     };
 
     template<typename ProtoMessage, typename AuditMessage, ui32 EventType>
@@ -288,6 +298,12 @@ struct TEvControlPlaneStorage {
 
         explicit TControlPlaneAuditableResponse(const NYql::TIssues& issues)
             : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(issues)
+        {
+        }
+
+        explicit TControlPlaneAuditableResponse(const ProtoMessage& result, const NYql::TIssues& issues, const TAuditDetails<AuditMessage>& auditDetails)
+            : TControlPlaneResponse<TControlPlaneAuditableResponse<ProtoMessage, AuditMessage, EventType>, ProtoMessage, EventType>(result, issues)
+            , AuditDetails(auditDetails)
         {
         }
 

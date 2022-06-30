@@ -14,6 +14,8 @@
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 
+#include <ydb/core/yq/libs/shared_resources/db_exec.h>
+
 #include <util/digest/multi.h>
 
 namespace {

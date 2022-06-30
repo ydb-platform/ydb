@@ -35,8 +35,8 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CPS_LOG_I("Starting ydb control plane storage service. Actor id: " << SelfId());
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_CONTROL_PLANE_STORAGE_PROVIDER));
 
-    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10);
     YdbConnection = NewYdbConnection(Config.Proto.GetStorage(), CredProviderFactory, YqSharedResources->CoreYdbDriver);
+    DbPool = YqSharedResources->DbPoolHolder->GetOrCreate(EDbPoolId::MAIN, 10, YdbConnection->TablePathPrefix);
     CreateDirectory();
     CreateQueriesTable();
     CreatePendingSmallTable();
@@ -252,7 +252,7 @@ bool TYdbControlPlaneStorageActor::IsSuperUser(const TString& user)
     });
 }
 
-void TYdbControlPlaneStorageActor::InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt) {
+void InsertIdempotencyKey(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey, const TString& response, const TInstant& expireAt) {
     if (idempotencyKey) {
         builder.AddString("scope", scope);
         builder.AddString("idempotency_key", idempotencyKey);
@@ -265,7 +265,7 @@ void TYdbControlPlaneStorageActor::InsertIdempotencyKey(TSqlQueryBuilder& builde
     }
 }
 
-void TYdbControlPlaneStorageActor::ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey) {
+void ReadIdempotencyKeyQuery(TSqlQueryBuilder& builder, const TString& scope, const TString& idempotencyKey) {
     if (idempotencyKey) {
         builder.AddString("scope", scope);
         builder.AddString("idempotency_key", idempotencyKey);
@@ -314,6 +314,11 @@ public:
     }
 };
 
+TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatus(NYdb::NTable::TSession&)> handler) {
+    TPromise<NYdb::TStatus> promise = NewPromise<NYdb::TStatus>();
+    TActivationContext::Register(new TDbRequest(dbPool, promise, handler));
+    return promise.GetFuture();
+}
 
 std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlPlaneStorageActor::Read(
     const TString& query,

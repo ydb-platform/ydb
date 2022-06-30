@@ -231,6 +231,15 @@ struct TEvents {
 
         NYdb::TStatus Result;
     };
+
+    struct TEvCallback : public NActors::TEventLocal<TEvCallback, TEventIds::EvCallback> {
+        explicit TEvCallback(std::function<void()> callback)
+            : Callback(callback)
+        {
+        }
+
+        std::function<void()> Callback;
+    };
 };
 
 } // namespace NYq

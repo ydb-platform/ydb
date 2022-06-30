@@ -44,6 +44,7 @@ struct TEventIds {
         EvGraphParams,
         EvRaiseTransientIssues,
         EvSchemaCreated,
+        EvCallback,
 
         // Special events
         EvEnd

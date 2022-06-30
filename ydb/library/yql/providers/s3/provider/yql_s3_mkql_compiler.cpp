@@ -10,6 +10,50 @@ namespace NYql {
 using namespace NKikimr::NMiniKQL;
 using namespace NNodes;
 
+namespace {
+
+
+TRuntimeNode BuildSerializeCall(
+    TRuntimeNode input,
+    const std::string_view& format,
+    const std::string_view& /*compression*/,
+    TType* inputType,
+    NCommon::TMkqlBuildContext& ctx)
+{
+    if (format == "raw") {
+        const auto structType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputType)->GetItemType());
+        MKQL_ENSURE(1U == structType->GetMembersCount(), "Expected single column.");
+        const auto schemeType = AS_TYPE(TDataType, structType->GetMemberType(0U))->GetSchemeType();
+        return ctx.ProgramBuilder.Map(input,
+            [&](TRuntimeNode item) {
+                const auto member = ctx.ProgramBuilder.Member(item, structType->GetMemberName(0U));
+                return NUdf::TDataType<const char*>::Id == schemeType ? member : ctx.ProgramBuilder.ToString(member);
+            }
+        );
+    } else if (format == "json_list") {
+        return ctx.ProgramBuilder.FlatMap(
+            ctx.ProgramBuilder.Condense(input, ctx.ProgramBuilder.NewList(AS_TYPE(TFlowType, inputType)->GetItemType(), {}),
+                [&ctx] (TRuntimeNode, TRuntimeNode) { return ctx.ProgramBuilder.NewDataLiteral<bool>(false); },
+                [&ctx] (TRuntimeNode item, TRuntimeNode state) { return ctx.ProgramBuilder.Append(state, item); }
+            ),
+            [&ctx] (TRuntimeNode list) {
+                const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({list.GetStaticType()})});
+                return ctx.ProgramBuilder.ToString(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.SerializeJson"), {ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.From", {}, userType), {list})}));
+            }
+        );
+    }
+
+    throw yexception() << "Unsupported format: " << format;
+}
+
+TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, NCommon::TMkqlBuildContext& ctx) {
+    const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
+    const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
+    return BuildSerializeCall(input, wrapper.Format().Value(), "TODO", inputItemType,  ctx);
+}
+
+}
+
 void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TS3State::TPtr&) {
     compiler.ChainCallable(TDqSourceWideWrap::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
@@ -22,6 +66,12 @@ void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
 
             return TRuntimeNode();
         });
+
+    if (!compiler.HasCallable(TS3SinkOutput::CallableName()))
+        compiler.AddCallable(TS3SinkOutput::CallableName(),
+            [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+                return SerializeForS3(TS3SinkOutput(&node), ctx);
+            });
 }
 
 }

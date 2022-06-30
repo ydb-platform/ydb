@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
+#include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -173,10 +174,26 @@ public:
         }
     }
 
+    void FillSinkSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sinkType) override {
+        const TDqSink sink(&node);
+        if (const auto maySettings = sink.Settings().Maybe<TS3SinkSettings>()) {
+            const auto settings = maySettings.Cast();
+            const auto& cluster = sink.DataSink().Cast<TS3DataSink>().Cluster().StringValue();
+            const auto& connect = State_->Configuration->Clusters.at(cluster);
+
+            NS3::TSink sinkDesc;
+            sinkDesc.SetUrl(connect.Url);
+            sinkDesc.SetToken(settings.Token().Name().StringValue());
+            sinkDesc.SetPath(settings.Path().StringValue());
+
+            protoSettings.PackFrom(sinkDesc);
+            sinkType = "S3Sink";
+        }
+    }
+
     void RegisterMkqlCompiler(NCommon::TMkqlCallableCompilerBase& compiler) override {
         RegisterDqS3MkqlCompilers(compiler, State_);
     }
-
 private:
     const TS3State::TPtr State_;
 };

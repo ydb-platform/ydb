@@ -35,7 +35,7 @@ TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway
 
         info.Names.insert({TString{S3ProviderName}});
         info.Source = CreateS3DataSource(state, gateway);
-        info.Sink = CreateS3DataSink(state);
+        info.Sink = CreateS3DataSink(state, gateway);
 
         return info;
     };

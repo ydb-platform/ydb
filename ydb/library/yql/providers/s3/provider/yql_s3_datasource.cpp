@@ -114,8 +114,6 @@ public:
     IDqIntegration* GetDqIntegration() override {
         return DqIntegration_.Get();
     }
-
-
 private:
     const TS3State::TPtr State_;
     const THolder<IGraphTransformer> IODiscoveryTransformer_;

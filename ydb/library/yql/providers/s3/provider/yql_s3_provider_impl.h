@@ -19,6 +19,8 @@ THolder<TExecTransformerBase> CreateS3DataSinkExecTransformer(TS3State::TPtr sta
 THolder<IGraphTransformer> CreateS3LogicalOptProposalTransformer(TS3State::TPtr state);
 THolder<IGraphTransformer> CreateS3SourceCallableExecutionTransformer(TS3State::TPtr state);
 THolder<IGraphTransformer> CreateS3IODiscoveryTransformer(TS3State::TPtr state, IHTTPGateway::TPtr gateway);
+THolder<IGraphTransformer> CreateS3PhysicalOptProposalTransformer(TS3State::TPtr state);
 
+TExprNode::TPtr ExtractFormat(TExprNode::TListType& settings);
 
 } // namespace NYql

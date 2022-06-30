@@ -1,4 +1,5 @@
 #include "yql_s3_provider_impl.h"
+#include "yql_s3_dq_integration.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
@@ -15,16 +16,28 @@ using namespace NNodes;
 
 namespace {
 
+void ScanPlanDependencies(const TExprNode::TPtr& input, TExprNode::TListType& children) {
+    VisitExpr(input, [&children](const TExprNode::TPtr& node) {
+        if (node->IsCallable("DqCnResult")) {
+            children.push_back(node->HeadPtr());
+            return false;
+        }
+
+        return true;
+    });
+}
+
 class TS3DataSinkProvider : public TDataProviderBase {
 public:
-    TS3DataSinkProvider(TS3State::TPtr state)
+    TS3DataSinkProvider(TS3State::TPtr state, IHTTPGateway::TPtr)
         : State_(state)
         , TypeAnnotationTransformer_(CreateS3DataSinkTypeAnnotationTransformer(State_))
         , ExecutionTransformer_(CreateS3DataSinkExecTransformer(State_))
         , LogicalOptProposalTransformer_(CreateS3LogicalOptProposalTransformer(State_))
-    {
-    }
-
+        , PhysicalOptProposalTransformer_(CreateS3PhysicalOptProposalTransformer(State_))
+        , DqIntegration_(CreateS3DqIntegration(State_))
+    {}
+private:
     TStringBuf GetName() const override {
         return S3ProviderName;
     }
@@ -44,6 +57,10 @@ public:
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
         return *ExecutionTransformer_;
+    }
+
+    IGraphTransformer& GetPhysicalOptProposalTransformer() override {
+        return *PhysicalOptProposalTransformer_;
     }
 
     bool CanExecute(const TExprNode& node) override {
@@ -69,17 +86,59 @@ public:
     IGraphTransformer& GetLogicalOptProposalTransformer() override {
         return *LogicalOptProposalTransformer_;
     }
-private:
+
+    TExprNode::TPtr RewriteIO(const TExprNode::TPtr& write, TExprContext& ctx) override {
+        const TS3Write w(write);
+        auto settings = write->Tail().ChildrenList();
+        return Build<TS3WriteObject>(ctx, w.Pos())
+                .World(w.World())
+                .DataSink(w.DataSink())
+                .Target<TS3Target>()
+                    .Path(write->Child(2U)->Head().Tail().HeadPtr())
+                    .Format(ExtractFormat(settings))
+                    .Settings(ctx.NewList(w.Pos(), std::move(settings)))
+                    .Build()
+                .Input(write->ChildPtr(3))
+            .Done().Ptr();
+    }
+
+    void GetOutputs(const TExprNode& node, TVector<TPinInfo>& outputs) override {
+        if (const auto& maybeOp = TMaybeNode<TS3WriteObject>(&node)) {
+            const auto& op = maybeOp.Cast();
+            outputs.push_back(TPinInfo(nullptr, op.DataSink().Raw(), op.Target().Raw(), op.DataSink().Cluster().StringValue() + '.' + op.Target().Path().StringValue(), false));
+        }
+    }
+
+    bool GetDependencies(const TExprNode& node, TExprNode::TListType& children, bool) override {
+        if (CanExecute(node)) {
+            children.push_back(node.HeadPtr());
+
+            if (TS3WriteObject::Match(&node)) {
+                ScanPlanDependencies(node.ChildPtr(TS3WriteObject::idx_Input), children);
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    IDqIntegration* GetDqIntegration() override {
+        return DqIntegration_.Get();
+    }
+
     const TS3State::TPtr State_;
     const THolder<TVisitorTransformerBase> TypeAnnotationTransformer_;
     const THolder<TExecTransformerBase> ExecutionTransformer_;
     const THolder<IGraphTransformer> LogicalOptProposalTransformer_;
+    const THolder<IGraphTransformer> PhysicalOptProposalTransformer_;
+    const THolder<IDqIntegration> DqIntegration_;
 };
 
 }
 
-TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state) {
-    return new TS3DataSinkProvider(state);
+TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state, IHTTPGateway::TPtr gateway) {
+    return new TS3DataSinkProvider(std::move(state), std::move(gateway));
 }
 
 } // namespace NYql

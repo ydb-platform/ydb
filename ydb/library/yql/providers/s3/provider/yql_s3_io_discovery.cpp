@@ -6,14 +6,13 @@
 #include <ydb/library/yql/utils/url_builder.h>
 
 #include <util/generic/size_literals.h>
-
 #include <contrib/libs/re2/re2/re2.h>
+#include <library/cpp/retry/retry_policy.h>
 
 #ifdef THROW
 #undef THROW
 #endif
 #include <library/cpp/xml/document/xml-document.h>
-#include <library/cpp/retry/retry_policy.h>
 
 namespace NYql {
 
@@ -26,17 +25,6 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
         if (const auto item = *it; item->Head().IsAtom("userschema")) {
             settings.erase(it);
             return {item->ChildPtr(1), item->ChildrenSize() > 2 ? item->TailPtr() : TExprNode::TPtr()};
-        }
-    }
-
-    return {};
-}
-
-TExprNode::TPtr ExtractFormat(TExprNode::TListType& settings) {
-    for (auto it = settings.cbegin(); settings.cend() != it; ++it) {
-        if (const auto item = *it; item->Head().IsAtom("format")) {
-            settings.erase(it);
-            return item->TailPtr();
         }
     }
 
@@ -114,6 +102,7 @@ void OnDiscovery(
                         0U,
                         std::bind(&OnDiscovery, gateway, pos, std::placeholders::_1, std::cref(keys), std::ref(output), std::move(promise), pendingBucketsWPtr, promiseInd, retryPolicy, maxDiscoveryFilesPerQuery),
                         /*data=*/"",
+                        false,
                         retryPolicy);
                 }
                 YQL_CLOG(INFO, ProviderS3) << "Gateway disappeared.";
@@ -256,6 +245,7 @@ public:
                     IHTTPGateway::TWeakPtr(Gateway_), ctx.GetPosition((*std::get<TNodeSet>(bucket.second).cbegin())->Pos()), std::placeholders::_1,
                     std::cref(bucket.first), std::ref(bucket.second), std::move(promise), pendingBucketsWPtr, i++, retryPolicy, State_->Configuration->MaxDiscoveryFilesPerQuery),
                 /*data=*/"",
+                false,
                 retryPolicy
             );
             YQL_CLOG(INFO, ProviderS3) << "Enumerate items in " << std::get<0U>(bucket.first) << std::get<1U>(bucket.first);

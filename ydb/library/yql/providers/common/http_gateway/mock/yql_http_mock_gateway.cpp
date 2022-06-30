@@ -43,12 +43,15 @@ public:
         return std::move(ret);
     }
 
+    void Upload(TString, THeaders, TString, TOnResponse) {}
+
     void Download(
             TString url,
             IHTTPGateway::THeaders headers,
             std::size_t expectedSize,
             IHTTPGateway::TOnResult callback,
             TString data,
+            bool,
             IRetryPolicy<long>::TPtr retryPolicy)
     {
 

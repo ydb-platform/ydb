@@ -1,0 +1,11 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NYql.NS3;
+
+message TSink {
+    string Url = 1;
+    string Token = 2;
+    string Path = 3;
+}
+

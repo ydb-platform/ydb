@@ -32,6 +32,6 @@ struct TS3State : public TThrRefBase
 TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory = nullptr);
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state, IHTTPGateway::TPtr gateway);
-TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state);
+TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state, IHTTPGateway::TPtr gateway);
 
 } // namespace NYql

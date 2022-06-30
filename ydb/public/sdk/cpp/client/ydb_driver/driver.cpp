@@ -45,6 +45,9 @@ public:
     bool GetGRpcKeepAlivePermitWithoutCalls() const override { return GRpcKeepAlivePermitWithoutCalls; }
     TDuration GetSocketIdleTimeout() const override { return SocketIdleTimeout; }
     ui64 GetMemoryQuota() const override { return MemoryQuota; }
+    ui64 GetMaxInboundMessageSize() const override { return MaxInboundMessageSize; }
+    ui64 GetMaxOutboundMessageSize() const override { return MaxOutboundMessageSize; }
+    ui64 GetMaxMessageSize() const override { return MaxMessageSize; }
     const TLog& GetLog() const override { return Log; }
 
     TStringType Endpoint;
@@ -70,6 +73,9 @@ public:
     bool GRpcKeepAlivePermitWithoutCalls = false;
     TDuration SocketIdleTimeout = TDuration::Minutes(6);
     ui64 MemoryQuota = 0;
+    ui64 MaxInboundMessageSize = 0;
+    ui64 MaxOutboundMessageSize = 0;
+    ui64 MaxMessageSize = 0;
     TLog Log; // Null by default.
 };
 
@@ -169,6 +175,21 @@ TDriverConfig& TDriverConfig::SetGRpcKeepAlivePermitWithoutCalls(bool permitWith
 
 TDriverConfig& TDriverConfig::SetSocketIdleTimeout(TDuration timeout) {
     Impl_->SocketIdleTimeout = timeout;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetMaxInboundMessageSize(ui64 maxInboundMessageSize) {
+    Impl_->MaxInboundMessageSize = maxInboundMessageSize;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetMaxOutboundMessageSize(ui64 maxOutboundMessageSize) {
+    Impl_->MaxOutboundMessageSize = maxOutboundMessageSize;
+    return *this;
+}
+
+TDriverConfig& TDriverConfig::SetMaxMessageSize(ui64 maxMessageSize) {
+    Impl_->MaxMessageSize = maxMessageSize;
     return *this;
 }
 

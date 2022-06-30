@@ -150,6 +150,9 @@ TGRpcConnectionsImpl::TGRpcConnectionsImpl(std::shared_ptr<IConnectionsParams> p
     , GRpcKeepAliveTimeout_(params->GetGRpcKeepAliveTimeout())
     , GRpcKeepAlivePermitWithoutCalls_(params->GetGRpcKeepAlivePermitWithoutCalls())
     , MemoryQuota_(params->GetMemoryQuota())
+    , MaxInboundMessageSize_(params->GetMaxInboundMessageSize())
+    , MaxOutboundMessageSize_(params->GetMaxOutboundMessageSize())
+    , MaxMessageSize_(params->GetMaxMessageSize())
     , QueuedRequests_(0)
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL
     , ChannelPool_(params->GetTcpKeepAliveSettings(), params->GetSocketIdleTimeout())

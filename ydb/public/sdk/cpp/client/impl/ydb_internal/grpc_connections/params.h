@@ -25,6 +25,9 @@ public:
     virtual TDuration GetSocketIdleTimeout() const = 0;
     virtual const TLog& GetLog() const = 0;
     virtual ui64 GetMemoryQuota() const = 0;
+    virtual ui64 GetMaxInboundMessageSize() const = 0;
+    virtual ui64 GetMaxOutboundMessageSize() const = 0;
+    virtual ui64 GetMaxMessageSize() const = 0;
 };
 
 } // namespace NYdb

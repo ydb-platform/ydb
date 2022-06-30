@@ -7,6 +7,8 @@
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
+
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -59,13 +61,14 @@ struct TKqpTxLocks {
     NKikimrMiniKQL::TType LockType;
     NKikimrMiniKQL::TListType LocksListType;
     THashMap<TKqpTxLock::TKey, TKqpTxLock> LocksMap;
+    NLongTxService::TLockHandle LockHandle;
 
     TMaybe<NYql::TIssue> LockIssue;
 
     bool HasLocks() const { return !LocksMap.empty(); }
     bool Broken() const { return LockIssue.Defined(); }
     void MarkBroken(NYql::TIssue lockIssue) { LockIssue.ConstructInPlace(std::move(lockIssue)); }
-    ui64 GetLockTxId() const { return HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
+    ui64 GetLockTxId() const { return LockHandle ? LockHandle.GetLockId() : HasLocks() ? LocksMap.begin()->second.GetLockId() : 0; }
     size_t Size() const { return LocksMap.size(); }
 
     void ReportIssues(NYql::TExprContext& ctx) {

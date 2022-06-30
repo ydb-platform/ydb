@@ -56,9 +56,10 @@ protected:
         YQL_ENSURE(false, "Rollback in ScanQuery tx");
     }
 
-    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
+    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NLongTxService::TLockHandle&& lockHandle, TExprContext& ctx, bool commit) override {
         Y_UNUSED(ctx);
         Y_UNUSED(commit);
+        Y_UNUSED(lockHandle);
 
         if (execResult.HasStats()) {
             TransformCtx->QueryStats.AddExecutions()->Swap(execResult.MutableStats());

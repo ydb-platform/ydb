@@ -159,12 +159,12 @@ namespace NTest {
 
         template <typename T>
         void SetLock(const TPointKey<T>& key) {
-            Locks.SetLock(TableId, key.GetRow(), LockId());
+            Locks.SetLock(TableId, key.GetRow(), LockId(), 0);
         }
 
         template <typename T>
         void SetLock(const TRangeKey<T>& range) {
-            Locks.SetLock(TableId, range.GetRowsRange(), LockId());
+            Locks.SetLock(TableId, range.GetRowsRange(), LockId(), 0);
         }
 
         template <typename T>
@@ -173,7 +173,7 @@ namespace NTest {
         }
 
         void BreakSetLocks() {
-            Locks.BreakSetLocks(LockId());
+            Locks.BreakSetLocks(LockId(), 0);
         }
 
         //

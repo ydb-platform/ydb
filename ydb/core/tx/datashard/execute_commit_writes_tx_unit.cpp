@@ -23,7 +23,7 @@ public:
         return !op->HasRuntimeConflicts();
     }
 
-    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext&) override {
+    EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         Y_VERIFY(op->IsCommitWritesTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
@@ -46,6 +46,7 @@ public:
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         DataShard.SysLocksTable().ApplyLocks();
+        DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 
         return EExecutionStatus::ExecutedNoMoreRestarts;

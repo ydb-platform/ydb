@@ -19,6 +19,7 @@
 #include <ydb/core/tx/coordinator/coordinator_impl.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
@@ -30,6 +31,7 @@ namespace NKqp {
 
 using namespace NYql;
 using namespace NYql::NDq;
+using namespace NLongTxService;
 
 namespace {
 
@@ -1182,6 +1184,7 @@ private:
 
         if (lockTxId) {
             dataTransaction.SetLockTxId(*lockTxId);
+            dataTransaction.SetLockNodeId(SelfId().NodeId());
         }
 
         for (auto& task : dataTransaction.GetKqpTransaction().GetTasks()) {
@@ -1616,6 +1619,7 @@ private:
         auto lockTxId = Request.AcquireLocksTxId;
         if (lockTxId.Defined() && *lockTxId == 0) {
             lockTxId = TxId;
+            LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
         }
 
         // first, start compute tasks
@@ -1707,6 +1711,9 @@ private:
         }
 
         if (!Locks.empty()) {
+            if (LockHandle) {
+                ResponseEv->LockHandle = std::move(LockHandle);
+            }
             BuildLocks(*response.MutableResult()->MutableLocks(), Locks);
         }
 
@@ -1849,6 +1856,9 @@ private:
     // Temporary storage during snapshot acquisition
     TVector<NDqProto::TDqTask> ComputeTasks;
     THashMap<ui64, NKikimrTxDataShard::TKqpTransaction> DatashardTxs;
+
+    // Lock handle for a newly acquired lock
+    TLockHandle LockHandle;
 };
 
 } // namespace

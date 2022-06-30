@@ -37,6 +37,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
+  tx-long_tx_service-public
   ydb-core-util
   ydb-core-wrappers
   ydb-core-ydb_convert
@@ -187,6 +188,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/remove_locks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_avl_tree.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_ops.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/range_treap.cpp
@@ -281,6 +283,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
+  tx-long_tx_service-public
   ydb-core-util
   ydb-core-wrappers
   ydb-core-ydb_convert

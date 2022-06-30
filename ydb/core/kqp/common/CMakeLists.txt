@@ -18,6 +18,7 @@ target_link_libraries(core-kqp-common PUBLIC
   ydb-core-engine
   core-kqp-expr_nodes
   core-kqp-provider
+  tx-long_tx_service-public
   ydb-library-aclib
   yql-core-issue
   yql-dq-actors

@@ -881,6 +881,7 @@ private:
         }
 
         result.ExecuterResult.Swap(response->MutableResult());
+        result.LockHandle = std::move(ev->Get()->LockHandle);
 
         Promise.SetValue(std::move(result));
         this->PassAway();

@@ -258,6 +258,9 @@ message TDataTransaction {
     optional uint64 CancelDeadlineMs = 14; // Wallclock timestamp from datareq (not duration)
     optional uint64 CancelAfterMs = 15; // Duration from tx start local to datashard
     optional bool CollectStats = 16;
+
+    // Datashard will subscribe to lock status when node id is non-zero
+    optional uint32 LockNodeId = 17;
 }
 
 message TCreateVolatileSnapshot {

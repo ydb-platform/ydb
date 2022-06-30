@@ -102,7 +102,11 @@ protected:
         return TStatus::Async;
     }
 
-    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
+    bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NLongTxService::TLockHandle&& lockHandle, TExprContext& ctx, bool commit) override {
+        if (lockHandle) {
+            TxState->Tx().Locks.LockHandle = std::move(lockHandle);
+        }
+
         if (execResult.HasLocks()) {
             YQL_ENSURE(!commit);
 

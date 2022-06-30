@@ -145,21 +145,22 @@ const NDataShard::TUserTable* TKqpDatashardComputeContext::GetTable(const TTable
 }
 
 void TKqpDatashardComputeContext::TouchTableRange(const TTableId& tableId, const TTableRange& range) const {
-    Shard->SysLocksTable().SetLock(tableId, range, LockTxId);
+    Shard->SysLocksTable().SetLock(tableId, range, LockTxId, LockNodeId);
     Shard->SetTableAccessTime(tableId, Now);
 }
 
 void TKqpDatashardComputeContext::TouchTablePoint(const TTableId& tableId, const TArrayRef<const TCell>& key) const {
-    Shard->SysLocksTable().SetLock(tableId, key, LockTxId);
+    Shard->SysLocksTable().SetLock(tableId, key, LockTxId, LockNodeId);
     Shard->SetTableAccessTime(tableId, Now);
 }
 
 void TKqpDatashardComputeContext::BreakSetLocks() const {
-    Shard->SysLocksTable().BreakSetLocks(LockTxId);
+    Shard->SysLocksTable().BreakSetLocks(LockTxId, LockNodeId);
 }
 
-void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId) {
+void TKqpDatashardComputeContext::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     LockTxId = lockTxId;
+    LockNodeId = lockNodeId;
 }
 
 void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
@@ -187,6 +188,7 @@ TActorId TKqpDatashardComputeContext::GetTaskOutputChannel(ui64 taskId, ui64 cha
 void TKqpDatashardComputeContext::Clear() {
     Database = nullptr;
     LockTxId = 0;
+    LockNodeId = 0;
 }
 
 bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidatedKey>& keys, ui64 pageFaultCount) {

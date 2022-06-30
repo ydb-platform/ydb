@@ -1502,11 +1502,11 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         SimulateSleep(server, TDuration::Seconds(1));
 
-        auto execSimpleRequest = [&](const TString& query) -> TString {
+        auto execSimpleRequest = [&](const TString& query, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) -> TString {
             auto reqSender = runtime.AllocateEdgeActor();
             auto ev = ExecRequest(runtime, reqSender, MakeSimpleRequest(query));
             auto& response = ev->Get()->Record.GetRef();
-            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), expectedStatus);
             if (response.GetResponse().GetResults().size() == 0) {
                 return "";
             }
@@ -1554,8 +1554,10 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         };
 
         ui64 lastLockTxId = 0;
+        ui32 lastLockNodeId = 0;
         TRowVersion lastMvccSnapshot = TRowVersion::Min();
         ui64 injectLockTxId = 0;
+        ui32 injectLockNodeId = 0;
         TRowVersion injectMvccSnapshot = TRowVersion::Min();
         auto capturePropose = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) -> auto {
             switch (ev->GetTypeRewrite()) {
@@ -1590,8 +1592,12 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
                         }
                         if (tx.GetLockTxId()) {
                             lastLockTxId = tx.GetLockTxId();
+                            lastLockNodeId = tx.GetLockNodeId();
                         } else if (injectLockTxId) {
                             tx.SetLockTxId(injectLockTxId);
+                            if (injectLockNodeId) {
+                                tx.SetLockNodeId(injectLockNodeId);
+                            }
                             TString txBody;
                             Y_VERIFY(tx.SerializeToString(&txBody));
                             record.SetTxBody(txBody);
@@ -1626,19 +1632,29 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         // We should have been acquiring locks
         Y_VERIFY(lastLockTxId != 0);
         ui64 snapshotLockTxId = lastLockTxId;
+        ui32 snapshotLockNodeId = lastLockNodeId;
         Y_VERIFY(lastMvccSnapshot);
         auto snapshotVersion = lastMvccSnapshot;
 
         // Perform an immediate write, pretending it happens as part of the above snapshot tx
         injectLockTxId = snapshotLockTxId;
+        injectLockNodeId = snapshotLockNodeId;
         injectMvccSnapshot = snapshotVersion;
         UNIT_ASSERT_VALUES_EQUAL(
             execSimpleRequest(Q_(R"(
                 UPSERT INTO `/Root/table-1` (key, value) VALUES (2, 2)
-                )")),
+                )"),
+                UseNewEngine ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::UNAVAILABLE),
             "");
         injectLockTxId = 0;
+        injectLockNodeId = 0;
         injectMvccSnapshot = TRowVersion::Min();
+
+        // Old engine doesn't support LockNodeId
+        // There's nothing to test unless we can write uncommitted data 
+        if (!UseNewEngine) {
+            return;
+        }
 
         // Start another snapshot read, it should not see above write (it's uncommitted)
         TString sessionId2, txId2;

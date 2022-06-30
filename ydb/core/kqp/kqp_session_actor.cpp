@@ -1072,6 +1072,10 @@ public:
         auto& txResult = *response->MutableResult();
         QueryState->QueryCtx->TxResults.emplace_back(ExtractTxResults(txResult));
 
+        if (ev->Get()->LockHandle) {
+            QueryState->TxCtx->Locks.LockHandle = std::move(ev->Get()->LockHandle);
+        }
+
         if (!MergeLocksWithTxResult(txResult)) {
             return;
         }

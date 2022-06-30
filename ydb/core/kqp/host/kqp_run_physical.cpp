@@ -134,7 +134,7 @@ IGraphTransformer::TStatus TKqpExecutePhysicalTransformerBase::DoApplyAsyncChang
         TransformState->TxResults.emplace_back(std::move(txResults));
     }
 
-    if (!OnExecuterResult(std::move(execResult), ctx, ExecuteFlags.HasFlags(TKqpExecuteFlag::Commit))) {
+    if (!OnExecuterResult(std::move(execResult), std::move(result.LockHandle), ctx, ExecuteFlags.HasFlags(TKqpExecuteFlag::Commit))) {
         return TStatus::Error;
     }
 

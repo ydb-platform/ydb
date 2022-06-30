@@ -8,6 +8,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/cache/cache.h>
+#include <util/generic/list.h>
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 
@@ -135,6 +136,22 @@ struct TVersionedLockId {
     }
 };
 
+struct TPendingSubscribeLock {
+    ui64 LockId = 0;
+    ui32 LockNodeId = 0;
+
+    TPendingSubscribeLock() = default;
+
+    TPendingSubscribeLock(ui64 lockId, ui32 lockNodeId)
+        : LockId(lockId)
+        , LockNodeId(lockNodeId)
+    { }
+
+    explicit operator bool() const {
+        return LockId != 0;
+    }
+};
+
 /// Aggregates shard, point and range locks
 class TLockInfo : public TSimpleRefCount<TLockInfo> {
     friend class TTableLocks;
@@ -143,7 +160,7 @@ class TLockInfo : public TSimpleRefCount<TLockInfo> {
 public:
     using TPtr = TIntrusivePtr<TLockInfo>;
 
-    TLockInfo(TLockLocker * locker, ui64 lockId);
+    TLockInfo(TLockLocker * locker, ui64 lockId, ui32 lockNodeId);
     ~TLockInfo();
 
     ui64 GetCounter(const TRowVersion& at = TRowVersion::Max()) const { return !BreakVersion || at < *BreakVersion ? Counter : Max<ui64>(); }
@@ -157,6 +174,7 @@ public:
     bool MayHavePointsAndRanges() const { return !ShardLock && (!BreakVersion || *BreakVersion); }
 
     ui64 GetLockId() const { return LockId; }
+    ui32 GetLockNodeId() const { return LockNodeId; }
 
     TInstant GetCreationTime() const { return CreationTime; }
     const THashSet<TPathId>& GetAffectedTables() const { return AffectedTables; }
@@ -173,6 +191,7 @@ private:
 private:
     TLockLocker * Locker;
     ui64 LockId;
+    ui32 LockNodeId;
     ui64 Counter;
     TInstant CreationTime;
     THashSet<TPathId> AffectedTables;
@@ -256,7 +275,7 @@ public:
 
         ui64 LocksCount() const { return Parent->LocksCount(); }
 
-        TLockInfo::TPtr TryAddLock(ui64 lockId);
+        TLockInfo::TPtr TryAddLock(ui64 lockId, ui32 lockNodeId);
         void RemoveLock(ui64 lockId);
         void TouchLock(ui64 lockId);
 
@@ -280,9 +299,9 @@ public:
         Tables.clear();
     }
 
-    TLockInfo::TPtr AddShardLock(ui64 lockTxId, const THashSet<TPathId>& affectedTables, const TRowVersion& at);
-    TLockInfo::TPtr AddPointLock(ui64 lockTxId, const TPointKey& key, const TRowVersion& at);
-    TLockInfo::TPtr AddRangeLock(ui64 lockTxId, const TRangeKey& key, const TRowVersion& at);
+    TLockInfo::TPtr AddShardLock(ui64 lockTxId, ui32 lockNodeId, const THashSet<TPathId>& affectedTables, const TRowVersion& at);
+    TLockInfo::TPtr AddPointLock(ui64 lockTxId, ui32 lockNodeId, const TPointKey& key, const TRowVersion& at);
+    TLockInfo::TPtr AddRangeLock(ui64 lockTxId, ui32 lockNodeId, const TRangeKey& key, const TRowVersion& at);
     TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
 
     ui64 LocksCount() const { return Locks.size(); }
@@ -326,6 +345,17 @@ public:
     // optimisation: set to remove broken lock at next Remove()
     void ScheduleLockCleanup(ui64 lockId, const TRowVersion& at);
 
+    TPendingSubscribeLock NextPendingSubscribeLock() {
+        TPendingSubscribeLock result;
+        if (!PendingSubscribeLocks.empty()) {
+            result = PendingSubscribeLocks.front();
+            PendingSubscribeLocks.pop_front();
+        }
+        return result;
+    }
+
+    void RemoveSubscribedLock(ui64 lockId);
+
     ui64 IncCounter() { return Counter++; };
 
 private:
@@ -337,6 +367,7 @@ private:
     TVector<ui64> CleanupPending; // LockIds of broken locks with pending cleanup
     TPriorityQueue<TVersionedLockId> BrokenCandidates;
     TPriorityQueue<TVersionedLockId> CleanupCandidates;
+    TList<TPendingSubscribeLock> PendingSubscribeLocks;
     TLockLimiter Limiter;
     ui64 Counter;
 
@@ -348,7 +379,7 @@ private:
 
     void RemoveBrokenRanges();
 
-    TLockInfo::TPtr GetOrAddLock(ui64 lockId);
+    TLockInfo::TPtr GetOrAddLock(ui64 lockId, ui32 lockNodeId);
     void RemoveOneLock(ui64 lockId);
     void RemoveBrokenLocks();
 };
@@ -356,6 +387,7 @@ private:
 /// A portion of locks update
 struct TLocksUpdate {
     ui64 LockTxId = 0;
+    ui32 LockNodeId = 0;
     TVector<TPointKey> PointLocks;
     TVector<TRangeKey> RangeLocks;
     TVector<TPointKey> PointBreaks;
@@ -373,6 +405,7 @@ struct TLocksUpdate {
 
     void Clear() {
         LockTxId = 0;
+        LockNodeId = 0;
         ShardLock = false;
         ShardBreak = false;
         PointLocks.clear();
@@ -385,15 +418,15 @@ struct TLocksUpdate {
         return ShardLock || PointLocks.size() || RangeLocks.size();
     }
 
-    void SetLock(const TTableId& tableId, const TRangeKey& range, ui64 lockId) {
-        Y_VERIFY(LockTxId == lockId);
+    void SetLock(const TTableId& tableId, const TRangeKey& range, ui64 lockId, ui32 lockNodeId) {
+        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
         AffectedTables.insert(tableId.PathId);
         RangeTables.insert(tableId.PathId);
         RangeLocks.push_back(range);
     }
 
-    void SetLock(const TTableId& tableId, const TPointKey& key, ui64 lockId) {
-        Y_VERIFY(LockTxId == lockId);
+    void SetLock(const TTableId& tableId, const TPointKey& key, ui64 lockId, ui32 lockNodeId) {
+        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
         AffectedTables.insert(tableId.PathId);
         PointLocks.push_back(key);
     }
@@ -414,8 +447,8 @@ struct TLocksUpdate {
         Erases.push_back(lockId);
     }
 
-    void BreakSetLocks(ui64 lockId) {
-        Y_VERIFY(LockTxId == lockId);
+    void BreakSetLocks(ui64 lockId, ui32 lockNodeId) {
+        Y_VERIFY(LockTxId == lockId && LockNodeId == lockNodeId);
         BreakOwn = true;
     }
 };
@@ -468,11 +501,11 @@ public:
     ui64 ExtractLockTxId(const TArrayRef<const TCell>& syslockKey) const;
     TLock GetLock(const TArrayRef<const TCell>& syslockKey) const;
     void EraseLock(const TArrayRef<const TCell>& syslockKey);
-    void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId);
-    void SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId);
+    void SetLock(const TTableId& tableId, const TArrayRef<const TCell>& key, ui64 lockTxId, ui32 lockNodeId);
+    void SetLock(const TTableId& tableId, const TTableRange& range, ui64 lockTxId, ui32 lockNodeId);
     void BreakLock(const TTableId& tableId, const TArrayRef<const TCell>& key);
     void BreakAllLocks(const TTableId& tableId);
-    void BreakSetLocks(ui64 lockTxId);
+    void BreakSetLocks(ui64 lockTxId, ui32 lockNodeId);
     bool IsMyKey(const TArrayRef<const TCell>& key) const;
 
     ui64 LocksCount() const { return Locker.LocksCount(); }
@@ -487,6 +520,14 @@ public:
         if (txLock)
             return txLock->IsBroken(at);
         return true;
+    }
+
+    TPendingSubscribeLock NextPendingSubscribeLock() {
+        return Locker.NextPendingSubscribeLock();
+    }
+
+    void RemoveSubscribedLock(ui64 lockId) {
+        Locker.RemoveSubscribedLock(lockId);
     }
 
 private:

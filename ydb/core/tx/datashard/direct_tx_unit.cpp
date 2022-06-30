@@ -41,6 +41,7 @@ public:
         op->ChangeRecords() = std::move(tx->GetCollectedChanges());
 
         DataShard.SysLocksTable().ApplyLocks();
+        DataShard.SubscribeNewLocks(ctx);
         Pipeline.AddCommittingOp(op);
 
         return EExecutionStatus::DelayCompleteNoMoreRestarts;

@@ -31,7 +31,7 @@ public:
     TString GetTablePath(const TTableId& tableId) const;
     const NDataShard::TUserTable* GetTable(const TTableId& tableId) const;
     void BreakSetLocks() const;
-    void SetLockTxId(ui64 lockTxId);
+    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
 
     const NDataShard::TUserTable::TUserColumn& GetKeyColumnInfo(
         const NDataShard::TUserTable& table, ui32 keyIndex) const;
@@ -108,6 +108,7 @@ private:
     TEngineHost& EngineHost;
     TInstant Now;
     ui64 LockTxId = 0;
+    ui32 LockNodeId = 0;
     bool PersistentChannels = false;
     bool TabletNotReady = false;
     TRowVersion ReadVersion = TRowVersion::Min();

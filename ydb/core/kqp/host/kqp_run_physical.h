@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/common/kqp_gateway.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
 #include <ydb/core/kqp/prepare/kqp_prepare.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 
 #include <ydb/library/yql/core/yql_graph_transformer.h>
 
@@ -43,7 +44,8 @@ protected:
     virtual TStatus DoExecute(std::shared_ptr<const NKqpProto::TKqpPhyTx> tx, bool commit, NYql::TExprContext& ctx) = 0;
     virtual TStatus DoRollback() = 0;
 
-    virtual bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, NYql::TExprContext& ctx, bool commit) = 0;
+    virtual bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult,
+        NLongTxService::TLockHandle&& lockHandle, NYql::TExprContext& ctx, bool commit) = 0;
 
 protected:
     TKqpParamsMap PrepareParameters(const NKqpProto::TKqpPhyTx& tx);

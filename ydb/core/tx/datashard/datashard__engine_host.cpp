@@ -280,7 +280,7 @@ TIntrusivePtr<TThrRefBase> InitDataShardSysTables(TDataShard* self) {
 ///
 class TDataShardEngineHost : public TEngineHost {
 public:
-    TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, TInstant now)
+    TDataShardEngineHost(TDataShard* self, NTable::TDatabase& db, TEngineHostCounters& counters, ui64& lockTxId, ui32& lockNodeId, TInstant now)
         : TEngineHost(db, counters,
             TEngineHostSettings(self->TabletID(),
                 (self->State == TShardState::Readonly || self->State == TShardState::Frozen),
@@ -289,6 +289,7 @@ public:
         , Self(self)
         , DB(db)
         , LockTxId(lockTxId)
+        , LockNodeId(lockNodeId)
         , Now(now)
     {}
 
@@ -357,7 +358,7 @@ public:
         if (LockTxId) {
             // Prevent updates/erases with LockTxId set, unless it's allowed for immediate mvcc txs
             if (key.RowOperation != TKeyDesc::ERowOperation::Read &&
-                (!Self->GetEnableLockedWrites() || !IsImmediateTx || !IsRepeatableSnapshot))
+                (!Self->GetEnableLockedWrites() || !IsImmediateTx || !IsRepeatableSnapshot || !LockNodeId))
             {
                 key.Status = TKeyDesc::EStatus::OperationNotSupported;
                 return false;
@@ -381,7 +382,7 @@ public:
             return DataShardSysTable(tableId).SelectRow(row, columnIds, returnType, readTarget, holderFactory);
         }
 
-        Self->SysLocksTable().SetLock(tableId, row, LockTxId);
+        Self->SysLocksTable().SetLock(tableId, row, LockTxId, LockNodeId);
 
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRow(tableId, row, columnIds, returnType, readTarget, holderFactory);
@@ -394,7 +395,7 @@ public:
     {
         Y_VERIFY(!TSysTables::IsSystemTable(tableId), "SelectRange no system table is not supported");
 
-        Self->SysLocksTable().SetLock(tableId, range, LockTxId);
+        Self->SysLocksTable().SetLock(tableId, range, LockTxId, LockNodeId);
 
         Self->SetTableAccessTime(tableId, Now);
         return TEngineHost::SelectRange(tableId, range, columnIds, skipNullKeys, returnType, readTarget,
@@ -550,6 +551,7 @@ private:
     TDataShard* Self;
     NTable::TDatabase& DB;
     const ui64& LockTxId;
+    const ui32& LockNodeId;
     bool IsImmediateTx = false;
     bool IsRepeatableSnapshot = false;
     TInstant Now;
@@ -564,9 +566,10 @@ TEngineBay::TEngineBay(TDataShard * self, TTransactionContext& txc, const TActor
                        std::pair<ui64, ui64> stepTxId)
     : StepTxId(stepTxId)
     , LockTxId(0)
+    , LockNodeId(0)
 {
     auto now = TAppData::TimeProvider->Now();
-    EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, now);
+    EngineHost = MakeHolder<TDataShardEngineHost>(self, txc.DB, EngineHostCounters, LockTxId, LockNodeId, now);
 
     EngineSettings = MakeHolder<TEngineFlatSettings>(IEngineFlat::EProtocol::V1, AppData(ctx)->FunctionRegistry,
         *TAppData::RandomProvider, *TAppData::TimeProvider, EngineHost.Get(), self->AllocCounters);
@@ -741,10 +744,11 @@ IEngineFlat * TEngineBay::GetEngine() {
     return Engine.Get();
 }
 
-void TEngineBay::SetLockTxId(ui64 lockTxId) {
+void TEngineBay::SetLockTxId(ui64 lockTxId, ui32 lockNodeId) {
     LockTxId = lockTxId;
+    LockNodeId = lockNodeId;
     if (ComputeCtx) {
-        ComputeCtx->SetLockTxId(lockTxId);
+        ComputeCtx->SetLockTxId(lockTxId, lockNodeId);
     }
 }
 

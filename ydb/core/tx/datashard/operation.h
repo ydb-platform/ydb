@@ -672,6 +672,7 @@ public:
         return GetKeysInfo().ReadsCount + GetKeysInfo().WritesCount;
     }
     virtual ui64 LockTxId() const { return 0; }
+    virtual ui32 LockNodeId() const { return 0; }
     virtual bool HasLockedWrites() const { return false; }
 
     ////////////////////////////////////////

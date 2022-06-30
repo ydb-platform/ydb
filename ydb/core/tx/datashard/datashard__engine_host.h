@@ -44,7 +44,7 @@ public:
 
     const NMiniKQL::IEngineFlat * GetEngine() const { return Engine.Get(); }
     NMiniKQL::IEngineFlat * GetEngine();
-    void SetLockTxId(ui64 lockTxId);
+    void SetLockTxId(ui64 lockTxId, ui32 lockNodeId);
     void SetUseLlvmRuntime(bool llvmRuntime) { EngineSettings->LlvmRuntime = llvmRuntime; }
 
     EResult Validate() {
@@ -110,6 +110,7 @@ private:
     TValidationInfo Info;
     TEngineHostCounters EngineHostCounters;
     ui64 LockTxId;
+    ui32 LockNodeId;
     NYql::NDq::TLogFunc KqpLogFunc;
     THolder<NUdf::IApplyContext> KqpApplyCtx;
     THolder<NMiniKQL::TKqpDatashardComputeContext> ComputeCtx;

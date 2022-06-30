@@ -6,6 +6,7 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/common/dq_value.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 
 #include <library/cpp/actors/core/actorid.h>
 
@@ -128,6 +129,7 @@ public:
 
     struct TExecPhysicalResult : public TGenericResult {
         NKikimrKqp::TExecuterTxResult ExecuterResult;
+        NLongTxService::TLockHandle LockHandle;
     };
 
     struct TAstQuerySettings {

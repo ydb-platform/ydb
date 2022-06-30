@@ -24,7 +24,7 @@ public:
 private:
     void ExecuteDataTx(TOperation::TPtr op,
                        const TActorContext& ctx);
-    void AddLocksToResult(TOperation::TPtr op);
+    void AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx);
 };
 
 TExecuteDataTxUnit::TExecuteDataTxUnit(TDataShard& dataShard,
@@ -254,15 +254,15 @@ void TExecuteDataTxUnit::ExecuteDataTx(TOperation::TPtr op,
     }
 
     if (counters.InvisibleRowSkips) {
-        DataShard.SysLocksTable().BreakSetLocks(op->LockTxId());
+        DataShard.SysLocksTable().BreakSetLocks(op->LockTxId(), op->LockNodeId());
     }
 
-    AddLocksToResult(op);
+    AddLocksToResult(op, ctx);
 
     Pipeline.AddCommittingOp(op);
 }
 
-void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op) {
+void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorContext& ctx) {
     auto locks = DataShard.SysLocksTable().ApplyLocks();
     for (const auto& lock : locks) {
         if (lock.IsError()) {
@@ -273,6 +273,7 @@ void TExecuteDataTxUnit::AddLocksToResult(TOperation::TPtr op) {
         op->Result()->AddTxLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
                                 lock.SchemeShard, lock.PathId);
     }
+    DataShard.SubscribeNewLocks(ctx);
 }
 
 void TExecuteDataTxUnit::Complete(TOperation::TPtr, const TActorContext&) {

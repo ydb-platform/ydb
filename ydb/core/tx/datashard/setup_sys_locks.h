@@ -17,6 +17,7 @@ struct TSetupSysLocks {
 
         update.Clear();
         update.LockTxId = op->LockTxId();
+        update.LockNodeId = op->LockNodeId();
 
         if (self.IsMvccEnabled()) {
             auto [readVersion, writeVersion] = self.GetReadWriteVersions(op.Get());

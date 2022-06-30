@@ -5,6 +5,7 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
 

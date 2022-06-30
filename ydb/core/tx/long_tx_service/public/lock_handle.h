@@ -56,6 +56,10 @@ namespace NLongTxService {
             return *this;
         }
 
+        explicit operator bool() const noexcept {
+            return bool(LockId);
+        }
+
         ui64 GetLockId() const noexcept {
             return LockId;
         }

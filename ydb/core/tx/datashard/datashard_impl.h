@@ -35,6 +35,7 @@
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tablet_flat/flat_page_iface.h>
+#include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
@@ -54,6 +55,7 @@ extern TStringBuf SnapshotTransferReadSetMagic;
 
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TScanOptions;
+using NLongTxService::TEvLongTxService;
 
 // For CopyTable and MoveShadow
 class TTxTableSnapshotContext : public NTabletFlatExecutor::TTableSnapshotContext {
@@ -205,6 +207,7 @@ class TDataShard
     class TTxCompactBorrowed;
     class TTxCompactTable;
     class TTxPersistFullCompactionTs;
+    class TTxRemoveLock;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -1024,6 +1027,8 @@ class TDataShard
 
     void Handle(TEvDataShard::TEvApplyReplicationChanges::TPtr& ev, const TActorContext& ctx);
 
+    void Handle(TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
+
     void HandleByReplicationSourceOffsetsServer(STATEFN_SIG);
 
     void DoPeriodicTasks(const TActorContext &ctx);
@@ -1535,6 +1540,8 @@ public:
     void DeleteReadIterator(TReadIteratorsMap::iterator it);
     void CancelReadIterators(Ydb::StatusIds::StatusCode code, const TString& issue, const TActorContext& ctx);
     void ReadIteratorsOnNodeDisconnected(const TActorId& sessionId, const TActorContext &ctx);
+
+    void SubscribeNewLocks(const TActorContext &ctx);
 
 private:
     ///
@@ -2392,6 +2399,7 @@ protected:
             fFunc(TEvDataShard::EvGetReplicationSourceOffsets, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsAck, HandleByReplicationSourceOffsetsServer);
             fFunc(TEvDataShard::EvReplicationSourceOffsetsCancel, HandleByReplicationSourceOffsetsServer);
+            HFunc(TEvLongTxService::TEvLockStatus, Handle);
         default:
             if (!HandleDefaultEvents(ev, ctx)) {
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,

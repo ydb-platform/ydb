@@ -19,6 +19,7 @@ target_link_libraries(core-kqp-host PUBLIC
   core-kqp-opt
   core-kqp-prepare
   core-kqp-provider
+  tx-long_tx_service-public
   yql-core-services
   yql-minikql-invoke_builtins
   library-yql-sql

@@ -137,6 +137,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
             KqpRollbackLockChanges(tabletId, tx, DataShard, txc);
             KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
             DataShard.SysLocksTable().ApplyLocks();
+            DataShard.SubscribeNewLocks(ctx);
             return EExecutionStatus::Executed;
         }
 
@@ -181,7 +182,7 @@ EExecutionStatus TExecuteKqpDataTxUnit::Execute(TOperation::TPtr op, TTransactio
         KqpEraseLocks(tabletId, tx, DataShard.SysLocksTable());
 
         if (dataTx->GetCounters().InvisibleRowSkips) {
-            DataShard.SysLocksTable().BreakSetLocks(op->LockTxId());
+            DataShard.SysLocksTable().BreakSetLocks(op->LockTxId(), op->LockNodeId());
         }
 
         AddLocksToResult(op, ctx);
@@ -242,6 +243,7 @@ void TExecuteKqpDataTxUnit::AddLocksToResult(TOperation::TPtr op, const TActorCo
 
         LOG_T("add lock to result: " << op->Result()->Record.GetTxLocks().rbegin()->ShortDebugString());
     }
+    DataShard.SubscribeNewLocks(ctx);
 }
 
 EExecutionStatus TExecuteKqpDataTxUnit::OnTabletNotReady(TActiveTransaction& tx, TValidatedDataTx& dataTx,

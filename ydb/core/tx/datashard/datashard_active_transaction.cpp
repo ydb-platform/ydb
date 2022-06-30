@@ -46,7 +46,7 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
              "One of the fields should be set: MiniKQL, ReadTableTransaction, KqpTransaction");
 
     if (Tx.GetLockTxId())
-        EngineBay.SetLockTxId(Tx.GetLockTxId());
+        EngineBay.SetLockTxId(Tx.GetLockTxId(), Tx.GetLockNodeId());
 
     if (Tx.GetImmediate())
         EngineBay.SetIsImmediateTx();
@@ -286,8 +286,14 @@ bool TValidatedDataTx::CheckCancelled() {
 void TValidatedDataTx::ReleaseTxData() {
     TxBody = "";
     auto lock = Tx.GetLockTxId();
+    auto lockNode = Tx.GetLockNodeId();
     Tx.Clear();
-    Tx.SetLockTxId(lock);
+    if (lock) {
+        Tx.SetLockTxId(lock);
+    }
+    if (lockNode) {
+        Tx.SetLockNodeId(lockNode);
+    }
     EngineBay.DestroyEngine();
     IsReleased = true;
 

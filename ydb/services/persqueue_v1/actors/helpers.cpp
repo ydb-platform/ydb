@@ -17,11 +17,11 @@ bool RemoveEmptyMessages(PersQueue::V1::MigrationStreamingReadServerMessage::Dat
 }
 
 // TODO: remove after refactor
-bool RemoveEmptyMessages(PersQueue::V1::StreamingReadServerMessage::ReadResponse& data) {
-    auto batchRemover = [&](PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch& batch) -> bool {
+bool RemoveEmptyMessages(Topic::StreamReadMessage::ReadResponse& data) {
+    auto batchRemover = [&](Topic::StreamReadMessage::ReadResponse::Batch& batch) -> bool {
         return batch.message_data_size() == 0;
     };
-    auto partitionDataRemover = [&](PersQueue::V1::StreamingReadServerMessage::ReadResponse::PartitionData& partition) -> bool {
+    auto partitionDataRemover = [&](Topic::StreamReadMessage::ReadResponse::PartitionData& partition) -> bool {
         NProtoBuf::RemoveRepeatedFieldItemIf(partition.mutable_batches(), batchRemover);
         return partition.batches_size() == 0;
     };

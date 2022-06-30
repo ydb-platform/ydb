@@ -149,12 +149,12 @@ struct TEvPQProxy {
     };
 
     struct TEvReadInit : public NActors::TEventLocal<TEvReadInit, EvReadInit> {
-        TEvReadInit(const PersQueue::V1::StreamingReadClientMessage& req, const TString& peerName)
+        TEvReadInit(const Topic::StreamReadMessage::FromClient& req, const TString& peerName)
             : Request(req)
             , PeerName(peerName)
         { }
 
-        PersQueue::V1::StreamingReadClientMessage Request;
+        Topic::StreamReadMessage::FromClient Request;
         TString PeerName;
     };
 
@@ -220,14 +220,14 @@ struct TEvPQProxy {
     };
 
     struct TEvReadResponse : public NActors::TEventLocal<TEvReadResponse, EvReadResponse> {
-        explicit TEvReadResponse(PersQueue::V1::StreamingReadServerMessage&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime)
+        explicit TEvReadResponse(Topic::StreamReadMessage::FromServer&& resp, ui64 nextReadOffset, bool fromDisk, TDuration waitQuotaTime)
             : Response(std::move(resp))
             , NextReadOffset(nextReadOffset)
             , FromDisk(fromDisk)
             , WaitQuotaTime(waitQuotaTime)
         { }
 
-        PersQueue::V1::StreamingReadServerMessage Response;
+        Topic::StreamReadMessage::FromServer Response;
         ui64 NextReadOffset;
         bool FromDisk;
         TDuration WaitQuotaTime;

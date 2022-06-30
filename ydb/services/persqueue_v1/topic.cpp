@@ -86,7 +86,7 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamTopicWriteRequest(context));
                     },
-                    *ActorSystem, "TopicService/CreateWriteSession", getCounterBlock("topic", "WriteSession", true, true), nullptr
+                    *ActorSystem, "TopicService/StreamWrite", getCounterBlock("topic", "StreamWrite", true, true), nullptr
                 );
     }
 
@@ -106,7 +106,7 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
                         ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamTopicReadRequest(context));
                     },
-                    *ActorSystem, "TopicService/CreateReadSession", getCounterBlock("topic", "ReadSession", true, true), nullptr
+                    *ActorSystem, "TopicService/StreamRead", getCounterBlock("topic", "StreamRead", true, true), nullptr
                 );
     }
 

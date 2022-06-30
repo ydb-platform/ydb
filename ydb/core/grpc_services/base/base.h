@@ -100,7 +100,6 @@ struct TRpcServices {
         EvGetShardLocations,
         EvExperimentalStreamQuery,
         EvStreamPQWrite,
-        EvStreamPQRead,
         EvStreamPQMigrationRead,
         EvStreamTopicWrite,
         EvStreamTopicRead,

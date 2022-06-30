@@ -41,7 +41,7 @@ private:
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(NGRpcService::TEvStreamPQReadRequest, Handle);
+            HFunc(NGRpcService::TEvStreamTopicReadRequest, Handle);
             HFunc(NGRpcService::TEvStreamPQMigrationReadRequest, Handle);
             HFunc(NGRpcService::TEvPQReadInfoRequest, Handle);
             HFunc(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate, Handle);
@@ -54,7 +54,7 @@ private:
     void HandleStreamPQReadRequest(typename ReadRequest::TPtr& ev, const TActorContext& ctx);
 
 private:
-    void Handle(NGRpcService::TEvStreamPQReadRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(NGRpcService::TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NGRpcService::TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NGRpcService::TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvClustersUpdate::TPtr& ev, const TActorContext& ctx);
@@ -89,7 +89,7 @@ template <bool UseMigrationProtocol>
 auto FillReadResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
     using ServerMessage = typename std::conditional<UseMigrationProtocol,
                                                     PersQueue::V1::MigrationStreamingReadServerMessage,
-                                                    PersQueue::V1::StreamingReadServerMessage>::type;
+                                                    Topic::StreamReadMessage::FromServer>::type;
     ServerMessage res;
     FillIssue(res.add_issues(), code, errorReason);
     res.set_status(ConvertPersQueueInternalCodeToStatus(code));

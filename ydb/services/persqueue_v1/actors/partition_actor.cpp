@@ -6,14 +6,17 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 
 #include <ydb/public/api/protos/ydb_persqueue_v1.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <contrib/libs/protobuf_std/src/google/protobuf/util/time_util.h>
 
 #include <util/charset/utf8.h>
 
 namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace PersQueue::V1;
+using namespace Topic;
 
 
 TPartitionActor::TPartitionActor(
@@ -254,14 +257,28 @@ void TPartitionActor::Handle(const TEvPQProxy::TEvRestartPipe::TPtr&, const TAct
     }
 }
 
+i64 GetBatchWriteTimestampMS(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
+    return static_cast<i64>(batch->write_timestamp_ms());
+}
+i64 GetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
+    return ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(batch->written_at());
+}
+
+void SetBatchWriteTimestampMS(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, i64 value) {
+    batch->set_write_timestamp_ms(value);
+}
+void SetBatchWriteTimestampMS(Topic::StreamReadMessage::ReadResponse::Batch* batch, i64 value) {
+    *batch->mutable_written_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(value);
+}
+
 TString GetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch) {
     Y_VERIFY(batch);
     return batch->source_id();
 }
 
-TString GetBatchSourceId(PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch* batch) {
+TString GetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch) {
     Y_VERIFY(batch);
-    return batch->message_group_id();
+    return batch->producer_id();
 }
 
 void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString value) {
@@ -269,9 +286,9 @@ void SetBatchSourceId(PersQueue::V1::MigrationStreamingReadServerMessage::DataBa
     batch->set_source_id(std::move(value));
 }
 
-void SetBatchSourceId(PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch* batch, TString value) {
+void SetBatchSourceId(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString value) {
     Y_VERIFY(batch);
-    batch->set_message_group_id(std::move(value));
+    batch->set_producer_id(std::move(value));
 }
 
 void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::Batch* batch, TString key, TString value) {
@@ -281,9 +298,9 @@ void SetBatchExtraField(PersQueue::V1::MigrationStreamingReadServerMessage::Data
     item->set_value(std::move(value));
 }
 
-void SetBatchExtraField(PersQueue::V1::StreamingReadServerMessage::ReadResponse::Batch* batch, TString key, TString value) {
+void SetBatchExtraField(Topic::StreamReadMessage::ReadResponse::Batch* batch, TString key, TString value) {
     Y_VERIFY(batch);
-    (*batch->mutable_session_meta()->mutable_value())[key] = std::move(value);
+    (*batch->mutable_write_session_meta())[key] = std::move(value);
 }
 
 template<typename TReadResponse>
@@ -332,11 +349,13 @@ bool FillBatchedData(
         }
 
         if (!currentBatch
-            || static_cast<i64>(currentBatch->write_timestamp_ms()) != static_cast<i64>(r.GetWriteTimestampMS())
+            || GetBatchWriteTimestampMS(currentBatch) != static_cast<i64>(r.GetWriteTimestampMS())
             || GetBatchSourceId(currentBatch) != sourceId) {
             // If write time and source id are the same, the rest fields will be the same too.
             currentBatch = partitionData->add_batches();
-            currentBatch->set_write_timestamp_ms(r.GetWriteTimestampMS());
+            i64 write_ts = static_cast<i64>(r.GetWriteTimestampMS());
+            Y_VERIFY(write_ts >= 0);
+            SetBatchWriteTimestampMS(currentBatch, write_ts);
             SetBatchSourceId(currentBatch, std::move(sourceId));
 
             if (proto.HasMeta()) {
@@ -361,25 +380,34 @@ bool FillBatchedData(
                     SetBatchExtraField(currentBatch, kv.GetKey(), kv.GetValue());
                 }
             }
-
-            if (proto.HasIp() && IsUtf(proto.GetIp())) {
-                currentBatch->set_ip(proto.GetIp());
+            if constexpr (UseMigrationProtocol) {
+                if (proto.HasIp() && IsUtf(proto.GetIp())) {
+                    currentBatch->set_ip(proto.GetIp());
+                }
             }
         }
 
         auto* message = currentBatch->add_message_data();
+
         message->set_seq_no(r.GetSeqNo());
-        message->set_create_timestamp_ms(r.GetCreateTimestampMS());
         message->set_offset(r.GetOffset());
-
-        message->set_explicit_hash(r.GetExplicitHash());
-        message->set_partition_key(r.GetPartitionKey());
-
-        if (proto.HasCodec()) {
-            message->set_codec(NPQ::ToV1Codec((NPersQueueCommon::ECodec)proto.GetCodec()));
-        }
-        message->set_uncompressed_size(r.GetUncompressedSize());
         message->set_data(proto.GetData());
+        message->set_uncompressed_size(r.GetUncompressedSize());
+        if constexpr (UseMigrationProtocol) {
+            message->set_create_timestamp_ms(r.GetCreateTimestampMS());
+
+            message->set_explicit_hash(r.GetExplicitHash());
+            message->set_partition_key(r.GetPartitionKey());
+
+            if (proto.HasCodec()) {
+                message->set_codec(NPQ::ToV1Codec((NPersQueueCommon::ECodec)proto.GetCodec()));
+            }
+        } else {
+            *message->mutable_created_at() =
+                ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(r.GetCreateTimestampMS());
+
+            message->set_message_group_id(r.GetPartitionKey());
+        }
         hasData = true;
     }
 
@@ -528,7 +556,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
     EndOffset = res.GetMaxOffset();
     SizeLag = res.GetSizeLag();
 
-    StreamingReadServerMessage response;
+    StreamReadMessage::FromServer response;
     response.set_status(Ydb::StatusIds::SUCCESS);
     MigrationStreamingReadServerMessage migrationResponse;
     migrationResponse.set_status(Ydb::StatusIds::SUCCESS);
@@ -538,8 +566,8 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
         hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     } else {
-        StreamingReadServerMessage::ReadResponse* data = response.mutable_read_response();
-        hasData = FillBatchedData<StreamingReadServerMessage::ReadResponse>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        StreamReadMessage::ReadResponse* data = response.mutable_read_response();
+        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);

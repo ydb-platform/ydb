@@ -109,15 +109,14 @@ struct TFormedReadResponse: public TSimpleRefCount<TFormedReadResponse<TServerMe
 
 template<bool UseMigrationProtocol>
 class TReadSessionActor : public TActorBootstrapped<TReadSessionActor<UseMigrationProtocol>> {
-    using TClientMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadClientMessage, PersQueue::V1::StreamingReadClientMessage>;
-    using TServerMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadServerMessage, PersQueue::V1::StreamingReadServerMessage>;
+    using TClientMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadClientMessage, Topic::StreamReadMessage::FromClient>;
+    using TServerMessage = typename std::conditional_t<UseMigrationProtocol, PersQueue::V1::MigrationStreamingReadServerMessage, Topic::StreamReadMessage::FromServer>;
 
     using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
 
     using TEvReadInit = typename std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvMigrationReadInit, TEvPQProxy::TEvReadInit>;
     using TEvReadResponse = typename std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvMigrationReadResponse, TEvPQProxy::TEvReadResponse>;
-    // using TEvReadResponse = TEvPQProxy::TEvReadResponse;
-    using TEvStreamPQReadRequest = typename std::conditional_t<UseMigrationProtocol, NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest, NKikimr::NGRpcService::TEvStreamPQReadRequest>;
+    using TEvStreamPQReadRequest = typename std::conditional_t<UseMigrationProtocol, NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest, NKikimr::NGRpcService::TEvStreamTopicReadRequest>;
 
 private:
     //11 tries = 10,23 seconds, then each try for 5 seconds , so 21 retries will take near 1 min
@@ -288,8 +287,8 @@ private:
 
     ui32 MaxReadMessagesCount;
     ui32 MaxReadSize;
-    ui32 MaxTimeLagMs;
-    ui64 ReadTimestampMs;
+    i64 MaxTimeLagMs;
+    i64 ReadTimestampMs;
 
     TString Auth;
 
@@ -306,7 +305,8 @@ private:
     THashMap<TString, NPersQueue::TTopicConverterPtr> FullPathToConverter; // PrimaryFullPath -> Converter, for balancer replies matching
     THashSet<TString> TopicsToResolve;
     THashMap<TString, TVector<ui32>> TopicGroups;
-    THashMap<TString, ui64> ReadFromTimestamp;
+    THashMap<TString, i64> ReadFromTimestamp;
+    THashMap<TString, i64> MaxLagByTopic;
 
     bool ReadOnlyLocal;
     TDuration CommitInterval;

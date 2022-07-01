@@ -276,11 +276,14 @@ class Config:
                 )
 
     def _validate_retry_configuration(self, retries):
+        valid_options = ('max_attempts', 'mode', 'total_max_attempts')
+        valid_modes = ('legacy', 'standard', 'adaptive')
         if retries is not None:
             for key, value in retries.items():
-                if key not in ['max_attempts', 'mode', 'total_max_attempts']:
+                if key not in valid_options:
                     raise InvalidRetryConfigurationError(
-                        retry_config_option=key
+                        retry_config_option=key,
+                        valid_options=valid_options,
                     )
                 if key == 'max_attempts' and value < 0:
                     raise InvalidMaxRetryAttemptsError(
@@ -292,12 +295,11 @@ class Config:
                         provided_max_attempts=value,
                         min_value=1,
                     )
-                if key == 'mode' and value not in (
-                    'legacy',
-                    'standard',
-                    'adaptive',
-                ):
-                    raise InvalidRetryModeError(provided_retry_mode=value)
+                if key == 'mode' and value not in valid_modes:
+                    raise InvalidRetryModeError(
+                        provided_retry_mode=value,
+                        valid_modes=valid_modes,
+                    )
 
     def merge(self, other_config):
         """Merges the config object with another config object

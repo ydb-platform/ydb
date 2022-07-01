@@ -635,7 +635,7 @@ class InvalidRetryConfigurationError(BotoCoreError):
 
     fmt = (
         'Cannot provide retry configuration for "{retry_config_option}". '
-        'Valid retry configuration options are: \'max_attempts\''
+        'Valid retry configuration options are: {valid_options}'
     )
 
 
@@ -653,7 +653,7 @@ class InvalidRetryModeError(InvalidRetryConfigurationError):
 
     fmt = (
         'Invalid value provided to "mode": "{provided_retry_mode}" must '
-        'be one of: "legacy", "standard", "adaptive"'
+        'be one of: {valid_modes}'
     )
 
 

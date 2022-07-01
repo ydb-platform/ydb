@@ -12,8 +12,21 @@ namespace NKikimr::NBlobDepot {
     TRequestSender::~TRequestSender() {
         if (this != &Agent) {
             for (const auto& [id, context] : RequestsInFlight) {
-                const size_t numErased = Agent.TabletRequestInFlight.erase(id) + Agent.OtherRequestInFlight.erase(id);
-                Y_VERIFY(numErased == 1);
+                const ui64 id_ = id;
+                auto tryToProcess = [&](auto& map) {
+                    if (const auto it = map.find(id_); it != map.end()) {
+                        TBlobDepotAgent::TRequestInFlight& request = it->second;
+                        if (request.CancelCallback) {
+                            request.CancelCallback();
+                        }
+                        map.erase(it);
+                        return true;
+                    } else {
+                        return false;
+                    }
+                };
+                const bool success = tryToProcess(Agent.TabletRequestInFlight) || tryToProcess(Agent.OtherRequestInFlight);
+                Y_VERIFY(success);
             }
         }
     }
@@ -34,9 +47,10 @@ namespace NKikimr::NBlobDepot {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // TBlobDepotAgent machinery
 
-    void TBlobDepotAgent::RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context, bool toBlobDepotTablet) {
-        auto& map = toBlobDepotTablet ? TabletRequestInFlight : OtherRequestInFlight;
-        const auto [_, inserted] = map.emplace(id, sender);
+    void TBlobDepotAgent::RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,
+            TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet) {
+        TRequestsInFlight& map = toBlobDepotTablet ? TabletRequestInFlight : OtherRequestInFlight;
+        const auto [_, inserted] = map.emplace(id, TRequestInFlight{sender, std::move(cancelCallback)});
         Y_VERIFY(inserted);
         sender->RegisterRequest(id, std::move(context));
     }
@@ -46,7 +60,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA12, "HandleTabletResponse", (VirtualGroupId, VirtualGroupId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()));
         auto *event = ev->Get();
-        HandleResponse(reinterpret_cast<TAutoPtr<IEventHandle>&>(ev), event, TabletRequestInFlight);
+        OnRequestComplete(ev->Cookie, event, TabletRequestInFlight);
     }
 
     template void TBlobDepotAgent::HandleTabletResponse(TEvBlobDepot::TEvRegisterAgentResult::TPtr ev);
@@ -61,15 +75,18 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA13, "HandleOtherResponse", (VirtualGroupId, VirtualGroupId),
             (Id, ev->Cookie), (Type, TypeName<TEvent>()));
         auto *event = ev->Get();
-        HandleResponse(ev, event, OtherRequestInFlight);
+        OnRequestComplete(ev->Cookie, event, OtherRequestInFlight);
     }
 
-    void TBlobDepotAgent::HandleResponse(TAutoPtr<IEventHandle> ev, TResponse response, THashMap<ui64, TRequestSender*>& map) {
-        const auto it = map.find(ev->Cookie);
+    template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvGetResult::TPtr ev);
+    template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
+
+    void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map) {
+        const auto it = map.find(id);
         Y_VERIFY(it != map.end());
-        const auto [id, sender] = *it;
+        auto& [_, request] = *it;
+        request.Sender->OnRequestComplete(id, std::move(response));
         map.erase(it);
-        sender->OnRequestComplete(id, std::move(response));
     }
 
 } // NKikimr::NBlobDepot

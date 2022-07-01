@@ -42,7 +42,7 @@ namespace NKikimr::NBlobDepot {
         agent.ExpirationTimestamp = TInstant::Max();
         OnAgentConnect(agent);
 
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(ev, SelfId());
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
 
         record->SetGeneration(Executor()->Generation());
         for (const auto& [k, v] : ChannelKinds) {
@@ -65,7 +65,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
 
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(ev, SelfId(), ev->Get()->Record.GetChannelKind(),
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), ev->Get()->Record.GetChannelKind(),
             Executor()->Generation());
 
         if (const auto it = ChannelKinds.find(record->GetChannelKind()); it != ChannelKinds.end()) {

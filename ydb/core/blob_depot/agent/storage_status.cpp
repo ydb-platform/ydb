@@ -13,8 +13,7 @@ namespace NKikimr::NBlobDepot {
                     Agent.GetStorageStatusFlags()));
             }
 
-            void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr /*context*/, TResponse response) override {
-                (void)response;
+            void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr /*context*/, TResponse /*response*/) override {
                 Y_FAIL();
             }
         };

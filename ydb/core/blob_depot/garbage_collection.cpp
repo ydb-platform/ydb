@@ -1,9 +1,94 @@
 #include "blob_depot_tablet.h"
+#include "schema.h"
 
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TGarbageCollectionManager {
         TBlobDepot *Self;
+
+    private:
+        class TTxCollectGarbage : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> Request;
+            ui32 KeepIndex = 0;
+            ui32 DoNotKeepIndex = 0;
+            ui32 NumKeysProcessed = 0;
+            std::vector<TString> KeysToDelete;
+            bool Done = false;
+
+            static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
+
+        public:
+            TTxCollectGarbage(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> request,
+                    ui32 keepIndex = 0, ui32 doNotKeepIndex = 0)
+                : TTransactionBase(self)
+                , Request(std::move(request))
+                , KeepIndex(keepIndex)
+                , DoNotKeepIndex(doNotKeepIndex)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                Done = ProcessKeepFlags(txc) && ProcessDoNotKeepFlags(txc) && ApplyBarrier(txc);
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                Self->DeleteKeys(KeysToDelete);
+                if (Done) {
+                    auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId(), NKikimrProto::OK, std::nullopt);
+                    TActivationContext::Send(response.release());
+                } else {
+                    Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(Request), KeepIndex, DoNotKeepIndex));
+                }
+            }
+
+            bool ProcessKeepFlags(TTransactionContext& /*txc*/) {
+                const auto& record = Request->Get()->Record;
+                while (KeepIndex < record.KeepSize() && NumKeysProcessed < MaxKeysToProcessAtOnce) {
+                    ++KeepIndex;
+                    ++NumKeysProcessed;
+                }
+
+                return KeepIndex == record.KeepSize();
+            }
+
+            bool ProcessDoNotKeepFlags(TTransactionContext& /*txc*/) {
+                const auto& record = Request->Get()->Record;
+                while (DoNotKeepIndex < record.DoNotKeepSize() && NumKeysProcessed < MaxKeysToProcessAtOnce) {
+                    ++DoNotKeepIndex;
+                    ++NumKeysProcessed;
+                }
+
+                return DoNotKeepIndex == record.DoNotKeepSize();
+            }
+
+            bool ApplyBarrier(TTransactionContext& txc) {
+                NIceDb::TNiceDb db(txc.DB);
+
+                const auto& record = Request->Get()->Record;
+                if (record.HasCollectGeneration() && record.HasCollectStep()) {
+                    const TLogoBlobID first(record.GetTabletId(), 0, 0, record.GetChannel(), 0, 0);
+                    const TLogoBlobID last(record.GetTabletId(), record.GetCollectGeneration(), record.GetCollectStep(),
+                        record.GetChannel(), TLogoBlobID::MaxBlobSize, TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId,
+                        TLogoBlobID::MaxCrcMode);
+                    const bool hard = record.GetHard();
+
+                    auto processKey = [&](TStringBuf key, const TDataValue& value) {
+                        if (value.KeepState != NKikimrBlobDepot::EKeepState::Keep || hard) {
+                            db.Table<Schema::Data>().Key(TString(key)).Delete();
+                            KeysToDelete.emplace_back(key);
+                            ++NumKeysProcessed;
+                        }
+
+                        return NumKeysProcessed < MaxKeysToProcessAtOnce;
+                    };
+
+                    Self->ScanRange(first.AsBinaryString(), last.AsBinaryString(), EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END,
+                        processKey);
+                }
+
+                return true;
+            }
+        };
 
     public:
         TGarbageCollectionManager(TBlobDepot *self)
@@ -11,46 +96,13 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
-            std::vector<std::pair<std::map<TString, TDataValue>::iterator, EKeepState>> updates;
-
-            const auto& record = ev->Get()->Record;
-            auto processFlags = [&](const auto& items, EKeepState state) {
-                for (const NKikimrProto::TLogoBlobID& item : items) {
-                    const TLogoBlobID id = LogoBlobIDFromLogoBlobID(item);
-                    const TString key(reinterpret_cast<const char*>(id.GetRaw()), 3 * sizeof(ui64));
-                    if (const auto it = Self->Data.find(key); it == Self->Data.end()) {
-                        if (state == EKeepState::Keep) {
-                            STLOG(PRI_CRIT, BLOB_DEPOT, BDT05, "received Keep on nonexistent blob",
-                                (TabletId, Self->TabletID()), (BlobId, id.ToString()));
-                            return false; // we can't allow Keep on nonexistent blobs
-                        }
-                    } else if (it->second.KeepState < state) {
-                        updates.emplace_back(it, state);
-                    }
-                }
-                return true;
-            };
-
-            const bool success = processFlags(record.GetKeep(), EKeepState::Keep) &&
-                processFlags(record.GetDoNotKeep(), EKeepState::DoNotKeep);
-            if (!success) {
-                auto [response, _] = TEvBlobDepot::MakeResponseFor(ev, Self->SelfId(), NKikimrProto::ERROR,
-                    "missing key for Keep/DoNotKeep items");
-                TActivationContext::Send(response.release());
-                return;
-            }
-
-            auto [response, _] = TEvBlobDepot::MakeResponseFor(ev, Self->SelfId(), NKikimrProto::OK, std::nullopt);
-            TActivationContext::Send(response.release());
+            std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> uniq(ev.Release());
+            Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(uniq)));
         }
     };
 
     TBlobDepot::TGarbageCollectionManagerPtr TBlobDepot::CreateGarbageCollectionManager() {
-        return TGarbageCollectionManagerPtr(new TGarbageCollectionManager(this));
-    }
-
-    void TBlobDepot::TGarbageCollectionManagerDeleter::operator ()(TGarbageCollectionManager *object) const {
-        delete object;
+        return {new TGarbageCollectionManager{this}, std::default_delete<TGarbageCollectionManager>{}};
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {

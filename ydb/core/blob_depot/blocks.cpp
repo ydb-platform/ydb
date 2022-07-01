@@ -4,7 +4,7 @@
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TBlocksManager {
-        TBlobDepot *Self;
+        TBlobDepot* const Self;
         THashMap<ui64, ui32> Blocks;
 
     private:
@@ -31,7 +31,7 @@ namespace NKikimr::NBlobDepot {
                 const auto [it, inserted] = Self->BlocksManager->Blocks.emplace(TabletId, BlockedGeneration);
                 RaceDetected = !inserted && BlockedGeneration <= it->second;
                 if (RaceDetected) {
-                    Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::RACE);
+                    Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::ALREADY);
                 } else {
                     NIceDb::TNiceDb db(txc.DB);
                     db.Table<Schema::Blocks>().Key(TabletId).Update(
@@ -52,6 +52,75 @@ namespace NKikimr::NBlobDepot {
             }
         };
 
+        class TBlockProcessorActor : public TActorBootstrapped<TBlockProcessorActor> {
+            TBlobDepot* const Self;
+            const ui64 TabletId;
+            const ui32 BlockedGeneration;
+            std::unique_ptr<IEventHandle> Response;
+            ui32 BlocksPending = 0;
+            ui32 RetryCount = 0;
+            const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
+
+        public:
+            TBlockProcessorActor(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration,
+                    std::unique_ptr<IEventHandle> response)
+                : Self(self)
+                , TabletId(tabletId)
+                , BlockedGeneration(blockedGeneration)
+                , Response(std::move(response))
+            {}
+
+            void Bootstrap() {
+                TTabletStorageInfo *info = Self->Info();
+                for (const auto& [_, kind] : Self->ChannelKinds) {
+                    for (const ui8 channel : kind.IndexToChannel) {
+                        const ui32 groupId = info->GroupFor(channel, Self->Executor()->Generation());
+                        SendBlock(groupId);
+                        ++BlocksPending;
+                        RetryCount += 2;
+                    }
+                }
+
+                Become(&TThis::StateFunc);
+            }
+
+            void SendBlock(ui32 groupId) {
+                SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration,
+                    TInstant::Max(), IssuerGuid), groupId);
+            }
+
+            void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
+                switch (ev->Get()->Status) {
+                    case NKikimrProto::OK:
+                        if (!--BlocksPending) {
+                            TActivationContext::Send(Response.release());
+                            PassAway();
+                        }
+                        break;
+
+                    case NKikimrProto::ALREADY:
+                        // race, but this is not possible in current implementation
+                        Y_FAIL();
+
+                    case NKikimrProto::ERROR:
+                    default:
+                        if (!--RetryCount) {
+                            auto& r = Response->Get<TEvBlobDepot::TEvBlockResult>()->Record;
+                            r.SetStatus(NKikimrProto::ERROR);
+                            r.SetErrorReason(ev->Get()->ErrorReason);
+                        } else {
+                            SendBlock(ev->Cookie);
+                        }
+                        break;
+                }
+            }
+
+            STRICT_STFUNC(StateFunc,
+                hFunc(TEvBlobStorage::TEvBlockResult, Handle);
+                cFunc(TEvents::TSystem::Poison, PassAway);
+            )
+        };
+
     public:
         TBlocksManager(TBlobDepot *self)
             : Self(self)
@@ -61,13 +130,14 @@ namespace NKikimr::NBlobDepot {
             Blocks.emplace(tabletId, generation);
         }
 
-        void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, std::unique_ptr<IEventHandle> response) {
-            (void)tabletId, (void)blockedGeneration, (void)response;
+        void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration,
+                std::unique_ptr<IEventHandle> response) {
+            Self->RegisterWithSameMailbox(new TBlockProcessorActor(Self, tabletId, blockedGeneration, std::move(response)));
         }
 
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev) {
             const auto& record = ev->Get()->Record;
-            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(ev, Self->SelfId(), NKikimrProto::OK, std::nullopt);
+            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, Self->SelfId(), NKikimrProto::OK, std::nullopt);
 
             if (!record.HasTabletId() || !record.HasBlockedGeneration()) {
                 responseRecord->SetStatus(NKikimrProto::ERROR);
@@ -89,7 +159,7 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev) {
             const auto& record = ev->Get()->Record;
-            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(ev, Self->SelfId());
+            auto [response, responseRecord] = TEvBlobDepot::MakeResponseFor(*ev, Self->SelfId());
             responseRecord->SetTimeToLiveMs(15000); // FIXME
 
             for (const ui64 tabletId : record.GetTabletIds()) {
@@ -105,11 +175,7 @@ namespace NKikimr::NBlobDepot {
     // TBlocksManager wrapper
 
     TBlobDepot::TBlocksManagerPtr TBlobDepot::CreateBlocksManager() {
-        return TBlocksManagerPtr(new TBlocksManager(this));
-    }
-
-    void TBlobDepot::TBlocksManagerDeleter::operator ()(TBlocksManager *object) const {
-        delete object;
+        return {new TBlocksManager{this}, std::default_delete<TBlocksManager>{}};
     }
 
     void TBlobDepot::AddBlockOnLoad(ui64 tabletId, ui32 generation) {

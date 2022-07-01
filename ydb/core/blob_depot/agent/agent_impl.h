@@ -30,7 +30,10 @@ namespace NKikimr::NBlobDepot {
         using TPtr = std::shared_ptr<TRequestContext>;
     };
 
+    using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
+
     struct TTabletDisconnected {};
+    struct TKeyResolved { const TValueChain* ValueChain; };
 
     class TRequestSender {
         THashMap<ui64, TRequestContext::TPtr> RequestsInFlight;
@@ -42,6 +45,7 @@ namespace NKikimr::NBlobDepot {
         using TResponse = std::variant<
             // internal events
             TTabletDisconnected,
+            TKeyResolved,
 
             // tablet responses
             TEvBlobDepot::TEvRegisterAgentResult*,
@@ -53,7 +57,8 @@ namespace NKikimr::NBlobDepot {
             TEvBlobDepot::TEvResolveResult*,
 
             // underlying DS proxy responses
-            TEvBlobStorage::TEvGetResult*
+            TEvBlobStorage::TEvGetResult*,
+            TEvBlobStorage::TEvPutResult*
         >;
 
     public:
@@ -80,6 +85,7 @@ namespace NKikimr::NBlobDepot {
             , TRequestSender(*this)
             , VirtualGroupId(virtualGroupId)
             , BlocksManager(CreateBlocksManager())
+            , BlobMappingCache(CreateBlobMappingCache())
         {
             Y_VERIFY(TGroupID(VirtualGroupId).ConfigurationType() == EGroupConfigurationType::Virtual);
         }
@@ -99,7 +105,8 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
 
-            hFunc(TEvBlobStorage::TEvGetResult, Handle);
+            hFunc(TEvBlobStorage::TEvGetResult, HandleOtherResponse);
+            hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
 
             ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
         );
@@ -125,13 +132,23 @@ namespace NKikimr::NBlobDepot {
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // BlobDepot and other actor communications
+        // Request/response delivery logic
+
+        struct TRequestInFlight {
+            using TCancelCallback = std::function<void()>;
+
+            TRequestSender *Sender;
+            TCancelCallback CancelCallback;
+        };
+
+        using TRequestsInFlight = THashMap<ui64, TRequestInFlight>;
 
         ui64 NextRequestId = 1;
-        THashMap<ui64, TRequestSender*> TabletRequestInFlight;
-        THashMap<ui64, TRequestSender*> OtherRequestInFlight;
+        TRequestsInFlight TabletRequestInFlight;
+        TRequestsInFlight OtherRequestInFlight;
 
-        void RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context, bool toBlobDepotTablet);
+        void RegisterRequest(ui64 id, TRequestSender *sender, TRequestContext::TPtr context,
+            TRequestInFlight::TCancelCallback cancelCallback, bool toBlobDepotTablet);
 
         template<typename TEvent>
         void HandleTabletResponse(TAutoPtr<TEventHandle<TEvent>> ev);
@@ -139,7 +156,7 @@ namespace NKikimr::NBlobDepot {
         template<typename TEvent>
         void HandleOtherResponse(TAutoPtr<TEventHandle<TEvent>> ev);
 
-        void HandleResponse(TAutoPtr<IEventHandle> ev, TRequestSender::TResponse response, THashMap<ui64, TRequestSender*>& map);
+        void OnRequestComplete(ui64 id, TRequestSender::TResponse response, TRequestsInFlight& map);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -167,69 +184,22 @@ namespace NKikimr::NBlobDepot {
         void Issue(NKikimrBlobDepot::TEvResolve msg, TRequestSender *sender, TRequestContext::TPtr context);
         void Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context);
         void Issue(NKikimrBlobDepot::TEvCollectGarbage msg, TRequestSender *sender, TRequestContext::TPtr context);
+        void Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
 
         void Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        struct TChannelKind
-            : NBlobDepot::TChannelKind
-        {
-            struct TAllocatedId {
-                ui32 Generation;
-                ui64 Begin;
-                ui64 End;
-            };
-
-            std::vector<std::pair<ui8, ui32>> ChannelGroups;
-
-            bool IdAllocInFlight = false;
-            std::deque<TAllocatedId> IdQ;
-            static constexpr size_t PreallocatedIdCount = 2;
-
-            std::pair<TLogoBlobID, ui32> Allocate(TBlobDepotAgent& agent, EBlobType type, ui32 part, ui32 size) {
-                if (IdQ.empty()) {
-                    return {};
-                }
-
-                auto& item = IdQ.front();
-                auto cgsi = TCGSI::FromBinary(item.Generation, *this, item.Begin++);
-                if (item.Begin == item.End) {
-                    IdQ.pop_front();
-                }
-                auto id = cgsi.MakeBlobId(agent.TabletId, type, part, size);
-                const auto [channel, groupId] = ChannelGroups[ChannelToIndex[cgsi.Channel]];
-                Y_VERIFY_DEBUG(channel == cgsi.Channel);
-                return {id, groupId};
-            }
-        };
-
-        THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
-
-        void IssueAllocateIdsIfNeeded(NKikimrBlobDepot::TChannelKind::E channelKind);
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
         struct TExecutingQueries {};
         struct TPendingBlockChecks {};
+        struct TPendingId {};
 
         class TQuery
             : public TIntrusiveListItem<TQuery, TExecutingQueries>
             , public TIntrusiveListItem<TQuery, TPendingBlockChecks>
+            , public TIntrusiveListItem<TQuery, TPendingId>
             , public TRequestSender
         {
-            friend class TBlobDepotAgent;
-
-            struct TReadContext {
-                TQuery *Query;
-                ui64 Tag;
-                TString Buffer;
-                ui64 Size;
-                NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
-                THashMap<ui64, ui64> ReadsToOffset;
-            };
-            std::list<TReadContext> Reads;
-
         protected:
             std::unique_ptr<IEventHandle> Event; // original query event
             const ui64 QueryId;
@@ -241,13 +211,7 @@ namespace NKikimr::NBlobDepot {
                 , QueryId(RandomNumber<ui64>())
             {}
 
-            virtual ~TQuery() {
-                for (const auto& read : Reads) {
-                    for (const auto& [id, _] : read.ReadsToOffset) {
-                        Agent.ReadsInFlight.erase(id);
-                    }
-                }
-            }
+            virtual ~TQuery() = default;
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
@@ -257,6 +221,7 @@ namespace NKikimr::NBlobDepot {
 
             virtual void OnUpdateBlock(bool /*success*/) {}
             virtual void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus /*status*/, TString /*dataOrErrorReason*/) {}
+            virtual void OnIdAllocated() {}
 
         public:
             struct TDeleter {
@@ -272,11 +237,79 @@ namespace NKikimr::NBlobDepot {
         template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        struct TChannelKind
+            : NBlobDepot::TChannelKind
+        {
+            struct TAllocatedId {
+                ui32 Generation;
+                ui64 Begin;
+                ui64 End;
+            };
+
+            const NKikimrBlobDepot::TChannelKind::E Kind;
+            std::vector<std::pair<ui8, ui32>> ChannelGroups;
+
+            bool IdAllocInFlight = false;
+            std::deque<TAllocatedId> IdQ;
+            static constexpr size_t PreallocatedIdCount = 2;
+
+            TIntrusiveList<TQuery, TPendingId> QueriesWaitingForId;
+
+            TChannelKind(NKikimrBlobDepot::TChannelKind::E kind)
+                : Kind(kind)
+            {}
+
+            std::optional<TCGSI> Allocate(TBlobDepotAgent& agent) {
+                if (IdQ.empty()) {
+                    return std::nullopt;
+                }
+
+                auto& item = IdQ.front();
+                auto cgsi = TCGSI::FromBinary(item.Generation, *this, item.Begin++);
+                if (item.Begin == item.End) {
+                    IdQ.pop_front();
+                    agent.IssueAllocateIdsIfNeeded(*this);
+                }
+
+                return cgsi;
+            }
+
+            std::pair<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TCGSI& cgsi, EBlobType type, ui32 part,
+                    ui32 size) const {
+                auto id = cgsi.MakeBlobId(agent.TabletId, type, part, size);
+                const auto [channel, groupId] = ChannelGroups[ChannelToIndex[cgsi.Channel]];
+                Y_VERIFY_DEBUG(channel == cgsi.Channel);
+                return {id, groupId};
+            }
+
+            void EnqueueQueryWaitingForId(TQuery *query) {
+                QueriesWaitingForId.PushBack(query);
+            }
+
+            void ProcessQueriesWaitingForId() {
+                TIntrusiveList<TQuery, TPendingId> temp;
+                temp.Swap(QueriesWaitingForId);
+                for (TQuery& query : temp) {
+                    query.OnIdAllocated();
+                }
+            }
+        };
+
+        THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
+
+        void IssueAllocateIdsIfNeeded(TChannelKind& kind);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // DS proxy interaction
+
+        void SendToProxy(ui32 groupId, std::unique_ptr<IEventBase> event, TRequestSender *sender, TRequestContext::TPtr context);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Blocks
 
         class TBlocksManager;
-        struct TBlocksManagerDeleter { void operator ()(TBlocksManager*) const; };
-        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, TBlocksManagerDeleter>;
+        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, std::function<void(TBlocksManager*)>>;
         TBlocksManagerPtr BlocksManager;
 
         TBlocksManagerPtr CreateBlocksManager();
@@ -291,19 +324,30 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Reading
 
-        ui64 NextReadId = 1;
-        THashMap<ui64, std::list<TQuery::TReadContext>::iterator> ReadsInFlight;
+        struct TReadContext;
 
-        bool IssueRead(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>& values, ui64 offset, ui64 size,
-            NKikimrBlobStorage::EGetHandleClass getHandleClass, bool mustRestoreFirst, TQuery *query, ui64 tag,
-            bool vg, TString *error);
+        bool IssueRead(const TValueChain& values, ui64 offset, ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass,
+            bool mustRestoreFirst, TQuery *query, ui64 tag, bool vg, TString *error);
 
-        void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+        void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Blob mapping cache
+
+        class TBlobMappingCache;
+        using TBlobMappingCachePtr = std::unique_ptr<TBlobMappingCache, std::function<void(TBlobMappingCache*)>>;
+        TBlobMappingCachePtr BlobMappingCache;
+
+        TBlobMappingCachePtr CreateBlobMappingCache();
+
+        void HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg);
+        const TValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Status flags
 
         TStorageStatusFlags GetStorageStatusFlags() const;
+        float GetApproximateFreeSpaceShare() const;
     };
 
 } // NKikimr::NBlobDepot

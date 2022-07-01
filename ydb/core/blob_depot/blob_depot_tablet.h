@@ -24,6 +24,7 @@ namespace NKikimr::NBlobDepot {
             , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
             , BlocksManager(CreateBlocksManager())
             , GarbageCollectionManager(CreateGarbageCollectionManager())
+            , DataManager(CreateDataManager())
         {}
 
         void HandlePoison() {
@@ -161,8 +162,7 @@ namespace NKikimr::NBlobDepot {
         // Blocks
 
         class TBlocksManager;
-        struct TBlocksManagerDeleter { void operator ()(TBlocksManager *object) const; };
-        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, TBlocksManagerDeleter>;
+        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, std::function<void(TBlocksManager*)>>;
         TBlocksManagerPtr BlocksManager;
 
         TBlocksManagerPtr CreateBlocksManager();
@@ -176,8 +176,7 @@ namespace NKikimr::NBlobDepot {
         // Garbage collection
 
         class TGarbageCollectionManager;
-        struct TGarbageCollectionManagerDeleter { void operator ()(TGarbageCollectionManager *object) const; };
-        using TGarbageCollectionManagerPtr = std::unique_ptr<TGarbageCollectionManager, TGarbageCollectionManagerDeleter>;
+        using TGarbageCollectionManagerPtr = std::unique_ptr<TGarbageCollectionManager, std::function<void(TGarbageCollectionManager*)>>;
         TGarbageCollectionManagerPtr GarbageCollectionManager;
 
         TGarbageCollectionManagerPtr CreateGarbageCollectionManager();
@@ -185,22 +184,42 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // Key operation
+        // Data operations
+
+        class TDataManager;
+        using TDataManagerPtr = std::unique_ptr<TDataManager, std::function<void(TDataManager*)>>;
+        TDataManagerPtr DataManager;
+
+        TDataManagerPtr CreateDataManager();
+
+        using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
 
         struct TDataValue {
             TString Meta;
-            TCGSI Location;
-            ui32 Checksum;
-            ui64 TotalDataLen;
-            EKeepState KeepState;
+            TValueChain ValueChain;
+            NKikimrBlobDepot::EKeepState KeepState;
             bool Public;
         };
 
-        std::map<TString, TDataValue> Data;
+        enum EScanFlags : ui32 {
+            INCLUDE_BEGIN = 1,
+            INCLUDE_END = 2,
+            REVERSE = 4,
+        };
+
+        Y_DECLARE_FLAGS(TScanFlags, EScanFlags)
+
+        std::optional<TDataValue> FindKey(TStringBuf key);
+        void ScanRange(const std::optional<TStringBuf>& begin, const std::optional<TStringBuf>& end, TScanFlags flags,
+            const std::function<bool(TStringBuf, const TDataValue&)>& callback);
+        void DeleteKeys(const std::vector<TString>& keysToDelete);
+        void PutKey(TString key, TDataValue&& data);
+        void AddDataOnLoad(TString key, TString value);
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
-
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
     };
+
+    Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TScanFlags)
 
 } // NKikimr::NBlobDepot

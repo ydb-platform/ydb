@@ -90,6 +90,8 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Msg, msg.Record));
 
+                Agent.HandleResolveResult(msg.Record);
+
                 const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
                 if (status != NKikimrProto::OK && status != NKikimrProto::OVERRUN) {
                     return EndWithError(status, msg.Record.GetErrorReason());
@@ -121,7 +123,7 @@ namespace NKikimr::NBlobDepot {
                 }
 
                 if (status == NKikimrProto::OVERRUN) { // there will be extra message with data
-                    Agent.RegisterRequest(id, this, std::move(context), true);
+                    Agent.RegisterRequest(id, this, std::move(context), {}, true);
                 }
             }
 

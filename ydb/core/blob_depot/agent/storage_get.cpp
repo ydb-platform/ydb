@@ -5,16 +5,93 @@ namespace NKikimr::NBlobDepot {
     template<>
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery<TEvBlobStorage::EvGet>(std::unique_ptr<IEventHandle> ev) {
         class TGetQuery : public TQuery {
+            std::unique_ptr<TEvBlobStorage::TEvGetResult> Response;
+            ui32 AnswersRemain;
+
+            struct TResolveKeyContext : TRequestContext {
+                ui32 QueryIdx;
+
+                TResolveKeyContext(ui32 queryIdx)
+                    : QueryIdx(queryIdx)
+                {}
+            };
+
         public:
             using TQuery::TQuery;
 
             void Initiate() override {
-                EndWithError(NKikimrProto::ERROR, "not implemented");
+                auto& msg = GetQuery();
+
+                Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg.QuerySize,
+                    Agent.VirtualGroupId);
+                AnswersRemain = msg.QuerySize;
+
+                for (ui32 i = 0; i < msg.QuerySize; ++i) {
+                    auto& query = msg.Queries[i];
+                    TString blobId(reinterpret_cast<const char*>(query.Id.GetRaw()), 3 * sizeof(ui64));
+                    if (const TValueChain *value = Agent.ResolveKey(blobId, this, std::make_shared<TResolveKeyContext>(i))) {
+                        ProcessSingleResult(i, value);
+                    }
+
+                    auto& response = Response->Responses[i];
+                    response.Id = query.Id;
+                    response.Shift = query.Shift;
+                    response.RequestedSize = query.Size;
+                }
             }
 
-            void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr /*context*/, TResponse response) override {
-                (void)response;
-                Y_FAIL();
+            void ProcessSingleResult(ui32 queryIdx, const TValueChain *value) {
+                auto& msg = GetQuery();
+
+                if (!value) {
+                    Response->Responses[queryIdx].Status = NKikimrProto::NODATA;
+                    --AnswersRemain;
+                } else if (msg.IsIndexOnly) {
+                    Response->Responses[queryIdx].Status = NKikimrProto::OK;
+                    --AnswersRemain;
+                } else if (value) {
+                    TString error;
+                    const bool success = Agent.IssueRead(*value, msg.Queries[queryIdx].Shift, msg.Queries[queryIdx].Size,
+                        msg.GetHandleClass, msg.MustRestoreFirst, this, queryIdx, true, &error);
+                    if (!success) {
+                        EndWithError(NKikimrProto::ERROR, std::move(error));
+                    }
+                }
+                if (!AnswersRemain) {
+                    EndWithSuccess(std::move(Response));
+                }
+            }
+
+            void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString buffer) override {
+                auto& resp = Response->Responses[tag];
+                resp.Status = status;
+                if (status == NKikimrProto::OK) {
+                    resp.Buffer = std::move(buffer);
+                }
+                if (!--AnswersRemain) {
+                    EndWithSuccess(std::move(Response));
+                }
+            }
+
+            void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
+                if (auto *p = std::get_if<TKeyResolved>(&response)) {
+                    ProcessSingleResult(context->Obtain<TResolveKeyContext>().QueryIdx, p->ValueChain);
+                } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
+                    Agent.HandleGetResult(context, **p);
+                } else if (std::holds_alternative<TTabletDisconnected>(response)) {
+                    if (auto *resolveContext = dynamic_cast<TResolveKeyContext*>(context.get())) {
+                        Response->Responses[resolveContext->QueryIdx].Status = NKikimrProto::ERROR;
+                        if (!--AnswersRemain) {
+                            EndWithSuccess(std::move(Response));
+                        }
+                    }
+                } else {
+                    Y_FAIL();
+                }
+            }
+
+            TEvBlobStorage::TEvGet& GetQuery() const {
+                return *Event->Get<TEvBlobStorage::TEvGet>();
             }
         };
 

@@ -311,6 +311,7 @@ public:
         for (auto& [nodeId, info] : PerNodeInfo) {
             info.ActorSystem->Stop();
         }
+        Y_VERIFY(!TlsActivationContext);
         for (;;) {
             // exchange container to prevent side-effects while destroying actors (they may use actor system in dtors);
             // do this in cycle because actor destructor code may spawn more actors
@@ -536,10 +537,14 @@ public:
             CurrentNodeId = actorId.NodeId();
 
             // invoke the callback
-            if constexpr (std::is_invocable_v<TCallback, IActor*>) {
-                std::invoke(std::forward<TCallback>(callback), actor);
-            } else {
-                std::invoke(std::forward<TCallback>(callback));
+            try {
+                if constexpr (std::is_invocable_v<TCallback, IActor*>) {
+                    std::invoke(std::forward<TCallback>(callback), actor);
+                } else {
+                    std::invoke(std::forward<TCallback>(callback));
+                }
+            } catch (...) {
+                Y_FAIL_S("exception while invoking actor: " << CurrentExceptionMessage());
             }
 
             // forget about the context
@@ -665,7 +670,8 @@ public:
         ui32 targetNodeId = 0);
     static NTabletPipe::TClientConfig GetPipeConfigWithRetries();
     void SendToPipe(ui64 tabletId, const TActorId& sender, IEventBase* payload, ui64 cookie, const NKikimr::NTabletPipe::TClientConfig& pipeConfig);
-    static TTabletStorageInfo *CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId);
+    static TTabletStorageInfo *CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId,
+        ui32 numChannels);
     TActorId CreateTestBootstrapper(TTabletStorageInfo *info, std::function<IActor*(TActorId, TTabletStorageInfo*)> op, ui32 nodeId);
 
 private:

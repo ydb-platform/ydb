@@ -47,6 +47,23 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
+                // Data
+                {
+                    auto table = db.Table<Schema::Data>().Select();
+                    if (!table.IsReady()) {
+                        return false;
+                    }
+                    while (table.IsValid()) {
+                        Self->AddDataOnLoad(
+                            table.GetValue<Schema::Data::Key>(),
+                            table.GetValue<Schema::Data::Value>()
+                        );
+                        if (!table.Next()) {
+                            return false;
+                        }
+                    }
+                }
+
                 return true;
             }
 

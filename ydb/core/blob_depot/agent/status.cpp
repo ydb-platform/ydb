@@ -6,4 +6,8 @@ namespace NKikimr::NBlobDepot {
         return NKikimrBlobStorage::StatusIsValid; // FIXME: implement
     }
 
+    float TBlobDepotAgent::GetApproximateFreeSpaceShare() const {
+        return 1.0; // FIXME: implement
+    }
+
 } // NKikimr::NBlobDepot

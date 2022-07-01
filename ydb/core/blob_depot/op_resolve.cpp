@@ -31,19 +31,19 @@ namespace NKikimr::NBlobDepot {
 
         ui32 itemIndex = 0;
         for (const auto& item : ev->Get()->Record.GetItems()) {
-            auto beginIt = !item.HasBeginningKey() ? Data.begin()
-                : item.GetIncludeBeginning() ? Data.lower_bound(item.GetBeginningKey())
-                : Data.upper_bound(item.GetBeginningKey());
-
-            auto endIt = !item.HasEndingKey() ? Data.end()
-                : item.GetIncludeEnding() ? Data.upper_bound(item.GetEndingKey())
-                : Data.lower_bound(item.GetEndingKey());
+            std::optional<TStringBuf> begin = item.HasBeginningKey() ? std::make_optional(item.GetBeginningKey()) : std::nullopt;
+            std::optional<TStringBuf> end = item.HasEndingKey() ? std::make_optional(item.GetEndingKey()) : std::nullopt;
 
             ui32 numItems = 0;
-            auto addKey = [&](auto it) {
+            auto addKey = [&](TStringBuf key, const TDataValue& value) {
                 NKikimrBlobDepot::TEvResolveResult::TResolvedKey resolvedKey;
                 resolvedKey.SetItemIndex(itemIndex);
-                resolvedKey.SetKey(it->first);
+                resolvedKey.SetKey(key.data(), key.size());
+                resolvedKey.MutableValueChain()->CopyFrom(value.ValueChain);
+
+                if (value.Meta) {
+                    resolvedKey.SetMeta(value.Meta.data(), value.Meta.size());
+                }
 
                 const ui32 keySize = resolvedKey.ByteSizeLong();
                 if (messageSize + keySize > EventMaxByteSize) {
@@ -58,11 +58,18 @@ namespace NKikimr::NBlobDepot {
                 return !item.HasMaxKeys() || numItems != item.GetMaxKeys();
             };
 
-            if (item.GetReverse()) {
-                while (beginIt != endIt && addKey(--endIt)) {}
-            } else {
-                while (beginIt != endIt && addKey(beginIt++)) {}
+            TScanFlags flags;
+            if (item.GetIncludeBeginning()) {
+                flags |= EScanFlags::INCLUDE_BEGIN;
             }
+            if (item.GetIncludeEnding()) {
+                flags |= EScanFlags::INCLUDE_END;
+            }
+            if (item.GetReverse()) {
+                flags |= EScanFlags::REVERSE;
+            }
+
+            ScanRange(begin, end, flags, addKey);
 
             ++itemIndex;
         }

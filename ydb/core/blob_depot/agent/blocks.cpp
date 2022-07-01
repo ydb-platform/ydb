@@ -104,12 +104,8 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    void TBlobDepotAgent::TBlocksManagerDeleter::operator ()(TBlocksManager *object) const {
-        delete object;
-    }
-
     TBlobDepotAgent::TBlocksManagerPtr TBlobDepotAgent::CreateBlocksManager() {
-        return TBlocksManagerPtr(new TBlocksManager(*this));
+        return {new TBlocksManager{*this}, std::default_delete<TBlocksManager>{}};
     }
     
     void TBlobDepotAgent::Issue(NKikimrBlobDepot::TEvQueryBlocks msg, TRequestSender *sender, TRequestContext::TPtr context) {

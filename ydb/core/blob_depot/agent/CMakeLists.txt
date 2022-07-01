@@ -16,9 +16,11 @@ target_link_libraries(core-blob_depot-agent PUBLIC
 )
 target_sources(core-blob_depot-agent PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/agent.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/blob_mapping_cache.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/blocks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/comm.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/garbage.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/read.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent/request.cpp

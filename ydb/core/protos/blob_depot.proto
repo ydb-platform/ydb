@@ -3,6 +3,12 @@ import "ydb/core/protos/base.proto";
 
 package NKikimrBlobDepot;
 
+enum EKeepState {
+    Default = 0;
+    Keep = 1;
+    DoNotKeep = 2;
+}
+
 message TBlobSeqId {
     optional uint32 Channel = 1;
     optional uint32 Generation = 2;
@@ -23,6 +29,14 @@ message TValueChain {
     optional uint64 SubrangeBegin = 2;
     optional uint64 SubrangeEnd = 3;
 }
+
+message TValue {
+    optional bytes Meta = 1;
+    repeated TValueChain ValueChain = 2;
+    optional EKeepState KeepState = 3;
+    optional bool Public = 4;
+}
+
 
 message TEvApplyConfig {
     optional uint64 TxId = 1;
@@ -106,6 +120,8 @@ message TEvCollectGarbageResult {
 message TEvCommitBlobSeq {
     message TItem {
         optional TBlobLocator BlobLocator = 1; // GroupId and Generation are for validation purposes
+        optional bytes Key = 2;
+        optional bytes Meta = 3;
     }
 
     repeated TItem Items = 1;

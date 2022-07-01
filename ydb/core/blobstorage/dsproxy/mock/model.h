@@ -56,8 +56,12 @@ namespace NFake {
 
             // validate put against set blocks
             if (IsBlocked(id.TabletID(), id.Generation())) {
-                return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id,
-                        GetStorageStatusFlags(), 0, 0.f);
+                return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), 0, 0.f);
+            }
+            for (const auto& [tabletId, generation] : msg->ExtraBlockChecks) {
+                if (IsBlocked(tabletId, generation)) {
+                    return new TEvBlobStorage::TEvPutResult(NKikimrProto::BLOCKED, id, GetStorageStatusFlags(), 0, 0.f);
+                }
             }
 
             // check if this blob is not being collected -- writing such blob is a violation of BS contract

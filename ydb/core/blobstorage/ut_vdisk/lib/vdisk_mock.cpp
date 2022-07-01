@@ -111,8 +111,15 @@ public:
         }
 
         // check for blocks
-        if (!record.GetIgnoreBlock() && IsBlocked(id)) {
-            return sendResponse(NKikimrProto::BLOCKED, "blocked");
+        if (!record.GetIgnoreBlock()) {
+            if (IsBlocked(id)) {
+                return sendResponse(NKikimrProto::BLOCKED, "blocked");
+            }
+            for (const auto& extra : record.GetExtraBlockChecks()) {
+                if (IsBlocked(extra.GetTabletId(), extra.GetGeneration())) {
+                    return sendResponse(NKikimrProto::BLOCKED, "blocked");
+                }
+            }
         }
 
         // put the blob in place

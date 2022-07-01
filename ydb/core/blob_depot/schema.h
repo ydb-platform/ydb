@@ -55,24 +55,12 @@ namespace NKikimr::NBlobDepot {
 
         struct Data : Table<4> {
             struct Key : Column<1, NScheme::NTypeIds::String> {};
-            struct Meta : Column<2, NScheme::NTypeIds::String> {};
-            struct Id : Column<3, NScheme::NTypeIds::Uint64> {};
-            struct CGSI : Column<4, NScheme::NTypeIds::String> {};
-            struct Checksum : Column<5, NScheme::NTypeIds::Uint32> {};
-            struct TotalDataLen : Column<6, NScheme::NTypeIds::Uint64> {};
-            struct KeepState : Column<7, NScheme::NTypeIds::Uint8> { using Type = EKeepState; };
-            struct Public : Column<8, NScheme::NTypeIds::Bool> {};
+            struct Value : Column<2, NScheme::NTypeIds::String> {};
 
             using TKey = TableKey<Key>;
             using TColumns = TableColumns<
                 Key,
-                Meta,
-                Id,
-                CGSI,
-                Checksum,
-                TotalDataLen,
-                KeepState,
-                Public
+                Value
             >;
         };
 

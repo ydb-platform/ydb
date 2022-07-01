@@ -109,12 +109,13 @@ void TTestActorSystem::SendToPipe(ui64 tabletId, const TActorId& sender, IEventB
     });
 }
 
-TTabletStorageInfo *TTestActorSystem::CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType, TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId) {
+TTabletStorageInfo *TTestActorSystem::CreateTestTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
+        TBlobStorageGroupType::EErasureSpecies erasure, ui32 groupId, ui32 numChannels) {
     auto x = std::make_unique<TTabletStorageInfo>();
 
     x->TabletID = tabletId;
     x->TabletType = tabletType;
-    x->Channels.resize(4);
+    x->Channels.resize(numChannels);
 
     for (ui64 channel = 0; channel < x->Channels.size(); ++channel) {
         x->Channels[channel].Channel = channel;

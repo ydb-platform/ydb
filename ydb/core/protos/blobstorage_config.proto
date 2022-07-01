@@ -469,6 +469,7 @@ message TAllocateVirtualGroup {
     string ParentDir = 5;
     repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 6;
     repeated uint32 DecommitGroups = 7;
+    uint64 BlobDepotId = 8; // when the tablet is already created; for testing purposes only
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

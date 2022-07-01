@@ -24,16 +24,25 @@ namespace NKikimr::NBlobDepot {
         VG_COMPOSITE_BLOB = 0, // data + footer
         VG_DATA_BLOB = 1, // just data, footer aside
         VG_FOOTER_BLOB = 2, // footer only
+        VG_GC_BLOB = 3, // garbage collection command
     };
 
     struct TCGSI {
         static constexpr ui32 IndexBits = 20;
         static constexpr ui32 MaxIndex = (1 << IndexBits) - 1;
 
-        ui32 Channel;
-        ui32 Generation;
-        ui32 Step;
-        ui32 Index;
+        ui32 Channel = 0;
+        ui32 Generation = 0;
+        ui32 Step = 0;
+        ui32 Index = 0;
+        
+        auto AsTuple() const { return std::make_tuple(Channel, Generation, Step, Index); }
+        friend bool operator ==(const TCGSI& x, const TCGSI& y) { return x.AsTuple() == y.AsTuple(); }
+        friend bool operator !=(const TCGSI& x, const TCGSI& y) { return x.AsTuple() != y.AsTuple(); }
+
+        explicit operator bool() const {
+            return *this != TCGSI();
+        }
 
         ui64 ToBinary(const TChannelKind& kind) const {
             Y_VERIFY_DEBUG(Index <= MaxIndex);
@@ -62,6 +71,13 @@ namespace NKikimr::NBlobDepot {
             };
         }
 
+        void ToProto(NKikimrBlobDepot::TBlobSeqId *proto) const {
+            proto->SetChannel(Channel);
+            proto->SetGeneration(Generation);
+            proto->SetStep(Step);
+            proto->SetIndex(Index);
+        }
+
         TLogoBlobID MakeBlobId(ui64 tabletId, EBlobType type, ui32 part, ui32 size) const {
             return TLogoBlobID(tabletId, Generation, Step, Channel, size, MakeCookie(type, part));
         }
@@ -71,6 +87,7 @@ namespace NKikimr::NBlobDepot {
                 case EBlobType::VG_COMPOSITE_BLOB:
                 case EBlobType::VG_DATA_BLOB:
                 case EBlobType::VG_FOOTER_BLOB:
+                case EBlobType::VG_GC_BLOB:
                     static constexpr ui32 typeBits = 24 - IndexBits;
                     Y_VERIFY(static_cast<ui32>(type) < (1 << typeBits));
                     Y_VERIFY(!part);
@@ -79,12 +96,6 @@ namespace NKikimr::NBlobDepot {
 
             Y_FAIL();
         }
-    };
-
-    enum class EKeepState : ui8 {
-        Default,
-        Keep,
-        DoNotKeep
     };
 
 } // NKikimr::NBlobDepot

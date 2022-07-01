@@ -67,6 +67,11 @@ namespace NKikimr::NBsController {
         group->ParentDir = cmd.GetParentDir();
         group->Name = TStringBuilder() << "vgroup" << groupId.GetRaw();
 
+        if (cmd.GetBlobDepotId()) {
+            group->VirtualGroupState = NKikimrBlobStorage::EVirtualGroupState::WORKING;
+            group->BlobDepotId = cmd.GetBlobDepotId();
+        }
+
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetOperationMode(NKikimrBlobDepot::EOperationMode::VirtualGroup);
         config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());

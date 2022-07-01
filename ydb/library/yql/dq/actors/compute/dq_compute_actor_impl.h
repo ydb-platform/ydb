@@ -382,7 +382,7 @@ protected:
             // c) last run returned NO data (=> guaranteed, that peer's free space is not less than before this run)
             //
             // n.b. if c) is not satisfied we will also call ContinueExecute on branch
-            // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent" 
+            // "status != ERunStatus::Finished -> !pollSent -> ProcessOutputsState.DataWasSent"
             // but idk what is the logic behind this
             ContinueExecute();
             return;
@@ -839,6 +839,14 @@ protected:
             ui64 NoDstActorId = 0;
         };
         THolder<TStats> Stats;
+
+        struct TAsyncData { // Is used in case of async compute actor
+            TVector<NDqProto::TData> Data;
+            TMaybe<NDqProto::TCheckpoint> Checkpoint;
+            bool Finished = false;
+            bool Changed = false;
+        };
+        TMaybe<TAsyncData> AsyncData;
     };
 
     struct TAsyncOutputInfoBase {

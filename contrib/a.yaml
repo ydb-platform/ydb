@@ -132,6 +132,9 @@ ci:
             initial-backoff: 30s
             max-backoff: 5m
             if-output: ${state.return_code != `4`}
+          requirements:
+            sandbox:
+              dns: dns64
           input:
             config:
               fixed_sandbox_resources:

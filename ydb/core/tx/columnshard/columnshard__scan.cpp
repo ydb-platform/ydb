@@ -75,7 +75,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         ScanActorId = ctx.SelfID;
 
-        TimeoutActorId = CreateLongTimer(TlsActivationContext->AsActorContext(), Deadline - TInstant::Now(),
+        TimeoutActorId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
             new IEventHandle(SelfId(), SelfId(), new TEvents::TEvWakeup));
 
         Y_VERIFY(!ScanIterator);

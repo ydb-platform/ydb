@@ -227,6 +227,8 @@ void ApplySharding(TTxId txId, TPathId pathId, TOlapStoreInfo::TPtr storeInfo,
         shardInfoProto->SetOwnerId(idx.GetOwnerId());
         shardInfoProto->SetLocalId(idx.GetLocalId().GetValue());
     }
+
+    ss->SetPartitioning(pathId, storeInfo);
 }
 
 class TConfigureParts: public TSubOperationState {

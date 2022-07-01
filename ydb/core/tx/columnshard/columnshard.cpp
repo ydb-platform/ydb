@@ -58,28 +58,31 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
     auto clientId = ev->Get()->ClientId;
 
     if (clientId == StatsReportPipe) {
-        if (ev->Get()->Status != NKikimrProto::OK) {
-            StatsReportPipe = TActorId();
+        if (ev->Get()->Status == NKikimrProto::OK) {
+            LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
+        } else {
+            LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
+            StatsReportPipe = {};
         }
         return;
     }
 
     if (PipeClientCache->OnConnect(ev)) {
-        LOG_S_DEBUG("Connected to tablet at " << TabletID() << ", remote " << tabletId);
+        LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
         return;
     }
 
-    LOG_S_INFO("Failed to connect at " << TabletID() << ", remote " << tabletId);
+    LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
     auto tabletId = ev->Get()->TabletId;
     auto clientId = ev->Get()->ClientId;
 
-    LOG_S_DEBUG("Client pipe reset at " << TabletID() << ", remote " << tabletId);
+    LOG_S_DEBUG("Client pipe reset to " << tabletId << " at tablet " << TabletID());
 
     if (clientId == StatsReportPipe) {
-        StatsReportPipe = TActorId();
+        StatsReportPipe = {};
         return;
     }
 
@@ -87,13 +90,13 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TAc
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&) {
-    auto tabletId = ev->Get()->TabletId;
-    LOG_S_DEBUG("Server pipe connected at tablet " << TabletID() << ", remote " << tabletId);
+    Y_UNUSED(ev);
+    LOG_S_DEBUG("Server pipe connected at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&) {
-    auto tabletId = ev->Get()->TabletId;
-    LOG_S_DEBUG("Server pipe reset at tablet " << TabletID() << ", remote " << tabletId);
+    Y_UNUSED(ev);
+    LOG_S_DEBUG("Server pipe reset at tablet " << TabletID());
 }
 
 void TColumnShard::Handle(TEvPrivate::TEvScanStats::TPtr& ev, const TActorContext &ctx) {
@@ -128,6 +131,7 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
         SendWaitPlanStep(GetOutdatedStep());
     }
 
+    SendPeriodicStats();
     ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
 }
 
@@ -242,7 +246,7 @@ ui64 TColumnShard::MemoryUsage() const {
     return memory;
 }
 
-void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {
+void TColumnShard::UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage) {
     auto * metrics = Executor()->GetResourceMetrics();
     if (!metrics) {
         return;
@@ -258,8 +262,7 @@ void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {
 
     ui64 memory = MemoryUsage();
 
-    const TActorContext& ctx = TlsActivationContext->AsActorContext();
-    TInstant now = AppData(ctx)->TimeProvider->Now();
+    TInstant now = TAppData::TimeProvider->Now();
     metrics->CPU.Increment(usage.CPUExecTime, now);
     metrics->Network.Increment(usage.Network, now);
     //metrics->StorageSystem
@@ -271,13 +274,14 @@ void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {
     metrics->TryUpdate(ctx);
 }
 
-void TColumnShard::SendPeriodicStats(const TActorContext& ctx) {
+void TColumnShard::SendPeriodicStats() {
     if (!CurrentSchemeShardId || !StorePathId) {
         LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
         return;
     }
 
-    TInstant now = AppData(ctx)->TimeProvider->Now();
+    const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
+    TInstant now = TAppData::TimeProvider->Now();
     if (LastStatsReport + StatsReportInterval > now) {
         return;
     }

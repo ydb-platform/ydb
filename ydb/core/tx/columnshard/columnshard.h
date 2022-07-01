@@ -268,7 +268,6 @@ struct TEvColumnShard {
     };
 
     using TEvScan = TEvDataShard::TEvKqpScan;
-    using TEvPeriodicTableStats = TEvDataShard::TEvPeriodicTableStats;
 };
 
 inline auto& Proto(TEvColumnShard::TEvProposeTransaction* ev) {

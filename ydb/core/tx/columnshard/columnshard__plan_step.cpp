@@ -26,7 +26,7 @@ private:
 };
 
 
-bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext&) {
+bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
     LOG_S_DEBUG("TTxPlanStep.Execute at tablet " << Self->TabletID());
 
@@ -93,7 +93,7 @@ bool TTxPlanStep::Execute(TTransactionContext& txc, const TActorContext&) {
     Self->IncCounter(COUNTER_PLAN_STEP_ACCEPTED);
 
     if (plannedCount > 0 || Self->HaveOutdatedTxs()) {
-        Self->EnqueueProgressTx();
+        Self->EnqueueProgressTx(ctx);
     }
     return true;
 }

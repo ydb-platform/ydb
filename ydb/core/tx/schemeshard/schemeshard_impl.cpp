@@ -5873,6 +5873,23 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
     return true;
 }
 
+void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
+    const TVector<TShardIdx>& partitioning = storeInfo->ColumnShards;
+
+    if (AppData()->FeatureFlags.GetEnableSystemViews() && SysPartitionStatsCollector) {
+        TVector<std::pair<ui64, ui64>> shardIndices;
+        shardIndices.reserve(partitioning.size());
+        for (auto& shardIdx : partitioning) {
+            shardIndices.emplace_back(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()));
+        }
+
+        auto path = TPath::Init(pathId, this);
+        auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
+        ev->ShardIndices.swap(shardIndices);
+        Send(SysPartitionStatsCollector, ev.Release());
+    }
+}
+
 void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, TVector<TTableShardInfo>&& newPartitioning) {
     if (AppData()->FeatureFlags.GetEnableSystemViews()) {
         TVector<std::pair<ui64, ui64>> shardIndices;

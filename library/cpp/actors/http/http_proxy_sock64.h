@@ -25,9 +25,46 @@ public:
         }
         if (NHttp::IsIPv6(address)) {
             return std::make_shared<TSockAddrInet6>(address.data(), port);
-        } else {
+        } else if (NHttp::IsIPv4(address)) {
             return std::make_shared<TSockAddrInet>(address.data(), port);
         }
+        struct addrinfo hints = {
+            .ai_flags = AI_PASSIVE,
+            .ai_family = AF,
+            .ai_socktype = SOCK_STREAM,
+        };
+        struct addrinfo* gai_res = nullptr;
+        int gai_ret = getaddrinfo(address.data(), nullptr, &hints, &gai_res);
+        std::shared_ptr<ISockAddr> result;
+        if (gai_ret == 0 && gai_res->ai_addr) {
+            switch (gai_res->ai_addr->sa_family) {
+                case AF_INET6: {
+                        std::shared_ptr<TSockAddrInet6> resultIp6 = std::make_shared<TSockAddrInet6>();
+                        if (resultIp6->Size() >= gai_res->ai_addrlen) {
+                            memcpy(resultIp6->SockAddr(), gai_res->ai_addr, gai_res->ai_addrlen);
+                            resultIp6->SetPort(port);
+                            result = std::move(resultIp6);
+                        }
+                    }
+                    break;
+                case AF_INET: {
+                        std::shared_ptr<TSockAddrInet> resultIp4 = std::make_shared<TSockAddrInet>();
+                        if (resultIp4->Size() >= gai_res->ai_addrlen) {
+                            memcpy(resultIp4->SockAddr(), gai_res->ai_addr, gai_res->ai_addrlen);
+                            resultIp4->SetPort(port);
+                            result = std::move(resultIp4);
+                        }
+                    }
+                    break;
+            }
+        }
+        if (gai_res) {
+            freeaddrinfo(gai_res);
+        }
+        if (result) {
+            return result;
+        }
+        throw yexception() << "Unable to resolve address " << address;
     }
 
     static std::shared_ptr<ISockAddr> MakeAddress(const sockaddr_storage& storage) {
@@ -58,7 +95,7 @@ public:
     }
 
 protected:
-    int AF = 0;
+    int AF = AF_UNSPEC;
 
     void CreateSocket(int af) {
         SOCKET s;

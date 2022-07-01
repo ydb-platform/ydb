@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: requests
-Version: 2.28.0
+Version: 2.28.1
 Summary: Python HTTP for Humans.
 Home-page: https://requests.readthedocs.io
 Author: Kenneth Reitz
@@ -30,7 +30,7 @@ Classifier: Topic :: Software Development :: Libraries
 Requires-Python: >=3.7, <4
 Description-Content-Type: text/markdown
 License-File: LICENSE
-Requires-Dist: charset-normalizer (>=2.0.0)
+Requires-Dist: charset-normalizer (<3,>=2)
 Requires-Dist: idna (<4,>=2.5)
 Requires-Dist: urllib3 (<1.27,>=1.21.1)
 Requires-Dist: certifi (>=2017.4.17)
@@ -38,7 +38,7 @@ Provides-Extra: security
 Provides-Extra: socks
 Requires-Dist: PySocks (!=1.5.7,>=1.5.6) ; extra == 'socks'
 Provides-Extra: use_chardet_on_py3
-Requires-Dist: chardet (<5,>=3.0.2) ; extra == 'use_chardet_on_py3'
+Requires-Dist: chardet (<6,>=3.0.2) ; extra == 'use_chardet_on_py3'
 
 # Requests
 

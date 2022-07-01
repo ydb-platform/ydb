@@ -272,8 +272,6 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
-        // TODO: drop after transition to new s3 binding schema
-        bool S3BindingsAsTableHints = false; // if set, convert bindings to table_hints, not arguments of MrObject
     };
 
     class TColumnRefScope {

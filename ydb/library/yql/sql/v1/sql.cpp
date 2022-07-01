@@ -1479,7 +1479,7 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
         return false;
     }
 
-    const bool emitObject = bindSettings.ClusterType == PqProviderName || !Ctx.S3BindingsAsTableHints;
+    const bool emitObject = bindSettings.ClusterType == PqProviderName;
 
     // ordered map ensures AST stability
     TMap<TString, TString> kvs(bindSettings.Settings.begin(), bindSettings.Settings.end());
@@ -9827,8 +9827,6 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansicurrentrow") {
             Ctx.AnsiCurrentRow = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiCurrentRow");
-        } else if (normalizedPragma == "s3bindingsastablehints") {
-            Ctx.S3BindingsAsTableHints = true;
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

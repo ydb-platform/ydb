@@ -1577,31 +1577,6 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
             if (word == "MrObject") {
                 UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                    line.find(R"__((MrObject '"path" '"format" '('('"bar" (String '"1")) '('"compression" (String '"ccompression")))))__"));
-            } else if (word == "userschema") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
-                    line.find(R"__('('('"partitionedby" '"key" '"subkey") '('"userschema" (SqlTypeFromYson)__"));
-            }
-        };
-
-        TWordCountHive elementStat = {{TString("MrObject"), 0}, {TString("userschema"), 0}};
-        VerifyProgram(res, elementStat, verifyLine);
-
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["MrObject"]);
-        UNIT_ASSERT_VALUES_EQUAL(1, elementStat["userschema"]);
-    }
-
-    Y_UNIT_TEST(TableBindingsV2) {
-        NSQLTranslation::TTranslationSettings settings = GetSettingsWithS3Binding("foo");
-        NYql::TAstParseResult res = SqlToYqlWithSettings(
-            "pragma S3BindingsAsTableHints; select * from bindings.foo",
-            settings
-        );
-        UNIT_ASSERT(res.Root);
-
-        TVerifyLineFunc verifyLine = [](const TString& word, const TString& line) {
-            if (word == "MrObject") {
-                UNIT_ASSERT_VALUES_UNEQUAL(TString::npos,
                                            line.find(R"__((MrTableConcat (Key '('table (String '"path")))) (Void) '('('"bar" '"1") '('"compression" '"ccompression") '('"format" '"format") '('"partitionedby" '"key" '"subkey") '('"userschema" (SqlTypeFromYson)__"));
             }
         };

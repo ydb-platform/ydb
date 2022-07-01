@@ -51,9 +51,15 @@ namespace NKikimr::NStorage {
                 if (splitted.size() >= 3) {
                     size = Max(size, FromStringWithDefault<ui64>(splitted[2], size) << 30);
                 }
+
+                auto diskMode = NPDisk::NSectorMap::DM_NONE;
+                if (splitted.size() >= 4) {
+                    diskMode = NPDisk::NSectorMap::DiskModeFromString(splitted[3]);
+                }
+
                 auto& maps = Cfg->SectorMaps;
                 if (auto it = maps.find(path); it == maps.end()) {
-                    maps[path] = new NPDisk::TSectorMap(size);
+                    maps[path] = new NPDisk::TSectorMap(size, diskMode);
                     maps[path]->ZeroInit(1000); // Format PDisk
                 }
 

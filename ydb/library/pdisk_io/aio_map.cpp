@@ -3,12 +3,14 @@
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_countedqueueoneone.h>
 
 #include <util/random/random.h>
+#include <util/system/spinlock.h>
 #include <util/thread/pool.h>
 
 namespace NKikimr {
 namespace NPDisk {
 
 struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
+    IAsyncIoContext &AsyncIoContext;
     TSectorMap &SectorMap;
     TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> &CompleteQueue;
     void *Cookie;
@@ -22,10 +24,13 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
 
     TInstant Deadline;
 
-    TAsyncIoOperationMap(TSectorMap &sectorMap,
+    bool PrevAsyncIoOperationIsInProgress = false;
+
+    TAsyncIoOperationMap(IAsyncIoContext &asyncIoContext, TSectorMap &sectorMap,
             TCountedQueueOneOne<IAsyncIoOperation*, 4 << 10> &completeQueue,
             void *cookie, TReqId reqId, NWilson::TTraceId *traceId)
-        : SectorMap(sectorMap)
+        : AsyncIoContext(asyncIoContext)
+        , SectorMap(sectorMap)
         , CompleteQueue(completeQueue)
         , Cookie(cookie)
         , ReqId(reqId)
@@ -67,17 +72,18 @@ struct TAsyncIoOperationMap : IObjectInQueue, IAsyncIoOperation {
         switch (Type) {
             case IAsyncIoOperation::EType::PRead:
                 {
-                    SectorMap.Read((ui8*)Data, Size, Offset);
+                    SectorMap.Read((ui8*)Data, Size, Offset, PrevAsyncIoOperationIsInProgress);
                     break;
                 }
             case IAsyncIoOperation::EType::PWrite:
                 {
-                    SectorMap.Write((ui8*)Data, Size, Offset);
+                    SectorMap.Write((ui8*)Data, Size, Offset, PrevAsyncIoOperationIsInProgress);
                     break;
                 }
             default:
                 Y_FAIL_S("Unexpected op type# " << (i64)Type);
         }
+        AsyncIoContext.OnAsyncIoOperationCompletion(this);
         CompleteQueue.Push(this);
     }
 
@@ -209,6 +215,9 @@ class TAsyncIoContextMap : public IAsyncIoContext {
     int LastErrno = 0;
 
     TPDiskDebugInfo PDiskInfo;
+
+    TSpinLock SpinLock;
+    IAsyncIoOperation* LastOngoingAsyncIoOperation = nullptr;
 public:
 
     TAsyncIoContextMap(const TString &path, ui32 pDiskId, TIntrusivePtr<TSectorMap> sectorMap)
@@ -224,7 +233,7 @@ public:
     }
 
     IAsyncIoOperation* CreateAsyncIoOperation(void* cookie, TReqId reqId, NWilson::TTraceId *traceId) override {
-        IAsyncIoOperation *operation = new TAsyncIoOperationMap(*SectorMap, CompleteQueue, cookie, reqId, traceId);
+        IAsyncIoOperation *operation = new TAsyncIoOperationMap(*this, *SectorMap, CompleteQueue, cookie, reqId, traceId);
         return operation;
     }
 
@@ -323,7 +332,8 @@ public:
         if (SectorMap->ImitateRandomWait) {
             Queue = new TRandomWaitThreadPool(*SectorMap->ImitateRandomWait);
         } else {
-            Queue = CreateThreadPool(1, MaxEvents);
+            Queue = new TThreadPool();
+            Queue->Start(1, MaxEvents);
         }
         return EIoResult::Ok;
     }
@@ -331,6 +341,15 @@ public:
     EIoResult Submit(IAsyncIoOperation *op, ICallback *callback) override {
         op->SetCallback(callback);
         TAsyncIoOperationMap *operation = static_cast<TAsyncIoOperationMap*>(op);
+
+        {
+            TGuard<TSpinLock> guard(SpinLock);
+            if (LastOngoingAsyncIoOperation != nullptr) {
+                operation->PrevAsyncIoOperationIsInProgress = true;
+            }
+            LastOngoingAsyncIoOperation = operation;
+        }
+
         bool isOk = Queue->Add(operation);
         return isOk ? EIoResult::Ok : EIoResult::TryAgain;
     }
@@ -348,6 +367,13 @@ public:
 
     TFileHandle *GetFileHandle() override {
         return nullptr;
+    }
+
+    void OnAsyncIoOperationCompletion(IAsyncIoOperation *op) override {
+        TGuard<TSpinLock> guard(SpinLock);
+        if (LastOngoingAsyncIoOperation == op) {
+            LastOngoingAsyncIoOperation = nullptr;
+        }
     }
 };
 

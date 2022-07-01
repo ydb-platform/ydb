@@ -130,6 +130,7 @@ public:
     virtual int GetLastErrno() = 0;
     virtual TString GetPDiskInfo() = 0;
     virtual TFileHandle *GetFileHandle() = 0;
+    virtual void OnAsyncIoOperationCompletion(IAsyncIoOperation *op) = 0;
 };
 
 std::unique_ptr<IAsyncIoContext> CreateAsyncIoContextReal(const TString &path, ui32 pDiskId, TDeviceMode::TFlags flags);

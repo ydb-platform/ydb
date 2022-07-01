@@ -342,6 +342,9 @@ public:
     TFileHandle *GetFileHandle() override {
         return File.Get();
     }
+
+    void OnAsyncIoOperationCompletion(IAsyncIoOperation *) override {
+    }
 };
 
 

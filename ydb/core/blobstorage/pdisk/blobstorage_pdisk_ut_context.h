@@ -15,13 +15,13 @@ public:
     TIntrusivePtr<NPDisk::TSectorMap> SectorMap;
     THolder<TTempDir> TempDir;
 
-    TTestContext(bool makeTempDir, bool useSectorMap) {
+    TTestContext(bool makeTempDir, bool useSectorMap, NPDisk::NSectorMap::EDiskMode diskMode = NPDisk::NSectorMap::DM_NONE) {
         if (makeTempDir) {
             TempDir.Reset(new TTempDir);
             Dir = TempDir->Name().c_str();
         }
         if (useSectorMap) {
-            SectorMap = new NPDisk::TSectorMap;
+            SectorMap = new NPDisk::TSectorMap(0, diskMode);
         }
     }
 

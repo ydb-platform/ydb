@@ -138,7 +138,7 @@ public:
                 hFunc(TEvKqpCompute::TEvScanData, HandleExecute);
                 hFunc(TEvKqpCompute::TEvScanError, HandleExecute);
                 default:
-                    StateFuncBase(ev, ctx);
+                    BaseStateFuncBody(ev, ctx);
             }
         } catch (const TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()

@@ -80,6 +80,18 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
     virtual void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 };
 
+namespace NDetails {
+
+template <class T>
+struct TComputeActorStateFuncHelper;
+
+template <class T>
+struct TComputeActorStateFuncHelper<void (T::*)(STFUNC_SIG)> {
+    using TComputeActorClass = T;
+};
+
+} // namespace NDetails
+
 template<typename TDerived>
 class TDqComputeActorBase : public NActors::TActorBootstrapped<TDerived>
                           , public TDqComputeActorChannels::ICallbacks
@@ -125,7 +137,7 @@ public:
                 ev->Record.SetTaskId(Task.GetId());
 
                 this->Send(ExecuterId, ev.Release(), NActors::IEventHandle::FlagTrackDelivery);
-                this->Become(&TDqComputeActorBase::StateFuncBase);
+                this->Become(&TDqComputeActorBase::StateFuncWrapper<&TDqComputeActorBase::BaseStateFuncBody>);
             }
 
             static_cast<TDerived*>(this)->DoBootstrap();
@@ -205,33 +217,13 @@ protected:
         return "Unknown type";
     }
 
-    STFUNC(StateFuncBase) {
-        const bool reportTime = this->CurrentStateFunc() == &TDqComputeActorBase::StateFuncBase;
-
+    template <auto FuncBody>
+    STFUNC(StateFuncWrapper) {
         try {
-            switch (ev->GetTypeRewrite()) {
-                hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
-                hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
-                hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
-                hFunc(NActors::TEvents::TEvWakeup, HandleExecuteBase);
-                hFunc(NActors::TEvents::TEvUndelivered, HandleExecuteBase);
-                FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
-                FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
-                hFunc(TEvDqCompute::TEvRun, HandleExecuteBase);
-                hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase);
-                hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase);
-                FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
-                FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
-                FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
-                hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleExecuteBase);
-                hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
-                hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
-                hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
-                default: {
-                    CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
-                    InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
-                }
-            }
+            static_assert(std::is_member_function_pointer_v<decltype(FuncBody)>);
+            using TComputeActorClass = typename NDetails::TComputeActorStateFuncHelper<decltype(FuncBody)>::TComputeActorClass;
+            TComputeActorClass* self = static_cast<TComputeActorClass*>(this);
+            (self->*FuncBody)(ev, ctx);
         } catch (const NKikimr::TMemoryLimitExceededException& e) {
             InternalError(NYql::NDqProto::StatusIds::OVERLOADED, TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
                 << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
@@ -244,8 +236,32 @@ protected:
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::UNEXPECTED, e.what());
         }
 
-        if (reportTime) {
-            ReportEventElapsedTime();
+        ReportEventElapsedTime();
+    }
+
+    STFUNC(BaseStateFuncBody) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvDqCompute::TEvResumeExecution, HandleExecuteBase);
+            hFunc(TEvDqCompute::TEvChannelsInfo, HandleExecuteBase);
+            hFunc(TEvDq::TEvAbortExecution, HandleExecuteBase);
+            hFunc(NActors::TEvents::TEvWakeup, HandleExecuteBase);
+            hFunc(NActors::TEvents::TEvUndelivered, HandleExecuteBase);
+            FFunc(TEvDqCompute::TEvChannelData::EventType, Channels->Receive);
+            FFunc(TEvDqCompute::TEvChannelDataAck::EventType, Channels->Receive);
+            hFunc(TEvDqCompute::TEvRun, HandleExecuteBase);
+            hFunc(TEvDqCompute::TEvStateRequest, HandleExecuteBase);
+            hFunc(TEvDqCompute::TEvNewCheckpointCoordinator, HandleExecuteBase);
+            FFunc(TEvDqCompute::TEvInjectCheckpoint::EventType, Checkpoints->Receive);
+            FFunc(TEvDqCompute::TEvCommitState::EventType, Checkpoints->Receive);
+            FFunc(TEvDqCompute::TEvRestoreFromCheckpoint::EventType, Checkpoints->Receive);
+            hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, HandleExecuteBase);
+            hFunc(NActors::TEvInterconnect::TEvNodeConnected, HandleExecuteBase);
+            hFunc(IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived, OnNewAsyncInputDataArrived);
+            hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+            default: {
+                CA_LOG_C("TDqComputeActorBase, unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
+                InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Unexpected event: " << ev->GetTypeRewrite() << " (" << GetEventTypeString(ev) << ")");
+            }
         }
     }
 

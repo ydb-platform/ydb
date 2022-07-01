@@ -190,7 +190,7 @@ public:
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
                 IgnoreFunc(TEvTxProxySchemeCache::TEvInvalidateTableResult);
                 default:
-                    StateFuncBase(ev, ctx);
+                    BaseStateFuncBody(ev, ctx);
             }
         } catch (const TMemoryLimitExceededException& e) {
             InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()

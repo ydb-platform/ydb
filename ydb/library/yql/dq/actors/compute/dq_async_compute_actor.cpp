@@ -66,7 +66,7 @@ public:
         limits.ChannelBufferSize = MemoryLimits.ChannelBufferSize;
         limits.OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
 
-        Become(&TDqAsyncComputeActor::StateFuncBase);
+        Become(&TDqAsyncComputeActor::StateFuncWrapper<&TDqAsyncComputeActor::StateFuncBody>);
 
         // TODO:
         std::shared_ptr<IDqTaskRunnerExecutionContext> execCtx = std::shared_ptr<IDqTaskRunnerExecutionContext>(new TDqTaskRunnerExecutionContext());
@@ -80,7 +80,7 @@ public:
     }
 
 private:
-    STFUNC(StateFuncBase) {
+    STFUNC(StateFuncBody) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NTaskRunnerActor::TEvTaskRunFinished, OnRunFinished);
             HFunc(NTaskRunnerActor::TEvAsyncInputPushFinished, OnAsyncInputPushFinished);
@@ -93,10 +93,8 @@ private:
             hFunc(TEvDqCompute::TEvInjectCheckpoint, OnInjectCheckpoint);
             hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
             default:
-                TBase::StateFuncBase(ev, ctx);
+                TBase::BaseStateFuncBody(ev, ctx);
         };
-
-        ReportEventElapsedTime();
     };
 
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {

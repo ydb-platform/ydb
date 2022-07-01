@@ -242,6 +242,9 @@ private:
                         TNodeLocation(node.data_center())});
                 }
             }
+            if (NextPeer >= Peers.size()) {
+                NextPeer = 0;
+            }
 
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();

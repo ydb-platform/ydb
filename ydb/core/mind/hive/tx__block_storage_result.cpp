@@ -34,6 +34,7 @@ public:
                 }
             }
             if (msg->Status == NKikimrProto::OK
+                    || msg->Status == NKikimrProto::ALREADY
                     || msg->Status == NKikimrProto::RACE
                     || msg->Status == NKikimrProto::BLOCKED
                     || msg->Status == NKikimrProto::NO_GROUP) {

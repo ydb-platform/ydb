@@ -59,7 +59,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
         std::vector<TVDiskID> queryStatus, resend;
         if (status == NKikimrProto::ALREADY) {
             // ALREADY means that newly arrived Block is the same or older than existing one; we treat it as ERROR here
-            // and reply with RACE only when no quorum could be obtained during the whole operation
+            // and reply with ALREADY only when no quorum could be obtained during the whole operation
             SeenAlready = true;
             status = NKikimrProto::ERROR;
         }
@@ -74,7 +74,7 @@ class TBlobStorageGroupBlockRequest : public TBlobStorageGroupRequestActor<TBlob
 
             case NKikimrProto::ERROR: {
                 TStringStream err;
-                newStatus = SeenAlready ? NKikimrProto::RACE : NKikimrProto::ERROR;
+                newStatus = SeenAlready ? NKikimrProto::ALREADY : NKikimrProto::ERROR;
                 err << "Status# " << NKikimrProto::EReplyStatus_Name(newStatus)
                     << " From# " << vdisk.ToString()
                     << " NodeId# " << Info->GetActorId(vdisk).NodeId()

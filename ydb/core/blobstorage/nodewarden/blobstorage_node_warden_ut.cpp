@@ -461,8 +461,8 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         ui64 tabletId = 1234;
         ui32 generation = 1;
         BlockGroup(runtime, sender0, tabletId, groupId, generation, true);
-        BlockGroup(runtime, sender0, tabletId, groupId, generation, true, NKikimrProto::EReplyStatus::RACE);
-        BlockGroup(runtime, sender0, tabletId, groupId, generation-1, true, NKikimrProto::EReplyStatus::RACE);
+        BlockGroup(runtime, sender0, tabletId, groupId, generation, true, NKikimrProto::EReplyStatus::ALREADY);
+        BlockGroup(runtime, sender0, tabletId, groupId, generation-1, true, NKikimrProto::EReplyStatus::ALREADY);
 
         auto describePool = DescribeStoragePool(runtime, DOMAIN_ID, "test_storage");
         {

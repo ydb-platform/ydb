@@ -11,6 +11,7 @@ add_library(libs-libevent-event_core)
 target_compile_options(libs-libevent-event_core PRIVATE
   -DHAVE_CONFIG_H
   -DEVENT__HAVE_STRLCPY=1
+  -Wno-everything
 )
 target_include_directories(libs-libevent-event_core PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/libevent

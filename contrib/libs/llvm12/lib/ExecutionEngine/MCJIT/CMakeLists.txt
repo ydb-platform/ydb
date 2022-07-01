@@ -8,6 +8,9 @@
 
 
 add_library(lib-ExecutionEngine-MCJIT)
+target_compile_options(lib-ExecutionEngine-MCJIT PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-ExecutionEngine-MCJIT PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/ExecutionEngine/MCJIT
 )

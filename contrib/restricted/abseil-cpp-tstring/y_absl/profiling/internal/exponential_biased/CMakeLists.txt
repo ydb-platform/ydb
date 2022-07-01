@@ -8,6 +8,9 @@
 
 
 add_library(yprofiling-internal-exponential_biased)
+target_compile_options(yprofiling-internal-exponential_biased PRIVATE
+  -Wno-everything
+)
 target_include_directories(yprofiling-internal-exponential_biased PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

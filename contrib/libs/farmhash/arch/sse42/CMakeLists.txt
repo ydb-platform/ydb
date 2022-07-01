@@ -10,6 +10,7 @@
 add_library(farmhash-arch-sse42)
 target_compile_options(farmhash-arch-sse42 PRIVATE
   -msse4.2
+  -Wno-everything
 )
 target_link_libraries(farmhash-arch-sse42 PUBLIC
   contrib-libs-cxxsupp

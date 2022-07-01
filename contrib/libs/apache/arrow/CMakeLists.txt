@@ -27,6 +27,7 @@ target_compile_options(libs-apache-arrow PRIVATE
   -DPARQUET_EXPORTING
   -DURI_STATIC_BUILD
   -DHAVE_NETINET_IN_H
+  -Wno-everything
 )
 target_include_directories(libs-apache-arrow PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/arrow/cpp/src

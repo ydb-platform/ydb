@@ -8,6 +8,9 @@
 
 
 add_library(lib-MC-MCParser)
+target_compile_options(lib-MC-MCParser PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-MC-MCParser PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCParser
 )

@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-time-civil_time)
+target_compile_options(yabsl-time-civil_time PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-time-civil_time PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

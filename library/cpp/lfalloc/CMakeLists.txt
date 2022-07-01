@@ -8,6 +8,9 @@
 
 
 add_library(library-cpp-lfalloc)
+target_compile_options(library-cpp-lfalloc PRIVATE
+  -Wno-everything
+)
 target_link_libraries(library-cpp-lfalloc PUBLIC
   contrib-libs-cxxsupp
   cpp-malloc-api

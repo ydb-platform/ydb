@@ -9,6 +9,9 @@
 find_package(ZLIB REQUIRED)
 
 add_library(contrib-libs-hdr_histogram)
+target_compile_options(contrib-libs-hdr_histogram PRIVATE
+  -Wno-everything
+)
 target_include_directories(contrib-libs-hdr_histogram PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hdr_histogram/src
 )

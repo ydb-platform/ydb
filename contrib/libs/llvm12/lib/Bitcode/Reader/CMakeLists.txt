@@ -8,6 +8,9 @@
 
 
 add_library(lib-Bitcode-Reader)
+target_compile_options(lib-Bitcode-Reader PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Bitcode-Reader PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Reader
 )

@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-Vectorize)
+target_compile_options(lib-Transforms-Vectorize PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-Vectorize PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Vectorize
 )

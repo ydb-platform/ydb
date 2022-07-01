@@ -11,6 +11,7 @@ add_library(libs-poco-Net)
 target_compile_options(libs-poco-Net PRIVATE
   -DPOCO_SOCKETADDRESS_DONT_PREFER_IPV4
   -DPOCO_HAVE_FD_EPOLL
+  -Wno-everything
 )
 target_include_directories(libs-poco-Net PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Net/include

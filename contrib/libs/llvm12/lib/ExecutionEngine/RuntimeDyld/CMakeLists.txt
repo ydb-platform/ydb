@@ -8,6 +8,9 @@
 
 
 add_library(lib-ExecutionEngine-RuntimeDyld)
+target_compile_options(lib-ExecutionEngine-RuntimeDyld PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-ExecutionEngine-RuntimeDyld PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/ExecutionEngine/RuntimeDyld
 )

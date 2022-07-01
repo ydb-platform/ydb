@@ -8,6 +8,9 @@
 
 
 add_library(Target-X86-AsmParser)
+target_compile_options(Target-X86-AsmParser PRIVATE
+  -Wno-everything
+)
 target_include_directories(Target-X86-AsmParser PRIVATE
   ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Target/X86
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86

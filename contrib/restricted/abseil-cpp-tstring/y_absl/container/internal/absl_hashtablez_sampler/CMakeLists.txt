@@ -8,6 +8,9 @@
 
 
 add_library(ycontainer-internal-absl_hashtablez_sampler)
+target_compile_options(ycontainer-internal-absl_hashtablez_sampler PRIVATE
+  -Wno-everything
+)
 target_include_directories(ycontainer-internal-absl_hashtablez_sampler PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-AggressiveInstCombine)
+target_compile_options(lib-Transforms-AggressiveInstCombine PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-AggressiveInstCombine PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/AggressiveInstCombine
 )

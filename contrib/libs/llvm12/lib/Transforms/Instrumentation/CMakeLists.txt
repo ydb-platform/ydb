@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-Instrumentation)
+target_compile_options(lib-Transforms-Instrumentation PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-Instrumentation PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Instrumentation
 )

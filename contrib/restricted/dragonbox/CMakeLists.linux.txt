@@ -8,6 +8,9 @@
 
 
 add_library(dragonbox)
+target_compile_options(dragonbox PRIVATE
+  -Wno-everything
+)
 target_include_directories(dragonbox PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox/include
 )

@@ -8,6 +8,9 @@
 
 
 add_library(ystrings-internal-absl_cord_internal)
+target_compile_options(ystrings-internal-absl_cord_internal PRIVATE
+  -Wno-everything
+)
 target_include_directories(ystrings-internal-absl_cord_internal PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

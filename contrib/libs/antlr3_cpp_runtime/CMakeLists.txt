@@ -8,6 +8,9 @@
 
 
 add_library(contrib-libs-antlr3_cpp_runtime)
+target_compile_options(contrib-libs-antlr3_cpp_runtime PRIVATE
+  -Wno-everything
+)
 target_include_directories(contrib-libs-antlr3_cpp_runtime PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/antlr3_cpp_runtime/include
 )

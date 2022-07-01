@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-hash-internal)
+target_compile_options(yabsl-hash-internal PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-hash-internal PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

@@ -11,6 +11,9 @@ add_library(restricted-googletest-googletest)
 target_compile_options(restricted-googletest-googletest PUBLIC
   -DGTEST_HAS_STD_WSTRING=1
 )
+target_compile_options(restricted-googletest-googletest PRIVATE
+  -Wno-everything
+)
 target_include_directories(restricted-googletest-googletest PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include

@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-base-log_severity)
+target_compile_options(yabsl-base-log_severity PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-base-log_severity PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

@@ -8,6 +8,9 @@
 
 
 add_library(libs-poco-Util)
+target_compile_options(libs-poco-Util PRIVATE
+  -Wno-everything
+)
 target_include_directories(libs-poco-Util PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Util/include
 )

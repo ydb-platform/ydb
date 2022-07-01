@@ -8,6 +8,9 @@
 
 
 add_library(lib-DebugInfo-MSF)
+target_compile_options(lib-DebugInfo-MSF PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-DebugInfo-MSF PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/MSF
 )

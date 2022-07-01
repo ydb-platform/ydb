@@ -9,6 +9,9 @@
 find_package(ZLIB REQUIRED)
 
 add_library(libs-poco-Foundation)
+target_compile_options(libs-poco-Foundation PRIVATE
+  -Wno-everything
+)
 target_include_directories(libs-poco-Foundation PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Foundation/include
 )

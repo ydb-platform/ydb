@@ -10,6 +10,7 @@
 add_library(grpc-third_party-upb)
 target_compile_options(grpc-third_party-upb PRIVATE
   -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
+  -Wno-everything
 )
 target_include_directories(grpc-third_party-upb PRIVATE
   ${CMAKE_BINARY_DIR}/contrib/libs/grpc

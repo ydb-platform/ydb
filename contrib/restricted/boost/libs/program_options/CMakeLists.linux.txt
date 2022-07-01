@@ -27,6 +27,7 @@ target_compile_options(boost-libs-program_options PRIVATE
   -DDATE_TIME_INLINE
   -DBOOST_THREAD_DONT_USE_CHRONO
   -DBOOST_THREAD_POSIX
+  -Wno-everything
 )
 target_include_directories(boost-libs-program_options PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/boost/predef

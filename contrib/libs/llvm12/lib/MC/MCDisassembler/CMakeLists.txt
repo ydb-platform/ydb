@@ -8,6 +8,9 @@
 
 
 add_library(lib-MC-MCDisassembler)
+target_compile_options(lib-MC-MCDisassembler PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-MC-MCDisassembler PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/MC/MCDisassembler
 )

@@ -12,6 +12,9 @@ set_property(SOURCE ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP/
 
 
 add_library(lib-Frontend-OpenMP)
+target_compile_options(lib-Frontend-OpenMP PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Frontend-OpenMP PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Frontend/OpenMP
 )

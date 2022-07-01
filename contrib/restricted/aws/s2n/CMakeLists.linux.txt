@@ -26,6 +26,7 @@ target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_BIKE_R3_AVX512
   -DS2N_BIKE_R3_PCLMUL
   -DS2N_KYBER512R3_AVX2_BMI2
+  -Wno-everything
 )
 target_include_directories(restricted-aws-s2n PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n

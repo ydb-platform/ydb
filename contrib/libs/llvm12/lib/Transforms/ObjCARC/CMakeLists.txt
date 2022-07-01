@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-ObjCARC)
+target_compile_options(lib-Transforms-ObjCARC PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-ObjCARC PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/ObjCARC
 )

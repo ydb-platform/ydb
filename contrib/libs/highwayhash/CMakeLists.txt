@@ -8,6 +8,9 @@
 
 
 add_library(contrib-libs-highwayhash)
+target_compile_options(contrib-libs-highwayhash PRIVATE
+  -Wno-everything
+)
 target_include_directories(contrib-libs-highwayhash PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash
 )

@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-types-bad_variant_access)
+target_compile_options(yabsl-types-bad_variant_access PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-types-bad_variant_access PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

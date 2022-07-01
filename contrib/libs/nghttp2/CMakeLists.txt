@@ -11,6 +11,7 @@ add_library(contrib-libs-nghttp2)
 target_compile_options(contrib-libs-nghttp2 PRIVATE
   -DBUILDING_NGHTTP2
   -DHAVE_CONFIG_H
+  -Wno-everything
 )
 target_include_directories(contrib-libs-nghttp2 PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/nghttp2/lib/includes

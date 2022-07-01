@@ -8,6 +8,9 @@
 
 
 add_library(libs-poco-XML)
+target_compile_options(libs-poco-XML PRIVATE
+  -Wno-everything
+)
 target_include_directories(libs-poco-XML PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/expat
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/XML/include

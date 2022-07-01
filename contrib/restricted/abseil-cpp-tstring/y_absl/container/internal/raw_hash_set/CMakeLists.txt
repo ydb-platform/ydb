@@ -8,6 +8,9 @@
 
 
 add_library(ycontainer-internal-raw_hash_set)
+target_compile_options(ycontainer-internal-raw_hash_set PRIVATE
+  -Wno-everything
+)
 target_include_directories(ycontainer-internal-raw_hash_set PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

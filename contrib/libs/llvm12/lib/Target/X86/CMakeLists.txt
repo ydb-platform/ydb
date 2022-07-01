@@ -8,6 +8,9 @@
 
 
 add_library(lib-Target-X86)
+target_compile_options(lib-Target-X86 PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Target-X86 PRIVATE
   ${CMAKE_BINARY_DIR}/contrib/libs/llvm12/lib/Target/X86
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Target/X86

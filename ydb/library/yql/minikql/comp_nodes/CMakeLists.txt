@@ -10,6 +10,7 @@
 add_library(yql-minikql-comp_nodes)
 target_compile_options(yql-minikql-comp_nodes PRIVATE
   -DUSE_CURRENT_UDF_ABI_VERSION
+  -Wno-everything
 )
 target_link_libraries(yql-minikql-comp_nodes PUBLIC
   contrib-libs-cxxsupp

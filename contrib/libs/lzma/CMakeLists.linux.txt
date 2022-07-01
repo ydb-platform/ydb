@@ -14,6 +14,7 @@ target_compile_options(contrib-libs-lzma PUBLIC
 target_compile_options(contrib-libs-lzma PRIVATE
   -DHAVE_CONFIG_H
   -DTUKLIB_SYMBOL_PREFIX=lzma_
+  -Wno-everything
 )
 target_include_directories(contrib-libs-lzma PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/lzma/liblzma/api

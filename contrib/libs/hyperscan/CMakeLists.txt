@@ -10,6 +10,7 @@
 add_library(contrib-libs-hyperscan)
 target_compile_options(contrib-libs-hyperscan PRIVATE
   -DDISABLE_AVX512VBMI_DISPATCH
+  -Wno-everything
 )
 target_include_directories(contrib-libs-hyperscan PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan

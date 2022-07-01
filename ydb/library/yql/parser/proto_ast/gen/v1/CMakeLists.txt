@@ -8,6 +8,9 @@
 
 
 add_library(proto_ast-gen-v1)
+target_compile_options(proto_ast-gen-v1 PRIVATE
+  -Wno-everything
+)
 target_include_directories(proto_ast-gen-v1 PUBLIC
   ${CMAKE_BINARY_DIR}/ydb/library/yql/parser/proto_ast/gen/v1/org/antlr/codegen/templates/Cpp
 )

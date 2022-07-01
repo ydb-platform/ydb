@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-Scalar)
+target_compile_options(lib-Transforms-Scalar PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-Scalar PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Scalar
 )

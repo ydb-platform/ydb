@@ -15,6 +15,7 @@ target_compile_options(contrib-libs-libxml PUBLIC
 )
 target_compile_options(contrib-libs-libxml PRIVATE
   -DHAVE_CONFIG_H
+  -Wno-everything
 )
 target_include_directories(contrib-libs-libxml PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/libxml/include

@@ -10,6 +10,7 @@
 add_library(highwayhash-arch-sse41)
 target_compile_options(highwayhash-arch-sse41 PRIVATE
   -msse4.1
+  -Wno-everything
 )
 target_include_directories(highwayhash-arch-sse41 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/highwayhash

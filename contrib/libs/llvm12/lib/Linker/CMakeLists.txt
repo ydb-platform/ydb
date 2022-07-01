@@ -8,6 +8,9 @@
 
 
 add_library(llvm12-lib-Linker)
+target_compile_options(llvm12-lib-Linker PRIVATE
+  -Wno-everything
+)
 target_include_directories(llvm12-lib-Linker PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Linker
 )

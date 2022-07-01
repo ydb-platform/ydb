@@ -14,6 +14,7 @@ target_compile_options(contrib-libs-pcre PUBLIC
 target_compile_options(contrib-libs-pcre PRIVATE
   -DHAVE_CONFIG_H
   -DARCADIA_PCRE_ENABLE_JIT
+  -Wno-everything
 )
 target_include_directories(contrib-libs-pcre PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/pcre

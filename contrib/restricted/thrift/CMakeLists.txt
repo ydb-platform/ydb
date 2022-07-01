@@ -16,6 +16,7 @@ target_compile_options(contrib-restricted-thrift PRIVATE
   -Wno-unused-parameter
   -Wno-unused-private-field
   -Wno-unused-variable
+  -Wno-everything
 )
 target_include_directories(contrib-restricted-thrift PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/thrift

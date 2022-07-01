@@ -8,6 +8,9 @@
 
 
 add_library(lib-Bitcode-Writer)
+target_compile_options(lib-Bitcode-Writer PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Bitcode-Writer PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitcode/Writer
 )

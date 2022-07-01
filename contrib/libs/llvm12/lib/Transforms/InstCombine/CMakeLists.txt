@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-InstCombine)
+target_compile_options(lib-Transforms-InstCombine PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-InstCombine PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/InstCombine
 )

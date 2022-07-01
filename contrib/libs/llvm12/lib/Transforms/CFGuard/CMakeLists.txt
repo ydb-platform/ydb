@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-CFGuard)
+target_compile_options(lib-Transforms-CFGuard PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-CFGuard PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/CFGuard
 )

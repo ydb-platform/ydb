@@ -10,6 +10,7 @@
 add_library(libs-pcre-pcre16)
 target_compile_options(libs-pcre-pcre16 PRIVATE
   -DHAVE_CONFIG_H
+  -Wno-everything
 )
 target_include_directories(libs-pcre-pcre16 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/pcre

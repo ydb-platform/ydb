@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-synchronization-internal)
+target_compile_options(yabsl-synchronization-internal PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-synchronization-internal PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

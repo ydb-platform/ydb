@@ -8,6 +8,9 @@
 
 
 add_library(utils-TableGen-GlobalISel)
+target_compile_options(utils-TableGen-GlobalISel PRIVATE
+  -Wno-everything
+)
 target_include_directories(utils-TableGen-GlobalISel PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/utils/TableGen/GlobalISel
 )

@@ -8,6 +8,9 @@
 
 
 add_library(yql-minikql-codegen)
+target_compile_options(yql-minikql-codegen PRIVATE
+  -Wno-everything
+)
 target_link_libraries(yql-minikql-codegen PUBLIC
   contrib-libs-cxxsupp
   yutil

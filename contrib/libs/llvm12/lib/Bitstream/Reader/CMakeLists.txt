@@ -8,6 +8,9 @@
 
 
 add_library(lib-Bitstream-Reader)
+target_compile_options(lib-Bitstream-Reader PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Bitstream-Reader PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Bitstream/Reader
 )

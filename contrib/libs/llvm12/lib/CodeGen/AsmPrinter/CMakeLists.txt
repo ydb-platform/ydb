@@ -8,6 +8,9 @@
 
 
 add_library(lib-CodeGen-AsmPrinter)
+target_compile_options(lib-CodeGen-AsmPrinter PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-CodeGen-AsmPrinter PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/AsmPrinter
 )

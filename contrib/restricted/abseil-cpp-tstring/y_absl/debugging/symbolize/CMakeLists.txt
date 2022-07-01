@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-debugging-symbolize)
+target_compile_options(yabsl-debugging-symbolize PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-debugging-symbolize PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

@@ -8,6 +8,9 @@
 
 
 add_library(yabseil-cpp-tstring-y_absl-strings)
+target_compile_options(yabseil-cpp-tstring-y_absl-strings PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabseil-cpp-tstring-y_absl-strings PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

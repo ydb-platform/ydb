@@ -8,6 +8,9 @@
 
 
 add_library(contrib-libs-farmhash)
+target_compile_options(contrib-libs-farmhash PRIVATE
+  -Wno-everything
+)
 target_include_directories(contrib-libs-farmhash PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/farmhash/include
 )

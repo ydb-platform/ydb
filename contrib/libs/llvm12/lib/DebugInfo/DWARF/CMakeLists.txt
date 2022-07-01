@@ -8,6 +8,9 @@
 
 
 add_library(lib-DebugInfo-DWARF)
+target_compile_options(lib-DebugInfo-DWARF PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-DebugInfo-DWARF PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/DWARF
 )

@@ -8,6 +8,9 @@
 
 
 add_library(lib-DebugInfo-PDB)
+target_compile_options(lib-DebugInfo-PDB PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-DebugInfo-PDB PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/PDB
 )

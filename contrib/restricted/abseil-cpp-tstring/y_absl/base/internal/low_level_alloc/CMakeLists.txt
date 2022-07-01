@@ -8,6 +8,9 @@
 
 
 add_library(ybase-internal-low_level_alloc)
+target_compile_options(ybase-internal-low_level_alloc PRIVATE
+  -Wno-everything
+)
 target_include_directories(ybase-internal-low_level_alloc PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

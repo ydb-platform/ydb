@@ -8,6 +8,9 @@
 
 
 add_library(lib-TextAPI-MachO)
+target_compile_options(lib-TextAPI-MachO PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-TextAPI-MachO PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/TextAPI
 )

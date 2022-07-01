@@ -9,6 +9,9 @@
 find_package(ZLIB REQUIRED)
 
 add_library(libs-apache-orc)
+target_compile_options(libs-apache-orc PRIVATE
+  -Wno-everything
+)
 target_include_directories(libs-apache-orc PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/orc/c++/include
 )

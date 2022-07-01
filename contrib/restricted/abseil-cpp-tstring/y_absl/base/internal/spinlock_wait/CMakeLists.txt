@@ -8,6 +8,9 @@
 
 
 add_library(ybase-internal-spinlock_wait)
+target_compile_options(ybase-internal-spinlock_wait PRIVATE
+  -Wno-everything
+)
 target_include_directories(ybase-internal-spinlock_wait PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

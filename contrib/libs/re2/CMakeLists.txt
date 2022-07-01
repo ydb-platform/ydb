@@ -8,6 +8,9 @@
 
 
 add_library(contrib-libs-re2)
+target_compile_options(contrib-libs-re2 PRIVATE
+  -Wno-everything
+)
 target_include_directories(contrib-libs-re2 PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/re2/include
 )

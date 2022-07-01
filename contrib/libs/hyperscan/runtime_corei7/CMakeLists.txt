@@ -423,6 +423,7 @@ target_compile_options(libs-hyperscan-runtime_corei7 PRIVATE
   -DstreamInitSufPQ=corei7_streamInitSufPQ
   -DtruffleExec=corei7_truffleExec
   -Dvbs_mask_data=corei7_vbs_mask_data
+  -Wno-everything
 )
 target_include_directories(libs-hyperscan-runtime_corei7 PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan

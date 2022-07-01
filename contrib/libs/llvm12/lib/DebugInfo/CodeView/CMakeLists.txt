@@ -8,6 +8,9 @@
 
 
 add_library(lib-DebugInfo-CodeView)
+target_compile_options(lib-DebugInfo-CodeView PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-DebugInfo-CodeView PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/DebugInfo/CodeView
 )

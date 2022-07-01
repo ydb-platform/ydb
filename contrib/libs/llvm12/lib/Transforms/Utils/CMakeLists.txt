@@ -8,6 +8,9 @@
 
 
 add_library(lib-Transforms-Utils)
+target_compile_options(lib-Transforms-Utils PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-Transforms-Utils PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/Transforms/Utils
 )

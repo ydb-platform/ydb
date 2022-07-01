@@ -9,6 +9,9 @@
 find_package(OpenSSL REQUIRED)
 
 add_library(libs-poco-Crypto)
+target_compile_options(libs-poco-Crypto PRIVATE
+  -Wno-everything
+)
 target_include_directories(libs-poco-Crypto PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/poco/Crypto/include
 )

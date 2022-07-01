@@ -8,6 +8,9 @@
 
 
 add_library(yabsl-status-statusor)
+target_compile_options(yabsl-status-statusor PRIVATE
+  -Wno-everything
+)
 target_include_directories(yabsl-status-statusor PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )

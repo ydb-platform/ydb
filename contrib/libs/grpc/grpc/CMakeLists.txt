@@ -13,6 +13,7 @@ find_package(c-ares REQUIRED)
 add_library(libs-grpc-grpc)
 target_compile_options(libs-grpc-grpc PRIVATE
   -DGRPC_POSIX_FORK_ALLOW_PTHREAD_ATFORK=1
+  -Wno-everything
 )
 target_include_directories(libs-grpc-grpc PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/include

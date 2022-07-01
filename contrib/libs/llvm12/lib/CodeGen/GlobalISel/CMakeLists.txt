@@ -8,6 +8,9 @@
 
 
 add_library(lib-CodeGen-GlobalISel)
+target_compile_options(lib-CodeGen-GlobalISel PRIVATE
+  -Wno-everything
+)
 target_include_directories(lib-CodeGen-GlobalISel PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/llvm12/lib/CodeGen/GlobalISel
 )

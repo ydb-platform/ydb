@@ -15,15 +15,6 @@ using namespace NNodes;
 
 namespace {
 
-TStringBuf GetCompression(const TExprNode& settings) {
-    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        const auto& child = *settings.Child(i);
-        if (child.Head().IsAtom("compression") && child.Tail().IsCallable({"String", "Utf8"}))
-            if (const auto& comp = child.Tail().Head().Content(); !comp.empty())
-                return comp;
-    }
-    return ""sv;
-}
 
 class TS3DataSourceTypeAnnotationTransformer : public TVisitorTransformerBase {
 public:
@@ -156,17 +147,76 @@ public:
             return TStatus::Error;
         }
 
+        for (auto& path : input->Child(TS3Object::idx_Paths)->ChildrenList()) {
+            if (!EnsureTupleMinSize(*path, 2, ctx) || !EnsureTupleMaxSize(*path, 3, ctx)) {
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(*path->Child(TS3Path::idx_Path), ctx) ||
+                !EnsureAtom(*path->Child(TS3Path::idx_Size), ctx))
+            {
+                return TStatus::Error;
+            }
+
+            if (path->Child(TS3Path::idx_Path)->Content().empty()) {
+                ctx.AddError(TIssue(ctx.GetPosition(path->Child(TS3Path::idx_Path)->Pos()), "Expected non-empty path"));
+                return TStatus::Error;
+            }
+
+            ui64 size = 0;
+            auto sizeStr = path->Child(TS3Path::idx_Size)->Content();
+            if (!TryFromString(sizeStr, size)) {
+                ctx.AddError(TIssue(ctx.GetPosition(path->Child(TS3Path::idx_Size)->Pos()),
+                    TStringBuilder() << "Expected number as S3 object size, got: '" << sizeStr << "'"));
+                return TStatus::Error;
+            }
+
+            if (path->ChildrenSize() > TS3Path::idx_Settings) {
+                auto validator = [](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+                    Y_UNUSED(name);
+                    auto& value = setting.Tail();
+                    if (!EnsureStructType(value, ctx) || !EnsurePersistable(value, ctx)) {
+                        return false;
+                    }
+                    return true;
+                };
+
+                if (!EnsureValidSettings(*path->Child(TS3Path::idx_Settings), { "externalColumns" },
+                                         RequireSingleValueSettings(validator), ctx))
+                {
+                    return TStatus::Error;
+                }
+            }
+        }
+
         if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormat(input->Child(TS3Object::idx_Format)->Content(), ctx)) {
             return TStatus::Error;
         }
 
-        if (input->ChildrenSize() > TS3Object::idx_Settings && !EnsureTuple(*input->Child(TS3Object::idx_Settings), ctx)) {
-            return TStatus::Error;
-        }
-
-        const auto compression = GetCompression(*input->Child(TS3Object::idx_Settings));
-        if (!NCommon::ValidateCompression(compression, ctx)) {
-            return TStatus::Error;
+        if (input->ChildrenSize() > TS3Object::idx_Settings) {
+            auto validator = [](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+                Y_UNUSED(name);
+                auto& value = setting.Tail();
+                TStringBuf compression;
+                if (value.IsAtom()) {
+                    compression = value.Content();
+                } else {
+                    if (!EnsureStringOrUtf8Type(value, ctx)) {
+                        return false;
+                    }
+                    if (!value.IsCallable({"String", "Utf8"})) {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "Expected literal string as compression value"));
+                        return false;
+                    }
+                    compression = value.Head().Content();
+                }
+                return NCommon::ValidateCompression(compression, ctx);
+            };
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), { "compression" },
+                                     RequireSingleValueSettings(validator), ctx))
+            {
+                return TStatus::Error;
+            }
         }
 
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());

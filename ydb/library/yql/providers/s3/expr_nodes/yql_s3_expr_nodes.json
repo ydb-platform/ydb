@@ -31,7 +31,8 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "Path", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Size", "Type": "TCoAtom"}
+                {"Index": 1, "Name": "Size", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Settings", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

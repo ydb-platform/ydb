@@ -66,6 +66,14 @@ bool EnsureAtom(const TExprNode& node, TExprContext& ctx);
 bool EnsureCallable(const TExprNode& node, TExprContext& ctx);
 bool EnsureTuple(const TExprNode& node, TExprContext& ctx);
 bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx);
+
+using TSettingNodeValidator = std::function<bool (TStringBuf name, const TExprNode& setting, TExprContext& ctx)>;
+bool EnsureValidSettings(const TExprNode& node,
+    const THashSet<TStringBuf>& supportedSettings,
+    const TSettingNodeValidator& validator,
+    TExprContext& ctx);
+TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& validator);
+
 bool EnsureLambda(const TExprNode& node, TExprContext& ctx);
 IGraphTransformer::TStatus ConvertToLambda(TExprNode::TPtr& node, TExprContext& ctx, ui32 argumentsCount, ui32 maxArgumentsCount = Max<ui32>(),
     bool withTypes = true);

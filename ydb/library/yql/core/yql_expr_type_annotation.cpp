@@ -1910,6 +1910,48 @@ bool EnsureTupleOfAtoms(const TExprNode& node, TExprContext& ctx) {
     return true;
 }
 
+bool EnsureValidSettings(const TExprNode& node,
+    const THashSet<TStringBuf>& supportedSettings,
+    const TSettingNodeValidator& validator,
+    TExprContext& ctx)
+{
+    if (!EnsureTuple(node, ctx)) {
+        return false;
+    }
+
+    for (auto& settingNode : node.ChildrenList()) {
+        if (!EnsureTupleMinSize(*settingNode, 1, ctx)) {
+            return false;
+        }
+
+        if (!EnsureAtom(settingNode->Head(), ctx)) {
+            return false;
+        }
+
+        const TStringBuf name = settingNode->Head().Content();
+        if (!supportedSettings.contains(name)) {
+            ctx.AddError(TIssue(ctx.GetPosition(settingNode->Head().Pos()), TStringBuilder() << "Unknown setting '" << name << "'"));
+            return false;
+        }
+
+        if (!validator(name, *settingNode, ctx)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TSettingNodeValidator RequireSingleValueSettings(const TSettingNodeValidator& validator) {
+    return [validator](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+        if (setting.ChildrenSize() != 2) {
+            ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
+                                TStringBuilder() << "Option '" << name << "' requires single argument"));
+            return false;
+        }
+        return validator(name, setting, ctx);
+    };
+}
+
 bool EnsureTupleSize(const TExprNode& node, ui32 expectedSize, TExprContext& ctx) {
     if (HasError(node.GetTypeAnn(), ctx) || node.Type() != TExprNode::List) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected tuple, but got: " << node.Type()));

@@ -2254,23 +2254,27 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         return;
     }
 
-    if (ev->Get()->Status != NKikimrProto::OK) {
-        if (ev->Get()->ClientId == StateReportPipe) {
+    if (ev->Get()->ClientId == StateReportPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
             StateReportPipe = TActorId();
             ReportState(ctx, State);
-            return;
         }
+        return;
+    }
 
-        if (ev->Get()->ClientId == DbStatsReportPipe) {
+    if (ev->Get()->ClientId == DbStatsReportPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
             DbStatsReportPipe = TActorId();
-            return;
         }
+        return;
+    }
 
-        if (ev->Get()->ClientId == TableResolvePipe) {
+    if (ev->Get()->ClientId == TableResolvePipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
             TableResolvePipe = TActorId();
             ResolveTablePath(ctx);
-            return;
         }
+        return;
     }
 
     if (LoanReturnTracker.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
@@ -2285,6 +2289,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
                 LoanReturnTracker.AutoAckLoans(ev->Get()->TabletId, ctx);
             }
         }
+        return;
     }
 
     // Resend split-related messages in needed
@@ -2292,6 +2297,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
         if (ev->Get()->Status != NKikimrProto::OK) {
             SplitSrcSnapshotSender.DoSend(ev->Get()->TabletId, ctx);
         }
+        return;
     }
 
     if (ChangeSenderActivator.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
@@ -2302,6 +2308,7 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActo
                 ChangeSenderActivator.AutoAck(ev->Get()->TabletId, ctx);
             }
         }
+        return;
     }
 
     if (!PipeClientCache->OnConnect(ev)) {
@@ -2343,15 +2350,18 @@ void TDataShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActo
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                     "Resending loan returns from " << TabletID() << " to " << ev->Get()->TabletId);
         LoanReturnTracker.ResendLoans(ev->Get()->TabletId, ctx);
+        return;
     }
 
     // Resend split-related messages in needed
     if (SplitSrcSnapshotSender.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
         SplitSrcSnapshotSender.DoSend(ev->Get()->TabletId, ctx);
+        return;
     }
 
     if (ChangeSenderActivator.Has(ev->Get()->TabletId, ev->Get()->ClientId)) {
         ChangeSenderActivator.DoSend(ev->Get()->TabletId, ctx);
+        return;
     }
 
     LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD, "Client pipe to tablet %" PRIu64 " from %" PRIu64 " is reset", ev->Get()->TabletId, TabletID());

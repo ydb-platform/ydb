@@ -119,13 +119,15 @@ namespace NTabletPipe {
         }
 
         bool OnConnect(TEvTabletPipe::TEvClientConnected::TPtr& ev) override {
-            if (!ev->Get()->ServerId) {
+            if (ev->Get()->Status != NKikimrProto::OK) {
                 Erase(ev->Get()->TabletId, ev->Get()->ClientId);
                 return false;
             }
 
             TClientCacheEntry* currentClient;
-            if (Container->Find(ev->Get()->TabletId, currentClient)) {
+            if (Container->Find(ev->Get()->TabletId, currentClient) &&
+                currentClient->Client == ev->Get()->ClientId)
+            {
                 currentClient->Flags |= TClientCacheEntry::Opened;
                 if (currentClient->Flags & TClientCacheEntry::ShutdownRequested) {
                     currentClient->Flags &= ~TClientCacheEntry::ShutdownRequested;

@@ -30,6 +30,7 @@ from botocore import (
     UNSIGNED,
     __version__,
     handlers,
+    invoke_initializers,
     monitoring,
     paginate,
     retryhandler,
@@ -148,6 +149,7 @@ class Session:
         self.session_var_map = SessionVarDict(self, self.SESSION_VARIABLES)
         if session_vars is not None:
             self.session_var_map.update(session_vars)
+        invoke_initializers(self)
 
     def _register_components(self):
         self._register_credential_provider()

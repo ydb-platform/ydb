@@ -6562,7 +6562,9 @@
         },
         "ymake": {
             "formula": {
-                "sandbox_id": [1359572912],
+                "sandbox_id": [
+                    1359572912
+                ],
                 "match": "ymake"
             },
             "executable": {
@@ -8094,7 +8096,7 @@
         },
         "horadric": {
             "formula": {
-                "sandbox_id": 1360634828,
+                "sandbox_id": 1361822902,
                 "match": "horadric"
             },
             "executable": {
@@ -8237,7 +8239,7 @@
         },
         "apphost": {
             "formula": {
-                "sandbox_id": 1360634281,
+                "sandbox_id": 1361823439,
                 "match": "app_host_launcher"
             },
             "executable": {
@@ -8884,7 +8886,7 @@
         },
         "bigb_hitlog_analyser": {
             "formula": {
-                "sandbox_id": 1360634356,
+                "sandbox_id": 1361824951,
                 "match": "hitlog_analyser"
             },
             "executable": {
@@ -8974,7 +8976,7 @@
         },
         "exp_stats": {
             "formula": {
-                "sandbox_id": 1360635140,
+                "sandbox_id": 1361822599,
                 "match": "exp_stats"
             },
             "executable": {

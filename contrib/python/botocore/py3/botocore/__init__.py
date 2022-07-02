@@ -16,7 +16,7 @@ import logging
 import os
 import re
 
-__version__ = '1.27.11'
+__version__ = '1.27.12'
 
 
 class NullHandler(logging.Handler):
@@ -28,6 +28,7 @@ class NullHandler(logging.Handler):
 log = logging.getLogger('botocore')
 log.addHandler(NullHandler())
 
+_INITIALIZERS = []
 
 _first_cap_regex = re.compile('(.)([A-Z][a-z]+)')
 _end_cap_regex = re.compile('([a-z0-9])([A-Z])')
@@ -97,3 +98,42 @@ def xform_name(name, sep='_', _xform_cache=_xform_cache):
         transformed = _end_cap_regex.sub(r'\1' + sep + r'\2', s1).lower()
         _xform_cache[key] = transformed
     return _xform_cache[key]
+
+
+def register_initializer(callback):
+    """Register an initializer function for session creation.
+
+    This initializer function will be invoked whenever a new
+    `botocore.session.Session` is instantiated.
+
+    :type callback: callable
+    :param callback: A callable that accepts a single argument
+        of type `botocore.session.Session`.
+
+    """
+    _INITIALIZERS.append(callback)
+
+
+def unregister_initializer(callback):
+    """Unregister an initializer function.
+
+    :type callback: callable
+    :param callback: A callable that was previously registered
+        with `botocore.register_initializer`.
+
+    :raises ValueError: If a callback is provided that is not currently
+        registered as an initializer.
+
+    """
+    _INITIALIZERS.remove(callback)
+
+
+def invoke_initializers(session):
+    """Invoke all initializers for a session.
+
+    :type session: botocore.session.Session
+    :param session: The session to initialize.
+
+    """
+    for initializer in _INITIALIZERS:
+        initializer(session)

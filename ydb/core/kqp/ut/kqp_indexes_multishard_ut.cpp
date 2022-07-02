@@ -32,7 +32,10 @@ void CreateTableWithMultishardIndex(Tests::TClient& client) {
         Columns { Name: "key"    Type: "Uint64" }
         Columns { Name: "fk"    Type: "Uint32" }
         Columns { Name: "value"  Type: "Utf8" }
-        KeyColumnNames: ["key"])";
+        KeyColumnNames: ["key"]
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 3 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+    )";
 
     NKikimrSchemeOp::TTableDescription desc;
     bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
@@ -48,7 +51,10 @@ void CreateTableWithMultishardIndexAndDataColumn(Tests::TClient& client) {
         Columns { Name: "fk"    Type: "Uint32" }
         Columns { Name: "value"  Type: "Utf8" }
         Columns { Name: "ext_value"  Type: "Utf8" }
-        KeyColumnNames: ["key"])";
+        KeyColumnNames: ["key"]
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 3 } } } }
+        SplitBoundary { KeyPrefix { Tuple { Optional { Uint64: 100 } } } }
+    )";
 
     NKikimrSchemeOp::TTableDescription desc;
     bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
@@ -1029,6 +1035,65 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             const TString expected = R"([[[3000000002u];[3u];#]])";
             UNIT_ASSERT_VALUES_EQUAL(yson, expected);
         }
+    }
+
+    Y_UNIT_TEST_QUAD(SortByPk, WithMvcc, UseNewEngine) {
+        auto serverSettings = TKikimrSettings()
+            .SetEnableMvcc(WithMvcc)
+            .SetEnableMvccSnapshotReads(WithMvcc);
+        TKikimrRunner kikimr(serverSettings);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        FillTable<UseNewEngine>(session);
+
+        AssertSuccessResult(session.ExecuteDataQuery(Q1_(R"(
+            UPSERT INTO `/Root/MultiShardIndexed` (key, fk, value) VALUES
+                (10u, 1000, "NewValue1"),
+                (11u, 1001, "NewValue2"),
+                (12u, 1002, "NewValue3"),
+                (13u, 1003, "NewValue4"),
+                (14u, 1004, "NewValue5"),
+                (15u, 1005, "NewValue6"),
+                (101u, 1011, "NewValue7");
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync());
+
+        auto query = Q1_(R"(
+            SELECT * FROM MultiShardIndexed VIEW index
+            WHERE fk > 100
+            ORDER BY fk, key
+            LIMIT 100;
+        )");
+
+        auto explainResult = session.ExplainDataQuery(query).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(explainResult.GetStatus(), EStatus::SUCCESS, explainResult.GetIssues().ToString());
+
+        // Cerr << explainResult.GetPlan() << Endl;
+
+        if (UseNewEngine) {
+            NJson::TJsonValue plan;
+            NJson::ReadJsonTree(explainResult.GetPlan(), &plan, true);
+            auto node = FindPlanNodeByKv(plan, "Name", "TopSort");
+            UNIT_ASSERT(node.IsDefined());
+        }
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1000u];[10u];["NewValue1"]];
+            [[1001u];[11u];["NewValue2"]];
+            [[1002u];[12u];["NewValue3"]];
+            [[1003u];[13u];["NewValue4"]];
+            [[1004u];[14u];["NewValue5"]];
+            [[1005u];[15u];["NewValue6"]];
+            [[1011u];[101u];["NewValue7"]];
+            [[1000000000u];[1u];["v1"]];
+            [[2000000000u];[2u];["v2"]];
+            [[3000000000u];[3u];["v3"]];
+            [[4294967295u];[4u];["v4"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 }
 

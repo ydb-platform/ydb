@@ -164,9 +164,9 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
     return node;
 }
 
-// The index and main table have same number of rows, so we can push TCoTopSort or TCoTake through TKqlLookupTable.
+// The index and main table have same number of rows, so we can push a copy of TCoTopSort or TCoTake
+// through TKqlLookupTable.
 // The simplest way is to match TopSort or Take over TKqlReadTableIndex.
-
 TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
     if (!kqpCtx.IsDataQuery()) {
         return node;
@@ -201,7 +201,14 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             return TExprBase(newTopSort);
         };
 
-        return DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta, sortByColumns, filter);
+        auto lookup = DoRewriteIndexRead(readTableIndex, ctx, tableDesc, indexMeta, sortByColumns, filter);
+
+        return Build<TCoTopSort>(ctx, node.Pos())
+            .Input(lookup)
+            .KeySelectorLambda(ctx.DeepCopyLambda(topSort.KeySelectorLambda().Ref()))
+            .SortDirections(topSort.SortDirections())
+            .Count(topSort.Count())
+            .Done();
     }
 
     return node;

@@ -273,6 +273,41 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                         .Seal()
                         .Build();
                 } else if (linkType == "any" || linkType == "all") {
+                    const bool useIn = testLambda->Tail().IsCallable("PgResolvedOp")
+                        && testLambda->Tail().Head().Content() == "="
+                        && testLambda->Tail().Child(3) == testLambda->Head().Child(1)
+                        && !IsDepended(*testLambda->Tail().Child(2), *testLambda->Head().Child(1));
+
+                    if (useIn) {
+                        auto value = ctx.ReplaceNodes(testLambda->Tail().ChildPtr(2), {
+                            {testLambda->Head().Child(0), originalRow}
+                            });
+
+                        return ctx.Builder(node->Pos())
+                            .Callable("ToPg")
+                                .Callable(0, "SqlIn")
+                                    .Callable(0, "Map")
+                                        .Callable(0, "Collect")
+                                            .Add(0, select)
+                                        .Seal()
+                                        .Lambda(1)
+                                            .Param("row")
+                                            .Callable("SingleMember")
+                                                .Arg(0, "row")
+                                            .Seal()
+                                        .Seal()
+                                    .Seal()
+                                    .Add(1, value)
+                                    .List(2)
+                                        .List(0)
+                                            .Atom(0, "ansi")
+                                        .Seal()
+                                    .Seal()
+                                .Seal()
+                            .Seal()
+                            .Build();
+                    }
+
                     auto foldArg = ctx.NewArgument(node->Pos(), "linkRow");
                     auto stateArg = ctx.NewArgument(node->Pos(), "state");
                     auto foldArgs = ctx.NewArguments(node->Pos(), { foldArg, stateArg });
@@ -2389,23 +2424,13 @@ TExprNode::TPtr ExpandPgLike(const TExprNode::TPtr& node, TExprContext& ctx, TOp
 TExprNode::TPtr ExpandPgIn(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
     Y_UNUSED(optCtx);
     return ctx.Builder(node->Pos())
-        .Callable("Fold")
-            .Add(0, node->ChildPtr(1))
-            .Callable(1, "PgConst")
-                .Atom(0, "false")
-                .Callable(1, "PgType")
-                    .Atom(0, "bool")
-                .Seal()
-            .Seal()
-            .Lambda(2)
-                .Param("item")
-                .Param("state")
-                .Callable("PgOr")
-                    .Arg(0, "state")
-                    .Callable(1, "PgOp")
-                        .Atom(0, "=")
-                        .Arg(1, "item")
-                        .Add(2, node->ChildPtr(0))
+        .Callable("ToPg")
+            .Callable(0, "SqlIn")
+                .Add(0, node->ChildPtr(1))
+                .Add(1, node->ChildPtr(0))
+                .List(2)
+                    .List(0)
+                        .Atom(0, "ansi")
                     .Seal()
                 .Seal()
             .Seal()

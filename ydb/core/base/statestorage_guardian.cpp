@@ -109,7 +109,7 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
 
     void MakeRequest() {
         ui64 cookie = ++LastCookie;
-        Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, cookie), IEventHandle::FlagTrackDelivery, IEventHandle::FlagSubscribeOnSession, cookie);
+        Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, cookie), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateLookup);
     }
 

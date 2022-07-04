@@ -219,12 +219,12 @@ struct TConsumerSettings {
         return *this;
     }
 
-    TConsumerSettings& SetSuportedCodecs(TVector<ECodec>&& codecs) {
+    TConsumerSettings& SetSupportedCodecs(TVector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
         return *this;
     }
 
-    TConsumerSettings& SetSuportedCodecs(const TVector<ECodec>& codecs) {
+    TConsumerSettings& SetSupportedCodecs(const TVector<ECodec>& codecs) {
         SupportedCodecs_ = codecs;
         return *this;
     }
@@ -256,12 +256,12 @@ struct TAlterConsumerSettings {
         return TAlterConsumerAttributesBuilder(*this);
     }
 
-    TAlterConsumerSettings& SetSuportedCodecs(TVector<ECodec>&& codecs) {
+    TAlterConsumerSettings& SetSupportedCodecs(TVector<ECodec>&& codecs) {
         SetSupportedCodecs_ = std::move(codecs);
         return *this;
     }
 
-    TAlterConsumerSettings& SetSuportedCodecs(const TVector<ECodec>& codecs) {
+    TAlterConsumerSettings& SetSupportedCodecs(const TVector<ECodec>& codecs) {
         SetSupportedCodecs_ = codecs;
         return *this;
     }
@@ -294,12 +294,12 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     FLUENT_SETTING(TAttributes, Attributes);
 
 
-    TCreateTopicSettings& SetSuportedCodecs(TVector<ECodec>&& codecs) {
+    TCreateTopicSettings& SetSupportedCodecs(TVector<ECodec>&& codecs) {
         SupportedCodecs_ = std::move(codecs);
         return *this;
     }
 
-    TCreateTopicSettings& SetSuportedCodecs(const TVector<ECodec>& codecs) {
+    TCreateTopicSettings& SetSupportedCodecs(const TVector<ECodec>& codecs) {
         SupportedCodecs_ = codecs;
         return *this;
     }
@@ -362,12 +362,12 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
         return TAlterTopicAttributesBuilder(*this);
     }
 
-    TAlterTopicSettings& SetSuportedCodecs(TVector<ECodec>&& codecs) {
+    TAlterTopicSettings& SetSupportedCodecs(TVector<ECodec>&& codecs) {
         SetSupportedCodecs_ = std::move(codecs);
         return *this;
     }
 
-    TAlterTopicSettings& SetSuportedCodecs(const TVector<ECodec>& codecs) {
+    TAlterTopicSettings& SetSupportedCodecs(const TVector<ECodec>& codecs) {
         SetSupportedCodecs_ = codecs;
         return *this;
     }

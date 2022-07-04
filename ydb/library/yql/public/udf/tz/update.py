@@ -2,7 +2,7 @@ import re
 
 
 def main():
-    REGEXP = "^(\"(.+)\",|\"\",\/\/(.+))$"
+    REGEXP = """^("(.+)",|"",//(.+))$"""
     OUTPUT = "../udf_tz.gen"
     INPUT = OUTPUT
     CONTRIB_ZONES = "../../../../../../../contrib/libs/cctz/tzdata/ya.make.resources"

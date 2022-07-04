@@ -51,6 +51,7 @@ target_sources(library-yql-minikql PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_builder.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_type_ops.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/mkql_unboxed_value_stream.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/pack_num.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/primes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/minikql/watermark_tracker.cpp
 )

@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/user_info.h>
 #include <ydb/core/persqueue/write_meta.h>
+#include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
@@ -685,6 +686,28 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
     using TCdcStream = TShardedTableOptions::TCdcStream;
 
+    static NKikimrPQ::TPQConfig DefaultPQConfig() {
+        NKikimrPQ::TPQConfig pqConfig;
+        pqConfig.SetEnabled(true);
+        pqConfig.SetEnableProtoSourceIdInfo(true);
+        pqConfig.SetRoundRobinPartitionMapping(true);
+        pqConfig.SetTopicsAreFirstClassCitizen(true);
+        pqConfig.SetMaxReadCookies(10);
+        pqConfig.AddClientServiceType()->SetName("data-streams");
+        pqConfig.SetCheckACL(false);
+        pqConfig.SetRequireCredentialsInNewProtocol(false);
+        pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+        return pqConfig;
+    }
+
+    static void SetupLogging(TTestActorRuntime& runtime) {
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
+    }
+
     template <typename TDerived, typename TClient>
     class TTestEnv {
     public:
@@ -732,29 +755,6 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         const TActorId& GetEdgeActor() const {
             return EdgeActor;
-        }
-
-    private:
-        static NKikimrPQ::TPQConfig DefaultPQConfig() {
-            NKikimrPQ::TPQConfig pqConfig;
-            pqConfig.SetEnabled(true);
-            pqConfig.SetEnableProtoSourceIdInfo(true);
-            pqConfig.SetRoundRobinPartitionMapping(true);
-            pqConfig.SetTopicsAreFirstClassCitizen(true);
-            pqConfig.SetMaxReadCookies(10);
-            pqConfig.AddClientServiceType()->SetName("data-streams");
-            pqConfig.SetCheckACL(false);
-            pqConfig.SetRequireCredentialsInNewProtocol(false);
-            pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
-            return pqConfig;
-        }
-
-        static void SetupLogging(TTestActorRuntime& runtime) {
-            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-            runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
-            runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
-            runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
-            runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
         }
 
     private:
@@ -1453,6 +1453,85 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":11},"key":[1]})",
             R"({"update":{"value":21},"key":[2]})",
             R"({"update":{"value":32},"key":[3]})",
+        });
+    }
+
+    Y_UNIT_TEST(RacyCreateAndSend) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+
+        bool added = false;
+        TVector<THolder<IEventHandle>> delayed;
+
+        auto prevObserver = runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvChangeExchange::EvAddSender:
+                added = true;
+                break;
+
+            case TSchemeBoardEvents::EvUpdate:
+                if (auto* msg = ev->Get<TSchemeBoardEvents::TEvUpdate>()) {
+                    const auto desc = msg->GetRecord().GetDescribeSchemeResult();
+                    if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
+                        delayed.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                }
+                break;
+
+            default:
+                break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto txId = AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson));
+
+        if (!added) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&added](IEventHandle&) {
+                return added;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        if (!delayed.size() || delayed.size() % 3) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&delayed](IEventHandle&) {
+                return delayed.size() && (delayed.size() % 3 == 0);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : delayed) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        WaitTxNotification(server, edgeActor, txId);
+        WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":10},"key":[1]})",
+            R"({"update":{"value":20},"key":[2]})",
+            R"({"update":{"value":30},"key":[3]})",
         });
     }
 

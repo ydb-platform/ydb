@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(KqpPerf) {
         CompareYson(R"([[["Anna"];[3800u]]])", FormatResultSetYson(result.GetResultSet(0)));
 
         auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), UseNewEngine ? 2 : 1);
     }
 
     Y_UNIT_TEST_TWIN(MultiDeleteFromTable, UseNewEngine) {

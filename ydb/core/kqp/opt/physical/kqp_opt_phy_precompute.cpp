@@ -56,6 +56,12 @@ TExprBase KqpPropagatePrecomuteScalarRowset(TExprBase node, TExprContext& ctx, I
                     return false;
                 }
 
+                auto consumers = GetConsumers(maybePrecompute.Cast(), parentsMap);
+                if (consumers.size() > 1) {
+                    visitResult = false;
+                    return false;
+                }
+
                 precompute = maybePrecompute;
                 return false;
             }

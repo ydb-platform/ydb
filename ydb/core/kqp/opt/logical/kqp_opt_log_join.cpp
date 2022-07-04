@@ -207,7 +207,27 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
 
     auto rightReadMatch = MatchRead<TKqlReadTableBase>(join.RightInput());
     if (!rightReadMatch) {
-        return {};
+        if (auto readRangesMatch = MatchRead<TKqlReadTableRangesBase>(join.RightInput())) {
+            // for now only fullscans are supported
+            auto read = readRangesMatch->Read.Cast<TKqlReadTableRangesBase>();
+            if (TCoVoid::Match(read.Ranges().Raw())) {
+                rightReadMatch = readRangesMatch;
+                rightReadMatch->Read =
+                    Build<TKqlReadTable>(ctx, join.Pos())
+                    .Settings(read.Settings())
+                    .Table(read.Table())
+                    .Columns(read.Columns())
+                    .Range<TKqlKeyRange>()
+                        .From<TKqlKeyInc>().Build()
+                        .To<TKqlKeyInc>().Build()
+                        .Build()
+                    .Done();
+            } else {
+                return {};
+            }
+        } else {
+            return {};
+        }
     }
 
     if (rightReadMatch->FlatMap && !IsPassthroughFlatMap(rightReadMatch->FlatMap.Cast(), nullptr)) {

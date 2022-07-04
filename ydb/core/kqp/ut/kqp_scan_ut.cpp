@@ -1941,7 +1941,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookup, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor)
+            .SetEnableKqpScanQueryStreamLookup(true);
+
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -1970,7 +1974,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookupByPkPrefix, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor)
+            .SetEnableKqpScanQueryStreamLookup(true);
+
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 

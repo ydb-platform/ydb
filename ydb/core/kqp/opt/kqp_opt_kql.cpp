@@ -30,6 +30,10 @@ bool UseReadTableRanges(const TKikimrTableDescription& tableData, const TIntrusi
     if (kqpCtx->IsScanQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForScanQueries()) {
         return true;
     }
+    
+    if (kqpCtx->IsDataQuery() && kqpCtx->Config->FeatureFlags.GetEnablePredicateExtractForDataQueries()) {
+        return true;
+    }
 
     return false;
 }

@@ -585,7 +585,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
            );
         }
 
-        createStream->Confirm(OffsetToRead, OffsetToRead);
+        createStream->Confirm(OffsetToRead);
         RequestSourcePartitionStatus();
     } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TDestroyPartitionStreamEvent>(&event.GetRef())) {
         destroyStream->Confirm();

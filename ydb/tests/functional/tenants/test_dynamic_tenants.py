@@ -404,6 +404,6 @@ class TestCheckAccess(DBWithDynamicSlot):
                 calling(client.list_directory).with_args(
                     '/Root/'
                 ),
-                raises(ydb.Unauthorized)
+                raises(ydb.SchemeError)
             )
             client.list_directory('/')

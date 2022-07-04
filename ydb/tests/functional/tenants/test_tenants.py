@@ -373,12 +373,6 @@ class TestTenants(DBForStaticSlots):
                 assert len(result.children) > 0
                 assert result.children[0].name == ".sys"
 
-                result = driver.scheme_client.list_directory(above_database)
-                logger.debug("From database: list above database <%s> is %s", above_database, convert(result))
-                assert len(result.children) > 0
-                assert result.children[0].name == basename
-                assert result.children[0].type == ydb.scheme.SchemeEntryType.DATABASE
-
             driver_config_for_root = ydb.DriverConfig(
                 "%s:%s" % (self.cluster.nodes[1].host, self.cluster.nodes[1].port),
                 self.root_dir

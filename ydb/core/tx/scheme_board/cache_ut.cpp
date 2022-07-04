@@ -57,6 +57,7 @@ public:
     UNIT_TEST(MigrationUndo);
     UNIT_TEST(MigrationDeletedPathNavigate);
     UNIT_TEST(WatchRoot);
+    UNIT_TEST(PathBelongsToDomain);
     UNIT_TEST_SUITE_END();
 
     void Navigate();
@@ -76,6 +77,7 @@ public:
     void MigrationUndo();
     void MigrationDeletedPathNavigate();
     void WatchRoot();
+    void PathBelongsToDomain();
 
 protected:
     TNavigate::TEntry TestNavigateImpl(THolder<TNavigate> request, TNavigate::EStatus expectedStatus,
@@ -946,6 +948,48 @@ void TCacheTest::WatchRoot() {
 
     TestWatchRemove(watcher);
     SimulateSleep(*Context, TDuration::Seconds(1));
+}
+
+void TCacheTest::PathBelongsToDomain() {
+    ui64 txId = 100;
+    TestCreateSubDomain(*Context, ++txId, "/Root", "Name: \"SubDomain\"");
+    TestWaitNotification(*Context, {txId}, CreateNotificationSubscriber(*Context, TTestTxConfig::SchemeShard));
+    TestMkDir(*Context, ++txId, "/Root/SubDomain", "DirA");
+
+    TTableId testId;
+
+    // ok
+    {
+        auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = "/Root/SubDomain";
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath("/Root/SubDomain/DirA");
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::Ok,
+            "", TNavigate::EOp::OpPath, false, true);
+
+        testId = result.TableId;
+    }
+    // error, by path
+    {
+        auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = "/Root";
+        auto& entry = request->ResultSet.emplace_back();
+        entry.Path = SplitPath("/Root/SubDomain/DirA");
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByPath;
+        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+            "", TNavigate::EOp::OpPath, false, true);
+    }
+    // error, by path id
+    {
+        auto request = MakeHolder<TNavigate>();
+        request->DatabaseName = "/Root";
+        auto& entry = request->ResultSet.emplace_back();
+        entry.TableId = testId;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        auto result  = TestNavigateImpl(std::move(request), TNavigate::EStatus::PathErrorUnknown,
+            "", TNavigate::EOp::OpPath, false, true);
+    }
 }
 
 class TCacheTestWithDrops: public TCacheTest {

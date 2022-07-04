@@ -161,7 +161,21 @@ namespace {
     }
 
     template <typename TContextPtr, typename TEvResult, typename TDerived>
-    class TAclChecker: public TActorBootstrapped<TDerived> {
+    class TAccessChecker: public TActorBootstrapped<TDerived> {
+        static bool IsDomain(TNavigate::TEntry& entry) {
+            switch (entry.Kind) {
+            case NSchemeCache::TSchemeCacheNavigate::KindSubdomain:
+            case NSchemeCache::TSchemeCacheNavigate::KindExtSubdomain:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        static bool IsDomain(TResolve::TEntry&) {
+            return false;
+        }
+
         static TIntrusivePtr<TSecurityObject> GetSecurityObject(const TNavigate::TEntry& entry) {
             return entry.SecurityObject;
         }
@@ -235,61 +249,71 @@ namespace {
         }
 
     public:
-        explicit TAclChecker(TContextPtr context)
+        explicit TAccessChecker(TContextPtr context)
             : Context(context)
         {
             Y_VERIFY(!Context->WaitCounter);
         }
 
         void Bootstrap(const TActorContext&) {
-            if (Context->Request->UserToken == nullptr) {
-                SendResult();
-                return;
-            }
-
             for (auto& entry : Context->Request->ResultSet) {
-                auto securityObject = GetSecurityObject(entry);
-                if (securityObject == nullptr) {
-                    continue;
+                if (!IsDomain(entry) && Context->ResolvedDomainInfo && entry.DomainInfo) {
+                    // ^ It is allowed to describe subdomains by specifying root as DatabaseName
+
+                    if (Context->ResolvedDomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
+                        SBC_LOG_W("Path does not belong to the specified domain"
+                            << ": self# " << this->SelfId()
+                            << ", domain# " << Context->ResolvedDomainInfo->DomainKey
+                            << ", path's domain# " << entry.DomainInfo->DomainKey);
+
+                        SetErrorAndClear(Context.Get(), entry);
+                    }
                 }
+           
+                if (Context->Request->UserToken) {
+                    auto securityObject = GetSecurityObject(entry);
+                    if (securityObject == nullptr) {
+                        continue;
+                    }
 
-                const ui32 access = GetAccess(entry);
-                if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) {
-                    SBC_LOG_W("Access denied"
-                        << ": self# " << this->SelfId()
-                        << ", for# " << Context->Request->UserToken->GetUserSID()
-                        << ", access# " << NACLib::AccessRightsToString(access));
+                    const ui32 access = GetAccess(entry);
+                    if (!securityObject->CheckAccess(access, *Context->Request->UserToken)) {
+                        SBC_LOG_W("Access denied"
+                            << ": self# " << this->SelfId()
+                            << ", for# " << Context->Request->UserToken->GetUserSID()
+                            << ", access# " << NACLib::AccessRightsToString(access));
 
-                    SetErrorAndClear(Context.Get(), entry);
+                        SetErrorAndClear(Context.Get(), entry);
+                    }
                 }
             }
 
             SendResult();
         }
 
-        using TBase = TAclChecker<TContextPtr, TEvResult, TDerived>;
+        using TBase = TAccessChecker<TContextPtr, TEvResult, TDerived>;
 
     private:
         TContextPtr Context;
 
-    }; // TAclChecker
+    }; // TAccessChecker
 
-    class TAclCheckerNavigate: public TAclChecker<TNavigateContextPtr, TEvNavigateResult, TAclCheckerNavigate> {
+    class TAccessCheckerNavigate: public TAccessChecker<TNavigateContextPtr, TEvNavigateResult, TAccessCheckerNavigate> {
     public:
         using TBase::TBase;
     };
 
-    class TAclCheckerResolve: public TAclChecker<TResolveContextPtr, TEvResolveResult, TAclCheckerResolve> {
+    class TAccessCheckerResolve: public TAccessChecker<TResolveContextPtr, TEvResolveResult, TAccessCheckerResolve> {
     public:
         using TBase::TBase;
     };
 
-    IActor* CreateAclChecker(TNavigateContextPtr context) {
-        return new TAclCheckerNavigate(context);
+    IActor* CreateAccessChecker(TNavigateContextPtr context) {
+        return new TAccessCheckerNavigate(context);
     }
 
-    IActor* CreateAclChecker(TResolveContextPtr context) {
-        return new TAclCheckerResolve(context);
+    IActor* CreateAccessChecker(TResolveContextPtr context) {
+        return new TAccessCheckerResolve(context);
     }
 
     class TWatchCache: public TMonitorableActor<TWatchCache> {
@@ -2393,7 +2417,20 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     template <typename TContextPtr>
     void Complete(TContextPtr context) {
         Counters.FinishRequest(Now() - context->CreatedAt);
-        Register(CreateAclChecker(context));
+        Register(CreateAccessChecker(context));
+    }
+
+    template <typename TContext, typename TEvent>
+    TIntrusivePtr<TContext> MakeContext(TEvent& ev) const {
+        TIntrusivePtr<TContext> context(new TContext(ev->Sender, ev->Get()->Request, Now()));
+
+        if (context->Request->DatabaseName) {
+            if (auto* db = Cache.FindPtr(CanonizePath(context->Request->DatabaseName))) {
+                context->ResolvedDomainInfo = db->GetDomainInfo();
+            }
+        }
+
+        return context;
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
@@ -2405,7 +2442,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return;
         }
 
-        TIntrusivePtr<TNavigateContext> context(new TNavigateContext(ev->Sender, ev->Get()->Request, Now()));
+        auto context = MakeContext<TNavigateContext>(ev);
 
         for (size_t i = 0; i < context->Request->ResultSet.size(); ++i) {
             auto& entry = context->Request->ResultSet[i];
@@ -2465,7 +2502,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return;
         }
 
-        TIntrusivePtr<TResolveContext> context(new TResolveContext(ev->Sender, ev->Get()->Request, Now()));
+        auto context = MakeContext<TResolveContext>(ev);
 
         auto pathExtractor = [](const TResolve::TEntry& entry) {
             const TKeyDesc* keyDesc = entry.KeyDescription.Get();

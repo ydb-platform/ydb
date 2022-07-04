@@ -159,11 +159,8 @@ public:
         NActors::IActor::PassAway();
     }
 
-    void Bootstrap(const TActorContext& ctx) {
+    void Bootstrap() {
         Become(&TPendingFetcher::StateFunc);
-
-        Y_UNUSED(ctx);
-
         DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
 

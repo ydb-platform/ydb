@@ -789,6 +789,7 @@ private:
                         future = NThreading::MakeFuture<IDqGateway::TResult>(std::move(result));
                     }
                 } else {
+                    graphParams["Evaluation"] = ctx.Step.IsDone(TExprStep::ExprEval) ? "false" : "true";
                     future = State->DqGateway->ExecutePlan(
                         State->SessionId, executionPlanner->GetPlan(), columns, secureParams, graphParams,
                         settings, progressWriter, ModulesMapping, fillSettings.Discard);

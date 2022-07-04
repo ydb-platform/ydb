@@ -209,6 +209,7 @@ struct TEvents {
         { }
 
         NProto::TGraphParams GraphParams;
+        bool IsEvaluation = false;
         NThreading::TPromise<NYql::IDqGateway::TResult> Result;
     };
 

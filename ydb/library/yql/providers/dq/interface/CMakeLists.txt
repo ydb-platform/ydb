@@ -21,6 +21,7 @@ target_link_libraries(providers-dq-interface PUBLIC
   yql-dq-tasks
 )
 target_sources(providers-dq-interface PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_full_result_writer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_integration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_task_preprocessor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/interface/yql_dq_task_transform.cpp

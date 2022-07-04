@@ -23,6 +23,7 @@ struct TFollowerInfo;
 struct TEvPrivate {
     enum EEv {
         EvRefreshFollowerState = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvReplicaMissing,
 
         EvEnd
     };
@@ -36,6 +37,14 @@ struct TEvPrivate {
         TEvRefreshFollowerState(const TIntrusivePtr<TFollowerInfo> &info)
             : FollowerInfo(info)
         {}
+    };
+
+    struct TEvReplicaMissing : public TEventLocal<TEvReplicaMissing, EvReplicaMissing> {
+        const bool Missing;
+
+        explicit TEvReplicaMissing(bool missing)
+            : Missing(missing)
+        { }
     };
 };
 
@@ -74,6 +83,7 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
 
     ui64 Signature;
     TInstant DowntimeFrom;
+    ui64 LastCookie = 0;
 
     void PassAway() override {
         if (Replica.NodeId() != SelfId().NodeId())
@@ -98,13 +108,16 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
     }
 
     void MakeRequest() {
-        Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, 0), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+        ui64 cookie = ++LastCookie;
+        Send(Replica, new TEvStateStorage::TEvReplicaLookup(Info->TabletID, cookie), IEventHandle::FlagTrackDelivery, IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateLookup);
     }
 
     void UpdateInfo() {
+        ui64 cookie = ++LastCookie;
         TAutoPtr<TEvStateStorage::TEvReplicaUpdate> req(new TEvStateStorage::TEvReplicaUpdate());
         req->Record.SetTabletID(Info->TabletID);
+        req->Record.SetCookie(cookie);
         ActorIdToProto(Info->Leader, req->Record.MutableProposedLeader());
         ActorIdToProto(Info->TabletLeader, req->Record.MutableProposedLeaderTablet());
         req->Record.SetProposedGeneration(Info->Generation);
@@ -112,13 +125,40 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
         req->Record.SetSignature(Signature);
         req->Record.SetIsGuardian(true);
 
-        Send(Replica, req.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+        Send(Replica, req.Release(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, cookie);
         Become(&TThis::StateUpdate);
     }
 
     void Gone() {
         Send(Guard, new TEvents::TEvGone());
         PassAway();
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Cookie == LastCookie) {
+            // We could not deliver the last message, report to guardian that
+            // this replica is missing. We don't do anything else, as this
+            // error is assumed permanent until we disconnect, in which case
+            // we assume the target node may have been restarted and
+            // reconfigured.
+            Send(Guard, new TEvPrivate::TEvReplicaMissing(true));
+        }
+    }
+
+    void HandleThenSomeSleep(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        if (ev->Cookie == LastCookie) {
+            ++LastCookie;
+            Send(Guard, new TEvPrivate::TEvReplicaMissing(false));
+            SomeSleep();
+        }
+    }
+
+    void HandleThenRequestInfo(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        if (ev->Cookie == LastCookie) {
+            ++LastCookie;
+            Send(Guard, new TEvPrivate::TEvReplicaMissing(false));
+            RequestInfo();
+        }
     }
 
     void SomeSleep() {
@@ -139,6 +179,11 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
 
     void Handle(TEvStateStorage::TEvReplicaInfo::TPtr &ev) {
         const auto &record = ev->Get()->Record;
+        if (record.GetCookie() && record.GetCookie() != LastCookie) {
+            // Ignore outdated results
+            return;
+        }
+
         const auto status = record.GetStatus();
         Signature = record.GetSignature();
 
@@ -170,6 +215,7 @@ class TReplicaGuardian : public TActorBootstrapped<TReplicaGuardian> {
             Y_FAIL();
         }
     }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_REPLICA_GUARDIAN;
@@ -193,8 +239,8 @@ public:
             cFunc(TEvStateStorage::TEvReplicaProbeConnected::EventType, MakeRequest);
             cFunc(TEvStateStorage::TEvReplicaProbeDisconnected::EventType, Gone);
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
-            cFunc(TEvents::TEvUndelivered::EventType, SomeSleep);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -203,8 +249,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
-            cFunc(TEvents::TEvUndelivered::EventType, RequestInfo);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, RequestInfo);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenRequestInfo);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -221,8 +267,8 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
-            cFunc(TEvents::TEvUndelivered::EventType, SomeSleep);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, HandleThenSomeSleep);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -234,6 +280,7 @@ class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
     const TActorId Guard;
 
     TInstant DowntimeFrom;
+    ui64 LastCookie = 0;
 
     void RefreshInfo(TEvPrivate::TEvRefreshFollowerState::TPtr &ev) {
         Info = ev->Get()->FollowerInfo;
@@ -255,11 +302,32 @@ class TFollowerGuardian : public TActorBootstrapped<TFollowerGuardian> {
     }
 
     void MakeRequest() {
+        ui64 cookie = ++LastCookie;
         Send(
             Replica,
             new TEvStateStorage::TEvReplicaRegFollower(Info->TabletID, Info->Follower, Info->Tablet, Info->IsCandidate),
-            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession);
+            IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession,
+            cookie);
         Become(&TThis::StateCalm);
+    }
+
+    void Handle(TEvents::TEvUndelivered::TPtr& ev) {
+        if (ev->Cookie == LastCookie) {
+            // We could not deliver the last message, report to guardian that
+            // this replica is missing. We don't do anything else, as this
+            // error is assumed permanent until we disconnect, in which case
+            // we assume the target node may have been restarted and
+            // reconfigured.
+            Send(Guard, new TEvPrivate::TEvReplicaMissing(true));
+        }
+    }
+
+    void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
+        if (ev->Cookie == LastCookie) {
+            ++LastCookie;
+            Send(Guard, new TEvPrivate::TEvReplicaMissing(false));
+            SomeSleep();
+        }
     }
 
     void SomeSleep() {
@@ -315,8 +383,8 @@ public:
             hFunc(TEvPrivate::TEvRefreshFollowerState, UpdateInfo);
             cFunc(TEvStateStorage::TEvReplicaProbeConnected::EventType, MakeRequest);
             cFunc(TEvStateStorage::TEvReplicaProbeDisconnected::EventType, Gone);
-            cFunc(TEvents::TEvUndelivered::EventType, SomeSleep);
-            cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, SomeSleep);
+            hFunc(TEvents::TEvUndelivered, Handle);
+            hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
             cFunc(TEvTablet::TEvPing::EventType, Ping);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, Gone);
@@ -340,6 +408,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
     TIntrusivePtr<TFollowerInfo> FollowerInfo;
 
     TVector<std::pair<TActorId, TActorId>> ReplicaGuardians; // replica -> guardian, position dependant so vector
+    THashSet<TActorId> MissingReplicas;
     ui32 ReplicasOnlineThreshold;
 
     THolder<TFollowerTracker> FollowerTracker;
@@ -406,23 +475,42 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         Y_FAIL("must not happens, guardian must be created over active tablet");
     }
 
-    bool ReplicaDown(TActorId guardian) {
+    ui32 CountOnlineReplicas() const {
         ui32 replicasOnline = 0;
+
+        for (auto& pr : ReplicaGuardians) {
+            if (pr.second && !MissingReplicas.contains(pr.second)) {
+                ++replicasOnline;
+            }
+        }
+
+        return replicasOnline;
+    }
+
+    bool ValidateOnlineReplicasOrDie() {
+        ui32 replicasOnline = CountOnlineReplicas();
+
+        if (replicasOnline == ReplicasOnlineThreshold) {
+            Send(Launcher(), new TEvTablet::TEvDemoted(true));
+            HandlePoison();
+            return false;
+        }
+
+        return true;
+    }
+
+    bool ReplicaDown(TActorId guardian) {
         bool ret = false;
 
         for (auto it = ReplicaGuardians.begin(), end = ReplicaGuardians.end(); it != end; ++it) {
             if (it->second == guardian) {
                 it->second = TActorId();
                 ret = true;
-            } else if (it->second) {
-                ++replicasOnline;
+                break;
             }
         }
 
-        if (replicasOnline == ReplicasOnlineThreshold) {
-            Send(Launcher(), new TEvTablet::TEvDemoted(true));
-            HandlePoison();
-
+        if (ret && !ValidateOnlineReplicasOrDie()) {
             // we are dead now
             return false;
         }
@@ -456,6 +544,17 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
         if (ReplicaDown(ev->Sender)) {
             const ui64 rndDelay = AppData()->RandomProvider->GenRand() % 150;
             SendResolveRequest(TDuration::MilliSeconds(150 + rndDelay));
+        }
+    }
+
+    void Handle(TEvPrivate::TEvReplicaMissing::TPtr &ev) {
+        auto* msg = ev->Get();
+
+        if (msg->Missing) {
+            MissingReplicas.insert(ev->Sender);
+            ValidateOnlineReplicasOrDie();
+        } else {
+            MissingReplicas.erase(ev->Sender);
         }
     }
 
@@ -525,6 +624,7 @@ class TTabletGuardian : public TActorBootstrapped<TTabletGuardian> {
             Send(guardian, new TEvPrivate::TEvRefreshFollowerState(FollowerInfo));
         }
     }
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::SS_TABLET_GUARDIAN;
@@ -551,6 +651,7 @@ public:
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvents::TEvGone, HandleGoneResolve);
+            hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
         }
@@ -563,6 +664,7 @@ public:
             hFunc(TEvStateStorage::TEvReplicaInfo, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvents::TEvGone, HandleGoneCalm);
+            hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison);
             cFunc(TEvTablet::TEvTabletDead::EventType, HandlePoison);
         }

@@ -273,6 +273,20 @@ namespace {
 
     };
 
+    struct TEvPrivate {
+        enum EEv {
+            EvReplicaMissing = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+
+            EvEnd,
+        };
+
+        static_assert(EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TKikimrEvents::ES_PRIVATE)");
+
+        struct TEvReplicaMissing : public TEventLocal<TEvReplicaMissing, EvReplicaMissing> {
+            // empty
+        };
+    };
+
 } // anonymous
 
 template <typename TPath, typename TDerived>
@@ -339,6 +353,13 @@ class TReplicaSubscriber: public TMonitorableActor<TDerived> {
         this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
+    void Handle(TEvents::TEvUndelivered::TPtr&) {
+        // We notify parent that this replica is missing, but we stay alive
+        // until the node is disconnected, in which case we assume the node
+        // may reboot and actor is launched.
+        this->Send(Parent, new TEvPrivate::TEvReplicaMissing);
+    }
+
     void PassAway() override {
         if (Replica.NodeId() != this->SelfId().NodeId()) {
             this->Send(MakeInterconnectProxyId(Replica.NodeId()), new TEvents::TEvUnsubscribe());
@@ -393,11 +414,11 @@ public:
             hFunc(TSchemeBoardEvents::TEvNotify, Handle);
             hFunc(TSchemeBoardEvents::TEvSyncVersionRequest, Handle);
             hFunc(TSchemeBoardEvents::TEvSyncVersionResponse, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
 
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, PassAway);
-            cFunc(TEvents::TEvUndelivered::EventType, PassAway);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -436,8 +457,12 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
     }
 
     void Handle(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
-        CurrentSyncRequest = ev->Cookie;
-        this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
+        if (!ReplicaMissing) {
+            CurrentSyncRequest = ev->Cookie;
+            this->Send(ReplicaSubscriber, ev->Release().Release(), 0, ev->Cookie);
+        } else {
+            this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, ev->Cookie);
+        }
     }
 
     void HandleSleep(TSchemeBoardEvents::TEvSyncVersionRequest::TPtr& ev) {
@@ -474,20 +499,41 @@ class TSubscriberProxy: public TMonitorableActor<TDerived> {
         this->Send(ev->Sender, std::move(response), 0, ev->Cookie);
     }
 
-    void Handle(TEvents::TEvGone::TPtr& ev) {
-        if (ev->Sender != ReplicaSubscriber) {
-            return;
-        }
-
+    void OnReplicaFailure() {
         if (CurrentSyncRequest) {
             this->Send(Parent, new TSchemeBoardEvents::TEvSyncVersionResponse(0, true), 0, CurrentSyncRequest);
             CurrentSyncRequest = 0;
         }
 
-        ReplicaSubscriber = TActorId();
         this->Send(Parent, new TSchemeBoardEvents::TEvNotifyBuilder(Path, true));
+    }
+
+    void Handle(TEvents::TEvGone::TPtr& ev) {
+        if (ev->Sender != ReplicaSubscriber) {
+            return;
+        }
+
+        if (!ReplicaMissing) {
+            OnReplicaFailure();
+        }
+
+        ReplicaSubscriber = TActorId();
+        ReplicaMissing = false;
+
         this->Become(&TDerived::StateSleep, Delay, new TEvents::TEvWakeup());
         Delay = Min(Delay * 2, MaxDelay);
+    }
+
+    void Handle(TEvPrivate::TEvReplicaMissing::TPtr& ev) {
+        if (ev->Sender != ReplicaSubscriber) {
+            return;
+        }
+
+        if (!ReplicaMissing) {
+            OnReplicaFailure();
+
+            ReplicaMissing = true;
+        }
     }
 
     void PassAway() override {
@@ -545,6 +591,7 @@ public:
             hFunc(TSchemeBoardMonEvents::TEvInfoRequest, Handle);
 
             hFunc(TEvents::TEvGone, Handle);
+            hFunc(TEvPrivate::TEvReplicaMissing, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -572,6 +619,7 @@ private:
     TDuration Delay;
 
     ui64 CurrentSyncRequest;
+    bool ReplicaMissing = false;
 
     static constexpr TDuration DefaultDelay = TDuration::MilliSeconds(10);
     static constexpr TDuration MaxDelay = TDuration::Seconds(5);

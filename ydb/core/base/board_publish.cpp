@@ -60,7 +60,11 @@ public:
     {}
 
     void Bootstrap() {
-        Send(Replica, new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor), IEventHandle::FlagTrackDelivery | IEventHandle::FlagSubscribeOnSession, ++Round);
+        // Note: we don't track delivery, and instead treat undelivery as some
+        // form of silent "permanent" failure, waiting for disconnection. On
+        // disconnection we assume the node may be restarted with a new
+        // configuration and the actor become valid.
+        Send(Replica, new TEvStateStorage::TEvReplicaBoardPublish(Path, Payload, 0, true, PublishActor), IEventHandle::FlagSubscribeOnSession, ++Round);
 
         Become(&TThis::StatePublish);
     }
@@ -68,7 +72,6 @@ public:
     STATEFN(StatePublish) {
         switch (ev->GetTypeRewrite()) {
             cFunc(TEvents::TEvPoisonPill::EventType, Cleanup);
-            cFunc(TEvents::TEvUndelivered::EventType, NotAvailableUnsubscribe);
             cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, NotAvailable); // no cleanup on node disconnect
             cFunc(TEvStateStorage::TEvReplicaShutdown::EventType, NotAvailableUnsubscribe);
         }

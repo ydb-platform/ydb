@@ -25,3 +25,5 @@ items:
 # Footer
 - { name: Questions and answers,                 include: { mode: link, path: faq/toc_p.yaml } }
 - include: { mode: link, path: downloads/toc_p.yaml }
+- name: Public talks
+  href: public-talks.md

@@ -521,11 +521,11 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["yql_internal"] = &hasYqlInternal;
         bool hasPQ = services.empty();
         names["pq"] = &hasPQ;
-        bool hasPQv1 = false;
+        bool hasPQv1 = services.empty();
         names["pqv1"] = &hasPQv1;
         bool hasTopic = false;
-        names["topic"] = &hasTopic;
-        bool hasPQCD = false;
+        names["topic_service"] = &hasTopic;
+        bool hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;
         bool hasS3Internal = false;
         names["s3_internal"] = &hasS3Internal;

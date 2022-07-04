@@ -140,6 +140,16 @@ TFollowerGroup& TLeaderTabletInfo::AddFollowerGroup(TFollowerGroupId followerGro
     return followerGroup;
 }
 
+ui32 TLeaderTabletInfo::GetActualFollowerCount(TFollowerGroupId followerGroupId) const {
+    ui32 count = 0;
+    for (const auto& follower : Followers) {
+        if (follower.FollowerGroup.Id == followerGroupId) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 TActorId TLeaderTabletInfo::SetLockedToActor(const TActorId& actor, const TDuration& timeout) {
     TActorId previousOwner = LockedToActor;
     if (LockedToActor != actor) {

@@ -247,17 +247,11 @@ public:
 
     template <template <typename, typename...> class Cont, typename Type, typename... Types>
     static decltype(Type::Id) GenerateId(const Cont<Type, Types...>& items) {
-        decltype(Type::Id) id = 1;
-        bool retry;
-        do {
-            retry = false;
-            for (const auto& item : items) {
-                if (item.Id == id) {
-                    ++id;
-                    retry = true;
-                }
-            }
-        } while (retry);
+        decltype(Type::Id) id = 0;
+        for (const auto& item : items) {
+            id = std::max<decltype(Type::Id)>(id, item.Id);
+        }
+        ++id;
         return id;
     }
 
@@ -268,6 +262,7 @@ public:
     TFollowerTabletInfo& AddFollower(TFollowerGroup& followerGroup, TFollowerId followerId = 0);
     TFollowerGroupId GenerateFollowerGroupId() const;
     TFollowerGroup& AddFollowerGroup(TFollowerGroupId followerGroupId = 0);
+    ui32 GetActualFollowerCount(TFollowerGroupId followerGroupId) const;
 
     TFollowerGroup& GetFollowerGroup(TFollowerGroupId followerGroupId) {
         auto it = std::find(FollowerGroups.begin(), FollowerGroups.end(), followerGroupId);

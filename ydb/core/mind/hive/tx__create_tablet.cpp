@@ -274,7 +274,7 @@ public:
                     auto itFollowerGroup = tablet->FollowerGroups.begin();
                     for (const auto& srcFollowerGroup : FollowerGroups) {
                         TFollowerGroup& followerGroup = itFollowerGroup != tablet->FollowerGroups.end() ? *itFollowerGroup : tablet->AddFollowerGroup();
-                        ui32 oldFollowerCount = followerGroup.GetComputedFollowerCount(Self->GetDataCenters());
+                        ui32 oldFollowerCount = tablet->GetActualFollowerCount(followerGroup.Id);
                         followerGroup = srcFollowerGroup;
 
                         TVector<ui32> allowedDataCenters;
@@ -302,10 +302,17 @@ public:
                         }
 
                         for (ui32 i = followerGroup.GetComputedFollowerCount(Self->GetDataCenters()); i < oldFollowerCount; ++i) {
-                            TFollowerTabletInfo& follower = tablet->Followers.back();
+                            auto itFollower = tablet->Followers.rbegin();
+                            while (itFollower != tablet->Followers.rend() && itFollower->FollowerGroup.Id != followerGroup.Id) {
+                                ++itFollower;
+                            }
+                            if (itFollower == tablet->Followers.rend()) {
+                                break;
+                            }
+                            TFollowerTabletInfo& follower = *itFollower;
                             db.Table<Schema::TabletFollowerTablet>().Key(TabletId, follower.Id).Delete();
                             follower.InitiateStop(SideEffects);
-                            tablet->Followers.pop_back();
+                            tablet->Followers.erase(std::prev(itFollower.base()));
                         }
                         ++itFollowerGroup;
                     }

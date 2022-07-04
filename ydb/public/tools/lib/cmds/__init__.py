@@ -338,7 +338,10 @@ def deploy(arguments):
 
 
 def _stop_instances(arguments):
-    info = Recipe(arguments).read_metafile()
+    recipe = Recipe(arguments)
+    if not os.path.exists(recipe.metafile_path()):
+        return
+    info = recipe.read_metafile()
     for node_id, node_meta in info['nodes'].items():
         pid = node_meta['pid']
         try:
@@ -356,7 +359,10 @@ def cleanup_working_dir(arguments):
 
 
 def _cleanup_working_dir(arguments):
-    info = Recipe(arguments).read_metafile()
+    recipe = Recipe(arguments)
+    if not os.path.exists(recipe.metafile_path()):
+        return
+    info = recipe.read_metafile()
     for node_id, node_meta in info['nodes'].items():
         pdisks = node_meta['pdisks']
         for pdisk in pdisks:
@@ -421,13 +427,15 @@ def produce_arguments(args):
     parser.add_argument("--ydb-working-dir", action="store")
     parser.add_argument("--debug-logging", nargs='*')
     parser.add_argument("--enable-pq", action='store_true', default=False)
+    parser.add_argument("--fixed-ports", action='store_true', default=False)
     parser.add_argument("--pq-client-service-type", action='append', default=[])
     parser.add_argument("--enable-datastreams", action='store_true', default=False)
     parser.add_argument("--enable-pqcd", action='store_true', default=False)
-    parsed, _ = parser.parse_known_args()
+    parsed, _ = parser.parse_known_args(args)
     arguments = EmptyArguments()
     arguments.suppress_version_check = parsed.suppress_version_check
     arguments.ydb_working_dir = parsed.ydb_working_dir
+    arguments.fixed_ports = parsed.fixed_ports
     if parsed.use_packages is not None:
         arguments.use_packages = parsed.use_packages
     if parsed.debug_logging:

@@ -299,6 +299,8 @@ Y_UNIT_TEST(SingleFilePart) {
 }
 
 Y_UNIT_TEST(ReadError) {
+    return;
+
     TTestBasicRuntime runtime{1, false};
     runtime.Initialize(TAppPrepare().Unwrap());
     SetupLogs(runtime);
@@ -368,6 +370,10 @@ struct THttpRequest : NMonitoring::IHttpRequest {
 
     const THttpHeaders& GetHeaders() const override {
         return HttpHeaders;
+    }
+
+    TString GetRemoteAddr() const override {
+        return TString();
     }
 };
 

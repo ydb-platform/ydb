@@ -1803,6 +1803,9 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
 
                 PartitionConfig {
                     FollowerCount: %d
+                    PartitioningPolicy {
+                        MinPartitionsCount: 0
+                    }
                     CompactionPolicy {
                       InMemSizeToSnapshot: 100000
                       InMemStepsToSnapshot: 2

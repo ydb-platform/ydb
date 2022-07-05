@@ -37,6 +37,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 Columns { Name: "Value"      Type: "Utf8"}
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
@@ -120,6 +125,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
@@ -167,6 +177,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                     SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
                                     SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } }}}
                                     SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } }}}
+                                    PartitionConfig {
+                                        PartitioningPolicy {
+                                            MinPartitionsCount: 0
+                                        }
+                                    }
                                     )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
@@ -221,6 +236,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Table", true),
@@ -390,6 +410,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 Columns { Name: "Value"      Type: "Utf8"}
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "Jack" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -428,6 +453,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "C" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -500,6 +530,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "B" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
@@ -591,6 +626,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 Columns { Name: "Value"      Type: "Utf8"}
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
                 pathVersion = TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -649,6 +689,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 Columns { Name: "Value"      Type: "Utf8"}
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -769,6 +814,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 Columns { Name: "Value"      Type: "Utf8"}
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -860,6 +910,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 Columns { Name: "Value"      Type: "Utf8"}
                                 KeyColumnNames: ["key1", "key2"]
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "A" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -999,6 +1054,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "AAAA" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "CCCC" } }}}
                                 SplitBoundary { KeyPrefix { Tuple { Optional { Text: "DDDD" } }}}
+                                PartitionConfig {
+                                    PartitioningPolicy {
+                                        MinPartitionsCount: 0
+                                    }
+                                }
                                 )");
 
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);

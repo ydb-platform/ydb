@@ -550,6 +550,11 @@ public:
         }
         schema.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
+        if (!schema.GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount()) {
+            // This is the expected partitions count, see below
+            schema.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMinPartitionsCount(shardsToCreate);
+        }
+
         const NScheme::TTypeRegistry* typeRegistry = AppData()->TypeRegistry;
         const TSchemeLimits& limits = domainInfo->GetSchemeLimits();
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry, limits, *domainInfo, errStr, LocalSequences);

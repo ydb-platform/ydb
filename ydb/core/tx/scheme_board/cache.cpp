@@ -1413,10 +1413,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             case NKikimrSchemeOp::EPathTypeCdcStream:
                 Kind = TNavigate::KindCdcStream;
                 IsPrivatePath = CalcPathIsPrivate(entryDesc.GetPathType(), entryDesc.GetPathSubType());
-                FillInfo(Kind, CdcStreamInfo, std::move(*pathDesc.MutableCdcStreamDescription()));
-                if (CdcStreamInfo->Description.HasPathId()) {
-                    const auto& pathId = CdcStreamInfo->Description.GetPathId();
-                    CdcStreamInfo->PathId = TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
+                if (Created) {
+                    FillInfo(Kind, CdcStreamInfo, std::move(*pathDesc.MutableCdcStreamDescription()));
+                    if (CdcStreamInfo->Description.HasPathId()) {
+                        const auto& pathId = CdcStreamInfo->Description.GetPathId();
+                        CdcStreamInfo->PathId = TPathId(pathId.GetOwnerId(), pathId.GetLocalId());
+                    }
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeSequence:

@@ -228,6 +228,40 @@ Y_UNIT_TEST_SUITE(KqpService) {
          UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST_TWIN(PatternCache, UseLLVM) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto driver = kikimr.GetDriver();
+
+        size_t InFlight = 3;
+        NPar::LocalExecutor().RunAdditionalThreads(InFlight);
+        NPar::LocalExecutor().ExecRange([&driver](int /*id*/) {
+            NYdb::NTable::TTableClient db(driver);
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            for (ui32 i = 0; i < 100; ++i) {
+                ui64 total = 100500;
+                TString request = (TStringBuilder() << R"_(
+                    $data = AsList(
+                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << i / 5 << R"_(u AS Value),
+                        AsStruct("aaa" AS Key,)_" << total - 2 * (i / 5) << R"_(u AS Value)
+                    );
+
+                    SELECT Key, SUM(Value) as Sum FROM AS_TABLE($data) GROUP BY Key;
+                )_");
+
+                auto result = session.ExecuteDataQuery(request, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
+                AssertSuccessResult(result);
+
+                CompareYson(R"(
+                    [
+                        ["aaa";100500u]
+                    ]
+                )", FormatResultSetYson(result.GetResultSet(0)));
+            }
+        }, 0, InFlight, NPar::TLocalExecutor::WAIT_COMPLETE | NPar::TLocalExecutor::MED_PRIORITY);
+    }
 }
 
 } // namspace NKqp

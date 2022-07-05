@@ -3222,6 +3222,58 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
                 rollbackResult.GetIssues().ToString());
         }
     }
+
+    Y_UNIT_TEST(PagingNoPredicateExtract) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+            PRAGMA kikimr.OptEnablePredicateExtract = 'false';
+
+            DECLARE $app AS Utf8;
+            DECLARE $last_ts AS Int64;
+            DECLARE $last_host AS Utf8;
+
+            $part1 = (
+                SELECT * FROM Logs
+                WHERE App = $app AND Ts = $last_ts AND Host > $last_host
+                ORDER BY App, Ts, Host
+                LIMIT 10
+            );
+
+            $part2 = (
+                SELECT * FROM Logs
+                WHERE App = $app AND Ts > $last_ts
+                ORDER BY App, Ts, Host
+                LIMIT 10
+            );
+
+            $union = (
+                SELECT * FROM $part1
+                UNION ALL
+                SELECT * FROM $part2
+            );
+
+            SELECT Ts, Host, Message
+            FROM $union
+            ORDER BY Ts, Host
+            LIMIT 10;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Cerr << result.GetPlan() << Endl;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+        auto reads = plan["tables"][0]["reads"].GetArraySafe();
+        for (auto& read : reads) {
+            UNIT_ASSERT(read.Has("limit"));
+            UNIT_ASSERT_VALUES_EQUAL(FromString<i32>(read["limit"].GetString()), 10);
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

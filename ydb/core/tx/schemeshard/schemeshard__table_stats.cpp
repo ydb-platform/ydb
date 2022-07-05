@@ -178,7 +178,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     bool isDataShard = Self->Tables.contains(pathId);
     bool isOlapStore = Self->OlapStores.contains(pathId);
     if (!isDataShard && !isOlapStore) {
-        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
+        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unexpected stats from shard " << datashardId);
         return true;
     }
 

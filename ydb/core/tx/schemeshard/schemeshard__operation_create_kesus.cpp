@@ -401,7 +401,7 @@ public:
 
         const ui32 kesusProfileId = 0;
         TChannelsBindings kesusChannelsBindings;
-        if (!context.SS->ResolveTabletChannels(kesusProfileId, dstPath.DomainId(), kesusChannelsBindings)) {
+        if (!context.SS->ResolveTabletChannels(kesusProfileId, dstPath.GetPathIdForDomain(), kesusChannelsBindings)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
                         "Unable to construct channel binding for coordination node with the storage pool");
             return result;

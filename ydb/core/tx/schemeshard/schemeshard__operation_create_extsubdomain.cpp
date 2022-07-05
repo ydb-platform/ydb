@@ -184,10 +184,10 @@ public:
             }
         }
 
-        auto domainId = parentPath.DomainId();
-        Y_VERIFY(context.SS->PathsById.contains(domainId));
-        Y_VERIFY(context.SS->SubDomains.contains(domainId));
-        if (domainId != context.SS->RootPathId()) {
+        auto domainPathId = parentPath.GetPathIdForDomain();
+        Y_VERIFY(context.SS->PathsById.contains(domainPathId));
+        Y_VERIFY(context.SS->SubDomains.contains(domainPathId));
+        if (domainPathId != context.SS->RootPathId()) {
             result->SetError(NKikimrScheme::StatusNameConflict, "Nested subdomains is forbidden");
             return result;
         }

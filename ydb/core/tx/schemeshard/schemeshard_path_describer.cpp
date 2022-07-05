@@ -567,7 +567,7 @@ void TPathDescriber::DescribePathVersion(const TPath& path) {
 }
 
 void TPathDescriber::DescribeDomain(TPathElement::TPtr pathEl) {
-    TPathId domainId = Self->ResolveDomainId(pathEl);
+    TPathId domainId = Self->ResolvePathIdForDomain(pathEl);
 
     TPathElement::TPtr domainEl = Self->PathsById.at(domainId);
     Y_VERIFY(domainEl);
@@ -596,17 +596,13 @@ void TPathDescriber::DescribeDomainRoot(TPathElement::TPtr pathEl) {
 
     NKikimrSubDomains::TDomainDescription * entry = Result->Record.MutablePathDescription()->MutableDomainDescription();
 
-    NKikimrSubDomains::TDomainKey *key = entry->MutableDomainKey();
     entry->SetSchemeShardId_Depricated(Self->ParentDomainId.OwnerId);
     entry->SetPathId_Depricated(Self->ParentDomainId.LocalPathId);
 
-    if (pathEl->IsRoot()) {
-        key->SetSchemeShard(Self->ParentDomainId.OwnerId);
-        key->SetPathId(Self->ParentDomainId.LocalPathId);
-    } else {
-        key->SetSchemeShard(pathEl->PathId.OwnerId);
-        key->SetPathId(pathEl->PathId.LocalPathId);
-    }
+    auto domainKey = Self->GetDomainKey(pathEl->PathId);
+    NKikimrSubDomains::TDomainKey *key = entry->MutableDomainKey();
+    key->SetSchemeShard(domainKey.OwnerId);
+    key->SetPathId(domainKey.LocalPathId);
 
     entry->MutableProcessingParams()->CopyFrom(subDomainInfo->GetProcessingParams());
 

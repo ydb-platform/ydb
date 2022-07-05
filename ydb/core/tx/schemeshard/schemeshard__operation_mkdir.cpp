@@ -227,7 +227,7 @@ public:
         context.MemChanges.GrabNewPath(context.SS, allocatedPathId);
         context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabDomain(context.SS, parentPath.DomainId());
+        context.MemChanges.GrabDomain(context.SS, parentPath.GetPathIdForDomain());
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(parentPath.Base()->PathId);

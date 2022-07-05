@@ -641,7 +641,7 @@ public:
 
         // Construct channels bindings for columnshards
         TChannelsBindings channelsBindings;
-        if (!context.SS->GetOlapChannelsBindings(dstPath.DomainId(), storeInfo->Description.GetStorageConfig(), channelsBindings, errStr)) {
+        if (!context.SS->GetOlapChannelsBindings(dstPath.GetPathIdForDomain(), storeInfo->Description.GetStorageConfig(), channelsBindings, errStr)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }

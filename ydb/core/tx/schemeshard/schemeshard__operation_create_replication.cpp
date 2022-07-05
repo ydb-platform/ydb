@@ -291,7 +291,7 @@ public:
             }
         }
 
-        const auto domainId = parentPath.DomainId();
+        const auto domainPathId = parentPath.GetPathIdForDomain();
         auto domainInfo = parentPath.DomainInfo();
         const ui64 shardsToCreate = domainInfo->GetReplicationControllers().empty();
 
@@ -343,7 +343,7 @@ public:
 
         TChannelsBindings channelsBindings;
         if (shardsToCreate) {
-            if (!context.SS->ResolveTabletChannels(0, domainId, channelsBindings)) {
+            if (!context.SS->ResolveTabletChannels(0, domainPathId, channelsBindings)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                     "Unable to construct channel binding for replication controller with the storage pool");
                 return result;
@@ -367,15 +367,15 @@ public:
 
         if (shardsToCreate) {
             const auto shardIdx = context.SS->RegisterShardInfo(
-                TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), domainId)
+                TShardInfo::ReplicationControllerInfo(OperationId.GetTxId(), domainPathId)
                     .WithBindedChannels(channelsBindings));
             context.SS->TabletCounters->Simple()[COUNTER_REPLICATION_CONTROLLER_COUNT].Add(1);
 
             txState.Shards.emplace_back(shardIdx, ETabletType::ReplicationController, TTxState::CreateParts);
             txState.State = TTxState::CreateParts;
 
-            Y_VERIFY(context.SS->PathsById.contains(domainId));
-            context.SS->PathsById.at(domainId)->IncShardsInside();
+            Y_VERIFY(context.SS->PathsById.contains(domainPathId));
+            context.SS->PathsById.at(domainPathId)->IncShardsInside();
 
             domainInfo->AddInternalShard(shardIdx);
             domainInfo->AddReplicationController(shardIdx);
@@ -417,7 +417,7 @@ public:
             const TShardInfo& shardInfo = context.SS->ShardInfos.at(shard.Idx);
 
             if (shard.Operation == TTxState::CreateParts) {
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainId, OperationId.GetTxId(), shard.TabletType);
+                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
                 context.SS->PersistChannelsBinding(db, shard.Idx, shardInfo.BindedChannels);
             }
         }

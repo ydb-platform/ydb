@@ -49,7 +49,7 @@ public:
                 TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
                 );
         }
-        const TPathId domainId = database.DomainId();
+        const TPathId domainPathId = database.GetPathIdForDomain();
 
         ui64 page = DefaultPage;
         if (record.GetPageToken() && !TryFromString(record.GetPageToken(), page)) {
@@ -66,7 +66,7 @@ public:
         auto it = Self->IndexBuilds.begin();
         ui64 skip = (page - 1) * pageSize;
         while ((it != Self->IndexBuilds.end()) && skip) {
-            if (it->second->DomainPathId == domainId) {
+            if (it->second->DomainPathId == domainPathId) {
                 --skip;
             }
             ++it;
@@ -77,7 +77,7 @@ public:
 
         ui64 size = 0;
         while ((it != Self->IndexBuilds.end()) && size < pageSize) {
-            if (it->second->DomainPathId == domainId) {
+            if (it->second->DomainPathId == domainPathId) {
                 Fill(*respRecord.MutableEntries()->Add(), it->second);
                 ++size;
             }

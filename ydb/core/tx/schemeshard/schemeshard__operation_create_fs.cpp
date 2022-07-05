@@ -405,7 +405,7 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
     TChannelsBindings storeChannelBindings;
     const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
         storePoolKinds,
-        dstPath.DomainId(),
+        dstPath.GetPathIdForDomain(),
         storeChannelBindings
     );
 

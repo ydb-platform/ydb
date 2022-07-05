@@ -538,7 +538,7 @@ bool TAlterFileStore::ProcessChannelProfiles(
 
     const auto storeChannelsResolved = context.SS->ResolveChannelsByPoolKinds(
         partitionPoolKinds,
-        path.DomainId(),
+        path.GetPathIdForDomain(),
         storeChannelsBinding);
 
     if (!storeChannelsResolved) {

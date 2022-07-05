@@ -130,7 +130,7 @@ const TPath::TChecker &TPath::TChecker::NotUnderDomainUpgrade(TPath::TChecker::E
     Failed = true;
     Status = status;
     Explain << "path is being upgraded as part of subdomain right now"
-            << ", domainId: " << Path.DomainId();
+            << ", domainId: " << Path.GetPathIdForDomain();
     return *this;
 }
 
@@ -685,7 +685,7 @@ const TPath::TChecker& TPath::TChecker::IsTheSameDomain(const TPath &another, TP
         return *this;
     }
 
-    if (Path.DomainId() == another.DomainId()) {
+    if (Path.GetPathIdForDomain() == another.GetPathIdForDomain()) {
         return *this;
     }
 
@@ -1154,11 +1154,17 @@ TSubDomainInfo::TPtr TPath::DomainInfo() const {
     return SS->ResolveDomainInfo(Elements.back());
 }
 
-TPathId TPath::DomainId() const {
+TPathId TPath::GetPathIdForDomain() const {
     Y_VERIFY(!IsEmpty());
     Y_VERIFY(Elements.size());
 
-    return SS->ResolveDomainId(Elements.back());
+    return SS->ResolvePathIdForDomain(Elements.back());
+}
+
+TPathId TPath::GetDomainKey() const {
+    Y_VERIFY(IsResolved());
+
+    return SS->GetDomainKey(Elements.back());
 }
 
 bool TPath::IsDomain() const {
@@ -1390,7 +1396,7 @@ bool TPath::IsUnderDomainUpgrade() const {
         return false;
     }
 
-    return SS->PathsById.at(DomainId())->PathState == NKikimrSchemeOp::EPathState::EPathStateUpgrade;
+    return SS->PathsById.at(GetPathIdForDomain())->PathState == NKikimrSchemeOp::EPathState::EPathStateUpgrade;
 }
 
 bool TPath::IsUnderCopying() const {

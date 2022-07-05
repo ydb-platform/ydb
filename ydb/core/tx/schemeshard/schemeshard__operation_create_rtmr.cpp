@@ -325,7 +325,7 @@ public:
         }
 
         TChannelsBindings channelsBinding;
-        if (!context.SS->ResolveRtmrChannels(dstPath.DomainId(), channelsBinding)) {
+        if (!context.SS->ResolveRtmrChannels(dstPath.GetPathIdForDomain(), channelsBinding)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
             return result;
         }

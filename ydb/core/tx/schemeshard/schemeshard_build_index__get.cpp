@@ -44,7 +44,7 @@ public:
                 TStringBuilder() << "Database <" << record.GetDatabaseName() << "> not found"
                 );
         }
-        const TPathId domainId = database.DomainId();
+        const TPathId domainPathId = database.GetPathIdForDomain();
 
         TIndexBuildId indexBuildId = TIndexBuildId(record.GetIndexBuildId());
 
@@ -57,7 +57,7 @@ public:
         }
 
         TIndexBuildInfo::TPtr indexBuildInfo = Self->IndexBuilds.at(indexBuildId);
-        if (indexBuildInfo->DomainPathId != domainId) {
+        if (indexBuildInfo->DomainPathId != domainPathId) {
             return Reply(
                 std::move(response),
                 Ydb::StatusIds::BAD_REQUEST,

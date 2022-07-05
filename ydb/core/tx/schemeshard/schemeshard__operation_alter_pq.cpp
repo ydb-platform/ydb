@@ -584,7 +584,7 @@ public:
         // a tablet with local db which doesn't use extra channels in any way.
         const ui32 tabletProfileId = 0;
         TChannelsBindings tabletChannelsBinding;
-        if (!context.SS->ResolvePqChannels(tabletProfileId, path.DomainId(), tabletChannelsBinding)) {
+        if (!context.SS->ResolvePqChannels(tabletProfileId, path.GetPathIdForDomain(), tabletChannelsBinding)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter,
                              "Unable to construct channel binding for PQ with the storage pool");
             return result;
@@ -606,7 +606,7 @@ public:
 
             const auto resolved = context.SS->ResolveChannelsByPoolKinds(
                 partitionPoolKinds,
-                path.DomainId(),
+                path.GetPathIdForDomain(),
                 pqChannelsBinding);
             if (!resolved) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,

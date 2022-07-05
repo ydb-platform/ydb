@@ -356,7 +356,7 @@ public:
             }
         }
 
-        auto domainId = parentPath.DomainId();
+        auto domainPathId = parentPath.GetPathIdForDomain();
         auto domainInfo = parentPath.DomainInfo();
 
         // TODO: maybe select from several shards
@@ -428,7 +428,7 @@ public:
         const ui32 profileId = 0;
         TChannelsBindings channelsBindings;
         if (shardsToCreate) {
-            if (!context.SS->ResolveTabletChannels(profileId, dstPath.DomainId(), channelsBindings)) {
+            if (!context.SS->ResolveTabletChannels(profileId, dstPath.GetPathIdForDomain(), channelsBindings)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter,
                             "Unable to construct channel binding for sequence shard with the storage pool");
                 return result;
@@ -459,12 +459,12 @@ public:
 
         if (shardsToCreate) {
             sequenceShard = context.SS->RegisterShardInfo(
-                TShardInfo::SequenceShardInfo(OperationId.GetTxId(), domainId)
+                TShardInfo::SequenceShardInfo(OperationId.GetTxId(), domainPathId)
                     .WithBindedChannels(channelsBindings));
             context.SS->TabletCounters->Simple()[COUNTER_SEQUENCESHARD_COUNT].Add(1);
             txState.Shards.emplace_back(sequenceShard, ETabletType::SequenceShard, TTxState::CreateParts);
             txState.State = TTxState::CreateParts;
-            context.SS->PathsById.at(domainId)->IncShardsInside();
+            context.SS->PathsById.at(domainPathId)->IncShardsInside();
             domainInfo->AddInternalShard(sequenceShard);
             domainInfo->AddSequenceShard(sequenceShard);
         } else {
@@ -506,7 +506,7 @@ public:
         for (auto shard : txState.Shards) {
             if (shard.Operation == TTxState::CreateParts) {
                 context.SS->PersistChannelsBinding(db, shard.Idx, context.SS->ShardInfos.at(shard.Idx).BindedChannels);
-                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainId, OperationId.GetTxId(), shard.TabletType);
+                context.SS->PersistShardMapping(db, shard.Idx, InvalidTabletId, domainPathId, OperationId.GetTxId(), shard.TabletType);
             }
         }
 

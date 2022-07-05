@@ -233,7 +233,7 @@ public:
         context.MemChanges.GrabNewPath(context.SS, pathId);
         context.MemChanges.GrabPath(context.SS, tablePath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabDomain(context.SS, streamPath.DomainId());
+        context.MemChanges.GrabDomain(context.SS, streamPath.GetPathIdForDomain());
         context.MemChanges.GrabNewCdcStream(context.SS, pathId);
 
         context.DbChanges.PersistPath(pathId);

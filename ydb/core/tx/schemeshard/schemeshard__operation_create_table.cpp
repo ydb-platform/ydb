@@ -171,7 +171,7 @@ public:
 
         txState->ClearShardsInProgress();
 
-        const ui64 subDomainPathId = context.SS->ResolveDomainId(txState->TargetPathId).LocalPathId;
+        const ui64 subDomainPathId = context.SS->ResolvePathIdForDomain(txState->TargetPathId).LocalPathId;
 
         for (ui32 i = 0; i < txState->Shards.size(); ++i) {
             TShardIdx shardIdx = txState->Shards[i].Idx;
@@ -526,9 +526,9 @@ public:
         auto domainInfo = parentPath.DomainInfo();
         bool transactionSupport = domainInfo->IsSupportTransactions();
         if (domainInfo->GetAlter()) {
-            TPathId domainId = dstPath.DomainId();
-            Y_VERIFY(context.SS->PathsById.contains(domainId));
-            TPathElement::TPtr domain = context.SS->PathsById.at(domainId);
+            TPathId domainPathId = dstPath.GetPathIdForDomain();
+            Y_VERIFY(context.SS->PathsById.contains(domainPathId));
+            TPathElement::TPtr domain = context.SS->PathsById.at(domainPathId);
             Y_VERIFY(domain->PlannedToCreate() || domain->HasActiveChanges());
 
             transactionSupport |= domainInfo->GetAlter()->IsSupportTransactions();
@@ -583,7 +583,7 @@ public:
             TVector<TStorageRoom> storageRooms;
             THashMap<ui32, ui32> familyRooms;
             storageRooms.emplace_back(0);
-            if (!context.SS->GetBindingsRooms(dstPath.DomainId(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
+            if (!context.SS->GetBindingsRooms(dstPath.GetPathIdForDomain(), tableInfo->PartitionConfig(), storageRooms, familyRooms, channelsBinding, errStr)) {
                 errStr = TString("database doesn't have required storage pools to create tablet with storage config, details: ") + errStr;
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
@@ -599,8 +599,8 @@ public:
                 protoFamily->SetId(familyRoom.first);
                 protoFamily->SetRoom(familyRoom.second);
             }
-        } else if (context.SS->IsCompatibleChannelProfileLogic(dstPath.DomainId(), tableInfo)) {
-            if (!context.SS->GetChannelsBindings(dstPath.DomainId(), tableInfo, channelsBinding, errStr)) {
+        } else if (context.SS->IsCompatibleChannelProfileLogic(dstPath.GetPathIdForDomain(), tableInfo)) {
+            if (!context.SS->GetChannelsBindings(dstPath.GetPathIdForDomain(), tableInfo, channelsBinding, errStr)) {
                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                 return result;
             }

@@ -672,7 +672,7 @@ public:
 
         THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);
 
-        TPathId domainId = context.SS->ResolveDomainId(targetPath);
+        TPathId domainId = context.SS->ResolvePathIdForDomain(targetPath);
 
         TPathElement::TPtr domainEl = context.SS->PathsById.at(domainId);
         auto objectDomain = ev->Record.MutableObjectDomain();
@@ -1381,7 +1381,7 @@ public:
         volume->FinishAlter();
         auto newVolumeSpace = volume->GetVolumeSpace();
         // Decrease in occupied space is appled on tx finish
-        auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path));
+        auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
         Y_VERIFY(domainDir);
         domainDir->ChangeVolumeSpaceCommit(newVolumeSpace, oldVolumeSpace);
 

@@ -42,9 +42,9 @@ public:
             return true;
         }
 
-        auto domainId = path.DomainId();
+        auto domainPathId = path.GetPathIdForDomain();
         Result = MakeHolder<TEvSchemeShard::TEvFindTabletSubDomainPathIdResult>(
-            tabletId, domainId.OwnerId, domainId.LocalPathId);
+            tabletId, domainPathId.OwnerId, domainPathId.LocalPathId);
         return true;
     }
 

@@ -90,26 +90,26 @@ public:
 
     static void Bill(TOperationId operationId, const TPathId& pathId, const TShardIdx& shardIdx, ui64 ru, TOperationContext& context) {
         const auto path = TPath::Init(pathId, context.SS);
-        const auto domainId = path.DomainId();
-        const auto domain = TPath::Init(domainId, context.SS);
+        const auto pathIdForDomainId = path.GetPathIdForDomain();
+        const auto domainPath = TPath::Init(pathIdForDomainId, context.SS);
 
         auto unableToMakeABill = [&](const TStringBuf reason) {
             LOG_WARN_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to make a bill"
                 << ": kind# " << TKind::Name()
                 << ", opId# " << operationId
                 << ", reason# " << reason
-                << ", domain# " << domain.PathString()
-                << ", domainId# " << domainId
+                << ", domain# " << domainPath.PathString()
+                << ", domainPathId# " << pathIdForDomainId
                 << ", IsDomainSchemeShard: " << context.SS->IsDomainSchemeShard
                 << ", ParentDomainId: " << context.SS->ParentDomainId
-                << ", ResourcesDomainId: " << domain.DomainInfo()->GetResourcesDomainId());
+                << ", ResourcesDomainId: " << domainPath.DomainInfo()->GetResourcesDomainId());
         };
 
-        if (!context.SS->IsServerlessDomain(domain)) {
+        if (!context.SS->IsServerlessDomain(domainPath)) {
             return unableToMakeABill("domain is not a serverless db");
         }
 
-        const auto& attrs = domain.Base()->UserAttrs->Attrs;
+        const auto& attrs = domainPath.Base()->UserAttrs->Attrs;
         if (!attrs.contains("cloud_id")) {
             return unableToMakeABill("cloud_id not found in user attributes");
         }
@@ -143,8 +143,8 @@ public:
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Make a bill"
             << ": kind# " << TKind::Name()
             << ", opId# " << operationId
-            << ", domain# " << domain.PathString()
-            << ", domainId# " << domainId
+            << ", domain# " << domainPath.PathString()
+            << ", domainPathId# " << pathIdForDomainId
             << ", record# " << billRecord);
 
         context.OnComplete.Send(NMetering::MakeMeteringServiceID(),

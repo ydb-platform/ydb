@@ -467,11 +467,12 @@ public:
 
     const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
 
-    TPathId ResolveDomainId(TPathId pathId) const;
-    TPathId ResolveDomainId(TPathElement::TPtr pathEl) const;
+    TPathId ResolvePathIdForDomain(TPathId pathId) const;
+    TPathId ResolvePathIdForDomain(TPathElement::TPtr pathEl) const;
     TSubDomainInfo::TPtr ResolveDomainInfo(TPathId pathId) const;
     TSubDomainInfo::TPtr ResolveDomainInfo(TPathElement::TPtr pathEl) const;
 
+    TPathId GetDomainKey(TPathElement::TPtr pathEl) const;
     TPathId GetDomainKey(TPathId pathId) const;
 
     const NKikimrSubDomains::TProcessingParams& SelectProcessingPrarams(TPathId id) const;

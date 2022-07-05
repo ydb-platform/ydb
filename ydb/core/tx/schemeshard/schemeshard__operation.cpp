@@ -525,7 +525,7 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
         return result;
     }
 
-    auto domainId = path.DomainId();
+    auto domainPathId = path.GetPathIdForDomain();
     auto domainInfo = path.DomainInfo();
     if (!domainInfo->TryConsumeSchemeQuota(context.Ctx.Now())) {
         result.Status = NKikimrScheme::StatusQuotaExceeded;
@@ -534,7 +534,7 @@ TOperation::TConsumeQuotaResult TOperation::ConsumeQuota(const TTxTransaction& t
 
     // Even if operation fails later we want to persist updated/consumed quotas
     NIceDb::TNiceDb db(context.GetTxc().DB); // write quotas directly in db even if operation fails
-    context.SS->PersistSubDomainSchemeQuotas(db, domainId, *domainInfo);
+    context.SS->PersistSubDomainSchemeQuotas(db, domainPathId, *domainInfo);
     return result;
 }
 

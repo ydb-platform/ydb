@@ -318,7 +318,7 @@ namespace NKikimr::NSchemeShard {
 
                 // bind channels to storage pools
                 TChannelsBindings channelBindings;
-                if (!context.SS->ResolveChannelsByPoolKinds(storagePoolKinds, dstPath.DomainId(), channelBindings)) {
+                if (!context.SS->ResolveChannelsByPoolKinds(storagePoolKinds, dstPath.GetPathIdForDomain(), channelBindings)) {
                     return MakeHolder<TProposeResponse>(NKikimrScheme::StatusInvalidParameter, txId, ssId,
                         "Unable to construct channel binding with the storage pool");
                 }

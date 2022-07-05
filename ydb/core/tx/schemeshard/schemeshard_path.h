@@ -121,7 +121,8 @@ public:
     TPath& RiseUntilExisted();
     TPath FirstExistedParent() const;
     TSubDomainInfo::TPtr DomainInfo() const;
-    TPathId DomainId() const;
+    TPathId GetPathIdForDomain() const;
+    TPathId GetDomainKey() const;
     bool IsDomain() const;
     TPath& Dive(const TString& name);
     TPath Child(const TString& name) const;

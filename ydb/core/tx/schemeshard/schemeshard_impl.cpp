@@ -981,13 +981,13 @@ bool TSchemeShard::TabletResolveChannelsDetails(ui32 profileId, const TChannelPr
     return true;
 }
 
-TPathId TSchemeShard::ResolveDomainId(TPathId pathId) const {
+TPathId TSchemeShard::ResolvePathIdForDomain(TPathId pathId) const {
     Y_VERIFY(pathId != InvalidPathId);
     Y_VERIFY(PathsById.contains(pathId));
-    return ResolveDomainId(PathsById.at(pathId));
+    return ResolvePathIdForDomain(PathsById.at(pathId));
 }
 
-TPathId TSchemeShard::ResolveDomainId(TPathElement::TPtr pathEl) const {
+TPathId TSchemeShard::ResolvePathIdForDomain(TPathElement::TPtr pathEl) const {
     TPathId domainId = pathEl->IsDomainRoot()
             ? pathEl->PathId
             : pathEl->DomainPathId;
@@ -1002,18 +1002,24 @@ TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathId pathId) const {
 }
 
 TSubDomainInfo::TPtr TSchemeShard::ResolveDomainInfo(TPathElement::TPtr pathEl) const {
-    TPathId domainId = ResolveDomainId(pathEl);
+    TPathId domainId = ResolvePathIdForDomain(pathEl);
     Y_VERIFY(SubDomains.contains(domainId));
     auto info = SubDomains.at(domainId);
     Y_VERIFY(info);
     return info;
 }
 
+TPathId TSchemeShard::GetDomainKey(TPathElement::TPtr pathEl) const {
+    auto pathIdForDomain = ResolvePathIdForDomain(pathEl);
+    TPathElement::TPtr domainPathElement = PathsById.at(pathIdForDomain);
+    Y_VERIFY(domainPathElement);
+    return domainPathElement->IsRoot() ? ParentDomainId : pathIdForDomain;
+}
+
 TPathId TSchemeShard::GetDomainKey(TPathId pathId) const {
-    auto domainId = ResolveDomainId(pathId);
-    TPathElement::TPtr domainElement = PathsById.at(domainId);
-    Y_VERIFY(domainElement);
-    return domainElement->IsRoot() ? ParentDomainId : domainId;
+    Y_VERIFY(pathId != InvalidPathId);
+    Y_VERIFY(PathsById.contains(pathId));
+    return GetDomainKey(PathsById.at(pathId));
 }
 
 const NKikimrSubDomains::TProcessingParams &TSchemeShard::SelectProcessingPrarams(TPathId id) const {
@@ -3287,7 +3293,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     }
 
     if (!tableInfo->IsBackup && !tableInfo->IsShardsStatsDetached()) {
-        auto subDomainId = ResolveDomainId(pathId);
+        auto subDomainId = ResolvePathIdForDomain(pathId);
         auto subDomainInfo = ResolveDomainInfo(pathId);
         subDomainInfo->AggrDiskSpaceUsage(this, TPartitionStats(), tableInfo->GetStats().Aggregated);
         if (subDomainInfo->CheckDiskSpaceQuotas(this)) {
@@ -4380,15 +4386,15 @@ void TSchemeShard::MarkAsMigrated(TPathElement::TPtr node, const TActorContext &
                "Mark as Migrated path id " << node->PathId);
 
     Y_VERIFY(!node->Dropped());
-    Y_VERIFY_S(PathsById.contains(ResolveDomainId(node)),
+    Y_VERIFY_S(PathsById.contains(ResolvePathIdForDomain(node)),
                "details:"
                    << " node->PathId: " << node->PathId
                    << ", node->DomainPathId: " << node->DomainPathId);
 
-    Y_VERIFY_S(PathsById.at(ResolveDomainId(node))->IsExternalSubDomainRoot(),
+    Y_VERIFY_S(PathsById.at(ResolvePathIdForDomain(node))->IsExternalSubDomainRoot(),
                "details:"
-                   << " pathId: " << ResolveDomainId(node)
-                   << ", pathType: " << NKikimrSchemeOp::EPathType_Name(PathsById.at(ResolveDomainId(node))->PathType));
+                   << " pathId: " << ResolvePathIdForDomain(node)
+                   << ", pathType: " << NKikimrSchemeOp::EPathType_Name(PathsById.at(ResolvePathIdForDomain(node))->PathType));
 
     node->PathState = TPathElement::EPathState::EPathStateMigrated;
 

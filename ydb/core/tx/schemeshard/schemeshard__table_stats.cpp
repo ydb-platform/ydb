@@ -279,7 +279,7 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     }
 
     if (updateSubdomainInfo) {
-        auto subDomainId = Self->ResolveDomainId(pathId);
+        auto subDomainId = Self->ResolvePathIdForDomain(pathId);
         auto subDomainInfo = Self->ResolveDomainInfo(pathId);
         subDomainInfo->AggrDiskSpaceUsage(Self, newAggrStats, oldAggrStats);
         if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {

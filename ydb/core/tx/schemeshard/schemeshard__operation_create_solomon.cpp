@@ -360,7 +360,7 @@ public:
         const bool adoptingTablets = solomonDescription.AdoptedPartitionsSize() > 0;
 
         TChannelsBindings channelsBinding;
-        if (!adoptingTablets && !context.SS->ResolveSolomonChannels(channelProfileId, dstPath.DomainId(), channelsBinding)) {
+        if (!adoptingTablets && !context.SS->ResolveSolomonChannels(channelProfileId, dstPath.GetPathIdForDomain(), channelsBinding)) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
             return result;
         }

@@ -100,7 +100,7 @@ public:
         TBlockStoreVolumeInfo::TPtr volume = context.SS->BlockStoreVolumes.at(pathId);
 
         auto volumeSpace = volume->GetVolumeSpace();
-        auto domainDir = context.SS->PathsById.at(context.SS->ResolveDomainId(path));
+        auto domainDir = context.SS->PathsById.at(context.SS->ResolvePathIdForDomain(path));
         domainDir->ChangeVolumeSpaceCommit({ }, volumeSpace);
 
         if (!AppData()->DisableSchemeShardCleanupOnDropForTest) {

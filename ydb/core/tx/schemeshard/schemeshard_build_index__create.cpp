@@ -108,12 +108,12 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
 
-        auto subDomainId = domainPath.DomainId();
+        auto subDomainPathId = domainPath.GetPathIdForDomain();
         auto subDomainInfo = domainPath.DomainInfo();
         bool quotaAcquired = subDomainInfo->TryConsumeSchemeQuota(ctx.Now());
 
         // We need to persist updated/consumed quotas even if operation fails for other reasons
-        Self->PersistSubDomainSchemeQuotas(db, subDomainId, *subDomainInfo);
+        Self->PersistSubDomainSchemeQuotas(db, subDomainPathId, *subDomainInfo);
 
         if (!quotaAcquired) {
             return Reply(

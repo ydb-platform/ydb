@@ -3767,7 +3767,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             TPathElement::TPtr parent = Self->PathsById.at(path->ParentPathId);
-            TPathElement::TPtr inclusiveDomainPath = Self->PathsById.at(Self->ResolveDomainId(parent)); // take upper domain id info even when the path is domain by itself
+            TPathElement::TPtr inclusiveDomainPath = Self->PathsById.at(Self->ResolvePathIdForDomain(parent)); // take upper domain id info even when the path is domain by itself
             TSubDomainInfo::TPtr inclusivedomainInfo = Self->ResolveDomainInfo(parent);
 
             if (inclusiveDomainPath->IsExternalSubDomainRoot()) {
@@ -3842,7 +3842,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 continue;
             }
             auto volumeSpace = kv.second->GetVolumeSpace();
-            auto domainDir = Self->PathsById.at(Self->ResolveDomainId(itPath->second));
+            auto domainDir = Self->PathsById.at(Self->ResolvePathIdForDomain(itPath->second));
             domainDir->ChangeVolumeSpaceBegin(volumeSpace, { });
         }
 

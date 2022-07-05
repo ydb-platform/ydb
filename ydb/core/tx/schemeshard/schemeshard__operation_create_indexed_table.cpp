@@ -67,8 +67,8 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TCreateTableIndex construct operation "
                     << " table path: " << baseTablePath.PathString()
-                    << " domain path id: " << baseTablePath.DomainId()
-                    << " domain path: " << TPath::Init(baseTablePath.DomainId(), context.SS).PathString()
+                    << " domain path id: " << baseTablePath.GetPathIdForDomain()
+                    << " domain path: " << TPath::Init(baseTablePath.GetPathIdForDomain(), context.SS).PathString()
                     << " shardsToCreate: " << shardsToCreate
                     << " GetShardsInside: " << domainInfo->GetShardsInside()
                     << " MaxShards: " << domainInfo->GetSchemeLimits().MaxShards);

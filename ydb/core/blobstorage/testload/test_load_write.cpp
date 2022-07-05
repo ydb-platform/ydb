@@ -271,9 +271,9 @@ class TLogWriterTestLoadActor : public TActorBootstrapped<TLogWriterTestLoadActo
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvBlockResult *>(event);
                 Y_VERIFY(res);
-                if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::RACE})) {
+                if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ALREADY})) {
                     return;
-                } else if (res->Status == NKikimrProto::EReplyStatus::RACE && GroupBlockRetries-- > 0) {
+                } else if (res->Status == NKikimrProto::EReplyStatus::ALREADY && GroupBlockRetries-- > 0) {
                     LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " recieved " << res->ToString());
                     IssueTEvBlock(ctx);
                     return;

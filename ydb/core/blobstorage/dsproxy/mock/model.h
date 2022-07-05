@@ -137,7 +137,7 @@ namespace NFake {
             if (it == Blocks.end()) {
                 Blocks.emplace(msg->TabletId, msg->Generation);
             } else if (msg->Generation <= it->second) {
-                status = NKikimrProto::RACE;
+                status = NKikimrProto::ALREADY;
             } else {
                 it->second = msg->Generation;
             }

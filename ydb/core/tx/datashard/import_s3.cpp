@@ -696,7 +696,7 @@ public:
         , LogPrefix_(TStringBuilder() << "s3:" << TxId)
         , Retries(task.GetNumberOfRetries())
         , ReadBatchSize(task.GetS3Settings().GetLimits().GetReadBatchSize())
-        , ReadBufferSizeLimit(task.GetS3Settings().GetLimits().GetReadBufferSizeLimit())
+        , ReadBufferSizeLimit(AppData()->DataShardConfig.GetRestoreReadBufferSizeLimit())
     {
     }
 

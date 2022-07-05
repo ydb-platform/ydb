@@ -1400,6 +1400,7 @@ message TDataShardConfig {
     optional uint64 TtlReadAheadLo = 13 [default = 524288];
     optional uint64 TtlReadAheadHi = 14 [default = 1048576];
     optional uint64 IdleMemCompactionIntervalSeconds = 15 [default = 60];
+    optional uint64 RestoreReadBufferSizeLimit = 16 [default = 268435456]; // 256 MB
 }
 
 message TSchemeShardConfig {

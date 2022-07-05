@@ -70,6 +70,8 @@ struct TEvSysView {
         EvGetTopPartitionsRequest,
         EvGetTopPartitionsResponse,
 
+        EvInitPartitionStatsCollector,
+
         EvEnd,
     };
 
@@ -383,6 +385,20 @@ struct TEvSysView {
         NKikimrSysView::TEvGetTopPartitionsResponse,
         EvGetTopPartitionsResponse>
     {};
+
+
+    struct TEvInitPartitionStatsCollector : public TEventLocal<
+        TEvInitPartitionStatsCollector,
+        EvInitPartitionStatsCollector>
+    {
+        TPathId DomainKey;
+        ui64 SysViewProcessorId = 0;
+
+        TEvInitPartitionStatsCollector(TPathId domainKey, ui64 sysViewProcessorId)
+            : DomainKey(domainKey)
+            , SysViewProcessorId(sysViewProcessorId)
+        {}
+    };
 };
 
 } // NSysView

@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
 
-        auto collector = CreatePartitionStatsCollector(TPathId(), 0, batchSize);
+        auto collector = CreatePartitionStatsCollector(batchSize);
         auto collectorId = runtime.Register(collector.Release());
         WaitForBootstrap(runtime);
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(PartitionStats) {
         TTestActorRuntime runtime;
         runtime.Initialize(MakeEgg());
 
-        auto collector = CreatePartitionStatsCollector(TPathId(), 0, 1, 0);
+        auto collector = CreatePartitionStatsCollector(1, 0);
         auto collectorId = runtime.Register(collector.Release());
         WaitForBootstrap(runtime);
 

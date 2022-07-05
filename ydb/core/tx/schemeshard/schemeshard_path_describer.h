@@ -24,7 +24,7 @@ class TPathDescriber {
     void DescribeDir(const TPath& path);
     void DescribeTable(const TActorContext& ctx, TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl);
-    void DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl);
+    void DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeRtmrVolume(TPathId pathId, TPathElement::TPtr pathEl);
     void DescribeTableIndex(const TPath& path);

@@ -16,7 +16,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapTable TDropParts"
+                << "TDropColumnTable TDropParts"
                 << " operationId#" << OperationId;
     }
 
@@ -39,7 +39,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         TPathId pathId = txState->TargetPathId;
 
@@ -94,7 +94,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapTable TPropose"
+                << "TDropColumnTable TPropose"
                 << " operationId#" << OperationId;
     }
 
@@ -116,7 +116,7 @@ public:
                                << ", stepId: " << step);
 
         TTxState* txState = context.SS->FindTx(OperationId);
-        Y_VERIFY(txState->TxType == TTxState::TxDropOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         TPathId pathId = txState->TargetPathId;
         Y_VERIFY(context.SS->PathsById.contains(pathId));
@@ -161,7 +161,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         TSet<TTabletId> shardSet;
         for (const auto& shard : txState->Shards) {
@@ -183,7 +183,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapTable TProposedWaitParts"
+                << "TDropColumnTable TProposedWaitParts"
                 << " operationId#" << OperationId;
     }
 
@@ -199,7 +199,7 @@ public:
     bool HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) override {
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         auto shardId = TTabletId(ev->Get()->Record.GetOrigin());
         auto shardIdx = context.SS->MustGetShardIdx(shardId);
@@ -228,7 +228,7 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         txState->ClearShardsInProgress();
 
@@ -264,7 +264,7 @@ private:
 private:
     TString DebugHint() const override {
         return TStringBuilder()
-                << "TDropOlapTable TProposedDeleteParts"
+                << "TDropColumnTable TProposedDeleteParts"
                 << " operationId#" << OperationId;
     }
 
@@ -287,24 +287,24 @@ public:
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_VERIFY(txState);
-        Y_VERIFY(txState->TxType == TTxState::TxDropOlapTable);
+        Y_VERIFY(txState->TxType == TTxState::TxDropColumnTable);
 
         NIceDb::TNiceDb db(context.GetDB());
-        context.SS->PersistOlapTableRemove(db, txState->TargetPathId);
+        context.SS->PersistColumnTableRemove(db, txState->TargetPathId);
 
         context.OnComplete.DoneOperation(OperationId);
         return true;
     }
 };
 
-class TDropOlapTable : public TSubOperation {
+class TDropColumnTable : public TSubOperation {
 public:
-    TDropOlapTable(TOperationId id, const TTxTransaction& tx)
+    TDropColumnTable(TOperationId id, const TTxTransaction& tx)
         : OperationId(id)
         , Transaction(tx)
     {}
 
-    TDropOlapTable(TOperationId id, TTxState::ETxState state)
+    TDropColumnTable(TOperationId id, TTxState::ETxState state)
         : OperationId(id)
         , State(state)
     {
@@ -321,7 +321,7 @@ public:
         const TString& name = drop.GetName();
 
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropOlapTable Propose"
+                     "TDropColumnTable Propose"
                          << ", path: " << parentPathStr << "/" << name
                          << ", pathId: " << drop.GetId()
                          << ", opId: " << OperationId
@@ -341,7 +341,7 @@ public:
                 .IsAtLocalSchemeShard()
                 .IsResolved()
                 .NotDeleted()
-                .IsOlapTable()
+                .IsColumnTable()
                 .NotUnderDeleting()
                 .NotUnderOperation();
 
@@ -350,7 +350,7 @@ public:
                                                    << ", path: " << path.PathString();
                 auto status = checks.GetStatus(&explain);
                 result->SetError(status, explain);
-                if (path.IsResolved() && path.Base()->IsOlapTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
+                if (path.IsResolved() && path.Base()->IsColumnTable() && (path.Base()->PlannedToDrop() || path.Base()->Dropped())) {
                     result->SetPathDropTxId(ui64(path.Base()->DropTxId));
                     result->SetPathId(path.Base()->PathId.LocalPathId);
                 }
@@ -378,8 +378,8 @@ public:
             }
         }
 
-        Y_VERIFY(context.SS->OlapTables.contains(path.Base()->PathId));
-        TOlapTableInfo::TPtr tableInfo = context.SS->OlapTables.at(path.Base()->PathId);
+        Y_VERIFY(context.SS->ColumnTables.contains(path.Base()->PathId));
+        TColumnTableInfo::TPtr tableInfo = context.SS->ColumnTables.at(path.Base()->PathId);
 
         TPath storePath = TPath::Init(tableInfo->OlapStorePathId, context.SS);
         {
@@ -408,10 +408,10 @@ public:
             return result;
         }
 
-        Y_VERIFY(storeInfo->OlapTables.contains(path->PathId));
-        storeInfo->OlapTablesUnderOperation.insert(path->PathId);
+        Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
+        storeInfo->ColumnTablesUnderOperation.insert(path->PathId);
 
-        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropOlapTable, path.Base()->PathId);
+        TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropColumnTable, path.Base()->PathId);
         txState.State = TTxState::DropParts;
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"
         txState.MinStep = TStepId(1);
@@ -446,7 +446,7 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
 
-        context.SS->TabletCounters->Simple()[COUNTER_OLAP_TABLE_COUNT].Sub(1);
+        context.SS->TabletCounters->Simple()[COUNTER_COLUMN_TABLE_COUNT].Sub(1);
 
         Y_VERIFY_S(context.SS->PathsById.contains(path.Base()->ParentPathId),
                    "no parent with id: " << path.Base()->ParentPathId << " for node with id: " << path.Base()->PathId);
@@ -466,12 +466,12 @@ public:
     }
 
     void AbortPropose(TOperationContext&) override {
-        Y_FAIL("no AbortPropose for TDropOlapTable");
+        Y_FAIL("no AbortPropose for TDropColumnTable");
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropOlapTable AbortUnsafe"
+                     "TDropColumnTable AbortUnsafe"
                          << ", opId: " << OperationId
                          << ", forceDropId: " << forceDropTxId
                          << ", at schemeshard: " << context.SS->TabletID());
@@ -541,13 +541,13 @@ private:
 
 } // namespace
 
-ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, const TTxTransaction& tx) {
-    return new TDropOlapTable(id, tx);
+ISubOperationBase::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx) {
+    return new TDropColumnTable(id, tx);
 }
 
-ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, TTxState::ETxState state) {
+ISubOperationBase::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state) {
     Y_VERIFY(state != TTxState::Invalid);
-    return new TDropOlapTable(id, state);
+    return new TDropColumnTable(id, state);
 }
 
 } // namespace NSchemeShard

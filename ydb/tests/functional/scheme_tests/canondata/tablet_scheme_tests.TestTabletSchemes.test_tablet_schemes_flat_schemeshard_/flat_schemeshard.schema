@@ -5813,7 +5813,7 @@
     },
     {
         "TableId": 90,
-        "TableName": "OlapTables",
+        "TableName": "ColumnTables",
         "TableKey": [
             1
         ],
@@ -5866,7 +5866,7 @@
     },
     {
         "TableId": 91,
-        "TableName": "OlapTablesAlters",
+        "TableName": "ColumnTablesAlters",
         "TableKey": [
             1
         ],

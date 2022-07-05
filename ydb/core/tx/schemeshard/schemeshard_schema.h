@@ -1488,7 +1488,7 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody>;
     };
 
-    struct OlapTables : Table<90> {
+    struct ColumnTables : Table<90> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
@@ -1498,12 +1498,12 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding>;
     };
 
-    struct OlapTablesAlters : Table<91> {
+    struct ColumnTablesAlters : Table<91> {
         struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
         struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
         struct Description : Column<3, NScheme::NTypeIds::String> {}; // TColumnTableDescription
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
-        struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterOlapTable
+        struct AlterBody : Column<5, NScheme::NTypeIds::String> {}; // TAlterColumnTable
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, AlterBody>;
@@ -1687,8 +1687,8 @@ struct Schema : NIceDb::Schema {
         TxShardStatus,
         OlapStores,
         OlapStoresAlters,
-        OlapTables,
-        OlapTablesAlters,
+        ColumnTables,
+        ColumnTablesAlters,
         LoginKeys,
         LoginSids,
         LoginSidMembers,

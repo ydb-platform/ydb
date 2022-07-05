@@ -330,12 +330,12 @@ ISubOperationBase::TPtr CreateAlterOlapStore(TOperationId id, TTxState::ETxState
 ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateDropOlapStore(TOperationId id, TTxState::ETxState state);
 
-ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateNewOlapTable(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateAlterOlapTable(TOperationId id, TTxState::ETxState state);
-ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, const TTxTransaction& tx);
-ISubOperationBase::TPtr CreateDropOlapTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateNewColumnTable(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateNewColumnTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateAlterColumnTable(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateAlterColumnTable(TOperationId id, TTxState::ETxState state);
+ISubOperationBase::TPtr CreateDropColumnTable(TOperationId id, const TTxTransaction& tx);
+ISubOperationBase::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState state);
 
 ISubOperationBase::TPtr CreateNewBSV(TOperationId id, const TTxTransaction& tx);
 ISubOperationBase::TPtr CreateNewBSV(TOperationId id, TTxState::ETxState state);

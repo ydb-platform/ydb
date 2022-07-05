@@ -53,7 +53,7 @@ public:
         const TChecker& NoOlapStore(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& HasOlapStore(EStatus status = EStatus::StatusInvalidParameter) const;
         const TChecker& IsOlapStore(EStatus status = EStatus::StatusNameConflict) const;
-        const TChecker& IsOlapTable(EStatus status = EStatus::StatusNameConflict) const;
+        const TChecker& IsColumnTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsSequence(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsReplication(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsCommonSensePath(EStatus status = EStatus::StatusNameConflict) const;

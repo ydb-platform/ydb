@@ -197,7 +197,7 @@ public:
     THashMap<TPathId, TFileStoreInfo::TPtr> FileStoreInfos;
     THashMap<TPathId, TKesusInfo::TPtr> KesusInfos;
     THashMap<TPathId, TOlapStoreInfo::TPtr> OlapStores;
-    THashMap<TPathId, TOlapTableInfo::TPtr> OlapTables;
+    THashMap<TPathId, TColumnTableInfo::TPtr> ColumnTables;
 
     // it is only because we need to manage undo of upgrade subdomain, finally remove it
     THashMap<TPathId, TVector<TTabletId>> RevertedMigrations;
@@ -652,11 +652,11 @@ public:
     void PersistOlapStoreAlter(NIceDb::TNiceDb& db, TPathId pathId, const TOlapStoreInfo& storeInfo);
     void PersistOlapStoreAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
-    // OlapTable
-    void PersistOlapTable(NIceDb::TNiceDb& db, TPathId pathId, const TOlapTableInfo& tableInfo, bool isAlter = false);
-    void PersistOlapTableRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter = false);
-    void PersistOlapTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TOlapTableInfo& tableInfo);
-    void PersistOlapTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
+    // ColumnTable
+    void PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo, bool isAlter = false);
+    void PersistColumnTableRemove(NIceDb::TNiceDb& db, TPathId pathId, bool isAlter = false);
+    void PersistColumnTableAlter(NIceDb::TNiceDb& db, TPathId pathId, const TColumnTableInfo& tableInfo);
+    void PersistColumnTableAlterRemove(NIceDb::TNiceDb& db, TPathId pathId);
 
     // Sequence
     void PersistSequence(NIceDb::TNiceDb& db, TPathId pathId, const TSequenceInfo& sequenceInfo);

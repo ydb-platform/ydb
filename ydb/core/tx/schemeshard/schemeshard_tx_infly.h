@@ -93,9 +93,9 @@ struct TTxState {
         item(TxCreateOlapStore, 48) \
         item(TxAlterOlapStore, 49) \
         item(TxDropOlapStore, 50) \
-        item(TxCreateOlapTable, 51) \
-        item(TxAlterOlapTable, 52) \
-        item(TxDropOlapTable, 53) \
+        item(TxCreateColumnTable, 51) \
+        item(TxAlterColumnTable, 52) \
+        item(TxDropColumnTable, 53) \
         item(TxCreateCdcStream, 54) \
         item(TxCreateCdcStreamAtTable, 55) \
         item(TxAlterCdcStream, 56) \
@@ -295,7 +295,7 @@ struct TTxState {
         case TxCreateTable:
         case TxCopyTable:
         case TxCreateOlapStore:
-        case TxCreateOlapTable:
+        case TxCreateColumnTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
@@ -318,7 +318,7 @@ struct TTxState {
             return false;
         case TxDropTable:
         case TxDropOlapStore:
-        case TxDropOlapTable:
+        case TxDropColumnTable:
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
@@ -339,7 +339,7 @@ struct TTxState {
         case TxAlterPQGroup:
         case TxAlterTable:
         case TxAlterOlapStore:
-        case TxAlterOlapTable:
+        case TxAlterColumnTable:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -374,7 +374,7 @@ struct TTxState {
         switch (TxType) {
         case TxDropTable:
         case TxDropOlapStore:
-        case TxDropOlapTable:
+        case TxDropColumnTable:
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
@@ -393,7 +393,7 @@ struct TTxState {
         case TxCreateTable:
         case TxCopyTable:
         case TxCreateOlapStore:
-        case TxCreateOlapTable:
+        case TxCreateColumnTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
         case TxCreateExtSubDomain:
@@ -418,7 +418,7 @@ struct TTxState {
         case TxAlterPQGroup:
         case TxAlterTable:
         case TxAlterOlapStore:
-        case TxAlterOlapTable:
+        case TxAlterColumnTable:
         case TxModifyACL:
         case TxSplitTablePartition:
         case TxMergeTablePartition:
@@ -453,7 +453,7 @@ struct TTxState {
         switch (TxType) {
         case TxDropTable:
         case TxDropOlapStore:
-        case TxDropOlapTable:
+        case TxDropColumnTable:
         case TxDropPQGroup:
         case TxDropSubDomain:
         case TxDropBlockStoreVolume:
@@ -475,7 +475,7 @@ struct TTxState {
         case TxMkDir:
         case TxCreateTable:
         case TxCreateOlapStore:
-        case TxCreateOlapTable:
+        case TxCreateColumnTable:
         case TxCopyTable:
         case TxCreatePQGroup:
         case TxCreateSubDomain:
@@ -499,7 +499,7 @@ struct TTxState {
         case TxAlterPQGroup:
         case TxAlterTable:
         case TxAlterOlapStore:
-        case TxAlterOlapTable:
+        case TxAlterColumnTable:
         case TxModifyACL:
         case TxBackup:
         case TxRestore:

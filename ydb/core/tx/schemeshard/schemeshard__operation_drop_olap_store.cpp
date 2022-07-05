@@ -349,7 +349,7 @@ public:
         Y_VERIFY(context.SS->OlapStores.contains(path.Base()->PathId));
         TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(path.Base()->PathId);
 
-        if (!storeInfo->OlapTables.empty()) {
+        if (!storeInfo->ColumnTables.empty()) {
             errStr = TStringBuilder() << "OlapStore cannot be dropped until all tables are dropped";
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;

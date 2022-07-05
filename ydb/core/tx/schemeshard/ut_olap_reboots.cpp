@@ -67,12 +67,12 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
-                Name: "OlapTable"
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
+                Name: "ColumnTable"
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::PathExist);
+            TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::PathExist);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -105,15 +105,15 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
-                Name: "OlapTable"
+            TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
+                Name: "ColumnTable"
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestDropOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", "OlapTable");
+            TestDropColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", "ColumnTable");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::PathNotExist);
+            TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::PathNotExist);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -147,13 +147,13 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             }
 
             t.TestEnv->ReliablePropose(runtime,
-                CreateOlapTableRequest(t.TxId += 2, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable1"
+                CreateColumnTableRequest(t.TxId += 2, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable1"
                 )"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->ReliablePropose(runtime,
-                CreateOlapTableRequest(t.TxId - 1, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable2"
+                CreateColumnTableRequest(t.TxId - 1, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable2"
                 )"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusAlreadyExists, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
@@ -161,8 +161,8 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable1", false, NLs::PathExist);
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable2", false, NLs::PathExist);
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable1", false, NLs::PathExist);
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable2", false, NLs::PathExist);
             }
         });
     }
@@ -190,30 +190,30 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable1"
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable1"
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable2"
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable2"
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
             t.TestEnv->ReliablePropose(runtime,
-                DropOlapTableRequest(t.TxId += 2, "/MyRoot/OlapStore", "OlapTable1"),
+                DropColumnTableRequest(t.TxId += 2, "/MyRoot/OlapStore", "ColumnTable1"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->ReliablePropose(runtime,
-                DropOlapTableRequest(t.TxId - 1, "/MyRoot/OlapStore", "OlapTable2"),
+                DropColumnTableRequest(t.TxId - 1, "/MyRoot/OlapStore", "ColumnTable2"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, {t.TxId - 1, t.TxId});
 
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable1", false, NLs::PathNotExist);
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable2", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable1", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable2", false, NLs::PathNotExist);
             }
         });
     }
@@ -283,14 +283,14 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable"
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable"
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
             t.TestEnv->ReliablePropose(runtime,
-                DropOlapTableRequest(++t.TxId, "/MyRoot/OlapStore", "OlapTable"),
+                DropColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", "ColumnTable"),
                 {NKikimrScheme::StatusAccepted, NKikimrScheme::StatusMultipleModifications});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -302,7 +302,7 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::PathNotExist);
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::PathNotExist);
                 TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
             }
         });
@@ -331,8 +331,8 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestCreateOlapTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable"
+                TestCreateColumnTable(runtime, ++t.TxId, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable"
                     SchemaPresetName: "default"
                     TtlSettings {
                         Enabled {
@@ -343,14 +343,14 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-                    NLs::HasOlapTableTtlSettingsVersion(1),
-                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+                    NLs::HasColumnTableTtlSettingsVersion(1),
+                    NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(600))));
             }
 
             t.TestEnv->ReliablePropose(runtime,
-                AlterOlapTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable"
+                AlterColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable"
                     AlterTtlSettings {
                         Enabled {
                             ColumnName: "timestamp"
@@ -364,14 +364,14 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-                    NLs::HasOlapTableTtlSettingsVersion(2),
-                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+                    NLs::HasColumnTableTtlSettingsVersion(2),
+                    NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
             }
 
             t.TestEnv->ReliablePropose(runtime,
-                AlterOlapTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
-                    Name: "OlapTable"
+                AlterColumnTableRequest(++t.TxId, "/MyRoot/OlapStore", R"(
+                    Name: "ColumnTable"
                     AlterTtlSettings {
                         Disabled {}
                     }
@@ -382,9 +382,9 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
             {
                 TInactiveZone inactive(activeZone);
 
-                TestLs(runtime, "/MyRoot/OlapStore/OlapTable", false, NLs::All(
-                    NLs::HasOlapTableTtlSettingsVersion(2),
-                    NLs::HasOlapTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
+                TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::All(
+                    NLs::HasColumnTableTtlSettingsVersion(2),
+                    NLs::HasColumnTableTtlSettingsEnabled("timestamp", TDuration::Seconds(300))));
             }
         });
     }

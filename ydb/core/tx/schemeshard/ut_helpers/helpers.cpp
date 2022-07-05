@@ -776,10 +776,10 @@ namespace NSchemeShardUT_Private {
     DROP_BY_PATH_ID_HELPERS(DropOlapStore, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnStore)
 
     // olap table
-    GENERIC_HELPERS(CreateOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnTable)
-    GENERIC_HELPERS(AlterOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnTable)
-    GENERIC_HELPERS(DropOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
-    DROP_BY_PATH_ID_HELPERS(DropOlapTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable)
+    GENERIC_HELPERS(CreateColumnTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateColumnTable)
+    GENERIC_HELPERS(AlterColumnTable, NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableAlterColumnTable)
+    GENERIC_HELPERS(DropColumnTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+    DROP_BY_PATH_ID_HELPERS(DropColumnTable, NKikimrSchemeOp::EOperationType::ESchemeOpDropColumnTable)
 
     // sequence
     GENERIC_HELPERS(CreateSequence, NKikimrSchemeOp::EOperationType::ESchemeOpCreateSequence, &NKikimrSchemeOp::TModifyScheme::MutableSequence)

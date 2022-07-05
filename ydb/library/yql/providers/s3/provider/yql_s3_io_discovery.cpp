@@ -53,7 +53,7 @@ public:
         auto reads = FindNodes(input, [&](const TExprNode::TPtr& node) {
             if (const auto maybeRead = TMaybeNode<TS3Read>(node)) {
                 if (maybeRead.DataSource()) {
-                    return maybeRead.Cast().Arg(2).Ref().IsCallable({"MrObject", "MrTableConcat"});
+                    return maybeRead.Cast().Arg(2).Ref().IsCallable("MrTableConcat");
                 }
             }
             return false;
@@ -63,10 +63,9 @@ public:
         for (auto& r : reads) {
             const TS3Read read(std::move(r));
             std::unordered_set<std::string_view> paths;
-            if (const auto& object = read.Arg(2).Ref(); object.IsCallable("MrObject"))
-                paths.emplace(object.Head().Content());
-            else if (object.IsCallable("MrTableConcat"))
-                object.ForEachChild([&paths](const TExprNode& child){ paths.emplace(child.Head().Tail().Head().Content()); });
+            const auto& object = read.Arg(2).Ref();
+            YQL_ENSURE(object.IsCallable("MrTableConcat"));
+            object.ForEachChild([&paths](const TExprNode& child){ paths.emplace(child.Head().Tail().Head().Content()); });
             const auto& connect = State_->Configuration->Clusters.at(read.DataSource().Cluster().StringValue());
             const auto& token = State_->Configuration->Tokens.at(read.DataSource().Cluster().StringValue());
             const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, token);
@@ -114,6 +113,7 @@ public:
         for (auto& [node, requests] : requestsByNode) {
             const TS3Read read(node);
             const auto& object = read.Arg(2).Ref();
+            YQL_ENSURE(object.IsCallable("MrTableConcat"));
             size_t readSize = 0;
             TExprNode::TListType pathNodes;
             for (auto& req : requests) {
@@ -158,17 +158,11 @@ public:
             auto settings = read.Ref().Child(4)->ChildrenList();
             auto userSchema = ExtractSchema(settings);
             TExprNode::TPtr s3Object;
-            if (object.IsCallable("MrObject")) {
-                auto children = object.ChildrenList();
-                children.front() = ctx.NewList(object.Pos(), std::move(pathNodes));
-                s3Object = ctx.NewCallable(object.Pos(), TS3Object::CallableName(), std::move(children));
-            } else if (object.IsCallable("MrTableConcat")) {
-                s3Object = Build<TS3Object>(ctx, object.Pos())
-                    .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
-                    .Format(ExtractFormat(settings))
-                    .Settings(ctx.NewList(object.Pos(), std::move(settings)))
-                    .Done().Ptr();
-            }
+            s3Object = Build<TS3Object>(ctx, object.Pos())
+                .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
+                .Format(ExtractFormat(settings))
+                .Settings(ctx.NewList(object.Pos(), std::move(settings)))
+                .Done().Ptr();
 
             replaces.emplace(node, userSchema.back() ?
                 Build<TS3ReadObject>(ctx, read.Pos())

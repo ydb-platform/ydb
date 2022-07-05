@@ -27,13 +27,13 @@ message TPQConfig {
     optional uint32 MaxBlobSize = 4 [default = 8388608]; //8mb
     optional uint32 ClustersUpdateTimeoutSec = 5 [default = 30];
 
-    optional bool Enabled = 6 [default = false]; // Enable PQ proxies
+    optional bool Enabled = 6 [default = true]; // Enable PQ proxies
 
     optional uint32 MetaCacheTimeoutSec = 7 [default = 30];
 
     optional uint32 MaxReadCookies = 8 [default = 100000];
 
-    optional bool CheckACL = 9 [default = false];
+    optional bool CheckACL = 9 [default = true];
 
     optional uint32 SourceIdCleanupPeriodSec = 10 [default = 60]; // 24 hours // TODO: What is '24 hours'? Default is 60 seconds.
     optional uint32 SourceIdMaxLifetimeSec = 11 [default = 1382400]; // 16 days
@@ -41,10 +41,10 @@ message TPQConfig {
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
-    optional bool RequireCredentialsInNewProtocol = 14 [default = false];
+    optional bool RequireCredentialsInNewProtocol = 14 [default = true];
 
-    optional string ClusterTablePath = 15 [default = "/Root/PQ/Config/V2/Cluster"];
-    optional string VersionTablePath = 16 [default = "/Root/PQ/Config/V2/Versions"];
+    optional string ClusterTablePath = 15 [default = ""];
+    optional string VersionTablePath = 16 [default = ""];
 
     optional uint32 ClustersUpdateTimeoutOnErrorSec = 17 [default = 1];
 
@@ -57,9 +57,9 @@ message TPQConfig {
 
 
     message TQuotingConfig {
-        optional bool EnableQuoting = 1;
-        optional string QuotersDirectoryPath = 2 [default = "/Root/PersQueue/System/Quoters"];
-        optional ELimitedEntity TopicWriteQuotaEntityToLimit = 3;
+        optional bool EnableQuoting = 1 [default = true];
+        optional string QuotersDirectoryPath = 2 [default = ""];
+        optional ELimitedEntity TopicWriteQuotaEntityToLimit = 3 [default = USER_PAYLOAD_SIZE];
 
         // Enum for describing entities that quoter can limit.
         enum ELimitedEntity {
@@ -83,7 +83,8 @@ message TPQConfig {
 
     optional bool RoundRobinPartitionMapping = 26 [default = true];
 
-    optional string Root = 27 [default = "/Root/PQ"];
+    optional string Root = 27 [default = ""];
+    optional string TestDatabaseRoot = 47; // For unit-tests only
 
     message TPQLibSettings {
         optional uint32 ThreadsCount = 1 [default = 1];
@@ -102,7 +103,7 @@ message TPQConfig {
 
     repeated TChannelProfile ChannelProfiles = 31;
 
-    optional bool TopicsAreFirstClassCitizen = 32 [default = false];
+    optional bool TopicsAreFirstClassCitizen = 32 [default = true];
 
     optional string SourceIdTablePath = 33 [default = "/Root/PQ/SourceIdMeta2"];
 

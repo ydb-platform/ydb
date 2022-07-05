@@ -81,6 +81,7 @@ class KikimrConfigGenerator(object):
             udfs_path=None,
             output_path=None,
             enable_pq=False,
+            pq_client_service_types=None,
             slot_count=0,
             pdisk_store_path=None,
             version=None,
@@ -171,6 +172,12 @@ class KikimrConfigGenerator(object):
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
         self.yaml_config["feature_flags"]["enable_mvcc"] = "VALUE_FALSE" if disable_mvcc else "VALUE_TRUE"
         self.yaml_config['pqconfig']['enabled'] = enable_pq
+        if pq_client_service_types:
+            self.yaml_config['pqconfig']['client_service_type'] = []
+            for service_type in pq_client_service_types:
+                self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
+
+        # NOTE(shmel1k@): change to 'true' after migration to YDS scheme
         self.yaml_config['pqconfig']['topics_are_first_class_citizen'] = enable_pq and enable_datastreams
         self.yaml_config['sqs_config']['enable_sqs'] = enable_sqs
         self.yaml_config['pqcluster_discovery_config']['enabled'] = enable_pqcd

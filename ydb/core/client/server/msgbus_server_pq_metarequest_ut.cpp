@@ -56,6 +56,14 @@ protected:
 
         // Logging
         Runtime->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
+
+        // NOTE(shmel1k@): KIKIMR-14221
+        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+        Runtime->GetAppData(0).PQConfig.SetRequireCredentialsInNewProtocol(false);
+        Runtime->GetAppData(0).PQConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
+        Runtime->GetAppData(0).PQConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
+        Runtime->GetAppData(0).PQConfig.SetRoot("/Root/PQ");
     }
 
     void TearDown() override {

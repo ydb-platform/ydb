@@ -146,6 +146,16 @@ struct TTestContext {
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
+        // NOTE(shmel1k@): KIKIMR-14221
+        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+        Runtime->GetAppData(0).PQConfig.SetRequireCredentialsInNewProtocol(false);
+        Runtime->GetAppData(0).PQConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
+        Runtime->GetAppData(0).PQConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
+        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+        Runtime->GetAppData(0).PQConfig.SetRoot("/Root/PQ");
+        Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
@@ -209,7 +219,20 @@ struct TFinalizer {
 // SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void PQTabletPrepare(ui32 mcip, ui64 msip, i32 deleteTime, const TVector<std::pair<TString, bool>>& users, TTestContext& tc, int partitions = 2, ui32 lw = 6_MB, bool localDC = true, ui64 ts = 0, ui64 sidMaxCount = 0, ui32 specVersion = 0, i32 storageLimitBytes = 0) {
+void PQTabletPrepare(
+    ui32 mcip,
+    ui64 msip,
+    ui32 deleteTime,
+    const TVector<std::pair<TString, bool>>& users,
+    TTestContext& tc,
+    int partitions = 2,
+    ui32 lw = 6_MB,
+    bool localDC = true,
+    ui64 ts = 0,
+    ui64 sidMaxCount = 0,
+    ui32 specVersion = 0,
+    i32 storageLimitBytes = 0
+ ) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
     if (specVersion) {
@@ -228,7 +251,14 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, i32 deleteTime, const TVector<std::pa
             request->Record.MutableTabletConfig()->SetCacheSize(10*1024*1024);
             request->Record.SetTxId(12345);
             auto tabletConfig = request->Record.MutableTabletConfig();
-            tabletConfig->SetTopicName("topic");
+            if (tc.Runtime->GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
+                tabletConfig->SetTopicName("topic");
+                tabletConfig->SetTopicPath(tc.Runtime->GetAppData().PQConfig.GetDatabase() + "/topic");
+            } else {
+                tabletConfig->SetTopicName("rt3.dc1--topic");
+                tabletConfig->SetTopicPath("/Root/PQ/rt3.dc1--topic");
+            }
+            tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
             tabletConfig->SetLocalDC(localDC);
             tabletConfig->AddReadRules("user");
@@ -249,7 +279,7 @@ void PQTabletPrepare(ui32 mcip, ui64 msip, i32 deleteTime, const TVector<std::pa
 
             for (auto& u : users) {
                 if (u.second)
-                config->AddImportantClientId(u.first);
+                    config->AddImportantClientId(u.first);
                 if (u.first != "user")
                     tabletConfig->AddReadRules(u.first);
             }

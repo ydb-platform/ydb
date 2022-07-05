@@ -743,6 +743,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
             pqConfig.SetTopicsAreFirstClassCitizen(true);
             pqConfig.SetMaxReadCookies(10);
             pqConfig.AddClientServiceType()->SetName("data-streams");
+            pqConfig.SetCheckACL(false);
+            pqConfig.SetRequireCredentialsInNewProtocol(false);
+            pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
             return pqConfig;
         }
 

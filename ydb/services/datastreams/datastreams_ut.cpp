@@ -43,6 +43,10 @@ public:
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
         appConfig.MutablePQConfig()->SetMetaCacheRefreshIntervalMilliSeconds(30000);
+        // NOTE(shmel1k@): KIKIMR-14221
+        appConfig.MutablePQConfig()->SetCheckACL(false);
+        appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
+
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetPartitionReadQuotaIsTwiceWriteQuota(true);

@@ -34,6 +34,15 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
+
+    // NOTE(shmel1k@): KIKIMR-14221
+    pqConfig.SetRequireCredentialsInNewProtocol(false);
+    pqConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
+    pqConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
+    pqConfig.SetTopicsAreFirstClassCitizen(false);
+    pqConfig.SetRoot("/Root/PQ");
+    pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
     for (int i = 0; i < 12; ++i) {
         auto profile = pqConfig.AddChannelProfiles();
         Y_UNUSED(profile);

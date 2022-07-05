@@ -42,6 +42,15 @@ public:
         Server.ServerSettings.PQConfig.SetRemoteClusterEnabledDelaySec(1);
         Server.ServerSettings.PQConfig.SetCloseClientSessionWithEnabledRemotePreferredClusterDelaySec(1);
         Server.ServerSettings.PQClusterDiscoveryConfig.SetEnabled(true);
+        // NOTE(shmel1k@): KIKIMR-14221
+        Server.ServerSettings.PQConfig.SetCheckACL(false);
+        Server.ServerSettings.PQConfig.SetRequireCredentialsInNewProtocol(false);
+        Server.ServerSettings.PQConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
+        Server.ServerSettings.PQConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
+        Server.ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(false);
+        Server.ServerSettings.PQConfig.SetRoot("/Root/PQ");
+        Server.ServerSettings.PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+
         SetNetDataViaFile("::1/128\t" + GetLocalCluster());
 
         auto seed = TInstant::Now().MicroSeconds();

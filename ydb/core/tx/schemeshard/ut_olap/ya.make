@@ -23,6 +23,7 @@ PEERDIR(
     library/cpp/regex/pcre
     library/cpp/svnversion
     ydb/core/testlib
+    ydb/core/formats
     ydb/core/tx
     ydb/core/tx/columnshard
     ydb/core/tx/schemeshard/ut_helpers

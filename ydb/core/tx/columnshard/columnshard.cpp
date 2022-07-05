@@ -11,17 +11,6 @@ IActor* CreateColumnShard(const TActorId& tablet, TTabletStorageInfo* info) {
 
 namespace NKikimr::NColumnShard {
 
-IActor* CreateIndexingActor(ui64 tabletId, const TActorId& parent);
-IActor* CreateCompactionActor(ui64 tabletId, const TActorId& parent);
-IActor* CreateEvictionActor(ui64 tabletId, const TActorId& parent);
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
-                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
-                         TAutoPtr<TEvColumnShard::TEvWrite> ev, const TInstant& deadline = TInstant::Max());
-IActor* CreateWriteActor(ui64 tabletId, const NOlap::TIndexInfo& indexTable,
-                         const TActorId& dstActor, TBlobBatch&& blobBatch, bool blobGrouppingEnabled,
-                         TAutoPtr<TEvPrivate::TEvWriteIndex> ev, const TInstant& deadline = TInstant::Max());
-IActor* CreateColumnShardScan(const TActorId& scanComputeActor, ui32 scanId, ui64 txId);
-
 void TColumnShard::BecomeBroken(const TActorContext& ctx)
 {
     Become(&TThis::StateBroken);
@@ -62,6 +51,14 @@ void TColumnShard::Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext&
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
     auto tabletId = ev->Get()->TabletId;
+    auto clientId = ev->Get()->ClientId;
+
+    if (clientId == StatsReportPipe) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            StatsReportPipe = TActorId();
+        }
+        return;
+    }
 
     if (PipeClientCache->OnConnect(ev)) {
         LOG_S_DEBUG("Connected to tablet at " << TabletID() << ", remote " << tabletId);
@@ -73,7 +70,14 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
 
 void TColumnShard::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext&) {
     auto tabletId = ev->Get()->TabletId;
+    auto clientId = ev->Get()->ClientId;
+
     LOG_S_DEBUG("Client pipe reset at " << TabletID() << ", remote " << tabletId);
+
+    if (clientId == StatsReportPipe) {
+        StatsReportPipe = TActorId();
+        return;
+    }
 
     PipeClientCache->OnDisconnect(ev);
 }
@@ -103,47 +107,6 @@ void TColumnShard::Handle(TEvTxProcessing::TEvPlanStep::TPtr& ev, const TActorCo
     LOG_S_DEBUG("PlanStep " << step << " at tablet " << TabletID() << ", mediator " << mediatorId);
 
     Execute(new TTxPlanStep(this, ev), ctx);
-}
-
-// EvWrite -> WriteActor (attach BlobId without proto changes) -> EvWrite
-void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContext& ctx) {
-    OnYellowChannels(std::move(ev->Get()->YellowMoveChannels), std::move(ev->Get()->YellowStopChannels));
-
-    auto& data = Proto(ev->Get()).GetData();
-    const ui64 tableId = ev->Get()->Record.GetTableId();
-    bool error = data.empty() || data.size() > TLimits::MAX_BLOB_SIZE || !PrimaryIndex || !IsTableWritable(tableId)
-        || ev->Get()->PutStatus == NKikimrProto::ERROR;
-
-    if (error) {
-        LOG_S_WARN("Write (fail) " << data.size() << " bytes at tablet " << TabletID());
-
-        ev->Get()->PutStatus = NKikimrProto::ERROR;
-        Execute(new TTxWrite(this, ev), ctx);
-    } else if (InsertTable->IsOverloaded(tableId)) {
-        LOG_S_INFO("Write (overload) " << data.size() << " bytes for table " << tableId << " at tablet " << TabletID());
-
-        ev->Get()->PutStatus = NKikimrProto::TRYLATER;
-        Execute(new TTxWrite(this, ev), ctx);
-    } else if (ev->Get()->BlobId.IsValid()) {
-        LOG_S_DEBUG("Write (record) " << data.size() << " bytes at tablet " << TabletID());
-
-        Execute(new TTxWrite(this, ev), ctx);
-    } else {
-        if (IsAnyChannelYellowStop()) {
-            LOG_S_ERROR("Write (out of disk space) at tablet " << TabletID());
-
-            IncCounter(COUNTER_OUT_OF_SPACE);
-            ev->Get()->PutStatus = NKikimrProto::TRYLATER;
-            Execute(new TTxWrite(this, ev), ctx);
-        } else {
-            LOG_S_DEBUG("Write (blob) " << data.size() << " bytes at tablet " << TabletID());
-
-            ev->Get()->MaxSmallBlobSize = Settings.MaxSmallBlobSize;
-
-            ctx.Register(CreateWriteActor(TabletID(), PrimaryIndex->GetIndexInfo(), ctx.SelfID,
-                BlobManager->StartBlobBatch(), Settings.BlobWriteGrouppingEnabled, ev->Release()));
-        }
-    }
 }
 
 void TColumnShard::Handle(TEvColumnShard::TEvRead::TPtr& ev, const TActorContext& ctx) {
@@ -253,6 +216,35 @@ void TColumnShard::Handle(TEvPrivate::TEvPeriodicWakeup::TPtr& ev, const TActorC
     ctx.Schedule(ActivationPeriod, new TEvPrivate::TEvPeriodicWakeup());
 }
 
+void TColumnShard::Handle(TEvMediatorTimecast::TEvRegisterTabletResult::TPtr& ev, const TActorContext&) {
+    const auto* msg = ev->Get();
+    Y_VERIFY(msg->TabletId == TabletID());
+    MediatorTimeCastEntry = msg->Entry;
+    Y_VERIFY(MediatorTimeCastEntry);
+    LOG_S_DEBUG("Registered with mediator time cast at tablet " << TabletID());
+
+    RescheduleWaitingReads();
+}
+
+void TColumnShard::Handle(TEvMediatorTimecast::TEvNotifyPlanStep::TPtr& ev, const TActorContext&) {
+    const auto* msg = ev->Get();
+    Y_VERIFY(msg->TabletId == TabletID());
+
+    Y_VERIFY(MediatorTimeCastEntry);
+    ui64 step = MediatorTimeCastEntry->Get(TabletID());
+    LOG_S_DEBUG("Notified by mediator time cast with PlanStep# " << step << " at tablet " << TabletID());
+
+    for (auto it = MediatorTimeCastWaitingSteps.begin(); it != MediatorTimeCastWaitingSteps.end();) {
+        if (step < *it) {
+            break;
+        }
+        it = MediatorTimeCastWaitingSteps.erase(it);
+    }
+
+    RescheduleWaitingReads();
+    EnqueueBackgroundActivities(true);
+}
+
 void TColumnShard::UpdateBlobMangerCounters() {
     const auto counters = BlobManager->GetCountersUpdate();
     IncCounter(COUNTER_BLOB_MANAGER_GC_REQUESTS, counters.GcRequestsSent);
@@ -319,6 +311,22 @@ void TColumnShard::UpdateIndexCounters() {
     SetCounter(COUNTER_EVICTED_RAW_BYTES, stats.Evicted.RawBytes);
 }
 
+ui64 TColumnShard::MemoryUsage() const {
+    ui64 memory =
+        Tables.size() * sizeof(TTableInfo) +
+        PathsToDrop.size() * sizeof(ui64) +
+        Ttl.PathsCount() * sizeof(TTtl::TDescription) +
+        SchemaPresets.size() * sizeof(TSchemaPreset) +
+        AltersInFlight.size() * sizeof(TAlterMeta) +
+        CommitsInFlight.size() * sizeof(TCommitMeta) +
+        TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
+        TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
+    if (PrimaryIndex) {
+        memory += PrimaryIndex->MemoryUsage();
+    }
+    return memory;
+}
+
 void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {
     auto * metrics = Executor()->GetResourceMetrics();
     if (!metrics) {
@@ -333,19 +341,7 @@ void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {
         TabletCounters->Simple()[COUNTER_SPLIT_COMPACTED_BYTES].Get() +
         TabletCounters->Simple()[COUNTER_INACTIVE_BYTES].Get();
 
-    ui64 memory =
-        Tables.size() * sizeof(TTableInfo) +
-        PathsToDrop.size() * sizeof(ui64) +
-        Ttl.PathsCount() * sizeof(TTtl::TDescription) +
-        SchemaPresets.size() * sizeof(TSchemaPreset) +
-        //TtlSettingsPresets.size() * sizeof(TTtlSettingsPreset) +
-        AltersInFlight.size() * sizeof(TAlterMeta) +
-        CommitsInFlight.size() * sizeof(TCommitMeta) +
-        TabletCounters->Simple()[COUNTER_PREPARED_RECORDS].Get() * sizeof(NOlap::TInsertedData) +
-        TabletCounters->Simple()[COUNTER_COMMITTED_RECORDS].Get() * sizeof(NOlap::TInsertedData);
-    if (PrimaryIndex) {
-        memory += PrimaryIndex->MemoryUsage();
-    }
+    ui64 memory = MemoryUsage();
 
     const TActorContext& ctx = TlsActivationContext->AsActorContext();
     TInstant now = AppData(ctx)->TimeProvider->Now();
@@ -358,6 +354,59 @@ void TColumnShard::UpdateResourceMetrics(const TUsage& usage) {
     //metrics->WriteThroughput
 
     metrics->TryUpdate(ctx);
+}
+
+void TColumnShard::SendPeriodicStats(const TActorContext& ctx) {
+    if (!CurrentSchemeShardId || !StorePathId) {
+        LOG_S_DEBUG("Disabled periodic stats at tablet " << TabletID());
+        return;
+    }
+
+    TInstant now = AppData(ctx)->TimeProvider->Now();
+    if (LastStatsReport + StatsReportInterval > now) {
+        return;
+    }
+    LastStatsReport = now;
+
+    if (!StatsReportPipe) {
+        LOG_S_DEBUG("Create periodic stats pipe to " << CurrentSchemeShardId << " at tablet " << TabletID());
+        NTabletPipe::TClientConfig clientConfig;
+        StatsReportPipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, clientConfig));
+    }
+
+    auto ev = std::make_unique<TEvDataShard::TEvPeriodicTableStats>(TabletID(), StorePathId);
+    {
+        ev->Record.SetShardState(2); // NKikimrTxDataShard.EDatashardState.Ready
+        ev->Record.SetGeneration(Executor()->Generation());
+        ev->Record.SetRound(StatsReportRound++);
+        ev->Record.SetNodeId(ctx.ExecutorThread.ActorSystem->NodeId);
+        ev->Record.SetStartTime(StartTime().MilliSeconds());
+
+        if (auto* resourceMetrics = Executor()->GetResourceMetrics()) {
+            resourceMetrics->Fill(*ev->Record.MutableTabletMetrics());
+        }
+
+        auto* tabletStats = ev->Record.MutableTableStats();
+        tabletStats->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_WRITE_OVERLOAD].Get());
+        tabletStats->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_OUT_OF_SPACE].Get());
+        tabletStats->SetInFlightTxCount(Executor()->GetStats().TxInFly);
+
+        if (PrimaryIndex) {
+            const auto& indexStats = PrimaryIndex->GetTotalStats();
+            NOlap::TSnapshot lastIndexUpdate = PrimaryIndex->LastUpdate();
+            auto activeIndexStats = indexStats.Active(); // data stats excluding inactive and evicted
+
+            tabletStats->SetRowCount(activeIndexStats.Rows);
+            tabletStats->SetDataSize(activeIndexStats.Bytes + TabletCounters->Simple()[COUNTER_COMMITTED_BYTES].Get());
+            // TODO: we need row/dataSize counters for evicted data (managed by tablet but stored outside)
+            //tabletStats->SetIndexSize(); // TODO: calc size of internal tables
+            //tabletStats->SetLastAccessTime(); // TODO: last read/write time
+            tabletStats->SetLastUpdateTime(lastIndexUpdate.PlanStep);
+        }
+    }
+
+    LOG_S_DEBUG("Sending periodic stats at tablet " << TabletID());
+    NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
 }
 
 }

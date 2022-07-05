@@ -85,7 +85,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
     // it's OK to OnDone InvalidShardIdx
     // move shard to the end of all queues
     TInstant now = AppData(ctx)->TimeProvider->Now();
-    TTableInfo::TPartitionStats stats;
+    TPartitionStats stats;
     stats.FullCompactionTs = now.Seconds();
     auto duration = CompactionQueue->OnDone(TShardCompactionInfo(shardIdx, stats));
 
@@ -139,7 +139,7 @@ void TSchemeShard::Handle(TEvDataShard::TEvCompactTableResult::TPtr &ev, const T
 
 void TSchemeShard::EnqueueBackgroundCompaction(
     const TShardIdx& shardIdx,
-    const TTableInfo::TPartitionStats& stats)
+    const TPartitionStats& stats)
 {
     if (!CompactionQueue)
         return;
@@ -174,7 +174,7 @@ void TSchemeShard::EnqueueBackgroundCompaction(
 
 void TSchemeShard::UpdateBackgroundCompaction(
     const TShardIdx& shardIdx,
-    const TTableInfo::TPartitionStats& newStats)
+    const TPartitionStats& newStats)
 {
     if (!CompactionQueue)
         return;
@@ -241,7 +241,7 @@ void TSchemeShard::UpdateBackgroundCompactionQueueMetrics() {
 
 void TSchemeShard::UpdateShardMetrics(
     const TShardIdx& shardIdx,
-    const TTableInfo::TPartitionStats& newStats)
+    const TPartitionStats& newStats)
 {
     if (newStats.HasBorrowedData)
         ShardsWithBorrowed.insert(shardIdx);

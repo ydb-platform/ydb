@@ -9,7 +9,7 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TTableInfo::TPartitionStats& tableStats) {
+static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TPartitionStats& tableStats) {
     stats->SetRowCount(tableStats.RowCount);
     stats->SetDataSize(tableStats.DataSize);
     stats->SetIndexSize(tableStats.IndexSize);
@@ -31,7 +31,7 @@ static void FillTableStats(NKikimrTableStats::TTableStats* stats, const TTableIn
     stats->SetPartCount(tableStats.PartCount);
 }
 
-static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TTableInfo::TPartitionStats& tableStats) {
+static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TPartitionStats& tableStats) {
     metrics->SetCPU(tableStats.GetCurrentRawCpuUsage());
     metrics->SetMemory(tableStats.Memory);
     metrics->SetNetwork(tableStats.Network);
@@ -40,6 +40,11 @@ static void FillTableMetrics(NKikimrTabletBase::TMetrics* metrics, const TTableI
     metrics->SetWriteThroughput(tableStats.WriteThroughput);
     metrics->SetReadIops(tableStats.ReadIops);
     metrics->SetWriteIops(tableStats.WriteIops);
+}
+
+static void FillAggregatedStats(NKikimrSchemeOp::TPathDescription& pathDescription, const TAggregatedStats& stats) {
+    FillTableStats(pathDescription.MutableTableStats(), stats.Aggregated);
+    FillTableMetrics(pathDescription.MutableTabletMetrics(), stats.Aggregated);
 }
 
 void TPathDescriber::FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl, TPathElement::EPathSubType subType) {
@@ -233,17 +238,7 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
         }
     }
 
-    const auto& tableStats(tableInfo->GetStats().Aggregated);
-
-    {
-        auto* stats = Result->Record.MutablePathDescription()->MutableTableStats();
-        FillTableStats(stats, tableStats);
-    }
-
-    {
-        auto* metrics = Result->Record.MutablePathDescription()->MutableTabletMetrics();
-        FillTableMetrics(metrics, tableStats);
-    }
+    FillAggregatedStats(*Result->Record.MutablePathDescription(), tableInfo->GetStats());
 
     if (returnPartitionStats) {
         NKikimrSchemeOp::TPathDescription& pathDescription = *Result->Record.MutablePathDescription();
@@ -362,6 +357,8 @@ void TPathDescriber::DescribeOlapStore(TPathId pathId, TPathElement::TPtr pathEl
         Y_VERIFY(shardInfo, "ColumnShard not found");
         description->AddColumnShards(shardInfo->TabletID.GetValue());
     }
+
+    FillAggregatedStats(*Result->Record.MutablePathDescription(), storeInfo->GetStats());
 }
 
 void TPathDescriber::DescribeColumnTable(TPathId pathId, TPathElement::TPtr pathEl) {

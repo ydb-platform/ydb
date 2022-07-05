@@ -185,6 +185,121 @@ struct TPartitionConfigMerger {
 
 };
 
+struct TPartitionStats {
+    // Latest timestamps when CPU usage exceeded 2%, 5%, 10%, 20%, 30%
+    struct TTopUsage {
+        TInstant Last2PercentLoad;
+        TInstant Last5PercentLoad;
+        TInstant Last10PercentLoad;
+        TInstant Last20PercentLoad;
+        TInstant Last30PercentLoad;
+
+        const TTopUsage& Update(const TTopUsage& usage) {
+            Last2PercentLoad  = std::max(Last2PercentLoad,  usage.Last2PercentLoad);
+            Last5PercentLoad  = std::max(Last5PercentLoad,  usage.Last5PercentLoad);
+            Last10PercentLoad = std::max(Last10PercentLoad, usage.Last10PercentLoad);
+            Last20PercentLoad = std::max(Last20PercentLoad, usage.Last20PercentLoad);
+            Last30PercentLoad = std::max(Last30PercentLoad, usage.Last30PercentLoad);
+            return *this;
+        }
+    };
+
+    TMessageSeqNo SeqNo;
+
+    ui64 RowCount = 0;
+    ui64 DataSize = 0;
+    ui64 IndexSize = 0;
+
+    TInstant LastAccessTime;
+    TInstant LastUpdateTime;
+    TDuration TxCompleteLag;
+
+    ui64 ImmediateTxCompleted = 0;
+    ui64 PlannedTxCompleted = 0;
+    ui64 TxRejectedByOverload = 0;
+    ui64 TxRejectedBySpace = 0;
+    ui64 InFlightTxCount = 0;
+
+    ui64 RowUpdates = 0;
+    ui64 RowDeletes = 0;
+    ui64 RowReads = 0;
+    ui64 RangeReads = 0;
+    ui64 RangeReadRows = 0;
+
+    ui64 Memory = 0;
+    ui64 Network = 0;
+    ui64 Storage = 0;
+    ui64 ReadThroughput = 0;
+    ui64 WriteThroughput = 0;
+    ui64 ReadIops = 0;
+    ui64 WriteIops = 0;
+
+    THashSet<TTabletId> PartOwners;
+    ui64 PartCount = 0;
+    ui64 SearchHeight = 0;
+    ui64 FullCompactionTs = 0;
+    ui64 MemDataSize = 0;
+    ui32 ShardState = NKikimrTxDataShard::Unknown;
+
+    // True when PartOwners has parts from other tablets
+    bool HasBorrowedData = false;
+
+    // True when lent parts to other tablets
+    bool HasLoanedData = false;
+
+    // Tablet actor started at
+    TInstant StartTime;
+
+    TTopUsage TopUsage;
+
+    void SetCurrentRawCpuUsage(ui64 rawCpuUsage, TInstant now) {
+        CPU = rawCpuUsage;
+        float percent = rawCpuUsage * 0.000001 * 100;
+        if (percent >= 2)
+            TopUsage.Last2PercentLoad = now;
+        if (percent >= 5)
+            TopUsage.Last5PercentLoad = now;
+        if (percent >= 10)
+            TopUsage.Last10PercentLoad = now;
+        if (percent >= 20)
+            TopUsage.Last20PercentLoad = now;
+        if (percent >= 30)
+            TopUsage.Last30PercentLoad = now;
+    }
+
+    ui64 GetCurrentRawCpuUsage() const {
+        return CPU;
+    }
+
+    float GetLatestMaxCpuUsagePercent(TInstant since) const {
+        // TODO: fix the case when stats were not collected yet
+
+        if (TopUsage.Last30PercentLoad > since)
+            return 40;
+        if (TopUsage.Last20PercentLoad > since)
+            return 30;
+        if (TopUsage.Last10PercentLoad > since)
+            return 20;
+        if (TopUsage.Last5PercentLoad > since)
+            return 10;
+        if (TopUsage.Last2PercentLoad > since)
+            return 5;
+
+        return 2;
+    }
+
+private:
+    ui64 CPU = 0;
+};
+
+struct TAggregatedStats {
+    TPartitionStats Aggregated;
+    THashMap<TShardIdx, TPartitionStats> PartitionStats;
+    size_t PartitionStatsUpdated = 0;
+
+    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
+};
+
 struct TSubDomainInfo;
 
 struct TTableInfo : public TSimpleRefCount<TTableInfo> {
@@ -226,114 +341,6 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
         ui32 SuccessShardCount;
         THashMap<TShardIdx, TTxState::TShardStatus> ShardStatuses;
         ui64 DataTotalSize;
-    };
-
-    struct TPartitionStats {
-        TMessageSeqNo SeqNo;
-
-        ui64 RowCount = 0;
-        ui64 DataSize = 0;
-        ui64 IndexSize = 0;
-
-        TInstant LastAccessTime;
-        TInstant LastUpdateTime;
-        TDuration TxCompleteLag;
-
-        ui64 ImmediateTxCompleted = 0;
-        ui64 PlannedTxCompleted = 0;
-        ui64 TxRejectedByOverload = 0;
-        ui64 TxRejectedBySpace = 0;
-        ui64 InFlightTxCount = 0;
-
-        ui64 RowUpdates = 0;
-        ui64 RowDeletes = 0;
-        ui64 RowReads = 0;
-        ui64 RangeReads = 0;
-        ui64 RangeReadRows = 0;
-
-        ui64 Memory = 0;
-        ui64 Network = 0;
-        ui64 Storage = 0;
-        ui64 ReadThroughput = 0;
-        ui64 WriteThroughput = 0;
-        ui64 ReadIops = 0;
-        ui64 WriteIops = 0;
-
-        THashSet<TTabletId> PartOwners;
-        ui64 PartCount = 0;
-        ui64 SearchHeight = 0;
-        ui64 FullCompactionTs = 0;
-        ui64 MemDataSize = 0;
-        ui32 ShardState = NKikimrTxDataShard::Unknown;
-
-        // True when PartOwners has parts from other tablets
-        bool HasBorrowedData = false;
-
-        // True when lent parts to other tablets
-        bool HasLoanedData = false;
-
-        // Tablet actor started at
-        TInstant StartTime;
-
-        void SetCurrentRawCpuUsage(ui64 rawCpuUsage, TInstant now) {
-            CPU = rawCpuUsage;
-            float percent = rawCpuUsage * 0.000001 * 100;
-            if (percent >= 2)
-                Last2PercentLoad = now;
-            if (percent >= 5)
-                Last5PercentLoad = now;
-            if (percent >= 10)
-                Last10PercentLoad = now;
-            if (percent >= 20)
-                Last20PercentLoad = now;
-            if (percent >= 30)
-                Last30PercentLoad = now;
-        }
-
-        void SaveCpuUsageHistory(const TPartitionStats& oldStats) {
-            Last2PercentLoad  = std::max(Last2PercentLoad,  oldStats.Last2PercentLoad);
-            Last5PercentLoad  = std::max(Last5PercentLoad,  oldStats.Last5PercentLoad);
-            Last10PercentLoad = std::max(Last10PercentLoad, oldStats.Last10PercentLoad);
-            Last20PercentLoad = std::max(Last20PercentLoad, oldStats.Last20PercentLoad);
-            Last30PercentLoad = std::max(Last30PercentLoad, oldStats.Last30PercentLoad);
-        }
-
-        ui64 GetCurrentRawCpuUsage() const {
-            return CPU;
-        }
-
-        float GetLatestMaxCpuUsagePercent(TInstant since) const {
-            // TODO: fix the case when stats were not collected yet
-
-            if (Last30PercentLoad > since)
-                return 40;
-            if (Last20PercentLoad > since)
-                return 30;
-            if (Last10PercentLoad > since)
-                return 20;
-            if (Last5PercentLoad > since)
-                return 10;
-            if (Last2PercentLoad > since)
-                return 5;
-
-            return 2;
-        }
-
-    private:
-        ui64 CPU = 0;
-
-        // Latest timestamps when CPU usage exceeded 2%, 5%, 10%, 20%, 30%
-        TInstant Last2PercentLoad;
-        TInstant Last5PercentLoad;
-        TInstant Last10PercentLoad;
-        TInstant Last20PercentLoad;
-        TInstant Last30PercentLoad;
-    };
-
-    struct TStats {
-        TPartitionStats Aggregated;
-        THashMap<TShardIdx, TPartitionStats> PartitionStats;
-        size_t PartitionStatsUpdated = 0;
     };
 
     struct TAlterTableInfo : TSimpleRefCount<TAlterTableInfo> {
@@ -454,7 +461,7 @@ private:
     THashMap<TOperationId, TVector<TShardIdx>> ShardsInSplitMergeByOpId;
     THashMap<TShardIdx, TOperationId> ShardsInSplitMergeByShards;
     ui64 ExpectedPartitionCount = 0; // number of partitions after all in-flight splits/merges are finished
-    TStats Stats;
+    TAggregatedStats Stats;
     bool ShardsStatsDetached = false;
 
     TPartitionsVec::iterator FindPartition(const TShardIdx& shardIdx) {
@@ -545,7 +552,7 @@ public:
         return Partitions;
     }
 
-    const TStats& GetStats() const {
+    const TAggregatedStats& GetStats() const {
         return Stats;
     }
 
@@ -556,7 +563,7 @@ public:
         ShardsStatsDetached = true;
     }
 
-    void UpdateShardStats(TShardIdx datashardIdx, TPartitionStats& newStats);
+    void UpdateShardStats(TShardIdx datashardIdx, const TPartitionStats& newStats);
 
     void RegisterSplitMegreOp(TOperationId txId, const TTxState& txState);
 
@@ -840,17 +847,25 @@ struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     TVector<TShardIdx> ColumnShards;
 
     THashMap<ui32, TOlapStoreSchemaPreset> SchemaPresets;
-    //THashMap<ui32, TOlapStoreTtlSettingsPreset> TtlSettingsPresets;
     THashMap<TString, ui32> SchemaPresetByName;
-    THashMap<TString, ui32> TtlSettingsPresetByName;
 
     THashSet<TPathId> ColumnTables;
     THashSet<TPathId> ColumnTablesUnderOperation;
+    TAggregatedStats Stats;
 
     TOlapStoreInfo() = default;
     TOlapStoreInfo(ui64 alterVersion, NKikimrSchemeOp::TColumnStoreDescription&& description,
             NKikimrSchemeOp::TColumnStoreSharding&& sharding,
             TMaybe<NKikimrSchemeOp::TAlterColumnStore>&& alterBody = Nothing());
+
+    const TAggregatedStats& GetStats() const {
+        return Stats;
+    }
+
+    void UpdateShardStats(TShardIdx shardIdx, const TPartitionStats& newStats) {
+        Stats.PartitionStats[shardIdx]; // insert if none
+        Stats.UpdateShardStats(shardIdx, newStats);
+    }
 };
 
 struct TColumnTableInfo : TSimpleRefCount<TColumnTableInfo> {
@@ -1695,7 +1710,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         CoordinatorSelector = new TCoordinators(ProcessingParams);
     }
 
-    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TTableInfo::TPartitionStats& newAggr, const TTableInfo::TPartitionStats& oldAggr = TTableInfo::TPartitionStats()) {
+    void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {}) {
         DiskSpaceUsage.Tables.DataSize += (newAggr.DataSize - oldAggr.DataSize);
         counters->ChangeDiskSpaceTablesDataBytes(newAggr.DataSize - oldAggr.DataSize);
 

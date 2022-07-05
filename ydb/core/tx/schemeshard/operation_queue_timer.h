@@ -115,7 +115,7 @@ struct TShardCompactionInfo {
         : ShardIdx(id)
     {}
 
-    TShardCompactionInfo(const TShardIdx& id, const TTableInfo::TPartitionStats& stats)
+    TShardCompactionInfo(const TShardIdx& id, const TPartitionStats& stats)
         : ShardIdx(id)
         , SearchHeight(stats.SearchHeight)
         , LastFullCompactionTs(stats.FullCompactionTs)

@@ -156,6 +156,7 @@ message TCommitTxBody {
 
 message TInitShard {
     optional uint32 DataChannelCount = 1;
+    optional uint64 StorePathId = 2;
 }
 
 message TSchemaPresetVersionInfo {
@@ -217,8 +218,9 @@ message TAlterStore {
     optional NKikimrSchemeOp.TAlterColumnStore AlterBody = 1;
     repeated uint32 DroppedSchemaPresets = 2;
     repeated NKikimrSchemeOp.TColumnTableSchemaPreset SchemaPresets = 3;
-    repeated uint32 DroppedTtlSettingsPresets = 4;
-    repeated NKikimrSchemeOp.TColumnTableTtlSettingsPreset TtlSettingsPresets = 5;
+    repeated uint32 Reserved_4 = 4; // DroppedTtlSettingsPresets, deprecated
+    repeated NKikimrSchemeOp.TColumnTableTtlSettingsPreset Reserved_5 = 5; // TtlSettingsPresets, deprecated
+    optional uint64 StorePathId = 6;
 }
 
 message TSchemaSeqNo {

@@ -823,6 +823,11 @@ struct TEvDataShard {
             Record.SetTableOwnerId(tableOwnerId);
             Record.SetTableLocalId(tableLocalId);
         }
+
+        TEvPeriodicTableStats(ui64 datashardId, ui64 tableLocalId) {
+            Record.SetDatashardId(datashardId);
+            Record.SetTableLocalId(tableLocalId);
+        }
     };
 
     struct TEvS3ListingRequest : public TEventPB<TEvS3ListingRequest,

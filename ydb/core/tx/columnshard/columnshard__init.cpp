@@ -19,13 +19,13 @@ void TTxInit::SetDefaults() {
     Self->LastWriteId = TWriteId{0};
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;
+    Self->StorePathId = 0;
     Self->BasicTxInfo.clear();
     Self->DeadlineQueue.clear();
     Self->PlanQueue.clear();
     Self->AltersInFlight.clear();
     Self->CommitsInFlight.clear();
     Self->SchemaPresets.clear();
-    //Self->TtlSettingsPresets.clear();
     Self->Tables.clear();
     Self->LongTxWrites.clear();
     Self->LongTxWritesByUniqueId.clear();
@@ -62,6 +62,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastWriteId, Self->LastWriteId);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedStep, Self->LastPlannedStep);
     ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::LastPlannedTxId, Self->LastPlannedTxId);
+    ready = ready && Schema::GetSpecialValue(db, Schema::EValueIds::StorePathId, Self->StorePathId);
 
     if (!ready)
         return false;
@@ -170,49 +171,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
                 return false;
         }
     }
-#if 0 // TTL presets haven't been used
-    { // Load ttl settings presets
-        auto rowset = db.Table<Schema::TtlSettingsPresetInfo>().Select();
-        if (!rowset.IsReady())
-            return false;
 
-        while (!rowset.EndOfSet()) {
-            const ui32 id = rowset.GetValue<Schema::TtlSettingsPresetInfo::Id>();
-            auto& preset = Self->TtlSettingsPresets[id];
-            preset.Id = id;
-            preset.Name = rowset.GetValue<Schema::TtlSettingsPresetInfo::Name>();
-            if (rowset.HaveValue<Schema::TtlSettingsPresetInfo::DropStep>() &&
-                rowset.HaveValue<Schema::TtlSettingsPresetInfo::DropTxId>())
-            {
-                preset.DropVersion.Step = rowset.GetValue<Schema::TtlSettingsPresetInfo::DropStep>();
-                preset.DropVersion.TxId = rowset.GetValue<Schema::TtlSettingsPresetInfo::DropTxId>();
-            }
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-
-    { // Load ttl settings preset versions
-        auto rowset = db.Table<Schema::TtlSettingsPresetVersionInfo>().Select();
-        if (!rowset.IsReady())
-            return false;
-
-        while (!rowset.EndOfSet()) {
-            const ui32 id = rowset.GetValue<Schema::TtlSettingsPresetVersionInfo::Id>();
-            Y_VERIFY(Self->TtlSettingsPresets.contains(id));
-            auto& preset = Self->TtlSettingsPresets.at(id);
-            const TRowVersion version(
-                rowset.GetValue<Schema::TtlSettingsPresetVersionInfo::SinceStep>(),
-                rowset.GetValue<Schema::TtlSettingsPresetVersionInfo::SinceTxId>());
-            auto& info = preset.Versions[version];
-            Y_VERIFY(info.ParseFromString(rowset.GetValue<Schema::TtlSettingsPresetVersionInfo::InfoProto>()));
-
-            if (!rowset.Next())
-                return false;
-        }
-    }
-#endif
     { // Load tables
         auto rowset = db.Table<Schema::TableInfo>().Select();
         if (!rowset.IsReady())
@@ -266,7 +225,6 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     Self->SetCounter(COUNTER_TABLES, Self->Tables.size());
     Self->SetCounter(COUNTER_TABLE_PRESETS, Self->SchemaPresets.size());
-    //Self->SetCounter(COUNTER_TTL_PRESETS, Self->TtlSettingsPresets.size());
     Self->SetCounter(COUNTER_TABLE_TTLS, ttls.size());
 
     if (!schemaPreset.empty()) {

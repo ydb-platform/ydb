@@ -184,40 +184,13 @@ TColumnTableInfo::TPtr CreateColumnTable(
     } else {
         storageTiers = pSchema->Tiers;
     }
-#if 1
+
     if (op.HasRESERVED_TtlSettingsPresetName() || op.HasRESERVED_TtlSettingsPresetId()) {
         status = NKikimrScheme::StatusSchemeError;
         errStr = "TTL presets are not supported";
         return nullptr;
     }
-#else
-    if (op.HasTtlSettingsPresetName()) {
-        const TString presetName = op.GetTtlSettingsPresetName();
-        if (!storeInfo->TtlSettingsPresetByName.contains(presetName)) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified ttl settings preset '%s' does not exist in olap store", presetName.c_str());
-            return nullptr;
-        }
-        const ui32 presetId = storeInfo->TtlSettingsPresetByName.at(presetName);
-        if (!op.HasTtlSettingsPresetId()) {
-            op.SetTtlSettingsPresetId(presetId);
-        }
-        if (op.GetTtlSettingsPresetId() != presetId) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified ttl settings preset '%s' and id %" PRIu32 " do not match in olap store", presetName.c_str(), presetId);
-            return nullptr;
-        }
-    } else if (op.HasTtlSettingsPresetId()) {
-        const ui32 presetId = op.GetTtlSettingsPresetId();
-        if (!storeInfo->TtlSettingsPresets.contains(presetId)) {
-            status = NKikimrScheme::StatusSchemeError;
-            errStr = Sprintf("Specified ttl preset %" PRIu32 " does not exist in olap store", presetId);
-            return nullptr;
-        }
-        const TString& presetName = storeInfo->TtlSettingsPresets.at(presetId).Name;
-        op.SetTtlSettingsPresetName(presetName);
-    } else
-#endif
+
     if (op.HasTtlSettings()) {
         op.MutableTtlSettings()->SetVersion(1);
     }

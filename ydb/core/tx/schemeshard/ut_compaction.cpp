@@ -19,7 +19,7 @@ using TTableInfoMap = THashMap<TString, NKikimrTxDataShard::TEvGetInfoResponse::
 
 TShardCompactionInfo MakeCompactionInfo(ui64 idx, ui64 ts, ui64 sh = 0, ui64 d = 0) {
     TShardIdx shardId = TShardIdx(1, idx);
-    TTableInfo::TPartitionStats stats;
+    TPartitionStats stats;
     stats.FullCompactionTs = ts;
     stats.SearchHeight = sh;
     stats.RowDeletes = d;
@@ -1090,7 +1090,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 0;
         config.RowDeletesThreshold = 0;
 
-        TTableInfo::TPartitionStats stats; // all zeros
+        TPartitionStats stats; // all zeros
 
         TCompactionQueueImpl queue(config);
         UNIT_ASSERT(!queue.Enqueue({ShardIdx, stats}));
@@ -1102,7 +1102,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 0;
         config.RowDeletesThreshold = 0;
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 10;
         stats.RowDeletes = 100;
         stats.SearchHeight = 1; // below threshold
@@ -1119,7 +1119,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.RowDeletesThreshold = 0;
         config.CompactSinglePartedShards = true; // turn on
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 10;
         stats.RowDeletes = 100;
         stats.SearchHeight = 1; // below threshold
@@ -1135,7 +1135,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 0;
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 10;
         stats.RowDeletes = 100;
         stats.SearchHeight = 1; // below threshold
@@ -1152,7 +1152,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 10;
         stats.RowDeletes = 100;
         stats.SearchHeight = 3;
@@ -1170,7 +1170,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 10;
         stats.RowDeletes = 1;
         stats.SearchHeight = 20;
@@ -1189,7 +1189,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.RowDeletesThreshold = 10;
         config.RowCountThreshold = 1;
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 0;
         stats.RowDeletes = 1;
         stats.SearchHeight = 20;
@@ -1233,7 +1233,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 8);
 
         // remove from LastCompaction, active queue should not change
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 0), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 0), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 7UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 2UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
@@ -1249,7 +1249,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
 
         // remove1 from BySearchHeight (active queue should not change)
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 4), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 4), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 5UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 1UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
@@ -1257,7 +1257,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
 
         // remove2 from BySearchHeight, ByRowDeletes is active now
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 5), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 5), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 4UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 2UL);
@@ -1265,7 +1265,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
 
         // remove1 from ByRowDeletes
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 6), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 6), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 3UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 1UL);
@@ -1273,7 +1273,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
 
         // remove2 from ByRowDeletes
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 7), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 7), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
@@ -1281,7 +1281,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 2);
 
         // remove1 from LastCompaction
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 2), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 2), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 1UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
@@ -1289,7 +1289,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
 
         // remove2 from LastCompaction
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 3), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 3), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
@@ -1319,7 +1319,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
 
         // remove from BySearchHeight
-        UNIT_ASSERT(queue.Remove({TShardIdx(1, 4), TTableInfo::TPartitionStats()}));
+        UNIT_ASSERT(queue.Remove({TShardIdx(1, 4), TPartitionStats()}));
         UNIT_ASSERT_VALUES_EQUAL(queue.Size(), 2UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeBySearchHeight(), 0UL);
         UNIT_ASSERT_VALUES_EQUAL(queue.SizeByRowDeletes(), 0UL);
@@ -1387,7 +1387,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueType(), TCompactionQueueImpl::EActiveQueue::BySearchHeight);
         UNIT_ASSERT_VALUES_EQUAL(queue.ActiveQueueSize(), 1);
 
-        TTableInfo::TPartitionStats statsBelow;
+        TPartitionStats statsBelow;
         statsBelow.RowDeletes = 100;
         statsBelow.FullCompactionTs = 4;
         statsBelow.SearchHeight = 1; // below threshold
@@ -1415,7 +1415,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         // Now check transition from BySearchHeight to LastCompaction, i.e. empty RowDeletes
 
         // step1: populate w with item
-        TTableInfo::TPartitionStats statsSh;
+        TPartitionStats statsSh;
         statsSh.FullCompactionTs = 4;
         statsSh.SearchHeight = 100; // above threshold
         statsSh.RowDeletes = 1;     // below threshold
@@ -1447,7 +1447,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         // check ByLastCompaction -> ByRowDeletes, i.e. empty BySearchHeight
 
         // step1: populate ByRowDeletes with item
-        TTableInfo::TPartitionStats statsDel;
+        TPartitionStats statsDel;
         statsDel.FullCompactionTs = 5;
         statsDel.SearchHeight = 1; // below threshold
         statsDel.RowDeletes = 100; // above threshold
@@ -1475,7 +1475,7 @@ Y_UNIT_TEST_SUITE(TSchemeshardCompactionQueueTest) {
         config.SearchHeightThreshold = 10;
         config.RowDeletesThreshold = 10;
 
-        TTableInfo::TPartitionStats stats;
+        TPartitionStats stats;
         stats.RowCount = 10;
         stats.RowDeletes = 1000;
         stats.SearchHeight = 20;

@@ -1,9 +1,130 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/formats/arrow_helpers.h>
+#include <ydb/core/formats/arrow_batch_builder.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
 using namespace NKikimrSchemeOp;
 using namespace NSchemeShardUT_Private;
+
+namespace NKikimr {
+namespace {
+
+namespace NTypeIds = NScheme::NTypeIds;
+using TTypeId = NScheme::TTypeId;
+
+static const TString defaultStoreSchema = R"(
+    Name: "OlapStore"
+    ColumnShardCount: 1
+    SchemaPresets {
+        Name: "default"
+        Schema {
+            Columns { Name: "timestamp" Type: "Timestamp" }
+            Columns { Name: "data" Type: "Utf8" }
+            KeyColumnNames: "timestamp"
+            Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
+        }
+    }
+)";
+
+static const TVector<std::pair<TString, TTypeId>> defaultYdbSchema = {
+    {"timestamp", NTypeIds::Timestamp },
+    {"data", NTypeIds::Utf8 }
+};
+
+TString MakeTestBlob(std::pair<ui64, ui64> range) {
+    TString err;
+    NArrow::TArrowBatchBuilder batchBuilder(arrow::Compression::LZ4_FRAME);
+    batchBuilder.Start(defaultYdbSchema, 0, 0, err);
+
+    TString str;
+    TVector<TTypeId> types = {NTypeIds::Timestamp, NTypeIds::Utf8};
+
+    for (size_t i = range.first; i < range.second; ++i) {
+        str = ToString(i);
+
+        TVector<TCell> cells;
+        cells.push_back(TCell::Make<ui64>(i));
+        cells.push_back(TCell(str.data(), str.size()));
+
+        NKikimr::TDbTupleRef unused;
+        batchBuilder.AddRow(unused, NKikimr::TDbTupleRef(types.data(), cells.data(), 2));
+    }
+
+    auto batch = batchBuilder.FlushBatch(true);
+    UNIT_ASSERT(batch);
+    auto status = batch->ValidateFull();
+    UNIT_ASSERT(status.ok());
+
+    return batchBuilder.Finish();
+}
+
+static constexpr ui64 txInitiator = 42; // 0 means LongTx, we need another value here
+
+void WriteData(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui64 pathId, ui64 writeId, TString data) {
+    const TString dedupId = ToString(writeId);
+
+    auto evWrite = std::make_unique<TEvColumnShard::TEvWrite>(sender, txInitiator, writeId, pathId, dedupId, data);
+
+    ForwardToTablet(runtime, tabletId, sender, evWrite.release());
+    TAutoPtr<IEventHandle> handle;
+    auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvWriteResult>(handle);
+    UNIT_ASSERT(event);
+
+    auto& resWrite = Proto(event);
+    UNIT_ASSERT_EQUAL(resWrite.GetOrigin(), tabletId);
+    UNIT_ASSERT_EQUAL(resWrite.GetTxInitiator(), txInitiator);
+    UNIT_ASSERT_EQUAL(resWrite.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+}
+
+void ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 tabletId, ui64 txId, const TVector<ui64>& writeIds) {
+    NKikimrTxColumnShard::ETransactionKind txKind = NKikimrTxColumnShard::ETransactionKind::TX_KIND_COMMIT;
+    TString txBody;
+    {
+        NKikimrTxColumnShard::TCommitTxBody proto;
+        proto.SetTxInitiator(txInitiator);
+        for (ui64 id : writeIds) {
+            proto.AddWriteIds(id);
+        }
+
+        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
+    }
+
+    ForwardToTablet(runtime, tabletId, sender,
+                    new TEvColumnShard::TEvProposeTransaction(txKind, sender, txId, txBody));
+    TAutoPtr<IEventHandle> handle;
+    auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
+    UNIT_ASSERT(event);
+
+    auto& res = Proto(event);
+    UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
+    UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
+    UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::PREPARED);
+}
+
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 tabletId, ui64 planStep, const TSet<ui64>& txIds) {
+    auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep, txInitiator, tabletId);
+    for (ui64 txId : txIds) {
+        auto tx = plan->Record.AddTransactions();
+        tx->SetTxId(txId);
+        ActorIdToProto(sender, tx->MutableAckTo());
+    }
+
+    ForwardToTablet(runtime, tabletId, sender, plan.release());
+    TAutoPtr<IEventHandle> handle;
+
+    for (ui32 i = 0; i < txIds.size(); ++i) {
+        auto event = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(handle);
+        UNIT_ASSERT(event);
+
+        auto& res = Proto(event);
+        UNIT_ASSERT(txIds.count(res.GetTxId()));
+        UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::EResultStatus::SUCCESS);
+    }
+}
+
+}}
 
 
 Y_UNIT_TEST_SUITE(TOlap) {
@@ -12,19 +133,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
         ui64 txId = 100;
 
-        TString olapSchema = R"(
-            Name: "OlapStore"
-            ColumnShardCount: 1
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            }
-        )";
+        const TString& olapSchema = defaultStoreSchema;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
@@ -78,19 +187,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
         ui64 txId = 100;
 
-        TString olapSchema = R"(
-            Name: "OlapStore"
-            ColumnShardCount: 1
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            }
-        )";
+        const TString& olapSchema = defaultStoreSchema;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
@@ -220,19 +317,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
         ui64 txId = 100;
 
-        TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
-            Name: "OlapStore"
-            ColumnShardCount: 1
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            }
-        )");
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
 
         TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", R"(
@@ -251,19 +338,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
         ui64 txId = 100;
 
-        TString olapSchema = R"(
-            Name: "OlapStore"
-            ColumnShardCount: 1
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            }
-        )";
+        const TString& olapSchema = defaultStoreSchema;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
@@ -396,19 +471,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
         ui64 txId = 100;
 
-        TString olapSchema = R"(
-            Name: "OlapStore"
-            ColumnShardCount: 1
-            SchemaPresets {
-                Name: "default"
-                Schema {
-                    Columns { Name: "timestamp" Type: "Timestamp" }
-                    Columns { Name: "data" Type: "Utf8" }
-                    KeyColumnNames: "timestamp"
-                    Engine: COLUMN_ENGINE_REPLACING_TIMESERIES
-                }
-            }
-        )";
+        const TString& olapSchema = defaultStoreSchema;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
         env.TestWaitNotification(runtime, txId);
@@ -543,4 +606,102 @@ Y_UNIT_TEST_SUITE(TOlap) {
     // negatives for store: disallow alters
     // negatives for table: wrong tiers count, wrong tiers, wrong eviction column, wrong eviction values,
     //      different TTL columns in tiers
+
+    Y_UNIT_TEST(StoreStats) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        // disable stats batching
+        auto& appData = runtime.GetAppData();
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot", olapSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+        TestLsPathId(runtime, 2, NLs::PathStringEqual("/MyRoot/OlapStore"));
+
+        TString tableSchema = R"(
+            Name: "ColumnTable"
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/OlapStore", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        ui64 planStep = 0;
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            auto& self = record.GetPathDescription().GetSelf();
+            pathId = self.GetPathId();
+            txId = self.GetCreateTxId() + 1;
+            planStep = self.GetCreateStep();
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/OlapStore/ColumnTable");
+        };
+
+        TestLsPathId(runtime, 3, checkFn);
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep);
+
+        ui32 rowsInBatch = 100000;
+
+        {   // Write data directly into shard
+            TActorId sender = runtime.AllocateEdgeActor();
+            TString data = MakeTestBlob({0, rowsInBatch});
+
+            ui64 writeId = 0;
+
+            TSet<ui64> txIds;
+            for (ui32 i = 0; i < 10; ++i) {
+                WriteData(runtime, sender, shardId, pathId, ++writeId, data);
+                ProposeCommit(runtime, sender, shardId, ++txId, {writeId});
+                txIds.insert(txId);
+            }
+
+            PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+
+            // emulate timeout
+            runtime.UpdateCurrentTime(TInstant::Now());
+
+            // trigger periodic stats at shard (after timeout)
+            WriteData(runtime, sender, shardId, pathId, ++writeId, data);
+            ProposeCommit(runtime, sender, shardId, ++txId, {writeId});
+            txIds = {txId};
+            PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+        }
+
+        auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/OlapStore", true, true);
+        auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+        UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+        UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+#if 0
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/OlapStore", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore/ColumnTable", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 3, NLs::PathStringEqual(""));
+
+        TestDropOlapStore(runtime, ++txId, "/MyRoot", "OlapStore");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathNotExist);
+        TestLsPathId(runtime, 2, NLs::PathStringEqual(""));
+#endif
+    }
 }

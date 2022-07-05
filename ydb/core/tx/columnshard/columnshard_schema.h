@@ -47,6 +47,8 @@ struct Schema : NIceDb::Schema {
 
         LastGcBarrierGen = 8,
         LastGcBarrierStep = 9,
+        //LastExportNumber = 10,
+        StorePathId = 11,
     };
 
     enum class EInsertTableIds : ui8 {
@@ -345,37 +347,7 @@ struct Schema : NIceDb::Schema {
     static void EraseSchemaPresetInfo(NIceDb::TNiceDb& db, ui64 id) {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
-#if 0
-    static void SaveTtlSettingsPresetInfo(NIceDb::TNiceDb& db, ui64 id, const TString& name) {
-        db.Table<TtlSettingsPresetInfo>().Key(id).Update(
-            NIceDb::TUpdate<TtlSettingsPresetInfo::Name>(name));
-    }
 
-    static void SaveTtlSettingsPresetVersionInfo(
-            NIceDb::TNiceDb& db,
-            ui64 id, const TRowVersion& version,
-            const NKikimrTxColumnShard::TTtlSettingsPresetVersionInfo& info)
-    {
-        TString serialized;
-        Y_VERIFY(info.SerializeToString(&serialized));
-        db.Table<TtlSettingsPresetVersionInfo>().Key(id, version.Step, version.TxId).Update(
-            NIceDb::TUpdate<TtlSettingsPresetVersionInfo::InfoProto>(serialized));
-    }
-
-    static void SaveTtlSettingsPresetDropVersion(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& dropVersion) {
-        db.Table<TtlSettingsPresetInfo>().Key(id).Update(
-            NIceDb::TUpdate<TtlSettingsPresetInfo::DropStep>(dropVersion.Step),
-            NIceDb::TUpdate<TtlSettingsPresetInfo::DropTxId>(dropVersion.TxId));
-    }
-
-    static void EraseTtlSettingsPresetVersionInfo(NIceDb::TNiceDb& db, ui64 id, const TRowVersion& version) {
-        db.Table<TtlSettingsPresetVersionInfo>().Key(id, version.Step, version.TxId).Delete();
-    }
-
-    static void EraseTtlSettingsPresetInfo(NIceDb::TNiceDb& db, ui64 id) {
-        db.Table<TtlSettingsPresetInfo>().Key(id).Delete();
-    }
-#endif
     static void SaveTableInfo(NIceDb::TNiceDb& db, ui64 pathId) {
         db.Table<TableInfo>().Key(pathId).Update();
     }

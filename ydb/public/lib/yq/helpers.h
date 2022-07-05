@@ -11,7 +11,7 @@ T CreateYqSettings(const TScope& scope)
     T settings;
     settings.Header_ = {
         { "x-yq-scope", scope.ToString() }, // TODO: remove YQ-1055
-        { "x-fq-scope", scope.ToString() }
+        { "x-ydb-fq-project", scope.ToString() }
     };
     return settings;
 }

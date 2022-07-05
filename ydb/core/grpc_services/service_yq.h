@@ -30,7 +30,7 @@ public:
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult& , ICheckerIface* iface) override {
-        TString scope = GetPeerMetaValues("x-fq-scope").GetOrElse("");
+        TString scope = GetPeerMetaValues("x-ydb-fq-project").GetOrElse("");
         if (scope.empty()) {
             scope = GetPeerMetaValues("x-yq-scope").GetOrElse(""); // TODO: remove YQ-1055
         }

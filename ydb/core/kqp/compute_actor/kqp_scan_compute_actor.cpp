@@ -244,8 +244,8 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
+        YQL_ENSURE(ScanData);
+        YQL_ENSURE(!Shards.empty());
 
         auto& msg = ev->Get()->Record;
 
@@ -289,8 +289,8 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
+        YQL_ENSURE(ScanData);
+        YQL_ENSURE(!Shards.empty());
 
         auto& msg = *ev->Get();
         auto& state = Shards.front();
@@ -353,8 +353,8 @@ private:
     }
 
     void ProcessScanData() {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
+        YQL_ENSURE(ScanData);
+        YQL_ENSURE(!Shards.empty());
         Y_VERIFY(PendingScanData);
 
         auto& ev = PendingScanData.front().first;
@@ -460,8 +460,8 @@ private:
     }
 
     void HandleExecute(TEvKqpCompute::TEvScanError::TPtr& ev) {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
+        YQL_ENSURE(ScanData);
+        YQL_ENSURE(!Shards.empty());
 
         auto& msg = ev->Get()->Record;
 
@@ -552,7 +552,7 @@ private:
             return;
         }
 
-        Y_VERIFY_DEBUG(ScanData);
+        YQL_ENSURE(ScanData);
         auto& state = Shards.front();
 
         if (state.TabletId != msg.TabletId) {
@@ -615,14 +615,14 @@ private:
     }
 
     void HandleExecute(TEvPrivate::TEvRetryShard::TPtr&) {
-        Y_VERIFY_DEBUG(!Shards.empty());
+        YQL_ENSURE(!Shards.empty());
         auto& state = Shards.front();
         SendStartScanRequest(state, state.Generation);
     }
 
     void HandleExecute(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
-        Y_VERIFY_DEBUG(ScanData);
-        Y_VERIFY_DEBUG(!Shards.empty());
+        YQL_ENSURE(ScanData);
+        YQL_ENSURE(!Shards.empty());
 
         auto state = std::move(Shards.front());
         Shards.pop_front();

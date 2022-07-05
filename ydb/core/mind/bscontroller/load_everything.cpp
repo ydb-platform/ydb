@@ -176,8 +176,9 @@ public:
                 const TBoxStoragePoolId storagePoolId = it->second;
                 groupToStoragePool.erase(it);
 
+                const bool isVirtualGroup = TGroupID(groups.GetKey()).ConfigurationType() == EGroupConfigurationType::Virtual;
                 const auto geomIt = geometry.find(groups.GetKey());
-                Y_VERIFY(geomIt != geometry.end());
+                Y_VERIFY(isVirtualGroup || geomIt != geometry.end());
 
                 TGroupInfo& group = Self->AddGroup(groups.GetKey(),
                                                    groups.GetValue<T::Generation>(),
@@ -194,9 +195,9 @@ public:
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
                                                    storagePoolId,
-                                                   std::get<0>(geomIt->second),
-                                                   std::get<1>(geomIt->second),
-                                                   std::get<2>(geomIt->second));
+                                                   isVirtualGroup ? 0 : std::get<0>(geomIt->second),
+                                                   isVirtualGroup ? 0 : std::get<1>(geomIt->second),
+                                                   isVirtualGroup ? 0 : std::get<2>(geomIt->second));
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
 #define OPTIONAL(NAME) \

@@ -21,7 +21,7 @@ namespace NKikimr {
                 struct TQueue {
                     TActorId ActorId;
                     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
-                    bool ExtraBlockChecksSupport;
+                    std::optional<bool> ExtraBlockChecksSupport;
                 };
                 TQueue PutTabletLog;
                 TQueue PutAsyncBlob;
@@ -80,12 +80,12 @@ namespace NKikimr {
                 {}
 
                 static void ValidateEvent(TQueue& queue, const TEvBlobStorage::TEvVPut& event) {
-                    Y_VERIFY(!event.Record.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport);
+                    Y_VERIFY(!event.Record.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
                 }
 
                 static void ValidateEvent(TQueue& queue, const TEvBlobStorage::TEvVMultiPut& event) {
                     for (const auto& item : event.Record.GetItems()) {
-                        Y_VERIFY(!item.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport);
+                        Y_VERIFY(!item.ExtraBlockChecksSize() || queue.ExtraBlockChecksSupport.value_or(true));
                     }
                 }
 

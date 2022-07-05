@@ -14,9 +14,10 @@ namespace NKikimr {
             EvRegisterAgentResult,
             EvAllocateIds,
             EvAllocateIdsResult,
+            EvPushNotify,
+            EvPushNotifyResult,
             EvBlock,
             EvBlockResult,
-            EvPushNotify,
             EvQueryBlocks,
             EvQueryBlocksResult,
             EvCollectGarbage,
@@ -56,9 +57,10 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvRegisterAgentResult);
         BLOBDEPOT_EVENT_PB(EvAllocateIds, ChannelKind);
         BLOBDEPOT_EVENT_PB(EvAllocateIdsResult, ChannelKind, Generation);
-        BLOBDEPOT_EVENT_PB(EvBlock, TabletId, BlockedGeneration);
-        BLOBDEPOT_EVENT_PB(EvBlockResult, Status, ErrorReason);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotify);
+        BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotifyResult);
+        BLOBDEPOT_EVENT_PB(EvBlock, TabletId, BlockedGeneration);
+        BLOBDEPOT_EVENT_PB(EvBlockResult, Status, ErrorReason, TimeToLiveMs);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvQueryBlocks);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvQueryBlocksResult);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvCollectGarbage);
@@ -74,6 +76,7 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvApplyConfig> { using Type = TEvApplyConfigResult; };
         template<> struct TResponseFor<TEvRegisterAgent> { using Type = TEvRegisterAgentResult; };
         template<> struct TResponseFor<TEvAllocateIds> { using Type = TEvAllocateIdsResult; };
+        template<> struct TResponseFor<TEvPushNotify> { using Type = TEvPushNotifyResult; };
         template<> struct TResponseFor<TEvBlock> { using Type = TEvBlockResult; };
         template<> struct TResponseFor<TEvQueryBlocks> { using Type = TEvQueryBlocksResult; };
         template<> struct TResponseFor<TEvCollectGarbage> { using Type = TEvCollectGarbageResult; };

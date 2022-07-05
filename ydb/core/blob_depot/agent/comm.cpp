@@ -137,4 +137,12 @@ namespace NKikimr::NBlobDepot {
         RegisterRequest(id, sender, std::move(context), {}, true);
     }
 
+    void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
+        auto& msg = ev->Get()->Record;
+        OnBlockedTablets(msg.GetBlockedTablets());
+
+        auto [response, _] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
+        TActivationContext::Send(response.release());
+    }
+
 } // NKikimr::NBlobDepot

@@ -5,14 +5,15 @@ namespace NKikimr::NBlobDepot {
     class TBlobDepotAgent::TBlocksManager
         : public TRequestSender
     {
-        struct TBlockInfo {
+        struct TBlock {
             ui32 BlockedGeneration;
+            TDuration TimeToLive;
             TMonotonic ExpirationTimestamp; // not valid after
             bool RefreshInFlight = false;
             TIntrusiveList<TQuery, TPendingBlockChecks> PendingBlockChecks;
         };
 
-        THashMap<ui64, TBlockInfo> Blocks;
+        THashMap<ui64, TBlock> Blocks;
 
     public:
         TBlocksManager(TBlobDepotAgent& agent)
@@ -33,16 +34,18 @@ namespace NKikimr::NBlobDepot {
 
         NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, ui32 generation, TQuery *query,
                 ui32 *blockedGeneration) {
+            NKikimrProto::EReplyStatus status = NKikimrProto::UNKNOWN;
             auto& block = Blocks[tabletId];
-            const TMonotonic issueTime = TActivationContext::Monotonic();
+            const TMonotonic now = TActivationContext::Monotonic();
             if (generation <= block.BlockedGeneration) {
-                return NKikimrProto::RACE;
-            } else if (issueTime < block.ExpirationTimestamp) {
+                status = NKikimrProto::RACE;
+            } else if (now < block.ExpirationTimestamp) {
                 if (blockedGeneration) {
                     *blockedGeneration = block.BlockedGeneration;
                 }
-                return NKikimrProto::OK;
-            } else if (!block.RefreshInFlight) {
+                status = NKikimrProto::OK;
+            }
+            if (status != NKikimrProto::RACE && now + block.TimeToLive / 2 >= block.ExpirationTimestamp && !block.RefreshInFlight) {
                 NKikimrBlobDepot::TEvQueryBlocks queryBlocks;
                 queryBlocks.AddTabletIds(tabletId);
                 Agent.Issue(std::move(queryBlocks), this, std::make_shared<TQueryBlockContext>(
@@ -50,14 +53,20 @@ namespace NKikimr::NBlobDepot {
                 block.RefreshInFlight = true;
                 block.PendingBlockChecks.PushBack(query);
             }
-            return NKikimrProto::UNKNOWN;
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA99, "CheckBlockForTablet", (QueryId, query->GetQueryId()),
+                (TabletId, tabletId), (Generation, generation), (Status, status), (Now, now),
+                (ExpirationTimestamp, block.ExpirationTimestamp));
+            return status;
         }
 
         void ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) override {
             if (auto *p = std::get_if<TEvBlobDepot::TEvQueryBlocksResult*>(&response)) {
                 Handle(std::move(context), (*p)->Record);
             } else if (std::holds_alternative<TTabletDisconnected>(response)) {
-                IssueOnUpdateBlock(context, false);
+                auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
+                if (const auto it = Blocks.find(queryBlockContext.TabletId); it != Blocks.end()) {
+                    IssueOnUpdateBlock(it->second, false);
+                }
             } else {
                 Y_FAIL("unexpected response type");
             }
@@ -72,19 +81,18 @@ namespace NKikimr::NBlobDepot {
             const ui32 newBlockedGeneration = msg.GetBlockedGenerations(0);
             Y_VERIFY(block.BlockedGeneration <= newBlockedGeneration);
             block.BlockedGeneration = newBlockedGeneration;
-            block.ExpirationTimestamp = queryBlockContext.Timestamp + TDuration::MilliSeconds(msg.GetTimeToLiveMs());
-            IssueOnUpdateBlock(context, true);
+            block.TimeToLive = TDuration::MilliSeconds(msg.GetTimeToLiveMs());
+            block.ExpirationTimestamp = queryBlockContext.Timestamp + block.TimeToLive;
+            block.RefreshInFlight = false;
+            IssueOnUpdateBlock(block, true);
         }
 
-        void IssueOnUpdateBlock(const TRequestContext::TPtr& context, bool success) {
-            auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-            auto& block = Blocks[queryBlockContext.TabletId];
-            TIntrusiveList<TQuery, TPendingBlockChecks> temp;
-            temp.Swap(block.PendingBlockChecks);
-            for (auto it = temp.begin(); it != temp.end(); ) {
-                const auto current = it++;
-                current->OnUpdateBlock(success);
-            }
+        void IssueOnUpdateBlock(TBlock& block, bool success) {
+            TIntrusiveList<TQuery, TPendingBlockChecks> pendingBlockChecks;
+            pendingBlockChecks.Append(block.PendingBlockChecks);
+            pendingBlockChecks.ForEach([success](TQuery *query) {
+                query->OnUpdateBlock(success);
+            });
         }
 
         ui32 GetBlockForTablet(ui64 tabletId) {
@@ -92,14 +100,22 @@ namespace NKikimr::NBlobDepot {
             return it != Blocks.end() ? it->second.BlockedGeneration : 0;
         }
 
-        void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic expirationTimestamp) {
+        void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic timestamp, TDuration timeToLive) {
             auto& block = Blocks[tabletId];
             Y_VERIFY(block.BlockedGeneration <= blockedGeneration);
-            if (block.BlockedGeneration < blockedGeneration) {
-                block.BlockedGeneration = blockedGeneration;
-                block.ExpirationTimestamp = expirationTimestamp;
-            } else if (block.ExpirationTimestamp < expirationTimestamp) {
-                block.ExpirationTimestamp = expirationTimestamp;
+            block.BlockedGeneration = blockedGeneration;
+            block.TimeToLive = timeToLive;
+            block.ExpirationTimestamp = timestamp + timeToLive;
+        }
+
+        void OnBlockedTablets(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TEvPushNotify::TBlockedTablet>& tablets) {
+            for (const auto& tablet : tablets) {
+                if (const auto it = Blocks.find(tablet.GetTabletId()); it != Blocks.end()) {
+                    auto& block = it->second;
+                    block.BlockedGeneration = tablet.GetBlockedGeneration();
+                    block.ExpirationTimestamp = TMonotonic::Zero();
+                    IssueOnUpdateBlock(block, true);
+                }
             }
         }
     };
@@ -123,8 +139,12 @@ namespace NKikimr::NBlobDepot {
         return BlocksManager->GetBlockForTablet(tabletId);
     }
 
-    void TBlobDepotAgent::SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic expirationTimestamp) {
-        BlocksManager->SetBlockForTablet(tabletId, blockedGeneration, expirationTimestamp);
+    void TBlobDepotAgent::SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic timestamp, TDuration timeToLive) {
+        BlocksManager->SetBlockForTablet(tabletId, blockedGeneration, timestamp, timeToLive);
+    }
+
+    void TBlobDepotAgent::OnBlockedTablets(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TEvPushNotify::TBlockedTablet>& tablets) {
+        BlocksManager->OnBlockedTablets(tablets);
     }
 
 } // NKikimr::NBlobDepot

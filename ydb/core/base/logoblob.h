@@ -324,3 +324,15 @@ struct THash<NKikimr::TLogoBlobID> {
         return x.Hash();
     }
 };
+
+template<>
+inline NKikimr::TLogoBlobID Min<NKikimr::TLogoBlobID>() noexcept {
+    return {};
+}
+
+template<>
+inline NKikimr::TLogoBlobID Max<NKikimr::TLogoBlobID>() noexcept {
+    return NKikimr::TLogoBlobID(Max<ui64>(), Max<ui32>(), Max<ui32>(), NKikimr::TLogoBlobID::MaxChannel,
+        NKikimr::TLogoBlobID::MaxBlobSize, NKikimr::TLogoBlobID::MaxCookie, NKikimr::TLogoBlobID::MaxPartId,
+        NKikimr::TLogoBlobID::MaxCrcMode);
+}

@@ -85,7 +85,7 @@ TGroupSessions::TGroupSessions(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             auto& q = stateVDisk.Queues.GetQueue(queueId);
             q.ActorId = queue;
             q.FlowRecord = std::move(flowRecord);
-            q.ExtraBlockChecksSupport = false;
+            q.ExtraBlockChecksSupport.reset();
         }
     }
 }
@@ -126,7 +126,7 @@ void TGroupSessions::QueueConnectUpdate(ui32 orderNumber, NKikimrBlobStorage::EV
         q.ExtraBlockChecksSupport = extraGroupChecksSupport;
     } else {
         ConnectedQueuesMask[orderNumber] &= ~(1 << queueId);
-        q.ExtraBlockChecksSupport = false;
+        q.ExtraBlockChecksSupport.reset();
     }
 }
 

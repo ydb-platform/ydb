@@ -23,7 +23,6 @@ namespace NKikimr::NBlobDepot {
                 NumDoNotKeep = msg.DoNotKeep ? msg.DoNotKeep->size() : 0;
 
                 const auto status = Agent.CheckBlockForTablet(msg.TabletId, msg.RecordGeneration, this);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA99, "CheckBlockForTablet", (Status, status));
                 if (status == NKikimrProto::OK) {
                     IssueCollectGarbage();
                 } else if (status != NKikimrProto::UNKNOWN) {

@@ -87,8 +87,15 @@ message TEvBlockResult {
     optional uint32 TimeToLiveMs = 3;
 }
 
-message TEvPushNotify { // BlobDepot -> Agent push notification (to take some action)
-    repeated fixed64 UpdateBlocksForTabletIds = 1; // notify about some changed blocks
+message TEvPushNotify {
+    message TBlockedTablet {
+        optional fixed64 TabletId = 1;
+        optional uint32 BlockedGeneration = 2;
+    }
+    repeated TBlockedTablet BlockedTablets = 1;
+}
+
+message TEvPushNotifyResult {
 }
 
 message TEvQueryBlocks {

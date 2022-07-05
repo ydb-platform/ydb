@@ -98,10 +98,13 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
+            hFunc(TEvBlobDepot::TEvPushNotify, Handle);
+
             hFunc(TEvBlobDepot::TEvRegisterAgentResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvAllocateIdsResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvBlockResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvQueryBlocksResult, HandleTabletResponse);
+            hFunc(TEvBlobDepot::TEvCollectGarbageResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvCommitBlobSeqResult, HandleTabletResponse);
             hFunc(TEvBlobDepot::TEvResolveResult, HandleTabletResponse);
 
@@ -187,6 +190,8 @@ namespace NKikimr::NBlobDepot {
         void Issue(NKikimrBlobDepot::TEvCommitBlobSeq msg, TRequestSender *sender, TRequestContext::TPtr context);
 
         void Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context);
+
+        void Handle(TEvBlobDepot::TEvPushNotify::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -319,7 +324,9 @@ namespace NKikimr::NBlobDepot {
 
         ui32 GetBlockForTablet(ui64 tabletId);
 
-        void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic expirationTimestamp);
+        void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic issueTimestamp, TDuration timeToLive);
+
+        void OnBlockedTablets(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TEvPushNotify::TBlockedTablet>& tablets);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Reading

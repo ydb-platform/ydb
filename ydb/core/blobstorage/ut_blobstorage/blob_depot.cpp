@@ -84,6 +84,32 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer, data);
         }
 
+        sender = env.Runtime->AllocateEdgeActor(3);
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvRange(id.TabletID(), Min<TLogoBlobID>(),
+                Max<TLogoBlobID>(), false, TInstant::Max(), true));
+        });
+        {
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Id, id);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer, TString());
+        }
+
+        sender = env.Runtime->AllocateEdgeActor(4);
+        env.Runtime->WrapInActorContext(sender, [&] {
+            SendToBSProxy(sender, groupId, new TEvBlobStorage::TEvRange(id.TabletID(), Min<TLogoBlobID>(),
+                Max<TLogoBlobID>(), false, TInstant::Max(), false));
+        });
+        {
+            auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvRangeResult>(sender);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Status, NKikimrProto::OK);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Id, id);
+            UNIT_ASSERT_VALUES_EQUAL(res->Get()->Responses[0].Buffer, data);
+        }
+
         env.Sim(TDuration::Seconds(20));
     }
 

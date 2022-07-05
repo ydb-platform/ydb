@@ -38,15 +38,17 @@ namespace NKikimr::NBlobDepot {
         struct Barriers : Table<3> {
             struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Channel : Column<2, NScheme::NTypeIds::Uint8> {};
-            struct SoftGenStep : Column<3, NScheme::NTypeIds::Uint64> {};
-            struct HardGenStep : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct LastRecordGenStep : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct Soft : Column<4, NScheme::NTypeIds::Uint64> {};
+            struct Hard : Column<5, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TabletId, Channel>;
             using TColumns = TableColumns<
                 TabletId,
                 Channel,
-                SoftGenStep,
-                HardGenStep
+                LastRecordGenStep,
+                Soft,
+                Hard
             >;
         };
 

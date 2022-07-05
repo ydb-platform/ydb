@@ -52,7 +52,7 @@ namespace NKikimr::NBlobDepot {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();
                     auto& query = *Event->Get<TEvBlobStorage::TEvBlock>();
-                    Agent.SetBlockForTablet(query.TabletId, query.Generation, blockContext.Timestamp +
+                    Agent.SetBlockForTablet(query.TabletId, query.Generation, blockContext.Timestamp,
                         TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
                     EndWithSuccess(std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK));
                 }

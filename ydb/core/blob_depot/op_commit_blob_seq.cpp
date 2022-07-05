@@ -29,6 +29,14 @@ namespace NKikimr::NBlobDepot {
                     const bool success = value.SerializeToString(&valueData);
                     Y_VERIFY(success);
 
+                    const TString& key = item.GetKey();
+                    if (key.size() == 3 * sizeof(ui64)) {
+                        const TLogoBlobID id(reinterpret_cast<const ui64*>(key.data()));
+                        if (!Self->CheckBlobForBarrier(id)) {
+                            continue; // FIXME: report error somehow (?)
+                        }
+                    }
+
                     db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
                     UpdateQ.emplace_back(item.GetKey(), std::move(value));
                 }

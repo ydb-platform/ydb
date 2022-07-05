@@ -14,6 +14,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         std::map<TString, TDataValue, TCompareKey> Data;
+        std::set<TLogoBlobID> DataBlobIds;
 
     public:
         TDataManager(TBlobDepot *self)
@@ -75,6 +76,43 @@ namespace NKikimr::NBlobDepot {
                 .Public = proto.GetPublic(),
             });
         }
+
+        std::optional<TString> UpdatesKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState) {
+            if (const auto it = Data.find(key); it != Data.end()) {
+                TDataValue value = it->second;
+                value.KeepState = keepState;
+                return ToValueProto(value);
+            } else {
+                return std::nullopt;
+            }
+        }
+
+        void UpdateKeepState(const std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>>& data) {
+            for (const auto& [key, keepState] : data) {
+                auto& value = Data[std::move(key)];
+                Y_VERIFY_DEBUG(value.KeepState < keepState);
+                value.KeepState = keepState;
+            }
+        }
+
+        static TString ToValueProto(const TDataValue& value) {
+            NKikimrBlobDepot::TValue proto;
+            if (value.Meta) {
+                proto.SetMeta(value.Meta);
+            }
+            proto.MutableValueChain()->CopyFrom(value.ValueChain);
+            if (proto.GetKeepState() != value.KeepState) {
+                proto.SetKeepState(value.KeepState);
+            }
+            if (proto.GetPublic() != value.Public) {
+                proto.SetPublic(value.Public);
+            }
+
+            TString s;
+            const bool success = proto.SerializeToString(&s);
+            Y_VERIFY(success);
+            return s;
+        }
     };
 
     TBlobDepot::TDataManagerPtr TBlobDepot::CreateDataManager() {
@@ -100,6 +138,14 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::AddDataOnLoad(TString key, TString value) {
         DataManager->AddDataOnLoad(std::move(key), std::move(value));
+    }
+
+    std::optional<TString> TBlobDepot::UpdatesKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState) {
+        return DataManager->UpdatesKeepState(key, keepState);
+    }
+
+    void TBlobDepot::UpdateKeepState(const std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>>& data) {
+        DataManager->UpdateKeepState(data);
     }
 
 } // NKikimr::NBlobDepot

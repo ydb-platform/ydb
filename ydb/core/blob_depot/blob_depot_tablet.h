@@ -62,6 +62,7 @@ namespace NKikimr::NBlobDepot {
         void OnAgentConnect(TAgentInfo& agent);
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgentInfo& GetAgent(const TActorId& pipeServerId);
+        TAgentInfo& GetAgent(ui32 nodeId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -183,6 +184,8 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
 
+        bool CheckBlobForBarrier(TLogoBlobID id) const;
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Data operations
 
@@ -215,6 +218,8 @@ namespace NKikimr::NBlobDepot {
         void DeleteKeys(const std::vector<TString>& keysToDelete);
         void PutKey(TString key, TDataValue&& data);
         void AddDataOnLoad(TString key, TString value);
+        std::optional<TString> UpdatesKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState);
+        void UpdateKeepState(const std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>>& data);
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);

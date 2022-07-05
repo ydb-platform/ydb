@@ -60,6 +60,8 @@ namespace NKikimr::NBlobDepot {
             void ProcessResponse(ui64 id, TRequestContext::TPtr context, TResponse response) override {
                 if (std::holds_alternative<TTabletDisconnected>(response)) {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
+                } else if (auto *p = std::get_if<TEvBlobStorage::TEvGetResult*>(&response)) {
+                    Agent.HandleGetResult(context, **p);
                 } else if (auto *p = std::get_if<TEvBlobDepot::TEvResolveResult*>(&response)) {
                     HandleResolveResult(id, std::move(context), **p);
                 } else {

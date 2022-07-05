@@ -82,9 +82,14 @@ namespace NKikimr::NBlobDepot {
         const auto it = PipeServerToNode.find(pipeServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         Y_VERIFY(it->second);
-        const auto agentIt = Agents.find(*it->second);
+        TAgentInfo& agent = GetAgent(*it->second);
+        Y_VERIFY(agent.ConnectedAgent == pipeServerId);
+        return agent;
+    }
+
+    TBlobDepot::TAgentInfo& TBlobDepot::GetAgent(ui32 nodeId) {
+        const auto agentIt = Agents.find(nodeId);
         Y_VERIFY(agentIt != Agents.end());
-        Y_VERIFY(agentIt->second.ConnectedAgent == pipeServerId);
         return agentIt->second;
     }
 

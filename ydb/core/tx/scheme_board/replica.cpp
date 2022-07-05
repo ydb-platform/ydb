@@ -1068,9 +1068,11 @@ private:
             << ", generation# " << generation);
 
         info.Generation = info.PendingGeneration;
-
         Send(ev->Sender, new TSchemeBoardEvents::TEvCommitResponse(owner, info.Generation), 0, ev->Cookie);
-        Send(SelfId(), new TEvPrivate::TEvSendStrongNotifications(owner));
+
+        if (WaitStrongNotifications.contains(owner)) {
+            Send(SelfId(), new TEvPrivate::TEvSendStrongNotifications(owner));
+        }
     }
 
     void Handle(TEvPrivate::TEvSendStrongNotifications::TPtr& ev) {

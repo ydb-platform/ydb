@@ -49,9 +49,10 @@ class TS3BufferZstd: public TS3BufferRaw {
 
 public:
     explicit TS3BufferZstd(int compressionLevel,
-            const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit)
-        : TS3BufferRaw(columns, rowsLimit, bytesLimit)
+            const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes)
+        : TS3BufferRaw(columns, maxRows, maxBytes)
         , CompressionLevel(compressionLevel)
+        , MinBytes(minBytes)
         , Context(ZSTD_createCCtx())
         , BytesRaw(0)
     {
@@ -76,6 +77,10 @@ public:
     }
 
     bool IsFilled() const override {
+        if (Buffer.Size() < MinBytes) {
+            return false;
+        }
+
         return Rows >= GetRowsLimit() || BytesRaw >= GetBytesLimit();
     }
 
@@ -104,6 +109,7 @@ protected:
 
 private:
     const int CompressionLevel;
+    const ui64 MinBytes;
 
     THolder<::ZSTD_CCtx, DestroyZCtx> Context;
     size_t ErrorCode;
@@ -113,9 +119,9 @@ private:
 }; // TS3BufferZstd
 
 NExportScan::IBuffer* CreateS3ExportBufferZstd(int compressionLevel,
-        const IExport::TTableColumns& columns, ui64 rowsLimit, ui64 bytesLimit)
+        const IExport::TTableColumns& columns, ui64 maxRows, ui64 maxBytes, ui64 minBytes)
 {
-    return new TS3BufferZstd(compressionLevel, columns, rowsLimit, bytesLimit);
+    return new TS3BufferZstd(compressionLevel, columns, maxRows, maxBytes, minBytes);
 }
 
 } // NDataShard

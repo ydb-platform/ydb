@@ -76,15 +76,11 @@ protected:
             return false;
         }
 
-        const auto& scanSettings = backup.GetScanSettings();
-        const ui64 rowsLimit = scanSettings.GetRowsBatchSize() ? scanSettings.GetRowsBatchSize() : Max<ui64>();
-        const ui64 bytesLimit = scanSettings.GetBytesBatchSize();
-
         auto createUploader = [self = DataShard.SelfId(), txId = op->GetTxId(), exp]() {
             return exp->CreateUploader(self, txId);
         };
 
-        THolder<IBuffer> buffer{exp->CreateBuffer(rowsLimit, bytesLimit)};
+        THolder<IBuffer> buffer{exp->CreateBuffer()};
         THolder<NTable::IScan> scan{CreateExportScan(std::move(buffer), createUploader)};
 
         const auto& taskName = appData->DataShardConfig.GetBackupTaskName();

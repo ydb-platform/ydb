@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
+#include <ydb/core/wrappers/s3_wrapper.h>
 
 #include <util/string/cast.h>
 #include <util/string/printf.h>
@@ -12,8 +13,8 @@ using namespace NKikimr::NWrappers::NTestHelpers;
 Y_UNIT_TEST_SUITE(TBackupTests) {
     using TFillFn = std::function<void(TTestBasicRuntime&)>;
 
-    void Backup(TTestBasicRuntime& runtime, const TString& compressionCodec,
-            const TString& creationScheme, TFillFn fill, ui32 rowsBatchSize = 128)
+    auto Backup(TTestBasicRuntime& runtime, const TString& compressionCodec,
+            const TString& creationScheme, TFillFn fill, ui32 rowsBatchSize = 128, ui32 minWriteBatchSize = 0)
     {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -35,6 +36,14 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         TString tableSchema;
         UNIT_ASSERT(google::protobuf::TextFormat::PrintToString(tableDesc.GetPathDescription(), &tableSchema));
 
+        ui32 partsUploaded = 0;
+        ui32 objectsPut = 0;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            partsUploaded += ui32(ev->GetTypeRewrite() == NWrappers::TEvS3Wrapper::EvUploadPartResponse);
+            objectsPut += ui32(ev->GetTypeRewrite() == NWrappers::TEvS3Wrapper::EvPutObjectResponse);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
         TestBackup(runtime, ++txId, "/MyRoot", Sprintf(R"(
             TableName: "Table"
             Table {
@@ -43,6 +52,9 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             S3Settings {
                 Endpoint: "localhost:%d"
                 Scheme: HTTP
+                Limits {
+                    MinWriteBatchSize: %d
+                }
             }
             ScanSettings {
                 RowsBatchSize: %d
@@ -50,8 +62,10 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
             Compression {
                 Codec: "%s"
             }
-        )", tableSchema.c_str(), port, rowsBatchSize, compressionCodec.c_str()));
+        )", tableSchema.c_str(), port, minWriteBatchSize, rowsBatchSize, compressionCodec.c_str()));
         env.TestWaitNotification(runtime, txId);
+
+        return std::make_pair(partsUploaded, objectsPut);
     }
 
     void WriteRow(TTestBasicRuntime& runtime, ui64 tabletId, const TString& key, const TString& value) {
@@ -101,20 +115,31 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         });
     }
 
-    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnLargeData) {
+    template<ECompressionCodec Codec>
+    void ShouldSucceedOnLargeData(ui32 minWriteBatchSize, const std::pair<ui32, ui32>& expectedResult) {
         TTestBasicRuntime runtime;
         const ui32 batchSize = 10;
 
-        Backup(runtime, ToString(Codec), R"(
+        const auto actualResult = Backup(runtime, ToString(Codec), R"(
             Name: "Table"
             Columns { Name: "key" Type: "Utf8" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )", [](TTestBasicRuntime& runtime) {
-            for (ui32 i = 0; i < 2 * batchSize; ++i) {
+            for (ui32 i = 0; i < 100 * batchSize; ++i) {
                 WriteRow(runtime, TTestTxConfig::FakeHiveTablets, Sprintf("a%d", i), "valueA");
             }
-        }, batchSize);
+        }, batchSize, minWriteBatchSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(actualResult, expectedResult);
+    }
+
+    Y_UNIT_TEST_WITH_COMPRESSION(ShouldSucceedOnLargeData) {
+        ShouldSucceedOnLargeData<Codec>(0, std::make_pair(101, 1));
+    }
+
+    Y_UNIT_TEST(ShouldSucceedOnLargeData_MinWriteBatch) {
+        ShouldSucceedOnLargeData<ECompressionCodec::Zstd>(1 << 20, std::make_pair(0, 2));
     }
 
 } // TBackupTests

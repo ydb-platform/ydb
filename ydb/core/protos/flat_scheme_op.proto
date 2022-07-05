@@ -864,7 +864,7 @@ message TS3Settings {
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB
-        optional uint32 WriteBatchSize = 2 [default = 67108864]; // 64 MB
+        optional uint32 MinWriteBatchSize = 2 [default = 5242880]; // 5 MB
         optional uint32 ReadBufferSizeLimit = 3 [default = 67108864]; // 64 MB
     };
 

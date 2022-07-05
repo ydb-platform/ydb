@@ -113,7 +113,7 @@ namespace NKikimr {
     void TBlocksCache::UpdatePersistent(ui64 tabletId, TBlockedGen gen) {
         Y_VERIFY(Initialized);
         auto& value = PersistentBlocks[tabletId];
-        if (value.Generation <= gen.Generation) {
+        if (value.Generation < gen.Generation) {
             value = gen;
         }
     }

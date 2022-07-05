@@ -22,7 +22,8 @@ extern "C" {
 
    * _cffi_call_python_org, which on CPython is actually part of the
      _cffi_exports[] array, is the function pointer copied from
-     _cffi_backend.
+     _cffi_backend.  If _cffi_start_python() fails, then this is set
+     to NULL; otherwise, it should never be NULL.
 
    After initialization is complete, both are equal.  However, the
    first one remains equal to &_cffi_start_and_call_python until the
@@ -224,7 +225,7 @@ static int _cffi_initialize_python(void)
 
         if (f != NULL && f != Py_None) {
             PyFile_WriteString("\nFrom: " _CFFI_MODULE_NAME
-                               "\ncompiled with cffi version: 1.15.0"
+                               "\ncompiled with cffi version: 1.15.1"
                                "\n_cffi_backend module: ", f);
             modules = PyImport_GetModuleDict();
             mod = PyDict_GetItemString(modules, "_cffi_backend");

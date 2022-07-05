@@ -2,7 +2,7 @@
 #include <Python.h>
 #include "structmember.h"
 
-#define CFFI_VERSION  "1.15.0"
+#define CFFI_VERSION  "1.15.1"
 
 #ifdef MS_WIN32
 #include <windows.h>
@@ -2196,7 +2196,7 @@ static PyObject *_frombuf_repr(CDataObject *cd, const char *cd_type_name)
     }
 }
 
-static PyObject *cdataowning_repr(CDataObject *cd)
+static Py_ssize_t cdataowning_size_bytes(CDataObject *cd)
 {
     Py_ssize_t size = _cdata_var_byte_size(cd);
     if (size < 0) {
@@ -2207,6 +2207,12 @@ static PyObject *cdataowning_repr(CDataObject *cd)
         else
             size = cd->c_type->ct_size;
     }
+    return size;
+}
+
+static PyObject *cdataowning_repr(CDataObject *cd)
+{
+    Py_ssize_t size = cdataowning_size_bytes(cd);
     return PyText_FromFormat("<cdata '%s' owning %zd bytes>",
                              cd->c_type->ct_name, size);
 }
@@ -4602,7 +4608,7 @@ static PyObject *get_unique_type(CTypeDescrObject *x,
            array      [ctype, length]
            funcptr    [ctresult, ellipsis+abi, num_args, ctargs...]
     */
-    PyObject *key, *y;
+    PyObject *key, *y, *res;
     void *pkey;
 
     key = PyBytes_FromStringAndSize(NULL, keylength * sizeof(void *));
@@ -4634,8 +4640,9 @@ static PyObject *get_unique_type(CTypeDescrObject *x,
     /* the 'value' in unique_cache doesn't count as 1, but don't use
        Py_DECREF(x) here because it will confuse debug builds into thinking
        there was an extra DECREF in total. */
-    ((PyObject *)x)->ob_refcnt--;
-    return (PyObject *)x;
+    res = (PyObject *)x;
+    Py_SET_REFCNT(res, Py_REFCNT(res) - 1);
+    return res;
 
  error:
     Py_DECREF(x);
@@ -5664,7 +5671,8 @@ static ffi_type *fb_fill_type(struct funcbuilder_s *fb, CTypeDescrObject *ct,
     }
 }
 
-#define ALIGN_ARG(n)  ((n) + 7) & ~7
+#define ALIGN_TO(n, a)  ((n) + ((a)-1)) & ~((a)-1)
+#define ALIGN_ARG(n)    ALIGN_TO(n, 8)
 
 static int fb_build(struct funcbuilder_s *fb, PyObject *fargs,
                     CTypeDescrObject *fresult)
@@ -5689,10 +5697,12 @@ static int fb_build(struct funcbuilder_s *fb, PyObject *fargs,
         /* exchange data size */
         /* first, enough room for an array of 'nargs' pointers */
         exchange_offset = nargs * sizeof(void*);
+        /* then enough room for the result --- which means at least
+           sizeof(ffi_arg), according to the ffi docs, but we also
+           align according to the result type, for issue #531 */
+        exchange_offset = ALIGN_TO(exchange_offset, fb->rtype->alignment);
         exchange_offset = ALIGN_ARG(exchange_offset);
         cif_descr->exchange_offset_arg[0] = exchange_offset;
-        /* then enough room for the result --- which means at least
-           sizeof(ffi_arg), according to the ffi docs */
         i = fb->rtype->size;
         if (i < (Py_ssize_t)sizeof(ffi_arg))
             i = sizeof(ffi_arg);
@@ -5720,6 +5730,7 @@ static int fb_build(struct funcbuilder_s *fb, PyObject *fargs,
         if (fb->atypes != NULL) {
             fb->atypes[i] = atype;
             /* exchange data size */
+            exchange_offset = ALIGN_TO(exchange_offset, atype->alignment);
             exchange_offset = ALIGN_ARG(exchange_offset);
             cif_descr->exchange_offset_arg[1 + i] = exchange_offset;
             exchange_offset += atype->size;
@@ -5736,6 +5747,7 @@ static int fb_build(struct funcbuilder_s *fb, PyObject *fargs,
 }
 
 #undef ALIGN_ARG
+#undef ALIGN_TO
 
 static void fb_cat_name(struct funcbuilder_s *fb, const char *piece,
                         int piecelen)
@@ -7009,12 +7021,14 @@ b_buffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
     /* this is the constructor of the type implemented in minibuffer.h */
     CDataObject *cd;
     Py_ssize_t size = -1;
+    int explicit_size;
     static char *keywords[] = {"cdata", "size", NULL};
 
     if (!PyArg_ParseTupleAndKeywords(args, kwds, "O!|n:buffer", keywords,
                                      &CData_Type, &cd, &size))
         return NULL;
 
+    explicit_size = size >= 0;
     if (size < 0)
         size = _cdata_var_byte_size(cd);
 
@@ -7037,6 +7051,20 @@ b_buffer_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
                      "don't know the size pointed to by '%s'",
                      cd->c_type->ct_name);
         return NULL;
+    }
+
+    if (explicit_size && CDataOwn_Check(cd)) {
+        Py_ssize_t size_max = cdataowning_size_bytes(cd);
+        if (size > size_max) {
+            char msg[256];
+            sprintf(msg, "ffi.buffer(cdata, bytes): creating a buffer of %llu "
+                         "bytes over a cdata that owns only %llu bytes.  This "
+                         "will crash if you access the extra memory",
+                         (unsigned PY_LONG_LONG)size,
+                         (unsigned PY_LONG_LONG)size_max);
+            if (PyErr_WarnEx(PyExc_UserWarning, msg, 1))
+                return NULL;
+        }
     }
     /*WRITE(cd->c_data, size)*/
     return minibuffer_new(cd->c_data, size, (PyObject *)cd);

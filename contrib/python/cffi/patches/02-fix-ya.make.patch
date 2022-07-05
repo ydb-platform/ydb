@@ -1,0 +1,22 @@
+--- contrib/python/cffi/ya.make	(index)
++++ contrib/python/cffi/ya.make	(working tree)
+@@ -21,6 +21,8 @@ NO_COMPILER_WARNINGS()
+ 
+ NO_LINT()
+ 
++SUPPRESSIONS(lsan.supp)
++
+ SRCS(
+     c/_cffi_backend.c
+ )
+@@ -54,6 +56,10 @@ RESOURCE_FILES(
+     .dist-info/METADATA
+     .dist-info/entry_points.txt
+     .dist-info/top_level.txt
++    cffi/_cffi_errors.h
++    cffi/_cffi_include.h
++    cffi/_embedding.h
++    cffi/parse_c_type.h
+ )
+ 
+ END()

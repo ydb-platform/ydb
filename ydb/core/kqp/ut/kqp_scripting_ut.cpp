@@ -266,6 +266,79 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(ScriptExplainCreatedTable) {
+        TKikimrRunner kikimr;
+        TScriptingClient client(kikimr.GetDriver());
+
+        TExplainYqlRequestSettings settings;
+        settings.Mode(ExplainYqlRequestMode::Plan);
+
+        {
+            auto result = client.ExecuteYqlScript(R"(
+                PRAGMA Kikimr.UseNewEngine = "true";
+                CREATE TABLE `/Root/ScriptingTest` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+                COMMIT;
+            )").GetValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto result = client.ExplainYqlScript(R"(
+            PRAGMA Kikimr.UseNewEngine = "false";
+            REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
+                (1, "One"),
+                (2, "Two");
+            COMMIT;
+
+            PRAGMA Kikimr.UseNewEngine = "true";
+            REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
+                (3, "Three"),
+                (4, "Four");
+            COMMIT;
+
+            PRAGMA kikimr.ScanQuery = "true";
+            PRAGMA Kikimr.UseNewEngine = "true";
+            SELECT count(*) FROM `/Root/ScriptingTest`;
+            COMMIT;
+
+            PRAGMA kikimr.ScanQuery = "false";
+            PRAGMA Kikimr.UseNewEngine = "true";
+            SELECT count(*) FROM `/Root/ScriptingTest`;
+            COMMIT;
+
+            PRAGMA kikimr.ScanQuery = "true";
+            PRAGMA Kikimr.UseNewEngine = "false";
+            SELECT count(*) FROM `/Root/ScriptingTest`;
+            COMMIT;
+
+            PRAGMA kikimr.ScanQuery = "false";
+            PRAGMA Kikimr.UseNewEngine = "false";
+            SELECT count(*) FROM `/Root/ScriptingTest`;
+            COMMIT;
+
+            PRAGMA kikimr.ScanQuery = "true";
+            SELECT 1*2*3*4*5;
+            COMMIT;
+
+            PRAGMA kikimr.ScanQuery = "false";
+            SELECT 1*2*3*4*5;
+            COMMIT;
+        )", settings).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        auto planJson = result.GetPlan();
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(planJson, &plan, true);
+        UNIT_ASSERT_EQUAL(plan.GetMapSafe().at("queries").GetArraySafe().size(), 8);
+    }
+
+
     Y_UNIT_TEST(ScriptExplain) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
@@ -322,13 +395,22 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             SELECT 1*2*3*4*5;
             COMMIT;
         )", settings).GetValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        // KIKIMR-15083
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
 
+        /*
         auto planJson = result.GetPlan();
 
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(planJson, &plan, true);
         UNIT_ASSERT_EQUAL(plan.GetMapSafe().at("queries").GetArraySafe().size(), 8);
+        */
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto res = session.DescribeTable("/Root/ScriptingTest").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
     }
 
     Y_UNIT_TEST(ScriptValidate) {

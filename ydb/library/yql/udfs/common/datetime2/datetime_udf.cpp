@@ -1599,7 +1599,7 @@ namespace {
 
                         const std::string_view monthName{start, cnt};
                         ui8 month = 0U;
-                        if (cnt < 4 || !ValidateMonthFullName(monthName, month)) {
+                        if (!ValidateMonthFullName(monthName, month)) {
                             return false;
                         }
                         SetMonth(result, month);

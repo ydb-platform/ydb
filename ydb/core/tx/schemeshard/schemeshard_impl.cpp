@@ -3583,15 +3583,6 @@ NKikimrSchemeOp::TPathVersion TSchemeShard::GetPathVersion(const TPath& path) co
                 if (tableInfo->Description.HasTtlSettings()) {
                     result.SetColumnTableTtlSettingsVersion(tableInfo->Description.GetTtlSettings().GetVersion());
                 }
-#if 0
-                else if (tableInfo->Description.HasTtlSettingsPresetId() && tableInfo->OlapStorePathId) {
-                    auto storeInfo = OlapStores.at(tableInfo->OlapStorePathId);
-                    auto& preset = storeInfo->TtlSettingsPresets.at(tableInfo->Description.GetTtlSettingsPresetId());
-                    result.SetColumnTableTtlSettingsVersion(tableInfo->Description.GetTtlSettingsPresetVersionAdj() + preset.Version);
-                } else {
-                    result.SetColumnTableTtlSettingsVersion(tableInfo->Description.GetTtlSettingsPresetVersionAdj());
-                }
-#endif
                 generalVersion += result.GetColumnTableTtlSettingsVersion();
 
                 break;

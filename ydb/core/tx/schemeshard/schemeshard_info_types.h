@@ -826,15 +826,7 @@ struct TOlapTtlSettings {
     // TODO: add parsed settings
     ui64 Version = 1;
 };
-#if 0
-struct TOlapStoreTtlSettingsPreset : public TOlapTtlSettings {
-    ui32 Id;
-    TString Name;
 
-    // Preset index in the olap store description
-    size_t ProtoIndex = -1;
-};
-#endif
 struct TOlapStoreInfo : TSimpleRefCount<TOlapStoreInfo> {
     using TPtr = TIntrusivePtr<TOlapStoreInfo>;
 
@@ -1006,10 +998,6 @@ struct TShardInfo {
 
     static TShardInfo KesusInfo(TTxId txId, TPathId pathId) {
         return TShardInfo(txId, pathId, ETabletType::Kesus);
-    }
-
-    static TShardInfo OlapShardInfo(TTxId txId, TPathId pathId) {
-         return TShardInfo(txId, pathId, ETabletType::OlapShard);
     }
 
     static TShardInfo ColumnShardInfo(TTxId txId, TPathId pathId) {

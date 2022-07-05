@@ -254,26 +254,6 @@ public:
             const ui32 presetId = alterData->SchemaPresetByName.at(presetName);
             updatedSchemaPresets.insert(presetId);
         }
-#if 0
-        TVector<ui32> droppedTtlSettingsPresets;
-        for (const auto& presetProto : storeInfo->Description.GetTtlSettingsPresets()) {
-            const ui32 presetId = presetProto.GetId();
-            if (!alterData->TtlSettingsPresets.contains(presetId)) {
-                droppedTtlSettingsPresets.push_back(presetId);
-            }
-        }
-        THashSet<ui32> updatedTtlSettingsPresets;
-        for (const auto& proto : alterData->AlterBody->GetAlterTtlSettingsPresets()) {
-            const TString& presetName = proto.GetName();
-            const ui32 presetId = alterData->TtlSettingsPresetByName.at(presetName);
-            updatedTtlSettingsPresets.insert(presetId);
-        }
-        for (const auto& proto : alterData->AlterBody->GetAddTtlSettingsPresets()) {
-            const TString& presetName = proto.GetName();
-            const ui32 presetId = alterData->TtlSettingsPresetByName.at(presetName);
-            updatedTtlSettingsPresets.insert(presetId);
-        }
-#endif
 
         TString columnShardTxBody;
         {
@@ -290,16 +270,7 @@ public:
                     *alter->AddSchemaPresets() = presetProto;
                 }
             }
-#if 0
-            for (ui32 id : droppedTtlSettingsPresets) {
-                alter->AddDroppedTtlSettingsPresets(id);
-            }
-            for (const auto& presetProto : storeInfo->Description.GetTtlSettingsPresets()) {
-                if (updatedTtlSettingsPresets.contains(presetProto.GetId())) {
-                    *alter->AddTtlSettingsPresets() = presetProto;
-                }
-            }
-#endif
+
             Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&columnShardTxBody);
         }
 

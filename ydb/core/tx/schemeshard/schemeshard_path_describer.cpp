@@ -383,17 +383,6 @@ void TPathDescriber::DescribeOlapTable(TPathId pathId, TPathElement::TPtr pathEl
             description->MutableSchema()->SetVersion(description->GetSchema().GetVersion() + description->GetSchemaPresetVersionAdj());
         }
     }
-#if 0
-    if (!description->HasTtlSettings() && description->HasTtlSettingsPresetId()) {
-        auto& preset = storeInfo->TtlSettingsPresets.at(description->GetTtlSettingsPresetId());
-        auto& presetProto = storeInfo->Description.GetTtlSettingsPresets(preset.ProtoIndex);
-        *description->MutableTtlSettings() = presetProto.GetTtlSettings();
-        if (description->HasTtlSettingsPresetVersionAdj()) {
-            description->MutableTtlSettings()->SetVersion(
-                description->GetTtlSettings().GetVersion() + description->GetTtlSettingsPresetVersionAdj());
-        }
-    }
-#endif
 }
 
 void TPathDescriber::DescribePersQueueGroup(TPathId pathId, TPathElement::TPtr pathEl) {

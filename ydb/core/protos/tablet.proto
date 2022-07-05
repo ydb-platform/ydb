@@ -41,7 +41,7 @@ message TTabletTypes {
         BlockStoreDiskRegistry = 31;
         SysViewProcessor = 32;
         FileStore = 33;
-        OlapShard = 34;
+        // number 34 was OlapShard
         ColumnShard = 35;
         TestShard = 36;
         SequenceShard = 37;

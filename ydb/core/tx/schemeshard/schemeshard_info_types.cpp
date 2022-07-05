@@ -2030,22 +2030,7 @@ TOlapStoreInfo::TOlapStoreInfo(
         preset.NextColumnId = presetProto.GetSchema().GetNextColumnId();
         preset.Version = presetProto.GetSchema().GetVersion();
     }
-#if 0
-    size_t ttlSettingsPresetIndex = 0;
-    for (const auto& presetProto : Description.GetTtlSettingsPresets()) {
-        Y_VERIFY(presetProto.HasId());
-        Y_VERIFY(presetProto.HasName());
-        Y_VERIFY(presetProto.HasTtlSettings());
-        Y_VERIFY(!TtlSettingsPresets.contains(presetProto.GetId()));
-        auto& preset = TtlSettingsPresets[presetProto.GetId()];
-        preset.Id = presetProto.GetId();
-        preset.Name = presetProto.GetName();
-        preset.ProtoIndex = ttlSettingsPresetIndex++;
-        TtlSettingsPresetByName[preset.Name] = preset.Id;
-        // TODO: parse relevant settings
-        preset.Version = presetProto.GetTtlSettings().GetVersion();
-    }
-#endif
+
     for (const auto& shardIdx : Sharding.GetColumnShards()) {
         ColumnShards.push_back(TShardIdx(
             TOwnerId(shardIdx.GetOwnerId()),

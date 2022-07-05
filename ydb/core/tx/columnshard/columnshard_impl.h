@@ -377,7 +377,7 @@ private:
     bool RemoveLongTxWrite(NIceDb::TNiceDb& db, TWriteId writeId, ui64 txId = 0);
     bool RemoveTx(NTable::TDatabase& database, ui64 txId);
 
-    void EnqueueProgressTx();
+    void EnqueueProgressTx(const TActorContext& ctx);
     void EnqueueBackgroundActivities(bool periodic = false, bool insertOnly = false);
 
     void UpdateSchemaSeqNo(const TMessageSeqNo& seqNo, NTabletFlatExecutor::TTransactionContext& txc);
@@ -407,9 +407,9 @@ private:
     void UpdateBlobMangerCounters();
     void UpdateInsertTableCounters();
     void UpdateIndexCounters();
-    void UpdateResourceMetrics(const TUsage& usage);
+    void UpdateResourceMetrics(const TActorContext& ctx, const TUsage& usage);
     ui64 MemoryUsage() const;
-    void SendPeriodicStats(const TActorContext& ctx);
+    void SendPeriodicStats();
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

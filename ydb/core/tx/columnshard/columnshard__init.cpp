@@ -36,7 +36,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
     // Load InsertTable
     TBlobGroupSelector dsGroupSelector(Self->Info());
     NOlap::TDbWrapper dbTable(txc.DB, &dsGroupSelector);
-    if (!Self->InsertTable->Load(dbTable, AppData(ctx)->TimeProvider->Now())) {
+    if (!Self->InsertTable->Load(dbTable, TAppData::TimeProvider->Now())) {
         return false;
     }
 
@@ -280,7 +280,7 @@ bool TTxInit::ReadEverything(TTransactionContext& txc, const TActorContext& ctx)
 
     Self->UpdateInsertTableCounters();
     Self->UpdateIndexCounters();
-    Self->UpdateResourceMetrics({});
+    Self->UpdateResourceMetrics(ctx, {});
     return true;
 }
 
@@ -309,7 +309,7 @@ void TTxInit::Complete(const TActorContext& ctx) {
     Self->TryRegisterMediatorTimeCast();
 
     // Trigger progress: planned or outdated tx
-    Self->EnqueueProgressTx();
+    Self->EnqueueProgressTx(ctx);
     Self->EnqueueBackgroundActivities();
 
     // Start periodic wakeups

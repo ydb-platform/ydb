@@ -8,7 +8,8 @@ namespace NKikimr::NColumnShard {
 
 using namespace NTabletFlatExecutor;
 
-bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
+
+bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_VERIFY(Ev);
     Y_VERIFY(Self->InsertTable);
     Y_VERIFY(Self->PrimaryIndex);
@@ -169,7 +170,7 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext&) {
         Self->IncCounter(COUNTER_EVICTION_BYTES_WRITTEN, bytesWritten);
     }
 
-    Self->UpdateResourceMetrics(Ev->Get()->ResourceUsage);
+    Self->UpdateResourceMetrics(ctx, Ev->Get()->ResourceUsage);
     return true;
 }
 

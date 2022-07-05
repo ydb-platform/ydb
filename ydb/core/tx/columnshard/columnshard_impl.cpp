@@ -508,8 +508,8 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
         return;
     }
 
-    const TActorContext& ctx = TlsActivationContext->AsActorContext();
-    SendPeriodicStats(ctx);
+    const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
+    SendPeriodicStats();
 
     if (auto event = SetupIndexation()) {
         ctx.Send(IndexingActor, event.release());

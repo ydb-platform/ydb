@@ -54,17 +54,17 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlV
         auto keyValue = MakeKeyCells(paramValue, table.KeyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true);
         Y_VERIFY_DEBUG(keyValue.size() == keyLen);
 
-        ui32 partitionIndex = FindKeyPartitionIndex(keyValue, key.Partitions, table.KeyColumnTypes,
+        ui32 partitionIndex = FindKeyPartitionIndex(keyValue, key.GetPartitions(), table.KeyColumnTypes,
             [] (const auto& partition) { return *partition.Range; });
 
-        ui64 shardId = key.Partitions[partitionIndex].ShardId;
+        ui64 shardId = key.GetPartitions()[partitionIndex].ShardId;
 
         shardParamValues[shardId].emplace_back(std::move(paramValue));
 
         auto point = TSerializedCellVec(TSerializedCellVec::Serialize(keyValue));
 
         auto& shardData = ret[shardId];
-        if (key.Partitions[partitionIndex].Range->IsPoint) {
+        if (key.GetPartitions()[partitionIndex].Range->IsPoint) {
             // singular case when partition is just a point
             shardData.FullRange.emplace(TSerializedTableRange(point.GetBuffer(), "", true, true));
             shardData.FullRange->Point = true;
@@ -141,7 +141,7 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
         auto range = TTableRange(fromValues, /* inclusiveFrom */ true,
                                  point ? TConstArrayRef<TCell>() : toValuesPrefix, /* inclusiveTo */ true,
                                  /* point */ point);
-        TVector<TPartitionWithRange> rangePartitions = GetKeyRangePartitions(range, key.Partitions, keyFullType);
+        TVector<TPartitionWithRange> rangePartitions = GetKeyRangePartitions(range, key.GetPartitions(), keyFullType);
 
         for (TPartitionWithRange& partitionWithRange : rangePartitions) {
             ui64 shardId = partitionWithRange.PartitionInfo->ShardId;
@@ -437,8 +437,8 @@ TSerializedTableRange MakeKeyRange(const TVector<NUdf::TDataTypeId>& keyColumnTy
 namespace {
 
 void FillFullRange(const TStageInfo& stageInfo, THashMap<ui64, TShardInfo>& shardInfoMap, bool read) {
-    for (ui64 i = 0; i < stageInfo.Meta.ShardKey->Partitions.size(); ++i) {
-        auto& partition = stageInfo.Meta.ShardKey->Partitions[i];
+    for (ui64 i = 0; i < stageInfo.Meta.ShardKey->GetPartitions().size(); ++i) {
+        auto& partition = stageInfo.Meta.ShardKey->GetPartitions()[i];
         auto& partitionRange = *partition.Range;
         auto& shardInfo = shardInfoMap[partition.ShardId];
 
@@ -456,7 +456,7 @@ void FillFullRange(const TStageInfo& stageInfo, THashMap<ui64, TShardInfo>& shar
         }
 
         if (i != 0) {
-            auto& prevPartition = stageInfo.Meta.ShardKey->Partitions[i - 1];
+            auto& prevPartition = stageInfo.Meta.ShardKey->GetPartitions()[i - 1];
 
             ranges->MakeFull(TSerializedTableRange(prevPartition.Range->EndKeyPrefix.GetCells(), !prevPartition.Range->IsInclusive,
                 partitionRange.EndKeyPrefix.GetCells(), partitionRange.IsInclusive));
@@ -499,7 +499,8 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
     YQL_ENSURE(readRange.HasKeyRange());
 
     auto range = MakeKeyRange(keyColumnTypes, readRange.GetKeyRange(), stageInfo, holderFactory, typeEnv);
-    auto readPartitions = GetKeyRangePartitions(range.ToTableRange(), stageInfo.Meta.ShardKey->Partitions, keyColumnTypes);
+    auto readPartitions = GetKeyRangePartitions(range.ToTableRange(), stageInfo.Meta.ShardKey->GetPartitions(),
+        keyColumnTypes);
 
     THashMap<ui64, TShardInfo> shardInfoMap;
     for (TPartitionWithRange& partitionWithRange : readPartitions) {
@@ -536,7 +537,8 @@ THashMap<ui64, TShardInfo> PrunePartitions(const TKqpTableKeys& tableKeys,
             ? TTableRange(std::get<TSerializedCellVec>(range).GetCells(), true, std::get<TSerializedCellVec>(range).GetCells(), true, true)
             : TTableRange(std::get<TSerializedTableRange>(range).ToTableRange());
 
-        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->Partitions, keyColumnTypes);
+        auto readPartitions = GetKeyRangePartitions(tableRange, stageInfo.Meta.ShardKey->GetPartitions(),
+            keyColumnTypes);
 
         for (TPartitionWithRange& partitionWithRange : readPartitions) {
             auto& shardInfo = shardInfoMap[partitionWithRange.PartitionInfo->ShardId];
@@ -672,7 +674,7 @@ THashMap<ui64, TShardInfo> PartitionLookupByRowsList(const NKqpProto::TKqpPhyRow
         }
 
         auto range = TTableRange(keyFrom, true, keyTo, true, /* point */  false);
-        auto partitions = GetKeyRangePartitions(range, stageInfo.Meta.ShardKey->Partitions, table.KeyColumnTypes);
+        auto partitions = GetKeyRangePartitions(range, stageInfo.Meta.ShardKey->GetPartitions(), table.KeyColumnTypes);
 
         for (auto& partitionWithRange: partitions) {
             ui64 shardId = partitionWithRange.PartitionInfo->ShardId;

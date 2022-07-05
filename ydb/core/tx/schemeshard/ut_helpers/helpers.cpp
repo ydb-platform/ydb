@@ -1833,7 +1833,7 @@ namespace NSchemeShardUT_Private {
         for (auto& dbKey : dbKeys) {
             ResolveKey(*dbKey);
             UNIT_ASSERT(dbKey->Status == TKeyDesc::EStatus::Ok);
-            for (auto& partition : dbKey->Partitions) {
+            for (auto& partition : dbKey->GetPartitions()) {
                 resolvedShards.insert(partition.ShardId);
             }
         }
@@ -2021,16 +2021,18 @@ namespace NSchemeShardUT_Private {
         TestLs(Runtime, Table, true, fnFillInfo);
     }
 
-    void TFakeDataReq::TTablePartitioningInfo::ResolveKey(const TTableRange &range, TVector<TKeyDesc::TPartitionInfo> &partitions) const {
+    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> TFakeDataReq::TTablePartitioningInfo::ResolveKey(
+        const TTableRange& range) const
+    {
         Y_VERIFY(!Partitioning.empty());
 
-        partitions.clear();
+        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
         // Temporary fix: for an empty range we need to return some datashard so that it can handle readset logic (
         // send empty result to other tx participants etc.)
         if (range.IsEmptyRange(KeyColumnTypes)) {
-            partitions.push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
-            return;
+            partitions->push_back(TKeyDesc::TPartitionInfo(Partitioning.begin()->Datashard));
+            return partitions;
         }
 
         TVector<TBorder>::const_iterator low = LowerBound(Partitioning.begin(), Partitioning.end(), true,
@@ -2041,15 +2043,17 @@ namespace NSchemeShardUT_Private {
 
         Y_VERIFY(low != Partitioning.end(), "last key must be (inf)");
         do {
-            partitions.push_back(TKeyDesc::TPartitionInfo(low->Datashard));
+            partitions->push_back(TKeyDesc::TPartitionInfo(low->Datashard));
 
             if (range.Point)
-                return;
+                return partitions;
 
             int prevComp = CompareBorders<true, true>(low->KeyTuple.GetCells(), range.To, low->Point || low->Inclusive, range.InclusiveTo, KeyColumnTypes);
             if (prevComp >= 0)
-                return;
+                return partitions;
         } while (++low != Partitioning.end());
+
+        return partitions;
     }
 
     TEvSchemeShard::TEvModifySchemeTransaction* CombineSchemeTransactions(const TVector<TEvSchemeShard::TEvModifySchemeTransaction*>& transactions) {

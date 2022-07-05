@@ -668,7 +668,7 @@ private:
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
 
-        if (keyDesc->Partitions.empty()) {
+        if (keyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << ScanData->TablePath << "'";
             CA_LOG_E(error);
             InternalError(TIssuesIds::KIKIMR_SCHEME_ERROR, error);
@@ -678,16 +678,16 @@ private:
         const auto& tr = *AppData()->TypeRegistry;
 
         TVector<TShardState> newShards;
-        newShards.reserve(keyDesc->Partitions.size());
+        newShards.reserve(keyDesc->GetPartitions().size());
 
-        for (ui64 idx = 0, i = 0; idx < keyDesc->Partitions.size(); ++idx) {
-            const auto& partition = keyDesc->Partitions[idx];
+        for (ui64 idx = 0, i = 0; idx < keyDesc->GetPartitions().size(); ++idx) {
+            const auto& partition = keyDesc->GetPartitions()[idx];
 
             TTableRange partitionRange{
-                idx == 0 ? state.Ranges.front().From.GetCells() : keyDesc->Partitions[idx - 1].Range->EndKeyPrefix.GetCells(),
-                idx == 0 ? state.Ranges.front().FromInclusive : !keyDesc->Partitions[idx - 1].Range->IsInclusive,
-                keyDesc->Partitions[idx].Range->EndKeyPrefix.GetCells(),
-                keyDesc->Partitions[idx].Range->IsInclusive
+                idx == 0 ? state.Ranges.front().From.GetCells() : keyDesc->GetPartitions()[idx - 1].Range->EndKeyPrefix.GetCells(),
+                idx == 0 ? state.Ranges.front().FromInclusive : !keyDesc->GetPartitions()[idx - 1].Range->IsInclusive,
+                keyDesc->GetPartitions()[idx].Range->EndKeyPrefix.GetCells(),
+                keyDesc->GetPartitions()[idx].Range->IsInclusive
             };
 
             CA_LOG_D("Processing resolved ShardId# " << partition.ShardId

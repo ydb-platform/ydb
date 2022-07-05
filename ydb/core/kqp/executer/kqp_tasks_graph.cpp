@@ -159,7 +159,7 @@ void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 {
     YQL_ENSURE(stageInfo.Meta.ShardKey);
     THashMap<ui64, const TKeyDesc::TPartitionInfo*> partitionsMap;
-    for (auto& partition : stageInfo.Meta.ShardKey->Partitions) {
+    for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
         partitionsMap[partition.ShardId] = &partition;
     }
 

@@ -98,22 +98,26 @@ void TTester::EmptyShardKeyResolver(TKeyDesc& key) {
 
 void TTester::SingleShardKeyResolver(TKeyDesc& key) {
     key.Status = TKeyDesc::EStatus::Ok;
-    key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+
+    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+    partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+    key.Partitioning = partitions;
 }
 
 void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
     const ui32 ShardBorder1 = 1000;
     const ui32 ShardBorder2 = 2000;
 
+    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
     key.Status = TKeyDesc::EStatus::Ok;
     if (key.Range.Point) {
         ui32 key0 = *(ui32*)key.Range.From[0].Data();
         if (key0 < ShardBorder1) {
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
         } else if (key0 < ShardBorder2) {
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
         } else {
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
         }
     } else {
         UNIT_ASSERT(key.Range.From.size() > 0);
@@ -126,12 +130,14 @@ void TTester::ThreeShardPointKeyResolver(TKeyDesc& key) {
         UNIT_ASSERT(from <= to);
 
         if (from < ShardBorder1)
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
         if (from < ShardBorder2 && to >= ShardBorder1)
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
+            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet1));
         if (to >= ShardBorder2)
-            key.Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
+            partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet2));
     }
+
+    key.Partitioning = partitions;
 }
 
 TTester::TKeyResolver TTester::GetKeyResolver() const {
@@ -332,7 +338,7 @@ ui32 TFakeProxyTx::SetProgram(TTester& tester, const TString& programText) {
         keyResolver(*dbKey);
         UNIT_ASSERT(dbKey->Status == TKeyDesc::EStatus::Ok);
 
-        for (auto& partition : dbKey->Partitions) {
+        for (auto& partition : dbKey->GetPartitions()) {
             resolvedShards.insert(partition.ShardId);
         }
     }
@@ -997,7 +1003,10 @@ TKeyExtractor::TKeyExtractor(TTester& tester, TString programText) {
 
     for (auto& key : Engine->GetDbKeys()) {
         key->Status = TKeyDesc::EStatus::Ok;
-        key->Partitions.push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+
+        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+        partitions->push_back(TKeyDesc::TPartitionInfo((ui64)TTestTxConfig::TxTablet0));
+        key->Partitioning = partitions;
     }
 }
 

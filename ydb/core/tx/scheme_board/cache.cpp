@@ -219,7 +219,7 @@ namespace {
             entry.DomainInfo.Drop();
             TKeyDesc& keyDesc = *entry.KeyDescription;
             keyDesc.ColumnInfos.clear();
-            keyDesc.Partitions.clear();
+            keyDesc.Partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
             keyDesc.SecurityObject.Drop();
         }
 
@@ -695,7 +695,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             NotNullColumns.clear();
             Indexes.clear();
             CdcStreams.clear();
-            Partitioning.clear();
+            Partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
             Self.Drop();
 
@@ -744,16 +744,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
 
             if (pathDesc.TablePartitionsSize()) {
-                Partitioning.resize(pathDesc.TablePartitionsSize());
+                auto partitioning = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+                partitioning->resize(pathDesc.TablePartitionsSize());
                 for (ui32 i : xrange(pathDesc.TablePartitionsSize())) {
                     const auto& src = pathDesc.GetTablePartitions(i);
-                    auto& partition = Partitioning[i];
+                    auto& partition = (*partitioning)[i];
                     partition.Range = TKeyDesc::TPartitionRangeInfo();
                     partition.Range->EndKeyPrefix.Parse(src.GetEndOfRangeKeyPrefix());
                     partition.Range->IsInclusive = src.HasIsInclusive() && src.GetIsInclusive();
                     partition.Range->IsPoint = src.HasIsPoint() && src.GetIsPoint();
                     partition.ShardId = src.GetDatashardId();
                 }
+
+                Partitioning = std::move(partitioning);
             }
 
             if (pathDesc.HasDomainDescription()) {
@@ -849,24 +852,25 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             ptr->Description = std::move(desc);
         }
 
-        // copy-paste from core/tx/scheme_cache/scheme_cache_impl.cpp
-        void FillRangePartitioning(
-            const TTableRange& range,
-            TVector<TKeyDesc::TPartitionInfo>& partitions
-        ) const {
-            Y_VERIFY(!Partitioning.empty());
+        std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> FillRangePartitioning(const TTableRange& range) const {
+            Y_VERIFY(Partitioning);
+            Y_VERIFY(!Partitioning->empty());
 
-            partitions.clear();
+            if (range.IsFullRange(KeyColumnTypes.size())) {
+                return Partitioning;
+            }
+
+            auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
 
             // Temporary fix: for an empty range we need to return some datashard
             // so that it can handle readset logic (send empty result to other tx participants etc.)
             if (range.IsEmptyRange(KeyColumnTypes)) {
-                partitions.push_back(*Partitioning.begin());
-                return;
+                partitions->push_back(*Partitioning->begin());
+                return partitions;
             }
 
             TVector<TKeyDesc::TPartitionInfo>::const_iterator low = LowerBound(
-                Partitioning.begin(), Partitioning.end(), true,
+                Partitioning->begin(), Partitioning->end(), true,
                 [&](const TKeyDesc::TPartitionInfo& left, bool) {
                     const int compares = CompareBorders<true, false>(
                         left.Range->EndKeyPrefix.GetCells(), range.From,
@@ -878,13 +882,13 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             );
 
-            Y_VERIFY(low != Partitioning.end(), "last key must be (inf)");
+            Y_VERIFY(low != Partitioning->end(), "last key must be (inf)");
 
             do {
-                partitions.push_back(*low);
+                partitions->push_back(*low);
 
                 if (range.Point) {
-                    return;
+                    return partitions;
                 }
 
                 const int prevComp = CompareBorders<true, true>(
@@ -894,10 +898,12 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 );
 
                 if (prevComp >= 0) {
-                    return;
+                    return partitions;
                 }
 
-            } while (++low != Partitioning.end());
+            } while (++low != Partitioning->end());
+
+            return partitions;
         }
 
         bool IsSysTable() const {
@@ -960,6 +966,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , IsPrivatePath(false)
             , IsVirtual(isVirtual)
             , SchemaVersion(0)
+            , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
         {
         }
 
@@ -978,6 +985,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             , IsPrivatePath(other.IsPrivatePath)
             , IsVirtual(other.IsVirtual)
             , SchemaVersion(other.SchemaVersion)
+            , Partitioning(std::make_shared<TVector<TKeyDesc::TPartitionInfo>>())
         {
             if (other.Subscriber) {
                 other.Subscriber = TSubscriber();
@@ -1806,18 +1814,22 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 } else if (Kind == TNavigate::KindOlapStore) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
                     // Add all shards of the OLAP store
+                    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
                     for (ui64 columnShard : OlapStoreInfo->Description.GetColumnShards()) {
-                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
-                        keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
+                        partitions->push_back(TKeyDesc::TPartitionInfo(columnShard));
+                        partitions->back().Range = TKeyDesc::TPartitionRangeInfo();
                     }
+                    keyDesc.Partitioning = std::move(partitions);
                     return;
                 } else if (Kind == TNavigate::KindOlapTable) {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable);
                     // Add all shards of the OLAP table
+                    auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
                     for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
-                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
-                        keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
+                        partitions->push_back(TKeyDesc::TPartitionInfo(columnShard));
+                        partitions->back().Range = TKeyDesc::TPartitionRangeInfo();
                     }
+                    keyDesc.Partitioning = std::move(partitions);
                     return;
                 }
 
@@ -1843,7 +1855,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         keyDesc.Range.From, TSysTables::TLocksTable::EColumns::DataShard, shard
                     );
                     if (ok) {
-                        keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(shard));
+                        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+                        partitions->push_back(TKeyDesc::TPartitionInfo(shard));
+                        keyDesc.Partitioning = std::move(partitions);
                     } else {
                         keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
                         ++context->Request->ErrorCount;
@@ -1851,17 +1865,19 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 }
             } else if (OlapTableInfo) {
                 // TODO: return proper partitioning info (KIKIMR-11069)
+                auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
                 for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
-                    keyDesc.Partitions.push_back(TKeyDesc::TPartitionInfo(columnShard));
-                    keyDesc.Partitions.back().Range = TKeyDesc::TPartitionRangeInfo();
+                    partitions->push_back(TKeyDesc::TPartitionInfo(columnShard));
+                    partitions->back().Range = TKeyDesc::TPartitionRangeInfo();
                 }
+                keyDesc.Partitioning = std::move(partitions);
             } else {
                 if (Partitioning) {
-                    FillRangePartitioning(keyDesc.Range, keyDesc.Partitions);
+                    keyDesc.Partitioning = FillRangePartitioning(keyDesc.Range);
                 }
             }
 
-            if (keyDesc.Partitions.empty()) {
+            if (keyDesc.GetPartitions().empty()) {
                 entry.Status = TResolve::EStatus::TypeCheckError;
                 keyDesc.Status = TKeyDesc::EStatus::OperationNotSupported;
             }
@@ -1914,7 +1930,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashSet<TString> NotNullColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
-        TVector<TKeyDesc::TPartitionInfo> Partitioning;
+        std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> Partitioning;
 
         TIntrusivePtr<TNavigate::TDirEntryInfo> Self;
 

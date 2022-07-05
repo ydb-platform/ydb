@@ -88,18 +88,26 @@ namespace {
 
     void SingleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
+
+        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+        partitions->push_back(TKeyDesc::TPartitionInfo(Shard1));
+        key.Partitioning = partitions;
     }
 
     void DoubleShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard1));
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(Shard2));
+
+        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+        partitions->push_back(TKeyDesc::TPartitionInfo(Shard1));
+        partitions->push_back(TKeyDesc::TPartitionInfo(Shard2));
+        key.Partitioning = partitions;
     }
 
     void TwoShardResolver(TKeyDesc& key) {
         key.Status = TKeyDesc::EStatus::Ok;
-        key.Partitions.push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
+        auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
+        partitions->push_back(TKeyDesc::TPartitionInfo(key.TableId.PathId.LocalPathId == Table1Id ? Shard1 : Shard2));
+        key.Partitioning = partitions;
     }
 
     struct TDriver {

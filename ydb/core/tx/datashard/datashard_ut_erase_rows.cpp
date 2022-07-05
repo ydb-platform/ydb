@@ -1402,7 +1402,8 @@ tkey = 100, key = 4
 
         check(TEvResponse::ProtoRecordType::SCHEME_ERROR, "Empty partitions list", [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvResolve::EventType) {
-                ev->Get<TEvResolve>()->Request->ResultSet.at(0).KeyDescription->Partitions.clear();
+                ev->Get<TEvResolve>()->Request->ResultSet.at(0).KeyDescription->Partitioning =
+                    std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
             }
         });
 

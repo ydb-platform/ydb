@@ -271,10 +271,10 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
 
     static ui64 GetShardId(const TTableRange& range, const TKeyDesc* keyDesc) {
         Y_VERIFY(range.Point);
-        Y_VERIFY(!keyDesc->Partitions.empty());
+        Y_VERIFY(!keyDesc->GetPartitions().empty());
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            keyDesc->Partitions.begin(), keyDesc->Partitions.end(), true,
+            keyDesc->GetPartitions().begin(), keyDesc->GetPartitions().end(), true,
             [&](const TKeyDesc::TPartitionInfo& partition, bool) {
                 const int compares = CompareBorders<true, false>(
                     partition.Range->EndKeyPrefix.GetCells(), range.From,
@@ -286,7 +286,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
             }
         );
 
-        Y_VERIFY(it != keyDesc->Partitions.end());
+        Y_VERIFY(it != keyDesc->GetPartitions().end());
         return it->ShardId;
     }
 
@@ -541,7 +541,7 @@ class TDistEraser: public TActorBootstrapped<TDistEraser> {
                 return;
             }
 
-            if (entry.KeyDescription->Partitions.empty()) {
+            if (entry.KeyDescription->GetPartitions().empty()) {
                 return SchemeError(TStringBuilder() << "Empty partitions list"
                     << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
             }

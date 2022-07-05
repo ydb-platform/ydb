@@ -196,7 +196,7 @@ private:
                 return;
             }
 
-            for (auto& partition : entry.KeyDescription->Partitions) {
+            for (auto& partition : entry.KeyDescription->GetPartitions()) {
                 YQL_ENSURE(partition.Range);
             }
 

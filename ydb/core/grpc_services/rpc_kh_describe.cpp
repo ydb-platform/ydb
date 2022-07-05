@@ -296,9 +296,9 @@ private:
         };
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Table [" << Request->GetProtoRequest()->path()
-                    << "] shards: " << getShardsString(KeyRange->Partitions));
+                    << "] shards: " << getShardsString(KeyRange->GetPartitions()));
 
-        for (const TKeyDesc::TPartitionInfo& partition : KeyRange->Partitions) {
+        for (const TKeyDesc::TPartitionInfo& partition : KeyRange->GetPartitions()) {
             auto* p = Result.add_partitions();
             p->set_tablet_id(partition.ShardId);
             p->set_end_key(partition.Range->EndKeyPrefix.GetBuffer());

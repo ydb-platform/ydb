@@ -1095,7 +1095,7 @@ void TDataReq::ContinueFlatMKQLResolve(const TActorContext &ctx) {
 
         // we would need shard -> table mapping for scheme cache invalidation on errors
         for (const auto& keyDescription : keyDescriptions) {
-            for (auto& partition : keyDescription->Partitions) {
+            for (auto& partition : keyDescription->GetPartitions()) {
                 if (auto *x = PerTablet.FindPtr(partition.ShardId)) {
                     x->TableId = keyDescription->TableId;
                 }
@@ -1137,7 +1137,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
     auto &entry = cacheRequest->ResultSet[0];
     ReadTableRequest->KeyDesc = std::move(entry.KeyDescription);
 
-    bool singleShard = ReadTableRequest->KeyDesc->Partitions.size() == 1;
+    bool singleShard = ReadTableRequest->KeyDesc->GetPartitions().size() == 1;
     CanUseFollower = false;
 
     bool immediate = singleShard;
@@ -1147,7 +1147,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
         immediate = true;
     }
 
-    for (auto& partition : ReadTableRequest->KeyDesc->Partitions) {
+    for (auto& partition : ReadTableRequest->KeyDesc->GetPartitions()) {
         NKikimrTxDataShard::TDataTransaction dataTransaction;
         dataTransaction.SetStreamResponse(StreamResponse);
         dataTransaction.SetImmediate(immediate);
@@ -1185,7 +1185,7 @@ void TDataReq::ProcessReadTableResolve(NSchemeCache::TSchemeCacheRequest *cacheR
             "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " SEND TEvProposeTransaction to datashard " << partition.ShardId
             << " with read table request"
-            << " affected shards " << ReadTableRequest->KeyDesc->Partitions.size()
+            << " affected shards " << ReadTableRequest->KeyDesc->GetPartitions().size()
             << " followers " << (CanUseFollower ? "allowed" : "disallowed") << " marker# P4b");
 
         const TActorId pipeCache = CanUseFollower ? Services.FollowerPipeCache : Services.LeaderPipeCache;
@@ -2776,8 +2776,8 @@ ui64 GetFirstTablet(NSchemeCache::TSchemeCacheRequest &cacheRequest) {
 
     NSchemeCache::TSchemeCacheRequest::TEntry& firstEntry= *cacheRequest.ResultSet.begin();
     NKikimr::TKeyDesc& firstKey = *firstEntry.KeyDescription;
-    Y_VERIFY(!firstKey.Partitions.empty());
-    return firstKey.Partitions.begin()->ShardId;
+    Y_VERIFY(!firstKey.GetPartitions().empty());
+    return firstKey.GetPartitions().begin()->ShardId;
 }
 
 const TDomainsInfo::TDomain& TDataReq::SelectDomain(NSchemeCache::TSchemeCacheRequest &cacheRequest, const TActorContext &ctx) {

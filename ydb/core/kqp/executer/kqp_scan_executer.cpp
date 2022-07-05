@@ -95,7 +95,7 @@ public:
         TSet<ui64> shardIds;
         for (auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
             if (stageInfo.Meta.ShardKey) {
-                for (auto& partition : stageInfo.Meta.ShardKey->Partitions) {
+                for (auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
                     shardIds.insert(partition.ShardId);
                 }
             }
@@ -563,7 +563,7 @@ private:
         auto ranges = FillReadRanges(keyColumnTypes, readRanges, stageInfo, holderFactory, typeEnv);
 
         THashMap<ui64, TShardInfo> shardInfoMap;
-        for (const auto& partition :  stageInfo.Meta.ShardKey->Partitions) {
+        for (const auto& partition :  stageInfo.Meta.ShardKey->GetPartitions()) {
             auto& shardInfo = shardInfoMap[partition.ShardId];
 
             YQL_ENSURE(!shardInfo.KeyReadRanges);
@@ -585,7 +585,7 @@ private:
         const auto& keyTypes = table.KeyColumnTypes;
 
         TMap<ui64, TKeyDesc::TPartitionRangeInfo> shard2range;
-        for (const auto& part: stageInfo.Meta.ShardKey->Partitions) {
+        for (const auto& part: stageInfo.Meta.ShardKey->GetPartitions()) {
             shard2range[part.ShardId] = part.Range.GetRef();
         }
 

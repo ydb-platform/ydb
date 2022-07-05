@@ -861,7 +861,8 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(GetKeyRange()->Partitions));
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: "
+            << getShardsString(GetKeyRange()->GetPartitions()));
 
         MakeShardRequests(ctx);
     }
@@ -869,13 +870,13 @@ private:
     void MakeShardRequests(const NActors::TActorContext& ctx) {
         const auto* keyRange = GetKeyRange();
 
-        Y_VERIFY(!keyRange->Partitions.empty());
+        Y_VERIFY(!keyRange->GetPartitions().empty());
 
         // Group rows by shard id
-        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->Partitions.size());
+        TVector<std::unique_ptr<TEvDataShard::TEvUploadRowsRequest>> shardRequests(keyRange->GetPartitions().size());
         for (const auto& keyValue : GetRows()) {
             // Find partition for the key
-            auto it = std::lower_bound(keyRange->Partitions.begin(), keyRange->Partitions.end(), keyValue.first.GetCells(),
+            auto it = std::lower_bound(keyRange->GetPartitions().begin(), keyRange->GetPartitions().end(), keyValue.first.GetCells(),
                 [this](const auto &partition, const auto& key) {
                     const auto& range = *partition.Range;
                     const int cmp = CompareBorders<true, false>(range.EndKeyPrefix.GetCells(), key,
@@ -884,7 +885,7 @@ private:
                     return (cmp < 0);
                 });
 
-            size_t shardIdx = it - keyRange->Partitions.begin();
+            size_t shardIdx = it - keyRange->GetPartitions().begin();
 
             TEvDataShard::TEvUploadRowsRequest* ev = shardRequests[shardIdx].get();
             if (!ev) {
@@ -914,7 +915,7 @@ private:
             if (!shardRequests[idx])
                 continue;
 
-            TTabletId shardId = keyRange->Partitions[idx].ShardId;
+            TTabletId shardId = keyRange->GetPartitions()[idx].ShardId;
 
             LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
 

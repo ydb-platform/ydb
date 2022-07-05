@@ -587,14 +587,14 @@ class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSe
             return;
         }
 
-        if (!entry.KeyDescription->Partitions) {
+        if (!entry.KeyDescription->GetPartitions()) {
             LOG_W("Empty partitions list"
                 << ": entry# " << entry.ToString(*AppData()->TypeRegistry));
             return Retry();
         }
 
         KeyDesc = std::move(entry.KeyDescription);
-        CreateSenders(MakePartitionIds(KeyDesc->Partitions));
+        CreateSenders(MakePartitionIds(KeyDesc->GetPartitions()));
 
         Become(&TThis::StateMain);
     }
@@ -610,18 +610,18 @@ class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSe
     }
 
     bool IsResolved() const override {
-        return KeyDesc && KeyDesc->Partitions;
+        return KeyDesc && KeyDesc->GetPartitions();
     }
 
     ui64 GetPartitionId(const TChangeRecord& record) const override {
         Y_VERIFY(KeyDesc);
-        Y_VERIFY(KeyDesc->Partitions);
+        Y_VERIFY(KeyDesc->GetPartitions());
 
         const auto range = TTableRange(record.GetKey());
         Y_VERIFY(range.Point);
 
         TVector<TKeyDesc::TPartitionInfo>::const_iterator it = LowerBound(
-            KeyDesc->Partitions.begin(), KeyDesc->Partitions.end(), true,
+            KeyDesc->GetPartitions().begin(), KeyDesc->GetPartitions().end(), true,
             [&](const TKeyDesc::TPartitionInfo& partition, bool) {
                 const int compares = CompareBorders<true, false>(
                     partition.Range->EndKeyPrefix.GetCells(), range.From,
@@ -633,7 +633,7 @@ class TAsyncIndexChangeSenderMain: public TActorBootstrapped<TAsyncIndexChangeSe
             }
         );
 
-        Y_VERIFY(it != KeyDesc->Partitions.end());
+        Y_VERIFY(it != KeyDesc->GetPartitions().end());
         return it->ShardId; // partition = shard
     }
 

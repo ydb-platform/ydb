@@ -605,13 +605,14 @@ private:
             return JoinVectorIntoString(shards, ", ");
         };
 
-        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: " << getShardsString(KeyRange->Partitions));
+        LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Range shards: "
+            << getShardsString(KeyRange->GetPartitions()));
 
         MakeShardRequests(ctx);
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
-        Y_VERIFY(!KeyRange->Partitions.empty());
+        Y_VERIFY(!KeyRange->GetPartitions().empty());
 
         // Send request to the first shard
         std::unique_ptr<TEvDataShard::TEvReadColumnsRequest> ev =
@@ -629,7 +630,7 @@ private:
             ev->Record.SetSnapshotTxId(SnapshotId.TxId);
         }
 
-        ui64 shardId = KeyRange->Partitions[0].ShardId;
+        ui64 shardId = KeyRange->GetPartitions()[0].ShardId;
 
         LOG_DEBUG_S(ctx, NKikimrServices::MSGBUS_REQUEST, "Sending request to shards " << shardId);
 

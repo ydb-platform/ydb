@@ -3074,7 +3074,8 @@ Y_UNIT_TEST_SUITE(KqpIndexes) {
 
         {
             const TString query(Q1_(R"(
-                SELECT * FROM `/Root/TestTable` VIEW ix_cust as t WHERE t.customer = "Vasya" ORDER BY t.customer DESC;
+                SELECT * FROM `/Root/TestTable` VIEW ix_cust as t WHERE t.customer = "Vasya"
+                ORDER BY t.customer DESC, t.id DESC;
             )"));
 
            {

@@ -112,8 +112,8 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKeyPrefix(const NDq::
             break;
         }
 
-        keyFullType.push_back(columnInfo->TypeId);
-        keyPrefixType.push_back(columnInfo->TypeId);
+        keyFullType.push_back(columnInfo->GetTypeId());
+        keyPrefixType.push_back(columnInfo->GetTypeId());
         keyPrefixIndices.push_back(columnInfo->Index);
     }
 

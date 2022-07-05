@@ -71,8 +71,9 @@ public:
             CurrentItemIndexes.resize(InputsSize, 0);
             Finished.resize(InputsSize, false);
             for (auto& sortCol : SortCols) {
-                TMaybe<EDataSlot> maybeDataSlot = FindDataSlot(sortCol.TypeId);
-                YQL_ENSURE(maybeDataSlot, "Trying to compare columns with unknown type id: " << sortCol.TypeId);
+                const auto typeId = sortCol.GetTypeId();
+                TMaybe<EDataSlot> maybeDataSlot = FindDataSlot(typeId);
+                YQL_ENSURE(maybeDataSlot, "Trying to compare columns with unknown type id: " << typeId);
                 YQL_ENSURE(IsTypeSupportedInMergeCn(*maybeDataSlot), "Column '" << sortCol.Name <<
                     "' has unsupported type for Merge connection: " << *maybeDataSlot);
                 SortColTypes[sortCol.Index] = *maybeDataSlot;

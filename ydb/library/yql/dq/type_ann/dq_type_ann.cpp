@@ -587,6 +587,11 @@ TStatus AnnotateDqCnHashShuffle(const TExprNode::TPtr& input, TExprContext& ctx)
                 TStringBuilder() << "Missing key column: " << column->Content()));
             return TStatus::Error;
         }
+        if (const auto ty = structType->FindItemType(column->Content()); !ty->IsHashable()) {
+            ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
+                TStringBuilder() << "Non-hashable key column: " << column->Content()));
+            return TStatus::Error;
+        }
     }
 
     input->SetTypeAnn(outputType);

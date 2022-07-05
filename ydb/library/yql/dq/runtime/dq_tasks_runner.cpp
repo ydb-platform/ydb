@@ -147,7 +147,7 @@ NUdf::TUnboxedValue DqBuildInputValue(const NDqProto::TTaskInput& inputDesc, con
 }
 
 IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outputDesc, const NMiniKQL::TType* type,
-    const NMiniKQL::TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs)
+    const NMiniKQL::TTypeEnvironment& /*typeEnv*/, TVector<IDqOutput::TPtr>&& outputs)
 {
     switch (outputDesc.GetTypeCase()) {
         case NDqProto::TTaskOutput::kSink:
@@ -159,7 +159,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
         }
 
         case NDqProto::TTaskOutput::kHashPartition: {
-            TVector<NUdf::TDataTypeId> keyColumnTypes;
+            TVector<TType*> keyColumnTypes;
             TVector<ui32> keyColumnIndices;
             GetColumnsInfo(type, outputDesc.GetHashPartition().GetKeyColumns(), keyColumnTypes, keyColumnIndices);
             YQL_ENSURE(!keyColumnTypes.empty());
@@ -171,7 +171,7 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
             }
 
             return CreateOutputHashPartitionConsumer(std::move(outputs), std::move(keyColumnTypes),
-                std::move(keyColumnIndices), typeEnv);
+                std::move(keyColumnIndices));
         }
 
         case NDqProto::TTaskOutput::kBroadcast: {

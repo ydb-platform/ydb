@@ -82,28 +82,16 @@ private:
 
 class TDqOutputHashPartitionConsumer : public IDqOutputConsumer {
 public:
-    TDqOutputHashPartitionConsumer(const TTypeEnvironment& typeEnv, TVector<IDqOutput::TPtr>&& outputs,
-        TVector<TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
-        : TypeEnv(typeEnv)
-        , Outputs(std::move(outputs))
-        , KeyColumnTypes(std::move(keyColumnTypes))
+    TDqOutputHashPartitionConsumer(TVector<IDqOutput::TPtr>&& outputs,
+        TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
+        : Outputs(std::move(outputs))
         , KeyColumnIndices(std::move(keyColumnIndices))
+        , ValueHashers(KeyColumnIndices.size(), NUdf::IHash::TPtr{})
     {
-        MKQL_ENSURE_S(KeyColumnTypes.size() == KeyColumnIndices.size());
+        MKQL_ENSURE_S(keyColumnTypes.size() == KeyColumnIndices.size());
 
-        for (size_t keyId = 0; keyId < KeyColumnTypes.size(); keyId++) {
-            NMiniKQL::TType* type;
-            if (KeyColumnTypes[keyId] == NUdf::TDataType<NUdf::TDecimal>::Id) {
-                type = NMiniKQL::TDataDecimalType::Create(22, 9, TypeEnv);
-            } else {
-                type = NMiniKQL::TDataType::Create(KeyColumnTypes[keyId], TypeEnv);
-            }
-            bool isTuple;
-            bool encoded;
-            bool useIHash;
-            GetDictionaryKeyTypes(type, KeyTypes, isTuple, encoded, useIHash);
-
-            ValueHashers.emplace_back(KeyTypes, isTuple, useIHash ? MakeHashImpl(type) : nullptr);
+        for (auto i = 0U; i < keyColumnTypes.size(); i++) {
+            ValueHashers[i] = MakeHashImpl(keyColumnTypes[i]);
         }
     }
 
@@ -144,29 +132,13 @@ private:
         if (!value.HasValue()) {
             return 0;
         }
-
-        #define APPLY_HASHER(type, layout) \
-            case TDataType<type>::Id: return hasher(value);
-
-        auto& hasher = ValueHashers[keyId];
-        switch (KeyColumnTypes[keyId]) {
-            KNOWN_FIXED_VALUE_TYPES(APPLY_HASHER)
-            case TDataType<TDecimal>::Id:
-                return GetValueHash<EDataSlot::Decimal>(value);
-        }
-
-        #undef APPLY_HASHER
-
-        return GetValueHash<EDataSlot::String>(value);
+        return ValueHashers[keyId]->Hash(value);
     }
 
 private:
-    const TTypeEnvironment& TypeEnv;
     TVector<IDqOutput::TPtr> Outputs;
-    TVector<TDataTypeId> KeyColumnTypes;
     TVector<ui32> KeyColumnIndices;
-    TVector<TValueHasher> ValueHashers;
-    TKeyTypes KeyTypes;
+    TVector<NUdf::IHash::TPtr> ValueHashers;
 };
 
 class TDqOutputBroadcastConsumer : public IDqOutputConsumer {
@@ -213,10 +185,9 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output) {
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
-    TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
+    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices)
 {
-    return MakeIntrusive<TDqOutputHashPartitionConsumer>(typeEnv, std::move(outputs), std::move(keyColumnTypes),
+    return MakeIntrusive<TDqOutputHashPartitionConsumer>(std::move(outputs), std::move(keyColumnTypes),
         std::move(keyColumnIndices));
 }
 

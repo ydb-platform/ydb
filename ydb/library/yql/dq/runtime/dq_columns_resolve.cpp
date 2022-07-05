@@ -21,10 +21,7 @@ TMaybe<TColumnInfo> FindColumnInfo(const NKikimr::NMiniKQL::TType* type, TString
         memberType = static_cast<TOptionalType&>(*memberType).GetItemType();
     }
 
-    YQL_ENSURE(memberType->GetKind() == TType::EKind::Data);
-    auto columnType = static_cast<TDataType&>(*memberType).GetSchemeType();
-
-    return TColumnInfo{TString(columnName), *columnIndex, columnType};
+    return TColumnInfo{TString(columnName), *columnIndex, memberType};
 }
 
 TColumnInfo GetColumnInfo(const TType* type, TStringBuf columnName) {

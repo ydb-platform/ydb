@@ -29,8 +29,7 @@ IDqOutputConsumer::TPtr CreateOutputMapConsumer(IDqOutput::TPtr output);
 
 IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
     TVector<IDqOutput::TPtr>&& outputs,
-    TVector<NUdf::TDataTypeId>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices,
-    const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv);
+    TVector<NKikimr::NMiniKQL::TType*>&& keyColumnTypes, TVector<ui32>&& keyColumnIndices);
 
 IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&& outputs);
 

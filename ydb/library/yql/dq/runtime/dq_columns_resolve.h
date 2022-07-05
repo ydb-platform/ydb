@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 // #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
@@ -9,7 +10,14 @@ namespace NYql::NDq {
 struct TColumnInfo {
     TString Name;
     ui32 Index;
-    NUdf::TDataTypeId TypeId;
+    NKikimr::NMiniKQL::TType* Type;
+
+    TColumnInfo(TString name, ui32 index, NKikimr::NMiniKQL::TType* type) : Name(name), Index(index), Type(type) {};
+
+    NUdf::TDataTypeId GetTypeId() const {
+        YQL_ENSURE(Type->GetKind() == NKikimr::NMiniKQL::TType::EKind::Data);
+        return static_cast<NKikimr::NMiniKQL::TDataType&>(*Type).GetSchemeType();
+    }
 };
 
 struct TSortColumnInfo : public TColumnInfo {
@@ -26,7 +34,7 @@ TColumnInfo GetColumnInfo(const NKikimr::NMiniKQL::TType* type, TStringBuf colum
 
 template<typename TList>
 void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& columns,
-    TVector<NUdf::TDataTypeId>& columnTypes, TVector<ui32>& columnIndices)
+    TVector<NKikimr::NMiniKQL::TType*>& columnTypes, TVector<ui32>& columnIndices)
 {
     columnTypes.clear();
     columnIndices.clear();
@@ -36,7 +44,7 @@ void GetColumnsInfo(const NKikimr::NMiniKQL::TType* type, const TList& columns,
 
     for (auto& column : columns) {
         auto columnInfo = GetColumnInfo(type, column);
-        columnTypes.push_back(columnInfo.TypeId);
+        columnTypes.push_back(columnInfo.Type);
         columnIndices.push_back(columnInfo.Index);
     }
 }

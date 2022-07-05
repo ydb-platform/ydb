@@ -372,36 +372,36 @@ protected:
         return modified;
     }
 
-    void StateFunc(TAutoPtr<IEventHandle> &ev, const TActorContext &ctx) {
-        switch (ev->GetTypeRewrite()) {
-            HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
-            HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
-            HFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
-            HFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
-            HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
-            HFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
-            HFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
-            HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
-            HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
-            HFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
-            hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
-            HFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
-            HFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
-            HFunc(TEvWhiteboard::TEvTraceRequest, Handle);
-            HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
-            HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
-            HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
-        }
-    }
+    STRICT_STFUNC(StateFunc,
+        HFunc(TEvWhiteboard::TEvTabletStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvTabletStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvNodeStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvNodeStateDelete, Handle);
+        HFunc(TEvWhiteboard::TEvNodeStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvPDiskStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvPDiskStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvPDiskStateDelete, Handle);
+        HFunc(TEvWhiteboard::TEvVDiskStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvVDiskStateGenerationChange, Handle);
+        HFunc(TEvWhiteboard::TEvVDiskStateDelete, Handle);
+        HFunc(TEvWhiteboard::TEvVDiskStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvBSGroupStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvBSGroupStateDelete, Handle);
+        HFunc(TEvWhiteboard::TEvBSGroupStateRequest, Handle);
+        HFunc(TEvWhiteboard::TEvSystemStateUpdate, Handle);
+        HFunc(TEvWhiteboard::TEvSystemStateAddEndpoint, Handle);
+        HFunc(TEvWhiteboard::TEvSystemStateAddRole, Handle);
+        HFunc(TEvWhiteboard::TEvSystemStateSetTenant, Handle);
+        HFunc(TEvWhiteboard::TEvSystemStateRemoveTenant, Handle);
+        HFunc(TEvWhiteboard::TEvSystemStateRequest, Handle);
+        hFunc(TEvWhiteboard::TEvIntrospectionData, Handle);
+        HFunc(TEvWhiteboard::TEvTabletLookupRequest, Handle);
+        HFunc(TEvWhiteboard::TEvTraceLookupRequest, Handle);
+        HFunc(TEvWhiteboard::TEvTraceRequest, Handle);
+        HFunc(TEvWhiteboard::TEvSignalBodyRequest, Handle);
+        HFunc(TEvPrivate::TEvUpdateRuntimeStats, Handle);
+        HFunc(TEvPrivate::TEvCleanupDeadTablets, Handle);
+    )
 
     void Handle(TEvWhiteboard::TEvTabletStateUpdate::TPtr &ev, const TActorContext &ctx) {
         auto tabletId(std::make_pair(ev->Get()->Record.GetTabletId(), ev->Get()->Record.GetFollowerId()));

@@ -882,14 +882,6 @@ private:
 
         result.ExecuterResult.Swap(response->MutableResult());
 
-        if (Target && result.ExecuterResult.HasStats()) {
-            auto statsEv = MakeHolder<TEvKqpExecuter::TEvStreamProfile>();
-            auto& record = statsEv->Record;
-
-            record.MutableProfile()->Swap(result.ExecuterResult.MutableStats());
-            this->Send(Target, statsEv.Release());
-        }
-
         Promise.SetValue(std::move(result));
         this->PassAway();
     }
@@ -1668,7 +1660,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
@@ -1702,7 +1694,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
@@ -1742,7 +1734,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_SCAN);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());
@@ -1802,7 +1794,7 @@ public:
         ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_AST_DML);
         ev->Record.MutableRequest()->SetQuery(query);
         ev->Record.MutableRequest()->SetKeepSession(false);
-        ev->Record.MutableRequest()->SetStatsMode(settings.StatsMode);
+        ev->Record.MutableRequest()->SetCollectStats(settings.CollectStats);
 
         if (!params.Values.empty()) {
             FillParameters(std::move(params), *ev->Record.MutableRequest()->MutableParameters());

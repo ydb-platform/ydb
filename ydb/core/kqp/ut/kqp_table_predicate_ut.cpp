@@ -181,32 +181,29 @@ void CreateTableWithIntKey(TSession session, ui64 partitions, ui32 rangesPerPart
     UNIT_ASSERT(success);
 }
 
-void ExecuteStreamQueryAndCheck(NExperimental::TStreamQueryClient& db, const TString& query,
+void ExecuteStreamQueryAndCheck(NYdb::NTable::TTableClient& db, const TString& query,
     const TString& expectedYson)
 {
-    auto settings = NExperimental::TExecuteStreamQuerySettings()
-        .ProfileMode(NExperimental::EStreamQueryProfileMode::Basic);
+    TStreamExecScanQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
-    auto it = db.ExecuteStreamQuery(query, settings).GetValueSync();
+    auto it = db.StreamExecuteScanQuery(query, settings).GetValueSync();
     UNIT_ASSERT(it.IsSuccess());
 
-    TVector<TString> profiles;
-    auto resultYson = StreamResultToYson(it, &profiles);
+    auto res = CollectStreamResult(it);
 
     Cerr << "---------QUERY----------" << Endl;
     Cerr << query << Endl;
     Cerr << "---------RESULT---------" << Endl;
-    Cerr << resultYson << Endl;
+    Cerr << res.ResultSetYson << Endl;
     Cerr << "------------------------" << Endl;
 
-    CompareYson(expectedYson, resultYson);
+    CompareYson(expectedYson, res.ResultSetYson);
 
-    NYql::NDqProto::TDqExecutionStats stats;
-    // First stage is computation, second scan read.
-    google::protobuf::TextFormat::ParseFromString(profiles.back(), &stats);
+    UNIT_ASSERT(res.QueryStats);
+    ui64 readRows = res.QueryStats->query_phases().rbegin()->table_access(0).reads().rows();
+    ui64 resultRows = res.RowsCount;
 
-    ui64 resultRows = stats.GetResultRows();
-    ui64 readRows = stats.GetTables(0).GetReadRows();
     UNIT_ASSERT_EQUAL_C(resultRows, readRows, "There are " << resultRows << " in result, but read " << readRows << " !");
 }
 
@@ -214,10 +211,8 @@ void RunTestOverIntTable(const TString& query, const TString& expectedYson, ui64
     TKikimrSettings kikimrSettings;
     TKikimrRunner kikimr(kikimrSettings);
 
-    NExperimental::TStreamQueryClient db(kikimr.GetDriver());
-
-    auto client = kikimr.GetTableClient();
-    auto session = client.CreateSession().GetValueSync().GetSession();
+    auto db = kikimr.GetTableClient();
+    auto session = db.CreateSession().GetValueSync().GetSession();
     CreateTableWithIntKey(session, partitions, rangesPerPartition);
 
     ExecuteStreamQueryAndCheck(db, query, expectedYson);
@@ -1218,7 +1213,6 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
 
     Y_UNIT_TEST(NoFullScanAtDNFPredicate) {
         TKikimrRunner kikimr;
-        NExperimental::TStreamQueryClient streamDb(kikimr.GetDriver());
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1270,7 +1264,7 @@ Y_UNIT_TEST_SUITE(KqpTablePredicate) {
                 ORDER BY Value;
             )");
             SubstGlobal(query, "<PREDICATE>", data.first);
-            ExecuteStreamQueryAndCheck(streamDb, query, data.second);
+            ExecuteStreamQueryAndCheck(db, query, data.second);
         }
     }
 

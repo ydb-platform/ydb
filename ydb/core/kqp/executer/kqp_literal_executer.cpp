@@ -31,10 +31,11 @@ TDqTaskRunnerContext CreateTaskRunnerContext(NMiniKQL::TKqpComputeContextBase* c
     return context;
 }
 
-TDqTaskRunnerSettings CreateTaskRunnerSettings(NDqProto::EDqStatsMode statsMode) {
+TDqTaskRunnerSettings CreateTaskRunnerSettings(Ydb::Table::QueryStatsCollection::Mode statsMode) {
     TDqTaskRunnerSettings settings;
-    settings.CollectBasicStats = statsMode >= NDqProto::DQ_STATS_MODE_BASIC;
-    settings.CollectProfileStats = statsMode >= NDqProto::DQ_STATS_MODE_PROFILE;
+    // Always collect basic stats for system views / request unit computation.
+    settings.CollectBasicStats = true;
+    settings.CollectProfileStats = CollectProfileStats(statsMode);
     settings.OptLLVM = "OFF";
     settings.TerminateOnError = false;
     settings.AllowGeneratorsInUnboxedValues = false;
@@ -66,10 +67,8 @@ public:
         , Counters(counters)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
-        if (Request.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
-            Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-                ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
-        }
+        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
     }
 
     void Bootstrap() {
@@ -300,7 +299,7 @@ private:
                 auto taskCpuTime = stats->BuildCpuTime + stats->ComputeCpuTime;
                 executerCpuTime -= taskCpuTime;
                 NYql::NDq::FillTaskRunnerStats(taskRunner->GetTaskId(), TaskId2StageId[taskRunner->GetTaskId()],
-                    *stats, fakeComputeActorStats.AddTasks(), Request.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE);
+                    *stats, fakeComputeActorStats.AddTasks(), CollectProfileStats(Request.StatsMode));
                 fakeComputeActorStats.SetCpuTimeUs(fakeComputeActorStats.GetCpuTimeUs() + taskCpuTime.MicroSeconds());
             }
 
@@ -315,7 +314,7 @@ private:
 
             Stats->Finish();
 
-            if (Y_UNLIKELY(Request.StatsMode >= NDqProto::DQ_STATS_MODE_PROFILE)) {
+            if (Y_UNLIKELY(CollectFullStats(Request.StatsMode))) {
                 for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
                     const auto& tx = Request.Transactions[txId].Body;
                     auto planWithStats = AddExecStatsToTxPlan(tx.GetPlan(), response.GetResult().GetStats());

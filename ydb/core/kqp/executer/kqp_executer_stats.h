@@ -7,8 +7,14 @@
 namespace NKikimr {
 namespace NKqp {
 
+NYql::NDqProto::EDqStatsMode GetDqStatsMode(Ydb::Table::QueryStatsCollection::Mode mode);
+NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollection::Mode mode);
+
+bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
+
 struct TQueryExecutionStats {
-    const NYql::NDqProto::EDqStatsMode StatsMode;
+    const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;
 
@@ -32,13 +38,12 @@ struct TQueryExecutionStats {
     TDuration ResolveWallTime;
     TVector<NKikimrQueryStats::TTxStats> DatashardStats;
 
-    TQueryExecutionStats(NYql::NDqProto::EDqStatsMode statsMode, const TKqpTasksGraph* const tasksGraph,
+    TQueryExecutionStats(Ydb::Table::QueryStatsCollection::Mode statsMode, const TKqpTasksGraph* const tasksGraph,
         NYql::NDqProto::TDqExecutionStats* const result)
         : StatsMode(statsMode)
         , TasksGraph(tasksGraph)
         , Result(result)
     {
-        YQL_ENSURE(StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC);
     }
 
     void AddComputeActorStats(ui32 nodeId, NYql::NDqProto::TDqComputeActorStats&& stats);

@@ -85,10 +85,8 @@ public:
         , Counters(counters)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
-        if (Request.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC) {
-            Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
-                ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
-        }
+        Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
+            ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
     }
 
     void Bootstrap() {

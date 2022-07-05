@@ -695,7 +695,8 @@ NKqp::TKqpTasksRunner& TEngineBay::GetKqpTasksRunner(const NKikimrTxDataShard::T
 
         if (tx.HasRuntimeSettings() && tx.GetRuntimeSettings().HasStatsMode()) {
             auto statsMode = tx.GetRuntimeSettings().GetStatsMode();
-            settings.CollectBasicStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
+            // Always collect basic stats for system views / request unit computation.
+            settings.CollectBasicStats = true;
             settings.CollectProfileStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
         } else {
             settings.CollectBasicStats = false;

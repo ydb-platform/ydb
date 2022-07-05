@@ -62,7 +62,7 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     TKikimrRunner kikimr{appCfg, "", KikimrDefaultUtDomainRoot};
 
     CreateSampleTables(kikimr);
-    NExperimental::TStreamQueryClient db(kikimr.GetDriver());
+    auto db = kikimr.GetTableClient();
 
     Y_DEFER {
         NYql::NDq::GetDqExecutionSettingsForTests().Reset();
@@ -71,10 +71,10 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
     NYql::NDq::GetDqExecutionSettingsForTests().FlowControl.MaxOutputChunkSize = limit;
     NYql::NDq::GetDqExecutionSettingsForTests().FlowControl.InFlightBytesOvercommit = 1.0f;
 
-    auto settings = NExperimental::TExecuteStreamQuerySettings()
-        .ProfileMode(NExperimental::EStreamQueryProfileMode::Full);
+    TStreamExecScanQuerySettings settings;
+    settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
-    auto result = db.ExecuteStreamQuery(R"(
+    auto it = db.StreamExecuteScanQuery(R"(
             $r = (select * from `/Root/FourShard` where Key > 201);
 
             SELECT l.Key as key, l.Text as text, r.Value1 as value
@@ -82,33 +82,26 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity) {
             ORDER BY key, text, value
         )", settings).GetValueSync();
 
-    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
 
-    TVector<TString> profiles;
+    auto res = CollectStreamResult(it);
+
     CompareYson(R"([
             [[202u];["Value2"];["Value-202"]];
             [[301u];["Value1"];["Value-301"]];
             [[302u];["Value2"];["Value-302"]]
-        ])", StreamResultToYson(result, &profiles));
+        ])", res.ResultSetYson);
 
-    UNIT_ASSERT_EQUAL(1, profiles.size());
+    NJson::TJsonValue plan;
+    NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-    NYql::NDqProto::TDqExecutionStats stats;
-    google::protobuf::TextFormat::ParseFromString(profiles[0], &stats);
-    UNIT_ASSERT(stats.IsInitialized());
-
-    ui32 blockedByCapacity = 0;
-    for (const auto& stage : stats.GetStages()) {
-        for (const auto& ca : stage.GetComputeActors()) {
-            for (const auto& task : ca.GetTasks()) {
-                for (const auto& output : task.GetOutputChannels()) {
-                    blockedByCapacity += output.GetBlockedByCapacity();
-                }
-            }
-        }
+    ui32 writesBlockedNoSpace = 0;
+    auto nodes = FindPlanNodes(plan, "WritesBlockedNoSpace");
+    for (auto& node : nodes) {
+        writesBlockedNoSpace += node.GetIntegerSafe();
     }
 
-    UNIT_ASSERT_EQUAL(hasBlockedByCapacity, blockedByCapacity > 0);
+    UNIT_ASSERT_EQUAL(hasBlockedByCapacity, writesBlockedNoSpace > 0);
 }
 
 Y_UNIT_TEST(FlowControl_Unlimited) {
@@ -182,8 +175,6 @@ void SlowClient() {
     UNIT_ASSERT_EQUAL(kqpCounters.RmComputeActors->Val(), 0);
     UNIT_ASSERT_EQUAL(kqpCounters.RmMemory->Val(), 0);
 }
-
-#endif
 
 } // suite
 

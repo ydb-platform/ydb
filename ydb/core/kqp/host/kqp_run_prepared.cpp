@@ -139,7 +139,7 @@ private:
             YQL_CLOG(TRACE, ProviderKqp) << "MiniKQL parameters:" << Endl << paramsTextBuilder;
         }
 
-        if (TransformCtx->QueryCtx->StatsMode == EKikimrStatsMode::Profile) {
+        if (TransformCtx->QueryCtx->StatsMode == EKikimrStatsMode::Full) {
             MkqlExecuteResult.Program = mkql.GetProgramText();
         }
 

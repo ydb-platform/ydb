@@ -952,7 +952,7 @@ private:
             Stats->FinishTs = TInstant::Now();
             Stats->Finish();
 
-            if (Request.StatsMode == NYql::NDqProto::DQ_STATS_MODE_PROFILE) {
+            if (CollectFullStats(Request.StatsMode)) {
                 const auto& tx = Request.Transactions[0].Body;
                 auto planWithStats = AddExecStatsToTxPlan(tx.GetPlan(), response.GetResult().GetStats());
                 response.MutableResult()->MutableStats()->AddTxPlansWithStats(planWithStats);

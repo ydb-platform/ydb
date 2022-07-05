@@ -705,6 +705,7 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
     auto tableInfo = dataShard.GetUserTables().begin();
 
     // Directly use StatsMode instead of bool flag, too much is reported for STATS_COLLECTION_BASIC mode.
+    bool withBasicStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_BASIC;
     bool withProfileStats = statsMode >= NYql::NDqProto::DQ_STATS_MODE_PROFILE;
 
     auto& computeActorStats = *result.Record.MutableComputeActorStats();
@@ -713,9 +714,8 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
     ui64 maxFinishTimeMs = 0;
 
     for (auto& [taskId, taskStats] : tasksRunner.GetTasksStats()) {
+        // Always report statistics required for system views & request unit computation
         auto* protoTask = computeActorStats.AddTasks();
-        auto stageId = tasksRunner.GetTask(taskId).GetStageId();
-        NYql::NDq::FillTaskRunnerStats(taskId, stageId, *taskStats, protoTask, withProfileStats);
 
         auto taskTableStats = computeCtx.GetTaskCounters(taskId);
 
@@ -727,6 +727,13 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
         protoTable->SetWriteBytes(taskTableStats.UpdateRowBytes);
         protoTable->SetEraseRows(taskTableStats.NEraseRow);
 
+        if (!withBasicStats) {
+            continue;
+        }
+
+        auto stageId = tasksRunner.GetTask(taskId).GetStageId();
+        NYql::NDq::FillTaskRunnerStats(taskId, stageId, *taskStats, protoTask, withProfileStats);
+
         minFirstRowTimeMs = std::min(minFirstRowTimeMs, protoTask->GetFirstRowTimeMs());
         maxFinishTimeMs = std::max(maxFinishTimeMs, protoTask->GetFinishTimeMs());
 
@@ -735,7 +742,6 @@ void KqpFillStats(TDataShard& dataShard, const NKqp::TKqpTasksRunner& tasksRunne
         if (Y_UNLIKELY(withProfileStats)) {
             NKqpProto::TKqpShardTableExtraStats tableExtraStats;
             tableExtraStats.SetShardId(dataShard.TabletID());
-            // tableExtraStats.SetShardCpuTimeUs(...); // TODO: take it from TTxStats
             protoTable->MutableExtra()->PackFrom(tableExtraStats);
         }
     }

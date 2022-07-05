@@ -111,6 +111,7 @@ public:
         ev->Record.MutableRequest()->MutableTxControl()->CopyFrom(req->tx_control());
         ev->Record.MutableRequest()->MutableQueryCachePolicy()->CopyFrom(req->query_cache_policy());
         ev->Record.MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats()));
+        ev->Record.MutableRequest()->SetCollectStats(req->collect_stats());
 
         auto& query = req->query();
         switch (req->query().query_case()) {

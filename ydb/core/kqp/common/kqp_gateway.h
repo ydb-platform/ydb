@@ -117,7 +117,7 @@ public:
         ui64 TotalReadSizeLimitBytes = 0;
         ui64 MkqlMemoryLimit = 0; // old engine compatibility
         ui64 PerShardKeysSizeLimitBytes = 0;
-        NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
+        Ydb::Table::QueryStatsCollection::Mode StatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
         bool DisableLlvmForUdfStages = false;
         bool LlvmEnabled = true;
         TKqpSnapshot Snapshot = TKqpSnapshot();
@@ -131,7 +131,7 @@ public:
     };
 
     struct TAstQuerySettings {
-        NYql::NDqProto::EDqStatsMode StatsMode = NYql::NDqProto::DQ_STATS_MODE_NONE;
+        Ydb::Table::QueryStatsCollection::Mode CollectStats = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     };
 
 public:

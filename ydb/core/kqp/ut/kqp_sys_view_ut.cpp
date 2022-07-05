@@ -311,6 +311,52 @@ Y_UNIT_TEST_SUITE(KqpSystemView) {
         checkTable("`/Root/.sys/top_queries_by_cpu_time_one_hour`");
     }
 
+    Y_UNIT_TEST(QueryStatsScan) {
+        auto checkTable = [&] (const TStringBuf tableName) {
+            TKikimrRunner kikimr;
+            auto client = kikimr.GetTableClient();
+
+            {
+                auto it = kikimr.GetTableClient().StreamExecuteScanQuery(R"(
+                    SELECT COUNT(*) FROM `/Root/EightShard`
+                )").GetValueSync();
+
+                UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+                CompareYson(R"([[24u]])", StreamResultToYson(it));
+            }
+
+            TStringStream request;
+            request << "SELECT ReadBytes FROM " << tableName << " ORDER BY ReadBytes";
+
+            auto it = client.StreamExecuteScanQuery(request.Str()).GetValueSync();
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+
+            TSet<ui64> readBytesSet;
+            for (;;) {
+                auto streamPart = it.ReadNext().GetValueSync();
+                if (!streamPart.IsSuccess()) {
+                    UNIT_ASSERT_C(streamPart.EOS(), streamPart.GetIssues().ToString());
+                    break;
+                }
+
+                if (streamPart.HasResultSet()) {
+                    auto resultSet = streamPart.ExtractResultSet();
+
+                    NYdb::TResultSetParser parser(resultSet);
+                    while (parser.TryNextRow()) {
+                        auto value = parser.ColumnParser("ReadBytes").GetOptionalUint64();
+                        UNIT_ASSERT(value);
+                        readBytesSet.emplace(*value);
+                    }
+                }
+            }
+
+            UNIT_ASSERT(readBytesSet.contains(192)); // EightShard
+        };
+
+        checkTable("`/Root/.sys/top_queries_by_read_bytes_one_minute`");
+    }
+
     Y_UNIT_TEST(FailNavigate) {
         TKikimrRunner kikimr("user0@builtin");
         auto client = kikimr.GetTableClient();

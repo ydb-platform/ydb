@@ -66,6 +66,7 @@ private:
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(req->tx_id());
         ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
         ev->Record.MutableRequest()->SetStatsMode(GetKqpStatsMode(req->collect_stats()));
+        ev->Record.MutableRequest()->SetCollectStats(req->collect_stats());
 
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
     }

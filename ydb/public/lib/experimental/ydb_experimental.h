@@ -74,7 +74,8 @@ private:
 enum class EStreamQueryProfileMode {
     None,
     Basic,
-    Full
+    Full,
+    Profile
 };
 
 struct TExecuteStreamQuerySettings : public TRequestSettings<TExecuteStreamQuerySettings> {

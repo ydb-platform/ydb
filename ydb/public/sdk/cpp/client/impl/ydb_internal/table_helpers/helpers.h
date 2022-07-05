@@ -27,6 +27,8 @@ inline Ydb::Table::QueryStatsCollection::Mode GetStatsCollectionMode(TMaybe<NTab
                 return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
             case NTable::ECollectQueryStatsMode::Full:
                 return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+            case NTable::ECollectQueryStatsMode::Profile:
+                return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
             default:
                 break;
         }

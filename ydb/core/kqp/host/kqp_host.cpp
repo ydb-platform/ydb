@@ -283,10 +283,6 @@ public:
             queryResult.PreparedQuery = Query;
         }
 
-        /*
-         * Set stats and plan for DataQuery. In case of ScanQuery they will be set
-         * later in TStreamExecuteScanQueryRPC.
-         */
         if (ExecuteCtx->QueryResults.size() == 1) {
             auto& execResult = ExecuteCtx->QueryResults[0];
             queryResult.QueryStats.Swap(&execResult.QueryStats);
@@ -840,7 +836,7 @@ public:
                 bool useScanQuery = ShouldUseScanQuery(dataQuery, settings);
 
                 IKqpGateway::TAstQuerySettings querySettings;
-                querySettings.StatsMode = GetStatsMode(settings.StatsMode);
+                querySettings.CollectStats = GetStatsMode(settings.StatsMode);
 
                 TFuture<TQueryResult> future;
                 switch (queryType) {
@@ -2230,14 +2226,16 @@ private:
 
 } // namespace
 
-NDqProto::EDqStatsMode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
+Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode statsMode) {
     switch (statsMode) {
         case NYql::EKikimrStatsMode::Basic:
-            return NYql::NDqProto::DQ_STATS_MODE_BASIC;
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+        case NYql::EKikimrStatsMode::Full:
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
         case NYql::EKikimrStatsMode::Profile:
-            return NYql::NDqProto::DQ_STATS_MODE_PROFILE;
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE;
         default:
-            return NYql::NDqProto::DQ_STATS_MODE_NONE;
+            return Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     }
 }
 

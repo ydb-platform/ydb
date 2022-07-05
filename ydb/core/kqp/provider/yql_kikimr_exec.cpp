@@ -1101,7 +1101,7 @@ private:
             auto profile = config->Profile.Get(cluster);
             if (profile && *profile) {
                 // Do not disable profiling if it was enabled at request level
-                settings.StatsMode = EKikimrStatsMode::Profile;
+                settings.StatsMode = EKikimrStatsMode::Full;
             }
 
             asyncResult = runFunc(settings);

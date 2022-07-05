@@ -44,10 +44,12 @@ struct TKqpQueryState {
 };
 
 EKikimrStatsMode GetStatsMode(const NKikimrKqp::TQueryRequest& queryRequest, EKikimrStatsMode minMode) {
-    switch (queryRequest.GetStatsMode()) {
-        case NYql::NDqProto::DQ_STATS_MODE_BASIC:
+    switch (queryRequest.GetCollectStats()) {
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC:
             return EKikimrStatsMode::Basic;
-        case NYql::NDqProto::DQ_STATS_MODE_PROFILE:
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL:
+            return EKikimrStatsMode::Full;
+        case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             return EKikimrStatsMode::Profile;
         default:
             return std::max(EKikimrStatsMode::None, minMode);

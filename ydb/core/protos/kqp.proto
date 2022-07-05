@@ -91,7 +91,8 @@ message TQueryRequest {
     optional uint64 TimeoutMs = 17;
     optional Ydb.YqlInternal.ExecQuerySettings QuerySettings = 18;
     reserved 19; // (deprecated) StatsMode
-    optional NYql.NDqProto.EDqStatsMode StatsMode = 20;
+    optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
+    optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
 }
 
 message TKqpPathIdProto {

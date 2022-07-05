@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-NYql::NDqProto::EDqStatsMode GetStatsMode(NYql::EKikimrStatsMode statsMode);
+Ydb::Table::QueryStatsCollection::Mode GetStatsMode(NYql::EKikimrStatsMode statsMode);
 
 template<typename TResult, bool copyIssues = true>
 class TKqpAsyncResultBase : public NYql::IKikimrAsyncResult<TResult> {

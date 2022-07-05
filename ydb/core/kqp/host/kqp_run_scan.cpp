@@ -57,9 +57,12 @@ protected:
     }
 
     bool OnExecuterResult(NKikimrKqp::TExecuterTxResult&& execResult, TExprContext& ctx, bool commit) override {
-        Y_UNUSED(execResult);
         Y_UNUSED(ctx);
         Y_UNUSED(commit);
+
+        if (execResult.HasStats()) {
+            TransformCtx->QueryStats.AddExecutions()->Swap(execResult.MutableStats());
+        }
 
         return true;
     }

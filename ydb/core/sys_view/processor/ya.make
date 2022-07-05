@@ -20,6 +20,7 @@ SRCS(
     tx_aggregate.cpp
     tx_interval_summary.cpp
     tx_interval_metrics.cpp
+    tx_top_partitions.cpp
 )
 
 PEERDIR(

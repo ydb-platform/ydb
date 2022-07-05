@@ -67,6 +67,10 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx,
     LoginProvider.Audience = TPath::Init(subDomainPathId, this).PathString();
     domainPtr->UpdateSecurityState(LoginProvider.GetSecurityState());
 
+    TTabletId sysViewProcessorId = domainPtr->GetTenantSysViewProcessorID();
+    SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector(
+        GetDomainKey(subDomainPathId), sysViewProcessorId ? sysViewProcessorId.GetValue() : 0).Release());
+
     Execute(CreateTxInitPopulator(std::move(delayPublications)), ctx);
 
     if (tablesToClean) {
@@ -3285,7 +3289,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
+    if (AppData()->FeatureFlags.GetEnableSystemViews() && SysPartitionStatsCollector) {
         auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
         Send(SysPartitionStatsCollector, ev.Release());
     }
@@ -3825,8 +3829,6 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData)));
-
-    SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
     SplitSettings.Register(appData->Icb);
 
@@ -5834,7 +5836,9 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         auto path = TPath::Init(pathId, this);
         auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
         ev->ShardIndices.swap(shardIndices);
-        Send(SysPartitionStatsCollector, ev.Release());
+        if (SysPartitionStatsCollector) {
+            Send(SysPartitionStatsCollector, ev.Release());
+        }
     }
 
     if (!tableInfo->IsBackup) {

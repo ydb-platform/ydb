@@ -41,6 +41,7 @@ private:
     struct TTxAggregate;
     struct TTxIntervalSummary;
     struct TTxIntervalMetrics;
+    struct TTxTopPartitions;
 
     struct TEvPrivate {
         enum EEv {
@@ -72,14 +73,24 @@ private:
         TNodeId NodeId;
         THolder<NKikimrSysView::TQueryStats> Stats;
     };
-    using TTop = std::vector<TTopQuery>;
+    using TQueryTop = std::vector<TTopQuery>;
 
-    using TResultKey = std::pair<ui64, ui32>;
+    using TPartitionTop = std::vector<THolder<NKikimrSysView::TTopPartitionsInfo>>;
+
+    using THistoryKey = std::pair<ui64, ui32>;
 
     template <typename TEntry>
-    using TResultMap = std::map<TResultKey, TEntry, std::less<TResultKey>,
-        NActors::NMemory::TAlloc<std::pair<const TResultKey, TEntry>, MemoryLabelResults>>;
+    using TResultMap = std::map<THistoryKey, TEntry, std::less<THistoryKey>,
+        NActors::NMemory::TAlloc<std::pair<const THistoryKey, TEntry>, MemoryLabelResults>>;
+
     using TResultStatsMap = TResultMap<NKikimrSysView::TQueryStats>;
+
+    using TResultPartitionsMap = TResultMap<NKikimrSysView::TTopPartitionsInfo>;
+
+    struct TQueryToMetrics {
+        NKikimrSysView::TQueryMetrics Metrics;
+        TString Text;
+    };
 
 private:
     static bool TopQueryCompare(const TTopQuery& l, const TTopQuery& r) {
@@ -102,7 +113,10 @@ private:
     void Handle(TEvPrivate::TEvProcess::TPtr& ev);
     void Handle(TEvSysView::TEvIntervalQuerySummary::TPtr& ev);
     void Handle(TEvSysView::TEvGetIntervalMetricsResponse::TPtr& ev);
+    void Handle(TEvSysView::TEvSendTopPartitions::TPtr& ev);
+
     void Handle(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev);
+    void Handle(TEvSysView::TEvGetTopPartitionsRequest::TPtr& ev);
 
     void Handle(TEvSysView::TEvSendDbCountersRequest::TPtr& ev);
     void Handle(TEvPrivate::TEvApplyCounters::TPtr& ev);
@@ -121,10 +135,14 @@ private:
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
 
     template <typename TSchema>
-    void PersistTopResults(NIceDb::TNiceDb& db,
-        TTop& top, TResultStatsMap& results, TInstant intervalEnd);
+    void PersistQueryTopResults(NIceDb::TNiceDb& db,
+        TQueryTop& top, TResultStatsMap& results, TInstant intervalEnd);
+    void PersistQueryResults(NIceDb::TNiceDb& db);
 
-    void PersistResults(NIceDb::TNiceDb& db);
+    template <typename TSchema>
+    void PersistPartitionTopResults(NIceDb::TNiceDb& db,
+        TPartitionTop& top, TResultPartitionsMap& results, TInstant intervalEnd);
+    void PersistPartitionResults(NIceDb::TNiceDb& db);
 
     void ScheduleAggregate();
     void ScheduleCollect();
@@ -132,9 +150,8 @@ private:
     void ScheduleApplyCounters();
     void ScheduleSendNavigate();
 
-    template <typename TSchema, typename TEntry>
-    void CutHistory(NIceDb::TNiceDb& db, TResultMap<TEntry>& results,
-        TDuration historySize);
+    template <typename TSchema, typename TMap>
+    void CutHistory(NIceDb::TNiceDb& db, TMap& results, TDuration historySize);
 
     static TInstant EndOfHourInterval(TInstant intervalEnd);
 
@@ -145,11 +162,16 @@ private:
     void SendRequests();
     void IgnoreFailure(TNodeId nodeId);
 
-    template <typename TResponse>
-    void ReplyOverloaded(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev);
+    static void EntryToProto(NKikimrSysView::TQueryMetricsEntry& dst, const TQueryToMetrics& src);
+    static void EntryToProto(NKikimrSysView::TQueryStatsEntry& dst, const NKikimrSysView::TQueryStats& src);
+    static void EntryToProto(NKikimrSysView::TTopPartitionsEntry& dst, const NKikimrSysView::TTopPartitionsInfo& src);
 
-    template <typename TEntry, typename TResponse>
-    void Reply(TEvSysView::TEvGetQueryMetricsRequest::TPtr& ev);
+    template <typename TResponse>
+    void ReplyOverloaded(const TActorId& sender);
+
+    template <typename TMap, typename TRequest, typename TResponse>
+    void Reply(typename TRequest::TPtr& ev);
+
 
     TIntrusivePtr<IDbCounters> CreateCountersForService(NKikimrSysView::EDbCountersService service);
     void AttachExternalCounters();
@@ -165,6 +187,8 @@ private:
             IgnoreFunc(TEvSysView::TEvIntervalQuerySummary);
             IgnoreFunc(TEvSysView::TEvGetIntervalMetricsResponse);
             IgnoreFunc(TEvSysView::TEvGetQueryMetricsRequest);
+            IgnoreFunc(TEvSysView::TEvSendTopPartitions);
+            IgnoreFunc(TEvSysView::TEvGetTopPartitionsRequest);
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
             default:
                 if (!HandleDefaultEvents(ev, ctx)) {
@@ -181,6 +205,8 @@ private:
             IgnoreFunc(TEvSysView::TEvIntervalQuerySummary);
             IgnoreFunc(TEvSysView::TEvGetIntervalMetricsResponse);
             IgnoreFunc(TEvSysView::TEvGetQueryMetricsRequest);
+            IgnoreFunc(TEvSysView::TEvSendTopPartitions);
+            IgnoreFunc(TEvSysView::TEvGetTopPartitionsRequest);
             IgnoreFunc(TEvSysView::TEvSendDbCountersRequest);
             default:
                 if (!HandleDefaultEvents(ev, ctx)) {
@@ -200,6 +226,8 @@ private:
             hFunc(TEvSysView::TEvIntervalQuerySummary, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsResponse, Handle);
             hFunc(TEvSysView::TEvGetQueryMetricsRequest, Handle);
+            hFunc(TEvSysView::TEvSendTopPartitions, Handle);
+            hFunc(TEvSysView::TEvGetTopPartitionsRequest, Handle);
             hFunc(TEvSysView::TEvSendDbCountersRequest, Handle);
             hFunc(TEvPrivate::TEvApplyCounters, Handle);
             hFunc(TEvPrivate::TEvSendNavigate, Handle);
@@ -261,10 +289,6 @@ private:
     std::unordered_set<TNodeId> SummaryNodes;
 
     // IntervalMetrics
-    struct TQueryToMetrics {
-        NKikimrSysView::TQueryMetrics Metrics;
-        TString Text;
-    };
     std::unordered_map<TQueryHash, TQueryToMetrics> QueryMetrics;
 
     // NodesToRequest
@@ -282,14 +306,14 @@ private:
     std::unordered_map<TNodeId, TNodeToQueries> NodesInFlight;
 
     // IntervalTops
-    TTop ByDurationMinute;
-    TTop ByReadBytesMinute;
-    TTop ByCpuTimeMinute;
-    TTop ByRequestUnitsMinute;
-    TTop ByDurationHour;
-    TTop ByReadBytesHour;
-    TTop ByCpuTimeHour;
-    TTop ByRequestUnitsHour;
+    TQueryTop ByDurationMinute;
+    TQueryTop ByReadBytesMinute;
+    TQueryTop ByCpuTimeMinute;
+    TQueryTop ByRequestUnitsMinute;
+    TQueryTop ByDurationHour;
+    TQueryTop ByReadBytesHour;
+    TQueryTop ByCpuTimeHour;
+    TQueryTop ByRequestUnitsHour;
 
     // Metrics...
     using TResultMetricsMap = TResultMap<TQueryToMetrics>;
@@ -307,9 +331,22 @@ private:
     TResultStatsMap TopByRequestUnitsOneMinute;
     TResultStatsMap TopByRequestUnitsOneHour;
 
+    // IntervalPartitionTops
+    TPartitionTop PartitionTopMinute;
+    TPartitionTop PartitionTopHour;
+
+    // TopPartitions...
+    TResultPartitionsMap TopPartitionsOneMinute;
+    TResultPartitionsMap TopPartitionsOneHour;
+
     // limited queue of user requests
     static constexpr size_t PendingRequestsLimit = 5;
-    std::queue<TEvSysView::TEvGetQueryMetricsRequest::TPtr> PendingRequests;
+
+    using TVariantRequestPtr = std::variant<
+        TEvSysView::TEvGetQueryMetricsRequest::TPtr,
+        TEvSysView::TEvGetTopPartitionsRequest::TPtr>;
+
+    std::queue<TVariantRequestPtr> PendingRequests;
     bool ProcessInFly = false;
 
     // db counters

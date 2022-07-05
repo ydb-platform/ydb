@@ -23,7 +23,9 @@ static ui64 GetIops(const T& c) {
 }
 
 void TSchemeShard::Handle(NSysView::TEvSysView::TEvGetPartitionStats::TPtr& ev, const TActorContext& ctx) {
-    ctx.Send(ev->Forward(SysPartitionStatsCollector));
+    if (SysPartitionStatsCollector) {
+        ctx.Send(ev->Forward(SysPartitionStatsCollector));
+    }
 }
 
 auto TSchemeShard::BuildStatsForCollector(TPathId pathId, TShardIdx shardIdx, TTabletId datashardId,
@@ -299,9 +301,11 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
             startTime = rec.GetStartTime();
         }
 
-        PendingMessages.emplace_back(
-            Self->SysPartitionStatsCollector,
-            Self->BuildStatsForCollector(pathId, shardIdx, datashardId, nodeId, startTime, newStats).Release());
+        if (Self->SysPartitionStatsCollector) {
+            PendingMessages.emplace_back(
+                Self->SysPartitionStatsCollector,
+                Self->BuildStatsForCollector(pathId, shardIdx, datashardId, nodeId, startTime, newStats).Release());
+        }
     }
 
     if (isOlapStore) {

@@ -97,7 +97,7 @@ struct TSysViewProcessor::TTxAggregate : public TTxBase {
         Self->ClearIntervalSummaries(db);
 
         if (Self->NodesToRequest.empty()) {
-            Self->PersistResults(db);
+            Self->PersistQueryResults(db);
         }
 
         Self->CurrentStage = AGGREGATE;

@@ -11,6 +11,7 @@
 #include <ydb/core/sys_view/storage/storage_pools.h>
 #include <ydb/core/sys_view/storage/storage_stats.h>
 #include <ydb/core/sys_view/tablets/tablets.h>
+#include <ydb/core/sys_view/partition_stats/top_partitions.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -35,7 +36,7 @@ THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const
         tableId.SysViewInfo == TopQueriesByRequestUnits1MinuteName ||
         tableId.SysViewInfo == TopQueriesByRequestUnits1HourName)
     {
-        return CreateQueryStatsScan(ownerId, scanId, tableId, tableId.SysViewInfo, tableRange, columns);
+        return CreateQueryStatsScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
     if (tableId.SysViewInfo == PDisksName) {
@@ -66,7 +67,13 @@ THolder<IActor> CreateSystemViewScan(const TActorId& ownerId, ui32 scanId, const
         return CreateQueryMetricsScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
-    return nullptr;
+    if (tableId.SysViewInfo == TopPartitions1MinuteName ||
+        tableId.SysViewInfo == TopPartitions1HourName)
+    {
+        return CreateTopPartitionsScan(ownerId, scanId, tableId, tableRange, columns);
+    }
+
+    return {};
 }
 
 } // NSysView

@@ -506,9 +506,11 @@ private:
     NKikimrSysView::TEvGetQueryMetricsRequest Request;
 };
 
-THolder<IActor> CreateQueryStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId, const TStringBuf viewName,
+THolder<IActor> CreateQueryStatsScan(const TActorId& ownerId, ui32 scanId, const TTableId& tableId,
     const TTableRange& tableRange, const TArrayRef<NMiniKQL::TKqpComputeContextBase::TColumn>& columns)
 {
+    auto viewName = tableId.SysViewInfo;
+
     if (viewName == TopQueriesByDuration1MinuteName) {
         return MakeHolder<TQueryStatsScan<TDurationGreater>>(ownerId, scanId, tableId, tableRange, columns,
             NKikimrSysView::TOP_DURATION_ONE_MINUTE,

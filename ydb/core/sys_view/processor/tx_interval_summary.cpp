@@ -68,9 +68,9 @@ struct TSysViewProcessor::TTxIntervalSummary : public TTxBase {
         TNodeId nodeId,
         NKikimrSysView::EStatsType statsType,
         const NKikimrSysView::TEvIntervalQuerySummary::TQuerySet& queries,
-        TTop& top)
+        TQueryTop& top)
     {
-        TTop result;
+        TQueryTop result;
         std::unordered_set<TQueryHash> seenHashes;
         size_t queryIndex = 0;
         auto topIt = top.begin();

@@ -25,7 +25,9 @@ struct TSysViewProcessor::TTxInitSchema : public TTxBase {
             Schema::TopByCpuTimeOneMinute::TableId,
             Schema::TopByCpuTimeOneHour::TableId,
             Schema::TopByRequestUnitsOneMinute::TableId,
-            Schema::TopByRequestUnitsOneHour::TableId
+            Schema::TopByRequestUnitsOneHour::TableId,
+            Schema::TopPartitionsOneMinute::TableId,
+            Schema::TopPartitionsOneHour::TableId
         };
 
         for (auto id : resultTableIds) {

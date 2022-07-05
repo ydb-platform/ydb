@@ -8,6 +8,8 @@ OWNER(
 SRCS(
     partition_stats.h
     partition_stats.cpp
+    top_partitions.h
+    top_partitions.cpp
 )
 
 PEERDIR(

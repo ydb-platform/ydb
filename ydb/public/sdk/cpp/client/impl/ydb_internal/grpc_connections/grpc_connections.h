@@ -83,6 +83,16 @@ public:
         clientConfig.SslCaCert = CaCert_;
         clientConfig.MemQuota = MemoryQuota_;
 
+        if (MaxMessageSize_ > 0) {
+            clientConfig.MaxMessageSize = MaxMessageSize_;
+        }
+        if (MaxInboundMessageSize_ > 0) {
+            clientConfig.MaxInboundMessageSize = MaxInboundMessageSize_;
+        }
+        if (MaxOutboundMessageSize_ > 0) {
+            clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
+        }
+
         if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
             || dbState->Database.empty()
             || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
@@ -704,6 +714,9 @@ private:
     const TDuration GRpcKeepAliveTimeout_;
     const bool GRpcKeepAlivePermitWithoutCalls_;
     const ui64 MemoryQuota_;
+    const ui64 MaxInboundMessageSize_;
+    const ui64 MaxOutboundMessageSize_;
+    const ui64 MaxMessageSize_;
 
     std::atomic_int64_t QueuedRequests_;
 #ifndef YDB_GRPC_BYPASS_CHANNEL_POOL

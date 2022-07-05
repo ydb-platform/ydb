@@ -104,6 +104,18 @@ public:
     //! default: 6 minutes
     TDriverConfig& SetSocketIdleTimeout(TDuration timeout);
 
+    //! Set maximum incoming message size.
+    //! Note: this option overrides MaxMessageSize for incoming messages.
+    //! default: 0
+    TDriverConfig& SetMaxInboundMessageSize(ui64 maxInboundMessageSize);
+    //! Set maximum outgoing message size.
+    //! Note: this option overrides MaxMessageSize for outgoing messages.
+    //! default: 0
+    TDriverConfig& SetMaxOutboundMessageSize(ui64 maxOutboundMessageSize);
+    //! Note: if this option is unset, default 64_MB message size will be used.
+    //! default: 0
+    TDriverConfig& SetMaxMessageSize(ui64 maxMessageSize);
+
     //! Log backend.
     TDriverConfig& SetLog(THolder<TLogBackend> log);
 private:

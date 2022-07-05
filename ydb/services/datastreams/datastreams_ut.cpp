@@ -982,7 +982,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             }
 
             // check for total number of shards
-            UNIT_ASSERT_EQUAL(describedShards.size(), 9);
+            UNIT_ASSERT_VALUES_EQUAL(describedShards.size(), 9);
         }
 
     }
@@ -1644,7 +1644,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             NKikimrPQ::TYdsShardIterator protoShardIterator;
             TString decoded;
             Base64Decode(result.GetResult().shard_iterator(), decoded);
-            Y_VERIFY(protoShardIterator.ParseFromString(decoded));
+            UNIT_ASSERT(protoShardIterator.ParseFromString(decoded));
             UNIT_ASSERT_VALUES_EQUAL(protoShardIterator.GetStreamName(), "/Root/" + streamName);
         }
 
@@ -1872,7 +1872,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
         }
 
-        std::vector<std::string> put_data;
+        std::vector<std::string> putData;
         const ui32 recordsCount = 10;
         {
             std::string data;
@@ -1882,7 +1882,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             std::mt19937 generator{rd()};
             for (ui32 i = 1; i <= recordsCount; ++i) {
                 std::shuffle(data.begin(), data.end(), generator);
-                put_data.push_back(data);
+                putData.push_back(data);
                 {
                     TString id = Sprintf("%04u", i);
                     NYDS_V1::TDataRecord dataRecord{{data.begin(), data.end()}, id, ""};
@@ -1915,7 +1915,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 UNIT_ASSERT_VALUES_EQUAL(
                     std::stoi(result.GetResult().records().begin()->sequence_number()), i);
                 UNIT_ASSERT_VALUES_EQUAL(MD5::Calc(result.GetResult().records().begin()->data()),
-                                         MD5::Calc(put_data[i]));
+                                         MD5::Calc(putData[i]));
             }
         }
     }

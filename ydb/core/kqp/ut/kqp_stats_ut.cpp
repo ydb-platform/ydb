@@ -342,6 +342,7 @@ Y_UNIT_TEST(StatsProfile) {
     settings.CollectQueryStats(ECollectQueryStatsMode::Profile);
 
     auto result = session.ExecuteDataQuery(R"(
+        PRAGMA kikimr.UseNewEngine = "true";
         SELECT COUNT(*) FROM TwoShard;
     )", TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

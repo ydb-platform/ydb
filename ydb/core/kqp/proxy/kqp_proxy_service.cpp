@@ -49,6 +49,10 @@ TString MakeKqpProxyBoardPath(const TString& database) {
 
 static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(5000);
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(10);
+static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
+
+
+using namespace NKikimrConfig;
 
 
 std::optional<ui32> GetDefaultStateStorageGroupId(const TString& database) {
@@ -114,20 +118,30 @@ class TLocalSessionsRegistry {
     THashMap<TString, TKqpSessionInfo> LocalSessions;
     THashMap<TActorId, TString> TargetIdIndex;
     THashSet<TString> ShutdownInFlightSessions;
-    TList<TString> RecentUsedSessions;
-    THashMap<TString, TList<TString>::iterator> Links;
     THashMap<TString, ui32> SessionsCountPerDatabase;
+    std::vector<std::vector<TString>> ReadySessions;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
 
 public:
-    TLocalSessionsRegistry()  = default;
+    TLocalSessionsRegistry(TIntrusivePtr<IRandomProvider> randomProvider)
+        : ReadySessions(2)
+        , RandomProvider(randomProvider)
+    {}
 
     TKqpSessionInfo* Create(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters)
+        const TString& database, TKqpDbCountersPtr dbCounters, bool supportsBalancing)
     {
-        RecentUsedSessions.push_front(sessionId);
-        auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters));
+        std::vector<i32> pos(2, -1);
+        pos[0] = ReadySessions[0].size();
+        ReadySessions[0].push_back(sessionId);
+
+        if (supportsBalancing) {
+            pos[1] = ReadySessions[1].size();
+            ReadySessions[1].push_back(sessionId);
+        }
+
+        auto result = LocalSessions.emplace(sessionId, TKqpSessionInfo(sessionId, workerId, database, dbCounters, std::move(pos)));
         SessionsCountPerDatabase[database]++;
-        Links.emplace(sessionId, RecentUsedSessions.begin());
         Y_VERIFY(result.second, "Duplicate session id!");
         TargetIdIndex.emplace(workerId, sessionId);
         return &result.first->second;
@@ -137,23 +151,21 @@ public:
         return ShutdownInFlightSessions;
     }
 
-    TKqpSessionInfo* CanShutdownSession(const TString& sessionId) {
-        auto [_, success] = ShutdownInFlightSessions.emplace(sessionId);
-        if (success) {
-            auto ptr = LocalSessions.FindPtr(sessionId);
-            ptr->ShutdownStartedAt = TAppData::TimeProvider->Now();
-            return ptr;
-        }
-
-        return nullptr;
+    TKqpSessionInfo* StartShutdownSession(const TString& sessionId) {
+        ShutdownInFlightSessions.emplace(sessionId);
+        auto ptr = LocalSessions.FindPtr(sessionId);
+        ptr->ShutdownStartedAt = TAppData::TimeProvider->Now();
+        RemoveSessionFromLists(ptr);
+        return ptr;
     }
 
-    TKqpSessionInfo* PickSessionToShutdown() {
-        for(auto it = RecentUsedSessions.begin(); it != RecentUsedSessions.end(); ++it) {
-            TKqpSessionInfo* session = CanShutdownSession(*it);
-            if (session)
-                return session;
+    TKqpSessionInfo* PickSessionToShutdown(bool force, ui32 minReasonableToKick) {
+        auto& sessions = force ? ReadySessions.at(0) : ReadySessions.at(1);
+        if (sessions.size() >= minReasonableToKick) {
+            ui64 idx = RandomProvider->GenRand() % sessions.size();
+            return StartShutdownSession(sessions[idx]);
         }
+
         return nullptr;
     }
 
@@ -179,13 +191,38 @@ public:
                     SessionsCountPerDatabase.erase(counter);
                 }
             }
-            auto lnk = Links.find(sessionId);
-            RecentUsedSessions.erase(lnk->second);
-            Links.erase(sessionId);
+
+            RemoveSessionFromLists(&(it->second));
             ShutdownInFlightSessions.erase(sessionId);
             TargetIdIndex.erase(it->second.WorkerId);
             LocalSessions.erase(it);
         }
+    }
+
+    void RemoveSessionFromLists(TKqpSessionInfo* ptr) {
+        for(ui32 i = 0; i < ptr->ReadyPos.size(); ++i) {
+            i32& pos = ptr->ReadyPos.at(i);
+            auto& sessions = ReadySessions.at(i);
+            if (pos != -1 && pos + 1 != static_cast<i32>(sessions.size())) {
+                auto& lastPos = LocalSessions.at(sessions.back()).ReadyPos.at(i);
+                Y_VERIFY(lastPos + 1 == static_cast<i32>(sessions.size()));
+                std::swap(sessions[pos], sessions[lastPos]);
+                lastPos = pos;
+            }
+
+            if (pos != -1) {
+                sessions.pop_back();
+                pos = -1;
+            }
+        }
+    }
+
+    const TKqpSessionInfo* IsPendingShutdown(const TString& sessionId) const {
+        if (ShutdownInFlightSessions.find(sessionId) != ShutdownInFlightSessions.end()) {
+            return FindPtr(sessionId);
+        }
+
+        return nullptr;
     }
 
     bool CheckDatabaseLimits(const TString& database, ui32 databaseLimit) {
@@ -207,25 +244,6 @@ public:
 
     const TKqpSessionInfo* FindPtr(const TString& sessionId) const {
         return LocalSessions.FindPtr(sessionId);
-    }
-
-    void Promote(const TString& sessionId) {
-        auto lnk = Links.find(sessionId);
-        Y_VERIFY(lnk != Links.end());
-        RecentUsedSessions.erase(lnk->second);
-        RecentUsedSessions.push_front(lnk->first);
-        lnk->second = RecentUsedSessions.begin();
-    }
-
-    TKqpSessionInfo* FindAndPromote(const TString& sessionId) {
-        TKqpSessionInfo* ptr = LocalSessions.FindPtr(sessionId);
-        if (ptr) {
-            ptr->LastRequestAt = TAppData::TimeProvider->Now();
-            ++ptr->UseFrequency;
-            Promote(sessionId);
-        }
-
-        return ptr;
     }
 
     void Erase(const TActorId& targetId) {
@@ -274,12 +292,14 @@ public:
         , PendingRequests()
         , TenantsReady(false)
         , Tenants()
-        , ModuleResolverState() {}
+        , ModuleResolverState()
+    {}
 
     void Bootstrap() {
         Counters = MakeIntrusive<TKqpCounters>(AppData()->Counters, &TlsActivationContext->AsActorContext());
         ModuleResolverState = MakeIntrusive<TModuleResolverState>();
 
+        LocalSessions = std::make_unique<TLocalSessionsRegistry>(AppData()->RandomProvider);
         RandomProvider = AppData()->RandomProvider;
         if (!GetYqlDefaultModuleResolver(ModuleResolverState->ExprCtx, ModuleResolverState->ModuleResolver)) {
             TStringStream errorStream;
@@ -406,7 +426,7 @@ public:
             return;
         }
 
-        NodeResources.SetActiveWorkersCount(LocalSessions.size());
+        NodeResources.SetActiveWorkersCount(LocalSessions->size());
         PublishBoardPath = MakeKqpProxyBoardPath(database);
         auto actor = CreateBoardPublishActor(PublishBoardPath, NodeResources.SerializeAsString(), SelfId(), *groupId, 0, true);
         BoardPublishActor = Register(actor);
@@ -456,7 +476,7 @@ public:
         }
 
         KQP_PROXY_LOG_I("Received tenant pool status, serving tenants: " << JoinRange(", ", Tenants.begin(), Tenants.end()));
-        for (auto& [_, sessionInfo] : LocalSessions) {
+        for (auto& [_, sessionInfo] : *LocalSessions) {
             if (!sessionInfo.Database.empty() && !Tenants.contains(sessionInfo.Database)) {
                 auto closeSessionEv = MakeHolder<TEvKqp::TEvCloseSessionRequest>();
                 closeSessionEv->Record.MutableRequest()->SetSessionId(sessionInfo.SessionId);
@@ -501,6 +521,12 @@ public:
                 KQP_PROXY_LOG_D("Failed to get system details");
                 break;
 
+            case TKqpEvents::EvCreateSessionRequest: {
+                KQP_PROXY_LOG_D("Remote create session request failed");
+                ReplyProcessError(Ydb::StatusIds::UNAVAILABLE, "Session not found.", ev->Cookie);
+                break;
+            }
+
             case TKqpEvents::EvQueryRequest:
             case TKqpEvents::EvPingSessionRequest: {
                 KQP_PROXY_LOG_D("Session not found, targetId: " << ev->Sender << " requestId: " << ev->Cookie);
@@ -520,19 +546,52 @@ public:
         KQP_PROXY_LOG_N("KQP proxy shutdown requested.");
         ShutdownRequested = true;
         ShutdownState.Reset(ev->Get()->ShutdownState.Get());
-        ShutdownState->Update(LocalSessions.size());
+        ShutdownState->Update(LocalSessions->size());
         auto& shs = TableServiceConfig.GetShutdownSettings();
         ui32 hardTimeout = shs.GetHardTimeoutMs();
         ui32 softTimeout = shs.GetSoftTimeoutMs();
-        for(auto& [idx, sessionInfo] : LocalSessions) {
+        for(auto& [idx, sessionInfo] : *LocalSessions) {
             Send(sessionInfo.WorkerId, new TEvKqp::TEvInitiateSessionShutdown(softTimeout, hardTimeout));
         }
+    }
+
+    bool CreateRemoteSession(TEvKqp::TEvCreateSessionRequest::TPtr& ev) {
+        auto& event = ev->Get()->Record;
+        if (!event.GetCanCreateRemoteSession() || LocalDatacenterProxies.empty()) {
+            return false;
+        }
+
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+        if (!sbs.GetSupportRemoteSessionCreation()) {
+            return false;
+        }
+
+        ui64 randomNumber = RandomProvider->GenRand();
+        ui32 nodeId = LocalDatacenterProxies[randomNumber % LocalDatacenterProxies.size()];
+        if (nodeId == SelfId().NodeId()){
+            return false;
+        }
+
+        std::unique_ptr<TEvKqp::TEvCreateSessionRequest> remoteRequest = std::make_unique<TEvKqp::TEvCreateSessionRequest>();
+        remoteRequest->Record.SetDeadlineUs(event.GetDeadlineUs());
+        remoteRequest->Record.SetTraceId(event.GetTraceId());
+        remoteRequest->Record.SetSupportsBalancing(event.GetSupportsBalancing());
+        remoteRequest->Record.MutableRequest()->SetDatabase(event.GetRequest().GetDatabase());
+
+        ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, event.GetTraceId(), TKqpEvents::EvCreateSessionRequest);
+        Send(MakeKqpProxyID(nodeId), remoteRequest.release(), IEventHandle::FlagTrackDelivery, requestId);
+        TDuration timeout = DEFAULT_CREATE_SESSION_TIMEOUT;
+        StartQueryTimeout(requestId, timeout);
+        return true;
     }
 
     void Handle(TEvKqp::TEvCreateSessionRequest::TPtr& ev) {
         auto& event = ev->Get()->Record;
         auto& request = event.GetRequest();
         TKqpRequestInfo requestInfo(event.GetTraceId());
+        if (CreateRemoteSession(ev)) {
+            return;
+        }
 
         auto responseEv = MakeHolder<TEvKqp::TEvCreateSessionResponse>();
 
@@ -542,7 +601,7 @@ public:
         const auto deadline = TInstant::MicroSeconds(event.GetDeadlineUs());
 
         if (CheckRequestDeadline(requestInfo, deadline, result) &&
-            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), result))
+            CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), true, request.GetDatabase(), event.GetSupportsBalancing(), result))
         {
             auto& response = *responseEv->Record.MutableResponse();
             response.SetSessionId(result.Value->SessionId);
@@ -617,7 +676,7 @@ public:
         } else {
             TProcessResult<TKqpSessionInfo*> result;
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                request.GetDatabase(), result))
+                request.GetDatabase(), false, result))
             {
                 if (!dbCounters) {
                     dbCounters = Counters->GetDbCounters(request.GetDatabase());
@@ -656,6 +715,15 @@ public:
         auto dbCounters = GetDbCountersForSession(sessionId);
 
         LogRequest(request, requestInfo, ev->Sender, dbCounters);
+
+        auto sessionInfo = LocalSessions->IsPendingShutdown(sessionId);
+        if (sessionInfo) {
+            if (dbCounters) {
+                // session is pending shutdown, and we close it
+                // but direct request from user.
+                Counters->ReportSessionGracefulShutdownHit(sessionInfo->DbCounters);
+            }
+        }
 
         if (!sessionId.empty()) {
             TProcessResult<TActorId> result;
@@ -755,14 +823,22 @@ public:
             return;
         }
 
+        Y_VERIFY(SelfDataCenterId);
         PeerProxyNodeResources.resize(boardInfo->InfoEntries.size());
         size_t idx = 0;
+        auto getDataCenterId = [](const auto& entry) {
+            return entry.HasDataCenterId() ? entry.GetDataCenterId() : DataCenterToString(entry.GetDataCenterNumId());
+        };
+
+        LocalDatacenterProxies.clear();
         for(auto& [ownerId, entry] : boardInfo->InfoEntries) {
             Y_PROTOBUF_SUPPRESS_NODISCARD PeerProxyNodeResources[idx].ParseFromString(entry.Payload);
+            if (getDataCenterId(PeerProxyNodeResources[idx]) == *SelfDataCenterId) {
+                LocalDatacenterProxies.emplace_back(PeerProxyNodeResources[idx].GetNodeId());
+            }
             ++idx;
         }
 
-        Y_VERIFY(SelfDataCenterId, "Unexpected case: empty info about DC!");
         PeerStats = CalcPeerStats(PeerProxyNodeResources, *SelfDataCenterId);
         TryKickSession();
     }
@@ -784,23 +860,61 @@ public:
         return false;
     }
 
+    std::pair<bool, ui32> GetBalancerEnableSettings() const {
+        const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
+        ui32 maxInFlightSize = sbs.GetMaxSessionsShutdownInFlightSize();
+        bool force = false;
+
+        auto tier = sbs.GetEnableTier();
+        if (sbs.GetEnabled()) {
+            // it's legacy configuration.
+            tier = TTableServiceConfig_TSessionBalancerSettings::TIER_ENABLED_FOR_ALL;
+        }
+
+        switch(tier) {
+            case TTableServiceConfig_TSessionBalancerSettings::TIER_DISABLED:
+                return {false, 0};
+            case TTableServiceConfig_TSessionBalancerSettings::TIER_ENABLED_FOR_ALL:
+                return {true, maxInFlightSize};
+            case TTableServiceConfig_TSessionBalancerSettings::TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT:
+                return {false, maxInFlightSize};
+            default:
+                return {false, 0};
+        }
+
+        return {force, maxInFlightSize};
+    }
+
     void TryKickSession() {
 
         const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
-        ui32 maxInFlightSize = sbs.GetMaxSessionsShutdownInFlightSize();
-        if (!maxInFlightSize || !sbs.GetEnabled())
-            return;
+        const std::pair<bool, ui32> settings = GetBalancerEnableSettings();
 
         Y_VERIFY(PeerStats);
 
         bool isReasonableToKick = false;
 
+        ui32 strategy = static_cast<ui32>(sbs.GetStrategy());
+        ui32 balanceByCpu = strategy & TTableServiceConfig_TSessionBalancerSettings::BALANCE_BY_CPU;
+        ui32 balanceByCount = strategy & TTableServiceConfig_TSessionBalancerSettings::BALANCE_BY_COUNT;
+
         if (sbs.GetLocalDatacenterPolicy()) {
-            isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions.size()));
-            isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+            if (balanceByCount) {
+                isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions->size()));
+            }
+
+            if (balanceByCpu) {
+                isReasonableToKick |= ShouldStartBalancing(PeerStats->LocalCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+            }
+
         } else {
-            isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions.size()));
-            isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+            if (balanceByCount) {
+                isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZSessionCount, static_cast<double>(sbs.GetMinNodeSessions()), static_cast<double>(LocalSessions->size()));
+            }
+
+            if (balanceByCpu) {
+                isReasonableToKick |= ShouldStartBalancing(PeerStats->CrossAZCpu, sbs.GetMinCpuBalancerThreshold(), NodeResources.GetCpuUsage());
+            }
         }
 
         if (!isReasonableToKick) {
@@ -811,8 +925,8 @@ public:
             ServerWorkerBalancerComplete = false;
         }
 
-        while(LocalSessions.GetShutdownInFlightSize() < maxInFlightSize) {
-            auto sessionInfo = LocalSessions.PickSessionToShutdown();
+        while(LocalSessions->GetShutdownInFlightSize() < settings.second) {
+            auto sessionInfo = LocalSessions->PickSessionToShutdown(settings.first, sbs.GetMinNodeSessions());
             if (!sessionInfo) {
                 break;
             }
@@ -834,12 +948,12 @@ public:
     }
 
     void ProcessMonShutdownQueue(ui32 wantsToShutdown) {
-        for(auto& [_, sessionInfo] : LocalSessions) {
-            if (!wantsToShutdown)
+        for(ui32 i = 0; i < wantsToShutdown; ++i) {
+            const TKqpSessionInfo* candidate = LocalSessions->PickSessionToShutdown(true, 0);
+            if (!candidate)
                 break;
 
-            StartSessionGraceShutdown(&sessionInfo);
-            --wantsToShutdown;
+            StartSessionGraceShutdown(candidate);
         }
     }
 
@@ -853,7 +967,7 @@ public:
             const TString& forceShutdown = cgi.Get("force_shutdown");
             ui32 wantsToShutdown = 0;
             if (forceShutdown == "all") {
-                wantsToShutdown = LocalSessions.size();
+                wantsToShutdown = LocalSessions->size();
             } else {
                 wantsToShutdown = FromStringWithDefault<ui32>(forceShutdown, 0);
             }
@@ -884,12 +998,13 @@ public:
                     str << "Force shutdown all sessions: <a href=\"kqp_proxy?" << cgiTmp.Print() << "\">Execute</a>" << Endl;
                 }
 
-                str << "Session balancer settings: " << Endl;
-                str << "Enabled: " << (sbs.GetEnabled() ? "true" : "false") << Endl;
-                str << "MaxSessionsShutdownInFlightSize: " << sbs.GetMaxSessionsShutdownInFlightSize() << Endl;
+                const std::pair<bool, ui32> sbsSettings = GetBalancerEnableSettings();
+                str << "Allow shutdown all sessions: " << (sbsSettings.first ? "true": "false") << Endl;
+                str << "MaxSessionsShutdownInFlightSize: " << sbsSettings.second << Endl;
                 str << "LocalDatacenterPolicy: " << (sbs.GetLocalDatacenterPolicy() ? "true" : "false") << Endl;
                 str << "MaxCVTreshold: " << sbs.GetMaxCVTreshold() << Endl;
                 str << "MinCVTreshold: " << sbs.GetMinCVTreshold() << Endl;
+                str << "Balance strategy: " << TTableServiceConfig_TSessionBalancerSettings_EBalancingStrategy_Name(sbs.GetStrategy()) << Endl;
 
                 str << Endl;
 
@@ -904,17 +1019,17 @@ public:
                     }
                 }
 
-                str << Endl << "Active workers count on node: " << LocalSessions.size() << Endl;
+                str << Endl;
 
-                const auto& sessionsShutdownInFlight = LocalSessions.GetShutdownInFlight();
+                str << "Active workers/session_actors count on node: " << LocalSessions->size() << Endl;
+                const auto& sessionsShutdownInFlight = LocalSessions->GetShutdownInFlight();
                 if (!sessionsShutdownInFlight.empty()) {
                     str << Endl;
                     str << "Sessions shutdown in flight: " << Endl;
                     auto now = TAppData::TimeProvider->Now();
                     for(const auto& sessionId : sessionsShutdownInFlight) {
-                        auto session = LocalSessions.FindPtr(sessionId);
-                        str << "Session " << sessionId << " is under shutdown for " << (now - session->ShutdownStartedAt).SecondsFloat() << " seconds. "
-                            << "QueryRequests: " << session->UseFrequency << Endl;
+                        auto session = LocalSessions->FindPtr(sessionId);
+                        str << "Session " << sessionId << " is under shutdown for " << (now - session->ShutdownStartedAt).SecondsFloat() << " seconds. " << Endl;
                     }
 
                     str << Endl;
@@ -937,7 +1052,7 @@ public:
                         str << "Peer(NodeId: " << entry.GetNodeId() << ", DataCenter: " << entry.GetDataCenterId() << "): active workers: "
                             << entry.GetActiveWorkersCount() << "): cpu usage: " << entry.GetCpuUsage() << ", threads count: " << entry.GetThreads() << Endl;
                     }
-                }
+                 }
             }
         }
 
@@ -988,7 +1103,7 @@ public:
             RemoveSession(sessionId, workerId);
 
             KQP_PROXY_LOG_D("Session closed, sessionId: " << event.GetResponse().GetSessionId()
-                << ", workerId: " << workerId << ", local sessions count: " << LocalSessions.size());
+                << ", workerId: " << workerId << ", local sessions count: " << LocalSessions->size());
         }
     }
 
@@ -1014,6 +1129,7 @@ public:
             hFunc(TEvKqp::TEvInitiateShutdownRequest, Handle);
             hFunc(TEvPrivate::TEvOnRequestTimeout, Handle);
             hFunc(NNodeWhiteboard::TEvWhiteboard::TEvSystemStateResponse, Handle);
+            hFunc(TEvKqp::TEvCreateSessionResponse, ForwardEvent);
         default:
             Y_FAIL("TKqpProxyService: unexpected event type: %" PRIx32 " event: %s",
                 ev->GetTypeRewrite(), ev->HasEvent() ? ev->GetBase()->ToString().data() : "serialized?");
@@ -1130,7 +1246,7 @@ private:
     }
 
     bool CreateNewSessionWorker(const TKqpRequestInfo& requestInfo,
-        const TString& cluster, bool longSession, const TString& database, TProcessResult<TKqpSessionInfo*>& result)
+        const TString& cluster, bool longSession, const TString& database, bool supportsBalancing, TProcessResult<TKqpSessionInfo*>& result)
     {
         if (!database.empty()) {
             if (!TenantsReady) {
@@ -1156,7 +1272,7 @@ private:
         }
 
         auto sessionsLimitPerNode = TableServiceConfig.GetSessionsLimitPerNode();
-        if (sessionsLimitPerNode && !LocalSessions.CheckDatabaseLimits(database, sessionsLimitPerNode)) {
+        if (sessionsLimitPerNode && !LocalSessions->CheckDatabaseLimits(database, sessionsLimitPerNode)) {
             TString error = TStringBuilder() << "Active sessions limit exceeded, maximum allowed: "
                 << sessionsLimitPerNode;
             KQP_PROXY_LOG_W(requestInfo << error);
@@ -1177,14 +1293,14 @@ private:
                 ? CreateKqpSessionActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters)
                 : CreateKqpWorkerActor(SelfId(), sessionId, KqpSettings, workerSettings, ModuleResolverState, Counters);
         auto workerId = TlsActivationContext->ExecutorThread.RegisterActor(workerActor, TMailboxType::HTSwap, AppData()->UserPoolId);
-        TKqpSessionInfo* sessionInfo = LocalSessions.Create(sessionId, workerId, database, dbCounters);
+        TKqpSessionInfo* sessionInfo = LocalSessions->Create(sessionId, workerId, database, dbCounters, supportsBalancing);
 
         KQP_PROXY_LOG_D(requestInfo << "Created new session"
             << ", sessionId: " << sessionInfo->SessionId
             << ", workerId: " << sessionInfo->WorkerId
             << ", database: " << sessionInfo->Database
             << ", longSession: " << longSession
-            << ", local sessions count: " << LocalSessions.size());
+            << ", local sessions count: " << LocalSessions->size());
 
         result.YdbStatus = Ydb::StatusIds::SUCCESS;
         result.Error.clear();
@@ -1209,7 +1325,7 @@ private:
         }
 
         if (*nodeId == SelfId().NodeId()) {
-            auto localSession = LocalSessions.FindAndPromote(sessionId);
+            auto localSession = LocalSessions->FindPtr(sessionId);
             if (!localSession) {
                 TString error = TStringBuilder() << "Session not found: " << sessionId;
                 KQP_PROXY_LOG_N(requestInfo << error);
@@ -1234,19 +1350,19 @@ private:
 
     void RemoveSession(const TString& sessionId, const TActorId& workerId) {
         if (!sessionId.empty()) {
-            LocalSessions.Erase(sessionId);
+            LocalSessions->Erase(sessionId);
             PublishResourceUsage();
             if (ShutdownRequested) {
-                ShutdownState->Update(LocalSessions.size());
+                ShutdownState->Update(LocalSessions->size());
             }
 
             return;
         }
 
-        LocalSessions.Erase(workerId);
+        LocalSessions->Erase(workerId);
         PublishResourceUsage();
         if (ShutdownRequested) {
-            ShutdownState->Update(LocalSessions.size());
+            ShutdownState->Update(LocalSessions->size());
         }
     }
 
@@ -1270,7 +1386,7 @@ private:
     }
 
     TKqpDbCountersPtr GetDbCountersForSession(const TString& sessionId) const {
-        auto localSession = LocalSessions.FindPtr(sessionId);
+        auto localSession = LocalSessions->FindPtr(sessionId);
         return localSession ? localSession->DbCounters : nullptr;
     }
 
@@ -1293,11 +1409,12 @@ private:
     TIntrusivePtr<TModuleResolverState> ModuleResolverState;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    TLocalSessionsRegistry LocalSessions;
+    std::unique_ptr<TLocalSessionsRegistry> LocalSessions;
 
     bool ServerWorkerBalancerComplete = false;
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
+    std::vector<ui64> LocalDatacenterProxies;
     TVector<NKikimrKqp::TKqpProxyNodeResources> PeerProxyNodeResources;
     bool ResourcesPublishScheduled = false;
     TString PublishBoardPath;

@@ -308,6 +308,12 @@ message TEvCreateSessionRequest {
     optional TCreateSessionRequest Request = 1;
     optional string TraceId = 2;
     optional uint64 DeadlineUs = 3;
+    // the flag that indicates that session can be created on the different
+    // node in the cluster.
+    // If flag is true, kqp proxy will create session  on the different node,
+    // if flag is false, in this case proxy will create session locally.
+    optional bool CanCreateRemoteSession = 4 [default = false];
+    optional bool SupportsBalancing = 5 [ default = false];
 }
 
 message TCreateSessionResponse {

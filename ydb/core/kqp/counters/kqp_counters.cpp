@@ -186,8 +186,8 @@ void TKqpCountersBase::Init() {
     ActiveWorkers = KqpGroup->GetCounter("Workers/Active", false);
     ProxyForwardedRequests = KqpGroup->GetCounter("Proxy/Forwarded", true);
 
-    SessionBalancerCV = KqpGroup->GetCounter("SessionBalancer/CV", false);
     SessionBalancerShutdowns = KqpGroup->GetCounter("SessionBalancer/Shutdown", true);
+    SessionGracefulShutdownHit = KqpGroup->GetCounter("SessionBalancer/GracefulHit", true);
 
     YdbActiveWorkers = YdbGroup->GetNamedCounter("name", "table.session.active_count", false);
 
@@ -253,6 +253,10 @@ void TKqpCountersBase::ReportQueryType(NKikimrKqp::EQueryType type) {
 
 void TKqpCountersBase::ReportSessionShutdownRequest() {
     SessionBalancerShutdowns->Inc();
+}
+
+void TKqpCountersBase::ReportSessionGracefulShutdownHit() {
+    SessionGracefulShutdownHit->Inc();
 }
 
 void TKqpCountersBase::ReportCreateSession(ui64 requestSize) {
@@ -776,6 +780,14 @@ void TKqpCounters::ReportSessionShutdownRequest(TKqpDbCountersPtr dbCounters) {
     if (dbCounters) {
         dbCounters->ReportSessionShutdownRequest();
     }
+}
+
+void TKqpCounters::ReportSessionGracefulShutdownHit(TKqpDbCountersPtr dbCounters) {
+    TKqpCountersBase::ReportSessionGracefulShutdownHit();
+    if (dbCounters) {
+        dbCounters->ReportSessionGracefulShutdownHit();
+    }
+
 }
 
 void TKqpCounters::ReportCreateSession(TKqpDbCountersPtr dbCounters, ui64 requestSize) {

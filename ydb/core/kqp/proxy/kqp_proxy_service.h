@@ -78,19 +78,19 @@ struct TKqpSessionInfo {
     TActorId WorkerId;
     TString Database;
     TKqpDbCountersPtr DbCounters;
-    ui32 UseFrequency;
     TInstant LastRequestAt;
     TInstant CreatedAt;
     TInstant ShutdownStartedAt;
+    std::vector<i32> ReadyPos;
 
     TKqpSessionInfo(const TString& sessionId, const TActorId& workerId,
-        const TString& database, TKqpDbCountersPtr dbCounters)
+        const TString& database, TKqpDbCountersPtr dbCounters, std::vector<i32>&& pos)
         : SessionId(sessionId)
         , WorkerId(workerId)
         , Database(database)
         , DbCounters(dbCounters)
-        , UseFrequency(0)
         , ShutdownStartedAt()
+        , ReadyPos(std::move(pos))
     {
         auto now = TAppData::TimeProvider->Now();
         LastRequestAt = now;

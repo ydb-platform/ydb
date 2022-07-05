@@ -204,6 +204,9 @@ class TokenServiceCredentials(IamTokenCredentials):
                 "Install jwt & yandex python cloud library to use service account credentials provider"
             )
 
+        self._iam_token_service_pb2 = iam_token_service_pb2
+        self._iam_token_service_pb2_grpc = iam_token_service_pb2_grpc
+
     def _channel_factory(self):
         return grpc.secure_channel(
             self._iam_endpoint,
@@ -218,7 +221,7 @@ class TokenServiceCredentials(IamTokenCredentials):
     def _get_iam_token(self):
         with self._channel_factory() as channel:
             tracing.trace(self.tracer, {"iam_token.from_service": True})
-            stub = iam_token_service_pb2_grpc.IamTokenServiceStub(channel)
+            stub = self._iam_token_service_pb2_grpc.IamTokenServiceStub(channel)
             response = stub.Create(
                 self._get_token_request(), timeout=self._get_token_request_timeout
             )
@@ -268,7 +271,7 @@ class JWTIamCredentials(TokenServiceCredentials, BaseJWTCredentials):
         BaseJWTCredentials.__init__(self, account_id, access_key_id, private_key)
 
     def _get_token_request(self):
-        return iam_token_service_pb2.CreateIamTokenRequest(
+        return self._iam_token_service_pb2.CreateIamTokenRequest(
             jwt=get_jwt(
                 self._account_id,
                 self._access_key_id,

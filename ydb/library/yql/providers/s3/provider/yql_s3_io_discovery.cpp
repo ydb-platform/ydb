@@ -134,7 +134,8 @@ public:
                     if (IS3Lister::HasWildcards(req.Pattern)) {
                         ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " << req.Pattern << " has no items."));
                     } else {
-                        ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " << req.Pattern << " doesn't exist."));
+                        ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
+                            TStringBuilder() << "Object " << req.Pattern << " doesn't exist" << (req.Pattern.EndsWith('/') ? " or is a directory." : ".")));
                     }
                     return TStatus::Error;
                 }

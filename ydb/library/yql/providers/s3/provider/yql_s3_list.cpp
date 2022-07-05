@@ -166,6 +166,10 @@ private:
 
                     for (const auto& content : contents) {
                         TString path = content.Node("s3:Key", false, nss).Value<TString>();
+                        if (path.EndsWith('/')) {
+                            // skip 'directories'
+                            continue;
+                        }
                         TVector<TString> matchedGlobs;
                         if (filter(path, matchedGlobs)) {
                             output->emplace_back();

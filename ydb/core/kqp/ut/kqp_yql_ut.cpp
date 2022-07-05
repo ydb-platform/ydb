@@ -335,6 +335,28 @@ Y_UNIT_TEST_SUITE(KqpYql) {
         UNIT_ASSERT_VALUES_EQUAL(req.GetStatus(), EStatus::GENERIC_ERROR);
         UNIT_ASSERT_STRING_CONTAINS(req.GetIssues().ToString(), "Failed to convert 'Value': Uint64 to Optional<String>");
     }
+
+    Y_UNIT_TEST_NEW_ENGINE(FlexibleTypes) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto params = TParamsBuilder()
+            .AddParam("$text").Utf8("Some text").Build()
+            .AddParam("$data").String("Some bytes").Build()
+            .Build();
+
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            DECLARE $text AS Text;
+            DECLARE $data AS Bytes;
+
+            SELECT $text, $data;
+        )"), TTxControl::BeginTx().CommitTx(), params).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([["Some text";"Some bytes"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKqp

@@ -153,7 +153,6 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     if (!db.LoadLastGcBarrier(LastCollectedGenStep)) {
         return false;
     }
-    NewCollectGenStep = LastCollectedGenStep;
 
     // Load the keep and delete queues
     TVector<TUnifiedBlobId> blobsToKeep;
@@ -202,7 +201,15 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
     return true;
 }
 
-bool TBlobManager::TryMoveGCBarrier() {
+bool TBlobManager::CanCollectGarbage() const {
+    if (KeepsToErase.size() || DeletesToErase.size()) {
+        return true;
+    }
+
+    return NeedStorageCG();
+}
+
+bool TBlobManager::NeedStorageCG() const {
     // Check that there is no GC request in flight
     if (!PerGroupGCListsInFlight.empty()) {
         return false;
@@ -220,84 +227,91 @@ bool TBlobManager::TryMoveGCBarrier() {
         return false;
     }
 
-    // Find the GenStep where GC barrier can be moved
-    {
-        Y_VERIFY(NewCollectGenStep >= LastCollectedGenStep);
-        while (!AllocatedGenSteps.empty()) {
-            if (!AllocatedGenSteps.front()->Finished()) {
-                break;
-            }
-            Y_VERIFY(AllocatedGenSteps.front()->GenStep > CollectGenStepInFlight);
-            NewCollectGenStep = AllocatedGenSteps.front()->GenStep;
+    return true;
+}
 
-            AllocatedGenSteps.pop_front();
+TGenStep TBlobManager::FindNewGCBarrier() {
+    TGenStep newCollectGenStep = LastCollectedGenStep;
+    size_t numFinished = 0;
+    for (auto& allocated : AllocatedGenSteps) {
+        if (!allocated->Finished()) {
+            break;
         }
-        if (AllocatedGenSteps.empty()) {
-            NewCollectGenStep = TGenStep{CurrentGen, CurrentStep};
-        }
+
+        ++numFinished;
+        newCollectGenStep = allocated->GenStep;
+        Y_VERIFY(newCollectGenStep > CollectGenStepInFlight);
+    }
+    if (numFinished) {
+        AllocatedGenSteps.erase(AllocatedGenSteps.begin(), AllocatedGenSteps.begin() + numFinished);
     }
 
-    return NewCollectGenStep > LastCollectedGenStep;
+    if (AllocatedGenSteps.empty()) {
+        newCollectGenStep = TGenStep{CurrentGen, CurrentStep};
+    }
+    return newCollectGenStep;
 }
 
 THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager::PreparePerGroupGCRequests() {
-    if (!TryMoveGCBarrier()) {
+    if (!NeedStorageCG()) {
+        return {};
+    }
+
+    TGenStep newCollectGenStep = FindNewGCBarrier();
+    Y_VERIFY(newCollectGenStep >= LastCollectedGenStep);
+    if (newCollectGenStep == LastCollectedGenStep) {
         return {};
     }
 
     PreviousGCTime = AppData()->TimeProvider->Now();
 
-    CollectGenStepInFlight = NewCollectGenStep;
-
     const ui32 channelIdx = BLOB_CHANNEL;
 
-    // Find the list of groups between LastCollectedGenSten and new GC GenStep
-    PerGroupGCListsInFlight.clear();
-    {
-        const ui32 fromGen = std::get<0>(LastCollectedGenStep);
-        const ui32 toGen = std::get<0>(CollectGenStepInFlight);
+    Y_VERIFY(PerGroupGCListsInFlight.empty());
+
+    // Clear all possibly not keeped trash in channel's groups: create an event for each group
+    if (FirstGC) {
+        FirstGC = false;
+
+        // TODO: we need only actual channel history here
         const auto& channelHistory = TabletInfo->ChannelInfo(channelIdx)->History;
-        auto fnCmpGen = [](ui32 gen, const auto& historyEntry) {
-            return gen < historyEntry.FromGeneration;
-        };
-        // Look for the entry with FromGeneration <= fromGen and the next entry has FromGeneration > fromGen
-        auto fromIt = std::upper_bound(channelHistory.begin(), channelHistory.end(), fromGen, fnCmpGen);
-        if (fromIt != channelHistory.begin()) {
-            --fromIt;
-        }
-        auto toIt = std::upper_bound(channelHistory.begin(), channelHistory.end(), toGen, fnCmpGen);
-        for (auto it = fromIt; it != toIt; ++it) {
-            ui32 group = it->GroupID;
-            PerGroupGCListsInFlight[group];
+
+        for (auto it = channelHistory.begin(); it != channelHistory.end(); ++it) {
+            PerGroupGCListsInFlight[it->GroupID];
         }
     }
 
     // Make per-group Keep/DontKeep lists
     {
         // Add all blobs to keep
-        while (!BlobsToKeep.empty()) {
-            auto blobIt = BlobsToKeep.begin();
-            if (TGenStep{blobIt->Generation(), blobIt->Step()} > CollectGenStepInFlight) {
+        auto keepBlobIt = BlobsToKeep.begin();
+        for (; keepBlobIt != BlobsToKeep.end(); ++keepBlobIt) {
+            TGenStep genStep{keepBlobIt->Generation(), keepBlobIt->Step()};
+            if (genStep > newCollectGenStep) {
                 break;
             }
-            ui32 blobGroup = TabletInfo->GroupFor(blobIt->Channel(), blobIt->Generation());
-            PerGroupGCListsInFlight[blobGroup].KeepList.insert(*blobIt);
-            BlobsToKeep.erase(blobIt);
+            ui32 blobGroup = TabletInfo->GroupFor(keepBlobIt->Channel(), keepBlobIt->Generation());
+            PerGroupGCListsInFlight[blobGroup].KeepList.insert(*keepBlobIt);
+        }
+        if (BlobsToKeep.begin() != keepBlobIt) {
+            BlobsToKeep.erase(BlobsToKeep.begin(), keepBlobIt);
         }
 
         // Add all blobs to delete
-        while (!BlobsToDelete.empty()) {
-            auto blobIt = BlobsToDelete.begin();
-            if (TGenStep{blobIt->Generation(), blobIt->Step()} > CollectGenStepInFlight) {
+        auto blobIt = BlobsToDelete.begin();
+        for (; blobIt != BlobsToDelete.end(); ++blobIt) {
+            TGenStep genStep{blobIt->Generation(), blobIt->Step()};
+            if (genStep > newCollectGenStep) {
                 break;
             }
             ui32 blobGroup = TabletInfo->GroupFor(blobIt->Channel(), blobIt->Generation());
-            bool canSkipDontKeep = false;
-            if (PerGroupGCListsInFlight[blobGroup].KeepList.count(*blobIt)) {
+            TGCLists& gl = PerGroupGCListsInFlight[blobGroup];
+            bool skipDontKeep = false;
+            if (gl.KeepList.count(*blobIt)) {
                 // Remove the blob from keep list if its also in the delete list
-                PerGroupGCListsInFlight[blobGroup].KeepList.erase(*blobIt);
+                gl.KeepList.erase(*blobIt);
                 // Skipped blobs still need to be deleted from BlobsToKeep table
-                PerGroupGCListsInFlight[blobGroup].KeepListSkipped.push_back(*blobIt);
+                KeepsToErase.push_back(TUnifiedBlobId(blobGroup, *blobIt));
 
                 if (CurrentGen == blobIt->Generation()) {
                     // If this blob was created and deleted in the current generation then
@@ -305,18 +319,21 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
                     // NOTE: its not safe to do this for older generations because there is
                     // a scenario when Keep flag was sent in the old generation and then tablet restarted
                     // before getting the result and removing the blob from the Keep list.
-                    canSkipDontKeep = true;
+                    skipDontKeep = true;
+                    DeletesToErase.push_back(TUnifiedBlobId(blobGroup, *blobIt));
+                    ++CountersUpdate.BlobSkippedEntries;
                 }
             }
-            if (!canSkipDontKeep) {
-                PerGroupGCListsInFlight[blobGroup].DontKeepList.insert(*blobIt);
-            } else {
-                // Skipped blobs still need to be deleted from BlobsToDelete table
-                PerGroupGCListsInFlight[blobGroup].DontKeepListSkipped.push_back(*blobIt);
+            if (!skipDontKeep) {
+                gl.DontKeepList.insert(*blobIt);
             }
-            BlobsToDelete.erase(blobIt);
+        }
+        if (BlobsToDelete.begin() != blobIt) {
+            BlobsToDelete.erase(BlobsToDelete.begin(), blobIt);
         }
     }
+
+    CollectGenStepInFlight = newCollectGenStep;
 
     // Make per group requests
     THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> requests;
@@ -340,6 +357,27 @@ THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> TBlobManager:
     return requests;
 }
 
+bool TBlobManager::CleanupFlaggedBlobs(IBlobManagerDb& db) {
+    if (KeepsToErase.empty() && DeletesToErase.empty()) {
+        return false;
+    }
+
+    static constexpr size_t maxBlobsToCleanup = 100000;
+    size_t numBlobs = 0;
+
+    for (; !KeepsToErase.empty() && numBlobs < maxBlobsToCleanup; ++numBlobs) {
+        db.EraseBlobToKeep(KeepsToErase.front());
+        KeepsToErase.pop_front();
+    }
+
+    for (; !DeletesToErase.empty() && numBlobs < maxBlobsToCleanup; ++numBlobs) {
+        db.EraseBlobToDelete(DeletesToErase.front());
+        DeletesToErase.pop_front();
+    }
+
+    return true;
+}
+
 void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, IBlobManagerDb& db) {
     Y_VERIFY(ev->Get()->Status == NKikimrProto::OK, "The caller must handle unsuccessful status");
     Y_VERIFY(!CounterToGroupInFlight.empty());
@@ -350,29 +388,36 @@ void TBlobManager::OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, 
     Y_VERIFY(CounterToGroupInFlight.count(counterFromRequest));
     ui32 group = CounterToGroupInFlight[counterFromRequest];
 
-    auto it =  PerGroupGCListsInFlight.find(group);
-    for (const auto& blobId : it->second.KeepList) {
-        db.EraseBlobToKeep(TUnifiedBlobId(group, blobId));
+    auto it = PerGroupGCListsInFlight.find(group);
+    const auto& keepList = it->second.KeepList;
+    const auto& dontKeepList = it->second.DontKeepList;
+
+    static constexpr size_t maxBlobsToCleanup = 100000;
+    size_t blobsToForget = keepList.size() + dontKeepList.size() + KeepsToErase.size() + DeletesToErase.size();
+
+    if (blobsToForget < maxBlobsToCleanup) {
+        for (const auto& blobId : keepList) {
+            db.EraseBlobToKeep(TUnifiedBlobId(group, blobId));
+        }
+        for (const auto& blobId : dontKeepList) {
+            db.EraseBlobToDelete(TUnifiedBlobId(group, blobId));
+        }
+    } else {
+        for (const auto& blobId : keepList) {
+            KeepsToErase.push_back(TUnifiedBlobId(group, blobId));
+        }
+        for (const auto& blobId : dontKeepList) {
+            DeletesToErase.push_back(TUnifiedBlobId(group, blobId));
+        }
     }
 
-    for (const auto& blobId : it->second.DontKeepList) {
-        db.EraseBlobToDelete(TUnifiedBlobId(group, blobId));
-    }
-
-    for (const auto& blobId : it->second.KeepListSkipped) {
-        db.EraseBlobToKeep(TUnifiedBlobId(group, blobId));
-    }
-
-    for (const auto& blobId : it->second.DontKeepListSkipped) {
-        db.EraseBlobToDelete(TUnifiedBlobId(group, blobId));
-    }
+    // NOTE: It clears blobs of different groups.
+    // It's expected to be safe cause we have GC result for the blobs or don't need such result.
+    CleanupFlaggedBlobs(db);
 
     ++CountersUpdate.GcRequestsSent;
-    CountersUpdate.BlobKeepEntries += it->second.KeepList.size();
-    CountersUpdate.BlobDontKeepEntries += it->second.DontKeepList.size();
-    // "SkippedBlobs" counter tracks blobs that where excluded from both Keep and DontKeep lists
-    // DontKeepListSkipped contains those blobs; KeepListSkipped contains them too but also some more
-    CountersUpdate.BlobSkippedEntries += it->second.DontKeepListSkipped.size();
+    CountersUpdate.BlobKeepEntries += keepList.size();
+    CountersUpdate.BlobDontKeepEntries += dontKeepList.size();
 
     PerGroupGCListsInFlight.erase(it);
     CounterToGroupInFlight.erase(group);

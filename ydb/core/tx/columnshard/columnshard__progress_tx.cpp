@@ -131,7 +131,7 @@ public:
         }
 
         Self->UpdateBlobMangerCounters();
-        if (Self->BlobManager->TryMoveGCBarrier()) {
+        if (Self->BlobManager->CanCollectGarbage()) {
             Self->Execute(Self->CreateTxRunGc(), ctx);
         }
 

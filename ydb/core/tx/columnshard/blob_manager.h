@@ -151,9 +151,6 @@ private:
     // The Gen:Step that has been acknowledged by the Distributed Storage
     TGenStep LastCollectedGenStep = {0, 0};
 
-    // The Gen:Step where GC barrier can be moved
-    TGenStep NewCollectGenStep = {0, 0};
-
     // Distributed Storage requires a monotonically increasing counter for GC requests
     ui64 PerGenerationCounter = 1;
 
@@ -162,15 +159,16 @@ private:
     struct TGCLists {
         THashSet<TLogoBlobID> KeepList;
         THashSet<TLogoBlobID> DontKeepList;
-        TVector<TLogoBlobID> KeepListSkipped;       // List of blobs excluded from Keep list for optimization
-        TVector<TLogoBlobID> DontKeepListSkipped;   // List of blobs excluded from both Keep/DontKeep lists
-                                                    // NOTE: skipped blobs still need to be removed from local db after GC request completes
     };
     THashMap<ui32, TGCLists> PerGroupGCListsInFlight;
+    // NOTE: blobs still need to be removed from local db
+    TDeque<TUnifiedBlobId> KeepsToErase;
+    TDeque<TUnifiedBlobId> DeletesToErase;
     // Maps PerGenerationCounter value to the group in PerGroupGCListsInFlight
     THashMap<ui64, ui32> CounterToGroupInFlight;
     // The barrier in the current in-flight GC request(s)
     TGenStep CollectGenStepInFlight = {0, 0};
+    bool FirstGC = true;
 
     // Stores counter updates since last call to GetCountersUpdate()
     // Then the counters are reset and start accumulating new delta
@@ -186,11 +184,14 @@ public:
     // Loads the state at startup
     bool LoadState(IBlobManagerDb& db);
 
-    // Checks if GC barrier can be moved. Updates NewCollectGenStep if possible.
-    bool TryMoveGCBarrier();
+    bool CanCollectGarbage() const;
+    bool NeedStorageCG() const;
 
     // Prepares Keep/DontKeep lists and GC barrier
     THashMap<ui32, std::unique_ptr<TEvBlobStorage::TEvCollectGarbage>> PreparePerGroupGCRequests();
+
+    // Cleanup blobs that have correct flags (skipped or already marked with correct flags)
+    bool CleanupFlaggedBlobs(IBlobManagerDb& db);
 
     // Called with GC result received from Distributed Storage
     void OnGCResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev, IBlobManagerDb& db);
@@ -210,6 +211,7 @@ public:
     void SetBlobInUse(const TUnifiedBlobId& blobId, bool inUse) override;
 
 private:
+    TGenStep FindNewGCBarrier();
     void DeleteSmallBlob(const TUnifiedBlobId& blobId, IBlobManagerDb& db);
 
     // Delete small blobs that were previously in use and could not be deleted

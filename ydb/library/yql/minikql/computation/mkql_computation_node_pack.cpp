@@ -451,6 +451,7 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         auto itemType = listType->GetItemType();
         const auto len = NDetails::UnpackUInt64(buf);
         NUdf::TUnboxedValue *items = nullptr;
+        MKQL_ENSURE(len <= Max<ui32>(), "Bad list length: " << len);
         auto list = holderFactory.CreateDirectArrayHolder(len, items);
         for (ui64 i = 0; i < len; ++i) {
             *items++ = UnpackImpl(itemType, buf, topLength, holderFactory);
@@ -500,9 +501,11 @@ NUdf::TUnboxedValue TValuePacker::UnpackImpl(const TType* type, TStringBuf& buf,
         ui32 variantIndex = NDetails::UnpackUInt32(buf);
         TType* innerType = variantType->GetUnderlyingType();
         if (innerType->IsStruct()) {
+            MKQL_ENSURE(variantIndex < static_cast<TStructType*>(innerType)->GetMembersCount(), "Bad variant index: " << variantIndex);
             innerType = static_cast<TStructType*>(innerType)->GetMemberType(variantIndex);
         } else {
             MKQL_ENSURE(innerType->IsTuple(), "Unexpected underlying variant type: " << innerType->GetKindAsStr());
+            MKQL_ENSURE(variantIndex < static_cast<TTupleType*>(innerType)->GetElementsCount(), "Bad variant index: " << variantIndex);
             innerType = static_cast<TTupleType*>(innerType)->GetElementType(variantIndex);
         }
         return holderFactory.CreateVariantHolder(UnpackImpl(innerType, buf, topLength, holderFactory).Release(), variantIndex);

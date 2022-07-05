@@ -13,7 +13,6 @@ SRCS(
     counting_events.cpp
     decommit_3dc.cpp
     defrag.cpp
-    donor.cpp
     encryption.cpp
     gc_quorum_3dc.cpp
     incorrect_queries.cpp
@@ -52,6 +51,7 @@ REQUIREMENTS(ram:32)
 END()
 
 RECURSE_FOR_TESTS(
+    ut_donor
     ut_group_reconfiguration
     ut_osiris
     ut_replication

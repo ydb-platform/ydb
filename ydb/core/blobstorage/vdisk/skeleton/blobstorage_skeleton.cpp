@@ -97,6 +97,15 @@ namespace NKikimr {
         // Some stuff to handle a case when we can't accept TEvVPut requests
         // because of (fresh) compaction overload
         ////////////////////////////////////////////////////////////////////////
+        template<typename TEvent>
+        bool DonorCheck(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
+            if (Config->BaseInfo.DonorMode) {
+                ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
+                return false;
+            }
+            return true;
+        }
+
         void ProcessPostponedEvents(const TActorContext &ctx, bool actualizeLevels) {
             if (OverloadHandler) {
                 // we perform postponed events processing in batch to prioritize emergency
@@ -147,6 +156,9 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
 
         void Handle(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this);
             if (!postpone) {
                 PrivateHandle(ev, ctx);
@@ -179,14 +191,18 @@ namespace NKikimr {
         }
 
         template <typename TEvPtr>
-        void ReplyVPatchError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvPtr &ev) {
+        void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvPtr &ev, const TActorContext& ctx,
+                TInstant now) {
             using namespace NErrBuilder;
-            std::unique_ptr<IEventBase> res = ErroneousResult(VCtx, status, errorReason, ev, TActivationContext::Now(),
+            std::unique_ptr<IEventBase> res = ErroneousResult(VCtx, status, errorReason, ev, now,
                     SkeletonFrontIDPtr, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo);
-            SendReply(TActivationContext::AsActorContext(), std::move(res), ev, BS_VDISK_PATCH);
+            SendReply(ctx, std::move(res), ev, BS_VDISK_PATCH);
         }
 
         void Handle(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this);
             if (!postpone) {
                 PrivateHandle(ev, ctx);
@@ -196,14 +212,14 @@ namespace NKikimr {
         void PrivateHandle(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx) {
             TInstant now = ctx.Now();
             if (!EnableVPatch.Update(now)) {
-                ReplyVPatchError(NKikimrProto::ERROR, "VPatch is disabled", ev);
+                ReplyError(NKikimrProto::ERROR, "VPatch is disabled", ev, ctx, TAppData::TimeProvider->Now());
                 return;
             }
 
             TLogoBlobID patchedBlobId = LogoBlobIDFromLogoBlobID(ev->Get()->Record.GetPatchedBlobId());
 
             if (VPatchActors.count(patchedBlobId)) {
-                ReplyVPatchError(NKikimrProto::ERROR, "The patching request already is running", ev);
+                ReplyError(NKikimrProto::ERROR, "The patching request already is running", ev, ctx, TAppData::TimeProvider->Now());
                 return;
             }
 
@@ -220,6 +236,9 @@ namespace NKikimr {
 
         template <typename TEvDiffPtr>
         void HandleVPatchDiffResending(TEvDiffPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
                 LOG_DEBUG_S(ctx, BS_VDISK_PATCH, VCtx->VDiskLogPrefix << "TEvVPatch: recieve diff;"
                         << " Event# " << ev->Get()->ToString());
@@ -235,7 +254,7 @@ namespace NKikimr {
             if (it != VPatchActors.end()) {
                 TActivationContext::Send(ev->Forward(it->second));
             } else {
-                ReplyVPatchError(NKikimrProto::ERROR, "VPatchActor doesn't exist", ev);
+                ReplyError(NKikimrProto::ERROR, "VPatchActor doesn't exist", ev, ctx, TAppData::TimeProvider->Now());
             }
         }
 
@@ -267,6 +286,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this);
             if (!postpone) {
                 PrivateHandle(ev, ctx);
@@ -614,6 +636,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             const bool postpone = OverloadHandler->PostponeEvent(ev, ctx, this);
             if (!postpone) {
                 PrivateHandle(ev, ctx);
@@ -895,6 +920,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVBlock::TPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             ++IFaceMonGroup->BlockMsgs();
             TInstant now = TAppData::TimeProvider->Now();
             NKikimrBlobStorage::TEvVBlock &record = ev->Get()->Record;
@@ -1009,6 +1037,9 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVCollectGarbage::TPtr &ev, const TActorContext &ctx) {
+            if (!DonorCheck(ev, ctx)) {
+                return;
+            }
             IFaceMonGroup->GCMsgs()++;
             TInstant now = TAppData::TimeProvider->Now();
             NKikimrBlobStorage::TEvVCollectGarbage &record = ev->Get()->Record;

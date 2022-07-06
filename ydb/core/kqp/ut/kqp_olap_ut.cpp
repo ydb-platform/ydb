@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                      }
         )");
 
-        legacyClient.CreateOlapTable("/Root/olapStore", R"(
+        legacyClient.CreateColumnTable("/Root/olapStore", R"(
             Name: "OlapParametersTable"
             ColumnShardCount: 1
         )");
@@ -1262,7 +1262,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             if (pushEnabled) {
                 qBuilder << R"(PRAGMA Kikimr.KqpPushOlapProcess = "true";)" << Endl;
             }
-            
+
             qBuilder << R"(PRAGMA Kikimr.OptEnablePredicateExtract = "false";)" << Endl;
             qBuilder << "SELECT `timestamp` FROM `/Root/olapStore/olapTable` WHERE ";
             qBuilder << predicate;

@@ -394,8 +394,16 @@ namespace Tests {
 
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const TString& scheme);
         NMsgBusProxy::EResponseStatus CreateOlapStore(const TString& parent, const NKikimrSchemeOp::TColumnStoreDescription& store);
-        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme);
-        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table);
+        NMsgBusProxy::EResponseStatus CreateColumnTable(const TString& parent, const TString& scheme);
+        NMsgBusProxy::EResponseStatus CreateColumnTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table);
+#if 1 // legacy names
+        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const TString& scheme) {
+            return CreateColumnTable(parent, scheme);
+        }
+        NMsgBusProxy::EResponseStatus CreateOlapTable(const TString& parent, const NKikimrSchemeOp::TColumnTableDescription& table) {
+            return CreateColumnTable(parent, table);
+        }
+#endif
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);

@@ -248,6 +248,9 @@ private:
                         return;
                     }
                 }
+                if (domain.GetDomainState().GetDiskQuotaExceeded()) {
+                    requestBaseCtx->SetDiskQuotaExceeded(true);
+                }
             } else {
                 Counters->IncDatabaseUnavailableCounter();
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_DB_NOT_READY, "database unavailable");

@@ -220,7 +220,7 @@ namespace {
             entry.SolomonVolumeInfo.Drop();
             entry.PQGroupInfo.Drop();
             entry.OlapStoreInfo.Drop();
-            entry.OlapTableInfo.Drop();
+            entry.ColumnTableInfo.Drop();
             entry.CdcStreamInfo.Drop();
             entry.SequenceInfo.Drop();
             entry.ReplicationInfo.Drop();
@@ -730,7 +730,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             SolomonVolumeInfo.Drop();
             PQGroupInfo.Drop();
             OlapStoreInfo.Drop();
-            OlapTableInfo.Drop();
+            ColumnTableInfo.Drop();
             CdcStreamInfo.Drop();
             SequenceInfo.Drop();
             ReplicationInfo.Drop();
@@ -796,7 +796,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             }
         }
 
-        void FillTableInfoFromOlapTable(const NKikimrSchemeOp::TPathDescription& pathDesc) {
+        void FillTableInfoFromColumnTable(const NKikimrSchemeOp::TPathDescription& pathDesc) {
             const auto& desc = pathDesc.GetColumnTableDescription();
 
             THashMap<TString, ui32> nameToId;
@@ -1149,7 +1149,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             DESCRIPTION_PART(SolomonVolumeInfo);
             DESCRIPTION_PART(PQGroupInfo);
             DESCRIPTION_PART(OlapStoreInfo);
-            DESCRIPTION_PART(OlapTableInfo);
+            DESCRIPTION_PART(ColumnTableInfo);
             DESCRIPTION_PART(CdcStreamInfo);
             DESCRIPTION_PART(SequenceInfo);
             DESCRIPTION_PART(ReplicationInfo);
@@ -1403,14 +1403,14 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 FillInfo(Kind, OlapStoreInfo, std::move(*pathDesc.MutableColumnStoreDescription()));
                 break;
             case NKikimrSchemeOp::EPathTypeColumnTable:
-                Kind = TNavigate::KindOlapTable;
+                Kind = TNavigate::KindColumnTable;
                 if (Created) {
-                    FillTableInfoFromOlapTable(pathDesc);
+                    FillTableInfoFromColumnTable(pathDesc);
                 }
-                FillInfo(Kind, OlapTableInfo, std::move(*pathDesc.MutableColumnTableDescription()));
-                if (OlapTableInfo->Description.HasColumnStorePathId()) {
-                    auto& p = OlapTableInfo->Description.GetColumnStorePathId();
-                    OlapTableInfo->OlapStoreId = TTableId(p.GetOwnerId(), p.GetLocalId());
+                FillInfo(Kind, ColumnTableInfo, std::move(*pathDesc.MutableColumnTableDescription()));
+                if (ColumnTableInfo->Description.HasColumnStorePathId()) {
+                    auto& p = ColumnTableInfo->Description.GetColumnStorePathId();
+                    ColumnTableInfo->OlapStoreId = TTableId(p.GetOwnerId(), p.GetLocalId());
                 }
                 break;
             case NKikimrSchemeOp::EPathTypeTableIndex:
@@ -1491,7 +1491,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindOlapStore);
                         break;
                     case NKikimrSchemeOp::EPathTypeColumnTable:
-                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindOlapTable);
+                        ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindColumnTable);
                         break;
                     case NKikimrSchemeOp::EPathTypeRtmrVolume:
                         ListNodeEntry->Children.emplace_back(name, pathId, TNavigate::KindRtmr);
@@ -1600,10 +1600,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
                 entry.Kind = TNavigate::KindTable;
                 if (target == NSysView::ISystemViewResolver::ETarget::OlapStore ||
-                    target == NSysView::ISystemViewResolver::ETarget::OlapTable)
+                    target == NSysView::ISystemViewResolver::ETarget::ColumnTable)
                 {
                     // OLAP sys views are represented by OLAP tables
-                    entry.Kind =TNavigate::KindOlapTable;
+                    entry.Kind =TNavigate::KindColumnTable;
                 }
 
                 entry.Columns = std::move(schema->Columns);
@@ -1654,17 +1654,17 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapStore);
                     entry.OlapStoreInfo = OlapStoreInfo;
                     return;
-                } else if (Kind == TNavigate::KindOlapTable) {
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable);
+                } else if (Kind == TNavigate::KindColumnTable) {
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::ColumnTable);
                     entry.OlapStoreInfo = OlapStoreInfo;
-                    entry.OlapTableInfo = OlapTableInfo;
+                    entry.ColumnTableInfo = ColumnTableInfo;
                     return;
                 }
 
                 return SetError(context, entry, TNavigate::EStatus::PathErrorUnknown);
             }
 
-            const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindOlapTable;
+            const bool isTable = Kind == TNavigate::KindTable || Kind == TNavigate::KindColumnTable;
             if (entry.Operation == TNavigate::OpTable && !isTable) {
                 return SetError(context, entry, TNavigate::EStatus::PathNotTable);
             }
@@ -1720,7 +1720,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.SolomonVolumeInfo = SolomonVolumeInfo;
             entry.PQGroupInfo = PQGroupInfo;
             entry.OlapStoreInfo = OlapStoreInfo;
-            entry.OlapTableInfo = OlapTableInfo;
+            entry.ColumnTableInfo = ColumnTableInfo;
             entry.CdcStreamInfo = CdcStreamInfo;
             entry.SequenceInfo = SequenceInfo;
             entry.ReplicationInfo = ReplicationInfo;
@@ -1858,11 +1858,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                     }
                     keyDesc.Partitioning = std::move(partitions);
                     return;
-                } else if (Kind == TNavigate::KindOlapTable) {
-                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::OlapTable);
+                } else if (Kind == TNavigate::KindColumnTable) {
+                    FillSystemViewEntry(context, entry, NSysView::ISystemViewResolver::ETarget::ColumnTable);
                     // Add all shards of the OLAP table
                     auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-                    for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
+                    for (ui64 columnShard : ColumnTableInfo->Description.GetSharding().GetColumnShards()) {
                         partitions->push_back(TKeyDesc::TPartitionInfo(columnShard));
                         partitions->back().Range = TKeyDesc::TPartitionRangeInfo();
                     }
@@ -1900,10 +1900,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                         ++context->Request->ErrorCount;
                     }
                 }
-            } else if (OlapTableInfo) {
+            } else if (ColumnTableInfo) {
                 // TODO: return proper partitioning info (KIKIMR-11069)
                 auto partitions = std::make_shared<TVector<TKeyDesc::TPartitionInfo>>();
-                for (ui64 columnShard : OlapTableInfo->Description.GetSharding().GetColumnShards()) {
+                for (ui64 columnShard : ColumnTableInfo->Description.GetSharding().GetColumnShards()) {
                     partitions->push_back(TKeyDesc::TPartitionInfo(columnShard));
                     partitions->back().Range = TKeyDesc::TPartitionRangeInfo();
                 }
@@ -1985,7 +1985,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         // OlapStore specific
         TIntrusivePtr<TNavigate::TOlapStoreInfo> OlapStoreInfo;
-        TIntrusivePtr<TNavigate::TOlapTableInfo> OlapTableInfo;
+        TIntrusivePtr<TNavigate::TColumnTableInfo> ColumnTableInfo;
 
         // CDC specific
         TIntrusivePtr<TNavigate::TCdcStreamInfo> CdcStreamInfo;

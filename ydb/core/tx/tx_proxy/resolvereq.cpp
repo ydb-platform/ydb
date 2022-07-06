@@ -180,7 +180,7 @@ namespace {
                 auto& entry = resp->ResultSet[index];
 
                 table.TableId = entry.TableId;
-                table.IsOlapTable = (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable);
+                table.IsColumnTable = (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable);
 
                 TVector<NScheme::TTypeId> keyColumnTypes(entry.Columns.size());
                 TVector<TKeyDesc::TColumnOp> columns(entry.Columns.size());

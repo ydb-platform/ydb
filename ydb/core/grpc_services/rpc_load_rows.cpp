@@ -185,8 +185,8 @@ const Ydb::Table::BulkUpsertRequest* GetProtoRequest(IRequestOpCtx* req) {
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadRowsRPCPublic(IRequestOpCtx* request)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()))
+    explicit TUploadRowsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
+        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
     {}
 
@@ -448,8 +448,8 @@ private:
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadColumnsRPCPublic(IRequestOpCtx* request)
-        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()))
+    explicit TUploadColumnsRPCPublic(IRequestOpCtx* request, bool diskQuotaExceeded)
+        : TBase(GetDuration(GetProtoRequest(request)->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
     {}
 
@@ -664,23 +664,27 @@ private:
 };
 
 void DoBulkUpsertRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider &) {
+    bool diskQuotaExceeded = p->GetDiskQuotaExceeded();
+
     if (GetProtoRequest(p.get())->has_arrow_batch_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release()));
+        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
     } else if (GetProtoRequest(p.get())->has_csv_settings()) {
-        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release()));
+        TActivationContext::AsActorContext().Register(new TUploadColumnsRPCPublic(p.release(), diskQuotaExceeded));
     } else {
-        TActivationContext::AsActorContext().Register(new TUploadRowsRPCPublic(p.release()));
+        TActivationContext::AsActorContext().Register(new TUploadRowsRPCPublic(p.release(), diskQuotaExceeded));
     }
 }
 
 template<>
 IActor* TEvBulkUpsertRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    bool diskQuotaExceeded = msg->GetDiskQuotaExceeded();
+
     if (GetProtoRequest(msg)->has_arrow_batch_settings()) {
-        return new TUploadColumnsRPCPublic(msg);
+        return new TUploadColumnsRPCPublic(msg, diskQuotaExceeded);
     } else if (GetProtoRequest(msg)->has_csv_settings()) {
-        return new TUploadColumnsRPCPublic(msg);
+        return new TUploadColumnsRPCPublic(msg, diskQuotaExceeded);
     } else {
-        return new TUploadRowsRPCPublic(msg);
+        return new TUploadRowsRPCPublic(msg, diskQuotaExceeded);
     }
 }
 

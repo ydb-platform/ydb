@@ -120,7 +120,7 @@ struct TSchemeCacheNavigate {
         KindExtSubdomain = 9,
         KindIndex = 10,
         KindOlapStore = 11,
-        KindOlapTable = 12,
+        KindColumnTable = 12,
         KindCdcStream = 13,
         KindSequence = 14,
         KindReplication = 15,
@@ -180,7 +180,7 @@ struct TSchemeCacheNavigate {
         NKikimrSchemeOp::TColumnStoreDescription Description;
     };
 
-    struct TOlapTableInfo : public TAtomicRefCount<TOlapTableInfo> {
+    struct TColumnTableInfo : public TAtomicRefCount<TColumnTableInfo> {
         EKind Kind = KindUnknown;
         NKikimrSchemeOp::TColumnTableDescription Description;
         TTableId OlapStoreId;
@@ -247,7 +247,7 @@ struct TSchemeCacheNavigate {
         TIntrusiveConstPtr<TKesusInfo> KesusInfo;
         TIntrusiveConstPtr<TSolomonVolumeInfo> SolomonVolumeInfo;
         TIntrusiveConstPtr<TOlapStoreInfo> OlapStoreInfo;
-        TIntrusiveConstPtr<TOlapTableInfo> OlapTableInfo;
+        TIntrusiveConstPtr<TColumnTableInfo> ColumnTableInfo;
         TIntrusiveConstPtr<TCdcStreamInfo> CdcStreamInfo;
         TIntrusiveConstPtr<TSequenceInfo> SequenceInfo;
         TIntrusiveConstPtr<TReplicationInfo> ReplicationInfo;

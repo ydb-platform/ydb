@@ -354,12 +354,14 @@ namespace NActors {
         TString err;
         LWPROBE_IF_TOO_LONG(SlowICReadFromSocket, ms) {
             do {
+                const ui64 begin = GetCycleCountFast();
 #ifndef _win_
                 recvres = iovcnt == 1 ? Socket->Recv(iovec->iov_base, iovec->iov_len, &err) : Socket->ReadV(iovec, iovcnt);
 #else
                 recvres = Socket->Recv(iovec[0].iov_base, iovec[0].iov_len, &err);
 #endif
-                Metrics->IncRecvSyscalls();
+                const ui64 end = GetCycleCountFast();
+                Metrics->IncRecvSyscalls((end - begin) * 1'000'000 / GetCyclesPerMillisecond());
             } while (recvres == -EINTR);
         }
 

@@ -165,8 +165,9 @@ namespace {
             ++*SpuriousWriteWakeups;
         }
 
-        void IncSendSyscalls() override {
+        void IncSendSyscalls(ui64 ns) override {
             ++*SendSyscalls;
+            *SendSyscallsNs += ns;
         }
 
         void IncInflyLimitReach() override {
@@ -197,8 +198,9 @@ namespace {
             ++*ch.IncomingEvents;
         }
 
-        void IncRecvSyscalls() override {
+        void IncRecvSyscalls(ui64 ns) override {
             ++*RecvSyscalls;
+            *RecvSyscallsNs += ns;
         }
 
         void AddTotalBytesRead(ui64 value) override {
@@ -288,7 +290,9 @@ namespace {
             if (updateGlobal) {
                 OutputBuffersTotalSize = Counters->GetCounter("OutputBuffersTotalSize");
                 SendSyscalls = Counters->GetCounter("SendSyscalls", true);
+                SendSyscallsNs = Counters->GetCounter("SendSyscallsNs", true);
                 RecvSyscalls = Counters->GetCounter("RecvSyscalls", true);
+                RecvSyscallsNs = Counters->GetCounter("RecvSyscallsNs", true);
                 SpuriousReadWakeups = Counters->GetCounter("SpuriousReadWakeups", true);
                 UsefulReadWakeups = Counters->GetCounter("UsefulReadWakeups", true);
                 SpuriousWriteWakeups = Counters->GetCounter("SpuriousWriteWakeups", true);
@@ -323,8 +327,10 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr QueueUtilization;
         NMonitoring::TDynamicCounters::TCounterPtr SubscribersCount;
         NMonitoring::TDynamicCounters::TCounterPtr SendSyscalls;
+        NMonitoring::TDynamicCounters::TCounterPtr SendSyscallsNs;
         NMonitoring::TDynamicCounters::TCounterPtr ClockSkewMicrosec;
         NMonitoring::TDynamicCounters::TCounterPtr RecvSyscalls;
+        NMonitoring::TDynamicCounters::TCounterPtr RecvSyscallsNs;
         NMonitoring::TDynamicCounters::TCounterPtr UsefulReadWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousReadWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
@@ -480,7 +486,7 @@ namespace {
             SpuriousWriteWakeups_->Inc();
         }
 
-        void IncSendSyscalls() override {
+        void IncSendSyscalls(ui64 /*ns*/) override {
             SendSyscalls_->Inc();
         }
 
@@ -512,7 +518,7 @@ namespace {
             ch.IncomingEvents->Inc();
         }
 
-        void IncRecvSyscalls() override {
+        void IncRecvSyscalls(ui64 /*ns*/) override {
             RecvSyscalls_->Inc();
         }
 

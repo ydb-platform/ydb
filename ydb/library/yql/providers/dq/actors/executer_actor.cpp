@@ -265,6 +265,8 @@ private:
                 TIssues issues;
                 IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                 Issues.AddIssues(issues);
+            } else if (ev->Get()->Record.GetStatusCode() == 0) {
+                Issues.AddIssue(TIssue("Unknown Error"));
             }
             Finish(ev->Get()->Record.GetStatusCode(), retriable, fallback);
         }

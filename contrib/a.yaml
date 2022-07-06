@@ -139,7 +139,7 @@ ci:
             config:
               fixed_sandbox_resources:
                 - key: mr_bin
-                  resource_id: 3268956001
+                  resource_id: 3288821076
 
               secret_environment_variables:
                 - key: ARC_TOKEN

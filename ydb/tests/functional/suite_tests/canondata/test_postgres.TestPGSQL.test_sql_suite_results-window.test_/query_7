@@ -1,5 +1,25 @@
 [
     {
+        "column0": 5000,
+        "column1": 1
+    },
+    {
+        "column0": 9800,
+        "column1": 2
+    },
+    {
+        "column0": 14600,
+        "column1": 2
+    },
+    {
+        "column0": 3900,
+        "column1": 1
+    },
+    {
+        "column0": 7400,
+        "column1": 2
+    },
+    {
         "column0": 6000,
         "column1": 1
     },
@@ -18,25 +38,5 @@
     {
         "column0": 25100,
         "column1": 5
-    },
-    {
-        "column0": 3900,
-        "column1": 1
-    },
-    {
-        "column0": 7400,
-        "column1": 2
-    },
-    {
-        "column0": 5000,
-        "column1": 1
-    },
-    {
-        "column0": 9800,
-        "column1": 2
-    },
-    {
-        "column0": 14600,
-        "column1": 2
     }
 ]

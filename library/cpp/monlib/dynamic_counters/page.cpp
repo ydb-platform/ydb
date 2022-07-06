@@ -120,7 +120,7 @@ void TDynamicCountersPage::BeforePre(IMonHttpRequest& request) {
     HTML(out) {
         DIV() {
             out << "<a href='" << request.GetPath() << "/json'>Counters as JSON</a>";
-            out << " for <a href='https://wiki.yandex-team.ru/solomon/'>Solomon</a>";
+            out << " for Solomon";
         }
 
         H5() {

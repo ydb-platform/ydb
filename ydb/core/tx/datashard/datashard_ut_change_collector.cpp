@@ -716,6 +716,22 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
         };
     }
 
+    TCdcStream NewImage() {
+        return TCdcStream{
+            .Name = "new_image",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeNewImage,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
+        };
+    }
+
+    TCdcStream OldImage() {
+        return TCdcStream{
+            .Name = "old_image",
+            .Mode = NKikimrSchemeOp::ECdcStreamModeOldImage,
+            .Format = NKikimrSchemeOp::ECdcStreamFormatProto,
+        };
+    }
+
     TCdcStream NewAndOldImages() {
         return TCdcStream{
             .Name = "new_and_old_images",
@@ -840,6 +856,44 @@ Y_UNIT_TEST_SUITE(CdcStreamChangeCollector) {
             {"keys_stream", {
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}),
                 TStructRecord(NTable::ERowOp::Upsert, {{"key", 1}}),
+            }},
+        });
+    }
+
+    Y_UNIT_TEST(NewImage) {
+        const auto schema = TShardedTableOptions()
+            .Columns({
+                {"a", "Uint32", true, false},
+                {"b", "Uint32", false, false},
+                {"c", "Uint32", false, false},
+            });
+
+        Run("/Root/path", schema, TVector<TCdcStream>{NewImage()}, TVector<TString>{
+            "INSERT INTO `/Root/path` (a, b) values (1, 2)",
+            "DELETE FROM `/Root/path` WHERE a = 1;",
+        }, {
+            {"new_image", {
+                TStructRecord(NTable::ERowOp::Upsert, {{"a", 1}}, {}, {}, {{"b", 2}, {"c", Null}}),
+                TStructRecord(NTable::ERowOp::Erase,  {{"a", 1}}, {}, {}, {}),
+            }},
+        });
+    }
+
+    Y_UNIT_TEST(OldImage) {
+        const auto schema = TShardedTableOptions()
+            .Columns({
+                {"a", "Uint32", true, false},
+                {"b", "Uint32", false, false},
+                {"c", "Uint32", false, false},
+            });
+
+        Run("/Root/path", schema, TVector<TCdcStream>{OldImage()}, TVector<TString>{
+            "INSERT INTO `/Root/path` (a, b) values (1, 2)",
+            "DELETE FROM `/Root/path` WHERE a = 1;",
+        }, {
+            {"old_image", {
+                TStructRecord(NTable::ERowOp::Upsert, {{"a", 1}}, {}, {}, {}),
+                TStructRecord(NTable::ERowOp::Erase,  {{"a", 1}}, {}, {{"b", 2}, {"c", Null}}, {}),
             }},
         });
     }

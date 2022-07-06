@@ -8,7 +8,8 @@ Copyright (c) 2010-2010: Joachim Faulhaber
 #ifndef BOOST_ICL_CONCEPT_INTERVAL_HPP_JOFA_100323
 #define BOOST_ICL_CONCEPT_INTERVAL_HPP_JOFA_100323
 
-#include <boost/assert.hpp> 
+#include <boost/assert.hpp>
+#include <boost/core/ignore_unused.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/mpl/and.hpp>
 #include <boost/mpl/or.hpp>
@@ -109,6 +110,8 @@ singleton(const typename interval_traits<Type>::domain_type& value)
     //ASSERT: This always creates an interval with exactly one element
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
                                  ::is_less_than(value) )); 
 
@@ -122,6 +125,8 @@ singleton(const typename interval_traits<Type>::domain_type& value)
     //ASSERT: This always creates an interval with exactly one element
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
                                  ::is_less_than(value))); 
 
@@ -178,6 +183,8 @@ unit_trail(const typename interval_traits<Type>::domain_type& value)
 {
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
                                  ::is_less_than(value) )); 
 
@@ -195,6 +202,8 @@ unit_trail(const typename interval_traits<Type>::domain_type& value)
 {
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
                                  ::is_less_than(value))); 
 
@@ -289,6 +298,8 @@ hull(const typename interval_traits<Type>::domain_type& left,
 {
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     if(interval_traits<Type>::domain_compare()(left,right))
     {
         BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
@@ -321,6 +332,8 @@ hull(const typename interval_traits<Type>::domain_type& left,
 {
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     if(interval_traits<Type>::domain_compare()(left,right))
     {
         BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
@@ -418,6 +431,8 @@ last(const Type& object)
 { 
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
                                  ::is_less_than(upper(object)) )); 
     return domain_prior<Type>(upper(object));
@@ -430,6 +445,8 @@ last(const Type& object)
 { 
     typedef typename interval_traits<Type>::domain_type    domain_type;
     typedef typename interval_traits<Type>::domain_compare domain_compare;
+    ignore_unused<domain_type, domain_compare>();
+
     BOOST_ASSERT((numeric_minimum<domain_type, domain_compare, is_numeric<domain_type>::value>
                                  ::is_less_than_or(upper(object), is_right_closed(object.bounds())) )); 
     return is_right_closed(object.bounds()) ? 

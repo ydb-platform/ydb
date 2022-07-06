@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: botocore
-Version: 1.27.12
+Version: 1.27.14
 Summary: Low-level, data-driven core of boto 3.
 Home-page: https://github.com/boto/botocore
 Author: Amazon Web Services
@@ -17,6 +17,7 @@ Classifier: Programming Language :: Python :: 3.7
 Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
 Requires-Python: >= 3.7
 License-File: LICENSE.txt
 License-File: NOTICE

@@ -303,6 +303,9 @@ public:
     TFileHandle *GetFileHandle() override {
         return File.Get();
     }
+
+    void OnAsyncIoOperationCompletion(IAsyncIoOperation *) override {
+    }
 };
 
 std::unique_ptr<IAsyncIoContext> CreateAsyncIoContextReal(const TString &path, ui32 pDiskId, TDeviceMode::TFlags flags) {

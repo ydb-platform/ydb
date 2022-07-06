@@ -162,22 +162,6 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
         return false;
     }
 
-    // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
-    THashSet<TGenStep> genStepsWithBlobsToKeep;
-    for (const auto& unifiedBlobId : blobsToKeep) {
-        Y_VERIFY(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
-
-        TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
-        TGenStep genStep{blobId.Generation(), blobId.Step()};
-
-        Y_VERIFY(genStep > LastCollectedGenStep,
-            "Blob %s in keep queue is before last barrier (%" PRIu32 ":%" PRIu32 ")",
-            unifiedBlobId.ToStringNew().c_str(), std::get<0>(LastCollectedGenStep), std::get<1>(LastCollectedGenStep));
-
-        genStepsWithBlobsToKeep.insert(genStep);
-        BlobsToKeep.insert(blobId);
-    }
-
     for (const auto& unifiedBlobId : blobsToDelete) {
         if (unifiedBlobId.IsSmallBlob()) {
             SmallBlobsToDelete.insert(unifiedBlobId);
@@ -186,6 +170,28 @@ bool TBlobManager::LoadState(IBlobManagerDb& db) {
         } else {
             Y_FAIL("Unexpected blob id: %s", unifiedBlobId.ToStringNew().c_str());
         }
+    }
+
+    // Build the list of steps that cannot be garbage collected before Keep flag is set on the blobs
+    THashSet<TGenStep> genStepsWithBlobsToKeep;
+    for (const auto& unifiedBlobId : blobsToKeep) {
+        Y_VERIFY(unifiedBlobId.IsDsBlob(), "Not a DS blob id in Keep table: %s", unifiedBlobId.ToStringNew().c_str());
+
+        TLogoBlobID blobId = unifiedBlobId.GetLogoBlobId();
+        BlobsToKeep.insert(blobId);
+
+        // Keep + DontKeep (probably in different gen:steps)
+        // GC could go through it to a greater LastCollectedGenStep
+        if (BlobsToDelete.count(blobId)) {
+            continue;
+        }
+
+        TGenStep genStep{blobId.Generation(), blobId.Step()};
+        genStepsWithBlobsToKeep.insert(genStep);
+
+        Y_VERIFY(genStep > LastCollectedGenStep,
+            "Blob %s in keep queue is before last barrier (%" PRIu32 ":%" PRIu32 ")",
+            unifiedBlobId.ToStringNew().c_str(), std::get<0>(LastCollectedGenStep), std::get<1>(LastCollectedGenStep));
     }
 
     AllocatedGenSteps.clear();

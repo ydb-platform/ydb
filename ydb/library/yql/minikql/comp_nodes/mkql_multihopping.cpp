@@ -144,7 +144,8 @@ public:
                             bucket.Value = Self->OutLoad->GetValue(Ctx);
                         }
                     }
-                    StatesMap.emplace(key.Release(), std::move(keyState));
+                    StatesMap.emplace(key, std::move(keyState));
+                    key.Ref();
                 }
 
                 Finished = ReadBool(in);

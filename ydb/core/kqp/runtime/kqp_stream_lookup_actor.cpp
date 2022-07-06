@@ -39,6 +39,10 @@ public:
         Become(&TKqpStreamLookupActor::StateFunc);
     }
 
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::KQP_STREAM_LOOKUP_ACTOR;
+    }
+
 private:
     enum class EReadState {
         Initial,
@@ -108,6 +112,27 @@ private:
         };
     };
 
+    struct TTableScheme {
+        TTableScheme(const THashMap<ui32, TSysTables::TTableColumnInfo>& columns) {
+            std::map<ui32, NKikimr::NScheme::TTypeId> keyColumnTypesByKeyOrder;
+            for (const auto& [_, column] : columns) {
+                if (column.KeyOrder >= 0) {
+                    keyColumnTypesByKeyOrder[column.KeyOrder] = column.PType;
+                }
+
+                ColumnsByName.emplace(column.Name, std::move(column));
+            }
+
+            KeyColumnTypes.resize(keyColumnTypesByKeyOrder.size());
+            for (const auto& [keyOrder, keyColumnType] : keyColumnTypesByKeyOrder) {
+                KeyColumnTypes[keyOrder] = keyColumnType;
+            }
+        }
+
+        std::unordered_map<TString, TSysTables::TTableColumnInfo> ColumnsByName;
+        std::vector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+    };
+
 private:
     void SaveState(const NYql::NDqProto::TCheckpoint&, NYql::NDqProto::TSourceState&) final {}
     void LoadState(const NYql::NDqProto::TSourceState&) final {}
@@ -130,40 +155,19 @@ private:
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& batch, bool& finished, i64) final {
         i64 totalDataSize = 0;
 
-        for (; !Results.empty(); Results.pop_front()) {
-            const auto& result = Results.front();
-            YQL_ENSURE(result.size() == Columns.size(), "Result columns mismatch");
+        if (TableScheme) {
+            totalDataSize = PackResults(batch);
+            auto status = FetchLookupKeys();
 
-            NUdf::TUnboxedValue* rowItems = nullptr;
-            auto row = HolderFactory.CreateDirectArrayHolder(Columns.size(), rowItems);
-
-            for (ui32 colId = 0; colId < Columns.size(); ++colId) {
-                auto colIt = ColumnsByName.find(Columns[colId]);
-                YQL_ENSURE(colIt != ColumnsByName.end());
-                rowItems[colId] = NMiniKQL::GetCellValue(result[colId], colIt->second.PType);
-
-                totalDataSize += result[colId].Size();
+            if (Partitioning) {
+                ProcessLookupKeys();
             }
 
-            batch.push_back(std::move(row));
+            finished = (status == NUdf::EFetchStatus::Finish) && UnprocessedKeys.empty() && AllReadsFinished();
+        } else {
+            Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
 
-        NUdf::EFetchStatus status;
-        NUdf::TUnboxedValue key;
-        while ((status = Input.Fetch(key)) == NUdf::EFetchStatus::Ok) {
-            std::vector<TCell> keyCells(KeyPrefixColumns.size());
-            for (ui32 colId = 0; colId < KeyPrefixColumns.size(); ++colId) {
-                keyCells[colId] = MakeCell(KeyColumnTypes[colId], key.GetElement(colId), TypeEnv, /* copy */ true);
-            }
-
-            UnprocessedKeys.emplace_back(std::move(keyCells));
-        }
-
-        if (Partitioning) {
-            ProcessLookupKeys();
-        }
-
-        finished = (status == NUdf::EFetchStatus::Finish) && UnprocessedKeys.empty() && AllReadsFinished();
         return totalDataSize;
     }
 
@@ -208,20 +212,7 @@ private:
             return RuntimeError(TStringBuilder() << "Failed to resolve table: " << ToString(result.Status));
         }
 
-        std::map<ui32, NKikimr::NScheme::TTypeId> keyColumnTypesByKeyOrder;
-        for (const auto& [_, column] : result.Columns) {
-            if (column.KeyOrder >= 0) {
-                keyColumnTypesByKeyOrder[column.KeyOrder] = column.PType;
-            }
-
-            ColumnsByName.emplace(column.Name, std::move(column));
-        }
-
-        KeyColumnTypes.resize(keyColumnTypesByKeyOrder.size());
-        for (const auto& [keyOrder, keyColumnType] : keyColumnTypesByKeyOrder) {
-            KeyColumnTypes[keyOrder] = keyColumnType;
-        }
-
+        TableScheme = std::make_unique<TTableScheme>(result.Columns);
         ResolveTableShards();
     }
 
@@ -291,7 +282,7 @@ private:
     void Handle(TEvPrivate::TEvSchemeCacheRequestTimeout::TPtr& ev) {
         switch (ev->Get()->Tag) {
             case EEvSchemeCacheRequestTag::TableSchemeResolving:
-                if (ColumnsByName.empty()) {
+                if (!TableScheme) {
                     RuntimeError(TStringBuilder() << "Failed to resolve scheme for table: " << TableId
                         << " (request timeout exceeded)");
                 }
@@ -317,6 +308,49 @@ private:
         }
     }
 
+    ui64 PackResults(NKikimr::NMiniKQL::TUnboxedValueVector& batch) {
+        YQL_ENSURE(TableScheme);
+
+        ui64 totalSize = 0;
+        for (; !Results.empty(); Results.pop_front()) {
+            const auto& result = Results.front();
+            YQL_ENSURE(result.size() == Columns.size(), "Result columns mismatch");
+
+            NUdf::TUnboxedValue* rowItems = nullptr;
+            auto row = HolderFactory.CreateDirectArrayHolder(Columns.size(), rowItems);
+
+            for (ui32 colId = 0; colId < Columns.size(); ++colId) {
+                auto colIt = TableScheme->ColumnsByName.find(Columns[colId]);
+                YQL_ENSURE(colIt != TableScheme->ColumnsByName.end());
+                rowItems[colId] = NMiniKQL::GetCellValue(result[colId], colIt->second.PType);
+
+                totalSize += result[colId].Size();
+            }
+
+            batch.push_back(std::move(row));
+        }
+
+        return totalSize;
+    }
+
+    NUdf::EFetchStatus FetchLookupKeys() {
+        YQL_ENSURE(TableScheme);
+        YQL_ENSURE(KeyPrefixColumns.size() <= TableScheme->KeyColumnTypes.size());
+
+        NUdf::EFetchStatus status;
+        NUdf::TUnboxedValue key;
+        while ((status = Input.Fetch(key)) == NUdf::EFetchStatus::Ok) {
+            std::vector<TCell> keyCells(KeyPrefixColumns.size());
+            for (ui32 colId = 0; colId < KeyPrefixColumns.size(); ++colId) {
+                keyCells[colId] = MakeCell(TableScheme->KeyColumnTypes[colId], key.GetElement(colId), TypeEnv, /* copy */ true);
+            }
+
+            UnprocessedKeys.emplace_back(std::move(keyCells));
+        }
+
+        return status;
+    }
+
     void ProcessLookupKeys() {
         YQL_ENSURE(Partitioning, "Table partitioning should be initialized before lookup keys processing");
 
@@ -326,9 +360,9 @@ private:
             YQL_ENSURE(key.Point);
 
             std::vector<ui64> shardIds;
-            if (KeyPrefixColumns.size() < KeyColumnTypes.size()) {
+            if (KeyPrefixColumns.size() < TableScheme->KeyColumnTypes.size()) {
                 /* build range [[key_prefix, NULL, ..., NULL], [key_prefix, +inf, ..., +inf]) */
-                std::vector<TCell> fromCells(KeyColumnTypes.size());
+                std::vector<TCell> fromCells(TableScheme->KeyColumnTypes.size());
                 fromCells.insert(fromCells.begin(), key.From.begin(), key.From.end());
                 std::vector<TCell> toCells(key.From.begin(), key.From.end());
 
@@ -349,6 +383,7 @@ private:
     }
 
     std::vector<ui64> GetRangePartitioning(const TOwnedTableRange& range) {
+        YQL_ENSURE(TableScheme);
         YQL_ENSURE(Partitioning);
 
         auto it = LowerBound(Partitioning->begin(), Partitioning->end(), /* value */ true,
@@ -356,7 +391,7 @@ private:
                 const int result = CompareBorders<true, false>(
                     partition.Range->EndKeyPrefix.GetCells(), range.From,
                     partition.Range->IsInclusive || partition.Range->IsPoint,
-                    range.InclusiveFrom || range.Point, KeyColumnTypes
+                    range.InclusiveFrom || range.Point, TableScheme->KeyColumnTypes
                 );
 
                 return (result < 0);
@@ -376,7 +411,7 @@ private:
             auto cmp = CompareBorders<true, true>(
                 it->Range->EndKeyPrefix.GetCells(), range.To,
                 it->Range->IsInclusive || it->Range->IsPoint,
-                range.InclusiveTo || range.Point, KeyColumnTypes
+                range.InclusiveTo || range.Point, TableScheme->KeyColumnTypes
             );
 
             if (cmp >= 0) {
@@ -405,8 +440,8 @@ private:
         record.MutableTableId()->SetSchemaVersion(TableId.SchemaVersion);
 
         for (const auto& column : Columns) {
-            auto colIt = ColumnsByName.find(column);
-            YQL_ENSURE(colIt != ColumnsByName.end());
+            auto colIt = TableScheme->ColumnsByName.find(column);
+            YQL_ENSURE(colIt != TableScheme->ColumnsByName.end());
             record.AddColumns(colIt->second.Id);
         }
 
@@ -461,16 +496,17 @@ private:
     }
 
     void ResolveTableShards() {
+        YQL_ENSURE(TableScheme);
         Partitioning.reset();
 
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
 
-        TVector<TCell> minusInf(KeyColumnTypes.size());
+        TVector<TCell> minusInf(TableScheme->KeyColumnTypes.size());
         TVector<TCell> plusInf;
         TTableRange range(minusInf, true, plusInf, true, false);
 
         request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(TableId, range, TKeyDesc::ERowOperation::Read,
-            KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
+            TableScheme->KeyColumnTypes, TVector<TKeyDesc::TColumnOp>{}));
 
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvInvalidateTable(TableId, {}));
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -519,8 +555,7 @@ private:
     const IKqpGateway::TKqpSnapshot Snapshot;
     const std::vector<TString> KeyPrefixColumns;
     const std::vector<TString> Columns;
-    std::unordered_map<TString, TSysTables::TTableColumnInfo> ColumnsByName;
-    std::vector<NKikimr::NScheme::TTypeId> KeyColumnTypes;
+    std::unique_ptr<const TTableScheme> TableScheme;
     std::deque<TOwnedCellVec> Results;
     std::unordered_map<ui64, TReadState> Reads;
     std::unordered_map<ui64, std::set<ui64>> ReadsPerShard;

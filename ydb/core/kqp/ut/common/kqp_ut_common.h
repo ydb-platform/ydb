@@ -260,5 +260,7 @@ void CreateSampleTablesWithIndex(NYdb::NTable::TSession& session);
 // This method retries a simple query until it succeeds.
 void WaitForKqpProxyInit(const NYdb::TDriver& driver);
 
+void InitRoot(Tests::TServer::TPtr server, TActorId sender);
+
 } // namespace NKqp
 } // namespace NKikimr

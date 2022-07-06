@@ -45,52 +45,6 @@ TVector<NKikimrKqp::TKqpProxyNodeResources> Transform(TVector<TSimpleResource> d
     return result;
 }
 
-void InitRoot(Tests::TServer::TPtr server,
-              TActorId sender)
-{
-    if (server->GetSettings().StoragePoolTypes.empty()) {
-        return;
-    }
-
-    auto &runtime = *server->GetRuntime();
-    auto &settings = server->GetSettings();
-
-    auto tid = ChangeStateStorage(SchemeRoot, settings.Domain);
-    const TDomainsInfo::TDomain& domain = runtime.GetAppData().DomainsInfo->GetDomain(settings.Domain);
-
-    auto evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(1, tid);
-    auto transaction = evTx->Record.AddTransaction();
-    transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSubDomain);
-    transaction->SetWorkingDir("/");
-    auto op = transaction->MutableSubDomain();
-    op->SetName(domain.Name);
-
-    for (const auto& [kind, pool] : settings.StoragePoolTypes) {
-        auto* p = op->AddStoragePools();
-        p->SetKind(kind);
-        p->SetName(pool.GetName());
-    }
-
-    runtime.SendToPipe(tid, sender, evTx.Release(), 0, GetPipeConfigWithRetries());
-
-    {
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvModifySchemeTransactionResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetSchemeshardId(), tid);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetStatus(), NKikimrScheme::EStatus::StatusAccepted);
-    }
-
-    auto evSubscribe = MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(1);
-    runtime.SendToPipe(tid, sender, evSubscribe.Release(), 0, GetPipeConfigWithRetries());
-
-    {
-        TAutoPtr<IEventHandle> handle;
-        auto event = runtime.GrabEdgeEvent<TEvSchemeShard::TEvNotifyTxCompletionResult>(handle);
-        UNIT_ASSERT_VALUES_EQUAL(event->Record.GetTxId(), 1);
-    }
-}
-
-
 Y_UNIT_TEST_SUITE(KqpProxy) {
     Y_UNIT_TEST(CalcPeerStats) {
         auto getActiveWorkers = [](const NKikimrKqp::TKqpProxyNodeResources& entry) {

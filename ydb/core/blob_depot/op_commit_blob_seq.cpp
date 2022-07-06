@@ -6,7 +6,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev) {
         class TTxCommitBlobSeq : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> Request;
-            std::vector<std::pair<TString, NKikimrBlobDepot::TValue>> UpdateQ;
+            std::unique_ptr<IEventHandle> Response;
 
         public:
             TTxCommitBlobSeq(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCommitBlobSeq::THandle> request)
@@ -17,7 +17,13 @@ namespace NKikimr::NBlobDepot {
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 NIceDb::TNiceDb db(txc.DB);
 
+                NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
+                std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
+
                 for (const auto& item : Request->Get()->Record.GetItems()) {
+                    auto *responseItem = responseRecord->AddItems();
+                    responseItem->SetStatus(NKikimrProto::OK);
+
                     NKikimrBlobDepot::TValue value;
                     if (item.HasMeta()) {
                         value.SetMeta(item.GetMeta());
@@ -25,38 +31,35 @@ namespace NKikimr::NBlobDepot {
                     auto *chain = value.AddValueChain();
                     chain->MutableLocator()->CopyFrom(item.GetBlobLocator());
 
-                    TString valueData;
-                    const bool success = value.SerializeToString(&valueData);
-                    Y_VERIFY(success);
-
                     const TString& key = item.GetKey();
                     if (key.size() == 3 * sizeof(ui64)) {
                         const TLogoBlobID id(reinterpret_cast<const ui64*>(key.data()));
                         if (!Self->CheckBlobForBarrier(id)) {
-                            continue; // FIXME: report error somehow (?)
+                            responseItem->SetStatus(NKikimrProto::ERROR);
+                            responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << id << " is being put beyond the barrier");
+                            continue;
                         }
                     }
 
-                    db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
-                    UpdateQ.emplace_back(item.GetKey(), std::move(value));
-                }
-
-                return true;
-            }
-
-            void Complete(const TActorContext&) override {
-                auto [response, record] = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
-                for (auto& [key, value] : UpdateQ) {
                     Self->PutKey(std::move(key), {
                         .Meta = value.GetMeta(),
                         .ValueChain = std::move(*value.MutableValueChain()),
                         .KeepState = value.GetKeepState(),
                         .Public = value.GetPublic(),
                     });
-                    auto *responseItem = record->AddItems();
-                    responseItem->SetStatus(NKikimrProto::OK);
+
+                    TString valueData;
+                    const bool success = value.SerializeToString(&valueData);
+                    Y_VERIFY(success);
+
+                    db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
                 }
-                TActivationContext::Send(response.release());
+
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                TActivationContext::Send(Response.release());
             }
         };
 

@@ -23,7 +23,7 @@ namespace NKikimr::NBlobDepot {
         template<typename T>
         T& Obtain() {
             T *sp = static_cast<T*>(this);
-            Y_VERIFY_DEBUG(sp == dynamic_cast<T*>(this));
+            Y_VERIFY_DEBUG(sp && sp == dynamic_cast<T*>(this));
             return *sp;
         }
 
@@ -253,7 +253,6 @@ namespace NKikimr::NBlobDepot {
             };
 
             const NKikimrBlobDepot::TChannelKind::E Kind;
-            std::vector<std::pair<ui8, ui32>> ChannelGroups;
 
             bool IdAllocInFlight = false;
             std::deque<TAllocatedId> IdQ;
@@ -265,26 +264,26 @@ namespace NKikimr::NBlobDepot {
                 : Kind(kind)
             {}
 
-            std::optional<TCGSI> Allocate(TBlobDepotAgent& agent) {
+            std::optional<TBlobSeqId> Allocate(TBlobDepotAgent& agent) {
                 if (IdQ.empty()) {
                     return std::nullopt;
                 }
 
                 auto& item = IdQ.front();
-                auto cgsi = TCGSI::FromBinary(item.Generation, *this, item.Begin++);
+                auto blobSeqId = TBlobSeqId::FromBinary(item.Generation, *this, item.Begin++);
                 if (item.Begin == item.End) {
                     IdQ.pop_front();
                     agent.IssueAllocateIdsIfNeeded(*this);
                 }
 
-                return cgsi;
+                return blobSeqId;
             }
 
-            std::pair<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TCGSI& cgsi, EBlobType type, ui32 part,
+            std::pair<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TBlobSeqId& blobSeqId, EBlobType type, ui32 part,
                     ui32 size) const {
-                auto id = cgsi.MakeBlobId(agent.TabletId, type, part, size);
-                const auto [channel, groupId] = ChannelGroups[ChannelToIndex[cgsi.Channel]];
-                Y_VERIFY_DEBUG(channel == cgsi.Channel);
+                auto id = blobSeqId.MakeBlobId(agent.TabletId, type, part, size);
+                const auto [channel, groupId] = ChannelGroups[ChannelToIndex[blobSeqId.Channel]];
+                Y_VERIFY_DEBUG(channel == blobSeqId.Channel);
                 return {id, groupId};
             }
 

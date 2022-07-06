@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
 
     struct TChannelKind {
         std::array<ui8, 256> ChannelToIndex;
-        std::vector<ui8> IndexToChannel;
+        std::vector<std::pair<ui8, ui32>> ChannelGroups;
     };
 
 #pragma pack(push, 1)
@@ -27,7 +27,7 @@ namespace NKikimr::NBlobDepot {
         VG_GC_BLOB = 3, // garbage collection command
     };
 
-    struct TCGSI {
+    struct TBlobSeqId {
         static constexpr ui32 IndexBits = 20;
         static constexpr ui32 MaxIndex = (1 << IndexBits) - 1;
 
@@ -37,33 +37,38 @@ namespace NKikimr::NBlobDepot {
         ui32 Index = 0;
         
         auto AsTuple() const { return std::make_tuple(Channel, Generation, Step, Index); }
-        friend bool operator ==(const TCGSI& x, const TCGSI& y) { return x.AsTuple() == y.AsTuple(); }
-        friend bool operator !=(const TCGSI& x, const TCGSI& y) { return x.AsTuple() != y.AsTuple(); }
+        friend bool operator ==(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() == y.AsTuple(); }
+        friend bool operator !=(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() != y.AsTuple(); }
+
+        TString ToString() const {
+            return TStringBuilder() << "{" << Channel << ":" << Generation << ":" << Step << ":" << Index << "}";
+        }
 
         explicit operator bool() const {
-            return *this != TCGSI();
+            return *this != TBlobSeqId();
         }
 
         ui64 ToBinary(const TChannelKind& kind) const {
             Y_VERIFY_DEBUG(Index <= MaxIndex);
             Y_VERIFY(Channel < kind.ChannelToIndex.size());
-            return (static_cast<ui64>(Step) << IndexBits | Index) * kind.IndexToChannel.size() + kind.ChannelToIndex[Channel];
+            return (static_cast<ui64>(Step) << IndexBits | Index) * kind.ChannelGroups.size() + kind.ChannelToIndex[Channel];
         }
 
-        static TCGSI FromBinary(ui32 generation, const TChannelKind& kind, ui64 value) {
+        static TBlobSeqId FromBinary(ui32 generation, const TChannelKind& kind, ui64 value) {
             static_assert(sizeof(long long) >= sizeof(ui64));
-            auto res = std::lldiv(value, kind.IndexToChannel.size());
+            Y_VERIFY(!kind.ChannelGroups.empty());
+            auto res = std::lldiv(value, kind.ChannelGroups.size());
 
-            return TCGSI{
-                .Channel = kind.IndexToChannel[res.rem],
+            return TBlobSeqId{
+                .Channel = kind.ChannelGroups[res.rem].first,
                 .Generation = generation,
                 .Step = static_cast<ui32>(res.quot >> IndexBits),
                 .Index = static_cast<ui32>(res.quot) & MaxIndex
             };
         }
 
-        static TCGSI FromProto(const NKikimrBlobDepot::TBlobSeqId& proto) {
-            return TCGSI{
+        static TBlobSeqId FromProto(const NKikimrBlobDepot::TBlobSeqId& proto) {
+            return TBlobSeqId{
                 proto.GetChannel(),
                 proto.GetGeneration(),
                 proto.GetStep(),

@@ -39,29 +39,40 @@ namespace NKikimr::NBlobDepot {
                 : Data.lower_bound(*end);
 
             if (flags & EScanFlags::REVERSE) {
-                while (beginIt != endIt) {
+                if (beginIt != endIt) {
                     --endIt;
-                    if (!callback(endIt->first, endIt->second)) {
-                        break;
-                    }
+                    do {
+                        auto& current = *endIt--;
+                        if (!callback(current.first, current.second)) {
+                            break;
+                        }
+                    } while (beginIt != endIt);
                 }
             } else {
                 while (beginIt != endIt) {
-                    if (!callback(beginIt->first, beginIt->second)) {
+                    auto& current = *beginIt++;
+                    if (!callback(current.first, current.second)) {
                         break;
                     }
-                    ++beginIt;
                 }
             }
         }
 
-        void DeleteKeys(const std::vector<TString>& keysToDelete) {
-            for (const TString& key : keysToDelete) {
-                Data.erase(key);
-            }
+        void DeleteKey(TStringBuf key) {
+            Data.erase(TString(key));
         }
 
         void PutKey(TString key, TDataValue&& data) {
+            auto getKeyString = [&] {
+                if (Self->Config.GetOperationMode() == NKikimrBlobDepot::VirtualGroup) {
+                    return TLogoBlobID(reinterpret_cast<const ui64*>(key.data())).ToString();
+                } else {
+                    return key;
+                }
+            };
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "PutKey", (TabletId, Self->TabletID()), (Key, EscapeC(getKeyString())),
+                (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
+
             Data[std::move(key)] = std::move(data);
         }
 
@@ -77,21 +88,13 @@ namespace NKikimr::NBlobDepot {
             });
         }
 
-        std::optional<TString> UpdatesKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState) {
-            if (const auto it = Data.find(key); it != Data.end()) {
-                TDataValue value = it->second;
+        std::optional<TString> UpdateKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState) {
+            auto& value = Data[TString(key)];
+            if (value.KeepState < keepState) {
                 value.KeepState = keepState;
                 return ToValueProto(value);
             } else {
                 return std::nullopt;
-            }
-        }
-
-        void UpdateKeepState(const std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>>& data) {
-            for (const auto& [key, keepState] : data) {
-                auto& value = Data[std::move(key)];
-                Y_VERIFY_DEBUG(value.KeepState < keepState);
-                value.KeepState = keepState;
             }
         }
 
@@ -128,8 +131,8 @@ namespace NKikimr::NBlobDepot {
         return DataManager->ScanRange(begin, end, flags, callback);
     }
 
-    void TBlobDepot::DeleteKeys(const std::vector<TString>& keysToDelete) {
-        DataManager->DeleteKeys(keysToDelete);
+    void TBlobDepot::DeleteKey(TStringBuf key) {
+        DataManager->DeleteKey(key);
     }
 
     void TBlobDepot::PutKey(TString key, TDataValue&& data) {
@@ -140,12 +143,8 @@ namespace NKikimr::NBlobDepot {
         DataManager->AddDataOnLoad(std::move(key), std::move(value));
     }
 
-    std::optional<TString> TBlobDepot::UpdatesKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState) {
-        return DataManager->UpdatesKeepState(key, keepState);
-    }
-
-    void TBlobDepot::UpdateKeepState(const std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>>& data) {
-        DataManager->UpdateKeepState(data);
+    std::optional<TString> TBlobDepot::UpdateKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState) {
+        return DataManager->UpdateKeepState(key, keepState);
     }
 
 } // NKikimr::NBlobDepot

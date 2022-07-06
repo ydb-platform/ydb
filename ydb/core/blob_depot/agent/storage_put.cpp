@@ -7,7 +7,7 @@ namespace NKikimr::NBlobDepot {
         class TPutQuery : public TQuery {
             ui32 BlockChecksRemain = 3;
             ui32 PutsInFlight = 0;
-            TCGSI CGSI;
+            TBlobSeqId BlobSeqId;
             ui32 GroupId;
             ui64 TotalDataLen;
 
@@ -35,12 +35,14 @@ namespace NKikimr::NBlobDepot {
                 }
                 auto& kind = it->second;
 
-                std::optional<TCGSI> cgsi = kind.Allocate(Agent);
-                if (!cgsi) {
+                std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, GetQueryId()), (BlobSeqId, blobSeqId));
+                if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
 
-                CGSI = *cgsi;
+                BlobSeqId = *blobSeqId;
 
                 auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
                 const ui32 size = msg.Id.BlobSize();
@@ -64,15 +66,15 @@ namespace NKikimr::NBlobDepot {
                     // write single blob with footer
                     TString buffer = msg.Buffer;
                     buffer.append(footerData);
-                    std::tie(id, GroupId) = kind.MakeBlobId(Agent, CGSI, EBlobType::VG_COMPOSITE_BLOB, 0, buffer.size());
+                    std::tie(id, GroupId) = kind.MakeBlobId(Agent, BlobSeqId, EBlobType::VG_COMPOSITE_BLOB, 0, buffer.size());
                     sendPut(id, buffer);
                     ++PutsInFlight;
                 } else {
                     // write data blob and blob with footer
-                    std::tie(id, GroupId) = kind.MakeBlobId(Agent, CGSI, EBlobType::VG_DATA_BLOB, 0, msg.Buffer.size());
+                    std::tie(id, GroupId) = kind.MakeBlobId(Agent, BlobSeqId, EBlobType::VG_DATA_BLOB, 0, msg.Buffer.size());
                     sendPut(id, msg.Buffer);
 
-                    std::tie(id, GroupId) = kind.MakeBlobId(Agent, CGSI, EBlobType::VG_FOOTER_BLOB, 0, footerData.size());
+                    std::tie(id, GroupId) = kind.MakeBlobId(Agent, BlobSeqId, EBlobType::VG_FOOTER_BLOB, 0, footerData.size());
                     sendPut(id, TString(footerData));
 
                     PutsInFlight += 2;
@@ -117,7 +119,7 @@ namespace NKikimr::NBlobDepot {
                     item->SetKey(key.data(), key.size());
                     auto *locator = item->MutableBlobLocator();
                     locator->SetGroupId(GroupId);
-                    CGSI.ToProto(locator->MutableBlobSeqId());
+                    BlobSeqId.ToProto(locator->MutableBlobSeqId());
                     locator->SetChecksum(0);
                     locator->SetTotalDataLen(TotalDataLen);
                     locator->SetFooterLen(sizeof(TVirtualGroupBlobFooter));

@@ -112,28 +112,32 @@ namespace NKikimr::NBlobDepot {
         }
 
         STFUNC(StateWork) {
-            switch (const ui32 type = ev->GetTypeRewrite()) {
-                cFunc(TEvents::TSystem::Poison, HandlePoison);
+            try {
+                switch (const ui32 type = ev->GetTypeRewrite()) {
+                    cFunc(TEvents::TSystem::Poison, HandlePoison);
 
-                hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
-                hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
-                hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
-                hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
-                hFunc(TEvBlobDepot::TEvResolve, Handle);
+                    hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
+                    hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
+                    hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
+                    hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
+                    hFunc(TEvBlobDepot::TEvResolve, Handle);
 
-                hFunc(TEvBlobDepot::TEvBlock, Handle);
-                hFunc(TEvBlobDepot::TEvQueryBlocks, Handle);
+                    hFunc(TEvBlobDepot::TEvBlock, Handle);
+                    hFunc(TEvBlobDepot::TEvQueryBlocks, Handle);
 
-                hFunc(TEvBlobDepot::TEvCollectGarbage, Handle);
+                    hFunc(TEvBlobDepot::TEvCollectGarbage, Handle);
 
-                hFunc(TEvTabletPipe::TEvServerConnected, Handle);
-                hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
+                    hFunc(TEvTabletPipe::TEvServerConnected, Handle);
+                    hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 
-                default:
-                    if (!HandleDefaultEvents(ev, ctx)) {
-                        Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
-                    }
-                    break;
+                    default:
+                        if (!HandleDefaultEvents(ev, ctx)) {
+                            Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
+                        }
+                        break;
+                }
+            } catch (...) {
+                Y_FAIL_S("unexpected exception# " << CurrentExceptionMessage());
             }
         }
 
@@ -215,11 +219,10 @@ namespace NKikimr::NBlobDepot {
         std::optional<TDataValue> FindKey(TStringBuf key);
         void ScanRange(const std::optional<TStringBuf>& begin, const std::optional<TStringBuf>& end, TScanFlags flags,
             const std::function<bool(TStringBuf, const TDataValue&)>& callback);
-        void DeleteKeys(const std::vector<TString>& keysToDelete);
+        void DeleteKey(TStringBuf key);
         void PutKey(TString key, TDataValue&& data);
         void AddDataOnLoad(TString key, TString value);
-        std::optional<TString> UpdatesKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState);
-        void UpdateKeepState(const std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>>& data);
+        std::optional<TString> UpdateKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState);
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);

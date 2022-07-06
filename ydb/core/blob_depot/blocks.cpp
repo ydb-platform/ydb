@@ -46,6 +46,11 @@ namespace NKikimr::NBlobDepot {
                 if (BlockedGeneration <= block.BlockedGeneration) {
                     Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.SetStatus(NKikimrProto::ALREADY);
                 } else {
+                    // update block value in memory
+                    auto& block = Self->BlocksManager->Blocks[TabletId];
+                    block.BlockedGeneration = BlockedGeneration;
+
+                    // and persist it
                     NIceDb::TNiceDb db(txc.DB);
                     db.Table<Schema::Blocks>().Key(TabletId).Update(
                         NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(BlockedGeneration),
@@ -60,11 +65,6 @@ namespace NKikimr::NBlobDepot {
                 if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                     TActivationContext::Send(Response.release());
                 } else {
-                    // update block value in memory
-                    auto& block = Self->BlocksManager->Blocks[TabletId];
-                    Y_VERIFY(block.BlockedGeneration < BlockedGeneration);
-                    block.BlockedGeneration = BlockedGeneration;
-
                     Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, std::move(Response));
                 }
             }
@@ -142,10 +142,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void IssueBlocksToStorage() {
-                TTabletStorageInfo *info = Self->Info();
                 for (const auto& [_, kind] : Self->ChannelKinds) {
-                    for (const ui8 channel : kind.IndexToChannel) {
-                        const ui32 groupId = info->GroupFor(channel, Self->Executor()->Generation());
+                    for (const auto& [channel, groupId] : kind.ChannelGroups) {
+                        // FIXME: consider previous group generations (because agent can write in obsolete tablet generation)
+                        // !!!!!!!!!!!
                         SendBlock(groupId);
                         ++BlocksPending;
                         RetryCount += 2;

@@ -28,8 +28,6 @@ namespace NKikimr::NBlobDepot {
             int KeepIndex = 0;
             int DoNotKeepIndex = 0;
             ui32 NumKeysProcessed = 0;
-            std::vector<TString> KeysToDelete;
-            std::vector<std::pair<TString, NKikimrBlobDepot::EKeepState>> KeepStateUpdates;
             bool Done = false;
 
             static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
@@ -55,13 +53,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                Self->DeleteKeys(KeysToDelete);
-                Self->UpdateKeepState(KeepStateUpdates);
-
                 if (Done || Error) {
-                    if (Done) {
-                        ApplyBarrier();
-                    }
                     auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId(),
                         Error ? NKikimrProto::ERROR : NKikimrProto::OK, std::move(Error));
                     TActivationContext::Send(response.release());
@@ -109,8 +101,7 @@ namespace NKikimr::NBlobDepot {
                 for (; index < items.size() && NumKeysProcessed < MaxKeysToProcessAtOnce; ++index) {
                     const auto id = LogoBlobIDFromLogoBlobID(items[index]);
                     const TStringBuf key = id.AsBinaryString();
-                    if (const auto& value = Self->UpdatesKeepState(key, state)) {
-                        KeepStateUpdates.emplace_back(key, state);
+                    if (const auto& value = Self->UpdateKeepState(key, state)) {
                         db.Table<Schema::Data>().Key(TString(key)).Update<Schema::Data::Value>(*value);
                         ++NumKeysProcessed;
                     }
@@ -132,37 +123,24 @@ namespace NKikimr::NBlobDepot {
 
                     auto processKey = [&](TStringBuf key, const TDataValue& value) {
                         if (value.KeepState != NKikimrBlobDepot::EKeepState::Keep || hard) {
+                            const TLogoBlobID id(reinterpret_cast<const ui64*>(key.data()));
+                            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "DeleteKey", (TabletId, Self->TabletID()),
+                                (BlobId, id));
                             db.Table<Schema::Data>().Key(TString(key)).Delete();
-                            KeysToDelete.emplace_back(key);
+                            Self->DeleteKey(key);
                             ++NumKeysProcessed;
                         }
 
                         return NumKeysProcessed < MaxKeysToProcessAtOnce;
                     };
 
-                    Self->ScanRange(first.AsBinaryString(), last.AsBinaryString(), EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END,
-                        processKey);
+                    Self->ScanRange(first.AsBinaryString(), last.AsBinaryString(),
+                        EScanFlags::INCLUDE_BEGIN | EScanFlags::INCLUDE_END, processKey);
 
                     if (NumKeysProcessed == MaxKeysToProcessAtOnce) {
                         return false;
                     }
 
-                    auto row = db.Table<Schema::Barriers>().Key(record.GetTabletId(), record.GetChannel());
-                    const ui64 collectGenStep = GenStep(record.GetCollectGeneration(), record.GetCollectStep());
-                    if (record.GetHard()) {
-                        row.Update<Schema::Barriers::Hard>(collectGenStep);
-                    } else {
-                        row.Update<Schema::Barriers::Soft>(collectGenStep);
-                    }
-                    row.Update<Schema::Barriers::LastRecordGenStep>(GenStep(record.GetGeneration(), record.GetPerGenerationCounter()));
-                }
-
-                return true;
-            }
-
-            void ApplyBarrier() {
-                const auto& record = Request->Get()->Record;
-                if (record.HasCollectGeneration() && record.HasCollectStep()) {
                     const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
                     auto& barriers = Self->GarbageCollectionManager->Barriers;
                     auto& barrier = barriers[key];
@@ -173,7 +151,15 @@ namespace NKikimr::NBlobDepot {
                     barrier.LastRecordGenStep = recordGenStep;
                     Y_VERIFY(currentGenStep <= collectGenStep);
                     currentGenStep = collectGenStep;
+
+                    db.Table<Schema::Barriers>().Key(record.GetTabletId(), record.GetChannel()).Update(
+                        NIceDb::TUpdate<Schema::Barriers::LastRecordGenStep>(recordGenStep),
+                        NIceDb::TUpdate<Schema::Barriers::Soft>(barrier.Soft),
+                        NIceDb::TUpdate<Schema::Barriers::Hard>(barrier.Hard)
+                    );
                 }
+
+                return true;
             }
         };
 

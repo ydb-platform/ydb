@@ -67,13 +67,13 @@ namespace NKikimr::NBlobDepot {
 
             const ui64 partSize = Min(size ? size : Max<ui64>(), partLen - offset);
 
-            auto cgsi = TCGSI::FromProto(locator.GetBlobSeqId());
+            auto blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
 
             if (vg) {
                 const bool composite = totalDataLen + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize;
                 const EBlobType type = composite ? EBlobType::VG_COMPOSITE_BLOB : EBlobType::VG_DATA_BLOB;
                 const ui32 blobSize = totalDataLen + (composite ? sizeof(TVirtualGroupBlobFooter) : 0);
-                const auto id = cgsi.MakeBlobId(TabletId, type, 0, blobSize);
+                const auto id = blobSeqId.MakeBlobId(TabletId, type, 0, blobSize);
                 items.push_back(TReadItem{locator.GetGroupId(), id, static_cast<ui32>(offset + begin),
                     static_cast<ui32>(partSize), outputOffset});
             } else {

@@ -48,10 +48,10 @@ namespace NKikimr::NBlobDepot {
         for (const auto& [k, v] : ChannelKinds) {
             auto *proto = record->AddChannelKinds();
             proto->SetChannelKind(k);
-            for (const ui32 channel : v.IndexToChannel) {
+            for (const auto& [channel, groupId] : v.ChannelGroups) {
                 auto *cg = proto->AddChannelGroups();
                 cg->SetChannel(channel);
-                cg->SetGroupId(Info()->Channels[channel].History.back().GroupID);
+                cg->SetGroupId(groupId);
             }
         }
 
@@ -94,20 +94,22 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::InitChannelKinds() {
+        TTabletStorageInfo *info = Info();
+        const ui32 generation = Executor()->Generation();
+
         ui32 channel = 0;
         for (const auto& profile : Config.GetChannelProfiles()) {
             for (ui32 i = 0, count = profile.GetCount(); i < count; ++i, ++channel) {
                 if (channel >= 2) {
                     const auto kind = profile.GetChannelKind();
                     auto& p = ChannelKinds[kind];
-                    const ui32 indexWithinKind = p.IndexToChannel.size();
-                    p.IndexToChannel.push_back(channel);
-                    p.ChannelToIndex[indexWithinKind] = channel;
+                    p.ChannelToIndex[channel] = p.ChannelGroups.size();
+                    p.ChannelGroups.emplace_back(channel, info->GroupFor(channel, generation));
                 }
             }
         }
         for (auto& [k, v] : ChannelKinds) {
-            v.NextBlobSeqId = TCGSI{v.IndexToChannel.front(), Executor()->Generation(), 1, 0}.ToBinary(v);
+            v.NextBlobSeqId = TBlobSeqId{v.ChannelGroups.front().first, generation, 1, 0}.ToBinary(v);
         }
     }
 

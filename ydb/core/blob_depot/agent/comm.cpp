@@ -27,25 +27,34 @@ namespace NKikimr::NBlobDepot {
             (Msg, msg));
         Registered = true;
         BlobDepotGeneration = msg.GetGeneration();
-        THashSet<NKikimrBlobDepot::TChannelKind::E> allKinds;
+
+        THashSet<NKikimrBlobDepot::TChannelKind::E> vanishedKinds;
         for (const auto& [kind, _] : ChannelKinds) {
-            allKinds.insert(kind);
+            vanishedKinds.insert(kind);
         }
-        for (const auto& kind : msg.GetChannelKinds()) {
-            auto& v = ChannelKinds.emplace(kind.GetChannelKind(), kind.GetChannelKind()).first->second;
-            allKinds.erase(v.Kind);
+
+        for (const auto& ch : msg.GetChannelKinds()) {
+            const NKikimrBlobDepot::TChannelKind::E kind = ch.GetChannelKind();
+            vanishedKinds.erase(kind);
+
+            auto [it, inserted] = ChannelKinds.try_emplace(kind, kind);
+            auto& v = it->second;
+
+            v.ChannelToIndex.fill(0);
             v.ChannelGroups.clear();
-            v.IndexToChannel.clear();
-            for (const auto& channelGroup : kind.GetChannelGroups()) {
+
+            for (const auto& channelGroup : ch.GetChannelGroups()) {
                 const ui8 channel = channelGroup.GetChannel();
                 const ui32 groupId = channelGroup.GetGroupId();
+                v.ChannelToIndex[channel] = v.ChannelGroups.size();
                 v.ChannelGroups.emplace_back(channel, groupId);
-                v.ChannelToIndex[channel] = v.IndexToChannel.size();
-                v.IndexToChannel.push_back(channel);
             }
+
             IssueAllocateIdsIfNeeded(v);
         }
-        for (const auto& kind : allKinds) {
+
+        for (const NKikimrBlobDepot::TChannelKind::E kind : vanishedKinds) {
+            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA05, "kind vanished", (VirtualGroupId, VirtualGroupId), (Kind, kind));
             ChannelKinds.erase(kind);
         }
     }
@@ -64,16 +73,17 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg) {
+        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA06, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
+            (Msg, msg));
+
         auto& allocateIdsContext = context->Obtain<TAllocateIdsContext>();
         const auto it = ChannelKinds.find(allocateIdsContext.ChannelKind);
-        Y_VERIFY(it != ChannelKinds.end());
+        Y_VERIFY_S(it != ChannelKinds.end(), "Kind# " << NKikimrBlobDepot::TChannelKind::E_Name(allocateIdsContext.ChannelKind));
         auto& kind = it->second;
 
         Y_VERIFY(kind.IdAllocInFlight);
         kind.IdAllocInFlight = false;
 
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA06, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
-            (Msg, msg));
         Y_VERIFY(msg.GetChannelKind() == allocateIdsContext.ChannelKind);
         Y_VERIFY(msg.GetGeneration() == BlobDepotGeneration);
 

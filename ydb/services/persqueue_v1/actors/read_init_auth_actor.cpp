@@ -50,7 +50,7 @@ void TReadInitAndAuthActor::DescribeTopics(const NActors::TActorContext& ctx, bo
     }
 
     //LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " describe topics: " << JoinSeq(", ", topicNames));
-    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, showPrivate));
+    ctx.Send(MetaCacheId, new TEvDescribeTopicsRequest(topics, true, showPrivate));
 }
 
 void TReadInitAndAuthActor::Die(const TActorContext& ctx) {

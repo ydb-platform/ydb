@@ -1,0 +1,1 @@
+#define GIT_HEAD_ID "isl-0.23-61-g24e8cd12"

@@ -6,6 +6,31 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(strings-internal-str_format)
+target_compile_options(strings-internal-str_format PRIVATE
+  -DNOMINMAX
+  -Wno-everything
+)
+target_include_directories(strings-internal-str_format PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
+)
+target_link_libraries(strings-internal-str_format PUBLIC
+  contrib-libs-cxxsupp
+  abseil-cpp-absl-base
+  base-internal-raw_logging
+  base-internal-spinlock_wait
+  base-internal-throw_delegate
+  absl-base-log_severity
+  abseil-cpp-absl-numeric
+  abseil-cpp-absl-strings
+  strings-internal-absl_strings_internal
+)
+target_sources(strings-internal-str_format PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/arg.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/bind.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/extension.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/float_conversion.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/output.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/str_format/parser.cc
+)

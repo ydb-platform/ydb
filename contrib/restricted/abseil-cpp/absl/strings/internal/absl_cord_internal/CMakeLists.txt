@@ -6,6 +6,31 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(strings-internal-absl_cord_internal)
+target_compile_options(strings-internal-absl_cord_internal PRIVATE
+  -DNOMINMAX
+  -Wno-everything
+)
+target_include_directories(strings-internal-absl_cord_internal PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
+)
+target_link_libraries(strings-internal-absl_cord_internal PUBLIC
+  contrib-libs-cxxsupp
+  abseil-cpp-absl-base
+  base-internal-raw_logging
+  base-internal-spinlock_wait
+  base-internal-throw_delegate
+  absl-base-log_severity
+  abseil-cpp-absl-numeric
+  abseil-cpp-absl-strings
+  strings-internal-absl_strings_internal
+)
+target_sources(strings-internal-absl_cord_internal PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_internal.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_btree.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_btree_navigator.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_btree_reader.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_consume.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/strings/internal/cord_rep_ring.cc
+)

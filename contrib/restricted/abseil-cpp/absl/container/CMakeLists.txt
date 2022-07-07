@@ -6,6 +6,5 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(abseil-cpp-absl-container INTERFACE)

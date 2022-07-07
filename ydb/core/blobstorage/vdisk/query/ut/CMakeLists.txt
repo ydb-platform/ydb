@@ -8,6 +8,6 @@
 
 if (APPLE)
   include(CMakeLists.darwin.txt)
-elseif (UNIX AND NOT APPLE)
+elseif (UNIX)
   include(CMakeLists.linux.txt)
 endif()

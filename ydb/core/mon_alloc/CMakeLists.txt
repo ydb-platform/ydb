@@ -11,6 +11,7 @@ add_library(ydb-core-mon_alloc)
 target_link_libraries(ydb-core-mon_alloc PUBLIC
   contrib-libs-cxxsupp
   yutil
+  libs-tcmalloc-malloc_extension
   cpp-actors-core
   cpp-actors-prof
   cpp-html-pcdata
@@ -26,5 +27,5 @@ target_sources(ydb-core-mon_alloc PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/monitor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/profiler.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/stats.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/tcmalloc_null.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mon_alloc/tcmalloc.cpp
 )

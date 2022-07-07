@@ -6,6 +6,27 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(absl-random-absl_random_distributions)
+target_compile_options(absl-random-absl_random_distributions PRIVATE
+  -DNOMINMAX
+  -Wno-everything
+)
+target_include_directories(absl-random-absl_random_distributions PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp
+)
+target_link_libraries(absl-random-absl_random_distributions PUBLIC
+  contrib-libs-cxxsupp
+  abseil-cpp-absl-base
+  base-internal-raw_logging
+  base-internal-spinlock_wait
+  base-internal-throw_delegate
+  absl-base-log_severity
+  abseil-cpp-absl-numeric
+  abseil-cpp-absl-strings
+  strings-internal-absl_strings_internal
+)
+target_sources(absl-random-absl_random_distributions PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/random/discrete_distribution.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp/absl/random/gaussian_distribution.cc
+)

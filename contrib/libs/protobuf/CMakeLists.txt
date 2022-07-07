@@ -107,6 +107,50 @@ target_sources(contrib-libs-protobuf PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/wire_format_lite.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/wrappers.pb.cc
 )
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/any.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/any.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/api.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/api.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/descriptor.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/descriptor.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/duration.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/duration.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/empty.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/empty.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/field_mask.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/field_mask.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/source_context.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/source_context.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/struct.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/struct.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/timestamp.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/timestamp.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/type.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/type.proto
+)
+copy_file(
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src/google/protobuf/wrappers.proto
+  ${CMAKE_BINARY_DIR}/contrib/libs/protobuf/src/google/protobuf/wrappers.proto
+)
 
 add_global_library_for(contrib-libs-protobuf.global contrib-libs-protobuf)
 target_compile_options(contrib-libs-protobuf.global PRIVATE

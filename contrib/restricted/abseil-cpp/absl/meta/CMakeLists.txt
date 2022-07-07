@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(abseil-cpp-absl-meta INTERFACE)
+target_link_libraries(abseil-cpp-absl-meta INTERFACE
+  abseil-cpp-absl-base
+)

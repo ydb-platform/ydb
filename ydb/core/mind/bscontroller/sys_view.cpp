@@ -262,9 +262,6 @@ public:
             }
         }
 
-        auto pdiskFilterCountersToDelete = std::exchange(PDiskFilterCounters, {});
-        auto erasureCountersToDelete = std::exchange(ErasureCounters, {});
-
         using T = std::decay_t<decltype(State.PDisks)>::value_type;
         std::unordered_map<TBlobStorageController::TBoxId, std::vector<const T*>> boxes;
         for (const auto& kv : State.PDisks) {
@@ -356,6 +353,7 @@ public:
                 while (reserve >= 2) {
                     groupSizes.pop_front();
                     groupSizes.pop_back();
+                    reserve -= 2;
                 }
                 if (reserve) {
                     groupSizes.pop_front();
@@ -365,7 +363,13 @@ public:
                 entry.SetAvailableSizeToCreate(entry.GetAvailableSizeToCreate() + std::accumulate(groupSizes.begin(),
                     groupSizes.end(), ui64(0)));
             }
+        }
 
+        // Update counters
+        auto pdiskFilterCountersToDelete = std::exchange(PDiskFilterCounters, {});
+        auto erasureCountersToDelete = std::exchange(ErasureCounters, {});
+
+        for (auto& entry : v) {
             auto g = Counters->GetSubgroup("subsystem", "storage_stats");
 
             PDiskFilterCounters.emplace(entry.GetPDiskFilter());

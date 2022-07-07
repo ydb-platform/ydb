@@ -68,8 +68,9 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx,
     domainPtr->UpdateSecurityState(LoginProvider.GetSecurityState());
 
     TTabletId sysViewProcessorId = domainPtr->GetTenantSysViewProcessorID();
-    SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector(
-        GetDomainKey(subDomainPathId), sysViewProcessorId ? sysViewProcessorId.GetValue() : 0).Release());
+    auto evInit = MakeHolder<NSysView::TEvSysView::TEvInitPartitionStatsCollector>(
+        GetDomainKey(subDomainPathId), sysViewProcessorId ? sysViewProcessorId.GetValue() : 0);
+    Send(SysPartitionStatsCollector, evInit.Release());
 
     Execute(CreateTxInitPopulator(std::move(delayPublications)), ctx);
 
@@ -3289,7 +3290,7 @@ void TSchemeShard::PersistRemoveTable(NIceDb::TNiceDb& db, TPathId pathId, const
     Tables.erase(pathId);
     DecrementPathDbRefCount(pathId, "remove table");
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && SysPartitionStatsCollector) {
+    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
         auto ev = MakeHolder<NSysView::TEvSysView::TEvRemoveTable>(GetDomainKey(pathId), pathId);
         Send(SysPartitionStatsCollector, ev.Release());
     }
@@ -3829,6 +3830,8 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, "SchemeShard_AllowServerlessStorageBilling");
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(CollectTxAllocators(appData)));
+
+    SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
     SplitSettings.Register(appData->Icb);
 
@@ -5827,7 +5830,7 @@ bool TSchemeShard::FillUniformPartitioning(TVector<TString>& rangeEnds, ui32 key
 void TSchemeShard::SetPartitioning(TPathId pathId, TOlapStoreInfo::TPtr storeInfo) {
     const TVector<TShardIdx>& partitioning = storeInfo->ColumnShards;
 
-    if (AppData()->FeatureFlags.GetEnableSystemViews() && SysPartitionStatsCollector) {
+    if (AppData()->FeatureFlags.GetEnableSystemViews()) {
         TVector<std::pair<ui64, ui64>> shardIndices;
         shardIndices.reserve(partitioning.size());
         for (auto& shardIdx : partitioning) {
@@ -5853,9 +5856,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         auto path = TPath::Init(pathId, this);
         auto ev = MakeHolder<NSysView::TEvSysView::TEvSetPartitioning>(GetDomainKey(pathId), pathId, path.PathString());
         ev->ShardIndices.swap(shardIndices);
-        if (SysPartitionStatsCollector) {
-            Send(SysPartitionStatsCollector, ev.Release());
-        }
+        Send(SysPartitionStatsCollector, ev.Release());
     }
 
     if (!tableInfo->IsBackup) {

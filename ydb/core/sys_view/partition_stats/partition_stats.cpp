@@ -23,27 +23,20 @@ public:
         return NKikimrServices::TActivity::SYSTEM_VIEW_PART_STATS_COLLECTOR;
     }
 
-    explicit TPartitionStatsCollector(TPathId domainKey, ui64 sysViewProcessorId,
-        size_t batchSize, size_t pendingRequestsLimit)
-        : DomainKey(domainKey)
-        , SysViewProcessorId(sysViewProcessorId)
-        , BatchSize(batchSize)
+    explicit TPartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
+        : BatchSize(batchSize)
         , PendingRequestsLimit(pendingRequestsLimit)
     {}
 
     void Bootstrap() {
-        SVLOG_D("NSysView::TPartitionStatsCollector bootstrapped: "
-            << "domain key# " << DomainKey
-            << ", sysview processor id# " << SysViewProcessorId);
+        SVLOG_D("NSysView::TPartitionStatsCollector bootstrapped");
 
         if (AppData()->UsePartitionStatsCollectorForTests) {
             OverloadedPartitionBound = 0.0;
             ProcessOverloadedInterval = TDuration::Seconds(1);
         }
 
-        if (SysViewProcessorId) {
-            Schedule(ProcessOverloadedInterval, new TEvPrivate::TEvProcessOverloaded);
-        }
+        Schedule(ProcessOverloadedInterval, new TEvPrivate::TEvProcessOverloaded);
 
         Become(&TThis::StateWork);
     }
@@ -57,6 +50,7 @@ public:
             hFunc(TEvSysView::TEvGetPartitionStats, Handle);
             hFunc(TEvPrivate::TEvProcess, Handle);
             hFunc(TEvPrivate::TEvProcessOverloaded, Handle);
+            hFunc(TEvSysView::TEvInitPartitionStatsCollector, Handle);
             IgnoreFunc(TEvPipeCache::TEvDeliveryProblem);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
@@ -343,11 +337,11 @@ private:
     }
 
     void Handle(TEvPrivate::TEvProcessOverloaded::TPtr&) {
+        Schedule(ProcessOverloadedInterval, new TEvPrivate::TEvProcessOverloaded);
+
         if (!SysViewProcessorId) {
             return;
         }
-
-        Schedule(ProcessOverloadedInterval, new TEvPrivate::TEvProcessOverloaded);
 
         auto domainFound = DomainTables.find(DomainKey);
         if (domainFound == DomainTables.end()) {
@@ -409,6 +403,15 @@ private:
             new TEvPipeCache::TEvForward(sendEvent.Release(), SysViewProcessorId, true));
     }
 
+    void Handle(TEvSysView::TEvInitPartitionStatsCollector::TPtr& ev) {
+        DomainKey = ev->Get()->DomainKey;
+        SysViewProcessorId = ev->Get()->SysViewProcessorId;
+
+        SVLOG_I("NSysView::TPartitionStatsCollector initialized: "
+            << "domain key# " << DomainKey
+            << ", sysview processor id# " << SysViewProcessorId);
+    }
+
     void PassAway() override {
         Send(MakePipePeNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         TBase::PassAway();
@@ -419,10 +422,11 @@ private:
     }
 
 private:
-    const TPathId DomainKey;
-    const ui64 SysViewProcessorId;
     const size_t BatchSize;
     const size_t PendingRequestsLimit;
+
+    TPathId DomainKey;
+    ui64 SysViewProcessorId = 0;
 
     double OverloadedPartitionBound = 0.7;
     TDuration ProcessOverloadedInterval = TDuration::Seconds(15);
@@ -443,11 +447,9 @@ private:
     bool ProcessInFly = false;
 };
 
-THolder<IActor> CreatePartitionStatsCollector(
-    TPathId domainKey, ui64 sysViewProcessorId, size_t batchSize, size_t pendingRequestsLimit)
+THolder<IActor> CreatePartitionStatsCollector(size_t batchSize, size_t pendingRequestsLimit)
 {
-    return MakeHolder<TPartitionStatsCollector>(
-        domainKey, sysViewProcessorId, batchSize, pendingRequestsLimit);
+    return MakeHolder<TPartitionStatsCollector>(batchSize, pendingRequestsLimit);
 }
 
 

@@ -9,8 +9,6 @@ constexpr size_t STATS_COLLECTOR_BATCH_SIZE = 5000;
 constexpr size_t STATS_COLLECTOR_QUEUE_SIZE_LIMIT = 10;
 
 THolder<IActor> CreatePartitionStatsCollector(
-    TPathId domainKey,
-    ui64 sysViewProcessorId,
     size_t batchSize = STATS_COLLECTOR_BATCH_SIZE,
     size_t pendingRequestsCount = STATS_COLLECTOR_QUEUE_SIZE_LIMIT);
 

@@ -451,7 +451,7 @@ struct TSchemeShard::TTxScheduleConditionalErase : public TTransactionBase<TSche
         LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxScheduleConditionalErase Complete"
             << ": at schemeshard: " << Self->TabletID());
 
-        if (StatsCollectorEv && Self->SysPartitionStatsCollector) {
+        if (StatsCollectorEv) {
             ctx.Send(Self->SysPartitionStatsCollector, StatsCollectorEv.Release());
         }
 

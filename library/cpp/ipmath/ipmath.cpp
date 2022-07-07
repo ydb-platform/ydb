@@ -135,7 +135,7 @@ TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder
 
 TIpAddressRange::TIpAddressRangeBuilder& TIpAddressRange::TIpAddressRangeBuilder::To(TIpv6Address to) {
     Y_ENSURE_EX(IsValid(to), TInvalidIpRangeException() << "Address " << to.ToString() << " is invalid");
-    Start_ = to;
+    End_ = to;
     return *this;
 }
 

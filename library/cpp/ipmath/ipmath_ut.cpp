@@ -188,6 +188,14 @@ public:
         ASSERT_THAT(range.Size(), Eq(256));
     }
 
+    void IpRangeFromIpv4BuilderFromTIpv6Address() {
+        const auto s = TIpv6Address::FromString("192.168.0.0");
+        const auto e = TIpv6Address::FromString("192.168.0.255");
+        auto range = TIpAddressRange::From(s).To(e).Build();
+
+        ASSERT_THAT(range.Size(), Eq(256));
+    }
+
     void IpRangeFromInvalidIpv4() {
         auto build = [] (auto from, auto to) {
             return TIpAddressRange::From(from).To(to).Build();

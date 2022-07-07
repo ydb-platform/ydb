@@ -193,7 +193,7 @@ TRowState TCdcStreamChangeCollector::PatchState(const TRowState& oldState, ERowO
             auto it = updates.find(tag);
             if (it != updates.end()) {
                 newState.Set(pos, it->second.Op, it->second.AsCell());
-            } else if (rop == ERowOp::Upsert) {
+            } else if (rop == ERowOp::Upsert && oldState.GetRowState() != ERowOp::Erase) {
                 newState.Set(pos, oldState.GetCellOp(pos), oldState.Get(pos));
             } else {
                 newState.Set(pos, ECellOp::Null, TCell());
@@ -222,10 +222,6 @@ void TCdcStreamChangeCollector::Persist(const TTableId& tableId, const TPathId& 
         TArrayRef<const TRawTypeValue> key, TArrayRef<const TTag> keyTags,
         const TRowState* oldState, const TRowState* newState, TArrayRef<const TTag> valueTags)
 {
-    if (!oldState && !newState) {
-        return;
-    }
-
     NKikimrChangeExchange::TChangeRecord::TDataChange body;
     Serialize(body, rop, key, keyTags, oldState, newState, valueTags);
     TBaseChangeCollector::Persist(tableId, pathId, TChangeRecord::EKind::CdcDataChange, body);

@@ -168,10 +168,11 @@ TExprBase KqpApplyExtractMembersToLookupTable(TExprBase node, TExprContext& ctx,
         return node;
     }
 
-    if (auto maybeIndexLookup = lookup.Maybe<TKqlLookupIndex>()) {
+    if (auto maybeIndexLookup = lookup.Maybe<TKqlLookupIndexBase>()) {
         auto indexLookup = maybeIndexLookup.Cast();
 
-        return Build<TKqlLookupIndex>(ctx, lookup.Pos())
+        return Build<TKqlLookupIndexBase>(ctx, lookup.Pos())
+            .CallableName(indexLookup.CallableName())
             .Table(indexLookup.Table())
             .LookupKeys(indexLookup.LookupKeys())
             .Columns(usedColumns.Cast())

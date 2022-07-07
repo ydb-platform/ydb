@@ -109,17 +109,40 @@ TExprBase DoRewriteIndexRead(const TKqlReadTableIndex& read, TExprContext& ctx,
 } // namespace
 
 TExprBase KqpRewriteIndexRead(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
-    if (!kqpCtx.IsDataQuery()) {
-        return node;
-    }
-
     if (auto maybeIndexRead = node.Maybe<TKqlReadTableIndex>()) {
         auto indexRead = maybeIndexRead.Cast();
 
         const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, indexRead.Table().Path());
         const auto& [indexMeta, _ ] = tableDesc.Metadata->GetIndexMetadata(TString(indexRead.Index().Value()));
 
-        return DoRewriteIndexRead(indexRead, ctx, tableDesc, indexMeta, {});
+        if (kqpCtx.IsDataQuery()) {
+            return DoRewriteIndexRead(indexRead, ctx, tableDesc, indexMeta, {});
+        }
+
+        const bool needDataRead = CheckIndexCovering(indexRead, indexMeta);
+        if (!needDataRead) {
+            return Build<TKqlReadTable>(ctx, indexRead.Pos())
+                .Table(BuildTableMeta(*indexMeta, indexRead.Pos(), ctx))
+                .Range(indexRead.Range())
+                .Columns(indexRead.Columns())
+                .Settings(indexRead.Settings())
+                .Done();
+        }
+
+        auto keyColumnsList = BuildKeyColumnsList(tableDesc, indexRead.Pos(), ctx);
+
+        TExprBase readIndexTable = Build<TKqlReadTable>(ctx, indexRead.Pos())
+            .Table(BuildTableMeta(*indexMeta, indexRead.Pos(), ctx))
+            .Range(indexRead.Range())
+            .Columns(keyColumnsList)
+            .Settings(indexRead.Settings())
+            .Done();
+
+        return Build<TKqlStreamLookupTable>(ctx, indexRead.Pos())
+            .Table(indexRead.Table())
+            .LookupKeys(readIndexTable.Ptr())
+            .Columns(indexRead.Columns())
+            .Done();
     }
 
     return node;
@@ -158,6 +181,44 @@ TExprBase KqpRewriteLookupIndex(const TExprBase& node, TExprContext& ctx, const 
             .Table(lookupIndex.Table())
             .LookupKeys(lookupIndexTable.Ptr())
             .Columns(lookupIndex.Columns())
+            .Done();
+    }
+
+    return node;
+}
+
+TExprBase KqpRewriteStreamLookupIndex(const TExprBase& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!kqpCtx.IsScanQuery()) {
+        return node;
+    }
+
+    if (auto maybeStreamLookupIndex = node.Maybe<TKqlStreamLookupIndex>()) {
+        auto streamLookupIndex = maybeStreamLookupIndex.Cast();
+
+        const auto& tableDesc = GetTableData(*kqpCtx.Tables, kqpCtx.Cluster, streamLookupIndex.Table().Path());
+        const auto& [indexMeta, _] = tableDesc.Metadata->GetIndexMetadata(streamLookupIndex.Index().StringValue());
+
+        const bool needDataRead = CheckIndexCovering(streamLookupIndex, indexMeta);
+        if (!needDataRead) {
+            return Build<TKqlStreamLookupTable>(ctx, node.Pos())
+                .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+                .LookupKeys(streamLookupIndex.LookupKeys())
+                .Columns(streamLookupIndex.Columns())
+                .Done();
+        }
+
+        auto keyColumnsList = BuildKeyColumnsList(tableDesc, streamLookupIndex.Pos(), ctx);
+
+        TExprBase lookupIndexTable = Build<TKqlStreamLookupTable>(ctx, node.Pos())
+            .Table(BuildTableMeta(*indexMeta, node.Pos(), ctx))
+            .LookupKeys(streamLookupIndex.LookupKeys())
+            .Columns(keyColumnsList)
+            .Done();
+
+        return Build<TKqlStreamLookupTable>(ctx, node.Pos())
+            .Table(streamLookupIndex.Table())
+            .LookupKeys(lookupIndexTable.Ptr())
+            .Columns(streamLookupIndex.Columns())
             .Done();
     }
 

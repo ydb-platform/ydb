@@ -1680,7 +1680,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndex, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor, {}, AppCfg());
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor)
+            .SetEnableKqpScanQueryStreamLookup(true);
+
+        TKikimrRunner kikimr(settings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1698,24 +1702,44 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         UNIT_ASSERT_C(itOk.IsSuccess(), itOk.GetIssues().ToString());
         CompareYson(R"([[["Payload1"]];[["Payload2"]]])", StreamResultToYson(itOk));
 
-        // should NOT work with explicit view
-        auto itIndex = db.StreamExecuteScanQuery(R"(
-            PRAGMA AnsiInForEmptyOrNullableItemsCollections;
-            SELECT Value
-            FROM `/Root/SecondaryComplexKeys` VIEW Index
-            WHERE (Fk1, Fk2) IN AsList((1, "Fk1"), (2, "Fk2"), (42, "Fk5"), (Null, "FkNull"))
-            ORDER BY Value;
-        )").GetValueSync();
+        {  // Index contains required columns
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+                SELECT Fk2
+                FROM `/Root/SecondaryComplexKeys` VIEW Index
+                WHERE Fk1 IN [1, 2, 3, 4, 5]
+                ORDER BY Fk2;
+            )").GetValueSync();
 
-        NYdb::EStatus status = NYdb::EStatus::STATUS_UNDEFINED;
-        for (;;) {
-            auto streamPart = itIndex.ReadNext().GetValueSync();
-            if (!streamPart.IsSuccess()) {
-                status = streamPart.GetStatus();
-                break;
-            }
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([[["Fk1"]];[["Fk2"]];[["Fk5"]]])", StreamResultToYson(itIndex));
         }
-        UNIT_ASSERT_VALUES_EQUAL_C(status, EStatus::BAD_REQUEST, "ScanQuery with explicit index should fail");
+
+        {
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+                SELECT Value
+                FROM `/Root/SecondaryComplexKeys` VIEW Index
+                WHERE Fk1 >= 1 AND Fk1 < 5
+                ORDER BY Value;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([[["Payload1"]];[["Payload2"]]])", StreamResultToYson(itIndex));
+        }
+
+        {
+            auto itIndex = db.StreamExecuteScanQuery(R"(
+                PRAGMA AnsiInForEmptyOrNullableItemsCollections;
+                SELECT Value
+                FROM `/Root/SecondaryComplexKeys` VIEW Index
+                WHERE (Fk1, Fk2) IN AsList((1, "Fk1"), (2, "Fk2"), (42, "Fk5"), (Null, "FkNull"))
+                ORDER BY Value;
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+            CompareYson(R"([[["Payload1"]];[["Payload2"]]])", StreamResultToYson(itIndex));
+        }
     }
 
     Y_UNIT_TEST_TWIN(BoolFlag, UseSessionActor) {

@@ -75,7 +75,19 @@ TExprBase BuildLookupIndex(TExprContext& ctx, const TPositionHandle pos, const T
     const TKqpOptimizeContext& kqpCtx)
 {
     if (kqpCtx.IsScanQuery()) {
-        YQL_ENSURE(false, "StreamLookupIndex is not implemented");
+        YQL_ENSURE(kqpCtx.Config->FeatureFlags.GetEnableKqpScanQueryStreamLookup(), "Stream lookup is not enabled");
+        return Build<TKqlStreamLookupIndex>(ctx, pos)
+            .Table(read.Table())
+            .LookupKeys<TCoSkipNullMembers>()
+                .Input(keysToLookup)
+                .Members()
+                    .Add(lookupNames)
+                    .Build()
+                .Build()
+            .Columns(read.Columns())
+            .Index()
+                .Build(indexName)
+            .Done();
     }
 
     return Build<TKqlLookupIndex>(ctx, pos)

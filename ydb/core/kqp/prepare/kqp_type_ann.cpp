@@ -320,7 +320,7 @@ TStatus AnnotateReadTableRanges(const TExprNode::TPtr& node, TExprContext& ctx, 
 TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData, bool withSystemColumns)
 {
-    if (!EnsureArgsCount(*node, TKqlLookupIndex::Match(node.Get()) ? 4 : 3, ctx)) {
+    if (!EnsureArgsCount(*node, TKqlLookupIndexBase::Match(node.Get()) ? 4 : 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -368,8 +368,8 @@ TStatus AnnotateLookupTable(const TExprNode::TPtr& node, TExprContext& ctx, cons
     auto structType = lookupType->Cast<TStructExprType>();
 
     ui32 keyColumnsCount = 0;
-    if (TKqlLookupIndex::Match(node.Get())) {
-        auto index = node->Child(TKqlLookupIndex::idx_Index);
+    if (TKqlLookupIndexBase::Match(node.Get())) {
+        auto index = node->Child(TKqlLookupIndexBase::idx_Index);
         if (!EnsureAtom(*index, ctx)) {
             return TStatus::Error;
         }

@@ -136,9 +136,9 @@
             "Match": {"Type": "Callable", "Name": "KqlLookupTable"}
         },
         {
-            "Name": "TKqlLookupIndex",
+            "Name": "TKqlLookupIndexBase",
             "Base": "TKqlLookupTableBase",
-            "Match": {"Type": "Callable", "Name": "KqlLookupIndex"},
+            "Match": {"Type": "CallableBase"},
             "Children": [
                 {"Index": 3, "Name": "Index", "Type": "TCoAtom"}
             ]
@@ -152,6 +152,16 @@
             "Name": "TKqlStreamLookupTable",
             "Base": "TKqlLookupTableBase",
             "Match": {"Type": "Callable", "Name": "KqlStreamLookupTable"}
+        },
+        {
+            "Name": "TKqlLookupIndex",
+            "Base": "TKqlLookupIndexBase",
+            "Match": {"Type": "Callable", "Name": "KqlLookupIndex"}
+        },
+        {
+            "Name": "TKqlStreamLookupIndex",
+            "Base": "TKqlLookupIndexBase",
+            "Match": {"Type": "Callable", "Name": "KqlStreamLookupIndex"}
         },
         {
             "Name": "TKqlTableEffect",

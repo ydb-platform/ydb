@@ -559,6 +559,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v0
             SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
@@ -569,33 +570,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(!result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-    }
-
-    Y_UNIT_TEST(YqlSyntaxV1) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("1");
-
-        TKikimrRunner kikimr({setting});
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(!result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v0
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
 
         result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
@@ -620,36 +594,6 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }));
     }
 
-    Y_UNIT_TEST(YqlSyntaxServiceOverride) {
-        auto setting = NKikimrKqp::TKqpSetting();
-        setting.SetName("_KqpYqlSyntaxVersion");
-        setting.SetValue("0");
-
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetSqlVersion(1);
-
-        TKikimrRunner kikimr(appConfig, {setting});
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(!result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            --!syntax_v0
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-
-        result = session.ExecuteDataQuery(R"(
-            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT(result.IsSuccess());
-    }
-
     Y_UNIT_TEST(QueryExplain) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
@@ -657,7 +601,7 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
 
         auto result = session.ExplainDataQuery(R"(
             PRAGMA Kikimr.UseNewEngine = 'false';
-            SELECT * FROM [/Root/Test] WHERE Group = 1 AND Name > "Name";
+            SELECT * FROM `/Root/Test` WHERE Group = 1 AND Name > "Name";
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -688,11 +632,11 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
                 declare $text as String;
                 declare $data as Int32;
 
-                update [/Root/EightShard]
+                update `/Root/EightShard`
                 set Text = $text, Data = $data
                 where Length(Text) != 7 and Data = $data and Key = $key;
 
-                upsert into [/Root/EightShard] (Key, Text, Data) values
+                upsert into `/Root/EightShard` (Key, Text, Data) values
                     ($key, $text || "_10", $data + 100);
             )");
 

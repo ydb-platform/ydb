@@ -31,11 +31,11 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1"));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
 
         auto table1head = TReadTableState(server, MakeReadTableSettings("/Root/table-1")).All();
         UNIT_ASSERT_VALUES_EQUAL(table1head,
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1", true));
 
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
 
         auto table1state = TReadTableState(server, MakeReadTableSettings("/Root/table-1", true));
 
@@ -183,7 +183,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
 
         // Split on key=3 boundary
         {
@@ -266,7 +266,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
 
         // Split on key=3 boundary
         {
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
 
         // Split on key=3 boundary
         {
@@ -413,7 +413,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
 
         // Split on key=4 boundary
         {
@@ -485,7 +485,7 @@ Y_UNIT_TEST_SUITE(DataShardReadTableSnapshots) {
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44), (5, 55), (6, 66);");
 
         // Split on key=4 boundary
         {

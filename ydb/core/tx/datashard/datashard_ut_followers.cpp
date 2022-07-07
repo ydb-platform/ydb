@@ -33,10 +33,10 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             TShardedTableOptions()
                 .Followers(1));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
 
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM [/Root/table-1]", "/Root"));
+            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         // Make a request to make sure snapshot metadata is updated on the follower
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM [/Root/table-1]", "/Root"));
+            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -72,11 +72,11 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
             UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults()[0].GetValue().ShortDebugString(), expected);
         }
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (4, 4);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (4, 4);");
 
         // The new row should be visible on the follower
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM [/Root/table-1]", "/Root"));
+            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);
@@ -91,11 +91,11 @@ Y_UNIT_TEST_SUITE(DataShardFollowers) {
 
         // Wait a bit more and add one more row
         SimulateSleep(server, TDuration::Seconds(2));
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 5);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 5);");
 
         // The new row should be visible on the follower
         {
-            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM [/Root/table-1]", "/Root"));
+            auto ev = ExecRequest(runtime, sender, MakeSimpleStaleRoRequest("SELECT * FROM `/Root/table-1`", "/Root"));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
             UNIT_ASSERT_VALUES_EQUAL(response.GetResponse().GetResults().size(), 1u);

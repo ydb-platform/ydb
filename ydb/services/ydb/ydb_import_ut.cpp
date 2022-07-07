@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(YdbImport) {
         Cerr << BATCH_COUNT * BATCH_SIZE << " rows in " << TInstant::Now() - start << Endl;
 
         auto res = session.ExecuteDataQuery(
-                        "SELECT count(*) AS __count FROM [/Root/Logs];",
+                        "SELECT count(*) AS __count FROM `/Root/Logs`;",
                         NYdb::NTable::TTxControl::BeginTx().CommitTx()
                     ).ExtractValueSync();
 

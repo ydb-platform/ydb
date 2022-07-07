@@ -52,7 +52,7 @@ private:
     void CreateQuery(NYdb::TType rowType) {
         auto rowsTypeString = NYdb::FormatType(rowType);
 
-        Query_ = Sprintf("DECLARE %s AS \"List<%s>\"; REPLACE INTO [%s] SELECT * FROM AS_TABLE(%s);",
+        Query_ = Sprintf("DECLARE %s AS List<%s>; REPLACE INTO `%s` SELECT * FROM AS_TABLE(%s);",
             ParamName_.c_str(),
             rowsTypeString.c_str(),
             Table_.c_str(),

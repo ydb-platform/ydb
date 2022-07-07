@@ -346,7 +346,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         }
 
         // Read
-        auto res = session.ExecuteDataQuery("SELECT count(*) AS _cnt FROM [/Root/LogsX];",
+        auto res = session.ExecuteDataQuery("SELECT count(*) AS _cnt FROM `/Root/LogsX`;",
                                             NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         Cerr << res.GetStatus() << Endl;
         UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
         Cerr << "Upsert done: " << TInstant::Now() - start << Endl;
 
         // Read
-        auto res = session.ExecuteDataQuery("SELECT count(*) AS _cnt FROM [/Root/LogsX];",
+        auto res = session.ExecuteDataQuery("SELECT count(*) AS _cnt FROM `/Root/LogsX`;",
                                             NYdb::NTable::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         Cerr << res.GetStatus() << Endl;
         UNIT_ASSERT_EQUAL(res.GetStatus(), EStatus::SUCCESS);

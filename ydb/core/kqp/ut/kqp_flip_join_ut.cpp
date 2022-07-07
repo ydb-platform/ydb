@@ -7,39 +7,39 @@ using namespace NYdb::NTable;
 
 static void CreateSampleTables(TSession session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE [/Root/FJ_Table_1] (
+            CREATE TABLE `/Root/FJ_Table_1` (
                 Key Int32, Fk2 Int32, Fk3 Int32, Value String,
                 PRIMARY KEY (Key)
             );
-            CREATE TABLE [/Root/FJ_Table_2] (
+            CREATE TABLE `/Root/FJ_Table_2` (
                 Key Int32, Fk3 Int32, Fk1 Int32, Value String,
                 PRIMARY KEY (Key)
             );
-            CREATE TABLE [/Root/FJ_Table_3] (
+            CREATE TABLE `/Root/FJ_Table_3` (
                 Key Int32, Fk1 Int32, Fk2 Int32, Value String,
                 PRIMARY KEY (Key)
             );
-            CREATE TABLE [/Root/FJ_Table_4] (
+            CREATE TABLE `/Root/FJ_Table_4` (
                 Key Int32, Value String,
                 PRIMARY KEY (Key)
             );
         )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-            REPLACE INTO [/Root/FJ_Table_1] (Key, Fk2, Fk3, Value) VALUES
+            REPLACE INTO `/Root/FJ_Table_1` (Key, Fk2, Fk3, Value) VALUES
                 (1, 101, 1001, "Value11"),
                 (2, 102, 1002, "Value12"),
                 (3, 103, 1003, "Value13"),
                 (4, 104, 1004, "Value14");
-            REPLACE INTO [/Root/FJ_Table_2] (Key, Fk3, Fk1, Value) VALUES
+            REPLACE INTO `/Root/FJ_Table_2` (Key, Fk3, Fk1, Value) VALUES
                 (101, 1001, 1, "Value21"),
                 (102, 1002, 2, "Value22");
-            REPLACE INTO [/Root/FJ_Table_3] (Key, Fk1, Fk2, Value) VALUES
+            REPLACE INTO `/Root/FJ_Table_3` (Key, Fk1, Fk2, Value) VALUES
                 (1001, 1, 101, "Value31"),
                 (1002, 2, 102, "Value32"),
                 (1003, 3, 103, "Value33"),
                 (1005, 5, 105, "Value35");
-            REPLACE INTO [/Root/FJ_Table_4] (Key, Value) VALUES
+            REPLACE INTO `/Root/FJ_Table_4` (Key, Value) VALUES
                 (1,    "Value4_1"),
                 (101,  "Value4_101"),
                 (1001, "Value4_1001");
@@ -81,8 +81,8 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t1.Value, t2.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         INNER JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
+                    FROM `/Root/FJ_Table_1` AS t1
+                         INNER JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
                     ORDER BY t1.Value, t2.Value
                 )", FormatPragma(disableFlip));
 
@@ -151,11 +151,11 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk
-                        FROM [/Root/FJ_Table_1] AS t1
-                             INNER JOIN [/Root/FJ_Table_2] AS t2 ON t1.Fk2 = t2.Key
+                        FROM `/Root/FJ_Table_1` AS t1
+                             INNER JOIN `/Root/FJ_Table_2` AS t2 ON t1.Fk2 = t2.Key
                     );
                     SELECT t.Value1, t.Value2, t3.Value
-                    FROM [/Root/FJ_Table_3] AS t3
+                    FROM `/Root/FJ_Table_3` AS t3
                          INNER JOIN $join AS t ON t3.Key = t.Fk
                     ORDER BY t.Value1, t.Value2, t3.Value
                 )", FormatPragma(disableFlip)));
@@ -190,8 +190,8 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
             const TString query = Q_(Sprintf(R"(
                     %s
                     SELECT t1.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         LEFT SEMI JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
+                    FROM `/Root/FJ_Table_1` AS t1
+                         LEFT SEMI JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
                     ORDER BY t1.Value
                 )", FormatLeftSemiPragma(disableFlip)));
 
@@ -222,9 +222,9 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
             const TString query = Q_(Sprintf(R"(
                     %s
                     SELECT t1.Key, t1.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         LEFT SEMI JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
-                         LEFT SEMI JOIN [/Root/FJ_Table_3] AS t3 ON t1.Key = t3.Fk1
+                    FROM `/Root/FJ_Table_1` AS t1
+                         LEFT SEMI JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
+                         LEFT SEMI JOIN `/Root/FJ_Table_3` AS t3 ON t1.Key = t3.Fk1
                     ORDER BY t1.Key, t1.Value
                 )", FormatLeftSemiPragma(disableFlip)));
 
@@ -258,11 +258,11 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk
-                        FROM [/Root/FJ_Table_1] AS t1
-                             INNER JOIN [/Root/FJ_Table_2] AS t2 ON t1.Fk2 = t2.Key
+                        FROM `/Root/FJ_Table_1` AS t1
+                             INNER JOIN `/Root/FJ_Table_2` AS t2 ON t1.Fk2 = t2.Key
                     );
                     SELECT t3.Value
-                    FROM [/Root/FJ_Table_3] AS t3
+                    FROM `/Root/FJ_Table_3` AS t3
                          LEFT SEMI JOIN $join AS t ON t3.Key = t.Fk
                     ORDER BY t3.Value
                 )", FormatLeftSemiPragma(disableFlip)));
@@ -297,8 +297,8 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
             const TString query = Q_(Sprintf(R"(
                     %s
                     SELECT t2.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         RIGHT SEMI JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
+                    FROM `/Root/FJ_Table_1` AS t1
+                         RIGHT SEMI JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
                     ORDER BY t2.Value
                 )", FormatPragma(disableFlip)));
 
@@ -329,9 +329,9 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
             const TString query = Q_(Sprintf(R"(
                     %s
                     SELECT t3.Key, t3.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         RIGHT SEMI JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
-                         RIGHT SEMI JOIN [/Root/FJ_Table_3] AS t3 ON t2.Key = t3.Fk2
+                    FROM `/Root/FJ_Table_1` AS t1
+                         RIGHT SEMI JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
+                         RIGHT SEMI JOIN `/Root/FJ_Table_3` AS t3 ON t2.Key = t3.Fk2
                     ORDER BY t3.Key, t3.Value
                 )", FormatPragma(disableFlip)));
 
@@ -366,11 +366,11 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3
-                        FROM [/Root/FJ_Table_1] AS t1
-                             INNER JOIN [/Root/FJ_Table_2] AS t2 ON t1.Fk2 = t2.Key
+                        FROM `/Root/FJ_Table_1` AS t1
+                             INNER JOIN `/Root/FJ_Table_2` AS t2 ON t1.Fk2 = t2.Key
                     );
                     SELECT t.Value1, t.Value2
-                    FROM [/Root/FJ_Table_3] AS t3
+                    FROM `/Root/FJ_Table_3` AS t3
                          RIGHT SEMI JOIN $join AS t ON t3.Key = t.Fk3
                     ORDER BY t.Value1, t.Value2
                 )", FormatPragma(disableFlip)));
@@ -406,8 +406,8 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t2.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         RIGHT JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
+                    FROM `/Root/FJ_Table_1` AS t1
+                         RIGHT JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
                     ORDER BY t2.Value
                 )", FormatPragma(disableFlip));
 
@@ -439,9 +439,9 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t3.Key, t3.Value
-                    FROM [/Root/FJ_Table_1] AS t1
-                         RIGHT JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk1
-                         RIGHT JOIN [/Root/FJ_Table_3] AS t3 ON t2.Key = t3.Fk2
+                    FROM `/Root/FJ_Table_1` AS t1
+                         RIGHT JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk1
+                         RIGHT JOIN `/Root/FJ_Table_3` AS t3 ON t2.Key = t3.Fk2
                     ORDER BY t3.Key, t3.Value
                 )", FormatPragma(disableFlip));
 
@@ -477,11 +477,11 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3
-                        FROM [/Root/FJ_Table_1] AS t1
-                             INNER JOIN [/Root/FJ_Table_2] AS t2 ON t1.Fk2 = t2.Key
+                        FROM `/Root/FJ_Table_1` AS t1
+                             INNER JOIN `/Root/FJ_Table_2` AS t2 ON t1.Fk2 = t2.Key
                     );
                     SELECT t.Value1, t.Value2
-                    FROM [/Root/FJ_Table_3] AS t3
+                    FROM `/Root/FJ_Table_3` AS t3
                          RIGHT JOIN $join AS t ON t3.Key = t.Fk3
                     ORDER BY t.Value1, t.Value2
                 )", FormatPragma(disableFlip));
@@ -517,8 +517,8 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     PRAGMA Kikimr.UseNewEngine = 'false';
                     %s
                     SELECT t2.Value
-                    FROM [/Root/FJ_Table_3] AS t1
-                         RIGHT ONLY JOIN [/Root/FJ_Table_2] AS t2 ON t1.Key = t2.Fk3
+                    FROM `/Root/FJ_Table_3` AS t1
+                         RIGHT ONLY JOIN `/Root/FJ_Table_2` AS t2 ON t1.Key = t2.Fk3
                     ORDER BY t2.Value
                 )", FormatPragma(disableFlip));
 
@@ -551,12 +551,12 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     %s
                     $join = (
                         SELECT t2.Key AS Key, t2.Fk1 AS Fk1, t2.Fk2 AS Fk2, t2.Value AS Value
-                        FROM [/Root/FJ_Table_1] AS t1
-                             RIGHT ONLY JOIN [/Root/FJ_Table_3] AS t2 ON t1.Key = t2.Fk1
+                        FROM `/Root/FJ_Table_1` AS t1
+                             RIGHT ONLY JOIN `/Root/FJ_Table_3` AS t2 ON t1.Key = t2.Fk1
                     );
                     SELECT t3.Key, t3.Value
                     FROM $join AS t
-                         INNER JOIN [/Root/FJ_Table_2] AS t3 ON t.Fk2 = t3.Key
+                         INNER JOIN `/Root/FJ_Table_2` AS t3 ON t.Fk2 = t3.Key
                     ORDER BY t3.Key, t3.Value
                 )", FormatPragma(disableFlip));
 
@@ -591,11 +591,11 @@ Y_UNIT_TEST_SUITE(KqpFlipJoin) {
                     %s
                     $join = (
                         SELECT t1.Value AS Value1, t2.Value AS Value2, t1.Fk3 AS Fk3
-                        FROM [/Root/FJ_Table_1] AS t1
-                             INNER JOIN [/Root/FJ_Table_2] AS t2 ON t1.Fk2 = t2.Key
+                        FROM `/Root/FJ_Table_1` AS t1
+                             INNER JOIN `/Root/FJ_Table_2` AS t2 ON t1.Fk2 = t2.Key
                     );
                     SELECT t.Value1, t.Value2
-                    FROM [/Root/FJ_Table_4] AS t3
+                    FROM `/Root/FJ_Table_4` AS t3
                          RIGHT ONLY JOIN $join AS t ON t3.Key = t.Fk3
                     ORDER BY t.Value1, t.Value2
                 )", FormatPragma(disableFlip));

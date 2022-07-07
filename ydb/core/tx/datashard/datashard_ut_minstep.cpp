@@ -88,7 +88,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
         ui64 shard1 = GetTableShards(server, sender, "/Root/table-1")[0];
 
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
@@ -101,7 +101,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
         // drop one table while proposes are active
         const TInstant dropStart = runtime.GetCurrentTime();
-        ExecSQL(server, sender, "DROP TABLE [/Root/table-1]", false);
+        ExecSQL(server, sender, "DROP TABLE `/Root/table-1`", false);
         WaitTabletBecomesOffline(server, shard1);
         const TInstant dropEnd = runtime.GetCurrentTime();
 
@@ -129,21 +129,21 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         }
 
         // make sure that second table is still operationable
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 2);");
-        ExecSQL(server, sender, "DROP TABLE [/Root/table-2]", false);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
+        ExecSQL(server, sender, "DROP TABLE `/Root/table-2`", false);
         WaitTabletBecomesOffline(server, shard2);
     }
 
     Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRO) {
         TestDropTablePlanComesNotTooEarly(
-            "SELECT * FROM [/Root/table-1]; SELECT * FROM [/Root/table-2];",
+            "SELECT * FROM `/Root/table-1`; SELECT * FROM `/Root/table-2`;",
             Ydb::StatusIds::UNAVAILABLE
         );
     }
 
     Y_UNIT_TEST(TestDropTablePlanComesNotTooEarlyRW) {
         TestDropTablePlanComesNotTooEarly(
-            "UPSERT INTO [/Root/table-2] (key, value) SELECT key, value FROM [/Root/table-1];",
+            "UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1`;",
             Ydb::StatusIds::UNDETERMINED
         );
     }
@@ -171,8 +171,8 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 2);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
         ui64 table1shard = GetTableShards(server, sender, "/Root/table-1").at(0);
 
         bool capturePlan = false;
@@ -218,7 +218,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         // We want select to prepare on all shards, but not planned yet
         captureProposeResults = true;
         Cerr << "Sending initial SELECT query..." << Endl;
-        SendSQL(server, sender, "SELECT * FROM [/Root/table-1] UNION ALL SELECT * FROM [/Root/table-2]");
+        SendSQL(server, sender, "SELECT * FROM `/Root/table-1` UNION ALL SELECT * FROM `/Root/table-2`");
         if (proposeResults.size() < 2) {
             TDispatchOptions options;
             options.CustomFinalCondition = [&]() -> bool {
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
 
         InitRoot(server, sender);
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
         ui64 shard1 = GetTableShards(server, sender, "/Root/table-1")[0];
 
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
@@ -428,7 +428,7 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         // we also capture scheme propose at datashard
         auto senderScheme = runtime.AllocateEdgeActor();
         auto dropStart = runtime.GetCurrentTime();
-        SendSQL(server, senderScheme, "DROP TABLE [/Root/table-1]", false);
+        SendSQL(server, senderScheme, "DROP TABLE `/Root/table-1`", false);
         if (!seenProposeScheme) {
             TDispatchOptions options;
             options.CustomFinalCondition = [&]() -> bool {
@@ -464,21 +464,21 @@ Y_UNIT_TEST_SUITE(TDataShardMinStepTest) {
         }
 
         // make sure that second table is still operationable
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 2);");
-        ExecSQL(server, sender, "DROP TABLE [/Root/table-2]", false);
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
+        ExecSQL(server, sender, "DROP TABLE `/Root/table-2`", false);
         WaitTabletBecomesOffline(server, shard2);
     }
 
     Y_UNIT_TEST(TestDropTableCompletesQuicklyRO) {
         TestDropTableCompletesQuickly(
-            "SELECT * FROM [/Root/table-1] UNION ALL SELECT * FROM [/Root/table-2];",
+            "SELECT * FROM `/Root/table-1` UNION ALL SELECT * FROM `/Root/table-2`;",
             Ydb::StatusIds::SUCCESS
         );
     }
 
     Y_UNIT_TEST(TestDropTableCompletesQuicklyRW) {
         TestDropTableCompletesQuickly(
-            "UPSERT INTO [/Root/table-2] (key, value) SELECT key, value FROM [/Root/table-1];",
+            "UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1`;",
             Ydb::StatusIds::SUCCESS
         );
     }

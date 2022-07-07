@@ -75,28 +75,28 @@ Y_UNIT_TEST_SUITE(YdbScripting) {
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "false";
 
-            CREATE TABLE [/Root/TestTable] (
+            CREATE TABLE `/Root/TestTable` (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
             );
             COMMIT;
 
-            REPLACE INTO [/Root/TestTable] (Key, Value) VALUES
+            REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
                 (1, "One"),
                 (2, "Two");
             COMMIT;
 
-            SELECT Key, Value FROM [/Root/TestTable];
+            SELECT Key, Value FROM `/Root/TestTable`;
             COMMIT;
 
-            REPLACE INTO [/Root/TestTable] (Key, Value) VALUES
+            REPLACE INTO `/Root/TestTable` (Key, Value) VALUES
                 (1, "OneNew");
             COMMIT;
 
-            SELECT Value, Key FROM [/Root/TestTable] WHERE Key = 1;
+            SELECT Value, Key FROM `/Root/TestTable` WHERE Key = 1;
 
-            SELECT * FROM [/Root/TestTable];
+            SELECT * FROM `/Root/TestTable`;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(result.IsSuccess());
@@ -157,22 +157,22 @@ Y_UNIT_TEST_SUITE(YdbScripting) {
 
         auto result = client.ExecuteYqlScript(R"(
             DECLARE $rows AS
-                'List<Struct<
+                List<Struct<
                     Key: Uint64?,
-                    Value: String?>>';
+                    Value: String?>>;
 
-            CREATE TABLE [/Root/TestTable] (
+            CREATE TABLE `/Root/TestTable` (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
             );
             COMMIT;
 
-            REPLACE INTO [/Root/TestTable]
+            REPLACE INTO `/Root/TestTable`
             SELECT * FROM AS_TABLE($rows);
             COMMIT;
 
-            SELECT * FROM [/Root/TestTable];
+            SELECT * FROM `/Root/TestTable`;
         )", params).GetValueSync();
 
         result.GetIssues().PrintTo(Cerr);

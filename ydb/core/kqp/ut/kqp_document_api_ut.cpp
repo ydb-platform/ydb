@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         CreateSampleTables(session);
 
         auto query = R"(
-            UPSERT INTO [/Root/DocumentApiTest] (Key1, Key2, Value) VALUES
+            UPSERT INTO `/Root/DocumentApiTest` (Key1, Key2, Value) VALUES
                 ("Key1_1", "Key2_1", CAST("{Value: 10}" AS Json));
         )";
 
@@ -52,8 +52,8 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         CreateSampleTables(session);
 
         auto text = R"(
-            DECLARE $rows AS 'List<Struct<Key1:String?, Key2:String?>>';
-            UPSERT INTO [/Root/DocumentApiTest] (Key1, Key2)
+            DECLARE $rows AS List<Struct<Key1:String?, Key2:String?>>;
+            UPSERT INTO `/Root/DocumentApiTest` (Key1, Key2)
                 SELECT Key1, Key2 FROM AS_TABLE($rows);
         )";
 
@@ -97,7 +97,7 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         CreateSampleTables(session);
 
         auto query = R"(
-            SELECT * FROM [/Root/DocumentApiTest];
+            SELECT * FROM `/Root/DocumentApiTest`;
         )";
 
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         CreateSampleTables(session);
 
         auto query = R"(
-            ALTER TABLE [/Root/DocumentApiTest] DROP COLUMN Value;
+            ALTER TABLE `/Root/DocumentApiTest` DROP COLUMN Value;
         )";
 
         auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         CreateSampleTables(session);
 
         auto query = R"(
-            DROP TABLE [/Root/DocumentApiTest];
+            DROP TABLE `/Root/DocumentApiTest`;
         )";
 
         auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
@@ -148,9 +148,9 @@ Y_UNIT_TEST_SUITE(KqpDocumentApi) {
         NYdb::NScripting::TScriptingClient client(kikimr.GetDriver());
 
         auto script = R"(
-            SELECT * FROM [/Root/DocumentApiTest];
+            SELECT * FROM `/Root/DocumentApiTest`;
             COMMIT;
-            ALTER TABLE [/Root/DocumentApiTest] DROP COLUMN Value;
+            ALTER TABLE `/Root/DocumentApiTest` DROP COLUMN Value;
         )";
 
         auto result = client.ExecuteYqlScript(script).GetValueSync();

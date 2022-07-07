@@ -372,7 +372,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
         CreateTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
             (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -459,7 +459,7 @@ Y_UNIT_TEST_SUITE(EraseRowsTests) {
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
 (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
 (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
@@ -472,7 +472,7 @@ key = 4, value = (empty maybe)
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldNotErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (2, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
@@ -485,7 +485,7 @@ key = 3, value = 2030-04-15T00:00:00.000000Z
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint32) {
         ConditionalEraseShouldSuccess("Uint32", TUnit::SECONDS, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600),
 (3, 1902441600),
@@ -498,7 +498,7 @@ key = 4, value = (empty maybe)
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64Seconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::SECONDS, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600),
 (3, 1902441600),
@@ -511,7 +511,7 @@ key = 4, value = (empty maybe)
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MilliSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::MILLISECONDS, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600000),
 (3, 1902441600000),
@@ -524,7 +524,7 @@ key = 4, value = (empty maybe)
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64MicroSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::MICROSECONDS, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600000000),
 (3, 1902441600000000),
@@ -537,7 +537,7 @@ key = 4, value = (empty maybe)
 
     Y_UNIT_TEST_WITH_MVCC(ConditionalEraseRowsShouldEraseOnUint64NanoSeconds) {
         ConditionalEraseShouldSuccess("Uint64", TUnit::NANOSECONDS, R"(
-UPSERT INTO [/Root/table-1] (key, value) VALUES
+UPSERT INTO `/Root/table-1` (key, value) VALUES
 (1, 0),
 (2, 636249600000000000),
 (3, 1902441600000000000),
@@ -680,7 +680,7 @@ key = 4, value = (empty maybe)
 
         CreateTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
             (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
@@ -691,7 +691,7 @@ key = 4, value = (empty maybe)
         TString txId;
         {
             auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, R"(
-                SELECT value FROM [/Root/table-1] WHERE key = 1
+                SELECT value FROM `/Root/table-1` WHERE key = 1
             )"));
 
             auto& response = ev->Get()->Record.GetRef();
@@ -711,7 +711,7 @@ key = 4, value = (empty maybe)
 
         {
             auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId, R"(
-                UPSERT INTO [/Root/table-1] (key, value) VALUES
+                UPSERT INTO `/Root/table-1` (key, value) VALUES
                 (4, CAST("2031-04-15T00:00:00.000000Z" AS Timestamp));
             )"));
 
@@ -743,7 +743,7 @@ key = 4, value = (empty maybe)
 
         CreateTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
             (1, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -772,7 +772,7 @@ key = 4, value = (empty maybe)
         }
 
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, value) VALUES
             (3, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
@@ -1012,7 +1012,7 @@ Y_UNIT_TEST_SUITE(DistributedEraseTests) {
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
-UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 400, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
 (2, 20, 300, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
 (3, 30, 200, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
@@ -1034,7 +1034,7 @@ tkey = 200, key = 3
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldEraseOnUint32) {
         ConditionalEraseShouldSuccess("Uint32", TUnit::SECONDS, R"(
-UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 400, 0),
 (2, 20, 300, 636249600),
 (3, 30, 200, 1902441600),
@@ -1056,7 +1056,7 @@ tkey = 200, key = 3
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldNotErase) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
-UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 300, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (2, 20, 200, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp)),
 (3, 30, 100, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
@@ -1080,7 +1080,7 @@ tkey = 300, key = 1
 
     Y_UNIT_TEST(ConditionalEraseRowsShouldSuccessOnShardedIndex) {
         ConditionalEraseShouldSuccess("Timestamp", TUnit::AUTO, R"(
-UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
 (1, 10, 400, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
 (2, 20, 300, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
 (3, 30, 200, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp)),
@@ -1119,7 +1119,7 @@ tkey = 100, key = 4
 
         CreateIndexedTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -1132,7 +1132,7 @@ tkey = 100, key = 4
 
         // case 1: modify ttl column
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (3, 90, 900, CAST("2030-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
@@ -1159,7 +1159,7 @@ tkey = 100, key = 4
 
         // restore previous value in ttl column
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (3, 90, 900, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
@@ -1168,7 +1168,7 @@ tkey = 100, key = 4
 
         // case 2: modify index column
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
         )");
 
@@ -1231,7 +1231,7 @@ tkey = 100, key = 4
 
         CreateIndexedTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (1, 10, 400, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, 20, 300, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, 30, 200, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp)),
@@ -1243,7 +1243,7 @@ tkey = 100, key = 4
         auto delayed = ConditionalEraseRowsDelayedPlan(server, sender, "/Root/table-1",
             tableId, 4, TInstant::Now().GetValue(), indexes);
 
-        ExecSQL(server, sender, "DELETE FROM [/Root/table-1] WHERE key < 3;");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key < 3;");
 
         for (auto& ev : delayed) {
             runtime.Send(ev.Release(), 0, true);
@@ -1460,7 +1460,7 @@ tkey = 100, key = 4
 
         CreateIndexedTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -1504,7 +1504,7 @@ tkey = 100, key = 4
 
         CreateIndexedTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -1544,7 +1544,7 @@ tkey = 100, key = 4
 
         CreateIndexedTable(server, sender, "/Root", "table-1");
         ExecSQL(server, sender, R"(
-            UPSERT INTO [/Root/table-1] (key, skey, tkey, value) VALUES
+            UPSERT INTO `/Root/table-1` (key, skey, tkey, value) VALUES
             (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
             (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
             (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -1644,7 +1644,7 @@ tkey = 100, key = 4
         auto check = [&](const char* table, const TProto::TLimits& limits, ui32 expectedRuns) {
             CreateIndexedTable(server, sender, "/Root", table);
             ExecSQL(server, sender, Sprintf(R"(
-                UPSERT INTO [/Root/%s] (key, skey, tkey, value) VALUES
+                UPSERT INTO `/Root/%s` (key, skey, tkey, value) VALUES
                 (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
                 (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
                 (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));
@@ -1702,7 +1702,7 @@ tkey = 100, key = 4
         auto check = [&](const char* table, const TShardedTableOptions& opts) {
             CreateShardedTable(server, sender, "/Root", table, opts);
             ExecSQL(server, sender, Sprintf(R"(
-                UPSERT INTO [/Root/%s] (key, skey, tkey, value) VALUES
+                UPSERT INTO `/Root/%s` (key, skey, tkey, value) VALUES
                 (1, 10, 300, CAST("1970-01-01T00:00:00.000000Z" AS Timestamp)),
                 (2, 20, 200, CAST("1990-03-01T00:00:00.000000Z" AS Timestamp)),
                 (3, 30, 100, CAST("2020-04-15T00:00:00.000000Z" AS Timestamp));

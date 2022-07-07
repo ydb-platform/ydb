@@ -27,26 +27,26 @@ void CreateSampleTables(TKikimrRunner& runner) {
     auto session = tableClient.CreateSession().GetValueSync().GetSession();
 
     AssertSuccessResult(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE [/Root/Test/UserTable] (
+        CREATE TABLE `/Root/Test/UserTable` (
             UserKey Utf8,
             UserSubkey Uint32,
             UserValue Utf8,
             PRIMARY KEY (UserKey, UserSubkey)
         );
-        CREATE TABLE [/Root/Test/TestTable2] (
+        CREATE TABLE `/Root/Test/TestTable2` (
             Group Uint32,
             Name String,
             Amount Uint64,
             Comment String,
             PRIMARY KEY (Group, Name)
         );
-        CREATE TABLE [/Root/Test/TestTableKsv] (
+        CREATE TABLE `/Root/Test/TestTableKsv` (
             key String,
             subkey String,
             value String,
             PRIMARY KEY (key, subkey)
         );
-        CREATE TABLE [/Root/Test/TestTable3] (
+        CREATE TABLE `/Root/Test/TestTable3` (
             Key Utf8,
             SomeJson Json,
             PRIMARY KEY (Key)
@@ -54,12 +54,12 @@ void CreateSampleTables(TKikimrRunner& runner) {
     )").GetValueSync());
 
     AssertSuccessResult(session.ExecuteDataQuery(R"(
-        REPLACE INTO [/Root/Test/TestTable2] (Group, Name, Amount, Comment) VALUES
+        REPLACE INTO `/Root/Test/TestTable2` (Group, Name, Amount, Comment) VALUES
             (1u, "Anna", 3500ul, "None"),
             (1u, "Paul", 300ul, "None"),
             (2u, "Tony", 7200ul, "None");
 
-        REPLACE INTO [/Root/Test/TestTableKsv] (key, subkey, value) VALUES
+        REPLACE INTO `/Root/Test/TestTableKsv` (key, subkey, value) VALUES
             ("Anna", "1", "Value1"),
             ("Anna", "2", "Value2"),
             ("Paul", "1", "Value3"),

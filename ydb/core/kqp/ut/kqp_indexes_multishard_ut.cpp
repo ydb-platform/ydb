@@ -97,7 +97,7 @@ void FillTableWithDataColumn(NYdb::NTable::TTableClient& db) {
         .Build();
 
     const TString query(R"(
-        DECLARE $rows AS 'List < Struct<key: Uint64, fk: Uint32, value: Utf8 > >';
+        DECLARE $rows AS List < Struct<key: Uint64, fk: Uint32, value: Utf8 > >;
         UPSERT INTO `/Root/MultiShardIndexedWithDataColumn` (key, fk, value)
         SELECT key, fk, value FROM AS_TABLE($rows);
     )");

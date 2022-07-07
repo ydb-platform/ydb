@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(YdbIndexTable) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "UPSERT INTO [/Root/Foo] (NameHash, Name, Version, Timestamp) "
+                "UPSERT INTO `/Root/Foo` (NameHash, Name, Version, Timestamp) "
                 "  VALUES ($name_hash, $name, $version, $timestamp);";
 
         TAtomic enough = 0;

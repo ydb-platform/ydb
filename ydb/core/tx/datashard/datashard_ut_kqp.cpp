@@ -260,7 +260,7 @@ void KqpStabilityTests::SetUp() {
     CreateShardedTable(Server, sender, "/Root", "table-2", 1);
 
     ExecSQL(Server, sender, R"(
-        UPSERT INTO [/Root/table-1] (key, value) VALUES
+        UPSERT INTO `/Root/table-1` (key, value) VALUES
             (1, 1), (2, 2), (3, 3),
             (10, 1), (20, 2), (30, 3),
             (100, 1), (200, 2), (300, 3),
@@ -271,7 +271,7 @@ void KqpStabilityTests::SetUp() {
             (4000001001u, 1), (4000001002u, 2), (4000001003u, 3)
     )");
     ExecSQL(Server, sender, R"(
-        UPSERT INTO [/Root/table-2] (key, value) VALUES
+        UPSERT INTO `/Root/table-2` (key, value) VALUES
           (1, 1), (5, 5), (7, 7), (11, 11)
     )");
 
@@ -319,7 +319,7 @@ void KqpStabilityTests::SetUp() {
 
     Query = R"(
             SELECT t1.key AS a, t2.key AS b
-            FROM [/Root/table-1] AS t1 JOIN [/Root/table-2] AS t2 ON t1.value = t2.key
+            FROM `/Root/table-1` AS t1 JOIN `/Root/table-2` AS t2 ON t1.value = t2.key
             ORDER BY a, b
         )";
 }

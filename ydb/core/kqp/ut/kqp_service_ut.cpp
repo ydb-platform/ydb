@@ -45,9 +45,9 @@ Y_UNIT_TEST_SUITE(KqpService) {
                     DECLARE $key AS Uint32;
                     DECLARE $value AS Int32;
 
-                    SELECT * FROM [/Root/EightShard];
+                    SELECT * FROM `/Root/EightShard`;
 
-                    UPSERT INTO [/Root/TwoShard] (Key, Value2) VALUES
+                    UPSERT INTO `/Root/TwoShard` (Key, Value2) VALUES
                         ($key, $value);
                 )", TTxControl::BeginTx().CommitTx(), params).GetValueSync();
 
@@ -110,14 +110,14 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 }
 
                 auto query = Sprintf(R"(
-                    SELECT Key, Text, Data FROM [/Root/EightShard] WHERE Key=%1$d + 0;
-                    SELECT Key, Data, Text FROM [/Root/EightShard] WHERE Key=%1$d + 1;
-                    SELECT Text, Key, Data FROM [/Root/EightShard] WHERE Key=%1$d + 2;
-                    SELECT Text, Data, Key FROM [/Root/EightShard] WHERE Key=%1$d + 3;
-                    SELECT Data, Key, Text FROM [/Root/EightShard] WHERE Key=%1$d + 4;
-                    SELECT Data, Text, Key FROM [/Root/EightShard] WHERE Key=%1$d + 5;
+                    SELECT Key, Text, Data FROM `/Root/EightShard` WHERE Key=%1$d + 0;
+                    SELECT Key, Data, Text FROM `/Root/EightShard` WHERE Key=%1$d + 1;
+                    SELECT Text, Key, Data FROM `/Root/EightShard` WHERE Key=%1$d + 2;
+                    SELECT Text, Data, Key FROM `/Root/EightShard` WHERE Key=%1$d + 3;
+                    SELECT Data, Key, Text FROM `/Root/EightShard` WHERE Key=%1$d + 4;
+                    SELECT Data, Text, Key FROM `/Root/EightShard` WHERE Key=%1$d + 5;
 
-                    UPSERT INTO [/Root/EightShard] (Key, Text) VALUES
+                    UPSERT INTO `/Root/EightShard` (Key, Text) VALUES
                         (%2$dul, "New");
                 )", RandomNumber<ui32>(), RandomNumber<ui32>());
 
@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
         TVector<TAsyncDataQueryResult> futures;
         for (ui32 i = 0; i < count; ++i) {
             auto query = Sprintf(R"(
-                SELECT * FROM [/Root/EightShard] WHERE Key=%1$d;
+                SELECT * FROM `/Root/EightShard` WHERE Key=%1$d;
             )", i);
 
             auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx());

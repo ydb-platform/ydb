@@ -639,13 +639,13 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
     }
 
     {
-        auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) VALUES (1,0x80000002),(0x80000001,2)");
+        auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) VALUES (1,0x80000002),(0x80000001,2)");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
     }
 
     {
-        auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) SELECT value as key, value FROM [/Root/table-1]");
+        auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) SELECT value as key, value FROM `/Root/table-1`");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
 
         // Get shard IDs.
@@ -711,7 +711,7 @@ void CheckLocksCacheUsage(bool waitForLocksStore) {
     }
 
     {
-        auto request = MakeSQLRequest("SELECT * FROM [/Root/table-1]");
+        auto request = MakeSQLRequest("SELECT * FROM `/Root/table-1`");
         runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
         auto reply = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
         auto &resp = reply->Record.GetRef().GetResponse();

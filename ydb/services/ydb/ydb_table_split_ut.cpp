@@ -125,7 +125,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                     DECLARE $version AS Uint32;
                     DECLARE $timestamp AS Int64;
 
-                    UPSERT INTO [/Root/Foo] (NameHash, Name, Version, Timestamp)
+                    UPSERT INTO `/Root/Foo` (NameHash, Name, Version, Timestamp)
                     VALUES ($name_hash, $name, $version, $timestamp);
                 )";
                 threads[i] = pool->Run([&client, upsertQuery, &enough, namePrefix]() {
@@ -199,7 +199,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "SELECT * FROM [/Root/Foo] \n"
+                "SELECT * FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         TKikimrWithGrpcAndRootSchema server;
@@ -212,7 +212,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "SELECT * FROM [/Root/Foo] \n"
+                "SELECT * FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         TKikimrWithGrpcAndRootSchema server;
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "UPSERT INTO [/Root/Foo] (NameHash, Name, Version, Timestamp) "
+                "UPSERT INTO `/Root/Foo` (NameHash, Name, Version, Timestamp) "
                 "  VALUES ($name_hash, $name, $version, $timestamp);";
 
         TKikimrWithGrpcAndRootSchema server;
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "DELETE FROM [/Root/Foo] \n"
+                "DELETE FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         TKikimrWithGrpcAndRootSchema server;
@@ -261,7 +261,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                     "DECLARE $name AS Utf8;\n"
                     "DECLARE $version AS Uint32;\n"
                     "DECLARE $timestamp AS Int64;\n\n"
-                    "UPSERT INTO [/Root/Foo] (NameHash, Name, Version, Timestamp) "
+                    "UPSERT INTO `/Root/Foo` (NameHash, Name, Version, Timestamp) "
                     "  VALUES ($name_hash, $name, $version, $timestamp);";
 
             TAtomic enough = 0;
@@ -289,7 +289,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "SELECT count(*) FROM [/Root/Foo] \n"
+                "SELECT count(*) FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash;";
 
         TAtomic enough = 0;
@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
                 "DECLARE $name AS Utf8;\n"
                 "DECLARE $version AS Uint32;\n"
                 "DECLARE $timestamp AS Int64;\n\n"
-                "SELECT * FROM [/Root/Foo] \n"
+                "SELECT * FROM `/Root/Foo` \n"
                 "WHERE NameHash = $name_hash AND Name = $name";
 
         TIntrusivePtr<ITimeProvider> originalTimeProvider = NKikimr::TAppData::TimeProvider;

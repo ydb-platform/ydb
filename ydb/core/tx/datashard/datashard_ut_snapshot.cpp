@@ -178,13 +178,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot);
         UNIT_ASSERT_VALUES_EQUAL(table1snapshot, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
@@ -248,13 +248,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
             //Cerr << "----Split End----" << Endl;
         }
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         auto table1snapshot = DoReadColumns(server, "/Root/table-1", snapshot);
         UNIT_ASSERT_VALUES_EQUAL(table1snapshot, "key = 1, value = 1\nkey = 2, value = 2\nkey = 3, value = 3\n");
@@ -302,8 +302,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
         CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
 
@@ -366,13 +366,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         auto table1head = ReadShardedTable(server, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(table1head,
@@ -453,13 +453,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" });
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
         UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
@@ -505,13 +505,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         CreateShardedTable(server, sender, "/Root", "table-1", 2);
         CreateShardedTable(server, sender, "/Root", "table-2", 2);
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         auto table1snapshot1 = ReadShardedTable(server, "/Root/table-1", snapshot);
         UNIT_ASSERT_VALUES_EQUAL(table1snapshot1,
@@ -550,13 +550,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot1 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         auto snapshot2 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
@@ -622,13 +622,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         // Snapshots table must have 1 row
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
@@ -686,13 +686,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         // Snapshots table must have 1 row
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
@@ -750,13 +750,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         // Snapshots table must have 1 row
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
@@ -833,13 +833,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         const auto shards1 = GetTableShards(server, sender, "/Root/table-1");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(10000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         // Snapshots table must have 1 row
         UNIT_ASSERT_VALUES_EQUAL(GetSnapshotCount(runtime, shards1[0]), 1u);
@@ -917,13 +917,13 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
         auto tableId1 = ResolveTableId(server, sender, "/Root/table-1");
         auto tableId2 = ResolveTableId(server, sender, "/Root/table-2");
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1), (2, 2), (3, 3);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 10), (20, 20), (30, 30);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1), (2, 2), (3, 3);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 10), (20, 20), (30, 30);");
 
         auto snapshot1 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 11), (2, 22), (3, 33), (4, 44);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 11), (20, 22), (30, 33), (40, 44);");
 
         runtime.GetAppData().FeatureFlags.SetEnableMvccForTest(true);
         RebootTablet(runtime, shards1.at(0), sender);
@@ -931,8 +931,8 @@ Y_UNIT_TEST_SUITE(DataShardSnapshots) {
 
         auto snapshot2 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
 
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 111), (2, 222), (3, 333), (4, 444);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (10, 111), (20, 222), (30, 333), (40, 444);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 111), (2, 222), (3, 333), (4, 444);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (10, 111), (20, 222), (30, 333), (40, 444);");
 
         auto snapshot3 = CreateVolatileSnapshot(server, { "/Root/table-1", "/Root/table-2" }, TDuration::MilliSeconds(30000));
 

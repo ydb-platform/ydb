@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         TString query = Q_(R"(
             SELECT Group, Name, Amount, Comment
-            FROM [/Root/Test]
+            FROM `/Root/Test`
             ORDER BY Group DESC;
         )");
 
@@ -575,8 +575,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         {
             TString query = Q_(R"(
-                DECLARE $x AS "Uint32";
-                DECLARE $y AS "String?";
+                DECLARE $x AS Uint32;
+                DECLARE $y AS String?;
 
                 SELECT *
                 FROM `/Root/Join2`
@@ -625,8 +625,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         {
             TString query = Q_(R"(
-                DECLARE $x AS "Uint32";
-                DECLARE $y AS "String?";
+                DECLARE $x AS Uint32;
+                DECLARE $y AS String?;
 
                 SELECT *
                 FROM `/Root/Join2`
@@ -681,8 +681,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         {
             TString query = Q_(R"(
-                DECLARE $x AS "Uint32";
-                DECLARE $y AS "String?";
+                DECLARE $x AS Uint32;
+                DECLARE $y AS String?;
 
                 SELECT *
                 FROM `/Root/Join2`
@@ -731,8 +731,8 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
         {
             TString query = Q_(R"(
-                DECLARE $x AS "Uint32";
-                DECLARE $y AS "String?";
+                DECLARE $x AS Uint32;
+                DECLARE $y AS String?;
 
                 SELECT *
                 FROM `/Root/Join2`
@@ -908,13 +908,13 @@ Y_UNIT_TEST_SUITE(KqpSort) {
 
             auto result = session.ExecuteDataQuery(R"(
                 DECLARE $rows AS
-                    'List<Struct<
+                    List<Struct<
                         Key: Uint64,
                         Value1: Int32,
                         Value2: String,
-                        Value3: Uint32>>';
+                        Value3: Uint32>>;
 
-                REPLACE INTO [/Root/TopSortTest]
+                REPLACE INTO `/Root/TopSortTest`
                 SELECT * FROM AS_TABLE($rows);
             )", TTxControl::BeginTx().CommitTx(), paramsBuilder.Build(),
                 TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
@@ -930,7 +930,7 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             DECLARE $limit AS Uint64;
             DECLARE $offset AS Uint64;
 
-            SELECT * FROM [/Root/TopSortTest]
+            SELECT * FROM `/Root/TopSortTest`
             WHERE Value1 != $filter
             ORDER BY Value2 DESC, Value3, Key DESC
             LIMIT $limit OFFSET $offset;

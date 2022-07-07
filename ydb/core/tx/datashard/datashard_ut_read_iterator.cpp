@@ -308,7 +308,7 @@ struct TTestHelper {
         {
             CreateTable(Server, Sender, "/Root", "table-1", WithFollower);
             ExecSQL(Server, Sender, R"(
-                UPSERT INTO [/Root/table-1]
+                UPSERT INTO `/Root/table-1`
                 (key1, key2, key3, value)
                 VALUES
                 (1, 1, 1, 100),
@@ -336,7 +336,7 @@ struct TTestHelper {
         {
             CreateMoviesTable(Server, Sender, "/Root", "movies");
             ExecSQL(Server, Sender, R"(
-                UPSERT INTO [/Root/movies]
+                UPSERT INTO `/Root/movies`
                 (id, title, rating)
                 VALUES
                 (1, "I Robot", 10),

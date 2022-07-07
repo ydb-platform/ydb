@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // Fill some data. Later we will copy data from shards 2 and 3 to shard 1.
         {
-            auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) VALUES (0x50000000,1),(0x80000001,1),(0x80000002,1),(0x80000003,1),(0x80000004,1),(0x80000005,1),(0x80000006,1),(0x80000007,1),(0x80000008,1),(0x80000009,1)");
+            auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) VALUES (0x50000000,1),(0x80000001,1),(0x80000002,1),(0x80000003,1),(0x80000004,1),(0x80000005,1),(0x80000006,1),(0x80000007,1),(0x80000008,1),(0x80000009,1)");
             runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(handle);
         }
@@ -118,7 +118,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             };
             runtime.SetObserverFunc(captureRS);
 
-            auto request = MakeSQLRequest("UPSERT INTO [/Root/table-1] (key, value) SELECT value, key FROM [/Root/table-1] WHERE key = 0x50000000");
+            auto request = MakeSQLRequest("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = 0x50000000");
             runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             // Wait until both parts of tx are finished on the second shard.
             TDispatchOptions options;
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // Run more txs and wait until RSs are in local db.
         {
             for (auto i = 1; i < 10; ++i) {
-                auto request = MakeSQLRequest(Sprintf("UPSERT INTO [/Root/table-1] (key, value) SELECT value, key FROM [/Root/table-1] WHERE key = %" PRIu32, i + 0x80000000));
+                auto request = MakeSQLRequest(Sprintf("UPSERT INTO `/Root/table-1` (key, value) SELECT value, key FROM `/Root/table-1` WHERE key = %" PRIu32, i + 0x80000000));
                 runtime.Send(new IEventHandle(NKqp::MakeKqpProxyID(runtime.GetNodeId()), sender, request.Release()));
             }
             TDispatchOptions options;
@@ -211,7 +211,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         CreateShardedTable(server, sender, "/Root", "table-2", 4);
 
         // Fill some data.
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (0x20000000,0x20000001),(0x60000000,0x60000001),(0xA0000000,0xA0000001),(0xE0000000,0xE0000001);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (0x20000000,0x20000001),(0x60000000,0x60000001),(0xA0000000,0xA0000001),(0xE0000000,0xE0000001);");
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         auto shards2 = GetTableShards(server, sender, "/Root/table-2");
@@ -231,7 +231,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
             };
             runtime.SetObserverFunc(captureRS);
 
-            ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) SELECT key, value FROM [/Root/table-1]");
+            ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) SELECT key, value FROM `/Root/table-1`");
         }
 
         // Now we have multishard tx completed but RS not acked. Restart
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
 
         // Try to drop table which waits for all OutRS to be acked. If acks
         // for completed tx work correctly then it should succeed.
-        SendSQL(server, sender, "DROP TABLE [/Root/table-1]", false);
+        SendSQL(server, sender, "DROP TABLE `/Root/table-1`", false);
         WaitTabletBecomesOffline(server, shards1[0]);
     }
 
@@ -266,8 +266,8 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         CreateShardedTable(server, sender, "/Root", "table-3", 1);
 
         // Fill some data.
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 2);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 2);");
 
         ui64 shard1 = GetTableShards(server, sender, "/Root/table-1")[0];
         ui64 shard2 = GetTableShards(server, sender, "/Root/table-2")[0];
@@ -293,10 +293,10 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         runtime.SetObserverFunc(captureRS);
 
         // Copy data from table-1 to table-3. Tx should hung due to dropped RS.
-        SendSQL(server, sender, "UPSERT INTO [/Root/table-3] (key, value) SELECT key, value FROM [/Root/table-1]");
+        SendSQL(server, sender, "UPSERT INTO `/Root/table-3` (key, value) SELECT key, value FROM `/Root/table-1`");
         // Copy data from table-2 to table-3. Tx should succeed due to out-of-order.
         // RS acks are dropped so table-2 should have unacked RS in local DB.
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-3] (key, value) SELECT key, value FROM [/Root/table-2]");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-3` (key, value) SELECT key, value FROM `/Root/table-2`");
 
         // Restart table-3 and wait for new RS from table-2.
         {
@@ -320,7 +320,7 @@ Y_UNIT_TEST_SUITE(TDataShardRSTest) {
         // in table-3. Finished tx will make delayed RS outdated and ack will
         // be send to table-2 leading to successful drop.
         runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-        SendSQL(server, sender, "DROP TABLE [/Root/table-2]", false);
+        SendSQL(server, sender, "DROP TABLE `/Root/table-2`", false);
         runtime.Register(CreateTabletKiller(shard1));
         WaitTabletBecomesOffline(server, shard2);
     }

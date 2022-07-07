@@ -38,7 +38,7 @@ Y_UNIT_TEST_SUITE(YdbS3Internal) {
         // Write some rows
         {
             auto res = session.ExecuteDataQuery(
-                        "REPLACE INTO [/Root/ListingObjects] (Hash, Name, Path, Version, Timestamp, Data) VALUES\n"
+                        "REPLACE INTO `/Root/ListingObjects` (Hash, Name, Path, Version, Timestamp, Data) VALUES\n"
                         "(50, 'bucket50', '/home/Music/Bohemian Rapshody.mp3', 1, 10, 'MP3'),\n"
                         "(50, 'bucket50', '/home/.bashrc', 1, 10, '#bashrc')\n"
                         ";",

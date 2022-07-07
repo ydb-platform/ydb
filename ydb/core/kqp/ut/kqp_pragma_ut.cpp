@@ -16,7 +16,7 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
         auto result = session.ExecuteDataQuery(R"(
             PRAGMA ydb.UnwrapReadTableValues = "true";
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -58,13 +58,13 @@ Y_UNIT_TEST_SUITE(KqpPragma) {
 
         auto result = session.ExecuteDataQuery(R"(
             PRAGMA kikimr.UnwrapReadTableValues = "true";
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[1u;"One"]])", FormatResultSetYson(result.GetResultSet(0)));
 
         result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[[1u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));

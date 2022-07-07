@@ -115,7 +115,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardBuildIndexScan) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
         // Upsert some initial values
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         CreateShardedTableForIndex(server, sender, "/Root", "table-2", 1, false);
 

@@ -134,7 +134,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
 
             auto explainResult = qp->SyncExplainDataQuery(query, true);
 
-            UNIT_ASSERT(explainResult.Success());
+            UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
 
             TExprContext exprCtx;
             VisitExpr(GetExpr(explainResult.QueryAst, exprCtx, moduleResolver.get()).Ptr(),
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
 
         {
-            const TString query = Q_("SELECT * FROM `/Root/IndexedTableWithState`:value_index WHERE value = \"q\";");
+            const TString query = Q_("SELECT * FROM `/Root/IndexedTableWithState` VIEW value_index WHERE value = \"q\";");
             auto result = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT(!result.Success());
             UNIT_ASSERT_C(result.Issues().ToString().Contains("No global indexes for table"), result.Issues().ToString());
@@ -195,11 +195,11 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
 
         {
             const TString query = Q_(R"(
-                UPSERT INTO `/Root/IndexedTableWithState` ("key", "value", "value2")
+                UPSERT INTO `/Root/IndexedTableWithState` (key, value, value2)
                     VALUES (1, "qq", "ww");
             )");
             auto explainResult = qp->SyncExplainDataQuery(query, true);
-            UNIT_ASSERT(explainResult.Success());
+            UNIT_ASSERT_C(explainResult.Success(), explainResult.Issues().ToString());
 
             TExprContext exprCtx;
             bool indexUpdated = false;
@@ -240,7 +240,7 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
         }
 
         {
-            const TString query = Q_("SELECT * FROM `/Root/IndexedTableWithState`:value_index WHERE value = \"q\";");
+            const TString query = Q_("SELECT * FROM `/Root/IndexedTableWithState` VIEW value_index WHERE value = \"q\";");
             auto result = qp->SyncExplainDataQuery(query, true);
             UNIT_ASSERT(!result.Success());
             UNIT_ASSERT(result.Issues().ToString().Contains("is not ready to use"));
@@ -3562,7 +3562,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
         }
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET 'Value3' = 35;
+                UPDATE `/Root/TestTable` SET Value3 = 35;
             )"));
 
             auto result = session.ExecuteDataQuery(
@@ -3942,7 +3942,7 @@ R"([[#;#;["Primary1"];[41u]];[["Secondary2"];[2u];["Primary2"];[42u]];[["Seconda
 
         {
             const TString query1(Q_(R"(
-                UPDATE `/Root/TestTable` SET 'Value1' = 'Val1_2';
+                UPDATE `/Root/TestTable` SET Value1 = 'Val1_2';
             )"));
 
             auto result = session.ExecuteDataQuery(

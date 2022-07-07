@@ -3219,17 +3219,17 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     CreateShardedTable(server, sender, "/Root", "table-1", 2);
     CreateShardedTable(server, sender, "/Root", "table-2", 1);
 
-    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);"));
-    ExecSQL(server, sender, Q_("UPSERT INTO [/Root/table-2] (key, value) VALUES (2, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);"));
+    ExecSQL(server, sender, Q_("UPSERT INTO `/Root/table-2` (key, value) VALUES (2, 1);"));
 
     TString sessionId = CreateSession(runtime, sender);
 
     TString txId;
     {
         auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId, Q_(
-            "SELECT * FROM [/Root/table-1] "
+            "SELECT * FROM `/Root/table-1` "
             "UNION ALL "
-            "SELECT * FROM [/Root/table-2]")));
+            "SELECT * FROM `/Root/table-2`")));
         auto& response = ev->Get()->Record.GetRef();
         UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
         txId = response.GetResponse().GetTxMeta().id();
@@ -3264,8 +3264,8 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     // Send a commit request, it would block on readset exchange
     auto senderCommit = runtime.AllocateEdgeActor();
     SendRequest(runtime, senderCommit, MakeCommitRequest(sessionId, txId, Q_(
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (3, 2); "
-        "UPSERT INTO [/Root/table-2] (key, value) VALUES (4, 2)")));
+        "UPSERT INTO `/Root/table-1` (key, value) VALUES (3, 2); "
+        "UPSERT INTO `/Root/table-2` (key, value) VALUES (4, 2)")));
 
     // Wait until we captured all readsets
     if (readSets.size() < 4) {
@@ -3298,13 +3298,13 @@ Y_UNIT_TEST_NEW_ENGINE(TestReadTableWriteConflict) {
     // because it arrived after the read table and they block each other
     auto senderWriteImm = runtime.AllocateEdgeActor();
     SendRequest(runtime, senderWriteImm, MakeSimpleRequest(Q_(
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (5, 3)")));
+        "UPSERT INTO `/Root/table-1` (key, value) VALUES (5, 3)")));
 
     // Start a planned write to both tables, wait for its plan step too
     auto senderWriteDist = runtime.AllocateEdgeActor();
     SendRequest(runtime, senderWriteDist, MakeSimpleRequest(Q_(
-        "UPSERT INTO [/Root/table-1] (key, value) VALUES (7, 4); "
-        "UPSERT INTO [/Root/table-2] (key, value) VALUES (8, 4)")));
+        "UPSERT INTO `/Root/table-1` (key, value) VALUES (7, 4); "
+        "UPSERT INTO `/Root/table-2` (key, value) VALUES (8, 4)")));
     if (seenPlanSteps < 2) {
         TDispatchOptions options;
         options.FinalEvents.emplace_back(

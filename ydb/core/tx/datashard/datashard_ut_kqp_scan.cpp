@@ -19,7 +19,7 @@ namespace {
     /* sum(value) == 596400 */
     TString FillTableQuery() {
         TStringBuilder sql;
-        sql << "UPSERT INTO [/Root/table-1] (key, value) VALUES ";
+        sql << "UPSERT INTO `/Root/table-1` (key, value) VALUES ";
         for (int i = 1; i < 100; ++i) {
             sql << " (" << i << ", " << i << i << "),";
         }

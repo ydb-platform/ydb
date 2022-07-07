@@ -17,14 +17,14 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(R"(
-            CREATE TABLE [/Root/ScriptingTest] (
+            CREATE TABLE `/Root/ScriptingTest` (
                 Key Uint64,
                 Value String,
                 PRIMARY KEY (Key)
             );
             COMMIT;
 
-            REPLACE INTO [/Root/ScriptingTest] (Key, Value) VALUES
+            REPLACE INTO `/Root/ScriptingTest` (Key, Value) VALUES
                 (1, "One"),
                 (2, "Two");
         )").GetValueSync();
@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 0);
 
         result = client.ExecuteYqlScript(R"(
-            SELECT COUNT(*) FROM [/Root/ScriptingTest];
+            SELECT COUNT(*) FROM `/Root/ScriptingTest`;
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
@@ -43,19 +43,23 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(UnsafeTimestampCast) {
-        TKikimrRunner kikimr;
+        auto setting = NKikimrKqp::TKqpSetting();
+        setting.SetName("_KqpYqlSyntaxVersion");
+        setting.SetValue("0");
+
+        TKikimrRunner kikimr({setting});
         TScriptingClient client(kikimr.GetDriver());
 
         auto result = client.ExecuteYqlScript(Q_(R"(
-            CREATE TABLE [/Root/TsTest] (
+            CREATE TABLE `/Root/TsTest` (
                 Key Timestamp,
                 Value String,
                 PRIMARY KEY (Key)
             );
             COMMIT;
 
-            UPSERT INTO [/Root/TsTest]
-            SELECT * FROM [/Root/KeyValue];
+            UPSERT INTO `/Root/TsTest`
+            SELECT * FROM `/Root/KeyValue`;
         )")).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -77,7 +81,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA db.ScanQuery = "true";
             DECLARE $text AS String;
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = $text;
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = $text;
         )", params).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
@@ -93,18 +97,18 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT COUNT(*) FROM [/Root/EightShard];
-            SELECT COUNT(*) FROM [/Root/TwoShard];
+            SELECT COUNT(*) FROM `/Root/EightShard`;
+            SELECT COUNT(*) FROM `/Root/TwoShard`;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
 
         result = client.ExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "true";
-            UPSERT INTO [/Root/KeyValue]
-            SELECT Key, Text AS Value FROM [/Root/EightShard];
+            UPSERT INTO `/Root/KeyValue`
+            SELECT Key, Text AS Value FROM `/Root/EightShard`;
 
-            SELECT * FROM [/Root/EightShard];
+            SELECT * FROM `/Root/EightShard`;
         )").GetValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
@@ -116,12 +120,12 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA ydb.ScanQuery = "true";
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value1";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value1";
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = default;
-            SELECT COUNT(*) FROM [/Root/EightShard];
-            SELECT COUNT(*) FROM [/Root/TwoShard];
+            SELECT COUNT(*) FROM `/Root/EightShard`;
+            SELECT COUNT(*) FROM `/Root/TwoShard`;
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
@@ -137,7 +141,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA ydb.ScanQuery = "true";
-            SELECT * FROM [/Root/EightShard];
+            SELECT * FROM `/Root/EightShard`;
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
@@ -154,12 +158,12 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
 
         auto result = client.ExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "false";
-            SELECT COUNT(*) FROM [/Root/EightShard];
+            SELECT COUNT(*) FROM `/Root/EightShard`;
             COMMIT;
-            SELECT COUNT(*) FROM [/Root/TwoShard];
+            SELECT COUNT(*) FROM `/Root/TwoShard`;
             COMMIT;
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT COUNT(*) FROM [/Root/KeyValue];
+            SELECT COUNT(*) FROM `/Root/KeyValue`;
         )", execSettings).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 3);
@@ -511,7 +515,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
         auto it = client.StreamExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value1";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value1";
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -527,7 +531,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
             $key2 = (SELECT Fk21 FROM `/Root/Join1` WHERE Key = 2);
             $limit = (SELECT Key FROM `/Root/Join1` WHERE Fk21 = 105);
 
-            SELECT Data FROM [/Root/EightShard] WHERE Key = $key1 OR Key = $key2 LIMIT COALESCE($limit, 1u);
+            SELECT Data FROM `/Root/EightShard` WHERE Key = $key1 OR Key = $key2 LIMIT COALESCE($limit, 1u);
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         CompareYson(R"([[[[1]];[[3]]]])", StreamResultToYson(it));
@@ -537,7 +541,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
         auto it = client.StreamExecuteYqlScript(R"(
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value1";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value1";
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -548,20 +552,20 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
         auto it = client.StreamExecuteYqlScript(R"(
-            SELECT Key FROM [/Root/EightShard] WHERE Text = "Value1"
+            SELECT Key FROM `/Root/EightShard` WHERE Text = "Value1"
             ORDER BY Key;
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value1";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value1";
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "false";
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value2";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value2";
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value3";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value3";
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -577,10 +581,10 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
         auto it = client.StreamExecuteYqlScript(R"(
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT Key FROM [/Root/EightShard] WHERE Text = "Value123";
+            SELECT Key FROM `/Root/EightShard` WHERE Text = "Value123";
             COMMIT;
 
-            SELECT COUNT(*) FROM [/Root/EightShard] WHERE Text = "Value1";
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Text = "Value1";
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -643,11 +647,11 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TKikimrRunner kikimr;
         TScriptingClient client(kikimr.GetDriver());
         auto it = client.StreamExecuteYqlScript(R"(
-            SELECT Key FROM [/Root/EightShard] WHERE Text = "Value";
+            SELECT Key FROM `/Root/EightShard` WHERE Text = "Value";
             COMMIT;
 
             PRAGMA kikimr.ScanQuery = "true";
-            SELECT Key FROM [/Root/EightShard] WHERE Text = "Value5";
+            SELECT Key FROM `/Root/EightShard` WHERE Text = "Value5";
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -659,14 +663,14 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TScriptingClient client(kikimr.GetDriver());
         {
             auto it = client.StreamExecuteYqlScript(R"(
-                CREATE TABLE [/Root/StreamScriptingTest] (
+                CREATE TABLE `/Root/StreamScriptingTest` (
                     Key Uint64,
                     Value String,
                     PRIMARY KEY (Key)
                 );
                 COMMIT;
 
-                REPLACE INTO [/Root/StreamScriptingTest] (Key, Value) VALUES
+                REPLACE INTO `/Root/StreamScriptingTest` (Key, Value) VALUES
                     (1, "One"),
                     (2, "Two");
             )").GetValueSync();
@@ -685,7 +689,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         }
 
         auto it = client.StreamExecuteYqlScript(R"(
-            SELECT COUNT(*) FROM [/Root/StreamScriptingTest];
+            SELECT COUNT(*) FROM `/Root/StreamScriptingTest`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
@@ -699,7 +703,7 @@ Y_UNIT_TEST_SUITE(KqpScripting) {
         TExecuteYqlRequestSettings settings;
         settings.OperationTimeout(TDuration::MilliSeconds(1));
         auto it = client.StreamExecuteYqlScript(R"(
-            SELECT Key FROM [/Root/EightShard] WHERE Text = "Value1";
+            SELECT Key FROM `/Root/EightShard` WHERE Text = "Value1";
         )", settings).GetValueSync();
 
         auto streamPart = it.ReadNext().GetValueSync();

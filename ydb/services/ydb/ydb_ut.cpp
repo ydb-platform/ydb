@@ -650,11 +650,11 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
                                 UNIT_ASSERT_EQUAL(explainResult.GetStatus(), EStatus::SUCCESS);
                                 done = true;
                             };
-                        const TString query = "UPSERT INTO [Root/TheTable] (Key, Value) VALUES (1, \"One\");";
+                        const TString query = "UPSERT INTO `Root/TheTable` (Key, Value) VALUES (1, \"One\");";
                         session.ExplainDataQuery(query).Apply(std::move(sqlResultHandler)).Wait();
                     };
 
-                const TString query = "CREATE TABLE [Root/TheTable] (Key Uint64, Value Utf8, PRIMARY KEY (Key));";
+                const TString query = "CREATE TABLE `Root/TheTable` (Key Uint64, Value Utf8, PRIMARY KEY (Key));";
                 session.ExecuteSchemeQuery(query).Apply(schemeQueryHandler).Wait();
             };
 
@@ -759,7 +759,7 @@ Y_UNIT_TEST_SUITE(TGRpcNewClient) {
                                         session.DescribeTable("/Root/TheDir/FooTable")
                                             .Apply(describeHandler).Wait();
                                                                             };
-                                const TString sql = "UPSERT INTO [Root/TheDir/FooTable] (Key, Value, NewColumn)"
+                                const TString sql = "UPSERT INTO `Root/TheDir/FooTable` (Key, Value, NewColumn)"
                                    " VALUES (1, \"One\", \"йцукен\")";
                                 session.ExecuteDataQuery(sql, TTxControl::
                                     BeginTx(TTxSettings::SerializableRW()).CommitTx()
@@ -1618,7 +1618,7 @@ partitioning_settings {
         {
             TString sessionId = CreateSession(channel);
             const TString query1(R"(
-            UPSERT INTO [/Root/TheTable] (Key, IValue) VALUES
+            UPSERT INTO `/Root/TheTable` (Key, IValue) VALUES
                 (1, "Secondary1"),
                 (2, "Secondary2"),
                 (3, "Secondary3");
@@ -1629,7 +1629,7 @@ partitioning_settings {
         {
             TString sessionId = CreateSession(channel);
             ExecYql(channel, sessionId,
-                "SELECT * FROM [/Root/TheTable];");
+                "SELECT * FROM `/Root/TheTable`;");
         }
 
     }
@@ -2248,7 +2248,7 @@ tx_meta {
             Ydb::Table::ExecuteSchemeQueryRequest request;
             request.set_session_id(sessionId);
             request.set_yql_text(R"(
-                CREATE TABLE [Root/TheTable] (
+                CREATE TABLE `Root/TheTable` (
                     Key UINT64,
                     Value UTF8,
                     PRIMARY KEY (Key)
@@ -2272,7 +2272,7 @@ tx_meta {
             Ydb::Table::ExplainDataQueryRequest request;
             request.set_session_id(sessionId);
             request.set_yql_text(R"(
-                UPSERT INTO [Root/TheTable] (Key, Value)
+                UPSERT INTO `Root/TheTable` (Key, Value)
                 VALUES (1, "One");
             )");
 
@@ -2294,7 +2294,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
             request.mutable_query()->set_yql_text(R"(
-                UPSERT INTO [Root/TheTable] (Key, Value)
+                UPSERT INTO `Root/TheTable` (Key, Value)
                 VALUES (1, "One");
             )");
 
@@ -2324,7 +2324,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
             request.mutable_query()->set_yql_text(R"(
-                UPSERT INTO [Root/TheTable] (Key, Value)
+                UPSERT INTO `Root/TheTable` (Key, Value)
                 VALUES (2, "Two");
             )");
 
@@ -2351,7 +2351,7 @@ tx_meta {
             request.set_session_id(sessionId);
             request.set_yql_text(R"(
                 DECLARE $Key AS Uint64;
-                SELECT * FROM [Root/TheTable] WHERE Key < $Key;
+                SELECT * FROM `Root/TheTable` WHERE Key < $Key;
             )");
 
             Ydb::Table::PrepareDataQueryResponse response;
@@ -2452,7 +2452,7 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("SELECT * from [Root/NotFound]");
+            request.mutable_query()->set_yql_text("SELECT * from `Root/NotFound`");
             request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
@@ -2712,7 +2712,7 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("UPSERT INTO [Root/TheTable] (Key, Value) VALUES (42, \"data\");");
+            request.mutable_query()->set_yql_text("UPSERT INTO `Root/TheTable` (Key, Value) VALUES (42, \"data\");");
             request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
@@ -2729,7 +2729,7 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExplainDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.set_yql_text("SELECT COUNT(*) FROM [Root/TheTable];");
+            request.set_yql_text("SELECT COUNT(*) FROM `Root/TheTable`;");
             Ydb::Table::ExplainDataQueryResponse response;
             auto status = Stub_->ExplainDataQuery(&context, request, &response);
             UNIT_ASSERT(status.ok());
@@ -2837,7 +2837,7 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("DELETE FROM [Root/TheTable];");
+            request.mutable_query()->set_yql_text("DELETE FROM `Root/TheTable`;");
             request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
@@ -2853,7 +2853,7 @@ tx_meta {
             grpc::ClientContext context;
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
-            request.mutable_query()->set_yql_text("DELETE FROM [Root/TheTable2];");
+            request.mutable_query()->set_yql_text("DELETE FROM `Root/TheTable2`;");
             request.mutable_tx_control()->mutable_begin_tx()->mutable_serializable_read_write();
             request.mutable_tx_control()->set_commit_tx(true);
             Ydb::Table::ExecuteDataQueryResponse response;
@@ -2930,7 +2930,7 @@ tx_meta {
             Ydb::Table::ExecuteDataQueryRequest request;
             request.set_session_id(sessionId);
             TStringBuilder requestBuilder;
-            requestBuilder << "UPSERT INTO [Root/TheTable] (Key, Value) VALUES";
+            requestBuilder << "UPSERT INTO `Root/TheTable` (Key, Value) VALUES";
             for (auto pair : data) {
                 requestBuilder << "(" << std::get<0>(pair) << ", \"" << std::get<1>(pair) << "\"),";
             }
@@ -3898,7 +3898,7 @@ Y_UNIT_TEST_SUITE(TTableProfileTests) {
         }
 
         {
-            auto res = session.ExecuteSchemeQuery("CREATE TABLE [/Root/ydb_ut_tenant/table-3] (Key Uint64, Value Utf8, PRIMARY KEY (Key))").ExtractValueSync();
+            auto res = session.ExecuteSchemeQuery("CREATE TABLE `/Root/ydb_ut_tenant/table-3` (Key Uint64, Value Utf8, PRIMARY KEY (Key))").ExtractValueSync();
             NKikimrSchemeOp::TTableDescription defaultDescription;
             defaultDescription.MutablePartitionConfig()->MutableCompactionPolicy()->CopyFrom(DEFAULT_COMPACTION_POLICY);
             //defaultDescription.MutablePartitionConfig()->SetChannelProfileId(0);
@@ -4851,15 +4851,15 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         CreateTable(channel);
 
         ExecYql(channel, sessionId,
-                "UPSERT INTO [/Root/table-1] (key, value) VALUES "
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
                 "(1, CAST(\"1\" as DECIMAL(22,9))),"
                 "(2, CAST(\"22.22\" as DECIMAL(22,9))),"
                 "(3, CAST(\"9999999999999.999999999\" as DECIMAL(22,9)));");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=1;",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
                               {{1, 0}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key >= 1 AND key <= 3;",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
                               {{1, 0}, {22, 220000000}, {9999999999999, 999999999}});
     }
 
@@ -4874,15 +4874,15 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         CreateTable(channel);
 
         ExecYql(channel, sessionId,
-                "UPSERT INTO [/Root/table-1] (key, value) VALUES "
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES "
                 "(1, CAST(\"-1\" as DECIMAL(22,9))),"
                 "(2, CAST(\"-22.22\" as DECIMAL(22,9))),"
                 "(3, CAST(\"-9999999999999.999999999\" as DECIMAL(22,9)));");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=1;",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=1;",
                               {{-1, 0}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key >= 1 AND key <= 3;",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= 1 AND key <= 3;",
                               {{-1, 0}, {-22, 220000000}, {-9999999999999, 999999999}});
     }
 
@@ -4909,7 +4909,7 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
         CreateTable(channel, request);
 
         ExecYql(channel, sessionId, R"(
-                UPSERT INTO [/Root/table-1] (key, value) VALUES
+                UPSERT INTO `/Root/table-1` (key, value) VALUES
                 (CAST("1" as DECIMAL(22,9)), CAST("1" as DECIMAL(22,9))),
                 (CAST("22.22" as DECIMAL(22,9)), CAST("22.22" as DECIMAL(22,9))),
                 (CAST("9999999999999.999999999" as DECIMAL(22,9)), CAST("9999999999999.999999999" as DECIMAL(22,9))),
@@ -4918,32 +4918,32 @@ Y_UNIT_TEST_SUITE(TYqlDecimalTests) {
                 (CAST("-9999999999999.999999999" as DECIMAL(22,9)), CAST("-9999999999999.999999999" as DECIMAL(22,9)));
         )");
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=CAST(\"1\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"1\" as DECIMAL(22,9));",
                               {{1, 0}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=CAST(\"22.22\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"22.22\" as DECIMAL(22,9));",
                               {{22, 220000000}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=CAST(\"9999999999999.999999999\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"9999999999999.999999999\" as DECIMAL(22,9));",
                               {{9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=CAST(\"-1\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-1\" as DECIMAL(22,9));",
                               {{-1, 0}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=CAST(\"-22.22\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-22.22\" as DECIMAL(22,9));",
                               {{-22, 220000000}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key=CAST(\"-9999999999999.999999999\" as DECIMAL(22,9));",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key=CAST(\"-9999999999999.999999999\" as DECIMAL(22,9));",
                               {{-9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key >= CAST(\"-22.22\" as DECIMAL(22,9))",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key >= CAST(\"-22.22\" as DECIMAL(22,9))",
                               {{-22, 220000000}, {-1, 0},
                                {1, 0}, {22, 220000000}, {9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key < CAST(\"-22.22\" as DECIMAL(22,9))",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key < CAST(\"-22.22\" as DECIMAL(22,9))",
                               {{-9999999999999, 999999999}});
 
-        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM [/Root/table-1] WHERE key > CAST(\"-22.222\" as DECIMAL(22,9)) AND key < CAST(\"22.222\" as DECIMAL(22,9))",
+        CheckYqlDecimalValues(channel, sessionId, "SELECT value FROM `/Root/table-1` WHERE key > CAST(\"-22.222\" as DECIMAL(22,9)) AND key < CAST(\"22.222\" as DECIMAL(22,9))",
                               {{-22, 220000000}, {-1, 0},
                                {1, 0}, {22, 220000000}});
     }
@@ -5033,7 +5033,7 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
         CreateTable(channel, request);
 
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-1] (key, val1, val2, val3, val4) VALUES
+                UPSERT INTO `/Root/table-1` (key, val1, val2, val3, val4) VALUES
                 (1, CAST(0 as DATE),
                     CAST(0 as DATETIME),
                     CAST(0 as TIMESTAMP),
@@ -5048,16 +5048,16 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
                     CAST(-1000 as INTERVAL));
         )___");
 
-        CheckDateValues(channel, sessionId, "SELECT val1 FROM [/Root/table-1];",
+        CheckDateValues(channel, sessionId, "SELECT val1 FROM `/Root/table-1`;",
                         {TInstant::Zero(), TInstant::Days(1000), TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
 
-        CheckDatetimeValues(channel, sessionId, "SELECT val2 FROM [/Root/table-1];",
+        CheckDatetimeValues(channel, sessionId, "SELECT val2 FROM `/Root/table-1`;",
                             {TInstant::Zero(), TInstant::Seconds(1000), TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
 
-        CheckTimestampValues(channel, sessionId, "SELECT val3 FROM [/Root/table-1];",
+        CheckTimestampValues(channel, sessionId, "SELECT val3 FROM `/Root/table-1`;",
                             {TInstant::Zero(), TInstant::MicroSeconds(1000), TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
 
-        CheckIntervalValues(channel, sessionId, "SELECT val4 FROM [/Root/table-1];",
+        CheckIntervalValues(channel, sessionId, "SELECT val4 FROM `/Root/table-1`;",
                             {0, 1000, -1000});
     }
 
@@ -5080,18 +5080,18 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
         CreateTable(channel, request);
 
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-1] (key) VALUES
+                UPSERT INTO `/Root/table-1` (key) VALUES
                 (CAST('2000-01-01' as DATE)),
                 (CAST('2020-01-01' as DATE)),
                 (CAST('2050-01-01' as DATE));
         )___");
 
-        CheckDateValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key = CAST('2050-01-01' as DATE);",
+        CheckDateValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key = CAST('2050-01-01' as DATE);",
                         {TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
-        CheckDateValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key > CAST('2000-01-01' as DATE);",
+        CheckDateValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key > CAST('2000-01-01' as DATE);",
                         {TInstant::ParseIso8601("2020-01-01T00:00:00Z"),
                          TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
-        CheckDateValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key < CAST('2050-01-01' as DATE);",
+        CheckDateValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key < CAST('2050-01-01' as DATE);",
                         {TInstant::ParseIso8601("2000-01-01T00:00:00Z"),
                          TInstant::ParseIso8601("2020-01-01T00:00:00Z")});
     }
@@ -5115,18 +5115,18 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
         CreateTable(channel, request);
 
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-1] (key) VALUES
+                UPSERT INTO `/Root/table-1` (key) VALUES
                 (CAST('2000-01-01T00:00:00Z' as DATETIME)),
                 (CAST('2020-01-01T00:00:00Z' as DATETIME)),
                 (CAST('2050-01-01T00:00:00Z' as DATETIME));
         )___");
 
-        CheckDatetimeValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key = CAST('2050-01-01T00:00:00Z' as DATETIME);",
+        CheckDatetimeValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key = CAST('2050-01-01T00:00:00Z' as DATETIME);",
                             {TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
-        CheckDatetimeValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key > CAST('2000-01-01T00:00:00Z' as DATETIME);",
+        CheckDatetimeValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key > CAST('2000-01-01T00:00:00Z' as DATETIME);",
                             {TInstant::ParseIso8601("2020-01-01T00:00:00Z"),
                              TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
-        CheckDatetimeValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key < CAST('2050-01-01T00:00:00Z' as DATETIME);",
+        CheckDatetimeValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key < CAST('2050-01-01T00:00:00Z' as DATETIME);",
                             {TInstant::ParseIso8601("2000-01-01T00:00:00Z"),
                              TInstant::ParseIso8601("2020-01-01T00:00:00Z")});
     }
@@ -5150,18 +5150,18 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
         CreateTable(channel, request);
 
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-1] (key) VALUES
+                UPSERT INTO `/Root/table-1` (key) VALUES
                 (CAST('2000-01-01T00:00:00.000000Z' as TIMESTAMP)),
                 (CAST('2020-01-01T00:00:00.000000Z' as TIMESTAMP)),
                 (CAST('2050-01-01T00:00:00.000000Z' as TIMESTAMP));
         )___");
 
-        CheckTimestampValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key = CAST('2050-01-01T00:00:00.000000Z' as TIMESTAMP);",
+        CheckTimestampValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key = CAST('2050-01-01T00:00:00.000000Z' as TIMESTAMP);",
                              {TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
-        CheckTimestampValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key > CAST('2000-01-01T00:00:00.000000Z' as TIMESTAMP);",
+        CheckTimestampValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key > CAST('2000-01-01T00:00:00.000000Z' as TIMESTAMP);",
                              {TInstant::ParseIso8601("2020-01-01T00:00:00Z"),
                               TInstant::ParseIso8601("2050-01-01T00:00:00Z")});
-        CheckTimestampValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key < CAST('2050-01-01T00:00:00.000000Z' as TIMESTAMP);",
+        CheckTimestampValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key < CAST('2050-01-01T00:00:00.000000Z' as TIMESTAMP);",
                              {TInstant::ParseIso8601("2000-01-01T00:00:00Z"),
                               TInstant::ParseIso8601("2020-01-01T00:00:00Z")});
     }
@@ -5185,17 +5185,17 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
         CreateTable(channel, request);
 
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-1] (key) VALUES
+                UPSERT INTO `/Root/table-1` (key) VALUES
                 (CAST(0 as INTERVAL)),
                 (CAST(1000 as INTERVAL)),
                 (CAST(-1000 as INTERVAL));
         )___");
 
-        CheckIntervalValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key = CAST(1000 as INTERVAL);",
+        CheckIntervalValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key = CAST(1000 as INTERVAL);",
                             {1000});
-        CheckIntervalValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key >= CAST(0 as INTERVAL);",
+        CheckIntervalValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key >= CAST(0 as INTERVAL);",
                             {0, 1000});
-        CheckIntervalValues(channel, sessionId, "SELECT key FROM [/Root/table-1] WHERE key < CAST(1000 as INTERVAL);",
+        CheckIntervalValues(channel, sessionId, "SELECT key FROM `/Root/table-1` WHERE key < CAST(1000 as INTERVAL);",
                             {-1000, 0});
     }
 
@@ -5233,56 +5233,56 @@ Y_UNIT_TEST_SUITE(TYqlDateTimeTests) {
         }
 
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-1] (key, val) VALUES
+                UPSERT INTO `/Root/table-1` (key, val) VALUES
                 (1, CAST('2000-01-01T00:00:00.000000Z' as TIMESTAMP)),
                 (2, CAST('2020-01-01T00:00:00.000000Z' as TIMESTAMP));
         )___");
         ExecYql(channel, sessionId, R"___(
-                UPSERT INTO [/Root/table-2] (key, val) VALUES
+                UPSERT INTO `/Root/table-2` (key, val) VALUES
                 (1, CAST(3600000000 as INTERVAL)),
                 (2, CAST(143123456 as INTERVAL));
         )___");
 
         ExecYql(channel, sessionId, R"___(
-                $t1 = (SELECT val FROM [/Root/table-1] WHERE key = 1);
-                $t2 = (SELECT val FROM [/Root/table-1] WHERE key = 2);
-                $i1 = (SELECT val FROM [/Root/table-2] WHERE key = 1);
-                $i2 = (SELECT val FROM [/Root/table-2] WHERE key = 2);
-                UPSERT INTO [/Root/table-1] (key, val) VALUES
+                $t1 = (SELECT val FROM `/Root/table-1` WHERE key = 1);
+                $t2 = (SELECT val FROM `/Root/table-1` WHERE key = 2);
+                $i1 = (SELECT val FROM `/Root/table-2` WHERE key = 1);
+                $i2 = (SELECT val FROM `/Root/table-2` WHERE key = 2);
+                UPSERT INTO `/Root/table-1` (key, val) VALUES
                 (3, $t1 + $i1),
                 (4, $t2 + $i2);
         )___");
 
         ExecYql(channel, sessionId, R"___(
-                $t1 = (SELECT val FROM [/Root/table-1] WHERE key = 1);
-                $t2 = (SELECT val FROM [/Root/table-1] WHERE key = 2);
-                $i1 = (SELECT val FROM [/Root/table-2] WHERE key = 1);
-                $i2 = (SELECT val FROM [/Root/table-2] WHERE key = 2);
-                UPSERT INTO [/Root/table-2] (key, val) VALUES
+                $t1 = (SELECT val FROM `/Root/table-1` WHERE key = 1);
+                $t2 = (SELECT val FROM `/Root/table-1` WHERE key = 2);
+                $i1 = (SELECT val FROM `/Root/table-2` WHERE key = 1);
+                $i2 = (SELECT val FROM `/Root/table-2` WHERE key = 2);
+                UPSERT INTO `/Root/table-2` (key, val) VALUES
                 (3, $i1 + $i2),
                 (4, $t2 - $t1),
                 (5, $t1 - $t2);
         )___");
 
-        CheckTimestampValues(channel, sessionId, "SELECT val FROM [/Root/table-1] WHERE key = 3;",
+        CheckTimestampValues(channel, sessionId, "SELECT val FROM `/Root/table-1` WHERE key = 3;",
                              {TInstant::ParseIso8601("2000-01-01T01:00:00Z")});
 
-        CheckTimestampValues(channel, sessionId, "SELECT val FROM [/Root/table-1] WHERE key = 4;",
+        CheckTimestampValues(channel, sessionId, "SELECT val FROM `/Root/table-1` WHERE key = 4;",
                              {TInstant::ParseIso8601("2020-01-01T00:00:00Z") + TDuration::MicroSeconds(143123456)});
 
-        CheckIntervalValues(channel, sessionId, "SELECT val FROM [/Root/table-2] WHERE key = 3;",
+        CheckIntervalValues(channel, sessionId, "SELECT val FROM `/Root/table-2` WHERE key = 3;",
                             {3743123456});
 
         auto diff = TInstant::ParseIso8601("2020-01-01T00:00:00Z") - TInstant::ParseIso8601("2000-01-01T00:00:00Z");
-        CheckIntervalValues(channel, sessionId, "SELECT val FROM [/Root/table-2] WHERE key = 4;",
+        CheckIntervalValues(channel, sessionId, "SELECT val FROM `/Root/table-2` WHERE key = 4;",
                             {static_cast<i64>(diff.MicroSeconds())});
 
-        CheckIntervalValues(channel, sessionId, "SELECT val FROM [/Root/table-2] WHERE key = 5;",
+        CheckIntervalValues(channel, sessionId, "SELECT val FROM `/Root/table-2` WHERE key = 5;",
                             {- static_cast<i64>(diff.MicroSeconds())});
 
         CheckTimestampValues(channel, sessionId, R"___(
-                             $v1 = (SELECT val FROM [/Root/table-1] WHERE key = 1);
-                             $v2 = (SELECT val FROM [/Root/table-2] WHERE key = 1);
+                             $v1 = (SELECT val FROM `/Root/table-1` WHERE key = 1);
+                             $v2 = (SELECT val FROM `/Root/table-2` WHERE key = 1);
                              SELECT ($v1 + $v2);)___",
                              {TInstant::ParseIso8601("2000-01-01T01:00:00Z")});
     }
@@ -5338,14 +5338,14 @@ Y_UNIT_TEST(LocksFromAnotherTenants) {
     }
 
     {
-        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) VALUES (1u, \"One\");", first_tenant_name.c_str());
+        TString query = Sprintf("UPSERT INTO `Root/%s/table` (Key, Value) VALUES (1u, \"One\");", first_tenant_name.c_str());
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetStatus() << result.GetIssues().ToString());
     }
 
     {
-        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) VALUES (2u, \"Second\");", second_tenant_name.c_str());
+        TString query = Sprintf("UPSERT INTO `Root/%s/table` (Key, Value) VALUES (2u, \"Second\");", second_tenant_name.c_str());
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
@@ -5354,7 +5354,7 @@ Y_UNIT_TEST(LocksFromAnotherTenants) {
     }
 
     {
-        TString query = Sprintf("UPSERT INTO [Root/%s/table] (Key, Value) SELECT Key, Value FROM [Root/%s/table];", second_tenant_name.c_str(), first_tenant_name.c_str());
+        TString query = Sprintf("UPSERT INTO `Root/%s/table` (Key, Value) SELECT Key, Value FROM `Root/%s/table`;", second_tenant_name.c_str(), first_tenant_name.c_str());
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
         UNIT_ASSERT_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR,

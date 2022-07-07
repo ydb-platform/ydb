@@ -34,7 +34,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
 
         // Make sure shard has some data commits
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (0, 0);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (0, 0);");
 
         bool addYellowFlag = false;
         bool captureReassign = true;
@@ -75,7 +75,7 @@ Y_UNIT_TEST_SUITE(DataShardReassign) {
 
         // Perform transaction to trigger yellow flag checks
         addYellowFlag = true;
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 1);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 1);");
         addYellowFlag = false;
 
         // Wait until we capture a reassign message

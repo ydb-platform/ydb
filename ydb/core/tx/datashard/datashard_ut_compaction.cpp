@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(DataShardCompaction) {
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (2, 200), (3, 300), (4, 400);");
 
         auto shards1 = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);

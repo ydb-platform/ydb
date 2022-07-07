@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
         // Upsert some initial values
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         TString sessionId = CreateSession(runtime, sender);
 
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         TString txId;
         {
             auto ev = ExecRequest(runtime, sender, MakeBeginRequest(sessionId,
-                "SELECT value FROM [/Root/table-1] WHERE key = 3"));
+                "SELECT value FROM `/Root/table-1` WHERE key = 3"));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::SUCCESS);
             txId = response.GetResponse().GetTxMeta().id();
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         // Commit transaction and perform some writes (must result in transaction locks invalidated)
         {
             auto ev = ExecRequest(runtime, sender, MakeCommitRequest(sessionId, txId,
-                "UPSERT INTO [/Root/table-1] (key, value) VALUES (6, 600);"));
+                "UPSERT INTO `/Root/table-1` (key, value) VALUES (6, 600);"));
             auto& response = ev->Get()->Record.GetRef();
             UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
 
@@ -281,9 +281,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get());
 
         // Apply some blind operations on an incomplete table
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
-        ExecSQL(server, sender, "DELETE FROM [/Root/table-1] ON (key) VALUES (5), (6), (8);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key) VALUES (6), (7), (10);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` ON (key) VALUES (5), (6), (8);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (6), (7), (10);");
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
@@ -347,9 +347,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
 
         // Apply some blind operations on an incomplete table
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
-        ExecSQL(server, sender, "DELETE FROM [/Root/table-1] ON (key) VALUES (5), (6), (8);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key) VALUES (6), (7), (10);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` ON (key) VALUES (5), (6), (8);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (6), (7), (10);");
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
@@ -428,9 +428,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
 
         // Apply some blind operations on an incomplete table
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
-        ExecSQL(server, sender, "DELETE FROM [/Root/table-1] ON (key) VALUES (5), (6), (8);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key) VALUES (6), (7), (10);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` ON (key) VALUES (5), (6), (8);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (6), (7), (10);");
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
@@ -527,9 +527,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
 
         // Apply some blind operations on an incomplete table
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
-        ExecSQL(server, sender, "DELETE FROM [/Root/table-1] ON (key) VALUES (5), (6), (8);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key) VALUES (6), (7), (10);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` ON (key) VALUES (5), (6), (8);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (6), (7), (10);");
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {
@@ -629,9 +629,9 @@ Y_UNIT_TEST_SUITE(TTxDataShardUploadRows) {
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false, policy.Get(), EShadowDataMode::Enabled);
 
         // Apply some blind operations on an incomplete table
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
-        ExecSQL(server, sender, "DELETE FROM [/Root/table-1] ON (key) VALUES (5), (6), (8);");
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key) VALUES (6), (7), (10);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` ON (key) VALUES (5), (6), (8);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key) VALUES (6), (7), (10);");
 
         // Write shadow data: keys from 1 to 9 historically had value=key*10
         {

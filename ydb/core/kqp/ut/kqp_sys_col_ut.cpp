@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
         {
             auto query = R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
-                REPLACE INTO [/Root/TwoShard] (Key, Value1, Value2)
+                REPLACE INTO `/Root/TwoShard` (Key, Value1, Value2)
                 VALUES (4u, "Four", -4);
             )";
             auto result = ExecuteDataQuery(kikimr, query);
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
         {
             auto query = R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
-                SELECT COUNT(*) FROM [/Root/TwoShard]
+                SELECT COUNT(*) FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -4;
             )";
             auto result = ExecuteDataQuery(kikimr, query);
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
         {
             auto query = R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
-                UPDATE [/Root/TwoShard] SET Value2 = -44
+                UPDATE `/Root/TwoShard` SET Value2 = -44
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -4;
             )";
             ExecuteDataQuery(kikimr, query);
@@ -129,7 +129,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
         {
             auto query = R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
-                SELECT COUNT(*) FROM [/Root/TwoShard]
+                SELECT COUNT(*) FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -44;
             )";
             auto result = ExecuteDataQuery(kikimr, query);
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
         {
             auto query = R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
-                DELETE FROM [/Root/TwoShard]
+                DELETE FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -44;
             )";
             auto result = ExecuteDataQuery(kikimr, query);
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
         {
             auto query = R"(
                 PRAGMA kikimr.EnableSystemColumns = "true";
-                SELECT COUNT(*) FROM [/Root/TwoShard]
+                SELECT COUNT(*) FROM `/Root/TwoShard`
                 WHERE _yql_partition_id = 72075186224037888ul AND Value2 = -44;
             )";
             auto result = ExecuteDataQuery(kikimr, query);
@@ -161,8 +161,9 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
     Y_UNIT_TEST(InnerJoinTables) {
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
-            SELECT * FROM [/Root/Join1] AS t1
-            INNER JOIN [/Root/Join2] AS t2
+            PRAGMA DisableSimpleColumns;
+            SELECT * FROM `/Root/Join1` AS t1
+            INNER JOIN `/Root/Join2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
         )";
@@ -175,8 +176,9 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
     Y_UNIT_TEST(InnerJoinSelect) {
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
-            SELECT * FROM [/Root/Join1] AS t1
-            INNER JOIN (SELECT Key1, Key2, Value2 FROM [/Root/Join2]) AS t2
+            PRAGMA DisableSimpleColumns;
+            SELECT * FROM `/Root/Join1` AS t1
+            INNER JOIN (SELECT Key1, Key2, Value2 FROM `/Root/Join2`) AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
         )";
@@ -189,8 +191,9 @@ Y_UNIT_TEST_SUITE(KqpSysColV0) {
     Y_UNIT_TEST(InnerJoinSelectAsterisk) {
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
-            SELECT * FROM [/Root/Join1] AS t1
-            INNER JOIN (SELECT * FROM [/Root/Join2]) AS t2
+            PRAGMA DisableSimpleColumns;
+            SELECT * FROM `/Root/Join1` AS t1
+            INNER JOIN (SELECT * FROM `/Root/Join2`) AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
         )";
@@ -299,6 +302,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
     Y_UNIT_TEST_NEW_ENGINE(InnerJoinTables) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN `/Root/Join2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
@@ -313,6 +317,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
     Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelect) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN (SELECT Key1, Key2, Value2 FROM `/Root/Join2`) AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
@@ -327,6 +332,7 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
     Y_UNIT_TEST_NEW_ENGINE(InnerJoinSelectAsterisk) {
         auto query = Q_(R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN (SELECT * FROM `/Root/Join2`) AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
@@ -372,13 +378,17 @@ Y_UNIT_TEST_SUITE(KqpSysColV1) {
         TKikimrRunner kikimr;
         auto query = R"(
             PRAGMA kikimr.EnableSystemColumns = "true";
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1` AS t1
             INNER JOIN `/Root/Join2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2
             WHERE t1.Value == "Value5" AND t2.Value2 == "Value31";
         )";
         auto it = ExecuteStreamQuery(kikimr, query);
-        CompareYson(R"([[[108u];["One"];[8];[108u];["One"];#;["Value5"];["Value31"]]])", StreamResultToYson(it));
+        auto yson = StreamResultToYson(it);
+        Cerr << yson << Endl;
+        CompareYson(R"([[[108u];["One"];[8];["Value5"];[108u];["One"];#;["Value31"]]])", yson);
+//      CompareYson(R"([[[108u];["One"];[8];[108u];["One"];#;["Value5"];["Value31"]]])", yson);
     }
 
     Y_UNIT_TEST(StreamInnerJoinSelect) {

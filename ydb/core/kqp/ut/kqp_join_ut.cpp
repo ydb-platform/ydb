@@ -191,6 +191,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 = t2.Key1 AND t1.Fk22 = t2.Key2
@@ -231,6 +232,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 == t2.Key1
@@ -329,6 +331,7 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
         CreateSampleTables(session);
 
         auto result = session.ExecuteDataQuery(Q_(R"(
+            PRAGMA DisableSimpleColumns;
             SELECT * FROM `/Root/Join1_1` AS t1
             INNER JOIN `/Root/Join1_2` AS t2
             ON t1.Fk21 == t2.Key1 AND t1.Fk22 == t2.Key2

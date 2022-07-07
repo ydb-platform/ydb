@@ -617,7 +617,7 @@ public:
         MkDir("/Root/PQ", "Config");
         MkDir("/Root/PQ/Config", "V2");
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE [/Root/PQ/Config/V2/Cluster] (
+            CREATE TABLE `/Root/PQ/Config/V2/Cluster` (
                 name Utf8,
                 balancer Utf8,
                 local Bool,
@@ -625,7 +625,7 @@ public:
                 weight Uint64,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE [/Root/PQ/Config/V2/Topics] (
+            CREATE TABLE `/Root/PQ/Config/V2/Topics` (
                 path Utf8,
                 dc Utf8,
                 PRIMARY KEY (path, dc)
@@ -633,7 +633,7 @@ public:
         )___");
 
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE [/Root/PQ/Config/V2/Versions] (
+            CREATE TABLE `/Root/PQ/Config/V2/Versions` (
                 name Utf8,
                 version Int64,
                 PRIMARY KEY (name)
@@ -641,7 +641,7 @@ public:
         )___");
 
         TStringBuilder upsertClusters;
-        upsertClusters <<  "UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, balancer, local, enabled, weight) VALUES ";
+        upsertClusters <<  "UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, balancer, local, enabled, weight) VALUES ";
         bool first = true;
         for (auto& [cluster, info] : clusters) {
             bool isLocal = localCluster.empty() ? first : localCluster == cluster;
@@ -655,14 +655,14 @@ public:
         TString clustersStr = clusters.empty() ? "" : TString(upsertClusters);
         Cerr << "=== Init DC: " << clustersStr << Endl;
         RunYqlDataQuery(clustersStr + R"___(
-            UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Cluster", 1);
-            UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES ("Topics", 0);
+            UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES ("Cluster", 1);
+            UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES ("Topics", 0);
         )___");
     }
 
     void UpdateDcEnabled(const TString& name, bool enabled) {
         TStringBuilder query;
-        query << "UPDATE [/Root/PQ/Config/V2/Cluster] SET enabled = " << (enabled ? "true" : "false")
+        query << "UPDATE `/Root/PQ/Config/V2/Cluster` SET enabled = " << (enabled ? "true" : "false")
               << " where name = \"" << name << "\";";
         Cerr << "===Update clusters: " << query << Endl;
         RunYqlDataQuery(query);
@@ -670,7 +670,7 @@ public:
 
     TPQTestClusterInfo GetDcInfo(const TString& name) {
         TStringBuilder query;
-        query << "SELECT balancer, enabled, weight FROM [/Root/PQ/Config/V2/Cluster] where name = \"" << name << "\";";
+        query << "SELECT balancer, enabled, weight FROM `/Root/PQ/Config/V2/Cluster` where name = \"" << name << "\";";
         auto result = RunYqlDataQuery(query);
         NYdb::TResultSetParser parser(*result);
         UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
@@ -688,12 +688,12 @@ public:
         MkDir("/Root/PQ/Config", "V2");
 
         RunYqlSchemeQuery(R"___(
-            CREATE TABLE [/Root/PQ/Config/V2/Consumer] (
+            CREATE TABLE `/Root/PQ/Config/V2/Consumer` (
                 name Utf8,
                 tvmClientId Utf8,
                 PRIMARY KEY (name)
             );
-            CREATE TABLE [/Root/PQ/Config/V2/Producer] (
+            CREATE TABLE `/Root/PQ/Config/V2/Producer` (
                 name Utf8,
                 tvmClientId Utf8,
                 PRIMARY KEY (name)
@@ -705,10 +705,10 @@ public:
     void UpdateDC(const TString& name, bool local, bool enabled) {
         const TString query = Sprintf(
             R"___(
-                UPSERT INTO [/Root/PQ/Config/V2/Cluster] (name, local, enabled) VALUES
+                UPSERT INTO `/Root/PQ/Config/V2/Cluster` (name, local, enabled) VALUES
                     ("%s", %s, %s);
-                UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version)
-                    SELECT name, version + 1 FROM [/Root/PQ/Config/V2/Versions] WHERE name == "Cluster";
+                UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version)
+                    SELECT name, version + 1 FROM `/Root/PQ/Config/V2/Versions` WHERE name == "Cluster";
             )___", name.c_str(), (local ? "true" : "false"), (enabled ? "true" : "false"));
 
         RunYqlDataQuery(query);
@@ -836,7 +836,7 @@ public:
 
     void CreateConsumer(const TString& oldName) {
         auto name = NPersQueue::ConvertOldConsumerName(oldName);
-        RunYqlSchemeQuery("CREATE TABLE [/Root/PQ/" + name + "] (" + "Topic Utf8, Partition Uint32, Offset Uint64,  PRIMARY KEY (Topic,Partition) );");
+        RunYqlSchemeQuery("CREATE TABLE `/Root/PQ/" + name + "` (" + "Topic Utf8, Partition Uint32, Offset Uint64,  PRIMARY KEY (Topic,Partition) );");
     }
 
     void GrantConsumerAccess(const TString& oldName, const TString& subj) {
@@ -1371,7 +1371,7 @@ public:
 
 private:
     static TString GetAlterTopicsVersionQuery() {
-        return "UPSERT INTO [/Root/PQ/Config/V2/Versions] (name, version) VALUES (\"Topics\", $version);";
+        return "UPSERT INTO `/Root/PQ/Config/V2/Versions` (name, version) VALUES (\"Topics\", $version);";
     }
 
 public:
@@ -1387,9 +1387,9 @@ public:
         TStringBuilder query;
         query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; ";
         if (add) {
-            query << "UPSERT INTO [/Root/PQ/Config/V2/Topics] (path, dc) VALUES ($path, $cluster); ";
+            query << "UPSERT INTO `/Root/PQ/Config/V2/Topics` (path, dc) VALUES ($path, $cluster); ";
         } else {
-            query << "DELETE FROM [/Root/PQ/Config/V2/Topics] WHERE path = $path AND dc = $cluster; ";
+            query << "DELETE FROM `/Root/PQ/Config/V2/Topics` WHERE path = $path AND dc = $cluster; ";
         }
         TString cluster = dc.GetOrElse(NPersQueue::GetDC(topic));
         query << GetAlterTopicsVersionQuery();

@@ -22,14 +22,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         bool useSchemeCacheMeta = tableSettings.GetUseSchemeCacheMetadata();
 
         auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue];
+            SELECT * FROM `/Root/KeyValue`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
             useSchemeCacheMeta ? EStatus::SCHEME_ERROR : EStatus::UNAUTHORIZED, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/NonExistent];
+            SELECT * FROM `/Root/NonExistent`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
@@ -42,12 +42,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue];
+            SELECT * FROM `/Root/KeyValue`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/NonExistent];
+            SELECT * FROM `/Root/NonExistent`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
@@ -59,17 +59,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue];
+            SELECT * FROM `/Root/KeyValue`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         auto schemeResult = session.ExecuteSchemeQuery(R"(
-            DROP TABLE [/Root/KeyValue];
+            DROP TABLE `/Root/KeyValue`;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(schemeResult.GetStatus(), EStatus::SUCCESS);
 
         result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue];
+            SELECT * FROM `/Root/KeyValue`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
@@ -81,12 +81,12 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto schemeResult = session.ExecuteSchemeQuery(R"(
-            DROP TABLE [/Root/KeyValue];
+            DROP TABLE `/Root/KeyValue`;
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(schemeResult.GetStatus(), EStatus::SUCCESS);
 
         schemeResult = session.ExecuteSchemeQuery(R"(
-            CREATE TABLE [/Root/KeyValue] (
+            CREATE TABLE `/Root/KeyValue` (
                 Key Uint32,
                 Value String,
                 PRIMARY KEY(Key)
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(schemeResult.GetStatus(), EStatus::SUCCESS);
 
         auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue];
+            SELECT * FROM `/Root/KeyValue`;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         const size_t limit = 1000;
 
         const static TString createTableQuery = R"(
-            CREATE TABLE [/Root/Test1234/KeyValue] (
+            CREATE TABLE `/Root/Test1234/KeyValue` (
                 Key Uint32,
                 Value String,
                 PRIMARY KEY(Key)
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         )";
 
         const static TString dropTableQuery = R"(
-            DROP TABLE [/Root/Test1234/KeyValue];
+            DROP TABLE `/Root/Test1234/KeyValue`;
         )";
 
         NPar::LocalExecutor().RunAdditionalThreads(inflight);
@@ -207,7 +207,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
                 auto status = db.RetryOperationSync([](TSession session) {
                     return session.ExecuteSchemeQuery(R"(
-                        ALTER TABLE [/Root/EightShard] DROP COLUMN Data;
+                        ALTER TABLE `/Root/EightShard` DROP COLUMN Data;
                     )").ExtractValueSync();
                 });
                 UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
@@ -225,7 +225,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     // Immediate
                     auto status = db.RetryOperationSync([](TSession session) {
                         return session.ExecuteDataQuery(R"(
-                            SELECT * FROM [/Root/EightShard] WHERE Key = 501u;
+                            SELECT * FROM `/Root/EightShard` WHERE Key = 501u;
                         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                     }, retrySettings);
                     UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                     // Planned
                     auto status = db.RetryOperationSync([](TSession session) {
                         return session.ExecuteDataQuery(R"(
-                            SELECT * FROM [/Root/EightShard];
+                            SELECT * FROM `/Root/EightShard`;
                         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
                     }, retrySettings);
                     UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
@@ -252,11 +252,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TString query;
         if (write) {
             query = Q_(R"(
-                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
             )");
         } else {
             query = Q_(R"(
-                SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+                SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
             )");
         }
 
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TString query;
         if (write) {
             query = Q_(R"(
-                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
             )");
         } else {
             query = Q1_(R"(
@@ -422,7 +422,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TString query2;
         if (write) {
             query1 = Q_(R"(
-                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
             )");
             query2 = query1;
         } else {
@@ -523,10 +523,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         TString query2;
         if (write) {
             query1 = Q_(R"(
-                UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
             )");
             query2 = Q_(R"(
-                UPSERT INTO [/Root/KeyValueMoved] (Key, Value) VALUES (10u, "New");
+                UPSERT INTO `/Root/KeyValueMoved` (Key, Value) VALUES (10u, "New");
             )");
         } else {
             query1 = Q1_(R"(
@@ -594,7 +594,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        const TString sql = "UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES(1, \"One\")";
+        const TString sql = "UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES(1, \"One\")";
 
         NYdb::NTable::TExecDataQuerySettings execSettings;
         execSettings.KeepInQueryCache(true);
@@ -675,8 +675,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         auto db = kikimr.GetTableClient();
         const TString sql = select
-            ? "SELECT * FROM [/Root/KeyValue];"
-            : "UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES(1, \"One\")";
+            ? "SELECT * FROM `/Root/KeyValue`;"
+            : "UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES(1, \"One\")";
 
         auto action = [db, sql, multistageTx]() mutable {
             return db.RetryOperationSync(

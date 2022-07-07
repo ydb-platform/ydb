@@ -66,7 +66,7 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-        CREATE TABLE [/Root/TestNulls] (
+        CREATE TABLE `/Root/TestNulls` (
             Key1 Uint32,
             Key2 Uint32,
             Value String,
@@ -75,7 +75,7 @@ void CreateNullSampleTables(TKikimrRunner& kikimr) {
     )").GetValueSync().IsSuccess());
 
     UNIT_ASSERT(session.ExecuteDataQuery(R"(
-        REPLACE INTO [/Root/TestNulls] (Key1, Key2, Value) VALUES
+        REPLACE INTO `/Root/TestNulls` (Key1, Key2, Value) VALUES
             (NULL, NULL, "One"),
             (NULL, 100u, "Two"),
             (NULL, 200u, "Three"),
@@ -796,12 +796,12 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto replaceQuery = R"(
             DECLARE $rows AS
-                'List<Struct<
+                List<Struct<
                     Key: Uint64?,
                     Value: String?
-                >>';
+                >>;
 
-            REPLACE INTO [/Root/Tmp]
+            REPLACE INTO `/Root/Tmp`
             SELECT * FROM AS_TABLE($rows);
         )";
 
@@ -1567,7 +1567,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
 
         auto it = db.StreamExecuteScanQuery(R"(
             --!syntax_v0
-            SELECT * FROM [/Root/EightShard] WHERE Key = 1;
+            SELECT * FROM `/Root/EightShard` WHERE Key = 1;
         )").GetValueSync();
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto part = it.ReadNext().GetValueSync();
@@ -1847,7 +1847,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         // EnableDebugLogging(kikimr);
 
         UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
-            CREATE TABLE [/Root/SampleMapTable] (
+            CREATE TABLE `/Root/SampleMapTable` (
                 Key Int32,
                 Value String,
                 Price Int32,
@@ -1856,7 +1856,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         )").GetValueSync().IsSuccess());
 
         UNIT_ASSERT(session.ExecuteDataQuery(R"(
-            REPLACE INTO [/Root/SampleMapTable] (Key, Value, Price) VALUES
+            REPLACE INTO `/Root/SampleMapTable` (Key, Value, Price) VALUES
                 (1, "Bitcoin", 50000),
                 (2, "Dogecoin", 1000),
                 (3, "Ethereum", 5000),

@@ -55,7 +55,7 @@ DefaultSettings {
 
 DefaultSettings {
     Name: "_KqpYqlSyntaxVersion"
-    Value: "0"
+    Value: "1"
 }
 
 DefaultSettings {

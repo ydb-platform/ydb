@@ -42,7 +42,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 
@@ -67,7 +67,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1UL);
@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         auto txIdCopy = AsyncCreateCopyTable(server, sender, "/Root", "table-2", "/Root/table-1");
         WaitTxNotification(server, sender, txIdCopy);
@@ -171,7 +171,7 @@ Y_UNIT_TEST_SUITE(DataShardBackgroundCompaction) {
         InitRoot(server, sender);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1);
-        ExecSQL(server, sender, "UPSERT INTO [/Root/table-1] (key, value) VALUES (1, 100), (3, 300), (5, 500);");
+        ExecSQL(server, sender, "UPSERT INTO `/Root/table-1` (key, value) VALUES (1, 100), (3, 300), (5, 500);");
 
         auto shards = GetTableShards(server, sender, "/Root/table-1");
 

@@ -15,16 +15,16 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/Test]
+            UPSERT INTO `/Root/Test`
             SELECT Group, "Sergey" AS Name
-            FROM [/Root/Test];
+            FROM `/Root/Test`;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto tx = result.GetTransaction();
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/Test] WHERE Group = 1;
+            SELECT * FROM `/Root/Test` WHERE Group = 1;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
@@ -36,7 +36,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/Test] WHERE Group = 1;
+            SELECT * FROM `/Root/Test` WHERE Group = 1;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([
@@ -57,12 +57,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(tx.IsActive());
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
         )"), TTxControl::Tx(tx)).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT_C(commitResult.IsSuccess(), commitResult.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -87,7 +87,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
@@ -105,13 +105,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         result = session.ExecuteDataQuery(Q_(R"(
             DECLARE $name AS String;
-            UPSERT INTO [/Root/Test] (Group, Name, Amount) VALUES
+            UPSERT INTO `/Root/Test` (Group, Name, Amount) VALUES
                 (10, $name, 500);
         )"), TTxControl::Tx(*tx).CommitTx(), params).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/Test] WHERE Group = 10;
+            SELECT * FROM `/Root/Test` WHERE Group = 10;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[500u];#;[10u];["One"]]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -135,12 +135,12 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::OnlineRO())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::StaleRO())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
     }
@@ -152,7 +152,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         // with effects, without locks
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(rollbackResult.IsSuccess());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         // with effects, with locks
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPDATE [/Root/KeyValue] SET Value = "New" WHERE Key = 1;
+            UPDATE `/Root/KeyValue` SET Value = "New" WHERE Key = 1;
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(rollbackResult.IsSuccess());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
@@ -332,7 +332,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
 
@@ -404,14 +404,14 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
         )"), TTxControl::BeginTx(TTxSettings::SerializableRW())).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         auto tx = result.GetTransaction();
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [BadTable];
+            SELECT * FROM `BadTable`;
         )"), TTxControl::Tx(*tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
 
@@ -429,7 +429,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto query = session.PrepareDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
         )")).ExtractValueSync().GetQuery();
 
         auto result = query.Execute(TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
@@ -439,7 +439,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(!tx->IsActive());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Value = "New";
+            SELECT * FROM `/Root/KeyValue` WHERE Value = "New";
         )"), TTxControl::BeginTx(TTxSettings::OnlineRO()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
         CompareYson(R"([[[10u];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -456,13 +456,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(tx.IsActive());
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            INSERT INTO [/Root/KeyValue] (Key, Value) VALUES (1u, "New");
+            INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1u, "New");
         )"), TTxControl::Tx(tx)).ExtractValueSync();
         // result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
 
         result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (1u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (1u, "New");
         )"), TTxControl::Tx(tx)).ExtractValueSync();
         // result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::NOT_FOUND, result.GetIssues().ToString());
@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         UNIT_ASSERT(tx.IsActive());
 
         auto result = session.ExecuteDataQuery(Q_(R"(
-            UPSERT INTO [/Root/KeyValue] (Key, Value) VALUES (10u, "New");
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (10u, "New");
         )"), TTxControl::Tx(tx)).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 

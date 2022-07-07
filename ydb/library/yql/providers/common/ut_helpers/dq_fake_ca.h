@@ -106,6 +106,10 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
             Parent.AsyncOutputPromises.StateSaved = NThreading::NewPromise<NDqProto::TSinkState>();
         };
 
+        void OnAsyncOutputFinished(ui64 outputIndex) override {
+            Y_UNUSED(outputIndex);
+        }
+
         TFakeActor& Parent;
     };
 

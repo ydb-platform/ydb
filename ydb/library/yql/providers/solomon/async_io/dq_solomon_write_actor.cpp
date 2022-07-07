@@ -154,11 +154,15 @@ public:
         NKikimr::NMiniKQL::TUnboxedValueVector&& batch,
         i64,
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
-        bool) override
+        bool finished) override
     {
         SINK_LOG_D("Got " << batch.size() << " items to send. Checkpoint: " << checkpoint.Defined()
                    << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
                    << ". Checkpoint in progress: " << CheckpointInProgress.has_value());
+
+        if (finished) {
+            Finished = true;
+        }
 
         ui64 metricsCount = 0;
         for (const auto& item : batch) {
@@ -182,6 +186,8 @@ public:
         if (FreeSpace <= 0) {
             ShouldNotifyNewFreeSpace = true;
         }
+
+        CheckFinished();
     };
 
     void LoadState(const NDqProto::TSinkState&) override { }
@@ -445,11 +451,19 @@ private:
         if (CheckpointInProgress && InflightBuffer.empty()) {
             DoCheckpoint();
         }
+
+        CheckFinished();
     }
 
     void DoCheckpoint() {
         Callbacks->OnAsyncOutputStateSaved(BuildState(), OutputIndex, *CheckpointInProgress);
         CheckpointInProgress = std::nullopt;
+    }
+
+    void CheckFinished() {
+        if (Finished && InflightBuffer.empty() && SendingBuffer.empty()) {
+            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        }
     }
 
 private:
@@ -462,6 +476,7 @@ private:
     TDqSolomonWriteActorMetrics Metrics;
     i64 FreeSpace = 0;
     TActorId HttpProxyId;
+    bool Finished = false;
 
     TString SourceId;
     bool ShouldNotifyNewFreeSpace = false;

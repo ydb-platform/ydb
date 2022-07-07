@@ -117,8 +117,11 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-        Y_UNUSED(finished);
         Y_UNUSED(dataSize);
+
+        if (finished) {
+            Finished = true;
+        }
 
         CreateSessionIfNotExists();
 
@@ -282,6 +285,7 @@ private:
                 ShouldNotifyNewFreeSpace = false;
             }
         }
+        CheckFinished();
         return !events.empty();
     }
 
@@ -363,6 +367,12 @@ private:
         TDqPqWriteActor& Self;
     };
 
+    void CheckFinished() {
+        if (Finished && Buffer.empty() && WaitingAcks.empty()) {
+            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        }
+    }
+
 private:
     const ui64 OutputIndex;
     const TTxId TxId;
@@ -372,6 +382,7 @@ private:
     IDqComputeActorAsyncOutput::ICallbacks* const Callbacks;
     const TString LogPrefix;
     i64 FreeSpace = 0;
+    bool Finished = false;
 
     NYdb::NPersQueue::TPersQueueClient PersQueueClient;
     std::shared_ptr<NYdb::NPersQueue::IWriteSession> WriteSession;
@@ -380,7 +391,6 @@ private:
     ui64 ConfirmedSeqNo = 0;
     std::optional<NYdb::NPersQueue::TContinuationToken> ContinuationToken;
     NThreading::TFuture<void> EventFuture;
-    std::queue<i64> InflightMessageSizes;
     bool ShouldNotifyNewFreeSpace = false;
     std::queue<TString> Buffer;
     std::queue<i64> WaitingAcks; // Size of items which are waiting for acks (used to update free space)

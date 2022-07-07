@@ -63,8 +63,13 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         OnSinkStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnAsyncOutputFinished(ui64 outputIndex) override final {
+        OnSinkFinished(outputIndex);
+    }
+
     virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
     virtual void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnSinkFinished(ui64 outputIndex) = 0;
 };
 
 struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
@@ -76,8 +81,13 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
         OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
     }
 
+    void OnAsyncOutputFinished(ui64 outputIndex) override final {
+        OnTransformFinished(outputIndex);
+    }
+
     virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
     virtual void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
+    virtual void OnTransformFinished(ui64 outputIndex) = 0;
 };
 
 namespace NDetails {
@@ -440,9 +450,9 @@ protected:
                     CA_LOG_D("Continue execution, not all input channels are initialized");
                     return;
                 }
-                if (Channels->CheckInFlight("Tasks execution finished")) {
+                if (Channels->CheckInFlight("Tasks execution finished") && AllAsyncOutputsFinished()) {
                     State = NDqProto::COMPUTE_STATE_FINISHED;
-                    CA_LOG_D("Compute state finished. All channels finished");
+                    CA_LOG_D("Compute state finished. All channels and sinks finished");
                     ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::SUCCESS, {TIssue("success")});
                 }
             }
@@ -626,7 +636,7 @@ public:
             Channels->SendChannelDataAck(channel->GetChannelId(), channel->GetFreeSpace());
         }
 
-        ResumeExecution();
+        ContinueExecute();
     }
 
     void PeerFinished(ui64 channelId) override {
@@ -662,6 +672,16 @@ public:
     void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override {
         Y_VERIFY(Checkpoints); // If we are checkpointing, we must have already constructed "checkpoints" object.
         Checkpoints->OnTransformStateSaved(std::move(state), outputIndex, checkpoint);
+    }
+
+    void OnSinkFinished(ui64 outputIndex) override {
+        SinksMap.at(outputIndex).FinishIsAcknowledged = true;
+        ContinueExecute();
+    }
+
+    void OnTransformFinished(ui64 outputIndex) override {
+        OutputTransformsMap.at(outputIndex).FinishIsAcknowledged = true;
+        ContinueExecute();
     }
 
 protected:
@@ -870,6 +890,7 @@ protected:
         IDqComputeActorAsyncOutput* AsyncOutput = nullptr;
         NActors::IActor* Actor = nullptr;
         bool Finished = false; // If sink/transform is in finished state, it receives only checkpoints.
+        bool FinishIsAcknowledged = false; // Async output has acknowledged its finish.
         TIssuesBuffer IssuesBuffer;
         bool PopStarted = false;
         i64 FreeSpaceBeforeSend = 0;
@@ -1521,6 +1542,24 @@ protected:
 
         CA_LOG_E("OutputTransform[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
         InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
+    }
+
+    bool AllAsyncOutputsFinished() const {
+        for (const auto& [outputIndex, sinkInfo] : SinksMap) {
+            if (!sinkInfo.FinishIsAcknowledged) {
+                ui64 index = outputIndex; // Crutch for logging through lambda.
+                CA_LOG_D("Waiting finish of sink[" << index << "]");
+                return false;
+            }
+        }
+        for (const auto& [outputIndex, transformInfo] : OutputTransformsMap) {
+            if (!transformInfo.FinishIsAcknowledged) {
+                ui64 index = outputIndex; // Crutch for logging through lambda.
+                CA_LOG_D("Waiting finish of transform[" << index << "]");
+                return false;
+            }
+        }
+        return true;
     }
 
     virtual ui64 CalcMkqlMemoryLimit() {

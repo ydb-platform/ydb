@@ -110,6 +110,9 @@ struct IDqComputeActorAsyncOutput {
         // Checkpointing
         virtual void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
 
+        // Finishing
+        virtual void OnAsyncOutputFinished(ui64 outputIndex) = 0; // Signal that async output has successfully written its finish flag and so compute actor is ready to finish.
+
         virtual ~ICallbacks() = default;
     };
 

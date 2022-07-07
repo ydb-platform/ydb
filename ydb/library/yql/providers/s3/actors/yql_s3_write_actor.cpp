@@ -252,7 +252,11 @@ private:
         }
     }
 
-    void HandleFinished() {}
+    void HandleFinished() {
+        if (InputFinished && !InFlight && Parts.empty()) {
+            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        }
+    }
 
     // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
@@ -317,4 +321,3 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
 }
 
 } // namespace NYql::NDq
-

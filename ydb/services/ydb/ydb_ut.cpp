@@ -1268,6 +1268,7 @@ primary_key: "Key"
 partitioning_settings {
   partitioning_by_size: DISABLED
   partitioning_by_load: DISABLED
+  min_partitions_count: 1
 }
 )___";
            UNIT_ASSERT_NO_DIFF(tmp, expected);
@@ -1609,6 +1610,7 @@ indexes {
 partitioning_settings {
   partitioning_by_size: DISABLED
   partitioning_by_load: DISABLED
+  min_partitions_count: 1
 }
 )___";
            UNIT_ASSERT_NO_DIFF(tmp, expected);
@@ -3519,6 +3521,14 @@ void CheckTableSettings(const TKikimrWithGrpcAndRootSchema &server,
         expected.ClearUniformPartitionsCount();
     } else {
         UNIT_ASSERT_VALUES_EQUAL(desc.TablePartitionsSize(), 1);
+    }
+
+    if (resp.GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount() &&
+        !expected.GetPartitionConfig().GetPartitioningPolicy().HasMinPartitionsCount())
+    {
+        // SchemeShard will set some min partitions count when unspecified by the user
+        expected.MutablePartitionConfig()->MutablePartitioningPolicy()->SetMinPartitionsCount(
+            resp.GetPartitionConfig().GetPartitioningPolicy().GetMinPartitionsCount());
     }
 
     std::vector<const ::google::protobuf::FieldDescriptor*> fields;

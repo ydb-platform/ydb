@@ -3088,6 +3088,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "Value"      Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             UniformPartitionsCount: 3
+                            PartitionConfig {
+                                PartitioningPolicy {
+                                    MinPartitionsCount: 0
+                                }
+                            }
                         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -3143,6 +3148,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             SplitBoundary { KeyPrefix {
                                 Tuple { Optional { Uint32 : 200 } }
                             }}
+                            PartitionConfig {
+                                PartitioningPolicy {
+                                    MinPartitionsCount: 0
+                                }
+                            }
                         )");
         env.TestWaitNotification(runtime, txId);
 
@@ -3577,6 +3587,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             KeyColumnNames: ["key"]
                             UniformPartitionsCount: 3
                             PartitionConfig {
+                              PartitioningPolicy {
+                                MinPartitionsCount: 0
+                              }
                               CompactionPolicy {
                                 InMemSizeToSnapshot: 4194304
                                 InMemStepsToSnapshot: 300
@@ -3741,6 +3754,11 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                             Columns { Name: "Value"      Type: "Utf8"}
                             KeyColumnNames: ["key"]
                             UniformPartitionsCount: 3
+                            PartitionConfig {
+                                PartitioningPolicy {
+                                    MinPartitionsCount: 0
+                                }
+                            }
                         )");
         env.TestWaitNotification(runtime, txId);
 

@@ -103,4 +103,65 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    class TGivenIdRange {
+        struct TRange {
+            ui32 Len;
+            TDynBitMap Bits;
+
+            TRange(ui32 len)
+                : Len(len)
+            {
+                Bits.Set(0, len);
+            }
+        };
+        std::map<ui64, TRange> Ranges; // range.begin -> range
+        ui32 NumAvailableItems = 0;
+
+    public:
+        TGivenIdRange() = default;
+        TGivenIdRange(const NKikimrBlobDepot::TGivenIdRange& proto);
+
+        void ToProto(NKikimrBlobDepot::TGivenIdRange *proto);
+
+        void Join(TGivenIdRange&& other);
+
+        void IssueNewRange(ui64 begin, ui64 end);
+        void RemovePoint(ui64 value);
+
+        bool IsEmpty() const;
+        ui32 GetNumAvailableItems() const;
+        ui64 Allocate();
+
+        void Output(IOutputStream& s) const;
+        TString ToString() const;
+
+    private:
+        TRange& InsertNewRange(ui64 begin, ui64 len);
+    };
+
+    using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
+
+    template<typename TCallback>
+    void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
+        for (const auto& item : valueChain) {
+            const auto& locator = item.GetLocator();
+            const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
+            if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()));
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()));
+            } else {
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
+                    locator.GetFooterLen()));
+            }
+        }
+    }
+
+    inline ui64 GenStep(ui32 gen, ui32 step) {
+        return static_cast<ui64>(gen) << 32 | step;
+    }
+
+    inline ui64 GenStep(TLogoBlobID id) {
+        return GenStep(id.Generation(), id.Step());
+    }
+
 } // NKikimr::NBlobDepot

@@ -1,4 +1,5 @@
 #include "blob_depot_tablet.h"
+#include "data.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -31,14 +32,21 @@ namespace NKikimr::NBlobDepot {
 
         ui32 itemIndex = 0;
         for (const auto& item : ev->Get()->Record.GetItems()) {
-            std::optional<TStringBuf> begin = item.HasBeginningKey() ? std::make_optional(item.GetBeginningKey()) : std::nullopt;
-            std::optional<TStringBuf> end = item.HasEndingKey() ? std::make_optional(item.GetEndingKey()) : std::nullopt;
+            TData::TKey begin;
+            TData::TKey end;
+
+            if (item.HasBeginningKey()) {
+                begin = TData::TKey::FromBinaryKey(item.GetBeginningKey(), Config);
+            }
+            if (item.HasEndingKey()) {
+                end = TData::TKey::FromBinaryKey(item.GetEndingKey(), Config);
+            }
 
             ui32 numItems = 0;
-            auto addKey = [&](TStringBuf key, const TDataValue& value) {
+            auto addKey = [&](const TData::TKey& key, const TData::TValue& value) {
                 NKikimrBlobDepot::TEvResolveResult::TResolvedKey resolvedKey;
                 resolvedKey.SetItemIndex(itemIndex);
-                resolvedKey.SetKey(key.data(), key.size());
+                resolvedKey.SetKey(key.MakeBinaryKey());
                 resolvedKey.MutableValueChain()->CopyFrom(value.ValueChain);
 
                 if (value.Meta) {
@@ -58,18 +66,18 @@ namespace NKikimr::NBlobDepot {
                 return !item.HasMaxKeys() || numItems != item.GetMaxKeys();
             };
 
-            TScanFlags flags;
+            TData::TScanFlags flags;
             if (item.GetIncludeBeginning()) {
-                flags |= EScanFlags::INCLUDE_BEGIN;
+                flags |= TData::EScanFlags::INCLUDE_BEGIN;
             }
             if (item.GetIncludeEnding()) {
-                flags |= EScanFlags::INCLUDE_END;
+                flags |= TData::EScanFlags::INCLUDE_END;
             }
             if (item.GetReverse()) {
-                flags |= EScanFlags::REVERSE;
+                flags |= TData::EScanFlags::REVERSE;
             }
 
-            ScanRange(begin, end, flags, addKey);
+            Data->ScanRange(item.HasBeginningKey() ? &begin : nullptr, item.HasEndingKey() ? &end : nullptr, flags, addKey);
 
             ++itemIndex;
         }

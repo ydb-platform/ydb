@@ -66,11 +66,29 @@ namespace NKikimr::NBlobDepot {
             >;
         };
 
+        struct Trash : Table<5> {
+            struct BlobId : Column<1, NScheme::NTypeIds::String> {};
+
+            using TKey = TableKey<BlobId>;
+            using TColumns = TableColumns<BlobId>;
+        };
+
+        struct ConfirmedGC : Table<6> {
+            struct Channel : Column<1, NScheme::NTypeIds::Uint8> {};
+            struct GroupId : Column<2, NScheme::NTypeIds::Uint32> {};
+            struct ConfirmedGenStep : Column<3, NScheme::NTypeIds::Uint64> {};
+
+            using TKey = TableKey<Channel, GroupId>;
+            using TColumns = TableColumns<Channel, GroupId, ConfirmedGenStep>;
+        };
+
         using TTables = SchemaTables<
             Config,
             Blocks,
             Barriers,
-            Data
+            Data,
+            Trash,
+            ConfirmedGC
         >;
 
         using TSettings = SchemaSettings<

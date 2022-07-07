@@ -1,5 +1,7 @@
 #include "blob_depot_tablet.h"
 #include "schema.h"
+#include "data.h"
+#include "garbage_collection.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -20,6 +22,8 @@ namespace NKikimr::NBlobDepot {
                 NKikimrBlobDepot::TEvCommitBlobSeqResult *responseRecord;
                 std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
 
+                TAgent& agent = Self->GetAgent(Request->Recipient);
+
                 for (const auto& item : Request->Get()->Record.GetItems()) {
                     auto *responseItem = responseRecord->AddItems();
                     responseItem->SetStatus(NKikimrProto::OK);
@@ -29,19 +33,17 @@ namespace NKikimr::NBlobDepot {
                         value.SetMeta(item.GetMeta());
                     }
                     auto *chain = value.AddValueChain();
-                    chain->MutableLocator()->CopyFrom(item.GetBlobLocator());
+                    auto *locator = chain->MutableLocator();
+                    locator->CopyFrom(item.GetBlobLocator());
 
-                    const TString& key = item.GetKey();
-                    if (key.size() == 3 * sizeof(ui64)) {
-                        const TLogoBlobID id(reinterpret_cast<const ui64*>(key.data()));
-                        if (!Self->CheckBlobForBarrier(id)) {
-                            responseItem->SetStatus(NKikimrProto::ERROR);
-                            responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << id << " is being put beyond the barrier");
-                            continue;
-                        }
+                    if (!MarkGivenIdCommitted(agent, TBlobSeqId::FromProto(locator->GetBlobSeqId()), responseItem)) {
+                        continue;
+                    }
+                    if (!CheckKeyAgainstBarrier(item.GetKey(), responseItem)) {
+                        continue;
                     }
 
-                    Self->PutKey(std::move(key), {
+                    Self->Data->PutKey(TData::TKey::FromBinaryKey(item.GetKey(), Self->Config), {
                         .Meta = value.GetMeta(),
                         .ValueChain = std::move(*value.MutableValueChain()),
                         .KeepState = value.GetKeepState(),
@@ -58,7 +60,51 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
+            bool MarkGivenIdCommitted(TAgent& agent, const TBlobSeqId& blobSeqId,
+                    NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {
+                const NKikimrBlobDepot::TChannelKind::E kind = blobSeqId.Channel < Self->ChannelToKind.size()
+                    ? Self->ChannelToKind[blobSeqId.Channel] : NKikimrBlobDepot::TChannelKind::System;
+                if (kind == NKikimrBlobDepot::TChannelKind::System) {
+                    responseItem->SetStatus(NKikimrProto::ERROR);
+                    responseItem->SetErrorReason("incorrect Channel for blob");
+                    return false;
+                }
+
+                const auto channelKindIt = Self->ChannelKinds.find(kind);
+                Y_VERIFY(channelKindIt != Self->ChannelKinds.end());
+                auto& ck = channelKindIt->second;
+
+                const ui64 value = blobSeqId.ToBinary(ck);
+                agent.ChannelKinds[kind].GivenIdRanges.RemovePoint(value);
+                ck.GivenIdRanges.RemovePoint(value);
+
+                auto& channel = Self->PerChannelRecords[blobSeqId.Channel];
+                channel.GivenStepIndex.erase(std::make_pair(blobSeqId.Step, blobSeqId.Index));
+
+                return true;
+            }
+
+            bool CheckKeyAgainstBarrier(const TString& key, NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {
+                if (Self->Config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup) {
+                    if (key.size() != 3 * sizeof(ui64)) {
+                        responseItem->SetStatus(NKikimrProto::ERROR);
+                        responseItem->SetErrorReason("incorrect BlobId format");
+                        return false;
+                    }
+
+                    const TLogoBlobID id(reinterpret_cast<const ui64*>(key.data()));
+                    if (!Self->BarrierServer->CheckBlobForBarrier(id)) {
+                        responseItem->SetStatus(NKikimrProto::ERROR);
+                        responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << id << " is being put beyond the barrier");
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+
             void Complete(const TActorContext&) override {
+                Self->Data->HandleTrash();
                 TActivationContext::Send(Response.release());
             }
         };

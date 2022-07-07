@@ -8,4 +8,6 @@
 #include <ydb/core/protos/blob_depot.pb.h>
 #include <ydb/core/util/stlog.h>
 
+#include <library/cpp/monlib/service/pages/templates.h>
+
 #include <util/generic/va_args.h>

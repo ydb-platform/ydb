@@ -14,7 +14,7 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(it != PipeServerToNode.end());
         if (const auto& nodeId = it->second) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end()) {
-                if (TAgentInfo& agent = agentIt->second; agent.ConnectedAgent == it->first) {
+                if (TAgent& agent = agentIt->second; agent.ConnectedAgent == it->first) {
                     OnAgentDisconnect(agent);
                     agent.ConnectedAgent.reset();
                     agent.ConnectedNodeId = 0;
@@ -25,7 +25,7 @@ namespace NKikimr::NBlobDepot {
         PipeServerToNode.erase(it);
     }
 
-    void TBlobDepot::OnAgentDisconnect(TAgentInfo& /*agent*/) {
+    void TBlobDepot::OnAgentDisconnect(TAgent& /*agent*/) {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
@@ -58,36 +58,52 @@ namespace NKikimr::NBlobDepot {
         TActivationContext::Send(response.release());
     }
 
-    void TBlobDepot::OnAgentConnect(TAgentInfo& /*agent*/) {
+    void TBlobDepot::OnAgentConnect(TAgent& /*agent*/) {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
 
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), ev->Get()->Record.GetChannelKind(),
-            Executor()->Generation());
+        const ui32 generation = Executor()->Generation();
+
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), ev->Get()->Record.GetChannelKind(), generation);
 
         if (const auto it = ChannelKinds.find(record->GetChannelKind()); it != ChannelKinds.end()) {
-            auto& nextBlobSeqId = it->second.NextBlobSeqId;
-            record->SetRangeBegin(nextBlobSeqId);
-            nextBlobSeqId += PreallocatedIdCount;
-            record->SetRangeEnd(nextBlobSeqId);
+            auto& kind = it->second;
+
+            const ui64 rangeBegin = kind.NextBlobSeqId;
+            kind.NextBlobSeqId += ev->Get()->Record.GetCount();
+            const ui64 rangeEnd = kind.NextBlobSeqId;
+
+            TGivenIdRange range;
+            range.IssueNewRange(rangeBegin, rangeEnd);
+
+            range.ToProto(record->MutableGivenIdRange());
+
+            TAgent& agent = GetAgent(ev->Recipient);
+            agent.ChannelKinds[it->first].GivenIdRanges.Join(TGivenIdRange(range));
+            kind.GivenIdRanges.Join(std::move(range));
+
+            for (ui64 value = rangeBegin; value < rangeEnd; ++value) {
+                const auto blobSeqId = TBlobSeqId::FromBinary(generation, kind, value);
+                PerChannelRecords[blobSeqId.Channel].GivenStepIndex.emplace(blobSeqId.Step, blobSeqId.Index);
+            }
         }
 
         TActivationContext::Send(response.release());
     }
 
-    TBlobDepot::TAgentInfo& TBlobDepot::GetAgent(const TActorId& pipeServerId) {
+    TBlobDepot::TAgent& TBlobDepot::GetAgent(const TActorId& pipeServerId) {
         const auto it = PipeServerToNode.find(pipeServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         Y_VERIFY(it->second);
-        TAgentInfo& agent = GetAgent(*it->second);
+        TAgent& agent = GetAgent(*it->second);
         Y_VERIFY(agent.ConnectedAgent == pipeServerId);
         return agent;
     }
 
-    TBlobDepot::TAgentInfo& TBlobDepot::GetAgent(ui32 nodeId) {
+    TBlobDepot::TAgent& TBlobDepot::GetAgent(ui32 nodeId) {
         const auto agentIt = Agents.find(nodeId);
         Y_VERIFY(agentIt != Agents.end());
         return agentIt->second;
@@ -97,6 +113,9 @@ namespace NKikimr::NBlobDepot {
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();
 
+        Y_VERIFY(ChannelToKind.empty());
+        ChannelToKind.resize(info->Channels.size(), NKikimrBlobDepot::TChannelKind::System);
+
         ui32 channel = 0;
         for (const auto& profile : Config.GetChannelProfiles()) {
             for (ui32 i = 0, count = profile.GetCount(); i < count; ++i, ++channel) {
@@ -105,9 +124,16 @@ namespace NKikimr::NBlobDepot {
                     auto& p = ChannelKinds[kind];
                     p.ChannelToIndex[channel] = p.ChannelGroups.size();
                     p.ChannelGroups.emplace_back(channel, info->GroupFor(channel, generation));
+
+                    Y_VERIFY(channel < ChannelToKind.size());
+                    ChannelToKind[channel] = kind;
                 }
             }
         }
+
+        Y_VERIFY_S(channel == ChannelToKind.size(), "channel# " << channel
+            << " ChannelToKind.size# " << ChannelToKind.size());
+
         for (auto& [k, v] : ChannelKinds) {
             v.NextBlobSeqId = TBlobSeqId{v.ChannelGroups.front().first, generation, 1, 0}.ToBinary(v);
         }

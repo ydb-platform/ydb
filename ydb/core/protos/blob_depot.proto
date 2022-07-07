@@ -37,6 +37,18 @@ message TValue {
     optional bool Public = 4;
 }
 
+message TGivenIdRange {
+    message TRange {
+        optional uint64 Begin = 1;
+        optional uint32 Len = 2;
+        repeated uint32 Offsets = 3;
+        repeated fixed64 BitMasks = 4;
+    }
+    repeated TRange Ranges = 1;
+}
+
+
+
 
 message TEvApplyConfig {
     optional uint64 TxId = 1;
@@ -67,13 +79,13 @@ message TEvRegisterAgentResult {
 
 message TEvAllocateIds {
     optional NKikimrBlobDepot.TChannelKind.E ChannelKind = 1;
+    optional uint32 Count = 2;
 }
 
 message TEvAllocateIdsResult {
     optional NKikimrBlobDepot.TChannelKind.E ChannelKind = 1;
     optional uint32 Generation = 2; // executor generation, for validation purposes
-    optional uint64 RangeBegin = 3; // <Generation> <Step> <Channel>
-    optional uint64 RangeEnd = 4;
+    optional TGivenIdRange GivenIdRange = 3;
 }
 
 message TEvBlock {

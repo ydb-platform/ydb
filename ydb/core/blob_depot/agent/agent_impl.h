@@ -246,16 +246,10 @@ namespace NKikimr::NBlobDepot {
         struct TChannelKind
             : NBlobDepot::TChannelKind
         {
-            struct TAllocatedId {
-                ui32 Generation;
-                ui64 Begin;
-                ui64 End;
-            };
-
             const NKikimrBlobDepot::TChannelKind::E Kind;
 
             bool IdAllocInFlight = false;
-            std::deque<TAllocatedId> IdQ;
+            TGivenIdRange GivenIdRange;
             static constexpr size_t PreallocatedIdCount = 2;
 
             TIntrusiveList<TQuery, TPendingId> QueriesWaitingForId;
@@ -265,17 +259,11 @@ namespace NKikimr::NBlobDepot {
             {}
 
             std::optional<TBlobSeqId> Allocate(TBlobDepotAgent& agent) {
-                if (IdQ.empty()) {
+                if (GivenIdRange.IsEmpty()) {
                     return std::nullopt;
                 }
-
-                auto& item = IdQ.front();
-                auto blobSeqId = TBlobSeqId::FromBinary(item.Generation, *this, item.Begin++);
-                if (item.Begin == item.End) {
-                    IdQ.pop_front();
-                    agent.IssueAllocateIdsIfNeeded(*this);
-                }
-
+                auto blobSeqId = TBlobSeqId::FromBinary(agent.BlobDepotGeneration, *this, GivenIdRange.Allocate());
+                agent.IssueAllocateIdsIfNeeded(*this);
                 return blobSeqId;
             }
 

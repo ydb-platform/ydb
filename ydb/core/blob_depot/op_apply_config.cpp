@@ -9,6 +9,7 @@ namespace NKikimr::NBlobDepot {
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
             TString ConfigProtobuf;
+            bool WasConfigured = false;
 
         public:
             TTxApplyConfig(TBlobDepot *self, TEvBlobDepot::TEvApplyConfig& ev, std::unique_ptr<IEventHandle> response,
@@ -25,6 +26,16 @@ namespace NKikimr::NBlobDepot {
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 NIceDb::TNiceDb db(txc.DB);
+
+                auto table = db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Select();
+                if (!table.IsReady()) {
+                    return false;
+                } else if (table.IsValid()) {
+                    WasConfigured = table.HaveValue<Schema::Config::ConfigProtobuf>();
+                } else {
+                    WasConfigured = false;
+                }
+
                 db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                     NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf)
                 );
@@ -32,10 +43,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                const bool wasEmpty = !Self->Config.ByteSizeLong();
                 const bool success = Self->Config.ParseFromString(ConfigProtobuf);
                 Y_VERIFY(success);
-                if (wasEmpty) {
+                if (!WasConfigured) {
                     Self->InitChannelKinds();
                 }
                 TActivationContext::Send(Response.release());

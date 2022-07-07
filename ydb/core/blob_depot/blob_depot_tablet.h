@@ -19,13 +19,8 @@ namespace NKikimr::NBlobDepot {
         };
 
     public:
-        TBlobDepot(TActorId tablet, TTabletStorageInfo *info)
-            : TActor(&TThis::StateInit)
-            , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-            , BlocksManager(CreateBlocksManager())
-            , GarbageCollectionManager(CreateGarbageCollectionManager())
-            , DataManager(CreateDataManager())
-        {}
+        TBlobDepot(TActorId tablet, TTabletStorageInfo *info);
+        ~TBlobDepot();
 
         void HandlePoison() {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "HandlePoison", (TabletId, TabletID()));
@@ -36,33 +31,45 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
-        static constexpr ui32 PreallocatedIdCount = 100;
 
-        struct TAgentInfo {
+        struct TAgent {
             std::optional<TActorId> ConnectedAgent;
             ui32 ConnectedNodeId;
             TInstant ExpirationTimestamp;
+
+            struct TChannelKind {
+                TGivenIdRange GivenIdRanges; // updated on AllocateIds and when BlobSeqIds are found in any way
+            };
+
+            THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
         };
 
         THashMap<TActorId, std::optional<ui32>> PipeServerToNode;
-        THashMap<ui32, TAgentInfo> Agents; // NodeId -> Agent
+        THashMap<ui32, TAgent> Agents; // NodeId -> Agent
 
         struct TChannelKind
             : NBlobDepot::TChannelKind
         {
             ui64 NextBlobSeqId = 0;
+            TGivenIdRange GivenIdRanges; // for all agents, including disconnected ones
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
+        std::vector<NKikimrBlobDepot::TChannelKind::E> ChannelToKind;
+
+        struct TPerChannelRecord {
+            std::set<std::tuple<ui32, ui32>> GivenStepIndex;
+        };
+        THashMap<ui8, TPerChannelRecord> PerChannelRecords;
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev);
-        void OnAgentDisconnect(TAgentInfo& agent);
+        void OnAgentDisconnect(TAgent& agent);
         void Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev);
-        void OnAgentConnect(TAgentInfo& agent);
+        void OnAgentConnect(TAgent& agent);
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
-        TAgentInfo& GetAgent(const TActorId& pipeServerId);
-        TAgentInfo& GetAgent(ui32 nodeId);
+        TAgent& GetAgent(const TActorId& pipeServerId);
+        TAgent& GetAgent(ui32 nodeId);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -111,35 +118,7 @@ namespace NKikimr::NBlobDepot {
             StateInitImpl(ev, ctx);
         }
 
-        STFUNC(StateWork) {
-            try {
-                switch (const ui32 type = ev->GetTypeRewrite()) {
-                    cFunc(TEvents::TSystem::Poison, HandlePoison);
-
-                    hFunc(TEvBlobDepot::TEvApplyConfig, Handle);
-                    hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
-                    hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
-                    hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
-                    hFunc(TEvBlobDepot::TEvResolve, Handle);
-
-                    hFunc(TEvBlobDepot::TEvBlock, Handle);
-                    hFunc(TEvBlobDepot::TEvQueryBlocks, Handle);
-
-                    hFunc(TEvBlobDepot::TEvCollectGarbage, Handle);
-
-                    hFunc(TEvTabletPipe::TEvServerConnected, Handle);
-                    hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
-
-                    default:
-                        if (!HandleDefaultEvents(ev, ctx)) {
-                            Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
-                        }
-                        break;
-                }
-            } catch (...) {
-                Y_FAIL_S("unexpected exception# " << CurrentExceptionMessage());
-            }
-        }
+        void StateWork(STFUNC_SIG);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -167,67 +146,31 @@ namespace NKikimr::NBlobDepot {
         // Blocks
 
         class TBlocksManager;
-        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, std::function<void(TBlocksManager*)>>;
-        TBlocksManagerPtr BlocksManager;
-
-        TBlocksManagerPtr CreateBlocksManager();
-
-        void AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration);
-
-        void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
-        void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
+        std::unique_ptr<TBlocksManager> BlocksManager;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Garbage collection
 
-        class TGarbageCollectionManager;
-        using TGarbageCollectionManagerPtr = std::unique_ptr<TGarbageCollectionManager, std::function<void(TGarbageCollectionManager*)>>;
-        TGarbageCollectionManagerPtr GarbageCollectionManager;
-
-        TGarbageCollectionManagerPtr CreateGarbageCollectionManager();
-
-        void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
-
-        bool CheckBlobForBarrier(TLogoBlobID id) const;
+        class TBarrierServer;
+        std::unique_ptr<TBarrierServer> BarrierServer;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Data operations
 
-        class TDataManager;
-        using TDataManagerPtr = std::unique_ptr<TDataManager, std::function<void(TDataManager*)>>;
-        TDataManagerPtr DataManager;
-
-        TDataManagerPtr CreateDataManager();
-
-        using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
-
-        struct TDataValue {
-            TString Meta;
-            TValueChain ValueChain;
-            NKikimrBlobDepot::EKeepState KeepState;
-            bool Public;
-        };
-
-        enum EScanFlags : ui32 {
-            INCLUDE_BEGIN = 1,
-            INCLUDE_END = 2,
-            REVERSE = 4,
-        };
-
-        Y_DECLARE_FLAGS(TScanFlags, EScanFlags)
-
-        std::optional<TDataValue> FindKey(TStringBuf key);
-        void ScanRange(const std::optional<TStringBuf>& begin, const std::optional<TStringBuf>& end, TScanFlags flags,
-            const std::function<bool(TStringBuf, const TDataValue&)>& callback);
-        void DeleteKey(TStringBuf key);
-        void PutKey(TString key, TDataValue&& data);
-        void AddDataOnLoad(TString key, TString value);
-        std::optional<TString> UpdateKeepState(TStringBuf key, NKikimrBlobDepot::EKeepState keepState);
+        class TData;
+        std::unique_ptr<TData> Data;
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
-    };
 
-    Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TScanFlags)
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Monitoring
+
+        class TTxMonData;
+        
+        bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
+
+        void RenderMainPage(IOutputStream& s);
+    };
 
 } // NKikimr::NBlobDepot

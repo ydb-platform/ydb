@@ -55,7 +55,7 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvApplyConfigResult, TabletId, TxId);
         BLOBDEPOT_EVENT_PB(EvRegisterAgent, VirtualGroupId);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvRegisterAgentResult);
-        BLOBDEPOT_EVENT_PB(EvAllocateIds, ChannelKind);
+        BLOBDEPOT_EVENT_PB(EvAllocateIds, ChannelKind, Count);
         BLOBDEPOT_EVENT_PB(EvAllocateIdsResult, ChannelKind, Generation);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotify);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotifyResult);

@@ -18,6 +18,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::ConnectToBlobDepot() {
         PipeId = Register(NTabletPipe::CreateClient(SelfId(), TabletId, NTabletPipe::TClientRetryPolicy::WithRetries()));
         const ui64 id = NextRequestId++;
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA04, "ConnectToBlobDepot", (VirtualGroupId, VirtualGroupId),
+            (PipeId, PipeId), (RequestId, id));
         NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvRegisterAgent(VirtualGroupId), id);
         RegisterRequest(id, this, nullptr, {}, true);
     }
@@ -60,13 +62,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA05, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
-            (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)),
-            (IdAllocInFlight, kind.IdAllocInFlight), (IdQ.size, kind.IdQ.size()),
-            (PreallocatedIdCount, kind.PreallocatedIdCount), (PipeId, PipeId));
-        if (!kind.IdAllocInFlight && kind.IdQ.size() < kind.PreallocatedIdCount && PipeId) {
+        if (!kind.IdAllocInFlight && kind.GivenIdRange.GetNumAvailableItems() < 100 && PipeId) {
             const ui64 id = NextRequestId++;
-            NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvAllocateIds(kind.Kind), id);
+            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA05, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
+                (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)),
+                (IdAllocInFlight, kind.IdAllocInFlight), (NumAvailableItems, kind.GivenIdRange.GetNumAvailableItems()),
+                (PreallocatedIdCount, kind.PreallocatedIdCount), (RequestId, id));
+            NTabletPipe::SendData(SelfId(), PipeId, new TEvBlobDepot::TEvAllocateIds(kind.Kind, 100), id);
             RegisterRequest(id, this, std::make_shared<TAllocateIdsContext>(kind.Kind), {}, true);
             kind.IdAllocInFlight = true;
         }
@@ -78,7 +80,8 @@ namespace NKikimr::NBlobDepot {
 
         auto& allocateIdsContext = context->Obtain<TAllocateIdsContext>();
         const auto it = ChannelKinds.find(allocateIdsContext.ChannelKind);
-        Y_VERIFY_S(it != ChannelKinds.end(), "Kind# " << NKikimrBlobDepot::TChannelKind::E_Name(allocateIdsContext.ChannelKind));
+        Y_VERIFY_S(it != ChannelKinds.end(), "Kind# " << NKikimrBlobDepot::TChannelKind::E_Name(allocateIdsContext.ChannelKind)
+            << " Msg# " << SingleLineProto(msg));
         auto& kind = it->second;
 
         Y_VERIFY(kind.IdAllocInFlight);
@@ -87,12 +90,11 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(msg.GetChannelKind() == allocateIdsContext.ChannelKind);
         Y_VERIFY(msg.GetGeneration() == BlobDepotGeneration);
 
-        if (msg.HasRangeBegin() && msg.HasRangeEnd()) {
-            kind.IdQ.push_back({BlobDepotGeneration, msg.GetRangeBegin(), msg.GetRangeEnd()});
+        if (msg.HasGivenIdRange()) {
+            TGivenIdRange range(msg.GetGivenIdRange());
+            kind.GivenIdRange.Join(std::move(range));
             kind.ProcessQueriesWaitingForId();
             IssueAllocateIdsIfNeeded(kind);
-        } else {
-            // no such channel allocated
         }
     }
 

@@ -20,6 +20,8 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blocks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/garbage_collection.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/given_id_range.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/mon_main.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_apply_config.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_init_schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/op_load.cpp

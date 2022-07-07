@@ -470,7 +470,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
         {
             kikimr.GetTestServer().GetRuntime()->GetAppData().AdministrationAllowedSIDs.push_back("root@builtin");
-            auto reply = kikimr.GetTestClient().MoveIndex("/Root/KeyValue", "value_index", "moved_value_index", "root@builtin");
+            auto reply = kikimr.GetTestClient().MoveIndex("/Root/KeyValue", "value_index", "moved_value_index", true, "root@builtin");
             const NKikimrClient::TResponse &response = reply->Record;
             UNIT_ASSERT_VALUES_EQUAL((NMsgBusProxy::EResponseStatus)response.GetStatus(), NMsgBusProxy::MSTATUS_OK);
         }
@@ -1137,6 +1137,16 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto query = TStringBuilder() << R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/table` RENAME TO `/Root/second`;
+            )";
+
+            const auto result = session.ExecuteSchemeQuery(query << ";").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
 
         {
@@ -2122,6 +2132,57 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     Y_UNIT_TEST(AlterTableAddAsyncIndexShouldSucceed) {
         AlterTableAddIndex(EIndexTypeSql::GlobalAsync, true);
     }
+
+    Y_UNIT_TEST(AlterTableRenameIndex) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/SecondaryKeys` RENAME INDEX Index TO RenamedIndex;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/SecondaryKeys").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexName(), "RenamedIndex");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetDataColumns().size(), 0);
+        }
+    }
+
+    Y_UNIT_TEST(AlterTableReplaceIndex) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session);
+
+        {
+            TString create_index_query = R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/SecondaryKeys` ADD INDEX ValueIndex GLOBAL SYNC ON (`Value`);
+            )";
+            auto result = session.ExecuteSchemeQuery(create_index_query).ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/SecondaryKeys` RENAME INDEX Index TO ValueIndex;
+            )").ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SCHEME_ERROR, status.GetIssues().ToString());
+        }
+    }
+
 
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;

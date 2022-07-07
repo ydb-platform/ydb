@@ -391,7 +391,7 @@ namespace NSchemeShardUT_Private {
         TestModificationResults(runtime, txId, expectedResults);
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, ui64 schemeShard, const TApplyIf& applyIf) {
+    TEvSchemeShard::TEvModifySchemeTransaction* MoveIndexRequest(ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard, const TApplyIf& applyIf) {
         THolder<TEvSchemeShard::TEvModifySchemeTransaction> evTx = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(txId, schemeShard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
@@ -401,21 +401,22 @@ namespace NSchemeShardUT_Private {
         descr->SetTablePath(tablePath);
         descr->SetSrcPath(srcPath);
         descr->SetDstPath(dstPath);
+        descr->SetAllowOverwrite(allowOverwrite);
 
         return evTx.Release();
     }
 
-    void AsyncMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, ui64 schemeShard) {
+    void AsyncMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& srcPath, const TString& dstPath, bool allowOverwrite, ui64 schemeShard) {
         TActorId sender = runtime.AllocateEdgeActor();
-        ForwardToTablet(runtime, schemeShard, sender, MoveIndexRequest(txId, tablePath, srcPath, dstPath, schemeShard));
+        ForwardToTablet(runtime, schemeShard, sender, MoveIndexRequest(txId, tablePath, srcPath, dstPath, allowOverwrite, schemeShard));
     }
 
-    void TestMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, const TVector<TEvSchemeShard::EStatus>& expectedResults) {
-        TestMoveIndex(runtime, TTestTxConfig::SchemeShard, txId, tablePath, src, dst, expectedResults);
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, bool allowOverwrite, const TVector<TEvSchemeShard::EStatus>& expectedResults) {
+        TestMoveIndex(runtime, TTestTxConfig::SchemeShard, txId, tablePath, src, dst, allowOverwrite, expectedResults);
     }
 
-    void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, const TVector<TEvSchemeShard::EStatus>& expectedResults) {
-        AsyncMoveIndex(runtime, txId, tablePath, src, dst, schemeShard);
+    void TestMoveIndex(TTestActorRuntime& runtime, ui64 schemeShard, ui64 txId, const TString& tablePath, const TString& src, const TString& dst, bool allowOverwrite, const TVector<TEvSchemeShard::EStatus>& expectedResults) {
+        AsyncMoveIndex(runtime, txId, tablePath, src, dst, allowOverwrite, schemeShard);
         TestModificationResults(runtime, txId, expectedResults);
     }
 

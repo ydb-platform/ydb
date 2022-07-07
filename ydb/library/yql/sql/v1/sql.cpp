@@ -8380,6 +8380,7 @@ private:
     bool AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params);
     bool AlterTableAlterChangefeed(const TRule_alter_table_alter_changefeed& node, TAlterTableParameters& params);
     void AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed& node, TAlterTableParameters& params);
+    void AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to& node, TAlterTableParameters& params);
     TNodePtr PragmaStatement(const TRule_pragma_stmt& stmt, bool& success);
     void AddStatementToBlocks(TVector<TNodePtr>& blocks, TNodePtr node);
 
@@ -9170,6 +9171,18 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
         AlterTableDropChangefeed(rule, params);
         break;
     }
+    case TRule_alter_table_action::kAltAlterTableAction15: {
+        // RENAME INDEX TO
+        if (!params.IsEmpty()) {
+            // rename action follows some other actions
+            Error() << "RENAME INDEX TO can not be used together with another table action";
+            return false;
+        }
+
+        const auto& renameTo = node.GetAlt_alter_table_action15().GetRule_alter_table_rename_index_to1();
+        AlterTableRenameIndexTo(renameTo, params);
+        break;
+    }
 
     default:
         AltNotImplemented("alter_table_action", node);
@@ -9314,6 +9327,13 @@ void TSqlQuery::AlterTableDropIndex(const TRule_alter_table_drop_index& node, TA
 
 void TSqlQuery::AlterTableRenameTo(const TRule_alter_table_rename_to& node, TAlterTableParameters& params) {
     params.RenameTo = IdEx(node.GetRule_an_id_table3(), *this);
+}
+
+void TSqlQuery::AlterTableRenameIndexTo(const TRule_alter_table_rename_index_to& node, TAlterTableParameters& params) {
+    auto src = IdEx(node.GetRule_an_id3(), *this);
+    auto dst = IdEx(node.GetRule_an_id5(), *this);
+
+    params.RenameIndexTo = std::make_pair(src, dst);
 }
 
 bool TSqlQuery::AlterTableAddChangefeed(const TRule_alter_table_add_changefeed& node, TAlterTableParameters& params) {

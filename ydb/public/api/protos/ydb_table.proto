@@ -500,6 +500,15 @@ message DropTableResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message RenameIndexItem {
+    // Index name to rename
+    string source_name = 1;
+    // Target index name
+    string destination_name = 2;
+    // Move options
+    bool replace_destination = 3;
+}
+
 // Alter table with given path
 message AlterTableRequest {
     // Session identifier
@@ -543,6 +552,8 @@ message AlterTableRequest {
     repeated Changefeed add_changefeeds = 19;
     // Remove change feeds (by its names)
     repeated string drop_changefeeds = 20;
+    // Rename existed index
+    repeated RenameIndexItem rename_indexes = 21;
 }
 
 message AlterTableResponse {

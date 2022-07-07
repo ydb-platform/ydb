@@ -1024,7 +1024,8 @@ private:
                     && name != "alterColumnFamilies"
                     && name != "setTableSettings"
                     && name != "addChangefeed"
-                    && name != "dropChangefeed")
+                    && name != "dropChangefeed"
+                    && name != "renameIndexTo")
             {
                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                     TStringBuilder() << "Unknown alter table action: " << name));

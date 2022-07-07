@@ -237,10 +237,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                                  {NLs::PathExist});
             }
 
-            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Sync", "MovedSync");
+            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Sync", "MovedSync", false);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Async", "MovedAsync");
+            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Async", "MovedAsync", false);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
             {
                 TInactiveZone inactive(activeZone);
@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveRebootsTest) {
                                                  {NLs::PathExist});
             }
 
-            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Sync", "Sync1");
+            TestMoveIndex(runtime, ++t.TxId, "/MyRoot/Table", "Sync", "Sync1", true);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             {

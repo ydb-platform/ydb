@@ -510,6 +510,7 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
     const auto& mainTable = moving.GetTablePath();
     const auto& srcIndex = moving.GetSrcPath();
     const auto& dstIndex = moving.GetDstPath();
+    bool allowOverwrite = moving.HasAllowOverwrite() && moving.GetAllowOverwrite();
 
     TPath mainTablePath = TPath::Resolve(mainTable, context.SS);
     {
@@ -594,6 +595,12 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
             .IsTableIndex();
 
         if (checks) {
+            if (!allowOverwrite) {
+                TString errStr = TStringBuilder()
+                    << "Index " << dstIndex
+                    << "exists, but overwrite flag has not been set";
+                return {CreateReject(nextId, NKikimrScheme::StatusSchemeError, errStr)};
+            }
             {
                 auto indexDropping = TransactionTemplate(mainTablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndex);
                 auto operation = indexDropping.MutableDrop();

@@ -1078,6 +1078,7 @@ message TMoveIndex {
     optional string TablePath = 1;
     optional string SrcPath = 2;
     optional string DstPath = 3;
+    optional bool AllowOverwrite = 4;
 }
 
 message TSequenceDescription {

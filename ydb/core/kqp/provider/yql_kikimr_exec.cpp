@@ -883,6 +883,24 @@ public:
                 } else if (name == "dropChangefeed") {
                     auto nameNode = action.Value().Cast<TCoAtom>();
                     alterTableRequest.add_drop_changefeeds(TString(nameNode.Value()));
+                } else if (name == "renameIndexTo") {
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto renameIndexes = alterTableRequest.add_rename_indexes();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto name = TString(nameNode.Value());
+                        if (name == "src") {
+                            renameIndexes->set_source_name(columnTuple.Item(1).Cast<TCoAtom>().StringValue());
+                        } else if (name == "dst") {
+                            renameIndexes->set_destination_name(columnTuple.Item(1).Cast<TCoAtom>().StringValue());
+                        } else {
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Unknown renameIndexTo param: " << name));
+                            return SyncError();
+                        }
+                    }
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                         TStringBuilder() << "Unknown alter table action: " << name));

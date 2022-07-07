@@ -106,6 +106,8 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
         AddChangefeed,
         // drop changefeeds
         DropChangefeed,
+        // rename index
+        RenameIndex,
     };
 
     THashSet<EOp> GetOps() const {
@@ -140,6 +142,10 @@ class TAlterTableRPC : public TRpcSchemeRequestActor<TAlterTableRPC, TEvAlterTab
 
         if (req->alter_attributes_size()) {
             ops.emplace(EOp::Attribute);
+        }
+
+        if (req->rename_indexes_size()) {
+            ops.emplace(EOp::RenameIndex);
         }
 
         return ops;
@@ -223,6 +229,15 @@ public:
 
         case EOp::Attribute:
             AlterUserAttributes(ctx);
+            break;
+
+        case EOp::RenameIndex:
+            if (req->rename_indexes_size() == 1) {
+                RenameIndex(ctx);
+            } else {
+                return Reply(StatusIds::UNSUPPORTED, "Only one index can be renamed by one operation",
+                    NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+            }
             break;
         }
 
@@ -618,6 +633,34 @@ private:
                 attr.SetValue(value);
             }
         }
+
+        ctx.Send(MakeTxProxyID(), proposeRequest.release());
+    }
+
+    void RenameIndex(const TActorContext &ctx) {
+        const auto req = GetProtoRequest();
+
+        std::pair<TString, TString> pathPair;
+        try {
+            pathPair = SplitPath(req->path());
+        } catch (const std::exception&) {
+            return ReplyWithStatus(StatusIds::BAD_REQUEST, ctx);
+        }
+
+        const auto& workingDir = pathPair.first;
+
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = CreateProposeTransaction();
+        auto& record = proposeRequest->Record;
+        auto& modifyScheme = *record.MutableTransaction()->MutableModifyScheme();
+
+        modifyScheme.SetWorkingDir(workingDir);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
+
+        auto& alter = *modifyScheme.MutableMoveIndex();
+        alter.SetTablePath(req->path());
+        alter.SetSrcPath(req->rename_indexes(0).source_name());
+        alter.SetDstPath(req->rename_indexes(0).destination_name());
+        alter.SetAllowOverwrite(req->rename_indexes(0).replace_destination());
 
         ctx.Send(MakeTxProxyID(), proposeRequest.release());
     }

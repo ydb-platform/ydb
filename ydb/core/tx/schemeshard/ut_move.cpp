@@ -766,10 +766,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
-        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync");
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync", false);
         env.TestWaitNotification(runtime, txId);
 
-        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Async", "MovedAsync");
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Async", "MovedAsync", false);
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -833,10 +833,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
-        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "Sync", {NKikimrScheme::StatusInvalidParameter});
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "Sync", true, {NKikimrScheme::StatusInvalidParameter});
         env.TestWaitNotification(runtime, txId);
 
-        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Async", "Async", {NKikimrScheme::StatusInvalidParameter});
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Async", "Async", true, {NKikimrScheme::StatusInvalidParameter});
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -900,10 +900,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                             NLs::CheckColumns("Table", {"key", "value0", "value1", "valueFloat"}, {}, {"key"}),
                             NLs::IndexesCount(2)});
 
-        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "BlaBla", "Sync", {NKikimrScheme::StatusPathDoesNotExist});
+        TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "BlaBla", "Sync", true, {NKikimrScheme::StatusPathDoesNotExist});
         env.TestWaitNotification(runtime, txId);
 
-        TestMoveIndex(runtime, ++txId, "/MyRoot/TableBlaBla", "Async", "Async", {NKikimrScheme::StatusPathDoesNotExist});
+        TestMoveIndex(runtime, ++txId, "/MyRoot/TableBlaBla", "Async", "Async", false, {NKikimrScheme::StatusPathDoesNotExist});
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
@@ -961,12 +961,12 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         WaitForSuppressed(runtime, suppressed, 1, observer);
 
         {
-            TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync", {NKikimrScheme::StatusMultipleModifications});
+            TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "Sync", "MovedSync", false, {NKikimrScheme::StatusMultipleModifications});
             env.TestWaitNotification(runtime, txId);
         }
 
         {
-            TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "SomeIndex", "Sync", {NKikimrScheme::StatusMultipleModifications});
+            TestMoveIndex(runtime, ++txId, "/MyRoot/Table", "SomeIndex", "Sync", false, {NKikimrScheme::StatusMultipleModifications});
             env.TestWaitNotification(runtime, txId);
         }
 

@@ -1526,7 +1526,7 @@ namespace Tests {
         return dynamic_cast<NMsgBusProxy::TBusResponse *>(reply.Release());
     }
 
-    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::MoveIndex(const TString& table, const TString& src, const TString& dst, const TString& userToken) {
+    TAutoPtr<NMsgBusProxy::TBusResponse> TClient::MoveIndex(const TString& table, const TString& src, const TString& dst, bool allowOverwrite, const TString& userToken) {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
         op->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMoveIndex);
@@ -1534,6 +1534,7 @@ namespace Tests {
         descr->SetTablePath(table);
         descr->SetSrcPath(src);
         descr->SetDstPath(dst);
+        descr->SetAllowOverwrite(allowOverwrite);
         TAutoPtr<NBus::TBusMessage> reply;
         if (userToken) {
             request->Record.SetSecurityToken(userToken);

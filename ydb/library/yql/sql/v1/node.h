@@ -1152,6 +1152,7 @@ namespace NSQLTranslationV1 {
         TVector<TChangefeedDescription> AddChangefeeds;
         TVector<TChangefeedDescription> AlterChangefeeds;
         TVector<TIdentifier> DropChangefeeds;
+        TMaybe<std::pair<TIdentifier, TIdentifier>> RenameIndexTo;
 
         bool IsEmpty() const {
             return AddColumns.empty() && DropColumns.empty() && AlterColumns.empty()
@@ -1159,7 +1160,8 @@ namespace NSQLTranslationV1 {
                 && !TableSettings.IsSet()
                 && AddIndexes.empty() && DropIndexes.empty()
                 && !RenameTo.Defined()
-                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty();
+                && AddChangefeeds.empty() && AlterChangefeeds.empty() && DropChangefeeds.empty()
+                && !RenameIndexTo.Defined();
         }
     };
 

@@ -43,12 +43,16 @@ struct TCgi {
         template <class TDefVal>
         TString AsInput(const TDefVal defValue) const {
             return TStringBuilder()
-                << "<label> " << Name << ": <input type=\"text\" id=\"" << Name << "\" name=\"" << Name << "\" value=\"" << defValue << "\" /> </label>";
+                << "<div class=\"col-md-4\">"
+                << "<label for=\"" << Name << "\"> " << Name << ": <input type=\"text\" class=\"form-control\" id=\"" << Name << "\" name=\"" << Name << "\" value=\"" << defValue << "\" /> </label>"
+                << "</div>";
         }
 
         TString AsInput() const {
             return TStringBuilder()
-                << "<label> " << Name << ": <input type=\"text\" id=\"" << Name << "\" name=\"" << Name << "\" /> </label>";
+                << "<div class=\"col-md-4\">"
+                << "<label for=\"" << Name << "\"> " << Name << ": <input type=\"text\" class=\"form-control\" id=\"" << Name << "\" name=\"" << Name << "\" /> </label>"
+                << "</div>";
         }
 
         template <class TVal>
@@ -495,45 +499,57 @@ private:
         OutputAdminPage(str);
     }
 
+    TString SubmitButton(const TStringBuf value) const {
+        return TStringBuilder()
+            << "<div class=\"col-md-4\"><input class=\"btn btn-default\" type=\"submit\" value=\"" << value << "\"></div>" << Endl;
+    }
 
     void OutputAdminPage(TStringStream& str) const {
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
+            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Settings to change: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
+            str << "<div style=\"display: flex; align-items: center;\">";
             str << TCgi::IsReadOnlyMode.AsInput(Self->IsReadOnlyMode);
-            str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Set\"/>" << Endl;
+            str << SubmitButton("Set");
+            str << "</div>";
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
+            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Execute upgrade DB's ACL, grant ACCESS to all existed users: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
             str << TCgi::UpdateAccessDatabaseRights.AsHiddenInput("1");
+            str << "<div style=\"display: flex; align-items: center;\">";
             str << TCgi::UpdateAccessDatabaseRightsDryRun.AsInput(1);
-            str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Run\"/>" << Endl;
+            str << SubmitButton("Run");
+            str << "</div>";
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
+            str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
             str << "<legend> Make all Access Database rights no inheritable at all datatabase: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
             str << TCgi::FixAccessDatabaseInheritance.AsHiddenInput("1");
+            str << "<div style=\"display: flex; align-items: center;\">";
             str << TCgi::FixAccessDatabaseInheritanceDryRun.AsInput(1);
-            str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Run\"/>" << Endl;
+            str << SubmitButton("Run");
+            str << "</div>";
             str << "</form>" << Endl;
         }
         {
-            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\">" << Endl;
+            str << "<form method=\"GET\" id=\"tblMonSSFrmUpdateCoordinatorsConfig\" name=\"tblMonSSFrmUpdateCoordinatorsConfig\" class=\"form-group\">" << Endl;
             str << "<legend> Send configuration update to all coordinators: </legend>";
             str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
             str << TCgi::Page.AsHiddenInput(TCgi::TPages::AdminRequest);
             str << TCgi::UpdateCoordinatorsConfig.AsHiddenInput("1");
+            str << "<div style=\"display: flex; align-items: center;\">";
             str << TCgi::UpdateCoordinatorsConfigDryRun.AsInput(1);
-            str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Run\"/>" << Endl;
+            str << SubmitButton("Run");
+            str << "</div>";
             str << "</form>" << Endl;
         }
     }
@@ -552,45 +568,66 @@ private:
             }
 
             {
-                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
-                str << "<legend> Path info by Path Id: </legend>";
+                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
+                str << "<legend> Hierarchy of SS items: </legend>";
                 str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
                 str << TCgi::Page.AsHiddenInput(TCgi::TPages::PathInfo);
-                str << TCgi::OwnerPathId.AsInput(Self->TabletID());
-                str << TCgi::LocalPathId.AsInput();
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Watch\"/>" << Endl;
+                str << TCgi::OwnerPathId.AsHiddenInput(Self->TabletID());
+                str << TCgi::LocalPathId.AsHiddenInput("1");
+                str << "<div style=\"display: flex; align-items: center;\">";
+                str << SubmitButton("Watch");
+                str << "</div>";
                 str << "</form>" << Endl;
             }
 
             {
-                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
+                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
+                str << "<legend> Path info by Path Id: </legend>" << Endl;
+                str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
+                str << TCgi::Page.AsHiddenInput(TCgi::TPages::PathInfo);
+                str << "<div style=\"display: flex; align-items: center;\">";
+                str << TCgi::OwnerPathId.AsInput(Self->TabletID());
+                str << TCgi::LocalPathId.AsInput();
+                str << SubmitButton("Watch");
+                str << "</div>";
+                str << "</form>" << Endl;
+            }
+
+            {
+                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
                 str << "<legend> Shard info by ID: </legend>";
                 str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
                 str << TCgi::Page.AsHiddenInput(TCgi::TPages::ShardInfoByTabletId);
+                str << "<div style=\"display: flex; align-items: center;\">";
                 str << TCgi::ShardID.AsInput();
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Watch\"/>" << Endl;
+                str << SubmitButton("Watch");
+                str << "</div>";
                 str << "</form>" << Endl;
             }
             {
-                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
+                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
                 str << "<legend> Shard info by Idx: </legend>";
                 str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
                 str << TCgi::Page.AsHiddenInput(TCgi::TPages::ShardInfoByShardIdx);
+                str << "<div style=\"display: flex; align-items: center;\">";
                 str << TCgi::OwnerShardIdx.AsInput(Self->TabletID());
                 str << TCgi::LocalShardIdx.AsInput();
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Watch\"/>" << Endl;
+                str << SubmitButton("Watch");
+                str << "</div>";
                 str << "</form>" << Endl;
             }
 
             {
-                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\">" << Endl;
+                str << "<form method=\"GET\" id=\"tblMonSSFrm\" name=\"tblMonSSFrm\" class=\"form-group\">" << Endl;
                 str << "<fieldset>";
                 str << "<legend>TxInFly info by OperationId: </legend>";
                 str << TCgi::TabletID.AsHiddenInput(Self->TabletID());
                 str << TCgi::Page.AsHiddenInput(TCgi::TPages::TransactionInfo);
+                str << "<div style=\"display: flex; align-items: center;\">";
                 str << TCgi::TxId.AsInput();
                 str << TCgi::PartId.AsInput();
-                str << "<input class=\"btn btn-default\" type=\"submit\" value=\"Watch\"/>" << Endl;
+                str << SubmitButton("Watch");
+                str << "</div>";
                 str << "</fieldset>";
                 str << "</form>" << Endl;
             }

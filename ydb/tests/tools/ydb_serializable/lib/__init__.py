@@ -287,7 +287,7 @@ class DatabaseChecker(object):
 
         def __exit__(self, exc_type=None, exc_val=None, exc_tb=None):
             assert self._session is not None
-            if exc_type is not None:
+            if exc_type is not None or self._session.closing():
                 # self._session.delete()
                 self._session = None
             else:

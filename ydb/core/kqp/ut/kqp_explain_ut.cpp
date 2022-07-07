@@ -712,6 +712,37 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
                           << " but received: " << filter.GetMapSafe().at("Predicate"));
         }
     }
+
+    Y_UNIT_TEST_TWIN(MergeConnection, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        TStreamExecScanQuerySettings settings;
+        settings.Explain(true);
+
+        auto db = kikimr.GetTableClient();
+
+        auto it = db.StreamExecuteScanQuery(R"(
+            SELECT * FROM `/Root/KeyValue` ORDER BY Key;
+        )", settings).GetValueSync();
+
+        auto res = CollectStreamResult(it);
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        UNIT_ASSERT(res.PlanJson);
+
+        Cerr << res.PlanJson << Endl;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+        auto merge = FindPlanNodeByKv(
+            plan,
+            "Node Type",
+            "Merge"
+        );
+        UNIT_ASSERT(merge.IsDefined());
+        const auto& sortColumns = merge.GetMapSafe().at("SortColumns").GetArraySafe();
+        UNIT_ASSERT(sortColumns.size() == 1);
+        UNIT_ASSERT(sortColumns.at(0) == "Key (Asc)");
+    }
 }
 
 } // namespace NKqp

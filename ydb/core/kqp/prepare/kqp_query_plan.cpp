@@ -696,6 +696,16 @@ private:
                     for (const auto& column : hashShuffle.Cast().KeyColumns()) {
                         keyColumns.AppendValue(TString(column.Value()));
                     }
+                } else if (auto merge = inputCn.Maybe<TDqCnMerge>()) {
+                    inputPlanNode.TypeName = "Merge";
+                    auto& sortColumns = inputPlanNode.NodeInfo["SortColumns"];
+                    for (const auto& sortColumn : merge.Cast().SortColumns()) {
+                        TStringBuilder sortColumnDesc;
+                        sortColumnDesc << sortColumn.Column().Value() << " ("
+                            << sortColumn.SortDirection().Value() << ")";
+
+                        sortColumns.AppendValue(sortColumnDesc);
+                    }
                 } else {
                     inputPlanNode.TypeName = inputCn.Ref().Content();
                 }
@@ -1557,6 +1567,7 @@ TString SerializeTxPlans(const TVector<const TString>& txPlans, const TString co
     writer.WriteKey("Plan");
     writer.BeginObject();
     writer.WriteKey("Node Type").WriteString("Query");
+    writer.WriteKey("PlanNodeType").WriteString("Query");
     writer.WriteKey("Plans");
     writer.BeginList();
 

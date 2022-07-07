@@ -137,7 +137,8 @@
                         "PlanNodeType": "ResultSet"
                     }
                 ],
-                "Node Type": "Query"
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
             }
         },
         {
@@ -252,7 +253,8 @@
                         "PlanNodeType": "ResultSet"
                     }
                 ],
-                "Node Type": "Query"
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
             }
         },
         {
@@ -296,7 +298,8 @@
                         "PlanNodeType": "ResultSet"
                     }
                 ],
-                "Node Type": "Query"
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
             }
         },
         {

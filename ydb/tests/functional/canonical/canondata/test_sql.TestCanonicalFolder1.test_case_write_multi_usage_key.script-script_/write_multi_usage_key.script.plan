@@ -92,7 +92,10 @@
                                                 "Node Type": "Limit-TableFullScan"
                                             }
                                         ],
-                                        "Node Type": "DqCnMerge",
+                                        "Node Type": "Merge",
+                                        "SortColumns": [
+                                            "Name (Asc)"
+                                        ],
                                         "PlanNodeType": "Connection"
                                     }
                                 ],
@@ -109,7 +112,8 @@
                         "PlanNodeType": "ResultSet"
                     }
                 ],
-                "Node Type": "Query"
+                "Node Type": "Query",
+                "PlanNodeType": "Query"
             }
         }
     ]

@@ -2283,7 +2283,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (rowset.HaveValue<Schema::PersQueues::RangeBegin>()) {
                     if (!pqInfo.KeyRange) {
-                        pqInfo.KeyRange = {};
+                        pqInfo.KeyRange.ConstructInPlace();
                     }
 
                     pqInfo.KeyRange->FromBound = rowset.GetValue<Schema::PersQueues::RangeBegin>();
@@ -2291,7 +2291,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                 if (rowset.HaveValue<Schema::PersQueues::RangeEnd>()) {
                     if (!pqInfo.KeyRange) {
-                        pqInfo.KeyRange = {};
+                        pqInfo.KeyRange.ConstructInPlace();
                     }
 
                     pqInfo.KeyRange->ToBound = rowset.GetValue<Schema::PersQueues::RangeEnd>();

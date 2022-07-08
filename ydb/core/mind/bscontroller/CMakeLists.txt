@@ -53,6 +53,7 @@ target_sources(core-mind-bscontroller PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/select_groups.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/self_heal.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/stat_processor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/storage_stats_calculator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/sys_view.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/update_group_latencies.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/mind/bscontroller/update_last_seen_ready.cpp

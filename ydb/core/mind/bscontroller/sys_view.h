@@ -2,6 +2,13 @@
 
 #include "impl.h"
 
+#include <ydb/core/protos/blobstorage_disk.pb.h>
+#include <ydb/core/sys_view/common/events.h>
+
+#include <util/system/types.h>
+
+#include <vector>
+
 namespace NKikimr::NBsController {
 
 struct TControllerSystemViewsState {
@@ -25,5 +32,43 @@ struct TEvControllerUpdateSystemViews :
     ui32 GroupReservePart;
 };
 
-} // NKikimr::NBsController
+struct TEvCalculateStorageStatsRequest :
+    TEventLocal<TEvCalculateStorageStatsRequest, NSysView::TEvSysView::EvCalculateStorageStatsRequest>
+{
+    TEvCalculateStorageStatsRequest(
+        const TControllerSystemViewsState& systemViewsState,
+        const TBlobStorageController::THostRecordMap& hostRecordMap,
+        ui32 groupReserveMin,
+        ui32 groupReservePart)
+        : SystemViewsState(systemViewsState)
+        , HostRecordMap(hostRecordMap)
+        , GroupReserveMin(groupReserveMin)
+        , GroupReservePart(groupReservePart)
+    {
+    }
 
+    TControllerSystemViewsState SystemViewsState;
+    TBlobStorageController::THostRecordMap HostRecordMap;
+    ui32 GroupReserveMin;
+    ui32 GroupReservePart;
+};
+
+struct TEvCalculateStorageStatsResponse :
+    TEventLocal<TEvCalculateStorageStatsResponse, NSysView::TEvSysView::EvCalculateStorageStatsResponse>
+{
+    std::vector<NKikimrSysView::TStorageStatsEntry> StorageStats;
+};
+
+struct TEvScheduleCalculateStorageStatsRequest :
+    TEventLocal<TEvScheduleCalculateStorageStatsRequest, NSysView::TEvSysView::EvScheduleCalculateStorageStatsRequest>
+{};
+
+struct TGroupDiskInfo {
+    const NKikimrBlobStorage::TPDiskMetrics *PDiskMetrics;
+    const NKikimrBlobStorage::TVDiskMetrics *VDiskMetrics;
+    ui32 ExpectedSlotCount;
+};
+
+void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks, TBlobStorageGroupType type);
+
+} // NKikimr::NBsController

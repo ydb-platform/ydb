@@ -184,7 +184,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
             IncCounter(COUNTER_WRITE_OVERLOAD);
             bool tableOverload = InsertTable->IsOverloaded(tableId);
             LOG_S_INFO("Write (overload) " << data.size() << " bytes into pathId " << tableId
-                << (ShardOverloaded()? "[shard]" : "") << (tableOverload? "[table]" : "")
+                << (ShardOverloaded()? " [shard]" : "") << (tableOverload? " [table]" : "")
                 << " at tablet " << TabletID());
         }
 

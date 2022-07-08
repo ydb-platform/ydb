@@ -554,6 +554,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
     ui64 bytesToIndex = 0;
     TVector<const NOlap::TInsertedData*> dataToIndex;
     dataToIndex.reserve(TLimits::MIN_SMALL_BLOBS_TO_INSERT);
+    THashMap<ui64, ui64> overloadedPathGranules;
     for (auto& [pathId, committed] : InsertTable->GetCommitted()) {
         for (auto& data : committed) {
             ui32 dataSize = data.BlobSize();
@@ -564,6 +565,7 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
                 continue;
             }
             if (auto* pMap = PrimaryIndex->GetOverloadedGranules(data.PathId)) {
+                overloadedPathGranules[pathId] = pMap->size();
                 InsertTable->SetOverloaded(data.PathId, true);
                 ++ignored;
                 continue;
@@ -574,6 +576,12 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
             bytesToIndex += dataSize;
             dataToIndex.push_back(&data);
         }
+    }
+
+    for (auto& [p, cnt] : overloadedPathGranules) {
+        ui64 pathId(p);
+        ui64 count(cnt);
+        LOG_S_INFO("Overloaded granules (" << count << ") for pathId " << pathId << " at tablet " << TabletID());
     }
 
     if (bytesToIndex < (ui64)Limits.MinInsertBytes && blobs < TLimits::MIN_SMALL_BLOBS_TO_INSERT) {

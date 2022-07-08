@@ -190,13 +190,13 @@ struct Schema : NIceDb::Schema {
         struct Committed : Column<1, NScheme::NTypeIds::Byte> {};
         struct ShardOrPlan : Column<2, NScheme::NTypeIds::Uint64> {};
         struct WriteTxId : Column<3, NScheme::NTypeIds::Uint64> {};
-        struct LogicalTableId : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<4, NScheme::NTypeIds::Uint64> {};
         struct DedupId : Column<5, NScheme::NTypeIds::String> {};
         struct BlobId : Column<6, NScheme::NTypeIds::String> {};
         struct Meta : Column<7, NScheme::NTypeIds::String> {};
 
-        using TKey = TableKey<Committed, ShardOrPlan, WriteTxId, LogicalTableId, DedupId>;
-        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, LogicalTableId, DedupId, BlobId, Meta>;
+        using TKey = TableKey<Committed, ShardOrPlan, WriteTxId, PathId, DedupId>;
+        using TColumns = TableColumns<Committed, ShardOrPlan, WriteTxId, PathId, DedupId, BlobId, Meta>;
     };
 
     struct IndexGranules : NIceDb::Schema::Table<GranulesTableId> {
@@ -457,7 +457,7 @@ struct Schema : NIceDb::Schema {
             EInsertTableIds recType = (EInsertTableIds)rowset.GetValue<InsertTable::Committed>();
             ui64 shardOrPlan = rowset.GetValue<InsertTable::ShardOrPlan>();
             ui64 writeTxId = rowset.GetValueOrDefault<InsertTable::WriteTxId>();
-            ui64 tableId = rowset.GetValue<InsertTable::LogicalTableId>();
+            ui64 pathId = rowset.GetValue<InsertTable::PathId>();
             TString dedupId = rowset.GetValue<InsertTable::DedupId>();
             TString strBlobId = rowset.GetValue<InsertTable::BlobId>();
             TString metaStr = rowset.GetValue<InsertTable::Meta>();
@@ -472,7 +472,7 @@ struct Schema : NIceDb::Schema {
                 writeTime = TInstant::Seconds(meta.GetDirtyWriteTimeSeconds());
             }
 
-            TInsertedData data(shardOrPlan, writeTxId, tableId, dedupId, blobId, metaStr, writeTime);
+            TInsertedData data(shardOrPlan, writeTxId, pathId, dedupId, blobId, metaStr, writeTime);
 
             switch (recType) {
                 case EInsertTableIds::Inserted:

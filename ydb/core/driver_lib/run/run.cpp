@@ -524,7 +524,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         bool hasPQv1 = services.empty();
         names["pqv1"] = &hasPQv1;
         bool hasTopic = false;
-        names["topic_service"] = &hasTopic;
+        names["topic"] = &hasTopic;
         bool hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;
         bool hasS3Internal = false;

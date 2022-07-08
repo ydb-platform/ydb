@@ -115,10 +115,10 @@ private:
     }
 
     void HandleScan(TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got ScanDataAck"
-            << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-            << ", freeSpace: " << ev->Get()->FreeSpace << ", prevFreeSpace: " << PeerFreeSpace);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " got ScanDataAck"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+            << " freeSpace: " << ev->Get()->FreeSpace << " prevFreeSpace: " << PeerFreeSpace);
 
         --InFlightScanDataMessages;
 
@@ -141,11 +141,11 @@ private:
         const auto& blobRange = event.BlobRange;
 
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got TEvReadBlobRangeResult error"
-                << ", at: " << ScanActorId
-                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-                << ", blob: " << ev->Get()->BlobRange
-                << ", status: " <<  NKikimrProto::EReplyStatus_Name(event.Status));
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " got TEvReadBlobRangeResult error"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+                << " blob: " << ev->Get()->BlobRange
+                << " status: " <<  NKikimrProto::EReplyStatus_Name(event.Status));
             SendError(event.Status);
             return Finish();
         }
@@ -155,11 +155,11 @@ private:
 
         InFlightReadBytes -= blobRange.Size;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got TEvReadBlobRangeResult"
-            << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-            << ", blob: " << ev->Get()->BlobRange
-            << ", prevFreeSpace: " << PeerFreeSpace);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " got TEvReadBlobRangeResult"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+            << " blob: " << ev->Get()->BlobRange
+            << " prevFreeSpace: " << PeerFreeSpace);
 
         ScanIterator->AddData(blobRange, event.Data);
 
@@ -170,14 +170,10 @@ private:
     bool ProduceResults() {
         Y_VERIFY(!Finished);
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Start producing result"
-            << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
-
         if (ScanIterator->Finished()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Producing result: scan iterator is finished"
-                << ", at: " << ScanActorId
-                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " producing result: scan iterator is finished"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath);
             return false;
         }
 
@@ -186,17 +182,19 @@ private:
             ResultYqlSchema = ReadMetadataRanges[ReadMetadataIndex]->GetResultYqlSchema();
         }
         if (!result.ResultBatch) {
-            // No data is ready yet
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " producing result: no data is ready yet"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath);
             return false;
         }
 
         auto& batch = result.ResultBatch;
         int numRows = batch->num_rows();
         int numColumns = batch->num_columns();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got ready result"
-            << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-            << ", blob (" << numColumns << " columns, " << numRows << " rows)");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " producing result: got ready result"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+            << " blob (" << numColumns << " columns, " << numRows << " rows)");
 
         switch (DataFormat) {
             case NKikimrTxDataShard::EScanDataFormat::UNSPECIFIED:
@@ -228,19 +226,18 @@ private:
 
     void ContinueProcessingStep() {
         if (!ScanIterator) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan iterator is not initialized"
-                << ", at: " << ScanActorId
-                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " iterator is not initialized"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath);
             return;
         }
 
         if (PeerFreeSpace == 0) {
             // Throttle down until the compute actor is ready to receive more rows
 
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Waiting for peer free space"
-                << ", at: " << ScanActorId
-                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
-
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+                "Scan " << ScanActorId << " waiting for peer free space"
+                << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath);
             return;
         }
 
@@ -283,9 +280,9 @@ private:
         }
 
         // The loop has finished without any progress!
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Scan is hanging"
-                << ", at: " << ScanActorId
-                << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " is hanging"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath);
     }
 
     void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
@@ -293,11 +290,11 @@ private:
         TString reason = ev->Get()->GetIssues().ToOneLineString();
 
         auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
-        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN, "Got AbortExecution"
-            << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-            << ", code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
-            << ", reason: " << reason);
+        LOG_LOG_S(*TlsActivationContext, prio, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " got AbortExecution"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+            << " code: " << NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())
+            << " reason: " << reason);
 
         AbortReason = std::move(reason);
         SendError(NKikimrProto::EReplyStatus::ERROR); // TODO: better status?
@@ -315,21 +312,21 @@ private:
                 break;
         }
 
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Undelivered event: " << eventType
-            << ", at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-            << ", reason: " << ev->Get()->Reason
-            << ", description: " << AbortReason);
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " undelivered event: " << eventType
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+            << " reason: " << ev->Get()->Reason
+            << " description: " << AbortReason);
 
         Finish();
     }
 
     void HandleScan(TEvents::TEvWakeup::TPtr&) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Guard execution timeout at: " << ScanActorId
-            << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath);
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " guard execution timeout"
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath);
 
         TimeoutActorId = {};
-
         Finish();
     }
 
@@ -406,12 +403,11 @@ private:
 
         PageFaults = 0;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN, "Send ScanData"
-                    << ", from: " << ScanActorId
-                    << ", to: " << ComputeActorId
-                    << ", txId: " << TxId << ", scanId: " << ScanId << ", gen: " << ScanGen << ", table: " << TablePath
-                    << ", bytes: " << Bytes << ", rows: " << Rows << ", page faults: " << Result->PageFaults
-                    << ", finished: " << Result->Finished << ", pageFault: " << Result->PageFault);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " send ScanData to " << ComputeActorId
+            << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " table: " << TablePath
+            << " bytes: " << Bytes << " rows: " << Rows << " page faults: " << Result->PageFaults
+            << " finished: " << Result->Finished << " pageFault: " << Result->PageFault);
 
         if (PeerFreeSpace < Bytes) {
             PeerFreeSpace = 0;
@@ -444,6 +440,9 @@ private:
         if (TimeoutActorId) {
             Send(TimeoutActorId, new TEvents::TEvPoison);
         }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_COLUMNSHARD_SCAN,
+            "Scan " << ScanActorId << " finished");
 
         Send(ColumnShardActorId, new TEvPrivate::TEvReadFinished(RequestCookie, TxId));
         ReportStats();
@@ -500,17 +499,14 @@ static void FillPredicatesFromRange(TReadDescription& read, const ::NKikimrTx::T
                                     const TVector<std::pair<TString, NScheme::TTypeId>>& ydbPk, ui64 tabletId) {
     TSerializedTableRange range(keyRange);
 
-    LOG_S_DEBUG("TTxScan.Execute range predicate. From key size: "
-        << range.From.GetCells().size() << " To key size: " << range.To.GetCells().size()
-        << " at tablet " << tabletId);
-
     read.GreaterPredicate = std::make_shared<NOlap::TPredicate>();
     read.LessPredicate = std::make_shared<NOlap::TPredicate>();
     std::tie(*read.GreaterPredicate, *read.LessPredicate) = RangePredicates(range, ydbPk);
 
-    LOG_S_DEBUG("TTxScan.Execute greater predicate over columns: " << read.GreaterPredicate->ToString()
-        << " at tablet " << tabletId);
-    LOG_S_DEBUG("TTxScan.Execute less predicate over columns: " << read.LessPredicate->ToString()
+    LOG_S_DEBUG("TTxScan range predicate. From key size: " << range.From.GetCells().size()
+        << " To key size: " << range.To.GetCells().size()
+        << " greater predicate over columns: " << read.GreaterPredicate->ToString()
+        << " less predicate over columns: " << read.LessPredicate->ToString()
         << " at tablet " << tabletId);
 
     if (read.GreaterPredicate && read.GreaterPredicate->Empty()) {
@@ -608,11 +604,13 @@ std::shared_ptr<NOlap::TReadMetadataBase> TTxScan::CreateReadMetadata(const TAct
 
 bool TTxScan::Execute(TTransactionContext& txc, const TActorContext& ctx) {
     Y_UNUSED(txc);
-    Y_VERIFY(Ev);
-    LOG_S_DEBUG("TTxScan.Execute at tablet " << Self->TabletID());
 
     auto& record = Ev->Get()->Record;
     const auto& snapshot = record.GetSnapshot();
+    const auto scanId = record.GetScanId();
+    const ui64 txId = record.GetTxId();
+
+    LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
     ui64 itemsLimit = record.HasItemsLimit() ? record.GetItemsLimit() : 0;
 
@@ -721,29 +719,27 @@ void TTxScan::Complete(const TActorContext& ctx) {
 
     TStringStream detailedInfo;
     if (IS_LOG_PRIORITY_ENABLED(ctx, NActors::NLog::PRI_TRACE, NKikimrServices::TX_COLUMNSHARD)) {
-        detailedInfo
-            << ", read metadata: " << TContainerPrinter(ReadMetadataRanges)
-            << ", req: " << request;
+        detailedInfo << " read metadata: (" << TContainerPrinter(ReadMetadataRanges) << ")"
+            << " req: " << request;
     }
 
-    LOG_S_DEBUG("Starting scan"
-                << ", txId: " << txId
-                << ", scanId: " << scanId
-                << ", gen: " << scanGen
-                << ", table: " << table
-                << ", snapshot: " << snapshot
-                << ", shard: " << Self->TabletID()
-                << ", timeout: " << timeout
-                << detailedInfo.Str()
-                );
-
     if (ReadMetadataRanges.empty()) {
+        LOG_S_DEBUG("TTxScan failed "
+                << " txId: " << txId
+                << " scanId: " << scanId
+                << " gen: " << scanGen
+                << " table: " << table
+                << " snapshot: " << snapshot
+                << " timeout: " << timeout
+                << detailedInfo.Str()
+                << " at tablet " << Self->TabletID());
+
         Y_VERIFY(ErrorDescription);
         auto ev = MakeHolder<TEvKqpCompute::TEvScanError>(scanGen);
 
         ev->Record.SetStatus(Ydb::StatusIds::BAD_REQUEST);
         auto issue = NYql::YqlIssue({}, NYql::TIssuesIds::KIKIMR_BAD_REQUEST, TStringBuilder()
-            << "Table " << table << " scan failed, reason: " << ErrorDescription);
+            << "Table " << table << " (shard " << Self->TabletID() << ") scan failed, reason: " << ErrorDescription);
         NYql::IssueToMessage(issue, ev->Record.MutableIssues()->Add());
 
         ctx.Send(scanComputeActor, ev.Release());
@@ -759,18 +755,35 @@ void TTxScan::Complete(const TActorContext& ctx) {
     Self->IncCounter(COUNTER_READ_INDEX_ROWS, statsDelta.Rows);
     Self->IncCounter(COUNTER_READ_INDEX_BYTES, statsDelta.Bytes);
 
-    ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor,
+    auto scanActor = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor,
         scanId, txId, scanGen, requestCookie, table, timeout, std::move(ReadMetadataRanges), dataFormat));
+
+    LOG_S_DEBUG("TTxScan starting " << scanActor
+                << " txId: " << txId
+                << " scanId: " << scanId
+                << " gen: " << scanGen
+                << " table: " << table
+                << " snapshot: " << snapshot
+                << " timeout: " << timeout
+                << detailedInfo.Str()
+                << " at tablet " << Self->TabletID());
 }
 
 
 void TColumnShard::Handle(TEvColumnShard::TEvScan::TPtr& ev, const TActorContext& ctx) {
-    const auto* msg = ev->Get();
-    ui64 txId = msg->Record.GetTxId();
-    const auto& snapshot = msg->Record.GetSnapshot();
+    auto& record = ev->Get()->Record;
+    ui64 txId = record.GetTxId();
+    const auto& scanId = record.GetScanId();
+    const auto& snapshot = record.GetSnapshot();
+
     TRowVersion readVersion(snapshot.GetStep(), snapshot.GetTxId());
     TRowVersion maxReadVersion = GetMaxReadVersion();
-    LOG_S_DEBUG("Scan at tablet " << TabletID() << " version=" << readVersion << " readable=" << maxReadVersion);
+
+    LOG_S_DEBUG("EvScan txId: " << txId
+        << " scanId: " << scanId
+        << " version: " << readVersion
+        << " readable: " << maxReadVersion
+        << " at tablet " << TabletID());
 
     if (maxReadVersion < readVersion) {
         WaitingScans.emplace(readVersion, std::move(ev));

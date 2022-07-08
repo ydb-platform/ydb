@@ -22,7 +22,7 @@ namespace NKqp {
     XX(DB_KQP_REQ_QUERY_PARSE, QueryActionRequests[NKikimrKqp::QUERY_ACTION_PARSE]) \
     XX(DB_KQP_REQ_QUERY_OTHER, OtherQueryRequests) \
     XX(DB_KQP_CLOSE_SESSION_REQ, CloseSessionRequests) \
-    XX(DB_KQP_CREATE_SESSION_REQ, PingSessionRequests) \
+    XX(DB_KQP_PING_SESSION_REQ, PingSessionRequests) \
     XX(DB_KQP_REQUEST_BYTES, RequestBytes) \
     XX(DB_KQP_QUERY_BYTES, QueryBytes) \
     XX(DB_KQP_PARAMS_BYTES, ParametersBytes) \
@@ -85,7 +85,8 @@ namespace NKqp {
     XX(DB_KQP_YDB_RSP_LOCKS_INVALIDATED, YdbResponsesLocksInvalidated) \
     XX(DB_KQP_QUERIES_WITH_RANGE_SCAN, QueriesWithRangeScan) \
     XX(DB_KQP_QUERIES_WITH_FULL_SCAN, QueriesWithFullScan) \
-    XX(DB_KQP_YDB_RESPONSE_BYTES, YdbResponseBytes)
+    XX(DB_KQP_YDB_RESPONSE_BYTES, YdbResponseBytes) \
+    XX(DB_KQP_CREATE_SESSION_REQ, CreateSessionRequests)
 
 #define DB_KQP_HISTOGRAM_COUNTERS_MAP(XX) \
     XX(DB_KQP_QUERY_LATENCY_EXECUTE, QueryLatencies[NKikimrKqp::QUERY_ACTION_EXECUTE]) \

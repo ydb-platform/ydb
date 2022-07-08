@@ -97,6 +97,11 @@ namespace NKikimr::NStorage {
         // some basic consistency checks
         Y_VERIFY(!newGroup || (newGroup->GetGroupID() == groupId && newGroup->GetGroupGeneration() == generation));
 
+        // log if from resolver
+        if (fromResolver) {
+            STLOG(PRI_NOTICE, BS_NODE, NW73, "ApplyGroupInfo from resolver", (GroupId, groupId), (GroupGeneration, generation));
+        }
+
         // obtain group record
         const auto [it, _] = Groups.try_emplace(groupId);
         TGroupRecord& group = it->second;

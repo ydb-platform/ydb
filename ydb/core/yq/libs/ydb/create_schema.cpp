@@ -251,6 +251,34 @@ private:
     const TString DirectoryPath;
 };
 
+class TCreateCoordinationNodeActor : public TCreateActorBase {
+public:
+    TCreateCoordinationNodeActor(
+        NActors::TActorId parent,
+        ui64 logComponent,
+        TYdbConnectionPtr connection,
+        const TString& coordinationNodePath,
+        TYdbSdkRetryPolicy::TPtr retryPolicy,
+        ui64 cookie)
+        : TCreateActorBase(parent, logComponent, std::move(connection), std::move(retryPolicy), cookie)
+        , CoordinationNodePath(coordinationNodePath)
+    {
+    }
+
+private:
+    TString GetEntityName() const override {
+        return TStringBuilder() << "coordination node \"" << CoordinationNodePath << "\"";
+    }
+
+    NYdb::TAsyncStatus CallYdbSdk() override {
+        SCHEMA_LOG_DEBUG("Call create coordination node \"" << CoordinationNodePath << "\"");
+        return Connection->CoordinationClient.CreateNode(CoordinationNodePath);
+    }
+
+private:
+    const TString CoordinationNodePath;
+};
+
 NActors::IActor* MakeCreateTableActor(
     NActors::TActorId parent,
     ui64 logComponent,
@@ -284,6 +312,24 @@ NActors::IActor* MakeCreateDirectoryActor(
         logComponent,
         std::move(connection),
         directoryPath,
+        std::move(retryPolicy),
+        cookie
+    );
+}
+
+NActors::IActor* MakeCreateCoordinationNodeActor(
+    NActors::TActorId parent,
+    ui64 logComponent,
+    TYdbConnectionPtr connection,
+    const TString& coordinationNodePath,
+    TYdbSdkRetryPolicy::TPtr retryPolicy,
+    ui64 cookie)
+{
+    return new TCreateCoordinationNodeActor(
+        parent,
+        logComponent,
+        std::move(connection),
+        coordinationNodePath,
         std::move(retryPolicy),
         cookie
     );

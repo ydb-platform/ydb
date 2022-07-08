@@ -33,6 +33,7 @@ target_proto_messages(libs-config-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/private_api.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/private_proxy.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/quotas_manager.proto
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/rate_limiter.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/read_actors_factory.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/resource_manager.proto
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/config/protos/storage.proto

@@ -3,6 +3,7 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/yq/libs/config/protos/storage.pb.h>
 
+#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
@@ -14,6 +15,7 @@ struct TYdbConnection : public TThrRefBase {
     NYdb::TDriver Driver;
     NYdb::NTable::TTableClient TableClient;
     NYdb::NScheme::TSchemeClient SchemeClient;
+    NYdb::NCoordination::TClient CoordinationClient;
     const TString DB;
     const TString TablePathPrefix;
 

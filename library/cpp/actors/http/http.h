@@ -54,6 +54,27 @@ struct TEqNoCase {
     }
 };
 
+struct TSensors {
+    TString Direction;
+    TString Host;
+    TString Url;
+    TString Status;
+    TDuration Time;
+
+    TSensors(
+            TStringBuf direction,
+            TStringBuf host,
+            TStringBuf url,
+            TStringBuf status,
+            TDuration time)
+        : Direction(direction)
+        , Host(host)
+        , Url(url)
+        , Status(status)
+        , Time(time)
+    {}
+};
+
 struct TUrlParameters {
     THashMap<TStringBuf, TStringBuf> Parameters;
 
@@ -840,6 +861,7 @@ public:
 // it's temporary accessible for cleanup
 //protected:
     THttpIncomingRequestPtr Request;
+    std::unique_ptr<TSensors> Sensors;
 };
 
 }

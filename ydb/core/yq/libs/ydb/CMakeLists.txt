@@ -19,6 +19,7 @@ target_link_libraries(yq-libs-ydb PUBLIC
   yq-libs-config
   yq-libs-events
   ydb-library-security
+  cpp-client-ydb_coordination
   cpp-client-ydb_scheme
   cpp-client-ydb_table
   tools-enum_parser-enum_serialization_runtime

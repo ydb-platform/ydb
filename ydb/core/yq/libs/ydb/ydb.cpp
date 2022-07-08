@@ -221,6 +221,7 @@ TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
     : Driver(driver)
     , TableClient(Driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory))
     , SchemeClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
+    , CoordinationClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
     , DB(config.GetDatabase())
     , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
 {

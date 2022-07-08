@@ -8,12 +8,21 @@ import argparse
 
 from yatest_lib.ya import Ya
 
+import yatest.common as yc
+
 RECIPE_START_OPTION = "start"
 RECIPE_STOP_OPTION = "stop"
 
 ya = None
 collect_cores = None
 sanitizer_extra_checks = None
+
+
+class Config:
+    def __init__(self):
+        self.ya = ya
+        self.collect_cores = collect_cores
+        self.sanitizer_extra_checks = sanitizer_extra_checks
 
 
 def _setup_logging(level=logging.DEBUG):
@@ -60,6 +69,7 @@ def get_options():
                 os.environ[envvar] = os.environ[envvar + '_ORIGINAL']
     collect_cores = args.collect_cores
 
+    yc.runtime._set_ya_config(config=Config())
     for recipe_option in RECIPE_START_OPTION, RECIPE_STOP_OPTION:
         if recipe_option in opts:
             return args, opts[opts.index(recipe_option):]

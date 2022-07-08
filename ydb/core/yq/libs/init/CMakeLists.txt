@@ -29,6 +29,7 @@ target_link_libraries(yq-libs-init PUBLIC
   yq-libs-gateway
   yq-libs-health
   yq-libs-quota_manager
+  libs-rate_limiter-control_plane_service
   yq-libs-shared_resources
   yq-libs-test_connection
   ydb-library-folder_service

@@ -20,7 +20,7 @@ struct TSocketDescriptor : NActors::TSharedDescriptor, THttpConfig {
     SocketType Socket;
 
     TSocketDescriptor() = default;
-    
+
     TSocketDescriptor(int af)
         : Socket(af)
     {
@@ -213,24 +213,11 @@ struct TEvHttpProxy {
         {}
     };
 
-    struct TEvReportSensors : NActors::TEventLocal<TEvReportSensors, EvReportSensors> {
-        TString Direction;
-        TString Host;
-        TString Url;
-        TString Status;
-        TDuration Time;
+    struct TEvReportSensors : TSensors, NActors::TEventLocal<TEvReportSensors, EvReportSensors> {
+        using TSensors::TSensors;
 
-        TEvReportSensors(
-                TStringBuf direction,
-                TStringBuf host,
-                TStringBuf url,
-                TStringBuf status,
-                TDuration time)
-            : Direction(direction)
-            , Host(host)
-            , Url(url)
-            , Status(status)
-            , Time(time)
+        TEvReportSensors(const TSensors& sensors)
+            : TSensors(sensors)
         {}
     };
 };

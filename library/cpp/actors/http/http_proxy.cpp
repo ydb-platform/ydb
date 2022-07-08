@@ -260,6 +260,10 @@ TEvHttpProxy::TEvReportSensors* BuildOutgoingRequestSensors(const THttpOutgoingR
 }
 
 TEvHttpProxy::TEvReportSensors* BuildIncomingRequestSensors(const THttpIncomingRequestPtr& request, const THttpOutgoingResponsePtr& response) {
+    const auto& sensors = response->Sensors;
+    if (sensors) {
+        return new TEvHttpProxy::TEvReportSensors(*sensors);
+    }
     return new TEvHttpProxy::TEvReportSensors(
             "in",
             request->Host,

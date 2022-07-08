@@ -11,6 +11,7 @@
 #include <ydb/core/yq/libs/private_client/internal_service.h>
 #include <ydb/core/yq/libs/private_client/loopback_service.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
+#include <ydb/core/yq/libs/rate_limiter/control_plane_service/rate_limiter_control_plane_service.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
@@ -82,6 +83,11 @@ void Init(
         auto controlPlaneProxy = NYq::CreateControlPlaneProxyActor(protoConfig.GetControlPlaneProxy(),
             appData->Counters->GetSubgroup("counters", "yq")->GetSubgroup("subsystem", "ControlPlaneProxy"), protoConfig.GetQuotasManager().GetEnabled());
         actorRegistrator(NYq::ControlPlaneProxyActorId(), controlPlaneProxy);
+    }
+
+    if (protoConfig.GetRateLimiter().GetControlPlaneEnabled()) {
+        NActors::IActor* rateLimiterService = NYq::CreateRateLimiterControlPlaneService(protoConfig.GetRateLimiter(), yqSharedResources, credentialsProviderFactory);
+        actorRegistrator(NYq::RateLimiterControlPlaneServiceId(), rateLimiterService);
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {

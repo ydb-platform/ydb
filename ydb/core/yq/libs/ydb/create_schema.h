@@ -30,4 +30,14 @@ NActors::IActor* MakeCreateDirectoryActor(
     TYdbSdkRetryPolicy::TPtr retryPolicy,
     ui64 cookie = 0);
 
+// Actor that creates coordination node.
+// Send TEvSchemaCreated to parent (if any).
+NActors::IActor* MakeCreateCoordinationNodeActor(
+    NActors::TActorId parent,
+    ui64 logComponent,
+    TYdbConnectionPtr connection,
+    const TString& coordinationNodePath,
+    TYdbSdkRetryPolicy::TPtr retryPolicy,
+    ui64 cookie = 0);
+
 } // namespace NYq

@@ -18,6 +18,7 @@ import "ydb/core/yq/libs/config/protos/pinger.proto";
 import "ydb/core/yq/libs/config/protos/private_api.proto";
 import "ydb/core/yq/libs/config/protos/private_proxy.proto";
 import "ydb/core/yq/libs/config/protos/quotas_manager.proto";
+import "ydb/core/yq/libs/config/protos/rate_limiter.proto";
 import "ydb/core/yq/libs/config/protos/read_actors_factory.proto";
 import "ydb/core/yq/libs/config/protos/resource_manager.proto";
 import "ydb/core/yq/libs/config/protos/test_connection.proto";
@@ -48,4 +49,5 @@ message TConfig {
     TReadActorsFactoryConfig ReadActorsFactoryConfig = 19;
     THealthConfig Health = 20;
     TQuotasManagerConfig QuotasManager = 21;
+    TRateLimiterConfig RateLimiter = 22;
 }

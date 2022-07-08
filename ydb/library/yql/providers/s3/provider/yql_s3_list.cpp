@@ -212,7 +212,6 @@ private:
                                       prefix,
                                       maxDiscoveryFilesPerQuery),
                             /*data=*/"",
-                            false,
                             retryPolicy);
                     }
                 }
@@ -270,7 +269,6 @@ private:
                       prefix,
                       MaxFilesPerQuery),
             /*data=*/"",
-            false,
             retryPolicy);
         return future;
     }

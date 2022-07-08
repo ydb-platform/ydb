@@ -53,8 +53,9 @@ struct TEvPrivate {
     };
 
     struct TEvUploadPartFinished : public TEventLocal<TEvUploadPartFinished, EvUploadPartFinished> {
-        explicit TEvUploadPartFinished(size_t size) : Size(size) {}
-        const size_t Size;
+        TEvUploadPartFinished(size_t size, size_t index, TString&& etag) : Size(size), Index(index), ETag(std::move(etag)) {}
+        const size_t Size, Index;
+        const TString ETag;
     };
 };
 
@@ -122,7 +123,7 @@ public:
 
     void Bootstrap() {
         Become(&TS3WriteActor::InitialStateFunc);
-        Gateway->Download(Url + Path + "?uploads", Headers, 0, std::bind(&TS3WriteActor::OnUploadsCreated, ActorSystem, SelfId(), std::placeholders::_1), "", true);
+        Gateway->Upload(Url + Path + "?uploads", Headers, "", std::bind(&TS3WriteActor::OnUploadsCreated, ActorSystem, SelfId(), std::placeholders::_1), false);
     }
 
     static constexpr char ActorName[] = "S3_WRITE_ACTOR";
@@ -131,7 +132,7 @@ private:
     void LoadState(const NDqProto::TSinkState&) final {};
     ui64 GetOutputIndex() const final { return OutputIndex; }
     i64 GetFreeSpace() const final {
-        return 1_GB - InFlight - std::accumulate(Parts.cbegin(), Parts.cend(), 0LL, [](i64 s, const NUdf::TUnboxedValuePod v){ return v ? s + v.AsStringRef().Size() : s; });
+        return 1_GB - InFlight - InQueue;
     }
 
     STRICT_STFUNC(InitialStateFunc,
@@ -159,9 +160,10 @@ private:
                 actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
             } else if (root.Name() != "InitiateMultipartUploadResult")
                 actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on create upload.")})));
-            else
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadStarted(root.Node("UploadId", true).Value<TString>())));
-
+            else {
+                const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
+                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
+            }
             break;
         } catch (const std::exception& ex) {
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse create upload response.")})));
@@ -176,15 +178,23 @@ private:
         }
     }
 
-    static void OnPartUploadFinish(TActorSystem* actorSystem, TActorId selfId, size_t size, IHTTPGateway::TResponse&& response) {
+    static void OnPartUploadFinish(TActorSystem* actorSystem, TActorId selfId, size_t size, size_t index, IHTTPGateway::TResult&& response) {
         switch (response.index()) {
-        case 0U:
-            if (const auto code = std::get<long>(std::move(response)); 200L == code)
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadPartFinished(size)));
-            else
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response code " << code)})));
+        case 0U: {
+            const auto str = std::get<IHTTPGateway::TContent>(std::move(response)).Extract();
+
+            if (const auto p = str.find("etag: \""); p != TString::npos) {
+                if (const auto p1 = p + 7, p2 = str.find("\"", p1); p2 != TString::npos) {
+                    actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadPartFinished(size, index, str.substr(p1, p2 - p1))));
+                    break;
+                }
+            }
+            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response:" << Endl << str)})));
+            break;
+        }
         case 1U:
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(response)))));
+            break;
         }
     }
 
@@ -200,7 +210,6 @@ private:
                 actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on finish upload.")})));
             else
                 actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadFinished()));
-
             break;
         } catch (const std::exception& ex) {
             actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse finish upload response.")})));
@@ -215,15 +224,17 @@ private:
         }
     }
 
-    void SendData(TUnboxedValueVector&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
+    void SendData(TUnboxedValueVector&& data, i64 size, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
         InputFinished = finished;
-        std::move(data.begin(), data.end(), std::back_inserter(Parts));
+        for (const auto& v : data)
+            Parts.emplace(v.AsStringRef());
+        data.clear();
+        InQueue += size;
         if (!UploadId.empty())
             StartUploadParts();
     }
 
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
-        Parts.clear();
         Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Error, true);
         if (!UploadId.empty()) {
             // TODO: Send delete.
@@ -232,30 +243,29 @@ private:
 
     void Handle(TEvPrivate::TEvUploadStarted::TPtr& result) {
         UploadId = result->Get()->UploadId;
-        Become(&TS3WriteActor::InitialStateFunc);
+        Become(&TS3WriteActor::WorkingStateFunc);
         StartUploadParts();
     }
 
     void Handle(TEvPrivate::TEvUploadPartFinished::TPtr& result) {
         InFlight -= result->Get()->Size;
+        Tags[result->Get()->Index] = std::move(result->Get()->ETag);
 
-        if (!InFlight && std::all_of(Parts.cbegin(), Parts.cend(), std::logical_not<NUdf::TUnboxedValuePod>())) {
+        if (!InFlight && InputFinished && Parts.empty()) {
             Become(&TS3WriteActor::FinalStateFunc);
-
             TStringBuilder xml;
             xml << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" << Endl;
             xml << "<CompleteMultipartUpload xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">" << Endl;
-            for (auto i = 1U; i <= Parts.size(); ++i)
-                xml << "<Part><PartNumber>" << i << "</Part></PartNumber>" << Endl;
+            size_t i = 0U;
+            for (const auto& tag : Tags)
+                xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
             xml << "</CompleteMultipartUpload>" << Endl;
-            Gateway->Download(Url + Path + "?uploadId=" + UploadId, Headers, 0, std::bind(&TS3WriteActor::OnUploadFinish, ActorSystem, SelfId(), std::placeholders::_1), xml, true);
+            Gateway->Upload(Url + Path + "?uploadId=" + UploadId, Headers, xml, std::bind(&TS3WriteActor::OnUploadFinish, ActorSystem, SelfId(), std::placeholders::_1), false);
         }
     }
 
     void HandleFinished() {
-        if (InputFinished && !InFlight && Parts.empty()) {
-            Callbacks->OnAsyncOutputFinished(OutputIndex);
-        }
+        return Callbacks->OnAsyncOutputFinished(OutputIndex);
     }
 
     // IActor & IDqComputeActorAsyncOutput
@@ -268,16 +278,17 @@ private:
     }
 
     void StartUploadParts() {
-        for (auto i = 0U; i < Parts.size(); ++i) {
-            if (auto part = std::move(Parts[i])) {
-                const auto size = part.AsStringRef().Size();
-                InFlight += size;
-                Gateway->Upload(Url + Path + "?partNumber=" + std::to_string(i + 1) + "&uploadId=" + UploadId, Headers, TString(part.AsStringRef()), std::bind(&TS3WriteActor::OnPartUploadFinish, ActorSystem, SelfId(), size, std::placeholders::_1));
-            }
+        for (InQueue = 0ULL; !Parts.empty(); Parts.pop()) {
+            const auto size = Parts.front().size();
+            const auto index = Tags.size();
+            Tags.emplace_back();
+            InFlight += size;
+            Gateway->Upload(Url + Path + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, Headers, std::move(Parts.front()), std::bind(&TS3WriteActor::OnPartUploadFinish, ActorSystem, SelfId(), size, index, std::placeholders::_1), true);
         }
     }
 
-    bool InputFinished  = false;
+    bool InputFinished = false;
+    size_t InQueue = 0ULL;
     size_t InFlight = 0ULL;
 
     const IHTTPGateway::TPtr Gateway;
@@ -291,7 +302,8 @@ private:
     const IHTTPGateway::THeaders Headers;
     const TString Path;
 
-    TUnboxedValueVector Parts;
+    std::queue<TString> Parts;
+    std::vector<TString> Tags;
 
     std::vector<TRetryParams> RetriesPerPath;
     const std::shared_ptr<NS3::TRetryConfig> RetryConfig;

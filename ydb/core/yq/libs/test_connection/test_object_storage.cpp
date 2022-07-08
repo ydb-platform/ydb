@@ -175,7 +175,6 @@ private:
                 0U,
                 std::bind(&DiscoveryCallback, std::placeholders::_1, SelfId(), TActivationContext::ActorSystem()),
                 /*data=*/"",
-                false,
                 retryPolicy
             );
     }

@@ -20,8 +20,9 @@ TRuntimeNode BuildSerializeCall(
     TType* inputType,
     NCommon::TMkqlBuildContext& ctx)
 {
+    const auto inputItemType = AS_TYPE(TFlowType, inputType)->GetItemType();
     if (format == "raw") {
-        const auto structType = AS_TYPE(TStructType, AS_TYPE(TFlowType, inputType)->GetItemType());
+        const auto structType = AS_TYPE(TStructType, inputItemType);
         MKQL_ENSURE(1U == structType->GetMembersCount(), "Expected single column.");
         const auto schemeType = AS_TYPE(TDataType, structType->GetMemberType(0U))->GetSchemeType();
         return ctx.ProgramBuilder.Map(input,
@@ -31,11 +32,7 @@ TRuntimeNode BuildSerializeCall(
             }
         );
     } else if (format == "json_list") {
-        return ctx.ProgramBuilder.FlatMap(
-            ctx.ProgramBuilder.Condense(input, ctx.ProgramBuilder.NewList(AS_TYPE(TFlowType, inputType)->GetItemType(), {}),
-                [&ctx] (TRuntimeNode, TRuntimeNode) { return ctx.ProgramBuilder.NewDataLiteral<bool>(false); },
-                [&ctx] (TRuntimeNode item, TRuntimeNode state) { return ctx.ProgramBuilder.Append(state, item); }
-            ),
+        return ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.SqueezeToList(input, ctx.ProgramBuilder.NewEmptyOptionalDataLiteral(NUdf::TDataType<ui64>::Id)),
             [&ctx] (TRuntimeNode list) {
                 const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({list.GetStaticType()})});
                 return ctx.ProgramBuilder.ToString(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.SerializeJson"), {ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.From", {}, userType), {list})}));
@@ -43,7 +40,8 @@ TRuntimeNode BuildSerializeCall(
         );
     }
 
-    throw yexception() << "Unsupported format: " << format;
+    const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewStreamType(inputItemType)})});
+    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format), {ctx.ProgramBuilder.FromFlow(input)}));
 }
 
 TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, NCommon::TMkqlBuildContext& ctx) {

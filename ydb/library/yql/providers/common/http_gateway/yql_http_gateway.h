@@ -62,14 +62,16 @@ public:
     };
 
     using THeaders = TSmallVec<TString>;
-
-    using TResponse = std::variant<long, TIssues>;
-    using TOnResponse = std::function<void(TResponse&&)>;
-
-    virtual void Upload(TString url, THeaders headers, TString body, TOnResponse callback) = 0;
-
     using TResult = std::variant<TContent, TIssues>;
     using TOnResult = std::function<void(TResult&&)>;
+
+    virtual void Upload(
+        TString url,
+        THeaders headers,
+        TString body,
+        TOnResult callback,
+        bool put = false,
+        IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()) = 0;
 
     virtual void Download(
         TString url,
@@ -77,7 +79,6 @@ public:
         std::size_t expectedSize,
         TOnResult callback,
         TString data = {},
-        bool post = false,
         IRetryPolicy</*http response code*/long>::TPtr RetryPolicy = IRetryPolicy<long>::GetNoRetryPolicy()
     ) = 0;
 

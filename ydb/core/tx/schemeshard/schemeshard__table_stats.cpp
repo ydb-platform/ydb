@@ -128,7 +128,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
     if (Self->StatsQueue.empty())
         return true;
 
-    NCpuTime::TCpuTimer timer;
+    TMonotonic start = TMonotonic::Now();
 
     const ui32 maxBatchSize = Self->StatsMaxBatchSize ? Self->StatsMaxBatchSize : 1;
     ui32 batchSize = 0;
@@ -137,7 +137,7 @@ bool TTxStorePartitionStats::Execute(TTransactionContext& txc, const TActorConte
         if (!PersistSingleStats(txc, ctx))
             break;
 
-        if (timer.GetTime() >= Self->StatsMaxExecuteTime)
+        if ((TMonotonic::Now() - start) >= Self->StatsMaxExecuteTime)
             break;
     }
 

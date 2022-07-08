@@ -455,7 +455,7 @@ private:
     TPartitionsVec Partitions;
     THashMap<TShardIdx, ui64> Shard2PartitionIdx; // shardIdx -> index in Partitions
     TPriorityQueue<TPartitionsVec::iterator, TVector<TPartitionsVec::iterator>, TSortByNextCondErase> CondEraseSchedule;
-    THashSet<TShardIdx> InFlightCondErase;
+    THashMap<TShardIdx, TActorId> InFlightCondErase; // shard to pipe client
     mutable TMaybe<ui32> TTLColumnId;
     THashSet<TOperationId> SplitOpsInFlight;
     THashMap<TOperationId, TVector<TShardIdx>> ShardsInSplitMergeByOpId;
@@ -734,7 +734,11 @@ public:
         return CondEraseSchedule.top();
     }
 
-    const THashSet<TShardIdx>& GetInFlightCondErase() const {
+    const auto& GetInFlightCondErase() const {
+        return InFlightCondErase;
+    }
+
+    auto& GetInFlightCondErase() {
         return InFlightCondErase;
     }
 
@@ -742,7 +746,7 @@ public:
         const auto* shardInfo = GetScheduledCondEraseShard();
         Y_VERIFY(shardInfo && shardIdx == shardInfo->ShardIdx);
 
-        InFlightCondErase.insert(shardIdx);
+        InFlightCondErase[shardIdx] = TActorId();
         CondEraseSchedule.pop();
     }
 

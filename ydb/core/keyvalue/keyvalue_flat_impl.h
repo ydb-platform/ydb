@@ -246,6 +246,7 @@ protected:
     KV_SIMPLE_TX(EraseCollect);
     KV_SIMPLE_TX(RegisterInitialGCCompletion);
     KV_SIMPLE_TX(CompleteGC);
+    KV_SIMPLE_TX(PartitialCompleteGC);
 
     TKeyValueState State;
     TDeque<TAutoPtr<IEventHandle>> InitialEventsQueue;
@@ -318,6 +319,12 @@ protected:
         Execute(new TTxCompleteGC(this), ctx);
     }
 
+    void  Handle(TEvKeyValue::TEvPartitialCompleteGC::TPtr &ev, const TActorContext &ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
+                << " Handle TEvPartitialCompleteGC " << ev->Get()->ToString());
+        Execute(new TTxPartitialCompleteGC(this), ctx);
+    }
+
     void Handle(TEvKeyValue::TEvCollect::TPtr &ev, const TActorContext &ctx) {
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                 << " Handle TEvCollect " << ev->Get()->ToString());
@@ -332,7 +339,7 @@ protected:
             }
             CollectorActorId = ctx.RegisterWithSameMailbox(CreateKeyValueCollector(ctx.SelfID, State.GetCollectOperation(),
                 Info(), Executor()->Generation(), State.GetPerGenerationCounter(), isSpringCleanup));
-            State.OnEvCollectDone(perGenerationCounterStepSize, ctx);
+            State.OnEvCollectDone(perGenerationCounterStepSize, CollectorActorId, ctx);
         } else {
             LOG_ERROR_S(ctx, NKikimrServices::KEYVALUE, "KeyValue# " << TabletID()
                     << " Handle TEvCollect: PerGenerationCounter overflow prevention restart.");
@@ -509,6 +516,7 @@ public:
 
             HFunc(TEvKeyValue::TEvEraseCollect, Handle);
             HFunc(TEvKeyValue::TEvCompleteGC, Handle);
+            HFunc(TEvKeyValue::TEvPartitialCompleteGC, Handle);
             HFunc(TEvKeyValue::TEvCollect, Handle);
             HFunc(TEvKeyValue::TEvStoreCollect, Handle);
             HFunc(TEvKeyValue::TEvRequest, Handle);

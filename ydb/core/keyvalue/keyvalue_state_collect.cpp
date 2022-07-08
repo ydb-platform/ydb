@@ -49,6 +49,56 @@ void TKeyValueState::PrepareCollectIfNeeded(const TActorContext &ctx) {
 }
 
 
+
+void TKeyValueState::RemoveFromTrashDoNotKeep(ISimpleDb &db, const TActorContext &ctx,
+        const TVector<TLogoBlobID> &collectedDoNotKeep)
+{
+    for (const TLogoBlobID &id : collectedDoNotKeep) {
+        THelpers::DbEraseTrash(id, db, ctx);
+        ui32 num = Trash.erase(id);
+        Y_VERIFY(num == 1);
+        CountTrashCollected(id.BlobSize());
+    }
+}
+
+void TKeyValueState::RemoveFromTrashBySoftBarrier(ISimpleDb &db, const TActorContext &ctx,
+        const NKeyValue::THelpers::TGenerationStep &genStep)
+{
+    ui64 storedCollectGeneration = StoredState.GetCollectGeneration();
+    ui64 storedCollectStep = StoredState.GetCollectStep();
+
+    // remove trash entries that were not marked as 'Keep' before, but which are automatically deleted by this barrier
+    // to prevent them from being added to 'DoNotKeep' list after
+    for (auto it = Trash.begin(); it != Trash.end(); ) {
+        THelpers::TGenerationStep trashGenStep = THelpers::GenerationStep(*it);
+        bool afterStoredSoftBarrier = trashGenStep > THelpers::TGenerationStep(storedCollectGeneration, storedCollectStep);
+        bool beforeSoftBarrier = trashGenStep <= genStep;
+        if (afterStoredSoftBarrier && beforeSoftBarrier) {
+            CountTrashCollected(it->BlobSize());
+            THelpers::DbEraseTrash(*it, db, ctx);
+            it = Trash.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void TKeyValueState::UpdateStoredState(ISimpleDb &db, const TActorContext &ctx,
+        const NKeyValue::THelpers::TGenerationStep &genStep)
+{
+    StoredState.SetCollectGeneration(std::get<0>(genStep));
+    StoredState.SetCollectStep(std::get<1>(genStep));
+    THelpers::DbUpdateState(StoredState, db, ctx);
+}
+
+void TKeyValueState::UpdateAfterPartitialGC(ISimpleDb &db, const TActorContext &ctx) {
+    RemoveFromTrashDoNotKeep(db, ctx, PartitialCollectedDoNotKeep);
+    if (PartitialCollectedGenerationStep) {
+        RemoveFromTrashBySoftBarrier(db, ctx, *PartitialCollectedGenerationStep);
+        UpdateStoredState(db, ctx, *PartitialCollectedGenerationStep);
+    }
+}
+
 void TKeyValueState::UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool updateTrash, bool updateState) {
     if (IsDamaged) {
         return;
@@ -57,11 +107,9 @@ void TKeyValueState::UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool upda
 
     ui64 collectGeneration = CollectOperation->Header.GetCollectGeneration();
     ui64 collectStep = CollectOperation->Header.GetCollectStep();
+    auto collectGenStep = THelpers::TGenerationStep(collectGeneration, collectStep);
 
     if (updateTrash) {
-        ui64 storedCollectGeneration = StoredState.GetCollectGeneration();
-        ui64 storedCollectStep = StoredState.GetCollectStep();
-
         for (TLogoBlobID &id: CollectOperation->DoNotKeep) {
             THelpers::DbEraseTrash(id, db, ctx);
             ui32 num = Trash.erase(id);
@@ -69,27 +117,13 @@ void TKeyValueState::UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool upda
             CountTrashCollected(id.BlobSize());
         }
 
-        // remove trash entries that were not marked as 'Keep' before, but which are automatically deleted by this barrier
-        // to prevent them from being added to 'DoNotKeep' list after
-        for (auto it = Trash.begin(); it != Trash.end(); ) {
-            THelpers::TGenerationStep trashGenStep = THelpers::GenerationStep(*it);
-            bool afterStoredSoftBarrier = trashGenStep > THelpers::TGenerationStep(storedCollectGeneration, storedCollectStep);
-            bool beforeSoftBarrier = trashGenStep <= THelpers::TGenerationStep(collectGeneration, collectStep);
-            if (afterStoredSoftBarrier && beforeSoftBarrier) {
-                CountTrashCollected(it->BlobSize());
-                THelpers::DbEraseTrash(*it, db, ctx);
-                it = Trash.erase(it);
-            } else {
-                ++it;
-            }
-        }
+        RemoveFromTrashBySoftBarrier(db, ctx, collectGenStep);
     }
 
     if (updateState) {
-        StoredState.SetCollectGeneration(collectGeneration);
-        StoredState.SetCollectStep(collectStep);
-        THelpers::DbUpdateState(StoredState, db, ctx);
+        UpdateStoredState(db, ctx, collectGenStep);
     }
+
 }
 
 void TKeyValueState::StoreCollectExecute(ISimpleDb &db, const TActorContext &ctx) {
@@ -148,6 +182,16 @@ void TKeyValueState::CompleteGCComplete(const TActorContext &ctx) {
     CollectOperation.Reset(nullptr);
     IsCollectEventSent = false;
     PrepareCollectIfNeeded(ctx);
+}
+
+
+void TKeyValueState::PartitialCompleteGCExecute(ISimpleDb &db, const TActorContext &ctx) {
+    UpdateAfterPartitialGC(db, ctx);
+}
+
+void TKeyValueState::PartitialCompleteGCComplete(const TActorContext &ctx) {
+    PartitialCollectedDoNotKeep.clear();
+    ctx.Send(CollectorActorId, new TEvKeyValue::TEvContinueGC(std::move(PartitialCollectedDoNotKeep)));
 }
 
 // Prepare the completely new full collect operation with the same gen/step, but with correct keep & doNotKeep lists
@@ -242,10 +286,11 @@ ui64 TKeyValueState::OnEvCollect(const TActorContext &ctx) {
     return perGenerationCounterStepSize;
 }
 
-void TKeyValueState::OnEvCollectDone(ui64 perGenerationCounterStepSize, const TActorContext &ctx) {
+void TKeyValueState::OnEvCollectDone(ui64 perGenerationCounterStepSize, TActorId collector, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     Y_VERIFY(perGenerationCounterStepSize >= 1);
     PerGenerationCounter += perGenerationCounterStepSize;
+    CollectorActorId = collector;
 }
 
 void TKeyValueState::OnEvEraseCollect(const TActorContext &ctx) {
@@ -255,6 +300,11 @@ void TKeyValueState::OnEvEraseCollect(const TActorContext &ctx) {
 
 void TKeyValueState::OnEvCompleteGC() {
     CountLatencyBsCollect();
+}
+
+void TKeyValueState::OnEvPartitialCompleteGC(TEvKeyValue::TEvPartitialCompleteGC *ev) {
+    PartitialCollectedGenerationStep = std::move(ev->CollectedGenerationStep);
+    PartitialCollectedDoNotKeep = std::move(ev->CollectedDoNotKeep);
 }
 
 } // NKeyValue

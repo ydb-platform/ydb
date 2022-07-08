@@ -1,5 +1,7 @@
 #include "keyvalue_flat_impl.h"
 
+
+#include <ydb/core/base/counters.h>
 #include <ydb/core/blobstorage/dsproxy/blobstorage_backoff.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -12,6 +14,7 @@ namespace NKeyValue {
 struct TGroupCollector {
     TDeque<TLogoBlobID> Keep;
     TDeque<TLogoBlobID> DoNotKeep;
+    ui32 Step = 0;
 };
 
 class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
@@ -24,7 +27,19 @@ class TKeyValueCollector : public TActorBootstrapped<TKeyValueCollector> {
     ui64 CollectorErrors;
     bool IsSpringCleanup;
 
-    TMap<ui32, TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
+    // [channel][groupId]
+    TVector<TMap<ui32, TGroupCollector>> CollectorForGroupForChannel;
+    ui32 EndChannel = 0;
+    bool IsMultiStepMode = false;
+    TMap<ui32, TGroupCollector>::iterator CurrentChannelGroup;
+
+    // For Keep
+    ui32 ChannelIdxInVector = 0;
+    TMaybe<THelpers::TGenerationStep> MinGenStepInCircle;
+
+    // For DoNotKeep
+    TVector<TLogoBlobID> CollectedDoNotKeep;
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::KEYVALUE_ACTOR;
@@ -41,69 +56,118 @@ public:
         , BackoffTimer(CollectorErrorInitialBackoffMs, CollectorErrorMaxBackoffMs)
         , CollectorErrors(0)
         , IsSpringCleanup(isSpringCleanup)
+        , IsMultiStepMode(CollectOperation->Keep.size() + CollectOperation->DoNotKeep.size() > MaxCollectGarbageFlagsPerMessage)
     {
         Y_VERIFY(CollectOperation.Get());
     }
 
+    ui32 GetVecIdxFromChannelIdx(ui32 channelIdx) {
+        return EndChannel - 1 - channelIdx;
+    }
+
+    ui32 GetChannelIdxFromVecIdx(ui32 deqIdx) {
+        return EndChannel - 1 - deqIdx;
+    }
+
     void Bootstrap(const TActorContext &ctx) {
-        ui32 endChannel = TabletInfo->Channels.size();
-        for (ui32 channelIdx = BLOB_CHANNEL; channelIdx < endChannel; ++channelIdx) {
+        EndChannel = TabletInfo->Channels.size();
+        CollectorForGroupForChannel.resize(EndChannel - BLOB_CHANNEL);
+        for (ui32 channelIdx = BLOB_CHANNEL; channelIdx < EndChannel; ++channelIdx) {
             const auto *channelInfo = TabletInfo->ChannelInfo(channelIdx);
             for (auto historyIt = channelInfo->History.begin(); historyIt != channelInfo->History.end(); ++historyIt) {
                 if (IsSpringCleanup) {
-                    CollectorForGroupForChannel[channelIdx][historyIt->GroupID];
+                    CollectorForGroupForChannel[GetVecIdxFromChannelIdx(channelIdx)][historyIt->GroupID];
                 } else {
                     auto nextHistoryIt = historyIt;
                     nextHistoryIt++;
                     if (nextHistoryIt == channelInfo->History.end()) {
-                        CollectorForGroupForChannel[channelIdx][historyIt->GroupID];
+                        CollectorForGroupForChannel[GetVecIdxFromChannelIdx(channelIdx)][historyIt->GroupID];
                     }
                 }
             }
         }
 
+        if (IsMultiStepMode) {
+            CollectedDoNotKeep.reserve(MaxCollectGarbageFlagsPerMessage);
+        }
+
+        Sort(CollectOperation->Keep);
         for (const auto &blob: CollectOperation->Keep) {
             ui32 groupId = TabletInfo->ChannelInfo(blob.Channel())->GroupForGeneration(blob.Generation());
             Y_VERIFY(groupId != Max<ui32>(), "Keep Blob# %s is mapped to an invalid group (-1)!",
                     blob.ToString().c_str());
-            CollectorForGroupForChannel[blob.Channel()][groupId].Keep.push_back(blob);
+            CollectorForGroupForChannel[GetVecIdxFromChannelIdx(blob.Channel())][groupId].Keep.push_back(blob);
         }
         for (const auto &blob: CollectOperation->DoNotKeep) {
             const ui32 groupId = TabletInfo->ChannelInfo(blob.Channel())->GroupForGeneration(blob.Generation());
             Y_VERIFY(groupId != Max<ui32>(), "DoNotKeep Blob# %s is mapped to an invalid group (-1)!",
                     blob.ToString().c_str());
-            CollectorForGroupForChannel[blob.Channel()][groupId].DoNotKeep.push_back(blob);
+            CollectorForGroupForChannel[GetVecIdxFromChannelIdx(blob.Channel())][groupId].DoNotKeep.push_back(blob);
         }
 
+        MinGenStepInCircle = THelpers::TGenerationStep(Max<ui32>(), Max<ui32>());
+        ChannelIdxInVector = CollectorForGroupForChannel.size() - 1;
+        CurrentChannelGroup = CollectorForGroupForChannel.back().begin();
         SendTheRequest(ctx);
         Become(&TThis::StateWait);
     }
 
-    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
-        NKikimrProto::EReplyStatus status = ev->Get()->Status;
-
-        if (status == NKikimrProto::OK) {
-            // Success
-            CollectorForGroupForChannel.begin()->second.erase(
-                    CollectorForGroupForChannel.begin()->second.begin());
-            if (CollectorForGroupForChannel.begin()->second.empty()) {
-                CollectorForGroupForChannel.erase(
-                        CollectorForGroupForChannel.begin());
+    bool ChangeGroup(const TActorContext &ctx) {
+        if (CollectorForGroupForChannel.back().empty()) {
+            while (CollectorForGroupForChannel.size() && CollectorForGroupForChannel.back().empty()) {
+                CollectorForGroupForChannel.pop_back();
             }
             if (CollectorForGroupForChannel.empty()) {
                 ctx.Send(KeyValueActorId, new TEvKeyValue::TEvCompleteGC());
                 Die(ctx);
-                return;
+                return true;
+            }
+            ChannelIdxInVector = CollectorForGroupForChannel.size() - 1;
+            CurrentChannelGroup = CollectorForGroupForChannel[ChannelIdxInVector].begin();
+        } else {
+            do {
+                if (ChannelIdxInVector) {
+                    ChannelIdxInVector--;
+                } else {
+                    ChannelIdxInVector = CollectorForGroupForChannel.size() - 1;
+                    CurrentChannelGroup = CollectorForGroupForChannel[ChannelIdxInVector].begin();
+                    SendPartitialCompleteGC(true);
+                    return true;
+                }
+            } while (CollectorForGroupForChannel[ChannelIdxInVector].empty());
+            CurrentChannelGroup = CollectorForGroupForChannel[ChannelIdxInVector].begin();
+        }
+        return false;
+    }
+
+    void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev, const TActorContext &ctx) {
+
+        NKikimrProto::EReplyStatus status = ev->Get()->Status;
+
+        if (status == NKikimrProto::OK) {
+            // Success
+
+            bool isLastRequestInCollector = false;
+            {
+                TGroupCollector &collector = CurrentChannelGroup->second;
+                isLastRequestInCollector = (collector.Step == collector.Keep.size() + collector.DoNotKeep.size());
+            }
+            if (isLastRequestInCollector) {
+                CurrentChannelGroup = CollectorForGroupForChannel[ChannelIdxInVector].erase(CurrentChannelGroup);
+            } else {
+                CurrentChannelGroup++;
+            }
+            if (CurrentChannelGroup == CollectorForGroupForChannel[ChannelIdxInVector].end()) {
+                if (ChangeGroup(ctx)) {
+                    return;
+                }
             }
             SendTheRequest(ctx);
             return;
         }
 
-        Y_VERIFY(CollectorForGroupForChannel.begin() != CollectorForGroupForChannel.end());
-        Y_VERIFY(CollectorForGroupForChannel.begin()->second.begin() !=
-                CollectorForGroupForChannel.begin()->second.end());
-        ui32 channelIdx = CollectorForGroupForChannel.begin()->first;
-        ui32 groupId = CollectorForGroupForChannel.begin()->second.begin()->first;
+        ui32 channelIdx = GetChannelIdxFromVecIdx(ChannelIdxInVector);
+        ui32 groupId = CurrentChannelGroup->first;
 
         CollectorErrors++;
         if (status == NKikimrProto::RACE || status == NKikimrProto::BLOCKED || status == NKikimrProto::NO_GROUP || CollectorErrors > CollectorMaxErrors) {
@@ -134,11 +198,8 @@ public:
 
     void Handle(TEvents::TEvWakeup::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
-        Y_VERIFY(CollectorForGroupForChannel.begin() != CollectorForGroupForChannel.end());
-        Y_VERIFY(CollectorForGroupForChannel.begin()->second.begin() !=
-                CollectorForGroupForChannel.begin()->second.end());
-        ui32 channelIdx = CollectorForGroupForChannel.begin()->first;
-        ui32 groupId = CollectorForGroupForChannel.begin()->second.begin()->first;
+        ui32 channelIdx = GetChannelIdxFromVecIdx(ChannelIdxInVector);
+        ui32 groupId = CurrentChannelGroup->first;
         LOG_DEBUG_S(ctx, NKikimrServices::KEYVALUE, "Tablet# " << TabletInfo->TabletID
                 << " Collector retrying with"
                 << " Group# " << groupId << " Channel# " << channelIdx
@@ -153,36 +214,101 @@ public:
         return;
     }
 
-    void PrepareVector(const TDeque<TLogoBlobID> &in, THolder<TVector<TLogoBlobID>> &out) {
-        ui64 size = in.size();
-        if (size) {
-            out.Reset(new TVector<TLogoBlobID>(size));
-            ui64 outIdx = 0;
-            for (const auto &blob: in) {
-                (*out)[outIdx] = blob;
-                ++outIdx;
-            }
-            Y_VERIFY(outIdx == size);
+    void Handle(TEvKeyValue::TEvContinueGC::TPtr &ev) {
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KEYVALUE, "Tablet# " << TabletInfo->TabletID
+                << " Collector continue GC Marker# KVC04");
+        MinGenStepInCircle = {};
+        CollectedDoNotKeep = std::move(ev->Get()->Buffer);
+        CollectedDoNotKeep.clear();
+        SendTheRequest(TActivationContext::AsActorContext());
+    }
+
+    void SendPartitialCompleteGC(bool endCircle) {
+        LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KEYVALUE, "Tablet# " << TabletInfo->TabletID
+                << "end of round# " << (endCircle ? "yes" : "no")
+                << " Collector send PartitialCompleteGC Marker# KVC05");
+        auto ev = std::make_unique<TEvKeyValue::TEvPartitialCompleteGC>();
+        if (endCircle && MinGenStepInCircle) {
+            ev->CollectedGenerationStep = std::move(MinGenStepInCircle);
         }
+        ev->CollectedDoNotKeep = std::move(CollectedDoNotKeep);
+
+        TActivationContext::Send(new IEventHandle(KeyValueActorId, SelfId(), ev.release()));
     }
 
     void SendTheRequest(const TActorContext &ctx) {
         THolder<TVector<TLogoBlobID>> keep;
         THolder<TVector<TLogoBlobID>> doNotKeep;
-        PrepareVector(CollectorForGroupForChannel.begin()->second.begin()->second.Keep, keep);
-        PrepareVector(CollectorForGroupForChannel.begin()->second.begin()->second.DoNotKeep, doNotKeep);
-        ui32 channelIdx = CollectorForGroupForChannel.begin()->first;
-        ui32 groupId = CollectorForGroupForChannel.begin()->second.begin()->first;
+
+        TGroupCollector &collector = CurrentChannelGroup->second;
+
+        ui32 doNotKeepSize = collector.DoNotKeep.size();
+        if (collector.Step < doNotKeepSize) {
+            doNotKeepSize -= collector.Step;
+        } else {
+            doNotKeepSize = 0;
+        }
+
+        if (doNotKeepSize && CollectedDoNotKeep.size() + doNotKeepSize > MaxCollectGarbageFlagsPerMessage) {
+            SendPartitialCompleteGC(false);
+            return;
+        }
+
+        if (doNotKeepSize) {
+            doNotKeepSize = Min(doNotKeepSize, (ui32)MaxCollectGarbageFlagsPerMessage);
+            doNotKeep.Reset(new TVector<TLogoBlobID>(doNotKeepSize));
+            auto begin = collector.DoNotKeep.begin() + collector.Step;
+            auto end = begin + doNotKeepSize;
+
+            collector.Step += doNotKeepSize;
+            Copy(begin, end, doNotKeep->begin());
+            Copy(doNotKeep->cbegin(), doNotKeep->cend(), std::back_inserter(CollectedDoNotKeep));
+        }
+
+        ui32 keepStartIdx = 0;
+        if (collector.Step >= collector.DoNotKeep.size()) {
+            keepStartIdx = collector.Step - collector.DoNotKeep.size();
+        }
+        ui32 keepSize = Min(collector.Keep.size() - keepStartIdx, MaxCollectGarbageFlagsPerMessage - doNotKeepSize);
+        if (keepSize) {
+            keep.Reset(new TVector<TLogoBlobID>(keepSize));
+            TMaybe<THelpers::TGenerationStep> collectedGenStep;
+            THelpers::TGenerationStep prevGenStep = THelpers::GenerationStep(collector.Keep.front());
+            auto begin = collector.Keep.begin() + keepStartIdx;
+            auto end = begin + keepSize;
+            ui32 idx = 0;
+            for (auto it = begin; it != end; ++it, ++idx) {
+                THelpers::TGenerationStep genStep = THelpers::GenerationStep(*it);
+                if (prevGenStep != genStep) {
+                    collectedGenStep = prevGenStep;
+                    prevGenStep = genStep;
+                }
+                (*keep)[idx] = *it;
+            }
+            collector.Step += idx;
+            if (collectedGenStep && MinGenStepInCircle) {
+                MinGenStepInCircle = Min(*MinGenStepInCircle, *collectedGenStep);
+            } else if (collectedGenStep) {
+                MinGenStepInCircle = collectedGenStep;
+            }
+        }
+
+        bool isLast = (collector.Keep.size() + collector.DoNotKeep.size() == collector.Step);
+
+        ui32 collectGeneration = CollectOperation->Header.CollectGeneration;
+        ui32 collectStep = CollectOperation->Header.CollectStep;
+        ui32 channelIdx = GetChannelIdxFromVecIdx(CollectorForGroupForChannel.size() - 1);
+        ui32 groupId = CurrentChannelGroup->first;
         SendToBSProxy(ctx, groupId,
             new TEvBlobStorage::TEvCollectGarbage(TabletInfo->TabletID, RecordGeneration, PerGenerationCounter,
-                channelIdx, true,
-                CollectOperation->Header.CollectGeneration, CollectOperation->Header.CollectStep,
+                channelIdx, isLast, collectGeneration, collectStep,
                 keep.Release(), doNotKeep.Release(), TInstant::Max(), true), (ui64)TKeyValueState::ECollectCookie::Soft);
     }
 
     STFUNC(StateWait) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            hFunc(TEvKeyValue::TEvContinueGC, Handle);
             HFunc(TEvents::TEvWakeup, Handle);
             HFunc(TEvents::TEvPoisonPill, Handle);
             default:

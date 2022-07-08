@@ -265,6 +265,7 @@ protected:
 
     ui64 TabletId;
     TActorId KeyValueActorId;
+    TActorId CollectorActorId;
     ui32 ExecutorGeneration;
     bool IsStatePresent;
     bool IsEmptyDbStart;
@@ -288,6 +289,9 @@ protected:
     ui32 PerGenerationCounter; // for garbage collection
 
     NMetrics::TResourceMetrics* ResourceMetrics;
+
+    TMaybe<NKeyValue::THelpers::TGenerationStep> PartitialCollectedGenerationStep;
+    TVector<TLogoBlobID> PartitialCollectedDoNotKeep;
 
 public:
     TKeyValueState();
@@ -330,22 +334,30 @@ public:
 
     // garbage collection methods
     void PrepareCollectIfNeeded(const TActorContext &ctx);
+    void RemoveFromTrashDoNotKeep(ISimpleDb &db, const TActorContext &ctx, const TVector<TLogoBlobID> &collectedDoNotKeep);
+    void RemoveFromTrashBySoftBarrier(ISimpleDb &db, const TActorContext &ctx, const NKeyValue::THelpers::TGenerationStep &genStep);
+    void UpdateStoredState(ISimpleDb &db, const TActorContext &ctx, const NKeyValue::THelpers::TGenerationStep &genStep);
     void UpdateGC(ISimpleDb &db, const TActorContext &ctx, bool updateTrash, bool updateState);
+    void UpdateAfterPartitialGC(ISimpleDb &db, const TActorContext &ctx);
     void StoreCollectExecute(ISimpleDb &db, const TActorContext &ctx);
     void StoreCollectComplete(const TActorContext &ctx);
     void EraseCollectExecute(ISimpleDb &db, const TActorContext &ctx);
     void EraseCollectComplete(const TActorContext &ctx);
     void CompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
     void CompleteGCComplete(const TActorContext &ctx);
+    void PartitialCompleteGCExecute(ISimpleDb &db, const TActorContext &ctx);
+    void PartitialCompleteGCComplete(const TActorContext &ctx);
     void SendStoreCollect(const TActorContext &ctx, const THelpers::TGenerationStep &genStep,
         TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep);
     void StartGC(const TActorContext &ctx, const THelpers::TGenerationStep &genStep,
         TVector<TLogoBlobID> &keep, TVector<TLogoBlobID> &doNotKeep);
     void StartCollectingIfPossible(const TActorContext &ctx);
     ui64 OnEvCollect(const TActorContext &ctx);
-    void OnEvCollectDone(ui64 perGenerationCounterStepSize, const TActorContext &ctx);
+    void OnEvCollectDone(ui64 perGenerationCounterStepSize, TActorId collector, const TActorContext &ctx);
     void OnEvEraseCollect(const TActorContext &ctx);
     void OnEvCompleteGC();
+    void OnEvPartitialCompleteGC(TEvKeyValue::TEvPartitialCompleteGC *ev);
+
 
     void Reply(THolder<TIntermediate> &intermediate, const TActorContext &ctx, const TTabletStorageInfo *info);
     void ProcessCmd(TIntermediate::TRead &read,

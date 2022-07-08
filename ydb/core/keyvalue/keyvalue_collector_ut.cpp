@@ -225,5 +225,44 @@ Y_UNIT_TEST(TestKeyValueCollectorMultiple) {
     UNIT_ASSERT(eraseCollect);
 }
 
+
+Y_UNIT_TEST(TestKeyValueCollectorMany) {
+    TContext context;
+    context.Setup();
+
+    TVector<TLogoBlobID> keep;
+    TVector<TLogoBlobID> doNotKeep;
+    doNotKeep.reserve(MaxCollectGarbageFlagsPerMessage + 1);
+    for (ui32 idx = 1; idx <= MaxCollectGarbageFlagsPerMessage + 1; ++idx) {
+        doNotKeep.emplace_back(0x10010000001000Bull, idx, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
+        keep.emplace_back(0x10010000001000Bull, idx, 58949, NKeyValue::BLOB_CHANNEL, 1209816, 10);
+
+    }
+
+    TIntrusivePtr<NKeyValue::TCollectOperation> operation(new NKeyValue::TCollectOperation(100, 100, std::move(keep), std::move(doNotKeep)));
+    context.SetActor(CreateKeyValueCollector(
+                context.GetTabletActorId(), operation, context.GetTabletInfo().Get(), 200, 200, true));
+
+    for (ui32 idx = 0; idx < 7; ++idx) {
+        TAutoPtr<IEventHandle> handle;
+        auto collect = context.GrabEvent<TEvBlobStorage::TEvCollectGarbage>(handle);
+        UNIT_ASSERT(collect);
+
+        context.Send(new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, collect->TabletId,
+                    collect->RecordGeneration, collect->PerGenerationCounter, collect->Channel));
+
+        if (idx == 1 || idx == 5) {
+            auto complete = context.GrabEvent<TEvKeyValue::TEvPartitialCompleteGC>(handle);
+            complete->CollectedDoNotKeep.clear();
+            auto cont = std::make_unique<TEvKeyValue::TEvContinueGC>(std::move(complete->CollectedDoNotKeep));
+            context.Send(cont.release());
+        }
+    }
+
+    TAutoPtr<IEventHandle> handle;
+    auto eraseCollect = context.GrabEvent<TEvKeyValue::TEvCompleteGC>(handle);
+    UNIT_ASSERT(eraseCollect);
+}
+
 } // TKeyValueCollectorTest
 } // NKikimr

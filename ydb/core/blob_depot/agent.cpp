@@ -1,4 +1,5 @@
 #include "blob_depot_tablet.h"
+#include "data.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -25,21 +26,30 @@ namespace NKikimr::NBlobDepot {
         PipeServerToNode.erase(it);
     }
 
-    void TBlobDepot::OnAgentDisconnect(TAgent& /*agent*/) {
+    void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
+        agent.InvalidateStepRequests.clear();
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
+        const auto& req = ev->Get()->Record;
+
         const auto it = PipeServerToNode.find(ev->Recipient);
         Y_VERIFY(it != PipeServerToNode.end());
         const ui32 nodeId = ev->Sender.NodeId();
         Y_VERIFY(!it->second || *it->second == nodeId);
         it->second = nodeId;
         auto& agent = Agents[nodeId];
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, ev->Get()->Record),
-            (NodeId, nodeId), (PipeServerId, it->first));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, req), (NodeId, nodeId),
+            (PipeServerId, it->first));
         agent.ConnectedAgent = it->first;
         agent.ConnectedNodeId = nodeId;
         agent.ExpirationTimestamp = TInstant::Max();
+
+        if (agent.AgentInstanceId && *agent.AgentInstanceId != req.GetAgentInstanceId()) {
+            ResetAgent(agent);
+        }
+        agent.AgentInstanceId = req.GetAgentInstanceId();
+
         OnAgentConnect(agent);
 
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
@@ -66,28 +76,55 @@ namespace NKikimr::NBlobDepot {
             (PipeServerId, ev->Recipient));
 
         const ui32 generation = Executor()->Generation();
-
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), ev->Get()->Record.GetChannelKind(), generation);
 
         if (const auto it = ChannelKinds.find(record->GetChannelKind()); it != ChannelKinds.end()) {
             auto& kind = it->second;
+            auto *givenIdRange = record->MutableGivenIdRange();
 
-            const ui64 rangeBegin = kind.NextBlobSeqId;
-            kind.NextBlobSeqId += ev->Get()->Record.GetCount();
-            const ui64 rangeEnd = kind.NextBlobSeqId;
+            // FIXME: optimize for faster range selection
 
-            TGivenIdRange range;
-            range.IssueNewRange(rangeBegin, rangeEnd);
+            // create array of channels appropriate for current selection
+            std::vector<TChannelInfo*> channels;
+            channels.reserve(kind.ChannelGroups.size());
+            for (const auto& [channel, _] : kind.ChannelGroups) {
+                Y_VERIFY_DEBUG(channel < Channels.size() && Channels[channel].ChannelKind == it->first);
+                channels.push_back(&Channels[channel]);
+            }
 
-            range.ToProto(record->MutableGivenIdRange());
+            // make a min heap
+            auto comp = [](TChannelInfo *x, const TChannelInfo *y) { return x->NextBlobSeqId > y->NextBlobSeqId; };
+            std::make_heap(channels.begin(), channels.end(), comp);
 
+            THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
+            for (ui32 i = 0, count = ev->Get()->Record.GetCount(); i < count; ++i) {
+                // extract element with the least NextBlobSeqId value
+                std::pop_heap(channels.begin(), channels.end(), comp);
+
+                // map it to channel index
+                TChannelInfo *channel = channels.back();
+                const ui64 value = channel->NextBlobSeqId;
+                const ui8 channelIndex = channel - Channels.data();
+
+                // fill in range item
+                auto& range = issuedRanges[channelIndex];
+                if (!range || range->GetEnd() != value) {
+                    range = givenIdRange->AddChannelRanges();
+                    range->SetChannel(channelIndex);
+                    range->SetBegin(value);
+                }
+                range->SetEnd(value + 1);
+
+                // update NextBlobSeqId value and put back into heap
+                ++channel->NextBlobSeqId;
+                std::push_heap(channels.begin(), channels.end(), comp);
+            }
+
+            // register issued ranges in agent and global records
             TAgent& agent = GetAgent(ev->Recipient);
-            agent.ChannelKinds[it->first].GivenIdRanges.Join(TGivenIdRange(range));
-            kind.GivenIdRanges.Join(std::move(range));
-
-            for (ui64 value = rangeBegin; value < rangeEnd; ++value) {
-                const auto blobSeqId = TBlobSeqId::FromBinary(generation, kind, value);
-                PerChannelRecords[blobSeqId.Channel].GivenStepIndex.emplace(blobSeqId.Step, blobSeqId.Index);
+            for (const auto& range : givenIdRange->GetChannelRanges()) {
+                agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
+                Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
             }
         }
 
@@ -109,12 +146,21 @@ namespace NKikimr::NBlobDepot {
         return agentIt->second;
     }
 
+    void TBlobDepot::ResetAgent(TAgent& agent) {
+        for (auto& [channel, agentGivenIdRange] : agent.GivenIdRanges) {
+            Channels[channel].GivenIdRanges.Subtract(agentGivenIdRange);
+            agentGivenIdRange = {};
+        }
+        Data->HandleTrash();
+    }
+
     void TBlobDepot::InitChannelKinds() {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "InitChannelKinds", (TabletId, TabletID()));
+
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();
 
-        Y_VERIFY(ChannelToKind.empty());
-        ChannelToKind.resize(info->Channels.size(), NKikimrBlobDepot::TChannelKind::System);
+        Y_VERIFY(Channels.empty());
 
         ui32 channel = 0;
         for (const auto& profile : Config.GetChannelProfiles()) {
@@ -124,18 +170,21 @@ namespace NKikimr::NBlobDepot {
                     auto& p = ChannelKinds[kind];
                     p.ChannelToIndex[channel] = p.ChannelGroups.size();
                     p.ChannelGroups.emplace_back(channel, info->GroupFor(channel, generation));
-
-                    Y_VERIFY(channel < ChannelToKind.size());
-                    ChannelToKind[channel] = kind;
+                    Channels.push_back({
+                        kind,
+                        &p,
+                        {},
+                        TBlobSeqId{channel, generation, 1, 0}.ToSequentialNumber(),
+                    });
+                } else {
+                    Channels.push_back({
+                        NKikimrBlobDepot::TChannelKind::System,
+                        nullptr,
+                        {},
+                        0
+                    });
                 }
             }
-        }
-
-        Y_VERIFY_S(channel == ChannelToKind.size(), "channel# " << channel
-            << " ChannelToKind.size# " << ChannelToKind.size());
-
-        for (auto& [k, v] : ChannelKinds) {
-            v.NextBlobSeqId = TBlobSeqId{v.ChannelGroups.front().first, generation, 1, 0}.ToBinary(v);
         }
     }
 

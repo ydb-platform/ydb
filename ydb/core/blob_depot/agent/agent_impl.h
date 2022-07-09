@@ -76,6 +76,7 @@ namespace NKikimr::NBlobDepot {
         , public TRequestSender
     {
         const ui32 VirtualGroupId;
+        const ui64 AgentInstanceId;
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
 
@@ -84,6 +85,7 @@ namespace NKikimr::NBlobDepot {
             : TActor(&TThis::StateFunc)
             , TRequestSender(*this)
             , VirtualGroupId(virtualGroupId)
+            , AgentInstanceId(RandomNumber<ui64>())
             , BlocksManager(CreateBlocksManager())
             , BlobMappingCache(CreateBlobMappingCache())
         {
@@ -249,8 +251,14 @@ namespace NKikimr::NBlobDepot {
             const NKikimrBlobDepot::TChannelKind::E Kind;
 
             bool IdAllocInFlight = false;
-            TGivenIdRange GivenIdRange;
-            static constexpr size_t PreallocatedIdCount = 2;
+
+            struct TGivenIdRangeHeapComp;
+            using TGivenIdRangePerChannel = THashMap<ui8, TGivenIdRange>;
+            TGivenIdRangePerChannel GivenIdRangePerChannel;
+            std::vector<TGivenIdRangePerChannel::value_type*> GivenIdRangeHeap;
+            ui32 NumAvailableItems = 0;
+
+            std::set<TBlobSeqId> WritesInFlight;
 
             TIntrusiveList<TQuery, TPendingId> QueriesWaitingForId;
 
@@ -258,37 +266,20 @@ namespace NKikimr::NBlobDepot {
                 : Kind(kind)
             {}
 
-            std::optional<TBlobSeqId> Allocate(TBlobDepotAgent& agent) {
-                if (GivenIdRange.IsEmpty()) {
-                    return std::nullopt;
-                }
-                auto blobSeqId = TBlobSeqId::FromBinary(agent.BlobDepotGeneration, *this, GivenIdRange.Allocate());
-                agent.IssueAllocateIdsIfNeeded(*this);
-                return blobSeqId;
-            }
+            void IssueGivenIdRange(const NKikimrBlobDepot::TGivenIdRange& proto);
+            ui32 GetNumAvailableItems() const;
+            std::optional<TBlobSeqId> Allocate(TBlobDepotAgent& agent);
+            std::pair<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TBlobSeqId& blobSeqId, EBlobType type,
+                    ui32 part, ui32 size) const;
+            void Trim(ui8 channel, ui32 generation, ui32 invalidatedStep);
+            void RebuildHeap();
 
-            std::pair<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TBlobSeqId& blobSeqId, EBlobType type, ui32 part,
-                    ui32 size) const {
-                auto id = blobSeqId.MakeBlobId(agent.TabletId, type, part, size);
-                const auto [channel, groupId] = ChannelGroups[ChannelToIndex[blobSeqId.Channel]];
-                Y_VERIFY_DEBUG(channel == blobSeqId.Channel);
-                return {id, groupId};
-            }
-
-            void EnqueueQueryWaitingForId(TQuery *query) {
-                QueriesWaitingForId.PushBack(query);
-            }
-
-            void ProcessQueriesWaitingForId() {
-                TIntrusiveList<TQuery, TPendingId> temp;
-                temp.Swap(QueriesWaitingForId);
-                for (TQuery& query : temp) {
-                    query.OnIdAllocated();
-                }
-            }
+            void EnqueueQueryWaitingForId(TQuery *query);
+            void ProcessQueriesWaitingForId();
         };
 
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
+        THashMap<ui8, TChannelKind*> ChannelToKind;
 
         void IssueAllocateIdsIfNeeded(TChannelKind& kind);
 

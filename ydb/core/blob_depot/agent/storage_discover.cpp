@@ -70,7 +70,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnUpdateBlock(bool success) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA14, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Success, success));
 
                 if (!success) {
@@ -89,7 +89,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Msg, msg.Record));
 
                 Agent.HandleResolveResult(msg.Record);

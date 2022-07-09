@@ -131,7 +131,6 @@ namespace NKikimr {
                     Geometry.GetNumFailDomainsPerFailRealm(), Geometry.GetNumVDisksPerFailDomain());
 
                 // bind group to storage pool
-                groupInfo->StoragePoolId = StoragePoolId;
                 State.StoragePoolGroups.Unshare().emplace(StoragePoolId, groupId);
 
                 const TGroupSpecies species = groupInfo->GetGroupSpecies();

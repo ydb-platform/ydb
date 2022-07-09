@@ -36,9 +36,8 @@ namespace NKikimr::NBlobDepot {
                     auto *locator = chain->MutableLocator();
                     locator->CopyFrom(item.GetBlobLocator());
 
-                    if (!MarkGivenIdCommitted(agent, TBlobSeqId::FromProto(locator->GetBlobSeqId()), responseItem)) {
-                        continue;
-                    }
+                    MarkGivenIdCommitted(agent, TBlobSeqId::FromProto(locator->GetBlobSeqId()));
+
                     if (!CheckKeyAgainstBarrier(item.GetKey(), responseItem)) {
                         continue;
                     }
@@ -60,28 +59,15 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
 
-            bool MarkGivenIdCommitted(TAgent& agent, const TBlobSeqId& blobSeqId,
-                    NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {
-                const NKikimrBlobDepot::TChannelKind::E kind = blobSeqId.Channel < Self->ChannelToKind.size()
-                    ? Self->ChannelToKind[blobSeqId.Channel] : NKikimrBlobDepot::TChannelKind::System;
-                if (kind == NKikimrBlobDepot::TChannelKind::System) {
-                    responseItem->SetStatus(NKikimrProto::ERROR);
-                    responseItem->SetErrorReason("incorrect Channel for blob");
-                    return false;
-                }
+            void MarkGivenIdCommitted(TAgent& agent, const TBlobSeqId& blobSeqId) {
+                Y_VERIFY(blobSeqId.Generation == Self->Executor()->Generation());
+                Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
 
-                const auto channelKindIt = Self->ChannelKinds.find(kind);
-                Y_VERIFY(channelKindIt != Self->ChannelKinds.end());
-                auto& ck = channelKindIt->second;
+                auto& channel = Self->Channels[blobSeqId.Channel];
 
-                const ui64 value = blobSeqId.ToBinary(ck);
-                agent.ChannelKinds[kind].GivenIdRanges.RemovePoint(value);
-                ck.GivenIdRanges.RemovePoint(value);
-
-                auto& channel = Self->PerChannelRecords[blobSeqId.Channel];
-                channel.GivenStepIndex.erase(std::make_pair(blobSeqId.Step, blobSeqId.Index));
-
-                return true;
+                const ui64 value = blobSeqId.ToSequentialNumber();
+                agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
+                channel.GivenIdRanges.RemovePoint(value);
             }
 
             bool CheckKeyAgainstBarrier(const TString& key, NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {

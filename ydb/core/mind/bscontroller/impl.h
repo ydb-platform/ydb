@@ -694,9 +694,21 @@ public:
         }
 
         void FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params) const {
-            FillInResources(params->MutableAssuredResources(), true);
-            FillInResources(params->MutableCurrentResources(), false);
-            FillInVDiskResources(params);
+            if (VirtualGroupState) {
+                for (auto *p : {params->MutableAssuredResources(), params->MutableCurrentResources()}) {
+                    p->SetSpace(1'000'000'000'000);
+                    p->SetIOPS(1'000);
+                    p->SetReadThroughput(100'000'000);
+                    p->SetWriteThroughput(100'000'000);
+                }
+                params->SetAllocatedSize(1'000'000'000'000);
+                params->SetAvailableSize(1'000'000'000'000);
+                params->SetSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::GREEN);
+            } else {
+                FillInResources(params->MutableAssuredResources(), true);
+                FillInResources(params->MutableCurrentResources(), false);
+                FillInVDiskResources(params);
+            }
         }
 
         void FillInResources(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters::TResources *pb, bool countMaxSlots) const {

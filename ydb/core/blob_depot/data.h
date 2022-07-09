@@ -317,6 +317,7 @@ namespace NKikimr::NBlobDepot {
         void CommitTrash(void *cookie);
         void HandleTrash();
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
+        void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId);
 
         static TString ToValueProto(const TValue& value);
@@ -333,7 +334,7 @@ namespace NKikimr::NBlobDepot {
             for (const auto& [key, record] : RecordsPerChannelGroup) {
                 THashSet<TLogoBlobID> inFlight(record.TrashInFlight.begin(), record.TrashInFlight.end());
                 for (const TLogoBlobID& id : record.Trash) {
-                    callback(record.TabletId, record.Channel, record.GroupId, id, inFlight.contains(id));
+                    callback(record.GroupId, id, inFlight.contains(id));
                 }
             }
         }

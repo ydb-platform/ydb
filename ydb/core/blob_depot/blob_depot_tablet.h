@@ -23,7 +23,7 @@ namespace NKikimr::NBlobDepot {
         ~TBlobDepot();
 
         void HandlePoison() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "HandlePoison", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT19, "HandlePoison", (TabletId, TabletID()));
             Become(&TThis::StateZombie);
             Send(Tablet(), new TEvents::TEvPoison);
         }
@@ -36,31 +36,27 @@ namespace NKikimr::NBlobDepot {
             std::optional<TActorId> ConnectedAgent;
             ui32 ConnectedNodeId;
             TInstant ExpirationTimestamp;
+            std::optional<ui64> AgentInstanceId;
 
-            struct TChannelKind {
-                TGivenIdRange GivenIdRanges; // updated on AllocateIds and when BlobSeqIds are found in any way
-            };
+            THashMap<ui8, TGivenIdRange> GivenIdRanges;
 
-            THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
+            THashMap<ui8, ui32> InvalidatedStepInFlight;
+            THashMap<ui64, THashMap<ui8, ui32>> InvalidateStepRequests;
+            ui64 LastRequestId = 0;
         };
 
         THashMap<TActorId, std::optional<ui32>> PipeServerToNode;
         THashMap<ui32, TAgent> Agents; // NodeId -> Agent
 
-        struct TChannelKind
-            : NBlobDepot::TChannelKind
-        {
-            ui64 NextBlobSeqId = 0;
-            TGivenIdRange GivenIdRanges; // for all agents, including disconnected ones
-        };
-
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
-        std::vector<NKikimrBlobDepot::TChannelKind::E> ChannelToKind;
 
-        struct TPerChannelRecord {
-            std::set<std::tuple<ui32, ui32>> GivenStepIndex;
+        struct TChannelInfo {
+            NKikimrBlobDepot::TChannelKind::E ChannelKind;
+            TChannelKind *KindPtr;
+            TGivenIdRange GivenIdRanges; // accumulated through all agents
+            ui64 NextBlobSeqId = 0;
         };
-        THashMap<ui8, TPerChannelRecord> PerChannelRecords;
+        std::vector<TChannelInfo> Channels;
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev);
@@ -70,6 +66,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev);
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
+        void ResetAgent(TAgent& agent);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -80,10 +77,12 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnActivateExecutor(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "OnActivateExecutor", (TabletId, TabletID()));
-
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "OnActivateExecutor", (TabletId, TabletID()));
             ExecuteTxInitSchema();
+        }
 
+        void OnLoadFinished() {
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "OnLoadFinished", (TabletId, TabletID()));
             Become(&TThis::StateWork);
             for (auto&& ev : std::exchange(InitialEventsQ, {})) {
                 TActivationContext::Send(ev.release());
@@ -91,14 +90,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void OnDetach(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "OnDetach", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "OnDetach", (TabletId, TabletID()));
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "OnTabletDead", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT22, "OnTabletDead", (TabletId, TabletID()));
             PassAway();
         }
 

@@ -4,7 +4,7 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "TEvApplyConfig", (TabletId, TabletID()), (Msg, ev->Get()->Record));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvApplyConfig", (TabletId, TabletID()), (Msg, ev->Get()->Record));
 
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
@@ -25,26 +25,30 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "TTxApplyConfig::Execute", (TabletId, Self->TabletID()));
+
                 NIceDb::TNiceDb db(txc.DB);
 
                 auto table = db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Select();
                 if (!table.IsReady()) {
                     return false;
-                } else if (table.IsValid()) {
-                    WasConfigured = table.HaveValue<Schema::Config::ConfigProtobuf>();
-                } else {
-                    WasConfigured = false;
                 }
+                WasConfigured = table.IsValid() && table.HaveValue<Schema::Config::ConfigProtobuf>();
 
                 db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                     NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf)
                 );
+
+                const bool success = Self->Config.ParseFromString(ConfigProtobuf);
+                Y_VERIFY(success);
+
                 return true;
             }
 
             void Complete(const TActorContext&) override {
-                const bool success = Self->Config.ParseFromString(ConfigProtobuf);
-                Y_VERIFY(success);
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT14, "TTxApplyConfig::Complete", (TabletId, Self->TabletID()),
+                    (WasConfigured, WasConfigured));
+
                 if (!WasConfigured) {
                     Self->InitChannelKinds();
                 }

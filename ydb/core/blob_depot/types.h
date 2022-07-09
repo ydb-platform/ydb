@@ -37,8 +37,13 @@ namespace NKikimr::NBlobDepot {
         ui32 Index = 0;
         
         auto AsTuple() const { return std::make_tuple(Channel, Generation, Step, Index); }
+
         friend bool operator ==(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() == y.AsTuple(); }
         friend bool operator !=(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() != y.AsTuple(); }
+        friend bool operator < (const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() <  y.AsTuple(); }
+        friend bool operator <=(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() <= y.AsTuple(); }
+        friend bool operator > (const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() >  y.AsTuple(); }
+        friend bool operator >=(const TBlobSeqId& x, const TBlobSeqId& y) { return x.AsTuple() >= y.AsTuple(); }
 
         TString ToString() const {
             return TStringBuilder() << "{" << Channel << ":" << Generation << ":" << Step << ":" << Index << "}";
@@ -48,23 +53,12 @@ namespace NKikimr::NBlobDepot {
             return *this != TBlobSeqId();
         }
 
-        ui64 ToBinary(const TChannelKind& kind) const {
-            Y_VERIFY_DEBUG(Index <= MaxIndex);
-            Y_VERIFY(Channel < kind.ChannelToIndex.size());
-            return (static_cast<ui64>(Step) << IndexBits | Index) * kind.ChannelGroups.size() + kind.ChannelToIndex[Channel];
+        ui64 ToSequentialNumber() const {
+            return ui64(Step) << IndexBits | Index;
         }
 
-        static TBlobSeqId FromBinary(ui32 generation, const TChannelKind& kind, ui64 value) {
-            static_assert(sizeof(long long) >= sizeof(ui64));
-            Y_VERIFY(!kind.ChannelGroups.empty());
-            auto res = std::lldiv(value, kind.ChannelGroups.size());
-
-            return TBlobSeqId{
-                .Channel = kind.ChannelGroups[res.rem].first,
-                .Generation = generation,
-                .Step = static_cast<ui32>(res.quot >> IndexBits),
-                .Index = static_cast<ui32>(res.quot) & MaxIndex
-            };
+        static TBlobSeqId FromSequentalNumber(ui32 channel, ui32 generation, ui64 value) {
+            return {channel, generation, ui32(value >> IndexBits), ui32(value & MaxIndex)};
         }
 
         static TBlobSeqId FromProto(const NKikimrBlobDepot::TBlobSeqId& proto) {
@@ -105,38 +99,44 @@ namespace NKikimr::NBlobDepot {
 
     class TGivenIdRange {
         struct TRange {
-            ui32 Len;
+            const ui64 Begin;
+            const ui64 End;
             TDynBitMap Bits;
 
-            TRange(ui32 len)
-                : Len(len)
+            TRange(ui64 begin, ui64 end)
+                : Begin(begin)
+                , End(end)
             {
-                Bits.Set(0, len);
+                Bits.Set(0, end - begin);
             }
+
+            struct TCompare {
+                bool operator ()(const TRange& x, const TRange& y) const { return x.Begin < y.Begin; }
+                bool operator ()(const TRange& x, ui64 y) const { return x.Begin < y; }
+                bool operator ()(ui64 x, const TRange& y) const { return x < y.Begin; }
+                using is_transparent = void;
+            };
         };
-        std::map<ui64, TRange> Ranges; // range.begin -> range
+
+        std::set<TRange, TRange::TCompare> Ranges;
         ui32 NumAvailableItems = 0;
 
     public:
-        TGivenIdRange() = default;
-        TGivenIdRange(const NKikimrBlobDepot::TGivenIdRange& proto);
-
-        void ToProto(NKikimrBlobDepot::TGivenIdRange *proto);
-
-        void Join(TGivenIdRange&& other);
-
         void IssueNewRange(ui64 begin, ui64 end);
+        void AddPoint(ui64 value);
         void RemovePoint(ui64 value);
 
         bool IsEmpty() const;
         ui32 GetNumAvailableItems() const;
+        ui64 GetMinimumValue() const;
         ui64 Allocate();
+
+        void Subtract(const TGivenIdRange& other);
+
+        void Trim(ui8 channel, ui32 generation, ui32 invalidatedStep);
 
         void Output(IOutputStream& s) const;
         TString ToString() const;
-
-    private:
-        TRange& InsertNewRange(ui64 begin, ui64 len);
     };
 
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
@@ -162,6 +162,10 @@ namespace NKikimr::NBlobDepot {
 
     inline ui64 GenStep(TLogoBlobID id) {
         return GenStep(id.Generation(), id.Step());
+    }
+
+    inline ui64 GenStep(TBlobSeqId id) {
+        return GenStep(id.Generation, id.Step);
     }
 
 } // NKikimr::NBlobDepot

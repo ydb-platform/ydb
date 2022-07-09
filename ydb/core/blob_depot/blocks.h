@@ -37,6 +37,13 @@ namespace NKikimr::NBlobDepot {
         void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
+
+        template<typename TCallback>
+        void Enumerate(TCallback&& callback) const {
+            for (const auto& [tabletId, block] : Blocks) {
+                callback(tabletId, block.BlockedGeneration);
+            }
+        }
     };
 
 } // NKikimr::NBlobDepot

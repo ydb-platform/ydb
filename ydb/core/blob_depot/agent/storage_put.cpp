@@ -14,6 +14,12 @@ namespace NKikimr::NBlobDepot {
         public:
             using TQuery::TQuery;
 
+            ~TPutQuery() {
+                if (BlobSeqId != TBlobSeqId()) {
+                    Agent.ChannelToKind[BlobSeqId.Channel]->WritesInFlight.erase(BlobSeqId);
+                }
+            }
+
             void Initiate() override {
                 auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
 
@@ -36,13 +42,14 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, GetQueryId()), (BlobSeqId, blobSeqId));
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
                 }
 
                 BlobSeqId = *blobSeqId;
+                kind.WritesInFlight.insert(BlobSeqId);
 
                 auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
                 const ui32 size = msg.Id.BlobSize();

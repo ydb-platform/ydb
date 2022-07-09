@@ -16,6 +16,8 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT15, "TTxLoad::Execute", (TabletId, Self->TabletID()));
+
                 NIceDb::TNiceDb db(txc.DB);
 
                 if (!Precharge(db)) {
@@ -29,9 +31,8 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     } else if (table.IsValid()) {
                         if (table.HaveValue<Schema::Config::ConfigProtobuf>()) {
-                            const bool success = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
-                            Y_VERIFY(success);
-                            Configured = true;
+                            Configured = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
+                            Y_VERIFY(Configured);
                         }
                     }
                 }
@@ -136,10 +137,15 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT16, "TTxLoad::Complete", (TabletId, Self->TabletID()),
+                    (Configured, Configured));
+
                 if (Configured) {
                     Self->InitChannelKinds();
                     Self->Data->HandleTrash();
                 }
+
+                Self->OnLoadFinished();
             }
         };
 

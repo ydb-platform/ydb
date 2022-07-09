@@ -53,7 +53,7 @@ namespace NKikimr::NBlobDepot {
                 block.RefreshInFlight = true;
                 block.PendingBlockChecks.PushBack(query);
             }
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA99, "CheckBlockForTablet", (QueryId, query->GetQueryId()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "CheckBlockForTablet", (QueryId, query->GetQueryId()),
                 (TabletId, tabletId), (Generation, generation), (Status, status), (Now, now),
                 (ExpirationTimestamp, block.ExpirationTimestamp));
             return status;
@@ -74,7 +74,7 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
             auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA01, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
+            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
                 (Msg, msg), (TabletId, queryBlockContext.TabletId));
             auto& block = Blocks[queryBlockContext.TabletId];
             Y_VERIFY(msg.BlockedGenerationsSize() == 1);

@@ -38,13 +38,12 @@ message TValue {
 }
 
 message TGivenIdRange {
-    message TRange {
-        optional uint64 Begin = 1;
-        optional uint32 Len = 2;
-        repeated uint32 Offsets = 3;
-        repeated fixed64 BitMasks = 4;
+    message TChannelRange {
+        optional uint32 Channel = 1;
+        optional uint64 Begin = 2;
+        optional uint64 End = 3;
     }
-    repeated TRange Ranges = 1;
+    repeated TChannelRange ChannelRanges = 1;
 }
 
 
@@ -62,6 +61,7 @@ message TEvApplyConfigResult {
 
 message TEvRegisterAgent {
     optional uint32 VirtualGroupId = 1; // for validation purposes
+    optional fixed64 AgentInstanceId = 2; // randomly generated number every time agent starts from scratch
 }
 
 message TEvRegisterAgentResult {
@@ -104,10 +104,17 @@ message TEvPushNotify {
         optional fixed64 TabletId = 1;
         optional uint32 BlockedGeneration = 2;
     }
+    message TInvalidatedStep {
+        optional uint32 Channel = 1;
+        optional uint32 Generation = 2; // for validation purposes
+        optional uint32 InvalidatedStep = 3;
+    }
     repeated TBlockedTablet BlockedTablets = 1;
+    repeated TInvalidatedStep InvalidatedSteps = 2;
 }
 
 message TEvPushNotifyResult {
+    repeated TBlobSeqId WritesInFlight = 1;
 }
 
 message TEvQueryBlocks {

@@ -1,6 +1,7 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 #include "garbage_collection.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -173,16 +174,12 @@ namespace NKikimr::NBlobDepot {
         void RenderTrashTable(bool header) {
             HTML(Stream) {
                 if (header) {
-                    TABLEH() { Stream << "tablet id"; }
-                    TABLEH() { Stream << "channel"; }
                     TABLEH() { Stream << "group id"; }
                     TABLEH() { Stream << "blob id"; }
                     TABLEH() { Stream << "in flight"; }
                 } else {
-                    Self->Data->EnumerateTrash([&](ui64 tabletId, ui8 channel, ui32 groupId, TLogoBlobID blobId, bool inFlight) {
+                    Self->Data->EnumerateTrash([&](ui32 groupId, TLogoBlobID blobId, bool inFlight) {
                         TABLER() {
-                            TABLED() { Stream << tabletId; }
-                            TABLED() { Stream << int(channel); }
                             TABLED() { Stream << groupId; }
                             TABLED() { Stream << blobId; }
                             TABLED() { Stream << (inFlight ? "*" : ""); }
@@ -218,7 +215,15 @@ namespace NKikimr::NBlobDepot {
         void RenderBlocksTable(bool header) {
             HTML(Stream) {
                 if (header) {
+                    TABLEH() { Stream << "tablet id"; }
+                    TABLEH() { Stream << "blocked generation"; }
                 } else {
+                    Self->BlocksManager->Enumerate([&](ui64 tabletId, ui32 blockedGeneration) {
+                        TABLER() {
+                            TABLED() { Stream << tabletId; }
+                            TABLED() { Stream << blockedGeneration; }
+                        }
+                    });
                 }
             }
         }

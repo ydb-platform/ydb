@@ -57,6 +57,15 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
 }
 
 void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
+    if (VirtualGroupState) {
+        if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
+            Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
+        } else {
+            Status = {NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED};
+        }
+        return;
+    }
+
     TBlobStorageGroupInfo::TGroupVDisks failed(Topology.get());
     TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(Topology.get());
     for (const TVSlotInfo *slot : VDisksInGroup) {

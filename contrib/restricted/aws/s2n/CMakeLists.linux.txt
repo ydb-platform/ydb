@@ -55,11 +55,11 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_avx512.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_vpclmul.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_fp_x64_asm.S
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_ntt_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_shuffle_avx2.S
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_aes_gcm.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_aead_cipher_chacha20_poly1305.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_cbc_cipher_3des.c

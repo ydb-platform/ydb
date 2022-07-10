@@ -338,7 +338,7 @@ private:
 
         YQL_ENSURE(state->ActorId == ev->Sender, "expected: " << state->ActorId << ", got: " << ev->Sender);
 
-        LastKey = std::move(msg.LastKey);
+        state->LastKey = std::move(msg.LastKey);
         ui64 bytes = 0;
         ui64 rowsCount = 0;
         {
@@ -367,7 +367,6 @@ private:
         CA_LOG_D("Got EvScanData, rows: " << rowsCount << ", bytes: " << bytes << ", finished: " << msg.Finished
                 << ", from: " << ev->Sender << ", shards remain: " << PendingShards.size()
                 << ", in flight shards " << InFlightShards.size()
-                << ", LastKey " << PrintLastKey()
                 << ", delayed for: " << latency.SecondsFloat() << " seconds by ratelimiter"
                 << ", tabletId: " << state->TabletId);
 
@@ -592,11 +591,14 @@ private:
             PendingShards.emplace_front(std::move(newShards[i]));
         }
 
+        if (!state.LastKey.empty()) {
+            PendingShards.front().LastKey = std::move(state.LastKey);
+        }
+
         if (IsDebugLogEnabled(TlsActivationContext->ActorSystem(), NKikimrServices::KQP_COMPUTE)
             && PendingShards.size() + InFlightShards.size() > 0)
         {
             TStringBuilder sb;
-            sb << "Last Key: " << PrintLastKey() << "; ";
             if (!PendingShards.empty()) {
                 sb << "Pending shards States: ";
                 for (auto& st : PendingShards) {
@@ -709,8 +711,8 @@ private:
         }
         ev->Record.MutableSkipNullKeys()->CopyFrom(Meta.GetSkipNullKeys());
 
-        CA_LOG_D("Start scan request, " << state->ToString(KeyColumnTypes) << ", LastKey: " << PrintLastKey());
-        auto ranges = state->GetScanRanges(KeyColumnTypes, LastKey);
+        CA_LOG_D("Start scan request, " << state->ToString(KeyColumnTypes));
+        auto ranges = state->GetScanRanges(KeyColumnTypes);
         auto protoRanges = ev->Record.MutableRanges();
         protoRanges->Reserve(ranges.size());
 
@@ -782,7 +784,7 @@ private:
         state->SubscribedOnTablet = false;
         auto retryDelay = state->CalcRetryDelay();
         CA_LOG_W("TKqpScanComputeActor: broken pipe with tablet " << state->TabletId
-            << ", restarting scan from last received key " << PrintLastKey()
+            << ", restarting scan from last received key " << state->PrintLastKey(KeyColumnTypes)
             << ", attempt #" << state->RetryAttempt << " (total " << state->TotalRetries << ")"
             << " schedule after " << retryDelay);
 
@@ -964,13 +966,6 @@ private:
         TBase::PassAway();
     }
 
-    TString PrintLastKey() const {
-        if (LastKey.empty()) {
-            return "<none>";
-        }
-        return DebugPrintPoint(KeyColumnTypes, LastKey, *AppData()->TypeRegistry);
-    }
-
     template<class TMessage>
     TShardState* GetShardState(const TMessage& msg, const TActorId& scanActorId) {
         ui32 generation;
@@ -1027,7 +1022,6 @@ private:
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
     TVector<NScheme::TTypeId> KeyColumnTypes;
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
-    TOwnedCellVec LastKey;
     std::deque<std::pair<TEvKqpCompute::TEvScanData::TPtr, TInstant>> PendingScanData;
     std::deque<TShardState> PendingShards;
     std::deque<TShardState> PendingResolveShards;

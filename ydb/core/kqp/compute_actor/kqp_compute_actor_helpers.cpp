@@ -1,6 +1,7 @@
 #include "kqp_compute_actor.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/library/yql/core/issue/yql_issue.h>
 
 namespace NKikimr::NKqp::NComputeActor {
@@ -29,6 +30,13 @@ void TShardState::ResetRetry() {
     ResolveAttempt = 0;
 }
 
+TString TShardState::PrintLastKey(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
+    if (LastKey.empty()) {
+        return "<none>";
+    }
+    return DebugPrintPoint(keyTypes, LastKey, *AppData()->TypeRegistry);
+}
+
 TDuration TShardState::CalcRetryDelay() {
     if (std::exchange(AllowInstantRetry, false)) {
         return TDuration::Zero();
@@ -45,7 +53,8 @@ TDuration TShardState::CalcRetryDelay() {
 TString TShardState::ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
     TStringBuilder sb;
     sb << "TShardState{ TabletId: " << TabletId << ", State: " << EShardStateToString(State)
-       << ", Gen: " << Generation << ", Ranges: [";
+       << ", Gen: " << Generation << ", Last Key " << TShardState::PrintLastKey(keyTypes)
+       << ", Ranges: [";
     for (size_t i = 0; i < Ranges.size(); ++i) {
         sb << "#" << i << ": " << DebugPrintRange(keyTypes, Ranges[i].ToTableRange(), *AppData()->TypeRegistry);
         if (i + 1 != Ranges.size()) {
@@ -58,9 +67,9 @@ TString TShardState::ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
     return sb;
 }
 
-const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef<NScheme::TTypeId> keyTypes, const TOwnedCellVec& lastKey) const {
+const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef<NScheme::TTypeId> keyTypes) const {
     // No any data read previously, return all ranges
-    if (!lastKey.DataSize()) {
+    if (!LastKey.DataSize()) {
         return Ranges;
     }
 
@@ -68,10 +77,10 @@ const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef
     TVector<TSerializedTableRange> ranges;
     ranges.reserve(Ranges.size());
 
-    YQL_ENSURE(keyTypes.size() == lastKey.size(), "Key columns size != last key");
+    YQL_ENSURE(keyTypes.size() == LastKey.size(), "Key columns size != last key");
 
     for (auto rangeIt = Ranges.begin(); rangeIt != Ranges.end(); ++rangeIt) {
-        int cmp = ComparePointAndRange(lastKey, rangeIt->ToTableRange(), keyTypes, keyTypes);
+        int cmp = ComparePointAndRange(LastKey, rangeIt->ToTableRange(), keyTypes, keyTypes);
 
         YQL_ENSURE(cmp >= 0, "Missed intersection of LastKey and range.");
 
@@ -81,7 +90,7 @@ const TSmallVec<TSerializedTableRange> TShardState::GetScanRanges(TConstArrayRef
 
         // It is range, where read was interrupted. Restart operation from last read key.
         ranges.emplace_back(std::move(TSerializedTableRange(
-            TSerializedCellVec::Serialize(lastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
+            TSerializedCellVec::Serialize(LastKey), rangeIt->To.GetBuffer(), false, rangeIt->ToInclusive
             )));
 
         // And push all others

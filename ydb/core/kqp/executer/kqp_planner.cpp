@@ -175,6 +175,7 @@ void TKqpPlanner::Process(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot
             AddScansToKqpNodeRequest(ev, nodeId);
 
             auto target = MakeKqpNodeServiceID(nodeId);
+            LOG_D("Send request to kqpnode: " << target << ", node_id: " << SelfId().NodeId() << ", TxId: " << TxId);
             TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(),
                 CalcSendMessageFlagsForNode(target.NodeId())));
         }
@@ -198,6 +199,7 @@ void TKqpPlanner::RunLocal(const TVector<NKikimrKqp::TKqpNodeResources>& snapsho
     AddScansToKqpNodeRequest(ev, SelfId().NodeId());
 
     auto target = MakeKqpNodeServiceID(SelfId().NodeId());
+    LOG_D("Send request to kqpnode: " << target << ", node_id: " << SelfId().NodeId() << ", TxId: " << TxId);
     TlsActivationContext->Send(new IEventHandle(target, ExecuterId, ev.Release(), IEventHandle::FlagTrackDelivery));
 
 

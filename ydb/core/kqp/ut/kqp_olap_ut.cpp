@@ -1452,10 +1452,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST_TWIN(ManyColumnShardsWithRestarts, UseSessionActor) {
-        // remove this return when bug with scan is fixed.
-        // todo: KIKIMR-15200
-        return;
-
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -1483,8 +1479,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         ui64 result = 0;
         THashSet<TActorId> columnShardScans;
-        ui64 rebootedScanCount = 0;
         std::set<ui64> tabletIds;
+        bool prevIsFinished = false;
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
             switch (ev->GetTypeRewrite()) {
@@ -1518,22 +1514,24 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
 
                 case NKqp::TKqpComputeEvents::EvScanData: {
-                    auto it = columnShardScans.find(ev->Sender);
-                    if (it != columnShardScans.end()) {
-                        ++rebootedScanCount;
-                        if (rebootedScanCount == 1) {
-                            ui64 tabletIdToKill = *tabletIds.begin();
-                            NKikimr::RebootTablet(*runtime, tabletIdToKill, sender);
-                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event, kill tablet " << tabletIdToKill << Endl);
-                            Cerr.Flush();
-                        }
+                    auto [it, success] = columnShardScans.emplace(ev->Sender);
+                    auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
+                    Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << Endl);
+                    if (success) {
+                        // first scan response.
+                        prevIsFinished = msg->Finished;
+                        return TTestActorRuntime::EEventAction::PROCESS;
                     } else {
-                        columnShardScans.insert(ev->Sender);
-                        runtime->EnableScheduleForActor(ev->Sender);
-                        Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << Endl);
-                        Cerr.Flush();
+                        if (prevIsFinished) {
+                            Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << ": hijack event");
+                            Cerr.Flush();
+                            auto resp = std::make_unique<NKqp::TEvKqpCompute::TEvScanError>(msg->Generation);
+                            runtime->Send(new IEventHandle(ev->Recipient, ev->Sender, resp.release()));
+                        } else {
+                            prevIsFinished = msg->Finished;
+                        }
+                        return TTestActorRuntime::EEventAction::PROCESS;
                     }
-
                     break;
                 }
 

@@ -4,8 +4,6 @@
 #include <ydb/core/kqp/kqp_compute.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/tx/datashard/range_ops.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -43,7 +41,6 @@ std::string_view EShardStateToString(EShardState state);
 
 bool FindSchemeErrorInIssues(const Ydb::StatusIds::StatusCode& status, const NYql::TIssues& issues);
 
-// scan over datashards
 struct TShardState {
     ui64 TabletId;
     TSmallVec<TSerializedTableRange> Ranges;
@@ -57,6 +54,9 @@ struct TShardState {
     TActorId RetryTimer;
     ui32 ResolveAttempt = 0;
     TActorId ActorId;
+    TOwnedCellVec LastKey;
+
+    TString PrintLastKey(TConstArrayRef<NScheme::TTypeId> keyTypes) const;
 
     explicit TShardState(ui64 tabletId)
         : TabletId(tabletId) {}
@@ -65,8 +65,7 @@ struct TShardState {
     void ResetRetry();
 
     TString ToString(TConstArrayRef<NScheme::TTypeId> keyTypes) const;
-    const TSmallVec<TSerializedTableRange> GetScanRanges(
-        TConstArrayRef<NScheme::TTypeId> keyTypes, const TOwnedCellVec& lastKey) const;
+    const TSmallVec<TSerializedTableRange> GetScanRanges(TConstArrayRef<NScheme::TTypeId> keyTypes) const;
 };
 
 } // namespace NComputeActor

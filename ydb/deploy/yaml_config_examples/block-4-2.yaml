@@ -2,16 +2,16 @@
 # are described in documentaion https://ydb.tech/en/docs/deploy/configuration/config
 
 # static erasure is the parameter that
-# desribes the fault tolerance mode of the
+# describes the fault tolerance mode of the
 # cluster. See docs for more details https://ydb.tech/en/docs/deploy/configuration/config#domains-blob
 static_erasure: block-4-2
 host_configs: # the list of available host configurations in the cluster.
 - drive:
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_01   # path of the first disk in the host configration.
-    type: SSD   # kind of the disk: available kinds are SSD, NVME, HDD
+    type: SSD                                      # kind of the disk: available kinds are SSD, NVME or HDD
   - path: /dev/disk/by-partlabel/ydb_disk_ssd_02
     type: SSD
-  host_config_id: 1  # the unique id of the host config
+  host_config_id: 1                                # the unique id of the host config
 hosts:
 - host: ydb-node-zone-a-1.local   # storage node DNS name
   host_config_id: 1           # numeric host configuration template identifier.
@@ -72,7 +72,7 @@ domains_config:
   domain:
   # There can be only one root domain in a cluster. Domain name prefixes all scheme objects names, e.g. full name of a table table1 in database db1 
   # in a cluster with domains_config.domain.name parameter set to Root would be equal to /Root/db1/table1
-  - name: Root 
+  - name: Root
     storage_pool_types:
     - kind: ssd
       pool_config:
@@ -92,21 +92,18 @@ domains_config:
     ssid: 1
 table_service_config:
   sql_version: 1
-actor_system_config:                 # the configuration of the actor system which descibes how cores of the instance are distributed
-  executor:                          # accross different types of workloads in the instance.
+actor_system_config:    # the configuration of the actor system which descibes how cores of the instance are distributed
+  executor:             # accross different types of workloads in the instance.
   - name: System        # system executor of the actor system. in this executor YDB launches system type of workloads, like system tablets
                         # and reads from storage.
-    spin_threshold: 0
     threads: 2          # the number of threads allocated to system executor.
     type: BASIC
   - name: User          # user executor of the actor system. In this executor YDB launches user workloads, like datashard activities,
                         # queries and rpc calls.
-    spin_threshold: 0
     threads: 3          # the number of threads allocated to user executor.
     type: BASIC
   - name: Batch         # user executor of the actor system. In this executor YDB launches batch operations, like scan queries, table
                         # compactions, background compactions.
-    spin_threshold: 0
     threads: 2          # the number of threads allocated to the batch executor.
     type: BASIC
   - name: IO            # the io executor. In this executor launches sync operations and writes logs.

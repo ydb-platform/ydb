@@ -43,6 +43,9 @@ public:
                 db.Table<Schema::Node>().Key(NodeId).Update<Schema::Node::Statistics>(node->Statistics);
             }
             node->BecomeDisconnected();
+            if (node->LocationAcquired) {
+                Self->RemoveRegisteredDataCentersNode(node->Location.GetDataCenterId(), node->Id);
+            }
             for (const TActorId& pipeServer : node->PipeServers) {
                 BLOG_TRACE("THive::TTxKillNode - killing pipe server " << pipeServer);
                 SideEffects.Send(pipeServer, new TEvents::TEvPoisonPill());

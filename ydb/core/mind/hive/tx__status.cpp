@@ -33,7 +33,7 @@ public:
                 NActorsInterconnect::TNodeLocation location;
                 node.Location.Serialize(&location, false);
                 db.Table<Schema::Node>().Key(nodeId).Update<Schema::Node::Location>(location);
-                Self->UpdateRegisteredDataCenters(node.Location.GetDataCenterId());
+                Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
             }
             Self->ProcessWaitQueue(); // new node connected
             if (node.Drain && Self->BalancerNodes.count(nodeId) == 0) {

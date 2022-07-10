@@ -14,10 +14,11 @@ public:
 
     TTxType GetTxType() const override { return NHive::TXTYPE_PROCESS_BOOT_QUEUE; }
 
-    bool Execute(TTransactionContext&, const TActorContext&) override {
+    bool Execute(TTransactionContext& txc, const TActorContext&) override {
         BLOG_D("THive::TTxProcessBootQueue()::Execute");
         SideEffects.Reset(Self->SelfId());
-        Self->ExecuteProcessBootQueue(SideEffects);
+        NIceDb::TNiceDb db(txc.DB);
+        Self->ExecuteProcessBootQueue(db, SideEffects);
         return true;
     }
 

@@ -401,7 +401,7 @@ protected:
     NKikimrConfig::THiveConfig DatabaseConfig;
     std::unordered_map<TTabletTypes::EType, NKikimrConfig::THiveTabletLimit> TabletLimit; // built from CurrentConfig
     std::unordered_map<TTabletTypes::EType, NKikimrHive::TDataCentersPreference> DefaultDataCentersPreference;
-    std::unordered_set<TDataCenterId> RegisteredDataCenterIds;
+    std::unordered_map<TDataCenterId, std::unordered_set<TNodeId>> RegisteredDataCenterNodes;
     std::unordered_set<TNodeId> ConnectedNodes;
 
     // to be removed later
@@ -594,14 +594,17 @@ public:
     void ExecuteStartTablet(TFullTabletId tabletId, const TActorId& local, ui64 cookie, bool external);
     ui32 GetDataCenters();
     ui32 GetRegisteredDataCenters();
-    void UpdateRegisteredDataCenters(TDataCenterId dataCenterId);
+    void UpdateRegisteredDataCenters();
+    void AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
+    void RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId);
     void SendPing(const TActorId& local, TNodeId id);
     void SendReconnect(const TActorId& local);
     static THolder<NKikimrBlobStorage::TEvControllerSelectGroups::TGroupParameters> BuildGroupParametersForChannel(const TLeaderTabletInfo& tablet, ui32 channelId);
     void KickTablet(const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, const TTabletInfo& tablet);
     void StopTablet(const TActorId& local, TFullTabletId tabletId);
-    void ExecuteProcessBootQueue(TCompleteNotifications& notifications);
+    void ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects);
+    void UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects);
 
     TTabletMetricsAggregates DefaultResourceMetricsAggregates;
     ui64 MetricsWindowSize = TDuration::Minutes(1).MilliSeconds();

@@ -177,7 +177,7 @@ void THive::DeleteTabletWithoutStorage(TLeaderTabletInfo* tablet, TSideEffects& 
     sideEffects.Send(SelfId(), new TEvTabletBase::TEvDeleteTabletResult(NKikimrProto::OK, tablet->Id));
 }
 
-void THive::ExecuteProcessBootQueue(TCompleteNotifications& notifications) {
+void THive::ExecuteProcessBootQueue(NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
     TInstant now = TActivationContext::Now();
     BLOG_D("Handle ProcessBootQueue (size: " << BootQueue.BootQueue.size() << ")");
     THPTimer bootQueueProcessingTimer;
@@ -212,9 +212,13 @@ void THive::ExecuteProcessBootQueue(TCompleteNotifications& notifications) {
                     break;
                 } else {
                     for (const TActorId actorToNotify : tablet->ActorsToNotifyOnRestart) {
-                        notifications.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
+                        sideEffects.Send(actorToNotify, new TEvPrivate::TEvRestartComplete(tablet->GetFullTabletId(), "boot delay"));
                     }
                     tablet->ActorsToNotifyOnRestart.clear();
+                    if (tablet->IsFollower()) {
+                        TLeaderTabletInfo& leader = tablet->GetLeader();
+                        UpdateTabletFollowersNumber(leader, db, sideEffects);
+                    }
                     BootQueue.AddToWaitQueue(record); // waiting for new node
                     continue;
                 }
@@ -237,7 +241,7 @@ void THive::ExecuteProcessBootQueue(TCompleteNotifications& notifications) {
         BootQueue.AddToBootQueue(record);
     }
     if (TabletCounters != nullptr) {
-        TabletCounters->Simple()[NHive::COUNTER_BOOTQUEUE_SIZE].Set(BootQueue.BootQueue.size());
+        UpdateCounterBootQueueSize(BootQueue.BootQueue.size());
         TabletCounters->Simple()[NHive::COUNTER_WAITQUEUE_SIZE].Set(BootQueue.WaitQueue.size());
         TabletCounters->Cumulative()[NHive::COUNTER_BOOTQUEUE_PROCESSED].Increment(1);
         TabletCounters->Cumulative()[NHive::COUNTER_BOOTQUEUE_TIME].Increment(ui64(1000000. * bootQueueProcessingTimer.PassedReset()));
@@ -413,9 +417,6 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     BLOG_D("Handle BootTablets");
     RequestPoolsInformation();
     for (auto& [id, node] : Nodes) {
-        if (node.LocationAcquired) {
-            UpdateRegisteredDataCenters(node.Location.GetDataCenterId());
-        }
         if (node.IsUnknown() && node.Local) {
             node.Ping();
         }
@@ -652,9 +653,6 @@ void THive::Handle(TEvInterconnect::TEvNodeInfo::TPtr &ev) {
             hiveNodeInfo->Location = nodeInfo.Location;
             hiveNodeInfo->LocationAcquired = true;
             BLOG_D("TEvInterconnect::TEvNodeInfo NodeId " << nodeInfo.NodeId << " Location " << GetLocationString(hiveNodeInfo->Location));
-            if (hiveNodeInfo->IsRegistered()) {
-                UpdateRegisteredDataCenters(hiveNodeInfo->Location.GetDataCenterId());
-            }
         }
     }
 }
@@ -2217,19 +2215,78 @@ void THive::SendReconnect(const TActorId& local) {
 }
 
 ui32 THive::GetDataCenters() {
-    return DataCenters;
+    return DataCenters ? DataCenters : 1;
 }
 
 ui32 THive::GetRegisteredDataCenters() {
-    return RegisteredDataCenters;
+    return RegisteredDataCenters ? RegisteredDataCenters : 1;
 }
 
-void THive::UpdateRegisteredDataCenters(TDataCenterId dataCenterId) {
+void THive::UpdateRegisteredDataCenters() {
+    if (RegisteredDataCenters != RegisteredDataCenterNodes.size()) {
+        BLOG_D("THive (UpdateRegisteredDC) DataCenters=" << DataCenters << " RegisteredDataCenters=" << RegisteredDataCenters << "->" << RegisteredDataCenterNodes.size());
+        RegisteredDataCenters = RegisteredDataCenterNodes.size();
+    }
+}
+
+void THive::AddRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
     if (dataCenterId != 0) { // ignore default data center id if exists
-        RegisteredDataCenterIds.insert(dataCenterId);
-        if (RegisteredDataCenters != RegisteredDataCenterIds.size()) {
-            RegisteredDataCenters = RegisteredDataCenterIds.size();
-            BLOG_D("THive (UpdateRegisteredDC) DataCenters=" << DataCenters << " RegisteredDataCenters=" << RegisteredDataCenters);
+        if (RegisteredDataCenterNodes[dataCenterId].insert(nodeId).second) {
+            if (RegisteredDataCenters != RegisteredDataCenterNodes.size()) {
+                UpdateRegisteredDataCenters();
+            }
+        }
+    }
+}
+
+void THive::RemoveRegisteredDataCentersNode(TDataCenterId dataCenterId, TNodeId nodeId) {
+    if (dataCenterId != 0) { // ignore default data center id if exists
+        RegisteredDataCenterNodes[dataCenterId].erase(nodeId);
+        if (RegisteredDataCenterNodes[dataCenterId].size() == 0) {
+            RegisteredDataCenterNodes.erase(dataCenterId);
+        }
+        if (RegisteredDataCenters != RegisteredDataCenterNodes.size()) {
+            UpdateRegisteredDataCenters();
+        }
+    }
+}
+
+void THive::UpdateTabletFollowersNumber(TLeaderTabletInfo& tablet, NIceDb::TNiceDb& db, TSideEffects& sideEffects) {
+    BLOG_D("UpdateTabletFollowersNumber Tablet " << tablet.ToString() << " RegisteredDataCenters=" << GetRegisteredDataCenters());
+    for (TFollowerGroup& group : tablet.FollowerGroups) {
+        ui32 followerCount = tablet.GetActualFollowerCount(group.Id);
+        ui32 requiredFollowerCount = group.GetComputedFollowerCount(GetRegisteredDataCenters());
+
+        while (followerCount < requiredFollowerCount) {
+            BLOG_D("UpdateTabletFollowersNumber Tablet " << tablet.ToString() << " is increasing number of followers (" << followerCount << "<" << requiredFollowerCount << ")");
+
+            TFollowerTabletInfo& follower = tablet.AddFollower(group);
+            follower.Statistics.SetLastAliveTimestamp(TlsActivationContext->Now().MilliSeconds());
+            db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Update(
+                        NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(follower.FollowerGroup.Id),
+                        NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
+                        NIceDb::TUpdate<Schema::TabletFollowerTablet::Statistics>(follower.Statistics));
+            follower.InitTabletMetrics();
+            follower.BecomeStopped();
+            ++followerCount;
+        }
+
+        while (followerCount > requiredFollowerCount) {
+            BLOG_D("UpdateTabletFollowersNumber Tablet " << tablet.ToString() << " is decreasing number of followers (" << followerCount << ">" << requiredFollowerCount << ")");
+
+            auto itFollower = tablet.Followers.rbegin();
+            while (itFollower != tablet.Followers.rend() && itFollower->FollowerGroup.Id != group.Id) {
+                ++itFollower;
+            }
+            if (itFollower == tablet.Followers.rend()) {
+                break;
+            }
+            TFollowerTabletInfo& follower = *itFollower;
+            db.Table<Schema::TabletFollowerTablet>().Key(tablet.Id, follower.Id).Delete();
+            db.Table<Schema::Metrics>().Key(tablet.Id, follower.Id).Delete();
+            follower.InitiateStop(sideEffects);
+            tablet.Followers.erase(std::prev(itFollower.base()));
+            --followerCount;
         }
     }
 }

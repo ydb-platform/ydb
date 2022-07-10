@@ -36,6 +36,7 @@ public:
         Self->Keeper.Clear();
         Self->Domains.clear();
         Self->BlockedOwners.clear();
+        Self->RegisteredDataCenterNodes.clear();
 
         Self->Domains[Self->RootDomainKey].Path = Self->RootDomainName;
         Self->Domains[Self->RootDomainKey].HiveId = rootHiveId;
@@ -306,6 +307,8 @@ public:
                 if (node.CanBeDeleted()) {
                     db.Table<Schema::Node>().Key(nodeId).Delete();
                     Self->Nodes.erase(nodeId);
+                } else if (node.IsUnknown() && node.LocationAcquired) {
+                    Self->AddRegisteredDataCentersNode(node.Location.GetDataCenterId(), node.Id);
                 }
                 if (!nodeRowset.Next())
                     return false;
@@ -487,8 +490,6 @@ public:
             tabletInfo.AcquireAllocationUnits();
         }
 
-        std::unordered_map<std::pair<TLeaderTabletInfo*, TFollowerGroup*>, ui32> followersPerGroup;
-
         {
             auto tabletFollowerGroupRowset = db.Table<Schema::TabletFollowerGroup>().Select();
             if (!tabletFollowerGroupRowset.IsReady())
@@ -518,7 +519,6 @@ public:
                     followerGroup.LocalNodeOnly = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::LocalNodeOnly>();
                     followerGroup.FollowerCountPerDataCenter = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>();
                     followerGroup.RequireDifferentNodes = tabletFollowerGroupRowset.GetValueOrDefault<Schema::TabletFollowerGroup::RequireDifferentNodes>();
-                    followersPerGroup[{tablet, &followerGroup}] = 0;
                 }
                 if (!tabletFollowerGroupRowset.Next())
                     return false;
@@ -550,26 +550,9 @@ public:
                             follower.BecomeStopped();
                         }
                     }
-                    followersPerGroup[{tablet, &followerGroup}]++;
                 }
                 if (!tabletFollowerRowset.Next())
                     return false;
-            }
-        }
-
-        {
-            for (auto& [id, count] : followersPerGroup) {
-                TFollowerGroup& followerGroup(*id.second);
-                while (followerGroup.GetComputedFollowerCount(Self->GetDataCenters()) > count) {
-                    TFollowerTabletInfo& follower = id.first->AddFollower(followerGroup);
-                    follower.InitTabletMetrics();
-                    follower.BecomeStopped();
-                    db.Table<Schema::TabletFollowerTablet>()
-                        .Key(id.first->Id, follower.Id)
-                        .Update(NIceDb::TUpdate<Schema::TabletFollowerTablet::FollowerNode>(0),
-                                NIceDb::TUpdate<Schema::TabletFollowerTablet::GroupID>(followerGroup.Id));
-                    ++count;
-                }
             }
         }
 

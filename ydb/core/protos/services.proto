@@ -896,5 +896,6 @@ message TActivity {
         BLOB_DEPOT_ACTOR = 570;
         BLOB_DEPOT_AGENT = 571;
         KQP_STREAM_LOOKUP_ACTOR = 572;
+        BS_STORAGE_STATS_ACTOR = 573;
     };
 };

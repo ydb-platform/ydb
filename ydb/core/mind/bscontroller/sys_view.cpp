@@ -86,7 +86,6 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     std::unordered_set<std::tuple<TString>> PDiskFilterCounters;
     std::unordered_set<std::tuple<TString, TString>> ErasureCounters;
     TActorId StorageStatsCalculatorId;
-    bool IsCalculateStorageStatsRequestInProgress = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -101,11 +100,9 @@ public:
         Counters->RemoveSubgroup("subsystem", "storage_stats");
     }
 
-    void Bootstrap(const TActorContext& ctx) {
-        StorageStatsCalculatorId = RunInBatchPool(ctx, CreateStorageStatsCalculator());
+    void Bootstrap(const TActorContext&) {
         Become(&TThis::StateWork);
-
-        Schedule(TDuration::Seconds(1), new TEvScheduleCalculateStorageStatsRequest());
+        Schedule(TDuration::Seconds(0), new TEvCalculateStorageStatsRequest());
     }
 
     STRICT_STFUNC(StateWork,
@@ -115,7 +112,7 @@ public:
         hFunc(TEvSysView::TEvGetGroupsRequest, Handle);
         hFunc(TEvSysView::TEvGetStoragePoolsRequest, Handle);
         hFunc(TEvSysView::TEvGetStorageStatsRequest, Handle);
-        hFunc(TEvScheduleCalculateStorageStatsRequest, Handle);
+        hFunc(TEvCalculateStorageStatsRequest, Handle);
         hFunc(TEvCalculateStorageStatsResponse, Handle);
         cFunc(TEvents::TSystem::Poison, PassAway);
     )
@@ -133,7 +130,10 @@ public:
     }
 
     void PassAway() override {
-        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
+        if (StorageStatsCalculatorId) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
+        }
+
         TActorBootstrapped::PassAway();
     }
 
@@ -221,17 +221,21 @@ public:
         Send(ev->Sender, response.release());
     }
 
-    void Handle(TEvScheduleCalculateStorageStatsRequest::TPtr&) {
-        if (IsCalculateStorageStatsRequestInProgress) {
+    void Handle(TEvCalculateStorageStatsRequest::TPtr&) {
+        if (StorageStatsCalculatorId) {
             return;
         }
 
-        IsCalculateStorageStatsRequestInProgress = true;
+        auto& ctx = TActivationContext::AsActorContext();
+        auto actor = CreateStorageStatsCoroCalculator(
+            State,
+            HostRecords,
+            GroupReserveMin,
+            GroupReservePart);
 
-        auto request = std::make_unique<TEvCalculateStorageStatsRequest>(State, HostRecords, GroupReserveMin, GroupReservePart);
-        Send(StorageStatsCalculatorId, request.release());
+        StorageStatsCalculatorId = RunInBatchPool(ctx, actor.release());
 
-        Schedule(TDuration::Minutes(10), new TEvScheduleCalculateStorageStatsRequest());
+        Schedule(TDuration::Minutes(10), new TEvCalculateStorageStatsRequest());
     }
 
     void Handle(TEvCalculateStorageStatsResponse::TPtr& ev) {
@@ -243,7 +247,7 @@ public:
             StorageStats.reset();
         }
 
-        IsCalculateStorageStatsRequestInProgress = false;
+        StorageStatsCalculatorId = TActorId();
     }
 
     void UpdateStorageStatsCounters(const std::vector<NKikimrSysView::TStorageStatsEntry>& storageStats) {

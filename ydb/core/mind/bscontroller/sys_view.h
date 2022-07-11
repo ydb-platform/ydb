@@ -35,33 +35,18 @@ struct TEvControllerUpdateSystemViews :
 struct TEvCalculateStorageStatsRequest :
     TEventLocal<TEvCalculateStorageStatsRequest, NSysView::TEvSysView::EvCalculateStorageStatsRequest>
 {
-    TEvCalculateStorageStatsRequest(
-        const TControllerSystemViewsState& systemViewsState,
-        const TBlobStorageController::THostRecordMap& hostRecordMap,
-        ui32 groupReserveMin,
-        ui32 groupReservePart)
-        : SystemViewsState(systemViewsState)
-        , HostRecordMap(hostRecordMap)
-        , GroupReserveMin(groupReserveMin)
-        , GroupReservePart(groupReservePart)
-    {
-    }
-
-    TControllerSystemViewsState SystemViewsState;
-    TBlobStorageController::THostRecordMap HostRecordMap;
-    ui32 GroupReserveMin;
-    ui32 GroupReservePart;
 };
 
 struct TEvCalculateStorageStatsResponse :
     TEventLocal<TEvCalculateStorageStatsResponse, NSysView::TEvSysView::EvCalculateStorageStatsResponse>
 {
+    template <typename T>
+    TEvCalculateStorageStatsResponse(T&& t)
+        : StorageStats(std::forward<T>(t))
+    {}
+
     std::vector<NKikimrSysView::TStorageStatsEntry> StorageStats;
 };
-
-struct TEvScheduleCalculateStorageStatsRequest :
-    TEventLocal<TEvScheduleCalculateStorageStatsRequest, NSysView::TEvSysView::EvScheduleCalculateStorageStatsRequest>
-{};
 
 struct TGroupDiskInfo {
     const NKikimrBlobStorage::TPDiskMetrics *PDiskMetrics;

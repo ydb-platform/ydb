@@ -1279,26 +1279,6 @@ Y_UNIT_TEST_SUITE(TFlatTest) {
         return res->Record.GetStatus();
     }
 
-    Y_UNIT_TEST(InitRoot) {
-        TPortManager pm;
-        ui16 port = pm.GetPort(2134);
-        TServer cleverServer = TServer(TServerSettings(port));
-        if (true) {
-            cleverServer.GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_DEBUG);
-        }
-
-        TFlatMsgBusClient annoyingClient(port);
-
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK);
-        // Reinitializing same root is Ok
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-1"), NMsgBusProxy::MSTATUS_OK);
-
-        // Unknown roots
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, ""), NMsgBusProxy::MSTATUS_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-11"), NMsgBusProxy::MSTATUS_ERROR);
-        UNIT_ASSERT_VALUES_EQUAL(TestInitRoot(annoyingClient, "dc-2"), NMsgBusProxy::MSTATUS_ERROR);
-    }
-
     Y_UNIT_TEST(CheckACL) {
         TPortManager pm;
         ui16 port = pm.GetPort(2134);

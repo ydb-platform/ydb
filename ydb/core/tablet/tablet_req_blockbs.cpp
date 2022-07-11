@@ -11,6 +11,7 @@ public:
     ui64 TabletId;
     ui32 GroupId;
     ui32 Generation;
+    ui64 IssuerGuid;
 
     void ReplyAndDie(NKikimrProto::EReplyStatus status, const TString &reason = { }) {
         Send(Owner, new TEvTabletBase::TEvBlockBlobStorageResult(status, TabletId, reason));
@@ -19,7 +20,7 @@ public:
 
     void SendRequest() {
         const TActorId proxy = MakeBlobStorageProxyID(GroupId);
-        THolder<TEvBlobStorage::TEvBlock> event(new TEvBlobStorage::TEvBlock(TabletId, Generation, TInstant::Max()));
+        auto event = MakeHolder<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(), IssuerGuid);
         event->IsMonitored = false;
         SendToBSProxy(TlsActivationContext->AsActorContext(), proxy, event.Release());
     }
@@ -64,10 +65,11 @@ public:
         Become(&TThis::StateWait);
     }
 
-    TTabletReqBlockBlobStorageGroup(ui64 tabletId, ui32 groupId, ui32 gen)
+    TTabletReqBlockBlobStorageGroup(ui64 tabletId, ui32 groupId, ui32 gen, ui64 issuerGuid)
         : TabletId(tabletId)
         , GroupId(groupId)
         , Generation(gen)
+        , IssuerGuid(issuerGuid)
     {}
 };
 
@@ -78,6 +80,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
     ui32 Replied = 0;
     TVector<THolder<TTabletReqBlockBlobStorageGroup>> Requests;
     TVector<TActorId> ReqActors;
+    ui64 IssuerGuid = RandomNumber<ui64>() | 1;
 
     void PassAway() override {
         for (auto &x : ReqActors)
@@ -107,6 +110,7 @@ class TTabletReqBlockBlobStorage : public TActorBootstrapped<TTabletReqBlockBlob
             return ReplyAndDie(msg->Status, msg->ErrorReason);
         }
     }
+
 public:
     TTabletReqBlockBlobStorage(TActorId owner, TTabletStorageInfo* info, ui32 generation, bool blockPrevEntry)
         : Owner(owner)
@@ -127,7 +131,8 @@ public:
                 continue;
             }
             if (blocked.insert(itEntry->GroupID).second) {
-                Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation));
+                Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation,
+                    IssuerGuid));
             }
 
             if (blockPrevEntry) {
@@ -136,7 +141,8 @@ public:
                     continue;
                 }
                 if (blocked.insert(itEntry->GroupID).second) {
-                    Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation));
+                    Requests.emplace_back(new TTabletReqBlockBlobStorageGroup(TabletId, itEntry->GroupID, Generation,
+                        IssuerGuid));
                 }
             }
         }

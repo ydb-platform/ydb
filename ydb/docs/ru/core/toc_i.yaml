@@ -27,3 +27,6 @@ items:
 - include: { mode: link, path: downloads/toc_p.yaml }
 - name: Публичные материалы
   href: public-talks.md
+- name: История изменений
+  href: changelog.md
+  

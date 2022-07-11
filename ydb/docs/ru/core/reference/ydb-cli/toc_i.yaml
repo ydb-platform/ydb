@@ -49,6 +49,8 @@ items:
       href: commands/discovery-list.md
     - name: Проверка аутентификации
       href: commands/discovery-whoami.md
+    - name: Вывод версии YDB CLI
+      href: version.md
   - name: Нагрузочное тестирование
     items:
     - name: Обзор

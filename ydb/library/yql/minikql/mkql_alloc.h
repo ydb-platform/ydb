@@ -416,7 +416,8 @@ struct TWithMiniKQLAlloc {
 template <typename T, typename... Args>
 T* AllocateOn(TAllocState* state, Args&&... args)
 {
-    return ::new(MKQLAllocFastWithSize(sizeof(T), state)) T(std::forward<Args>(args)...);
+    void* addr = MKQLAllocFastWithSize(sizeof(T), state);
+    return ::new(addr) T(std::forward<Args>(args)...);
     static_assert(std::is_base_of<TWithMiniKQLAlloc, T>::value, "Class must inherit TWithMiniKQLAlloc.");
 }
 

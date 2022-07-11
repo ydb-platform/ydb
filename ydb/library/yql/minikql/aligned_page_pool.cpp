@@ -1,4 +1,5 @@
 #include "aligned_page_pool.h"
+#include "util/string/builder.h"
 #include <library/cpp/actors/util/intrinsics.h>
 
 #include <util/generic/yexception.h>
@@ -122,8 +123,9 @@ TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounte
 TAlignedPagePool::~TAlignedPagePool() {
     if (CheckLostMem && !UncaughtException()) {
         Y_VERIFY_DEBUG(TotalAllocated == FreePages.size() * POOL_PAGE_SIZE,
-                       "Expected %ld, actual %ld (%ld page(s), %ld offloaded)", TotalAllocated,
-                       FreePages.size() * POOL_PAGE_SIZE, FreePages.size(), OffloadedActiveBytes);
+                       "Expected %ld, actual %ld (%ld page(s), %ld offloaded)",
+                       TotalAllocated, FreePages.size() * POOL_PAGE_SIZE,
+                       FreePages.size(), OffloadedActiveBytes);
         Y_VERIFY_DEBUG(OffloadedActiveBytes == 0, "offloaded: %ld", OffloadedActiveBytes);
     }
 
@@ -251,7 +253,8 @@ void* TAlignedPagePool::GetPage() {
 }
 
 void TAlignedPagePool::ReturnPage(void* addr) noexcept {
-    Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end());
+    auto str = TStringBuilder() << __func__ << " this: " << (void*)this << " addr: " << addr << Endl;
+    Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end(), "%s", str.Data());
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     ReturnBlock(addr, POOL_PAGE_SIZE);
 #else

@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_tasks_runner.h>
 #include <ydb/core/kqp/runtime/kqp_transport.h>
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
+#include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -250,8 +251,28 @@ private:
 
         auto taskRunner = CreateKqpTaskRunner(context, settings, log);
         TaskRunners.emplace_back(taskRunner);
+
+        std::shared_ptr<NMiniKQL::TPatternWithEnv> patternEnv;
+        bool useCache = AppData()->FeatureFlags.GetEnableKqpPatternCacheLiteral();
+        bool foundInCache = false;
+        if (useCache) {
+            auto *cache = Singleton<NMiniKQL::TComputationPatternLRUCache>();
+
+            patternEnv = cache->Find(protoTask.GetProgram().GetRaw());
+            if (patternEnv) {
+                foundInCache = true;
+            } else {
+                patternEnv = cache->CreateEnv();
+            }
+        }
+
         taskRunner->Prepare(protoTask, CreateTaskRunnerMemoryLimits(), CreateTaskRunnerExecutionContext(),
-                            parameterProvider);
+            parameterProvider, patternEnv);
+
+        if (useCache && !foundInCache) {
+            auto *cache = Singleton<NMiniKQL::TComputationPatternLRUCache>();
+            cache->EmplacePattern(protoTask.GetProgram().GetRaw(), std::move(patternEnv));
+        }
 
         auto status = taskRunner->Run();
         YQL_ENSURE(status == ERunStatus::Finished);

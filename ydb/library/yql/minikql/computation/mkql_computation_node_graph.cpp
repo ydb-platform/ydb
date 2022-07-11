@@ -221,7 +221,7 @@ public:
         , ValidatePolicy(opts.ValidatePolicy)
         , GraphPerProcess(opts.GraphPerProcess)
         , PatternNodes(MakeIntrusive<TPatternNodes>(opts.AllocState))
-        , ExternalAlloc(opts.CacheAlloc)
+        , ExternalAlloc(opts.CacheAlloc || opts.PatternEnv)
     {
         PatternNodes->HolderFactory = MakeHolder<THolderFactory>(opts.AllocState, *PatternNodes->MemInfo, &FunctionRegistry);
         PatternNodes->ValueBuilder = MakeHolder<TDefaultValueBuilder>(*PatternNodes->HolderFactory, ValidatePolicy);
@@ -778,18 +778,13 @@ public:
     }
 
     ~TComputationPatternImpl() {
-        if (Alloc) {
-            Alloc->Acquire();
-        }
-        PatternNodes.Reset();
-        TypeEnv.reset();
-        if (Alloc) {
-            Alloc->Release();
+        if (TypeEnv) {
+            auto guard = TypeEnv->BindAllocator();
+            PatternNodes.Reset();
         }
     }
 
-    void HoldInternals(const std::shared_ptr<TScopedAlloc>& alloc, const std::shared_ptr<TTypeEnvironment>& typeEnv) {
-        Alloc = alloc;
+    void SetTypeEnv(TTypeEnvironment* typeEnv) {
         TypeEnv = typeEnv;
     }
 
@@ -809,9 +804,9 @@ public:
     THolder<IComputationGraph> Clone(const TComputationOptsFull& compOpts) final {
         return MakeHolder<TComputationGraph>(PatternNodes, compOpts);
     }
+
 private:
-    std::shared_ptr<TScopedAlloc> Alloc;
-    std::shared_ptr<TTypeEnvironment> TypeEnv;
+    TTypeEnvironment* TypeEnv = nullptr;
     TPatternNodes::TPtr PatternNodes;
     NYql::NCodegen::ICodegen::TPtr Codegen;
 };
@@ -849,8 +844,8 @@ TIntrusivePtr<TComputationPatternImpl> MakeComputationPatternImpl(TExploringNode
 IComputationPattern::TPtr MakeComputationPattern(TExploringNodeVisitor& explorer, const TRuntimeNode& root,
         const std::vector<TNode*>& entryPoints, const TComputationPatternOpts& opts) {
     auto pattern = MakeComputationPatternImpl(explorer, root, entryPoints, opts);
-    if (opts.CacheAlloc) {
-        pattern->HoldInternals(opts.CacheAlloc->InjectedScopeAlloc(), opts.CacheEnv);
+    if (opts.PatternEnv) {
+        pattern->SetTypeEnv(&opts.PatternEnv->Env);
     }
     return pattern;
 }

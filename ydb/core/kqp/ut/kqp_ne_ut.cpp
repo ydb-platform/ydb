@@ -8,25 +8,63 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNewEngine) {
-    Y_UNIT_TEST_TWIN(SimpleSelect, UseSessionActor) {
-        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+    Y_UNIT_TEST_TWIN(Select1, UseSessionActor) {
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor)
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
             PRAGMA kikimr.UseNewEngine = "true";
-            SELECT Value1, Value2, Key FROM `/Root/TwoShard` WHERE Value2 != 0 ORDER BY Key DESC;
+            SELECT 1;
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         AssertSuccessResult(result);
 
         CompareYson(R"(
-            [
-                [["BigThree"];[1];[4000000003u]];
-                [["BigOne"];[-1];[4000000001u]];
-                [["Three"];[1];[3u]];
-                [["One"];[-1];[1u]]
-            ]
+            [ [1]; ]
         )", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_TWIN(SimpleUpsertSelect, UseSessionActor) {
+        auto settings = TKikimrSettings()
+            .SetEnableKqpSessionActor(UseSessionActor)
+            .SetWithSampleTables(false);
+        auto kikimr = TKikimrRunner{settings};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        AssertSuccessResult(session.ExecuteSchemeQuery(R"(
+            --!syntax_v1
+
+            CREATE TABLE `KeyValue` (
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (Key)
+            );
+        )").GetValueSync());
+
+        AssertSuccessResult(session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            REPLACE INTO `KeyValue` (Key, Value) VALUES
+                (1u, "One"),
+                (2u, "Two"),
+                (3u, "Three");
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync());
+
+        auto selectResult = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            SELECT * FROM `KeyValue`;
+        )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).GetValueSync();
+
+        AssertSuccessResult(selectResult);
+
+        CompareYson(R"([
+            [[1u];["One"]];
+            [[2u];["Two"]];
+            [[3u];["Three"]]
+        ])", FormatResultSetYson(selectResult.GetResultSet(0)));
     }
 
     Y_UNIT_TEST_TWIN(PkSelect1, UseSessionActor) {

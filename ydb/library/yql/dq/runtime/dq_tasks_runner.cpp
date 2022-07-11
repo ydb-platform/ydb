@@ -249,13 +249,15 @@ public:
         return TaskId;
     }
 
-    void BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider) {
+    void BuildTask(const NDqProto::TDqTask& task, const TDqTaskRunnerParameterProvider& parameterProvider,
+        const std::shared_ptr<TPatternWithEnv>& compPattern)
+    {
         LOG(TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
 
         auto& typeEnv = TypeEnv();
 
-        auto& program = task.GetProgram();
+        const NDqProto::TProgram &program = task.GetProgram();
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 
@@ -342,15 +344,31 @@ public:
         }
 
         auto validatePolicy = Settings.TerminateOnError ? NUdf::EValidatePolicy::Fail : NUdf::EValidatePolicy::Exception;
-        TComputationPatternOpts opts(Alloc().Ref(), typeEnv, Context.ComputationFactory, Context.FuncRegistry,
-            NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM,
-            EGraphPerProcess::Multi, ProgramParsed.StatsRegistry.Get());
-        SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
-        opts.SecureParamsProvider = SecureParamsProvider.get();
-        ProgramParsed.CompPattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
 
-        ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
-            opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
+        auto& compPatternAlloc = compPattern ? compPattern->Alloc.Ref() : Alloc().Ref();
+        auto& compPatternEnv = compPattern ? compPattern->Env : typeEnv;
+
+        TComputationPatternOpts opts(compPatternAlloc, compPatternEnv, Context.ComputationFactory,
+            Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM, EGraphPerProcess::Multi,
+            ProgramParsed.StatsRegistry.Get());
+
+            SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
+            opts.SecureParamsProvider = SecureParamsProvider.get();
+
+        if (compPattern) {
+            if (!compPattern->Pattern) {
+                auto guard = compPattern->Env.BindAllocator();
+                compPattern->Pattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
+            }
+            ProgramParsed.CompPattern = compPattern->Pattern;
+            // clone pattern using alloc from current scope
+            ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
+                opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider, &Alloc().Ref()));
+        } else {
+            ProgramParsed.CompPattern = MakeComputationPattern(programExplorer, programRoot, ProgramParsed.EntryPoints, opts);
+            ProgramParsed.CompGraph = ProgramParsed.CompPattern->Clone(
+                opts.ToComputationOptions(*Context.RandomProvider, *Context.TimeProvider));
+        }
 
         TBindTerminator term(ProgramParsed.CompGraph->GetTerminator());
 
@@ -396,10 +414,11 @@ public:
     }
 
     void Prepare(const NDqProto::TDqTask& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
-        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider& parameterProvider) override
+        const IDqTaskRunnerExecutionContext& execCtx, const TDqTaskRunnerParameterProvider& parameterProvider,
+        const std::shared_ptr<TPatternWithEnv>& compPattern) override
     {
         TaskId = task.GetId();
-        BuildTask(task, parameterProvider);
+        BuildTask(task, parameterProvider, compPattern);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();

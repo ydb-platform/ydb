@@ -151,4 +151,6 @@ message TDqTask {
     repeated TTaskOutput Outputs = 6;
     google.protobuf.Any Meta = 7;
     bool CreateSuspended = 8;
+    string RateLimiter = 10;
+    string RateLimiterResource = 11;
 }

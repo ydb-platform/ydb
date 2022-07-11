@@ -81,6 +81,8 @@ message ExecuteGraphRequest {
     map<string, string> SecureParams = 9;
     bool Discard = 12;
     map<string, string> GraphParams = 13;
+    string RateLimiter = 14;
+    string RateLimiterResource = 15;
 }
 
 message ExecuteGraphResponse {

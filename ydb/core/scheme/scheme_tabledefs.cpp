@@ -19,7 +19,7 @@ bool TTableRange::IsFullRange(ui32 columnsCount) const {
         return false;
     }
 
-    if (!From.size() == columnsCount) {
+    if (From.size() != columnsCount) {
         return false;
     }
 

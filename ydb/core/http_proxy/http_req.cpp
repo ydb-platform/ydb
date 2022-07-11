@@ -1,33 +1,30 @@
 #include "events.h"
 #include "http_req.h"
 #include "auth_factory.h"
+#include "json_proto_conversion.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
-#include <ydb/core/grpc_caching/cached_grpc_request_actor.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
-#include <ydb/core/protos/serverless_proxy_config.pb.h>
-#include <ydb/services/datastreams/shard_iterator.h>
-#include <ydb/services/datastreams/next_token.h>
-#include <ydb/services/datastreams/datastreams_proxy.h>
-
-#include <ydb/core/viewer/json/json.h>
-#include <ydb/core/base/appdata.h>
-
-#include <ydb/library/naming_conventions/naming_conventions.h>
-#include <ydb/library/yql/public/issue/yql_issue_message.h>
-
-#include <ydb/library/http_proxy/authorization/auth_helpers.h>
-#include <ydb/library/http_proxy/error/error.h>
-#include <ydb/services/lib/sharding/sharding.h>
+#include <library/cpp/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/parsed_request.h>
 #include <library/cpp/http/server/response.h>
-#include <library/cpp/json/json_reader.h>
-#include <library/cpp/json/json_writer.h>
-#include <library/cpp/protobuf/json/json_output_create.h>
-#include <library/cpp/protobuf/json/proto2json.h>
-#include <library/cpp/protobuf/json/proto2json_printer.h>
+
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/grpc_caching/cached_grpc_request_actor.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/serverless_proxy_config.pb.h>
+#include <ydb/core/viewer/json/json.h>
+
+#include <ydb/library/http_proxy/authorization/auth_helpers.h>
+#include <ydb/library/http_proxy/error/error.h>
+#include <ydb/library/yql/public/issue/yql_issue_message.h>
+
+#include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
+
+#include <ydb/services/datastreams/datastreams_proxy.h>
+#include <ydb/services/datastreams/next_token.h>
+#include <ydb/services/datastreams/shard_iterator.h>
+#include <ydb/services/lib/sharding/sharding.h>
 
 #include <library/cpp/uri/uri.h>
 
@@ -37,6 +34,7 @@
 #include <util/string/cast.h>
 #include <util/string/join.h>
 #include <util/string/vector.h>
+
 
 namespace NKikimr::NHttpProxy {
 
@@ -176,268 +174,8 @@ namespace NKikimr::NHttpProxy {
     constexpr TStringBuf REQUEST_DATE_HEADER = "x-amz-date";
     constexpr TStringBuf REQUEST_FORWARDED_FOR = "x-forwarded-for";
     constexpr TStringBuf REQUEST_TARGET_HEADER = "x-amz-target";
+    constexpr TStringBuf REQUEST_CONTENT_TYPE_HEADER = "content-type";
     static const TString CREDENTIAL_PARAM = "credential";
-
-    namespace {
-        class TYdsProtoToJsonPrinter : public NProtobufJson::TProto2JsonPrinter {
-        public:
-            TYdsProtoToJsonPrinter(const google::protobuf::Reflection* reflection, const NProtobufJson::TProto2JsonConfig& config)
-                : NProtobufJson::TProto2JsonPrinter(config)
-                , ProtoReflection(reflection)
-            {}
-
-        protected:
-            template <bool InMapContext>
-            void PrintDoubleValue(const TStringBuf& key, double value,
-                                  NProtobufJson::IJsonOutput& json) {
-                if constexpr(InMapContext) {
-                    json.WriteKey(key).Write(value);
-                } else {
-                    json.Write(value);
-                }
-            }
-
-            void PrintField(const NProtoBuf::Message& proto, const NProtoBuf::FieldDescriptor& field,
-                            NProtobufJson::IJsonOutput& json, TStringBuf key = {}) override
-            {
-                if (field.options().HasExtension(FieldTransformer)) {
-                    if (field.options().GetExtension(FieldTransformer) == TRANSFORM_BASE64) {
-                        Y_ENSURE(field.cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_STRING,
-                                 "Base64 is only supported for strings");
-
-                        if (!key) {
-                            key = MakeKey(field);
-                        }
-
-                        if (field.is_repeated()) {
-                            for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                                PrintStringValue<false>(field, TStringBuf(), Base64Encode(proto.GetReflection()->GetRepeatedString(proto, &field, i)), json);
-                            }
-                        } else {
-                            PrintStringValue<true>(field, key, Base64Encode(proto.GetReflection()->GetString(proto, &field)), json);
-                        }
-                        return;
-                    }
-
-                    if (field.options().GetExtension(FieldTransformer) == TRANSFORM_DOUBLE_S_TO_INT_MS) {
-                        Y_ENSURE(field.cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_INT64,
-                                 "Double S to Int MS is only supported for int64 timestamps");
-
-                        if (!key) {
-                            key = MakeKey(field);
-                        }
-
-                        if (field.is_repeated()) {
-                            for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                                double value = proto.GetReflection()->GetRepeatedInt64(proto, &field, i) / 1000.0;
-                                PrintDoubleValue<false>(TStringBuf(), value, json);
-                            }
-                        } else {
-                            double value = proto.GetReflection()->GetInt64(proto, &field) / 1000.0;
-                            PrintDoubleValue<true>(key, value, json);
-                        }
-                        return;
-                    }
-
-                    if (field.options().GetExtension(FieldTransformer) == TRANSFORM_EMPTY_TO_NOTHING) {
-                        Y_ENSURE(field.cpp_type() == google::protobuf::FieldDescriptor::CPPTYPE_STRING,
-                                 "Empty to nothing is only supported for strings");
-
-                        if (!key) {
-                            key = MakeKey(field);
-                        }
-
-                        if (field.is_repeated()) {
-                            for (int i = 0, endI = ProtoReflection->FieldSize(proto, &field); i < endI; ++i) {
-                                auto value = proto.GetReflection()->GetRepeatedString(proto, &field, i);
-                                if (!value.empty()) {
-                                    PrintStringValue<false>(field, TStringBuf(), proto.GetReflection()->GetRepeatedString(proto, &field, i), json);
-                                }
-                            }
-                        } else {
-                            auto value = proto.GetReflection()->GetString(proto, &field);
-                            if (!value.empty()) {
-                                PrintStringValue<true>(field, key, proto.GetReflection()->GetString(proto, &field), json);
-                            }
-                        }
-                        return;
-                    }
-                } else {
-                    return NProtobufJson::TProto2JsonPrinter::PrintField(proto, field, json, key);
-                }
-            }
-
-        private:
-            const google::protobuf::Reflection* ProtoReflection = nullptr;
-        };
-
-        TString ProxyFieldNameConverter(const google::protobuf::FieldDescriptor& descriptor) {
-            return NNaming::SnakeToCamelCase(descriptor.name());
-        }
-
-        void ProtoToJson(const Message& resp, NJson::TJsonValue& value) {
-            auto config = NProtobufJson::TProto2JsonConfig()
-                    .SetFormatOutput(false)
-                    .SetMissingSingleKeyMode(NProtobufJson::TProto2JsonConfig::MissingKeyDefault)
-                    .SetNameGenerator(ProxyFieldNameConverter)
-                    .SetEnumMode(NProtobufJson::TProto2JsonConfig::EnumName);
-            TYdsProtoToJsonPrinter printer(resp.GetReflection(), config);
-            printer.Print(resp, *NProtobufJson::CreateJsonMapOutput(value));
-        }
-
-        void JsonToProto(Message* message, const NJson::TJsonValue& jsonValue, ui32 depth = 0) {
-            Y_ENSURE(depth < 100, "Too deep map");
-            Y_ENSURE(jsonValue.IsMap(), "Top level of json value is not a map");
-            auto* desc = message->GetDescriptor();
-            auto* reflection = message->GetReflection();
-            for (const auto& [key, value] : jsonValue.GetMap()) {
-                auto* fieldDescriptor = desc->FindFieldByName(NNaming::CamelToSnakeCase(key));
-                Y_ENSURE(fieldDescriptor, "Unexpected json key: " + key);
-                auto transformer = Ydb::DataStreams::V1::TRANSFORM_NONE;
-                if (fieldDescriptor->options().HasExtension(FieldTransformer)) {
-                    transformer = fieldDescriptor->options().GetExtension(FieldTransformer);
-                }
-
-                if (value.IsArray()) {
-                    Y_ENSURE(fieldDescriptor->is_repeated());
-                    for (auto& elem : value.GetArray()) {
-                        switch (transformer) {
-                            case Ydb::DataStreams::V1::TRANSFORM_BASE64: {
-                                Y_ENSURE(fieldDescriptor->cpp_type() ==
-                                         google::protobuf::FieldDescriptor::CPPTYPE_STRING,
-                                         "Base64 transformer is only applicable to strings");
-                                reflection->AddString(message, fieldDescriptor, Base64Decode(value.GetString()));
-                                break;
-                            }
-                            case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
-                                reflection->SetInt64(message, fieldDescriptor, value.GetDouble() * 1000);
-                                break;
-                            }
-                            case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
-                            case Ydb::DataStreams::V1::TRANSFORM_NONE: {
-                                switch (fieldDescriptor->cpp_type()) {
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
-                                        reflection->AddInt32(message, fieldDescriptor, value.GetInteger());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
-                                        reflection->AddInt64(message, fieldDescriptor, value.GetInteger());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
-                                        reflection->AddUInt32(message, fieldDescriptor, value.GetUInteger());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
-                                        reflection->AddUInt64(message, fieldDescriptor, value.GetUInteger());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
-                                        reflection->AddDouble(message, fieldDescriptor, value.GetDouble());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT:
-                                        reflection->AddFloat(message, fieldDescriptor, value.GetDouble());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
-                                        reflection->AddFloat(message, fieldDescriptor, value.GetBoolean());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_ENUM:
-                                        {
-                                            const EnumValueDescriptor* enumValueDescriptor = fieldDescriptor->enum_type()->FindValueByName(value.GetString());
-                                            i32 number{0};
-                                            if (enumValueDescriptor == nullptr && TryFromString(value.GetString(), number)) {
-                                                enumValueDescriptor = fieldDescriptor->enum_type()->FindValueByNumber(number);
-                                            }
-                                            if (enumValueDescriptor != nullptr) {
-                                                reflection->AddEnum(message, fieldDescriptor, enumValueDescriptor);
-                                            }
-                                        }
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
-                                        reflection->AddString(message, fieldDescriptor, value.GetString());
-                                        break;
-                                    case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE: {
-                                        Message *msg = reflection->AddMessage(message, fieldDescriptor);
-                                        JsonToProto(msg, elem, depth + 1);
-                                        break;
-                                    }
-                                    default:
-                                        Y_ENSURE(false, "Unexpected type");
-                                }
-                                break;
-                            }
-                            default:
-                                Y_ENSURE(false, "Unknown transformer type");
-                        }
-                    }
-                } else {
-                    switch (transformer) {
-                        case Ydb::DataStreams::V1::TRANSFORM_BASE64: {
-                            Y_ENSURE(fieldDescriptor->cpp_type() ==
-                                     google::protobuf::FieldDescriptor::CPPTYPE_STRING,
-                                     "Base64 transformer is applicable only to strings");
-                            reflection->SetString(message, fieldDescriptor, Base64Decode(value.GetString()));
-                            break;
-                        }
-                        case Ydb::DataStreams::V1::TRANSFORM_DOUBLE_S_TO_INT_MS: {
-                            reflection->SetInt64(message, fieldDescriptor, value.GetDouble() * 1000);
-                            break;
-                        }
-                        case Ydb::DataStreams::V1::TRANSFORM_EMPTY_TO_NOTHING:
-                        case Ydb::DataStreams::V1::TRANSFORM_NONE: {
-                            switch (fieldDescriptor->cpp_type()) {
-                                case google::protobuf::FieldDescriptor::CPPTYPE_INT32:
-                                    reflection->SetInt32(message, fieldDescriptor, value.GetInteger());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_INT64:
-                                    reflection->SetInt64(message, fieldDescriptor, value.GetInteger());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_UINT32:
-                                    reflection->SetUInt32(message, fieldDescriptor, value.GetUInteger());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_UINT64:
-                                    reflection->SetUInt64(message, fieldDescriptor, value.GetUInteger());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_DOUBLE:
-                                    reflection->SetDouble(message, fieldDescriptor, value.GetDouble());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_FLOAT:
-                                    reflection->SetFloat(message, fieldDescriptor, value.GetDouble());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_BOOL:
-                                    reflection->SetBool(message, fieldDescriptor, value.GetBoolean());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_ENUM:
-                                    {
-                                        const EnumValueDescriptor* enumValueDescriptor = fieldDescriptor->enum_type()->FindValueByName(value.GetString());
-                                        i32 number{0};
-                                        if (enumValueDescriptor == nullptr && TryFromString(value.GetString(), number)) {
-                                            enumValueDescriptor = fieldDescriptor->enum_type()->FindValueByNumber(number);
-                                        }
-                                        if (enumValueDescriptor != nullptr) {
-                                            reflection->SetEnum(message, fieldDescriptor, enumValueDescriptor);
-                                        }
-                                    }
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_STRING:
-                                    reflection->SetString(message, fieldDescriptor, value.GetString());
-                                    break;
-                                case google::protobuf::FieldDescriptor::CPPTYPE_MESSAGE: {
-                                    auto *msg = reflection->MutableMessage(message, fieldDescriptor);
-                                    JsonToProto(msg, value, depth + 1);
-                                    break;
-                                }
-                                default:
-                                    Y_ENSURE(false, "Unexpected type");
-                            }
-                            break;
-                        }
-                        default:
-                            Y_ENSURE(false, "Unexpected transformer");
-                    }
-                }
-            }
-        }
-
-    }
-
-
 
     template<class TProtoRequest>
     void FillInputCustomMetrics(const TProtoRequest& request, const THttpRequestContext& httpContext, const TActorContext& ctx) {
@@ -810,10 +548,8 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
 
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
-                // convert grpc result to protobuf
-                // return http response;
                 if (ev->Get()->Status->IsSuccess()) {
-                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.ResponseBody);
+                    ProtoToJson(*ev->Get()->Message, HttpContext.ResponseData.Body);
                     FillOutputCustomMetrics<TProtoResult>(
                         *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())), HttpContext, ctx);
                     ReportLatencyCounters(ctx);
@@ -856,7 +592,7 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    JsonToProto(&Request, HttpContext.RequestBody);
+                    JsonToProto(HttpContext.RequestData.Body, &Request);
                 } catch (std::exception& e) {
                     LOG_SP_WARN_S(ctx, NKikimrServices::HTTP_PROXY,
                                   "got new request with incorrect json from [" << SourceAddress << "] " <<
@@ -912,10 +648,6 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             TActorId AuthActor;
         };
 
-
-
-
-
     private:
         TString Method;
 
@@ -965,12 +697,15 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
         #undef DECLARE_PROCESSOR
     }
 
-    bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context, THolder<NKikimr::NSQS::TAwsRequestSignV4> signature, const TActorContext& ctx) {
+    bool THttpRequestProcessors::Execute(const TString& name, THttpRequestContext&& context,
+                                         THolder<NKikimr::NSQS::TAwsRequestSignV4> signature,
+                                         const TActorContext& ctx) {
         // TODO: To be removed by CLOUD-79086
         if (name == "RegisterStreamConsumer" ||
             name == "DeregisterStreamConsumer" ||
             name == "ListStreamConsumers") {
-            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, TStringBuilder() << "Unsupported method name " << name, ctx);
+            context.SendBadRequest(NYdb::EStatus::BAD_REQUEST,
+                                   TStringBuilder() << "Unsupported method name " << name, ctx);
             return false;
         }
 
@@ -978,7 +713,8 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
             proc->second->Execute(std::move(context), std::move(signature), ctx);
             return true;
         }
-        context.SendBadRequest(NYdb::EStatus::BAD_REQUEST, TStringBuilder() << "Unknown method name " << name, ctx);
+        context.SendBadRequest(NYdb::EStatus::BAD_REQUEST,
+                               TStringBuilder() << "Unknown method name " << name, ctx);
         return false;
     }
 
@@ -991,8 +727,61 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
         }
     }
 
-    void THttpRequestContext::ParseHeaders(TStringBuf str)
-    {
+    THttpRequestContext::THttpRequestContext(
+        const NKikimrConfig::TServerlessProxyConfig& config,
+        NHttp::THttpIncomingRequestPtr request,
+        NActors::TActorId sender,
+        NYdb::TDriver* driver,
+        std::shared_ptr<NYdb::ICredentialsProvider> serviceAccountCredentialsProvider)
+        : ServiceConfig(config)
+        , Request(request)
+        , Sender(sender)
+        , Driver(driver)
+        , ServiceAccountCredentialsProvider(serviceAccountCredentialsProvider) {
+        char address[INET6_ADDRSTRLEN];
+        if (inet_ntop(AF_INET6, &(Request->Address), address, INET6_ADDRSTRLEN) == nullptr) {
+            SourceAddress = "unknown";
+        } else {
+            SourceAddress = address;
+        }
+
+        DatabaseName = Request->URL;
+        if (DatabaseName == "/") {
+           DatabaseName = "";
+        }
+    }
+
+    void THttpRequestContext::SendBadRequest(NYdb::EStatus status, const TString& errorText,
+                                             const TActorContext& ctx) {
+        ResponseData.Body.SetType(NJson::JSON_MAP);
+        ResponseData.Body["message"] = errorText;
+        ResponseData.Body["__type"] = StatusToErrorType(status);
+
+        LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY,
+                      "reply with status: " << status << " message: " << errorText);
+        auto res = Request->CreateResponse(
+                TStringBuilder() << (int)StatusToHttpCode(status),
+                StatusToErrorType(status),
+                strByMime(ContentType),
+                ResponseData.DumpBody(ContentType)
+            );
+        ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
+    }
+
+    void THttpRequestContext::DoReply(const TActorContext& ctx) {
+        if (ResponseData.Status == NYdb::EStatus::SUCCESS) {
+            LOG_SP_INFO_S(ctx, NKikimrServices::HTTP_PROXY, "reply ok");
+            auto res = Request->CreateResponseOK(
+                    ResponseData.DumpBody(ContentType),
+                    strByMime(ContentType)
+                );
+            ctx.Send(Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(res));
+        } else {
+            SendBadRequest(ResponseData.Status, ResponseData.ErrorText, ctx);
+        }
+    }
+
+    void THttpRequestContext::ParseHeaders(TStringBuf str) {
         TString sourceReqId;
         NHttp::THeaders headers(str);
         for (const auto& header : headers.Headers) {
@@ -1011,11 +800,34 @@ BuildLabels("", httpContext, "stream.put_records.failed_records_per_second")
                 TVector<TString> parts = SplitString(requestTarget, ".");
                 ApiVersion = parts[0];
                 MethodName = parts[1];
+            } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_CONTENT_TYPE_HEADER)) {
+                ContentType = mimeByStr(header.second);
             } else if (AsciiEqualsIgnoreCase(header.first, REQUEST_DATE_HEADER)) {
             }
         }
         RequestId = GenerateRequestId(sourceReqId);
     }
 
+    std::optional<NJson::TJsonValue> THttpRequestData::Parse(MimeTypes contentType, const TStringBuf& body) {
+        auto requestJsonStr = body;
 
+        switch (contentType) {
+        case MIME_JSON: {
+            NJson::TJsonValue requestBody;
+            auto fromJson = NJson::ReadJsonTree(requestJsonStr, &requestBody);
+            return fromJson ? std::optional(requestBody) : std::nullopt;
+        }
+        default:
+            return std::nullopt;
+        }
+    }
+
+    TString THttpResponseData::DumpBody(MimeTypes contentType) {
+        switch (contentType) {
+        case MIME_JSON:
+        default: {
+            return NJson::WriteJson(Body, false);
+        }
+        }
+    }
 } // namespace NKikimr::NHttpProxy

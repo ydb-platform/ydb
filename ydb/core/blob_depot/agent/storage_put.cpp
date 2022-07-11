@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -24,7 +25,7 @@ namespace NKikimr::NBlobDepot {
                 auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
 
                 // first step -- check blocks
-                const auto status = Agent.CheckBlockForTablet(msg.Id.TabletID(), msg.Id.Generation(), this);
+                const auto status = Agent.BlocksManager.CheckBlockForTablet(msg.Id.TabletID(), msg.Id.Generation(), this, nullptr);
                 if (status == NKikimrProto::OK) {
                     IssuePuts();
                 } else if (status != NKikimrProto::UNKNOWN) {

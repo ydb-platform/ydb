@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blob_mapping_cache.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -29,7 +30,8 @@ namespace NKikimr::NBlobDepot {
                 for (ui32 i = 0; i < msg.QuerySize; ++i) {
                     auto& query = msg.Queries[i];
                     TString blobId(reinterpret_cast<const char*>(query.Id.GetRaw()), 3 * sizeof(ui64));
-                    if (const TValueChain *value = Agent.ResolveKey(blobId, this, std::make_shared<TResolveKeyContext>(i))) {
+                    if (const TValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
+                            std::make_shared<TResolveKeyContext>(i))) {
                         ProcessSingleResult(i, value);
                     }
 

@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -153,7 +154,7 @@ namespace NKikimr::NBlobDepot {
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
 
         auto& msg = ev->Get()->Record;
-        OnBlockedTablets(msg.GetBlockedTablets());
+        BlocksManager.OnBlockedTablets(msg.GetBlockedTablets());
 
         for (const auto& item : msg.GetInvalidatedSteps()) {
             const ui8 channel = item.GetChannel();

@@ -81,16 +81,8 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeId;
 
     public:
-        TBlobDepotAgent(ui32 virtualGroupId)
-            : TActor(&TThis::StateFunc)
-            , TRequestSender(*this)
-            , VirtualGroupId(virtualGroupId)
-            , AgentInstanceId(RandomNumber<ui64>())
-            , BlocksManager(CreateBlocksManager())
-            , BlobMappingCache(CreateBlobMappingCache())
-        {
-            Y_VERIFY(TGroupID(VirtualGroupId).ConfigurationType() == EGroupConfigurationType::Virtual);
-        }
+        TBlobDepotAgent(ui32 virtualGroupId);
+        ~TBlobDepotAgent();
 
 #define FORWARD_STORAGE_PROXY(TYPE) fFunc(TEvBlobStorage::TYPE, HandleStorageProxy);
         STRICT_STFUNC(StateFunc,
@@ -292,19 +284,8 @@ namespace NKikimr::NBlobDepot {
         // Blocks
 
         class TBlocksManager;
-        using TBlocksManagerPtr = std::unique_ptr<TBlocksManager, std::function<void(TBlocksManager*)>>;
-        TBlocksManagerPtr BlocksManager;
-
-        TBlocksManagerPtr CreateBlocksManager();
-
-        NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, ui32 generation, TQuery *query,
-            ui32 *blockedGeneration = nullptr);
-
-        ui32 GetBlockForTablet(ui64 tabletId);
-
-        void SetBlockForTablet(ui64 tabletId, ui32 blockedGeneration, TMonotonic issueTimestamp, TDuration timeToLive);
-
-        void OnBlockedTablets(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TEvPushNotify::TBlockedTablet>& tablets);
+        std::unique_ptr<TBlocksManager> BlocksManagerPtr;
+        TBlocksManager& BlocksManager;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Reading
@@ -320,13 +301,8 @@ namespace NKikimr::NBlobDepot {
         // Blob mapping cache
 
         class TBlobMappingCache;
-        using TBlobMappingCachePtr = std::unique_ptr<TBlobMappingCache, std::function<void(TBlobMappingCache*)>>;
-        TBlobMappingCachePtr BlobMappingCache;
-
-        TBlobMappingCachePtr CreateBlobMappingCache();
-
-        void HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg);
-        const TValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
+        std::unique_ptr<TBlobMappingCache> BlobMappingCachePtr;
+        TBlobMappingCache& BlobMappingCache;
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Status flags

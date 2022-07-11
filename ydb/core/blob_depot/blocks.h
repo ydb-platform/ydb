@@ -18,7 +18,13 @@ namespace NKikimr::NBlobDepot {
             };
 
             ui32 BlockedGeneration = 0;
+            ui64 IssuerGuid = 0;
             THashMap<ui32, TPerAgentInfo> PerAgentInfo;
+
+            bool CanSetNewBlock(ui32 blockedGeneration, ui64 issuerGuid) const {
+                return BlockedGeneration < blockedGeneration || (BlockedGeneration == blockedGeneration &&
+                    (IssuerGuid == issuerGuid && IssuerGuid && issuerGuid));
+            }
         };
 
         TBlobDepot* const Self;
@@ -33,8 +39,9 @@ namespace NKikimr::NBlobDepot {
             : Self(self)
         {}
 
-        void AddBlockOnLoad(ui64 tabletId, ui32 generation);
-        void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, std::unique_ptr<IEventHandle> response);
+        void AddBlockOnLoad(ui64 tabletId, ui32 generation, ui64 issuerGuid);
+        void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
+            std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);
         void Handle(TEvBlobDepot::TEvQueryBlocks::TPtr ev);
 

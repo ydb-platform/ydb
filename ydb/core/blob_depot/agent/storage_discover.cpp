@@ -1,4 +1,6 @@
 #include "agent_impl.h"
+#include "blocks.h"
+#include "blob_mapping_cache.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -29,7 +31,7 @@ namespace NKikimr::NBlobDepot {
                 IssueResolve();
 
                 if (msg.DiscoverBlockedGeneration) {
-                    const auto status = Agent.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
+                    const auto status = Agent.BlocksManager.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
                     if (status == NKikimrProto::OK) {
                         DoneWithBlockedGeneration = true;
                     } else if (status != NKikimrProto::UNKNOWN) {
@@ -77,7 +79,7 @@ namespace NKikimr::NBlobDepot {
                     return EndWithError(NKikimrProto::ERROR, "BlobDepot tablet disconnected");
                 }
 
-                const auto status = Agent.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
+                const auto status = Agent.BlocksManager.CheckBlockForTablet(TabletId, Max<ui32>(), this, &BlockedGeneration);
                 if (status == NKikimrProto::OK) {
                     DoneWithBlockedGeneration = true;
                     CheckIfDone();
@@ -92,7 +94,7 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Msg, msg.Record));
 
-                Agent.HandleResolveResult(msg.Record);
+                Agent.BlobMappingCache.HandleResolveResult(msg.Record);
 
                 const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
                 if (status != NKikimrProto::OK && status != NKikimrProto::OVERRUN) {
@@ -130,6 +132,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, QueryId), (Status, status));
+
                 if (status == NKikimrProto::OK) {
                     Buffer = std::move(dataOrErrorReason);
                     DoneWithData = true;

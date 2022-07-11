@@ -7,16 +7,18 @@ namespace NKikimr::NBlobDepot {
         const ui64 TabletId;
         const ui32 BlockedGeneration;
         const ui32 NodeId;
+        const ui64 IssuerGuid;
         const TInstant Timestamp;
         std::unique_ptr<IEventHandle> Response;
 
     public:
-        TTxUpdateBlock(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, TInstant timestamp,
-                std::unique_ptr<IEventHandle> response)
+        TTxUpdateBlock(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
+                TInstant timestamp, std::unique_ptr<IEventHandle> response)
             : TTransactionBase(self)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
             , NodeId(nodeId)
+            , IssuerGuid(issuerGuid)
             , Timestamp(timestamp)
             , Response(std::move(response))
         {}
@@ -29,11 +31,13 @@ namespace NKikimr::NBlobDepot {
                 // update block value in memory
                 auto& block = Self->BlocksManager->Blocks[TabletId];
                 block.BlockedGeneration = BlockedGeneration;
+                block.IssuerGuid = IssuerGuid;
 
                 // and persist it
                 NIceDb::TNiceDb db(txc.DB);
                 db.Table<Schema::Blocks>().Key(TabletId).Update(
                     NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(BlockedGeneration),
+                    NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(IssuerGuid),
                     NIceDb::TUpdate<Schema::Blocks::IssuedByNode>(NodeId),
                     NIceDb::TUpdate<Schema::Blocks::IssueTimestamp>(Timestamp)
                 );
@@ -45,7 +49,7 @@ namespace NKikimr::NBlobDepot {
             if (Response->Get<TEvBlobDepot::TEvBlockResult>()->Record.GetStatus() != NKikimrProto::OK) {
                 TActivationContext::Send(Response.release());
             } else {
-                Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, std::move(Response));
+                Self->BlocksManager->OnBlockCommitted(TabletId, BlockedGeneration, NodeId, IssuerGuid, std::move(Response));
             }
         }
     };
@@ -55,19 +59,20 @@ namespace NKikimr::NBlobDepot {
         const ui64 TabletId;
         const ui32 BlockedGeneration;
         const ui32 NodeId;
+        const ui64 IssuerGuid;
         std::unique_ptr<IEventHandle> Response;
         ui32 BlocksPending = 0;
         ui32 RetryCount = 0;
-        const ui64 IssuerGuid = RandomNumber<ui64>() | 1;
         THashSet<ui32> NodesWaitingForPushResult;
 
     public:
-        TBlockProcessorActor(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId,
+        TBlockProcessorActor(TBlobDepot *self, ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
                 std::unique_ptr<IEventHandle> response)
             : Self(self)
             , TabletId(tabletId)
             , BlockedGeneration(blockedGeneration)
             , NodeId(nodeId)
+            , IssuerGuid(issuerGuid)
             , Response(std::move(response))
         {}
 
@@ -181,12 +186,15 @@ namespace NKikimr::NBlobDepot {
         )
     };
 
-    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 generation) {
-        Blocks[tabletId].BlockedGeneration = generation;
+    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 generation, ui64 issuerGuid) {
+        auto& block = Blocks[tabletId];
+        block.BlockedGeneration = generation;
+        block.IssuerGuid = issuerGuid;
     }
 
-    void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, std::unique_ptr<IEventHandle> response) {
-        Self->RegisterWithSameMailbox(new TBlockProcessorActor(Self, tabletId, blockedGeneration, nodeId,
+    void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
+            std::unique_ptr<IEventHandle> response) {
+        Self->RegisterWithSameMailbox(new TBlockProcessorActor(Self, tabletId, blockedGeneration, nodeId, issuerGuid,
             std::move(response)));
     }
 
@@ -201,12 +209,14 @@ namespace NKikimr::NBlobDepot {
         } else {
             const ui64 tabletId = record.GetTabletId();
             const ui32 blockedGeneration = record.GetBlockedGeneration();
-            if (const auto it = Blocks.find(tabletId); it != Blocks.end() && blockedGeneration <= it->second.BlockedGeneration) {
-                responseRecord->SetStatus(NKikimrProto::ALREADY);
-            } else {
+            const ui64 issuerGuid = record.GetIssuerGuid();
+            const auto it = Blocks.find(tabletId);
+            if (it == Blocks.end() || it->second.CanSetNewBlock(blockedGeneration, issuerGuid)) {
                 TAgent& agent = Self->GetAgent(ev->Recipient);
                 Self->Execute(std::make_unique<TTxUpdateBlock>(Self, tabletId, blockedGeneration,
-                    agent.ConnectedNodeId, TActivationContext::Now(), std::move(response)));
+                    agent.ConnectedNodeId, record.GetIssuerGuid(), TActivationContext::Now(), std::move(response)));
+            } else {
+                responseRecord->SetStatus(NKikimrProto::ALREADY);
             }
         }
 

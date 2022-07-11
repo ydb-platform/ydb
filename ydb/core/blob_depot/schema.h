@@ -23,13 +23,15 @@ namespace NKikimr::NBlobDepot {
         struct Blocks : Table<2> {
             struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
             struct BlockedGeneration : Column<2, NScheme::NTypeIds::Uint32> {};
-            struct IssueTimestamp : Column<3, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
-            struct IssuedByNode : Column<4, NScheme::NTypeIds::Uint32> {};
+            struct IssuerGuid : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct IssueTimestamp : Column<4, NScheme::NTypeIds::Uint64> { using Type = TInstant; };
+            struct IssuedByNode : Column<5, NScheme::NTypeIds::Uint32> {};
 
             using TKey = TableKey<TabletId>;
             using TColumns = TableColumns<
                 TabletId,
                 BlockedGeneration,
+                IssuerGuid,
                 IssueTimestamp,
                 IssuedByNode
             >;

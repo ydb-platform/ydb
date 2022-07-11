@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -20,16 +21,18 @@ namespace NKikimr::NBlobDepot {
                 auto& msg = *Event->Get<TEvBlobStorage::TEvBlock>();
 
                 // lookup existing blocks to try fail-fast
-                const ui32 blockedGeneration = Agent.GetBlockForTablet(msg.TabletId);
-                if (msg.Generation <= blockedGeneration) {
+                const auto& [blockedGeneration, issuerGuid] = Agent.BlocksManager.GetBlockForTablet(msg.TabletId);
+                if (msg.Generation < blockedGeneration || (msg.Generation == blockedGeneration && (
+                        msg.IssuerGuid != issuerGuid || !msg.IssuerGuid || !issuerGuid))) {
                     // we don't consider ExpirationTimestamp here because blocked generation may only increase
-                    return EndWithError(NKikimrProto::RACE, "block race detected");
+                    return EndWithError(NKikimrProto::ALREADY, "block race detected");
                 }
 
                 // issue request to the tablet
                 NKikimrBlobDepot::TEvBlock block;
                 block.SetTabletId(msg.TabletId);
                 block.SetBlockedGeneration(msg.Generation);
+                block.SetIssuerGuid(msg.IssuerGuid);
                 Agent.Issue(std::move(block), this, std::make_shared<TBlockContext>(TActivationContext::Monotonic()));
             }
 
@@ -52,7 +55,7 @@ namespace NKikimr::NBlobDepot {
                     // update blocks cache
                     auto& blockContext = context->Obtain<TBlockContext>();
                     auto& query = *Event->Get<TEvBlobStorage::TEvBlock>();
-                    Agent.SetBlockForTablet(query.TabletId, query.Generation, blockContext.Timestamp,
+                    Agent.BlocksManager.SetBlockForTablet(query.TabletId, query.Generation, blockContext.Timestamp,
                         TDuration::MilliSeconds(msg.Record.GetTimeToLiveMs()));
                     EndWithSuccess(std::make_unique<TEvBlobStorage::TEvBlockResult>(NKikimrProto::OK));
                 }

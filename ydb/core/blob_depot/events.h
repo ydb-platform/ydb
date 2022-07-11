@@ -59,7 +59,7 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvAllocateIdsResult, ChannelKind, Generation);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotify);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotifyResult);
-        BLOBDEPOT_EVENT_PB(EvBlock, TabletId, BlockedGeneration);
+        BLOBDEPOT_EVENT_PB(EvBlock, TabletId, BlockedGeneration, IssuerGuid);
         BLOBDEPOT_EVENT_PB(EvBlockResult, Status, ErrorReason, TimeToLiveMs);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvQueryBlocks);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvQueryBlocksResult);

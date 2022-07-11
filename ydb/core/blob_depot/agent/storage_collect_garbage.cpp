@@ -1,4 +1,5 @@
 #include "agent_impl.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -22,7 +23,7 @@ namespace NKikimr::NBlobDepot {
                 NumKeep = msg.Keep ? msg.Keep->size() : 0;
                 NumDoNotKeep = msg.DoNotKeep ? msg.DoNotKeep->size() : 0;
 
-                const auto status = Agent.CheckBlockForTablet(msg.TabletId, msg.RecordGeneration, this);
+                const auto status = Agent.BlocksManager.CheckBlockForTablet(msg.TabletId, msg.RecordGeneration, this, nullptr);
                 if (status == NKikimrProto::OK) {
                     IssueCollectGarbage();
                 } else if (status != NKikimrProto::UNKNOWN) {

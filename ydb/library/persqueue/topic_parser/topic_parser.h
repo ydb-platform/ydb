@@ -381,6 +381,7 @@ public:
 };
 
 TString NormalizeFullPath(const TString& fullPath);
+TString StripLeadSlash(const TString& path);
 
 
 } // namespace NPersQueue

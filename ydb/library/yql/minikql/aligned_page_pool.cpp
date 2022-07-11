@@ -109,10 +109,10 @@ private:
 
 } // unnamed
 
-TAlignedPagePoolCounters::TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) {
+TAlignedPagePoolCounters::TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot, const TString& name) {
     if (!countersRoot || name.empty())
         return;
-    NMonitoring::TDynamicCounterPtr subGroup = countersRoot->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
+    ::NMonitoring::TDynamicCounterPtr subGroup = countersRoot->GetSubgroup("counters", "utils")->GetSubgroup("subsystem", "mkqlalloc");
     TotalBytesAllocatedCntr = subGroup->GetCounter(name + "/TotalBytesAllocated");
     AllocationsCntr = subGroup->GetCounter(name + "/Allocations", true);
     PoolsCntr = subGroup->GetCounter(name + "/Pools", true);

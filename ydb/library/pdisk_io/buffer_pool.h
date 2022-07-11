@@ -15,9 +15,9 @@ template<typename TObject, ui32 Size>
 class TPool {
     TVector<TObject> Objects;
     NThreading::TObstructiveConsumerAuxQueue<TObject> InPoolObjects;
-    NMonitoring::TDynamicCounters::TCounterPtr TotalAllocatedObjects;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TotalAllocatedObjects;
     TAtomic FreeObjects;
-    NMonitoring::TDynamicCounters::TCounterPtr FreeObjectsMin;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FreeObjectsMin;
 
     public:
     TPool()
@@ -57,8 +57,8 @@ class TPool {
         }
     }
 
-    void InitializeMonitoring(NMonitoring::TDynamicCounters::TCounterPtr totalAllocatedObjects,
-            NMonitoring::TDynamicCounters::TCounterPtr freeObjectsMin) {
+    void InitializeMonitoring(::NMonitoring::TDynamicCounters::TCounterPtr totalAllocatedObjects,
+            ::NMonitoring::TDynamicCounters::TCounterPtr freeObjectsMin) {
         TotalAllocatedObjects = totalAllocatedObjects;
         FreeObjectsMin = freeObjectsMin;
         *FreeObjectsMin = AtomicGet(FreeObjects);

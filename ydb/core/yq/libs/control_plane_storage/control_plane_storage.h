@@ -41,7 +41,7 @@ NActors::IActor* CreateInMemoryControlPlaneStorageServiceActor(const NConfig::TC
 NActors::IActor* CreateYdbControlPlaneStorageServiceActor(
     const NConfig::TControlPlaneStorageConfig& config,
     const NConfig::TCommonConfig& common,
-    const NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory,
     const TString& tenantName);

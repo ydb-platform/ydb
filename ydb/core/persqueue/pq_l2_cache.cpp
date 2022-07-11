@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters& params, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters& params, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
 {
     return new TPersQueueCacheL2(params, counters);
 }

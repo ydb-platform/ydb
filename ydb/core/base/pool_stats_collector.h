@@ -12,6 +12,6 @@ namespace NKikimr {
 
     IActor* CreateStatsCollector(ui32 intervalSec,
                              const TActorSystemSetup& setup,
-                             NMonitoring::TDynamicCounterPtr counters);
+                             ::NMonitoring::TDynamicCounterPtr counters);
 
 }

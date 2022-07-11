@@ -18,7 +18,7 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
 }
 
 TGRpcMonitoringService::TGRpcMonitoringService(NActors::TActorSystem* system,
-                                               TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                                               TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                                                NActors::TActorId id)
      : ActorSystem_(system)
      , Counters_(counters)

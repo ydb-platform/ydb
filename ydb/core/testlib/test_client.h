@@ -235,7 +235,7 @@ namespace Tests {
 
         void SetupDefaultProfiles();
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
             return GRpcServerRootCounters;
         }
 
@@ -271,7 +271,7 @@ namespace Tests {
         const NBus::TBusServerSessionConfig BusServerSessionConfig; //BusServer hold const & on config
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         std::unique_ptr<NGrpc::TGRpcServer> GRpcServer;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> GRpcServerRootCounters;
         NYq::IYqSharedResources::TPtr YqSharedResources;
     };
 

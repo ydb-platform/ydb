@@ -175,8 +175,8 @@ using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
 using NTabletFlatExecutor::TTransactionContext;
-using NMonitoring::TDynamicCounterPtr;
-using NMonitoring::TDynamicCounters;
+using ::NMonitoring::TDynamicCounterPtr;
+using ::NMonitoring::TDynamicCounters;
 
 class TTenantSlotBroker : public TActor<TTenantSlotBroker>, public TTabletExecutedFlat {
 private:

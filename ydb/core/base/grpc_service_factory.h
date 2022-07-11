@@ -11,7 +11,7 @@ private:
     using TFactoryMethod = std::function<
             TServicePtr(
                 NActors::TActorSystem*,
-                TIntrusivePtr<NMonitoring::TDynamicCounters>,
+                TIntrusivePtr<::NMonitoring::TDynamicCounters>,
                 NActors::TActorId
             )
         >;
@@ -40,7 +40,7 @@ public:
     ) {
         auto method = [](
             NActors::TActorSystem* actorSystem,
-            TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
             NActors::TActorId grpcRequestProxyId
         ) {
             return TServicePtr(new TService(actorSystem, counters, grpcRequestProxyId));
@@ -56,7 +56,7 @@ public:
         const std::unordered_set<TString>& enabled,
         const std::unordered_set<TString>& disabled,
         NActors::TActorSystem* actorSystem,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         NActors::TActorId grpcRequestProxyId
     ) {
         std::vector<TServicePtr> services;

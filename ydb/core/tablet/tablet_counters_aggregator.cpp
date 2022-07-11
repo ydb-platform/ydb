@@ -59,7 +59,7 @@ const ui32 WAKEUP_TIMEOUT_SECONDS = 4;
 
 
 ////////////////////////////////////////////
-using TCountersVector = TVector<NMonitoring::TDynamicCounters::TCounterPtr>;
+using TCountersVector = TVector<::NMonitoring::TDynamicCounters::TCounterPtr>;
 
 struct THistogramCounter {
     TVector<TTabletPercentileCounter::TRangeDef> Ranges;
@@ -78,7 +78,7 @@ struct THistogramCounter {
     }
 
     void Clear() {
-        for (const NMonitoring::TDynamicCounters::TCounterPtr& cnt : Values) {
+        for (const ::NMonitoring::TDynamicCounters::TCounterPtr& cnt : Values) {
             *cnt = 0;
         }
 
@@ -98,7 +98,7 @@ using THistogramVector = TVector<THolder<THistogramCounter>>;
 class TAggregatedSimpleCounters {
 public:
     //
-    TAggregatedSimpleCounters(NMonitoring::TDynamicCounterPtr counterGroup)
+    TAggregatedSimpleCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
         : CounterGroup(counterGroup)
     {}
 
@@ -183,7 +183,7 @@ public:
 
 private:
     //
-    NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
     TCountersVector MaxSimpleCounters;
     TCountersVector SumSimpleCounters;
@@ -222,7 +222,7 @@ private:
 class TAggregatedCumulativeCounters {
 public:
     //
-    TAggregatedCumulativeCounters(NMonitoring::TDynamicCounterPtr counterGroup)
+    TAggregatedCumulativeCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
         : CounterGroup(counterGroup)
     {}
 
@@ -292,7 +292,7 @@ public:
 
 private:
     //
-    NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
     TCountersVector MaxCumulativeCounters;
     THistogramVector HistCumulativeCounters;
@@ -328,7 +328,7 @@ class TAggregatedHistogramCounters {
 public:
     //
 
-    TAggregatedHistogramCounters(NMonitoring::TDynamicCounterPtr counterGroup)
+    TAggregatedHistogramCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
         : CounterGroup(counterGroup)
     {}
 
@@ -522,7 +522,7 @@ private:
     }
 
 private:
-    NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TDynamicCounterPtr CounterGroup;
 
     // monitoring counters holders, updated only during recalculation
     TVector<TCountersVector> PercentileCounters;    // old style (ranges)
@@ -645,7 +645,7 @@ public:
 
 private:
     //
-    NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TDynamicCounterPtr CounterGroup;
     const ui8* AggrFunc;
     const char* const * Names;
     TString GroupNames;
@@ -699,7 +699,7 @@ private:
 class TTabletMon {
 public:
     //
-    TTabletMon(NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId)
+    TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
         , AllTypes(Counters.Get(), "type", "all")
         , IsFollower(isFollower)
@@ -932,7 +932,7 @@ private:
     class TTabletCountersForTabletType {
     public:
         //
-        TTabletCountersForTabletType(NMonitoring::TDynamicCounters* owner, const char* category, const char* name)
+        TTabletCountersForTabletType(::NMonitoring::TDynamicCounters* owner, const char* category, const char* name)
             : TabletCountersSection(owner->GetSubgroup(category, name))
             , TabletExecutorCountersSection(TabletCountersSection->GetSubgroup("category", "executor"))
             , TabletAppCountersSection(TabletCountersSection->GetSubgroup("category", "app"))
@@ -1030,7 +1030,7 @@ private:
             //
             bool IsInitialized;
 
-            TSolomonCounters(NMonitoring::TDynamicCounterPtr counterGroup)
+            TSolomonCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
                 : IsInitialized(false)
                 , AggregatedSimpleCounters(counterGroup)
                 , AggregatedCumulativeCounters(counterGroup)
@@ -1286,14 +1286,14 @@ private:
 
             THashMap<ui64, TInstant> LastAggregateUpdateTime;
 
-            NMonitoring::TDynamicCounterPtr CounterGroup;
+            ::NMonitoring::TDynamicCounterPtr CounterGroup;
         };
 
         //
-        NMonitoring::TDynamicCounterPtr TabletCountersSection;
+        ::NMonitoring::TDynamicCounterPtr TabletCountersSection;
 
-        NMonitoring::TDynamicCounterPtr TabletExecutorCountersSection;
-        NMonitoring::TDynamicCounterPtr TabletAppCountersSection;
+        ::NMonitoring::TDynamicCounterPtr TabletExecutorCountersSection;
+        ::NMonitoring::TDynamicCounterPtr TabletAppCountersSection;
 
         TSolomonCounters TabletExecutorCounters;
         TSolomonCounters TabletAppCounters;
@@ -1315,7 +1315,7 @@ private:
     static TTabletCountersForTabletType* GetOrAddCountersByTabletType(
         TTabletTypes::EType tabletType,
         TCountersByTabletType& countersByTabletType,
-        NMonitoring::TDynamicCounterPtr counters)
+        ::NMonitoring::TDynamicCounterPtr counters)
     {
         auto* typeCounters = FindCountersByTabletType(tabletType, countersByTabletType);
         if (!typeCounters) {
@@ -1336,7 +1336,7 @@ private:
     }
 
     class TYdbTabletCounters : public TThrRefBase {
-        using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
         using THistogramPtr = NMonitoring::THistogramPtr;
 
     private:
@@ -1390,7 +1390,7 @@ private:
 
 
     public:
-        explicit TYdbTabletCounters(const NMonitoring::TDynamicCounterPtr& ydbGroup) {
+        explicit TYdbTabletCounters(const ::NMonitoring::TDynamicCounterPtr& ydbGroup) {
             WriteRowCount = ydbGroup->GetNamedCounter("name",
                 "table.datashard.write.rows", true);
             WriteBytes = ydbGroup->GetNamedCounter("name",
@@ -1444,7 +1444,7 @@ private:
         };
 
         void Initialize(
-            NMonitoring::TDynamicCounterPtr counters,
+            ::NMonitoring::TDynamicCounterPtr counters,
             TCountersByTabletType& countersByTabletType)
         {
             auto datashard = FindCountersByTabletType(
@@ -1551,12 +1551,12 @@ public:
     class TTabletCountersForDb : public NSysView::IDbCounters {
     public:
         TTabletCountersForDb()
-            : SolomonCounters(new NMonitoring::TDynamicCounters)
+            : SolomonCounters(new ::NMonitoring::TDynamicCounters)
             , AllTypes(SolomonCounters.Get(), "type", "all")
         {}
 
-        TTabletCountersForDb(NMonitoring::TDynamicCounterPtr externalGroup,
-            NMonitoring::TDynamicCounterPtr internalGroup,
+        TTabletCountersForDb(::NMonitoring::TDynamicCounterPtr externalGroup,
+            ::NMonitoring::TDynamicCounterPtr internalGroup,
             THolder<TTabletCountersBase> executorCounters)
             : SolomonCounters(internalGroup)
             , ExecutorCounters(std::move(executorCounters))
@@ -1617,7 +1617,7 @@ public:
         }
 
     private:
-        NMonitoring::TDynamicCounterPtr SolomonCounters;
+        ::NMonitoring::TDynamicCounterPtr SolomonCounters;
         THolder<TTabletCountersBase> ExecutorCounters;
 
         TTabletCountersForTabletType AllTypes;
@@ -1665,7 +1665,7 @@ private:
 
 private:
     //
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TTabletCountersForTabletType AllTypes;
     bool IsFollower = false;
 
@@ -1687,8 +1687,8 @@ private:
 
 
 TIntrusivePtr<NSysView::IDbCounters> CreateTabletDbCounters(
-    NMonitoring::TDynamicCounterPtr externalGroup,
-    NMonitoring::TDynamicCounterPtr internalGroup,
+    ::NMonitoring::TDynamicCounterPtr externalGroup,
+    ::NMonitoring::TDynamicCounterPtr internalGroup,
     THolder<TTabletCountersBase> executorCounters)
 {
     return MakeIntrusive<TTabletMon::TTabletCountersForDb>(
@@ -1825,7 +1825,7 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletLabeledCo
         return;
     TString html;
     TStringOutput oss(html);
-    NMonitoring::TDynamicCounters counters;
+    ::NMonitoring::TDynamicCounters counters;
     const auto& params = it->second.second->Request.GetParams();
     TString reqTabletType = params.Get("type");
 

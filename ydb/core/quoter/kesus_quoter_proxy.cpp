@@ -76,12 +76,12 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             public:
                 TDoubleCounter() = default;
 
-                TDoubleCounter(NMonitoring::TDynamicCounters::TCounterPtr counter)
+                TDoubleCounter(::NMonitoring::TDynamicCounters::TCounterPtr counter)
                     : Counter(std::move(counter))
                 {
                 }
 
-                TDoubleCounter& operator=(NMonitoring::TDynamicCounters::TCounterPtr counter) {
+                TDoubleCounter& operator=(::NMonitoring::TDynamicCounters::TCounterPtr counter) {
                     Counter = std::move(counter);
                     return *this;
                 }
@@ -97,19 +97,19 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
                 }
 
             private:
-                NMonitoring::TDynamicCounters::TCounterPtr Counter;
+                ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
                 double Remainder = 0.0;
             };
 
-            std::vector<NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed; // Aggregated consumed counters for parent resources.
-            NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
-            NMonitoring::TDynamicCounters::TCounterPtr QueueWeight;
-            NMonitoring::TDynamicCounters::TCounterPtr Dropped;
-            NMonitoring::TDynamicCounters::TCounterPtr Accumulated;
+            std::vector<::NMonitoring::TDynamicCounters::TCounterPtr> ParentConsumed; // Aggregated consumed counters for parent resources.
+            ::NMonitoring::TDynamicCounters::TCounterPtr QueueSize;
+            ::NMonitoring::TDynamicCounters::TCounterPtr QueueWeight;
+            ::NMonitoring::TDynamicCounters::TCounterPtr Dropped;
+            ::NMonitoring::TDynamicCounters::TCounterPtr Accumulated;
             TDoubleCounter AllocatedOffline;
             TDoubleCounter ReceivedFromKesus;
 
-            TCounters(const TString& resource, const NMonitoring::TDynamicCounterPtr& quoterCounters) {
+            TCounters(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters) {
                 if (!quoterCounters) {
                     return;
                 }
@@ -133,7 +133,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
             }
 
             void AddConsumed(ui64 consumed) {
-                for (NMonitoring::TDynamicCounters::TCounterPtr& counter : ParentConsumed) {
+                for (::NMonitoring::TDynamicCounters::TCounterPtr& counter : ParentConsumed) {
                     *counter += consumed;
                 }
             }
@@ -141,7 +141,7 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
 
         TCounters Counters;
 
-        explicit TResourceState(const TString& resource, const NMonitoring::TDynamicCounterPtr& quoterCounters)
+        explicit TResourceState(const TString& resource, const ::NMonitoring::TDynamicCounterPtr& quoterCounters)
             : Resource(resource)
             , Counters(resource, quoterCounters)
         {}
@@ -265,12 +265,12 @@ class TKesusQuoterProxy : public TActorBootstrapped<TKesusQuoterProxy> {
     THashMap<TDuration, THolder<TEvPrivate::TEvOfflineResourceAllocation>> OfflineAllocationEvSchedule;
 
     struct TCounters {
-        NMonitoring::TDynamicCounterPtr QuoterCounters;
+        ::NMonitoring::TDynamicCounterPtr QuoterCounters;
 
-        NMonitoring::TDynamicCounters::TCounterPtr Disconnects;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Disconnects;
 
         void Init(const TString& quoterPath) {
-            TIntrusivePtr<NMonitoring::TDynamicCounters> serviceCounters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> serviceCounters = GetServiceCounters(AppData()->Counters, QUOTER_SERVICE_COUNTER_SENSOR_NAME);
             if (serviceCounters) {
                 QuoterCounters = serviceCounters->GetSubgroup(QUOTER_COUNTER_SENSOR_NAME, quoterPath);
                 Disconnects = QuoterCounters->GetCounter(DISCONNECTS_COUNTER_SENSOR_NAME, true);

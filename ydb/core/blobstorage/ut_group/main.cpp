@@ -160,7 +160,7 @@ public:
         NKikimrBlobStorage::EVDiskStatus Status;
     };
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     const NPDisk::TKey MainKey = NPDisk::YdbDefaultPDiskSequence;
     const ui32 NodeCount;
     const ui32 GroupId = 0;
@@ -174,7 +174,7 @@ public:
     TIntrusivePtr<TStoragePoolCounters> StoragePoolCounters;
 
     TTestEnv(ui32 nodeCount)
-        : Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
+        : Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
         , NodeCount(nodeCount)
     {}
 

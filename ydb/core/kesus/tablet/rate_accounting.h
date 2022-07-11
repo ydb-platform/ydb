@@ -30,12 +30,12 @@ public:
 IBillSink::TPtr MakeMeteringSink();
 
 struct TRateAccountingCounters {
-    TIntrusivePtr<NMonitoring::TDynamicCounters> ResourceCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr Provisioned;
-    NMonitoring::TDynamicCounters::TCounterPtr OnDemand;
-    NMonitoring::TDynamicCounters::TCounterPtr Overshoot;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> ResourceCounters;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Provisioned;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OnDemand;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Overshoot;
 
-    void SetResourceCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& resourceCounters) {
+    void SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& resourceCounters) {
         ResourceCounters = resourceCounters;
         if (ResourceCounters) {
             Provisioned = ResourceCounters->GetCounter("Provisioned", true);
@@ -82,7 +82,7 @@ public:
     // Returns true iff there are unsent reports (retry on next tick is required)
     bool RunAccounting();
 
-    void SetResourceCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& resourceCounters);
+    void SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& resourceCounters);
 
 private:
     void ConfigureImpl();

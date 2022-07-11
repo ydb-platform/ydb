@@ -73,7 +73,7 @@ namespace NKikimr {
         TIntrusivePtr<TVDiskContext> vctx = new TVDiskContext(
                 TActorId(),
                 groupInfo.PickTopology(),
-                new NMonitoring::TDynamicCounters(),
+                new ::NMonitoring::TDynamicCounters(),
                 TVDiskID(),
                 nullptr,
                 NPDisk::DEVICE_TYPE_UNKNOWN);

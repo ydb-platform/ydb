@@ -10,6 +10,6 @@
 
 namespace NYq {
 
-NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config, const NMonitoring::TDynamicCounterPtr& counters);
+NActors::IActor* CreateMockYqAuditServiceActor(const NConfig::TAuditConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters);
 
 } // namespace NYq

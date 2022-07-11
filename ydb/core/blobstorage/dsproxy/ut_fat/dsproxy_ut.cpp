@@ -3362,15 +3362,15 @@ protected:
         if (!TestStep) {
             TIntrusivePtr<TDsProxyNodeMon> nodeMon = new TDsProxyNodeMon(NKikimr::AppData(ctx)->Counters, true);
             TString name = Sprintf("%09" PRIu32, 0);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> group = GetServiceCounters(
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(
                 NKikimr::AppData(ctx)->Counters, "dsproxy")->GetSubgroup("blobstorageproxy", name);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
                     NKikimr::AppData(ctx)->Counters, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", name);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> overviewGroup = GetServiceCounters(
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> overviewGroup = GetServiceCounters(
                     NKikimr::AppData(ctx)->Counters, "dsproxy_overview");
             Mon = new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, BsInfo, nodeMon, false);
 
-            TIntrusivePtr<NMonitoring::TDynamicCounters> DynCounters = new NMonitoring::TDynamicCounters();
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> DynCounters = new ::NMonitoring::TDynamicCounters();
             StoragePoolCounters = new NKikimr::TStoragePoolCounters(DynCounters, "", {});
             PerDiskStatsPtr = new TDiskResponsivenessTracker::TPerDiskStats;
         }
@@ -4051,7 +4051,7 @@ public:
         SectorMapByPath.clear();
     }
 
-    THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, NMonitoring::TDynamicCounters &counters,
+    THolder<TActorSystemSetup> BuildActorSystemSetup(ui32 nodeId, ::NMonitoring::TDynamicCounters &counters,
             TIntrusivePtr<TTableNameserverSetup> &nameserverTable, TInterconnectMock &interconnectMock) {
         auto setup = MakeHolder<TActorSystemSetup>();
         setup->NodeId = nodeId;
@@ -4102,7 +4102,7 @@ public:
     }
 
     TIntrusivePtr<NActors::NLog::TSettings> AddLoggerActor(THolder<TActorSystemSetup> &setup,
-            NMonitoring::TDynamicCounters &counters) {
+            ::NMonitoring::TDynamicCounters &counters) {
 
         NActors::TActorId loggerActorId = NActors::TActorId(setup->NodeId, "logger");
         TIntrusivePtr<NActors::NLog::TSettings> logSettings(
@@ -4173,7 +4173,7 @@ public:
                 env->DrivesPerFailDomain, env->FailDomainCount, 1, &env->VDisks));
 
         // first node
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters());
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters());
 
         TInterconnectMock interconnect;
 

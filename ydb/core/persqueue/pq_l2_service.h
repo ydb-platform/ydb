@@ -19,7 +19,7 @@ struct TCacheL2Parameters {
     TDuration KeepTime;
 };
 
-IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters&, TIntrusivePtr<NMonitoring::TDynamicCounters>);
+IActor* CreateNodePersQueueL2Cache(const TCacheL2Parameters&, TIntrusivePtr<::NMonitoring::TDynamicCounters>);
 
 //
 

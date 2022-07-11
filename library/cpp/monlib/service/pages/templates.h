@@ -13,14 +13,14 @@
     label                                \
         :
 
-#define TAG(name) WITH_SCOPED(tmp, NMonitoring::name(__stream))
-#define TAG_CLASS(name, cls) WITH_SCOPED(tmp, NMonitoring::name(__stream, cls))
-#define TAG_CLASS_STYLE(name, cls, style) WITH_SCOPED(tmp, NMonitoring::name(__stream, {{"class", cls}, {"style", style}}))
-#define TAG_CLASS_ID(name, cls, id) WITH_SCOPED(tmp, NMonitoring::name(__stream, cls, "", id))
-#define TAG_CLASS_FOR(name, cls, for0) WITH_SCOPED(tmp, NMonitoring::name(__stream, cls, for0))
-#define TAG_ATTRS(name, ...) WITH_SCOPED(tmp, NMonitoring::name(__stream, ##__VA_ARGS__))
+#define TAG(name) WITH_SCOPED(tmp, ::NMonitoring::name(__stream))
+#define TAG_CLASS(name, cls) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, cls))
+#define TAG_CLASS_STYLE(name, cls, style) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, {{"class", cls}, {"style", style}}))
+#define TAG_CLASS_ID(name, cls, id) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, cls, "", id))
+#define TAG_CLASS_FOR(name, cls, for0) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, cls, for0))
+#define TAG_ATTRS(name, ...) WITH_SCOPED(tmp, ::NMonitoring::name(__stream, ##__VA_ARGS__))
 
-#define HTML(str) WITH_SCOPED(__stream, NMonitoring::TOutputStreamRef(str))
+#define HTML(str) WITH_SCOPED(__stream, ::NMonitoring::TOutputStreamRef(str))
 
 #define HEAD() TAG(THead)
 #define BODY() TAG(TBody)
@@ -92,10 +92,10 @@
 #define HTML_OUTPUT_TIME_PARAM(str, param) str << #param << ": " << ToStringLocalTimeUpToSeconds(param) << "<br/>"
 
 #define COLLAPSED_BUTTON_CONTENT(targetId, buttonText) \
-    WITH_SCOPED(tmp, NMonitoring::TCollapsedButton(__stream, targetId, buttonText))
+    WITH_SCOPED(tmp, ::NMonitoring::TCollapsedButton(__stream, targetId, buttonText))
 
 #define HREF(path) \
-    WITH_SCOPED(tmp, NMonitoring::THref(__stream, path))
+    WITH_SCOPED(tmp, ::NMonitoring::THref(__stream, path))
 
 namespace NMonitoring {
     struct THref {

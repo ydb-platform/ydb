@@ -200,7 +200,7 @@ public:
 
     virtual ~TQuoterResourceTree() = default;
 
-    virtual void SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters);
+    virtual void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters);
 
     ui64 GetResourceId() const {
         return ResourceId;
@@ -277,21 +277,21 @@ public:
 
     class TCounters {
     public:
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ResourceCounters;
-        NMonitoring::TDynamicCounters::TCounterPtr Sessions;
-        NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
-        NMonitoring::TDynamicCounters::TCounterPtr Limit; // Current limit according to settings. If resource has no explicit limit, the counter is nullptr.
-        NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecWhenResourceActive;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ResourceCounters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Sessions;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Limit; // Current limit according to settings. If resource has no explicit limit, the counter is nullptr.
+        ::NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecWhenResourceActive;
 
         void AddAllocated(double allocated);
         ui64 GetAllocated() const {
             return Allocated ? Allocated->Val() : 0;
         }
-        void SetResourceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> resourceCounters);
+        void SetResourceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> resourceCounters);
         void SetLimit(TMaybe<double> limit);
 
     private:
-        NMonitoring::TDynamicCounters::TCounterPtr Allocated;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Allocated;
         double AllocatedRemainder = 0.0;
     };
 
@@ -330,15 +330,15 @@ protected:
 class TQuoterResources {
 public:
     struct TCounters {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> QuoterCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> QuoterCounters;
         bool DetailedCountersMode = false;
 
-        NMonitoring::TDynamicCounters::TCounterPtr ResourceSubscriptions = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
-        NMonitoring::TDynamicCounters::TCounterPtr UnknownResourceSubscriptions = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
-        NMonitoring::TDynamicCounters::TCounterPtr ResourceConsumptionStarts = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
-        NMonitoring::TDynamicCounters::TCounterPtr ResourceConsumptionStops = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
-        NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecOnResourceAllocation = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
-        NMonitoring::TDynamicCounters::TCounterPtr TickProcessorTasksProcessed = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResourceSubscriptions = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        ::NMonitoring::TDynamicCounters::TCounterPtr UnknownResourceSubscriptions = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResourceConsumptionStarts = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResourceConsumptionStops = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        ::NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecOnResourceAllocation = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        ::NMonitoring::TDynamicCounters::TCounterPtr TickProcessorTasksProcessed = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
     };
 
 public:
@@ -354,7 +354,7 @@ public:
     TQuoterResourceTree* AddResource(ui64 resourceId, const NKikimrKesus::TStreamingQuoterResource& props, TString& errorMessage);
     bool DeleteResource(TQuoterResourceTree* resource, TString& errorMessage);
 
-    void SetQuoterCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> quoterCounters);
+    void SetQuoterCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> quoterCounters);
     void EnableDetailedCountersMode(bool enable = true);
     void FillCounters(NKikimrKesus::TEvGetQuoterResourceCountersResult& counters);
 

@@ -12,7 +12,7 @@
 
 namespace NKikimr {
 
-TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters> &group)
+TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group)
     : ActivePages(group->GetCounter("ActivePages"))
     , ActiveBytes(group->GetCounter("ActiveBytes"))
     , PassivePages(group->GetCounter("PassivePages"))

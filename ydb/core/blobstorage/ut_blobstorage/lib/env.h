@@ -369,7 +369,7 @@ struct TEnvironmentSetup {
 
                 auto config = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
                 config->Roots.emplace_back(DomainId, domain.SchemeRoot, domain.Name);
-                config->Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+                config->Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
                 Runtime->RegisterService(MakeSchemeCacheID(), Runtime->Register(CreateSchemeBoardSchemeCache(config.Get()), nodeId));
             }
         }
@@ -503,11 +503,11 @@ struct TEnvironmentSetup {
     }
 
     TActorId CreateQueueActor(const TVDiskID& vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId, ui32 index) {
-        TBSProxyContextPtr bspctx = MakeIntrusive<TBSProxyContext>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TBSProxyContextPtr bspctx = MakeIntrusive<TBSProxyContext>(MakeIntrusive<::NMonitoring::TDynamicCounters>());
         auto flowRecord = MakeIntrusive<NBackpressure::TFlowRecord>();
         auto groupInfo = GetGroupInfo(vdiskId.GroupID);
         std::unique_ptr<IActor> actor(CreateVDiskBackpressureClient(groupInfo, vdiskId, queueId,
-            MakeIntrusive<NMonitoring::TDynamicCounters>(), bspctx,
+            MakeIntrusive<::NMonitoring::TDynamicCounters>(), bspctx,
             NBackpressure::TQueueClientId(NBackpressure::EQueueClientType::DSProxy, index), TStringBuilder()
             << "test# " << index, 0, false, TDuration::Seconds(60), flowRecord, NMonitoring::TCountableBase::EVisibility::Private));
         const ui32 nodeId = Settings.ControllerNodeId;

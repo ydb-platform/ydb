@@ -13,12 +13,12 @@ namespace NKikimr {
         using TItem = typename TTimeSeries<T>::TItem;
         using TTimeSeries<T>::Items;
 
-        using TPercentile = std::pair<float, NMonitoring::TDynamicCounters::TCounterPtr>;
+        using TPercentile = std::pair<float, ::NMonitoring::TDynamicCounters::TCounterPtr>;
         using TPercentiles = TVector<TPercentile>;
 
         TPercentiles Percentiles;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-        NMonitoring::TDynamicCounters::TCounterPtr Samples;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Samples;
 
         struct TCompareTimestamp {
             bool operator ()(const TItem& x, TInstant y) {
@@ -29,7 +29,7 @@ namespace NKikimr {
     public:
         using TTimeSeries<T>::TTimeSeries;
 
-        TQuantileTracker(TDuration lifetime, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+        TQuantileTracker(TDuration lifetime, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                 const TString& metric, const TVector<float>& percentiles)
             : TTimeSeries<T>(lifetime)
             , Counters(counters)

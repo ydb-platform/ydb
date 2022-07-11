@@ -57,7 +57,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
     typedef TDelayedQueue<TEvTxUserProxy::TEvAllocateTxId> TDelayedAllocateTxId;
     TDelayedAllocateTxId DelayedAllocateTxId;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> CacheCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> CacheCounters;
     TIntrusivePtr<TTxProxyMon> TxProxyMon;
     TRequestControls RequestControls;
 

@@ -20,8 +20,8 @@
 #include <util/stream/str.h>
 
 namespace NKikimr {
-    using TDynamicCountersPtr = TIntrusivePtr<NMonitoring::TDynamicCounters>;
-    using TDynamicCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+    using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
+    using TDynamicCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
     namespace {
         class TLfAllocMonitor: public IAllocMonitor {

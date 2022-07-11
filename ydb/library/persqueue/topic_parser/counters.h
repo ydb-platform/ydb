@@ -12,8 +12,8 @@ TVector<NPersQueue::TPQLabelsInfo> GetLabelsForCustomCluster(const TTopicConvert
 TVector<NPersQueue::TPQLabelsInfo> GetLabelsForStream(const TTopicConverterPtr& topic, const TString& cloudId,
                                                       const TString& dbId, const TString& folderId);
 
-NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters,
+::NMonitoring::TDynamicCounterPtr GetCounters(::NMonitoring::TDynamicCounterPtr counters,
                                             const TString& subsystem,
                                             const TTopicConverterPtr& topic);
-NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters);
+::NMonitoring::TDynamicCounterPtr GetCountersForStream(::NMonitoring::TDynamicCounterPtr counters);
 } // namespace NPersQueue

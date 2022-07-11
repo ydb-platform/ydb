@@ -46,7 +46,7 @@ static bool IsVerbose = false;
 
 static THolder<TActorSystem> ActorSystem;
 
-static TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+static TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 static THolder<NActors::TMon> Monitoring;
 
 static TAtomic DoneCounter = 0;
@@ -77,7 +77,7 @@ static void Run(i64 instances = 1) {
                      nullptr, nullptr, nullptr, nullptr);
 
     try {
-        Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
+        Counters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
 
         testIds.resize(instances);
 

@@ -125,7 +125,7 @@ public:
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-        const NMonitoring::TDynamicCounterPtr& clientCounters,
+        const ::NMonitoring::TDynamicCounterPtr& clientCounters,
         const TString& tenantName
         )
         : YqSharedResources(yqSharedResources)
@@ -372,13 +372,13 @@ private:
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
 
     const TString Guid; //OwnerId
-    const NMonitoring::TDynamicCounterPtr ClientCounters;
+    const ::NMonitoring::TDynamicCounterPtr ClientCounters;
 
     TMaybe<NYql::NLog::TScopedBackend<NYql::NDq::TYqlLogScope>> LogScope;
 
     struct TQueryCountersInfo {
-        NMonitoring::TDynamicCounterPtr RootCountersParent;
-        NMonitoring::TDynamicCounterPtr PublicCountersParent;
+        ::NMonitoring::TDynamicCounterPtr RootCountersParent;
+        ::NMonitoring::TDynamicCounterPtr PublicCountersParent;
         TActorId RunActorId;
     };
 
@@ -405,7 +405,7 @@ NActors::IActor* CreatePendingFetcher(
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
-    const NMonitoring::TDynamicCounterPtr& clientCounters,
+    const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     const TString& tenantName)
 {
     return new TPendingFetcher(

@@ -11,10 +11,10 @@ namespace NKikimr {
     constexpr char HOST_LABEL[] = "host";
 
     // Get counters group for specified service. Skip tenant and slot labels.
-    TIntrusivePtr<NMonitoring::TDynamicCounters> GetServiceCounters(TIntrusivePtr<NMonitoring::TDynamicCounters> root,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> GetServiceCounters(TIntrusivePtr<::NMonitoring::TDynamicCounters> root,
                                                                     const TString &service, bool skipAddedLabels = true);
     // Get parent node for subsvc/svc if any. root->svc->subvc => svc, root->svc => root.
-    TIntrusivePtr<NMonitoring::TDynamicCounters> GetServiceCountersRoot(TIntrusivePtr<NMonitoring::TDynamicCounters> root,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> GetServiceCountersRoot(TIntrusivePtr<::NMonitoring::TDynamicCounters> root,
                                                                     const TString &service);
     // Extract subservice name if any. aba|caba => aba, caba.
     std::pair<TString, TString> ExtractSubServiceName(const TString &service);
@@ -24,5 +24,5 @@ namespace NKikimr {
     const THashSet<TString> &GetDatabaseAttributeSensorServices();
     const THashSet<TString> &GetDatabaseAttributeLabels();
     // Drop all extra labels.
-    void ReplaceSubgroup(TIntrusivePtr<NMonitoring::TDynamicCounters> root, const TString &service);
+    void ReplaceSubgroup(TIntrusivePtr<::NMonitoring::TDynamicCounters> root, const TString &service);
 } // namespace NKikimr

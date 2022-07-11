@@ -34,7 +34,7 @@ static constexpr ui32 CODEC_ID_SIZE = 1;
 public:
     TWriteSessionActor(NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
                        const NActors::TActorId& schemeCache,
-                       TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
+                       TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
                        const NPersQueue::TTopicsListController& topicsController);
     ~TWriteSessionActor();
 
@@ -199,7 +199,7 @@ private:
 
     THashMap<ui32, ui64> PartitionToTablet;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     NKikimr::NPQ::TMultiCounter BytesInflight;
     NKikimr::NPQ::TMultiCounter BytesInflightTotal;

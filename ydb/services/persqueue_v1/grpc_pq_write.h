@@ -17,12 +17,12 @@ namespace NGRpcProxy {
 namespace V1 {
 
 IActor* CreatePQWriteService(const NActors::TActorId& schemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
 class TPQWriteService : public NActors::TActorBootstrapped<TPQWriteService> {
 public:
     TPQWriteService(const NActors::TActorId& schemeCache,
-                    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
+                    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions);
 
     ~TPQWriteService()
     {}
@@ -65,7 +65,7 @@ private:
     // Cluster enabled at time if cluster is currently enabled
     THashMap<TString, TInstant> ClustersEnabledAt;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
     ui32 MaxSessions;
     TMaybe<TString> LocalCluster;

@@ -17,7 +17,7 @@ class TGRpcDiscoveryService
 {
 public:
     TGRpcDiscoveryService(NActors::TActorSystem* system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-                 TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
@@ -32,7 +32,7 @@ private:
     grpc::ServerCompletionQueue* CQ_;
 
     std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NGrpc::TGlobalLimiter* Limiter_;
 };
 

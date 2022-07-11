@@ -219,10 +219,10 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
         TMap<TMetricsScope, TFinalStatusCountersPtr> FinalStatusCounters;
-        NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
 
     public:
-        explicit TCounters(const NMonitoring::TDynamicCounterPtr& counters)
+        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
             for (auto& request: CommonRequests) {
@@ -317,7 +317,7 @@ public:
     TYdbControlPlaneStorageActor(
         const NConfig::TControlPlaneStorageConfig& config,
         const NConfig::TCommonConfig& common,
-        const NMonitoring::TDynamicCounterPtr& counters,
+        const ::NMonitoring::TDynamicCounterPtr& counters,
         const ::NYq::TYqSharedResources::TPtr& yqSharedResources,
         const NKikimr::TYdbCredentialsProviderFactory& credProviderFactory,
         const TString& tenantName)

@@ -43,7 +43,7 @@ public:
         : GType(gtype)
         , NodeCount(gtype.BlobSubgroupSize())
         , PDisks(NodeCount)
-        , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
+        , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     {
         for (ui32 i = 0; i < PDisks.size(); ++i) {
             PDisks[i] = {i + 1, 1, RandomNumber<ui64>(), nullptr};
@@ -278,7 +278,7 @@ private:
     }
 
 private:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 };
 
 void ReplicationTest(const TString datum) {

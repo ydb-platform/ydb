@@ -65,7 +65,7 @@ class TAllPDisks {
 public:
     TAllPDisks(const TAllPDisksConfiguration &cfg);
     void ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
-                       const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters);
+                       const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
     // get instance by pDiskID (sequential number starting from 1)
     TOnePDisk &Get(ui32 pDiskID);
     void EraseDisk(ui32 pDiskId, ui64 newGuid);
@@ -100,7 +100,7 @@ public:
         return VDisks.at(vdisk);
     }
     void ActorSetupCmd(NActors::TActorSystemSetup *setup, NKikimr::TBlobStorageGroupInfo *groupInfo,
-                       const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters);
+                       const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters);
     ui32 GetSize() const {
         return VDisks.size();
     }
@@ -153,7 +153,7 @@ struct TConfiguration {
     const NKikimr::TErasureType::EErasureSpecies Erasure;
     TAllPDisksConfiguration PCfg;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     std::unique_ptr<NActors::TMon> Monitoring;
     std::unique_ptr<NKikimr::TAppData> AppData;
     std::shared_ptr<NKikimr::NPDisk::IIoContextFactory> IoContext;

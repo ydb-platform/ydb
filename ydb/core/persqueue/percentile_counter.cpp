@@ -7,7 +7,7 @@ namespace NKikimr {
 
 namespace NPQ {
 
-TMultiCounter::TMultiCounter(NMonitoring::TDynamicCounterPtr counters,
+TMultiCounter::TMultiCounter(::NMonitoring::TDynamicCounterPtr counters,
                              const TVector<NPersQueue::TPQLabelsInfo>& labels,
                              const TVector<std::pair<TString, TString>>& subgroups,
                              const TVector<TString>& counter_names,
@@ -63,7 +63,7 @@ TMultiCounter::operator bool() {
 
 
 TPercentileCounter::TPercentileCounter(
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<NPersQueue::TPQLabelsInfo>& labels,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TVector<NPersQueue::TPQLabelsInfo>& labels,
         const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
         const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring
 ) {
@@ -102,7 +102,7 @@ void TPercentileCounter::DecFor(ui64 key, ui64 value) {
 }
 
 NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr, const TString name, ui32 border,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr, const TString name, ui32 border,
         TVector<ui32> durations
 ) {
     bool found = false;

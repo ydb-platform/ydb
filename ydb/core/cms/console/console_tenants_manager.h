@@ -35,7 +35,7 @@ using NTabletFlatExecutor::TTransactionContext;
 using NSchemeShard::TEvSchemeShard;
 using NTenantSlotBroker::TEvTenantSlotBroker;
 using NTenantSlotBroker::TSlotDescription;
-using NMonitoring::TDynamicCounterPtr;
+using ::NMonitoring::TDynamicCounterPtr;
 
 class TConsole;
 
@@ -95,7 +95,7 @@ public:
         static const THashSet<ECounter> DerivSensors;
 
     public:
-        using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
         TCounters(TDynamicCounterPtr counters)
             : Counters(counters)

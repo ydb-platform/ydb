@@ -62,7 +62,7 @@ struct TTestBootstrap : public TTestActorRuntime {
 
     THashMap<TActorId, ui64> ActorToTask;
 
-    NMonitoring::TDynamicCounterPtr Counters = new NMonitoring::TDynamicCounters();
+    ::NMonitoring::TDynamicCounterPtr Counters = new ::NMonitoring::TDynamicCounters();
 
     explicit TTestBootstrap(ui64 graphFlags = 0)
         : TTestActorRuntime(true)

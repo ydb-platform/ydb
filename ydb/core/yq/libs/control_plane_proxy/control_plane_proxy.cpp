@@ -52,18 +52,18 @@ LWTRACE_USING(YQ_CONTROL_PLANE_PROXY_PROVIDER);
 struct TRequestCounters: public virtual TThrRefBase {
     const TString Name;
 
-    NMonitoring::TDynamicCounters::TCounterPtr InFly;
-    NMonitoring::TDynamicCounters::TCounterPtr Ok;
-    NMonitoring::TDynamicCounters::TCounterPtr Error;
-    NMonitoring::TDynamicCounters::TCounterPtr Timeout;
-    NMonitoring::THistogramPtr LatencyMs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Error;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Timeout;
+    ::NMonitoring::THistogramPtr LatencyMs;
 
     explicit TRequestCounters(const TString& name)
         : Name(name)
     { }
 
-    void Register(const NMonitoring::TDynamicCounterPtr& counters) {
-        NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request", Name);
+    void Register(const ::NMonitoring::TDynamicCounterPtr& counters) {
+        ::NMonitoring::TDynamicCounterPtr subgroup = counters->GetSubgroup("request", Name);
         InFly = subgroup->GetCounter("InFly", false);
         Ok = subgroup->GetCounter("Ok", true);
         Error = subgroup->GetCounter("Error", true);
@@ -72,8 +72,8 @@ struct TRequestCounters: public virtual TThrRefBase {
     }
 
 private:
-    static NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
-        return NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
+    static ::NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets() {
+        return ::NMonitoring::ExplicitHistogram({0, 1, 2, 5, 10, 20, 50, 100, 500, 1000, 2000, 5000, 10000, 30000, 50000, 500000});
     }
 };
 
@@ -412,10 +412,10 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
         });
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
-        NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
 
     public:
-        explicit TCounters(const NMonitoring::TDynamicCounterPtr& counters)
+        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {
             for (auto& request: CommonRequests) {
@@ -476,7 +476,7 @@ class TControlPlaneProxyActor : public NActors::TActorBootstrapped<TControlPlane
     bool GetQuotas;
 
 public:
-    TControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const NMonitoring::TDynamicCounterPtr& counters, bool getQuotas)
+    TControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters, bool getQuotas)
         : Counters(counters)
         , Config(config)
         , GetQuotas(getQuotas)
@@ -492,7 +492,7 @@ public:
 
         NActors::TMon* mon = AppData()->Mon;
         if (mon) {
-            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
+            ::NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("actors", "Actors");
             mon->RegisterActorPage(actorsMonPage, "yq_control_plane_proxy", "YQ Control Plane Proxy", false,
                 TlsActivationContext->ExecutorThread.ActorSystem, SelfId());
         }
@@ -1769,7 +1769,7 @@ TActorId ControlPlaneProxyActorId() {
     return NActors::TActorId(0, name);
 }
 
-IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const NMonitoring::TDynamicCounterPtr& counters, bool getQuotas) {
+IActor* CreateControlPlaneProxyActor(const NConfig::TControlPlaneProxyConfig& config, const ::NMonitoring::TDynamicCounterPtr& counters, bool getQuotas) {
     return new TControlPlaneProxyActor(config, counters, getQuotas);
 }
 

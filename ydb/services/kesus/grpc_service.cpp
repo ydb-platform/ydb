@@ -609,7 +609,7 @@ private:
 
 TKesusGRpcService::TKesusGRpcService(
         NActors::TActorSystem* actorSystem,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         NActors::TActorId id)
     : ActorSystem(actorSystem)
     , Counters(counters)

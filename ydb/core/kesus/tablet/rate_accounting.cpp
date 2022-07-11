@@ -78,7 +78,7 @@ class TBillingMetric {
     TInstant Accumulated; // start of accumulation `Quantity`
 
     // Monitoring
-    NMonitoring::TDynamicCounters::TCounterPtr Billed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Billed;
 
     // Configuration
     NKikimrKesus::TAccountingConfig::TMetric Cfg;
@@ -100,7 +100,7 @@ public:
         return TTimeGrid(TDuration::Seconds(seconds));
     }
 
-    void SetResourceCounters(const NMonitoring::TDynamicCounters::TCounterPtr& billed) {
+    void SetResourceCounters(const ::NMonitoring::TDynamicCounters::TCounterPtr& billed) {
         Billed = billed;
     }
 
@@ -450,7 +450,7 @@ bool TRateAccounting::RunAccounting() {
     return accountingRequired || cleaningRequried;
 }
 
-void TRateAccounting::SetResourceCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& resourceCounters) {
+void TRateAccounting::SetResourceCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& resourceCounters) {
     Counters.SetResourceCounters(resourceCounters);
     TActivationContext::Send(new NActors::IEventHandle(AccountingActor, Kesus,
         new TEvPrivate::TEvCounters(Counters)));

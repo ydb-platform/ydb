@@ -23,14 +23,14 @@ namespace NKikimr::NGRpcProxy::V1 {
 using namespace PersQueue::V1;
 
 
-IActor* CreatePQSchemaService(const TActorId& schemeCache, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+IActor* CreatePQSchemaService(const TActorId& schemeCache, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     return new TPQSchemaService(schemeCache, counters);
 }
 
 
 
 TPQSchemaService::TPQSchemaService(const TActorId& schemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
     : SchemeCache(schemeCache)
     , Counters(counters)
     , LocalCluster("")

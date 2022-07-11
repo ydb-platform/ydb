@@ -129,8 +129,8 @@ class TCondEraseScan: public IActor, public IScan, public IEraserOps {
     private:
         ui64 RowsProcessed;
         ui64 RowsErased;
-        NMonitoring::TDynamicCounters::TCounterPtr MonProcessed;
-        NMonitoring::TDynamicCounters::TCounterPtr MonErased;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MonProcessed;
+        ::NMonitoring::TDynamicCounters::TCounterPtr MonErased;
     };
 
     static TVector<TCell> MakeKeyCells(const TVector<TKey>& keyOrder, const TRow& row) {

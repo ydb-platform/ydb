@@ -12,7 +12,7 @@ class TGRpcYdbDummyService
     : public NGrpc::TGrpcServiceBase<Draft::Dummy::DummyService>
 {
 public:
-    TGRpcYdbDummyService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId proxyActorId);
+    TGRpcYdbDummyService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId proxyActorId);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
     void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
@@ -26,7 +26,7 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };

@@ -7,14 +7,14 @@ namespace NYq {
 class TTestConnectionRequestCounters: public virtual TThrRefBase {
 public:
     const TString Name;
-    NMonitoring::TDynamicCounters::TCounterPtr InFly;
-    NMonitoring::TDynamicCounters::TCounterPtr Ok;
-    NMonitoring::TDynamicCounters::TCounterPtr Error;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFly;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Ok;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Error;
     NMonitoring::THistogramPtr LatencyMs;
 
     explicit TTestConnectionRequestCounters(const TString& name);
 
-    void Register(const NMonitoring::TDynamicCounterPtr& counters);
+    void Register(const ::NMonitoring::TDynamicCounterPtr& counters);
 
 private:
     static NMonitoring::IHistogramCollectorPtr GetLatencyHistogramBuckets();

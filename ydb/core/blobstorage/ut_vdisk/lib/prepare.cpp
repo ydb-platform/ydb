@@ -148,7 +148,7 @@ TAllPDisks::TAllPDisks(const TAllPDisksConfiguration &cfg)
 }
 
 void TAllPDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, ui32 node,
-                               const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters) {
+                               const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
     for (ui32 i = 0; i < PDisks.size(); i++) {
         TOnePDisk &inst = PDisks[i];
         inst.PDiskActorID = MakeBlobStoragePDiskID(node, i);
@@ -206,7 +206,7 @@ TAllVDisks::~TAllVDisks() {
 }
 
 void TAllVDisks::ActorSetupCmd(NActors::TActorSystemSetup *setup, NKikimr::TBlobStorageGroupInfo *groupInfo,
-                               const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters) {
+                               const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
     for (ui32 i = 0; i < VDisks.size(); i++) {
         TVDiskInstance &vdisk = VDisks[i];
         if (vdisk.Initialized) {
@@ -279,7 +279,7 @@ TConfiguration::~TConfiguration() {
 static TProgramShouldContinue KikimrShouldContinue;
 
 void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRepl) { // FIXME: put newPDisks into configuration (see up)
-    Counters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
+    Counters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
 
     TIntrusivePtr<TTableNameserverSetup> nameserverTable(new TTableNameserverSetup());
     TPortManager pm;

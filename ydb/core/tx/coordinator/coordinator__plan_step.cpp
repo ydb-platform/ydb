@@ -6,8 +6,8 @@ namespace NKikimr {
 namespace NFlatTxCoordinator {
 
 struct TInFlyAccountant {
-    NMonitoring::TDynamicCounters::TCounterPtr Counter;
-    TInFlyAccountant(NMonitoring::TDynamicCounters::TCounterPtr counter)
+    ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    TInFlyAccountant(::NMonitoring::TDynamicCounters::TCounterPtr counter)
         : Counter(counter)
     {
         Counter->Inc();

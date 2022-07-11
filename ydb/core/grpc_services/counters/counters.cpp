@@ -15,20 +15,20 @@ namespace NGRpcService {
 using namespace NActors;
 
 struct TYdbRpcCounters {
-    TYdbRpcCounters(const NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
+    TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
         const char* requestName, bool forDatabase);
 
-    NMonitoring::TDynamicCounters::TCounterPtr RequestCount;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestInflight;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestInflightBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestRpcError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestInflight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestRpcError;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcError;
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcNotAuthenticated;
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcResourceExhausted;
-    THashMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> ResponseByStatus;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcError;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcNotAuthenticated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseRpcResourceExhausted;
+    THashMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> ResponseByStatus;
 };
 
 class TYdbCounterBlock : public NGrpc::ICounterBlock {
@@ -38,27 +38,27 @@ protected:
 
     // "Internal" counters
     // TODO: Switch to public YDB counters
-    NMonitoring::TDynamicCounters::TCounterPtr TotalCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr InflyCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr NotOkRequestCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr NotOkResponseCounter;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr InflyRequestBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr NotAuthenticated;
-    NMonitoring::TDynamicCounters::TCounterPtr ResourceExhausted;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutDatabase;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutToken;
-    NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutTls;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TotalCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InflyCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NotOkRequestCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NotOkResponseCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InflyRequestBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResponseBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr NotAuthenticated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ResourceExhausted;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutDatabase;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutToken;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RequestsWithoutTls;
     NMonitoring::TPercentileTracker<4, 512, 15> RequestHistMs;
-    std::array<NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 2>  GRpcStatusCounters;
 
     TYdbRpcCounters YdbCounters;
 
 public:
-    TYdbCounterBlock(const NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
+    TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
         const char* requestName, bool percentile, bool streaming,
-        bool forDatabase = false, NMonitoring::TDynamicCounterPtr internalGroup = {});
+        bool forDatabase = false, ::NMonitoring::TDynamicCounterPtr internalGroup = {});
 
     void CountNotOkRequest() override {
         NotOkRequestCounter->Inc();
@@ -153,10 +153,10 @@ public:
     }
 };
 
-TYdbRpcCounters::TYdbRpcCounters(const NMonitoring::TDynamicCounterPtr& counters,
+TYdbRpcCounters::TYdbRpcCounters(const ::NMonitoring::TDynamicCounterPtr& counters,
     const char* serviceName, const char* requestName, bool forDatabase)
 {
-    NMonitoring::TDynamicCounterPtr ydbGroup;
+    ::NMonitoring::TDynamicCounterPtr ydbGroup;
     if (forDatabase) {
         ydbGroup = counters;
     } else {
@@ -220,15 +220,15 @@ TYdbRpcCounters::TYdbRpcCounters(const NMonitoring::TDynamicCounterPtr& counters
         typeGroup->GetSubgroup("status", "SESSION_BUSY")->GetNamedCounter("name", countName, true);
 }
 
-TYdbCounterBlock::TYdbCounterBlock(const NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
+TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
     const char* requestName, bool percentile, bool streaming,
-    bool forDatabase, NMonitoring::TDynamicCounterPtr internalGroup)
+    bool forDatabase, ::NMonitoring::TDynamicCounterPtr internalGroup)
     : Streaming(streaming)
     , Percentile(percentile)
     , YdbCounters(counters, serviceName, requestName, forDatabase)
 {
     // group for all counters
-    NMonitoring::TDynamicCounterPtr group;
+    ::NMonitoring::TDynamicCounterPtr group;
     if (forDatabase) {
         group = internalGroup;
     } else {
@@ -293,9 +293,9 @@ using TYdbCounterBlockPtr = TIntrusivePtr<TYdbCounterBlock>;
 
 class TYdbDbCounterBlock : public TYdbCounterBlock {
 public:
-    TYdbDbCounterBlock(const NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
+    TYdbDbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& counters, const char* serviceName,
         const char* requestName, bool percentile, bool streaming,
-        NMonitoring::TDynamicCounterPtr internalGroup = {})
+        ::NMonitoring::TDynamicCounterPtr internalGroup = {})
         : TYdbCounterBlock(counters, serviceName, requestName, percentile, streaming, true, internalGroup)
     {}
 
@@ -354,11 +354,11 @@ using TYdbDbCounterBlockPtr = TIntrusivePtr<TYdbDbCounterBlock>;
 class TGRpcDbCounters : public NSysView::IDbCounters {
 public:
     TGRpcDbCounters()
-        : Counters(new NMonitoring::TDynamicCounters)
-        , InternalGroup(new NMonitoring::TDynamicCounters)
+        : Counters(new ::NMonitoring::TDynamicCounters)
+        , InternalGroup(new ::NMonitoring::TDynamicCounters)
     {}
 
-    TGRpcDbCounters(NMonitoring::TDynamicCounterPtr counters, NMonitoring::TDynamicCounterPtr internalGroup)
+    TGRpcDbCounters(::NMonitoring::TDynamicCounterPtr counters, ::NMonitoring::TDynamicCounterPtr internalGroup)
         : Counters(counters)
         , InternalGroup(internalGroup)
     {}
@@ -394,8 +394,8 @@ public:
     }
 
 private:
-    NMonitoring::TDynamicCounterPtr Counters;
-    NMonitoring::TDynamicCounterPtr InternalGroup;
+    ::NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr InternalGroup;
 
     using TKey = std::pair<TString, TString>;
     TConcurrentRWHashMap<TKey, TYdbDbCounterBlockPtr, 16> CounterBlocks;
@@ -470,7 +470,7 @@ class TYdbCounterBlockWrapper : public NGrpc::ICounterBlock {
     bool Percentile = false;
     bool Streaming = false;
 
-    NMonitoring::TDynamicCounterPtr Root;
+    ::NMonitoring::TDynamicCounterPtr Root;
     TYdbDbCounterBlockPtr Db;
 
 public:
@@ -481,7 +481,7 @@ public:
         , RequestName(requestName)
         , Percentile(percentile)
         , Streaming(streaming)
-        , Root(new NMonitoring::TDynamicCounters)
+        , Root(new ::NMonitoring::TDynamicCounters)
         , Db(new TYdbDbCounterBlock(Root, serviceName.c_str(), requestName.c_str(), percentile, streaming, Root))
     {}
 
@@ -607,7 +607,7 @@ public:
     })
 };
 
-TServiceCounterCB::TServiceCounterCB(NMonitoring::TDynamicCounterPtr counters, TActorSystem *actorSystem)
+TServiceCounterCB::TServiceCounterCB(::NMonitoring::TDynamicCounterPtr counters, TActorSystem *actorSystem)
     : Counters(std::move(counters))
     , ActorSystem(actorSystem)
 {
@@ -635,8 +635,8 @@ NGrpc::ICounterBlockPtr TServiceCounterCB::operator()(const char* serviceName,
 }
 
 TIntrusivePtr<NSysView::IDbCounters> CreateGRpcDbCounters(
-    NMonitoring::TDynamicCounterPtr externalGroup,
-    NMonitoring::TDynamicCounterPtr internalGroup)
+    ::NMonitoring::TDynamicCounterPtr externalGroup,
+    ::NMonitoring::TDynamicCounterPtr internalGroup)
 {
     return new TGRpcDbCounters(externalGroup, internalGroup);
 }

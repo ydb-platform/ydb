@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 TGRpcYdbClickhouseInternalService::TGRpcYdbClickhouseInternalService(NActors::TActorSystem *system,
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     TIntrusivePtr<TInFlightLimiterRegistry> inFlightLimiterRegistry,
     NActors::TActorId id)
     : ActorSystem_(system)

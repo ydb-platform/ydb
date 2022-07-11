@@ -12,19 +12,19 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
     NTabletPipe::TClientConfig PipeConfig;
 
     struct TCounters {
-        NMonitoring::TDynamicCounters::TCounterPtr Tablets;
-        NMonitoring::TDynamicCounters::TCounterPtr Subscribers;
-        NMonitoring::TDynamicCounters::TCounterPtr PipesActive;
-        NMonitoring::TDynamicCounters::TCounterPtr PipesInactive;
-        NMonitoring::TDynamicCounters::TCounterPtr PipesConnecting;
-        NMonitoring::TDynamicCounters::TCounterPtr EventCreate;
-        NMonitoring::TDynamicCounters::TCounterPtr EventConnectOk;
-        NMonitoring::TDynamicCounters::TCounterPtr EventConnectFailure;
-        NMonitoring::TDynamicCounters::TCounterPtr EventGracefulShutdown;
-        NMonitoring::TDynamicCounters::TCounterPtr EventDisconnect;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Tablets;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Subscribers;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PipesActive;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PipesInactive;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PipesConnecting;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EventCreate;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EventConnectOk;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EventConnectFailure;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EventGracefulShutdown;
+        ::NMonitoring::TDynamicCounters::TCounterPtr EventDisconnect;
         bool HaveCounters = false;
 
-        explicit TCounters(NMonitoring::TDynamicCounterPtr counters) {
+        explicit TCounters(::NMonitoring::TDynamicCounterPtr counters) {
             if (counters) {
                 Tablets = counters->GetCounter("PipeCache/Tablets");
                 Subscribers = counters->GetCounter("PipeCache/Subscribers");

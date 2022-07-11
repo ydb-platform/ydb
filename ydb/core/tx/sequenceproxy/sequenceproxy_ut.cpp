@@ -66,7 +66,7 @@ Y_UNIT_TEST_SUITE(SequenceProxy) {
             for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
                 auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
                 cacheConfig->Roots.emplace_back(1, SCHEME_SHARD1_ID, root);
-                cacheConfig->Counters = new NMonitoring::TDynamicCounters();
+                cacheConfig->Counters = new ::NMonitoring::TDynamicCounters();
 
                 IActor* schemeCache = CreateSchemeBoardSchemeCache(cacheConfig.Get());
                 TActorId schemeCacheId = runtime.Register(schemeCache, nodeIndex);

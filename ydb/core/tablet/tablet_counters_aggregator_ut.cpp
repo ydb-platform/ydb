@@ -155,8 +155,8 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregator) {
         }
 
     public:
-        static NMonitoring::TDynamicCounterPtr GetAppCounters(TTestBasicRuntime& runtime) {
-            NMonitoring::TDynamicCounterPtr counters = runtime.GetAppData(0).Counters;
+        static ::NMonitoring::TDynamicCounterPtr GetAppCounters(TTestBasicRuntime& runtime) {
+            ::NMonitoring::TDynamicCounterPtr counters = runtime.GetAppData(0).Counters;
             UNIT_ASSERT(counters);
 
             TString tabletTypeStr = TTabletTypes::TypeToStr(TabletType);

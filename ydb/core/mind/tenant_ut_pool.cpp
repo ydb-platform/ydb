@@ -145,7 +145,7 @@ void CheckTenantPoolStatus(TTenantTestRuntime &runtime,
     CheckTenantPoolStatus(runtime, 0, domain1);
 }
 
-void CheckLabels(TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+void CheckLabels(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                  const TString &database,
                  const TString &slot,
                  THashMap<TString, TString> attrs = {},
@@ -501,7 +501,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, TENANT1_1_NAME);
             UNIT_ASSERT(tenantGroup);
-            TIntrusivePtr<NMonitoring::TDynamicCounters> slotGroup;
+            TIntrusivePtr<::NMonitoring::TDynamicCounters> slotGroup;
             if (attrServices.contains(service)) {
                 slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1");
             } else {
@@ -591,7 +591,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, TENANT1_1_NAME);
             UNIT_ASSERT(tenantGroup);
-            NMonitoring::TDynamicCounterPtr slotGroup;
+            ::NMonitoring::TDynamicCounterPtr slotGroup;
             if (attrServices.contains(service)) {
                 slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "slot-1");
             } else {
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, CanonizePath(DOMAIN1_NAME));
             UNIT_ASSERT(tenantGroup);
-            NMonitoring::TDynamicCounterPtr slotGroup;
+            ::NMonitoring::TDynamicCounterPtr slotGroup;
             if (attrServices.contains(service)) {
                 slotGroup = tenantGroup;
             } else {
@@ -633,7 +633,7 @@ Y_UNIT_TEST_SUITE(TTenantPoolTests) {
             auto serviceGroup = GetServiceCounters(counters, service, false);
             auto tenantGroup = serviceGroup->FindSubgroup(DATABASE_LABEL, "<none>");
             UNIT_ASSERT(tenantGroup);
-            NMonitoring::TDynamicCounterPtr slotGroup;
+            ::NMonitoring::TDynamicCounterPtr slotGroup;
             if (attrServices.contains(service)) {
                 slotGroup = tenantGroup->FindSubgroup(HOST_LABEL, "unassigned");
             } else {

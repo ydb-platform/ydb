@@ -122,13 +122,13 @@ class TKeyValueWriterTestLoadActor : public TActorBootstrapped<TKeyValueWriterTe
     TReallyFastRng32 Rng;
 
     // Monitoring
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LoadCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
     TInstant TestStartTime;
 
     ui64 TabletId;
     TActorId Pipe;
 
-    NMonitoring::TDynamicCounters::TCounterPtr KeyValueBytesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr KeyValueBytesWritten;
     TMap<ui64, TLogWriteCookie> InFlightWrites;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
 
@@ -138,7 +138,7 @@ public:
     }
 
     TKeyValueWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
-            const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+            const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , Rng(Now().GetValue())
@@ -360,7 +360,7 @@ public:
 };
 
 IActor * CreateKeyValueWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TKeyValueLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TKeyValueWriterTestLoadActor(cmd, parent, counters, index, tag);
 }
 

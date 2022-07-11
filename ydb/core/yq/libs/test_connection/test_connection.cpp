@@ -47,7 +47,7 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
         using TScopeCountersPtr = std::shared_ptr<TScopeCounters>;
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
-        NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounterPtr Counters;
 
         ERequestTypeScope ToType(YandexQuery::ConnectionSetting::ConnectionCase connectionCase) {
             switch (connectionCase) {
@@ -63,7 +63,7 @@ class TTestConnectionActor : public NActors::TActorBootstrapped<TTestConnectionA
         }
 
     public:
-        explicit TCounters(const NMonitoring::TDynamicCounterPtr& counters)
+        explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {}
 
@@ -118,7 +118,7 @@ public:
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
-        const NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : Config(config)
         , ControlPlaneStorageConfig(controlPlaneStorageConfig, commonConfig)
         , CommonConfig(commonConfig)
@@ -236,7 +236,7 @@ NActors::IActor* CreateTestConnectionActor(
         const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const NYql::IHTTPGateway::TPtr& httpGateway,
-        const NMonitoring::TDynamicCounterPtr& counters) {
+        const ::NMonitoring::TDynamicCounterPtr& counters) {
     return new TTestConnectionActor(config, controlPlaneStorageConfig, commonConfig,
                     tokenAccessorConfig, sharedResources,
                     credentialsFactory, cmConnections,

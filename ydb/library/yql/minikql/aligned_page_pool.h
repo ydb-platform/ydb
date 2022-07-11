@@ -16,12 +16,12 @@
 namespace NKikimr {
 
 struct TAlignedPagePoolCounters {
-    explicit TAlignedPagePoolCounters(NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
+    explicit TAlignedPagePoolCounters(::NMonitoring::TDynamicCounterPtr countersRoot = nullptr, const TString& name = TString());
 
-    NMonitoring::TDynamicCounters::TCounterPtr TotalBytesAllocatedCntr;
-    NMonitoring::TDynamicCounters::TCounterPtr AllocationsCntr;
-    NMonitoring::TDynamicCounters::TCounterPtr PoolsCntr;
-    NMonitoring::TDynamicCounters::TCounterPtr LostPagesBytesFreeCntr;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TotalBytesAllocatedCntr;
+    ::NMonitoring::TDynamicCounters::TCounterPtr AllocationsCntr;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PoolsCntr;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LostPagesBytesFreeCntr;
 
     void Swap(TAlignedPagePoolCounters& other) {
         DoSwap(TotalBytesAllocatedCntr, other.TotalBytesAllocatedCntr);

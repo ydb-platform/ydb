@@ -7,7 +7,7 @@
 namespace NKikimr {
 namespace NSchemeCache {
 
-TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters)
+TSchemeCacheConfig::TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::TDynamicCounterPtr counters)
     : Counters(counters)
 {
     Y_VERIFY(appData);

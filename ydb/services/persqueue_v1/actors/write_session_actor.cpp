@@ -91,7 +91,7 @@ static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 TWriteSessionActor::TWriteSessionActor(
         NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
         const NActors::TActorId& schemeCache,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
         const NPersQueue::TTopicsListController& topicsController
 )
     : Request(request)

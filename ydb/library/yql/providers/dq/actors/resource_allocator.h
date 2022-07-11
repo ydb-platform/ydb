@@ -14,7 +14,7 @@ namespace NYql {
         ui32 workerCount,
         const TString& traceId,
         const TDqConfiguration::TPtr& settings,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TVector<NYql::NDqProto::TDqTask>& tasks = {},
         const TString& computeActorType = "old");
 } // namespace NYql

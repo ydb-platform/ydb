@@ -17,7 +17,7 @@ namespace V1 {
 static const ui32 TopicWriteSessionsMaxCount = 1000000;
 static const ui32 TopicReadSessionsMaxCount = 100000;
 
-TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy)
+TGRpcTopicService::TGRpcTopicService(NActors::TActorSystem *system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache,const NActors::TActorId& grpcRequestProxy)
     : ActorSystem(system)
     , Counters(counters)
     , SchemeCache(schemeCache)

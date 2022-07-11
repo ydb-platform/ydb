@@ -138,7 +138,7 @@ private:
 public:
      TReadSessionActor(TEvStreamPQReadRequest* request, const ui64 cookie,
                        const NActors::TActorId& schemeCache, const NActors::TActorId& newSchemeCache,
-                       TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
+                       TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
                        const NPersQueue::TTopicsListController& topicsHandler);
     ~TReadSessionActor();
 
@@ -335,14 +335,14 @@ private:
 
     TMap<ui64, TCommitInfo> Commits; //readid->TCommitInfo
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
 
-    NMonitoring::TDynamicCounters::TCounterPtr SessionsCreated;
-    NMonitoring::TDynamicCounters::TCounterPtr SessionsActive;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionsCreated;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SessionsActive;
 
-    NMonitoring::TDynamicCounters::TCounterPtr Errors;
-    NMonitoring::TDynamicCounters::TCounterPtr PipeReconnects;
-    NMonitoring::TDynamicCounters::TCounterPtr BytesInflight;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PipeReconnects;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflight;
     ui64 BytesInflight_;
     ui64 RequestedBytes;
     ui32 ReadsInfly;

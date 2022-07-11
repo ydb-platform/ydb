@@ -15,17 +15,17 @@ namespace NPQ {
 static const ui32 MAX_BLOB_SIZE = 8_MB;
 
 struct TL2Counters {
-    NMonitoring::TDynamicCounters::TCounterPtr TotalSize;
-    NMonitoring::TDynamicCounters::TCounterPtr TotalCount;
-    NMonitoring::TDynamicCounters::TCounterPtr Hits;
-    NMonitoring::TDynamicCounters::TCounterPtr Misses;
-    NMonitoring::TDynamicCounters::TCounterPtr Touches;
-    NMonitoring::TDynamicCounters::TCounterPtr Evictions;
-    NMonitoring::TDynamicCounters::TCounterPtr Used;
-    NMonitoring::TDynamicCounters::TCounterPtr Unused;
-    NMonitoring::TDynamicCounters::TCounterPtr Retention;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TotalSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TotalCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Hits;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Misses;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Touches;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Evictions;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Used;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Unused;
+    ::NMonitoring::TDynamicCounters::TCounterPtr Retention;
 
-    TL2Counters(TIntrusivePtr<NMonitoring::TDynamicCounters> group)
+    TL2Counters(TIntrusivePtr<::NMonitoring::TDynamicCounters> group)
     {
         TotalSize = group->GetCounter("NodeCacheSizeBytes", false);
         TotalCount = group->GetCounter("NodeCacheSizeBlobs", false);
@@ -77,7 +77,7 @@ public:
         return NKikimrServices::TActivity::PERSQUEUE_CACHE_L2_ACTOR;
     }
 
-    TPersQueueCacheL2(const TCacheL2Parameters& params, TIntrusivePtr<NMonitoring::TDynamicCounters> countersGroup)
+    TPersQueueCacheL2(const TCacheL2Parameters& params, TIntrusivePtr<::NMonitoring::TDynamicCounters> countersGroup)
         : Cache(1_TB / MAX_BLOB_SIZE) // It's some "much bigger then we need" size here.
         , MaxSize(ClampMinSize(params.MaxSizeMB * 1_MB))
         , CurrentSize(0)

@@ -11,7 +11,7 @@ class TGRpcYqPrivateTaskService
     : public NGrpc::TGrpcServiceBase<Yq::Private::V1::YqPrivateTaskService>
 {
 public:
-    TGRpcYqPrivateTaskService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TGRpcYqPrivateTaskService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
@@ -25,7 +25,7 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };

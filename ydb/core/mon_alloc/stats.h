@@ -13,7 +13,7 @@ namespace NKikimr {
 
     NActors::IActor* CreateMemStatsCollector(
         ui32 intervalSec,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
 
     struct IAllocState {

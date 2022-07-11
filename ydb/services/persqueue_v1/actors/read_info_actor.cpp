@@ -16,7 +16,7 @@ using namespace PersQueue::V1;
 TReadInfoActor::TReadInfoActor(
         TEvPQReadInfoRequest* request, const NPersQueue::TTopicsListController& topicsHandler,
         const TActorId& schemeCache, const TActorId& newSchemeCache,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters
 )
     : TBase(request)
     , SchemeCache(schemeCache)

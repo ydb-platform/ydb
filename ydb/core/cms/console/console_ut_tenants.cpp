@@ -351,7 +351,7 @@ void CheckCounter(TTenantTestRuntime &runtime,
                   TTenantsManager::ECounter counter,
                   ui64 value)
 {
-    NMonitoring::TDynamicCounterPtr counters;
+    ::NMonitoring::TDynamicCounterPtr counters;
     for (ui32 i = 0; i < runtime.GetNodeCount() && !counters; ++i) {
         auto tablets = GetServiceCounters(runtime.GetDynamicCounters(i), "tablets");
         counters = tablets->FindSubgroup("type", "CONSOLE");

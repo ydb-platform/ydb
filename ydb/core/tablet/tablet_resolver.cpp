@@ -173,17 +173,17 @@ class TTabletResolver : public TActorBootstrapped<TTabletResolver> {
 
     ui64 LastCacheEpoch = 0;
 
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderLocal;
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderLocalDc;
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderOtherDc;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderLocal;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderLocalDc;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedLeaderOtherDc;
 
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerLocal;
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerLocalDc;
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerOtherDc;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerLocal;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerLocalDc;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedFollowerOtherDc;
 
-    NMonitoring::TDynamicCounters::TCounterPtr SelectedNone;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SelectedNone;
 
-    NMonitoring::TDynamicCounters::TCounterPtr InFlyResolveCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlyResolveCounter;
 
     std::optional<TString> FindNodeDc(ui32 nodeId) const {
         auto it = NodeToDcMapping.find(nodeId);

@@ -32,7 +32,7 @@ IActor *CreateFakeVDisk(const TVDiskID& vdiskId, const TActorId& pdiskServiceId,
 class TBasicTest : public TActorBootstrapped<TBasicTest> {
     TAutoEvent *StopEvent = nullptr;
     TStateManager *StateManager = nullptr;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TIntrusivePtr<TPDiskConfig> PDiskConfig;
     TActorId PDiskServiceId;
     const ui32 NumVDisks;

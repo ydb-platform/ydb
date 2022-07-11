@@ -32,8 +32,8 @@ struct TVPatchCtx : public TThrRefBase, TNonCopyable  {
 };
 
 IActor* CreateSkeletonVPatchActor(TActorId leaderId, const TBlobStorageGroupType &gType, TEvBlobStorage::TEvVPatchStart::TPtr &ev,
-        TInstant now, TActorIDPtr skeletonFrontIDPtr, const NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
-        const NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr, const TIntrusivePtr<TVPatchCtx> &vPatchCtx,
+        TInstant now, TActorIDPtr skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchFoundPartsMsgsPtr,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr &vPatchResMsgsPtr, const TIntrusivePtr<TVPatchCtx> &vPatchCtx,
         const TString &vDiskLogPrefix, ui64 incarnationGuid);
 
 } // NKikimr

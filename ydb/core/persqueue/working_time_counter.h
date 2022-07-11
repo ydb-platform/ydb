@@ -11,11 +11,11 @@ namespace NPQ {
 class TWorkingTimeCounter {
 private:
     bool IsInWorkingState;
-    NMonitoring::TDynamicCounters::TCounterPtr WorkingTimeMicroSec;
+    ::NMonitoring::TDynamicCounters::TCounterPtr WorkingTimeMicroSec;
     TInstant LastUpdateTimestamp;
 public:
 
-    TWorkingTimeCounter(NMonitoring::TDynamicCounters::TCounterPtr counter)
+    TWorkingTimeCounter(::NMonitoring::TDynamicCounters::TCounterPtr counter)
     : IsInWorkingState(false)
     , WorkingTimeMicroSec(counter)
     {}
@@ -36,7 +36,7 @@ public:
         }
     }
 
-    void SetCounter(NMonitoring::TDynamicCounterPtr counter,
+    void SetCounter(::NMonitoring::TDynamicCounterPtr counter,
                     const TVector<std::pair<TString, TString>>& subgroups,
                     const std::tuple<TString, TString, bool>& expiring) {
         for (const auto& subgroup : subgroups) {

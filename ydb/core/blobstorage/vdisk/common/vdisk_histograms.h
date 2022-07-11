@@ -13,7 +13,7 @@ namespace NKikimr {
         class THistograms {
         public:
             THistograms(
-                const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+                const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
                 NPDisk::EDeviceType type);
             const NVDiskMon::TLtcHistoPtr &GetHistogram(NKikimrBlobStorage::EGetHandleClass handleClass) const;
             const NVDiskMon::TLtcHistoPtr &GetHistogram(NKikimrBlobStorage::EPutHandleClass handleClass) const;

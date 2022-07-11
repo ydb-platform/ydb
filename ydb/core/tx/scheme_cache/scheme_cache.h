@@ -34,10 +34,10 @@ struct TSchemeCacheConfig : public TThrRefBase {
     };
 
     TSchemeCacheConfig() = default;
-    explicit TSchemeCacheConfig(const TAppData* appData, NMonitoring::TDynamicCounterPtr counters);
+    explicit TSchemeCacheConfig(const TAppData* appData, ::NMonitoring::TDynamicCounterPtr counters);
 
     TVector<TTagEntry> Roots;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
 };
 
 struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {

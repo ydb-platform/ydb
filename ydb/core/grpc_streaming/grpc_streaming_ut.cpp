@@ -41,7 +41,7 @@ public:
         TSelf,
         413>; //GRPC_SERVER = 413, services.proto
 
-    TStreamingService(TActorSystem* as, TIntrusivePtr<NMonitoring::TDynamicCounters> counters)
+    TStreamingService(TActorSystem* as, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters)
         : ActorSystem(*as)
         , Counters(std::move(counters))
     { }
@@ -78,7 +78,7 @@ public:
 
 private:
     TActorSystem& ActorSystem;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> const Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> const Counters;
 
     grpc::ServerCompletionQueue* CQ = nullptr;
     NGrpc::TGlobalLimiter* Limiter = nullptr;
@@ -101,7 +101,7 @@ public:
         GRpcServer.Reset(new NGrpc::TGRpcServer(options));
 
         auto* as = Server->GetRuntime()->GetAnyNodeActorSystem();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
         GRpcServer->AddService(new TStreamingService<TImplActor>(as, counters));
         GRpcServer->Start();

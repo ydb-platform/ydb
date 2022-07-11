@@ -52,7 +52,7 @@ static const THashSet<TString> DATABASE_ATTRIBUTE_LABELS
          TString("database_id")
     }};
 
-using NMonitoring::TDynamicCounters;
+using ::NMonitoring::TDynamicCounters;
 
 const THashSet<TString> &GetDatabaseSensorServices()
 {

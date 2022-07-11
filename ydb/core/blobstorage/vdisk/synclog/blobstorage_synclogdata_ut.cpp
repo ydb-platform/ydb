@@ -18,7 +18,7 @@ namespace NKikimr {
             ui32 appendBlockSize = 4 << 10;
             ui32 syncLogAdvisedIndexedBlockSize = 4 << 10;
 
-            NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
+            ::NMonitoring::TDynamicCounters::TCounterPtr cntr(new NMonitoring::TCounterForPtr);
             TMemoryConsumer memConsumer(cntr);
             TSyncLogParams params(pDiskGuid, chunkSize, appendBlockSize, syncLogAdvisedIndexedBlockSize, memConsumer);
             TEntryPointParser parser(std::move(params));

@@ -194,7 +194,7 @@ struct TSqsEvents {
         TIntrusivePtr<TQuoterResourcesForActions> QuoterResources;
 
         // Counters
-        TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters; // Raw counters interface. Is is not prefered to use them
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters; // Raw counters interface. Is is not prefered to use them
         TIntrusivePtr<TUserCounters> UserCounters;
         TIntrusivePtr<TQueueCounters> QueueCounters;
 

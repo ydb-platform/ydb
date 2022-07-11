@@ -74,7 +74,7 @@ namespace NActors {
         static bool DefaultScheduledFilterFunc(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration delay, TInstant& deadline);
     private:
         void Initialize() override;
-        TIntrusivePtr<NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const char* component) override;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> GetCountersForComponent(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const char* component) override;
         void InitActorSystemSetup(TActorSystemSetup& setup) override;
 
         TNodeData* GetNodeById(size_t idx) override {

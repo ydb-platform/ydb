@@ -85,8 +85,8 @@ private:
     void HandleGetLeaderNodeForQueueResponse(TSqsEvents::TEvGetLeaderNodeForQueueResponse::TPtr& ev);
 
 private:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCounters_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqPublicCounters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCounters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> YmqPublicCounters_;
 
     /// A map of node ids to TNodeIfno
     THashMap<ui32, TNodeInfoRef> NodesInfo_;

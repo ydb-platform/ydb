@@ -6,7 +6,7 @@
 
 namespace NKikimr::NQuoter {
 
-TRateLimiterGRpcService::TRateLimiterGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
+TRateLimiterGRpcService::TRateLimiterGRpcService(NActors::TActorSystem* actorSystem, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId grpcRequestProxyId)
     : ActorSystem(actorSystem)
     , Counters(std::move(counters))
     , GRpcRequestProxyId(grpcRequestProxyId)

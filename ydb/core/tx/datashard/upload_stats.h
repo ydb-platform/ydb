@@ -38,8 +38,8 @@ private:
     ui64 RowsSent = 0;
     ui64 BytesSent = 0;
 
-    NMonitoring::TDynamicCounters::TCounterPtr MonRows;
-    NMonitoring::TDynamicCounters::TCounterPtr MonBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MonRows;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MonBytes;
 };
 
 }}

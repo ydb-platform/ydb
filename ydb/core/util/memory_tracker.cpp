@@ -88,7 +88,7 @@ private:
         GatherDynamicMetrics();
     }
 
-    void RegisterCounters(NMonitoring::TDynamicCounterPtr counters) {
+    void RegisterCounters(::NMonitoring::TDynamicCounterPtr counters) {
         auto componentGroup = counters->GetSubgroup("component", "memory_tracker");
 
         auto count = TMemoryTracker::Instance()->GetCount();

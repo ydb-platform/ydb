@@ -29,15 +29,15 @@ enum class ERequestType {
 };
 
 struct TRequestMonGroup {
-    NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsIssued;
-    NMonitoring::TDynamicCounters::TCounterPtr VGetRangesIssued;
-    NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithData;
-    NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithNoData;
-    NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithErrors;
-    NMonitoring::TDynamicCounters::TCounterPtr VPutBlobsIssued;
-    NMonitoring::TDynamicCounters::TCounterPtr VMovedPatchBlobsIssued;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsIssued;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VGetRangesIssued;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithData;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithNoData;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VGetBlobsReturnedWithErrors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VPutBlobsIssued;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VMovedPatchBlobsIssued;
 
-    void Init(const TIntrusivePtr<NMonitoring::TDynamicCounters> &group) {
+    void Init(const TIntrusivePtr<::NMonitoring::TDynamicCounters> &group) {
         VGetBlobsIssued = group->GetCounter("VGetBlobsIssued", true);
         VGetRangesIssued = group->GetCounter("VGetRangesIssued", true);
         VGetBlobsReturnedWithData = group->GetCounter("VGetBlobsReturnedWithData", true);
@@ -107,11 +107,11 @@ struct TResponseStatusGroup : TThrRefBase {
     XX(NODATA) \
     // END
 
-#define XX(NAME) NMonitoring::TDynamicCounters::TCounterPtr Num##NAME;
+#define XX(NAME) ::NMonitoring::TDynamicCounters::TCounterPtr Num##NAME;
     ENUM_STATUS(XX)
 #undef XX
 
-    TResponseStatusGroup(const NMonitoring::TDynamicCounterPtr& group)
+    TResponseStatusGroup(const ::NMonitoring::TDynamicCounterPtr& group)
         : TThrRefBase()
 #define XX(NAME) , Num##NAME(group->GetCounter(#NAME, true))
         ENUM_STATUS(XX)
@@ -138,19 +138,19 @@ public:
     TIntrusivePtr<TDsProxyNodeMon> NodeMon;
 
 protected:
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> PercentileCounters;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> ResponseGroup;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> PercentileCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> ResponseGroup;
     ui64 GroupIdGen = Max<ui64>(); // group id:group gen
     std::atomic<bool> IsLimitedMon = ATOMIC_VAR_INIT(true);
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> ThroughputGroup;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> ThroughputGroup;
     std::unique_ptr<TThroughputMeter> PutTabletLogThroughput;
     std::unique_ptr<TThroughputMeter> PutAsyncBlobThroughput;
     std::unique_ptr<TThroughputMeter> PutUserDataThroughput;
     std::unique_ptr<TThroughputMeter> PutThroughput;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LatencyOverviewGroup;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> LatencyOverviewGroup;
 
 
     // log response time
@@ -172,15 +172,15 @@ protected:
     NMonitoring::TPercentileTrackerLg<3, 4, 3> PatchResponseTime;
 
     // event counters
-    TIntrusivePtr<NMonitoring::TDynamicCounters> EventGroup;
-    NMonitoring::TDynamicCounters::TCounterPtr EventPut;
-    NMonitoring::TDynamicCounters::TCounterPtr EventPutBytes;
-    NMonitoring::TDynamicCounters::TCounterPtr EventGetResBytes;
-    TMap<ui32, NMonitoring::TDynamicCounters::TCounterPtr> EventPutBytesBuckets;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> EventGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventPut;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventPutBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventGetResBytes;
+    TMap<ui32, ::NMonitoring::TDynamicCounters::TCounterPtr> EventPutBytesBuckets;
 
 
     // handoff use reason
-    TIntrusivePtr<NMonitoring::TDynamicCounters> HandoffGroup;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> HandoffGroup;
 
     // subevent counters
     TRequestMonGroup GetGroup;
@@ -193,44 +193,44 @@ public:
     TBlobStorageGroupProxyTimeStats TimeStats;
 
     // handoff use reason
-    std::array<NMonitoring::TDynamicCounters::TCounterPtr, 8> HandoffPartsSent;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 8> HandoffPartsSent;
 
     TAtomic PutSamplePPM = 0;
     TAtomic GetSamplePPM = 0;
     TAtomic DiscoverSamplePPM = 0;
 
     // event counters
-    NMonitoring::TDynamicCounters::TCounterPtr EventGet;
-    NMonitoring::TDynamicCounters::TCounterPtr EventBlock;
-    NMonitoring::TDynamicCounters::TCounterPtr EventDiscover;
-    NMonitoring::TDynamicCounters::TCounterPtr EventRange;
-    NMonitoring::TDynamicCounters::TCounterPtr EventCollectGarbage;
-    NMonitoring::TDynamicCounters::TCounterPtr EventMultiGet;
-    NMonitoring::TDynamicCounters::TCounterPtr EventIndexRestoreGet;
-    NMonitoring::TDynamicCounters::TCounterPtr EventMultiCollect;
-    NMonitoring::TDynamicCounters::TCounterPtr EventStatus;
-    NMonitoring::TDynamicCounters::TCounterPtr EventStopPutBatching;
-    NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
-    NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventBlock;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventDiscover;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventRange;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventCollectGarbage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventMultiGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventIndexRestoreGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventMultiCollect;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventStatus;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventStopPutBatching;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventStopGetBatching;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EventPatch;
 
-    NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
-    NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PutsSentViaPutBatching;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PutBatchesSent;
 
     // active event counters
-    TIntrusivePtr<NMonitoring::TDynamicCounters> ActiveRequestsGroup;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveGet;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveBlock;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveDiscover;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveRange;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveCollectGarbage;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiGet;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveIndexRestoreGet;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiCollect;
-    NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
-    NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> ActiveRequestsGroup;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActivePut;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActivePutCapacity;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveGetCapacity;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveBlock;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveDiscover;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveRange;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveCollectGarbage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveIndexRestoreGet;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveMultiCollect;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActiveStatus;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ActivePatch;
 
     std::optional<TResponseStatusGroup> RespStatPut;
     std::optional<TResponseStatusGroup> RespStatGet;
@@ -242,9 +242,9 @@ public:
     std::optional<TResponseStatusGroup> RespStatPatch;
 
     // special patch counters
-    NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
-    NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
-    NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VPatchContinueFailed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr VPatchPartPlacementVerifyFailed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PatchesWithFallback;
 
     TRequestMonGroup& GetRequestMonGroup(ERequestType request) {
         switch (request) {
@@ -263,9 +263,9 @@ public:
     }
 
 
-    TBlobStorageGroupProxyMon(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& percentileCounters,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& overviewCounters,
+    TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& percentileCounters,
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& overviewCounters,
             const TIntrusivePtr<TBlobStorageGroupInfo>& info,
             const TIntrusivePtr<TDsProxyNodeMon> &nodeMon,
             bool isLimitedMon);

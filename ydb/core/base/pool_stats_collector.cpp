@@ -17,7 +17,7 @@ public:
     TStatsCollectingActor(
         ui32 intervalSec,
         const TActorSystemSetup& setup,
-        NMonitoring::TDynamicCounterPtr counters)
+        ::NMonitoring::TDynamicCounterPtr counters)
         : NActors::TStatsCollectingActor(intervalSec, setup, GetServiceCounters(counters, "utils"))
     {
         MiniKQLPoolStats.Init(Counters.Get());
@@ -26,7 +26,7 @@ public:
 private:
     class TMiniKQLPoolStats {
     public:
-        void Init(NMonitoring::TDynamicCounters* group) {
+        void Init(::NMonitoring::TDynamicCounters* group) {
             CounterGroup = group->GetSubgroup("subsystem", "mkqlalloc");
             TotalBytes = CounterGroup->GetCounter("GlobalPoolTotalBytes", false);
         }
@@ -36,8 +36,8 @@ private:
         }
 
     private:
-        TIntrusivePtr<NMonitoring::TDynamicCounters> CounterGroup;
-        NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> CounterGroup;
+        ::NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
     };
 
     void OnWakeup(const TActorContext &ctx) override {
@@ -58,7 +58,7 @@ private:
 
 IActor *CreateStatsCollector(ui32 intervalSec,
                              const TActorSystemSetup& setup,
-                             NMonitoring::TDynamicCounterPtr counters)
+                             ::NMonitoring::TDynamicCounterPtr counters)
 {
     return new TStatsCollectingActor(intervalSec, setup, counters);
 }

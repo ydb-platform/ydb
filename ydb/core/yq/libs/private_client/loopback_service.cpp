@@ -23,7 +23,7 @@ namespace NYq {
 class TLoopbackService : public NActors::TActorBootstrapped<TLoopbackService> {
 public:
     TLoopbackService(
-        const NMonitoring::TDynamicCounterPtr& counters)
+        const ::NMonitoring::TDynamicCounterPtr& counters)
         : ServiceCounters(counters->GetSubgroup("subsystem", "LoopbackService"))
     {
     }
@@ -133,14 +133,14 @@ private:
         }
     }
 
-    const NMonitoring::TDynamicCounterPtr ServiceCounters;
+    const ::NMonitoring::TDynamicCounterPtr ServiceCounters;
     ui64 Cookie = 0;
     THashMap<ui64, NActors::TActorId> Senders;
     THashMap<ui64, ui64> OriginalCookies;
 };
 
 NActors::IActor* CreateLoopbackServiceActor(
-    const NMonitoring::TDynamicCounterPtr& counters) {
+    const ::NMonitoring::TDynamicCounterPtr& counters) {
         return new TLoopbackService(counters);
 }
 

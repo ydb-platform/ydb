@@ -380,7 +380,7 @@ void TGRpcService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPt
 }
 
 TFuture<void> TGRpcService::Prepare(TActorSystem* system, const TActorId& pqMeta, const TActorId& msgBusProxy,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     auto promise = NewPromise<void>();
     InitCb_ = [=]() mutable {
         try {

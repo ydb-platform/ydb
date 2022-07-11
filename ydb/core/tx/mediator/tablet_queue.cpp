@@ -77,7 +77,7 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     TStepEntry *ActiveStep;
 
     THashSet<TActorId> TimecastWatches;
-    NMonitoring::TDynamicCounters::TCounterPtr TimecastLagCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TimecastLagCounter;
 
     void SendToTablet(TTabletEntry::TStep *tabletStep, ui64 tablet, const TActorContext &ctx) {
         auto evx = new TEvTxProcessing::TEvPlanStep(tabletStep->StepRef->Step, Mediator, tablet);

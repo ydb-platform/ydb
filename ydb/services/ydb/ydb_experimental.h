@@ -13,7 +13,7 @@ class TGRpcYdbExperimentalService
     : public NGrpc::TGrpcServiceBase<Ydb::Experimental::V1::ExperimentalService>
 {
 public:
-    TGRpcYdbExperimentalService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TGRpcYdbExperimentalService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
@@ -27,7 +27,7 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     NActors::TActorId GRpcRequestProxyId_;
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
 };

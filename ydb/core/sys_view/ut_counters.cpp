@@ -81,10 +81,10 @@ Y_UNIT_TEST_SUITE(DbCounters) {
         for (size_t iter = 0; iter < 30; ++iter) {
             Cerr << "iteration " << iter << Endl;
 
-            auto checkTabletCounters = [] (NMonitoring::TDynamicCounterPtr databaseGroup,
+            auto checkTabletCounters = [] (::NMonitoring::TDynamicCounterPtr databaseGroup,
                 const char* databaseName)
             {
-                auto checkCounter = [databaseName] (NMonitoring::TDynamicCounterPtr group,
+                auto checkCounter = [databaseName] (::NMonitoring::TDynamicCounterPtr group,
                     const char* sensorName, bool isDerivative)
                 {
                     auto value = group->GetCounter(sensorName, isDerivative)->Val();

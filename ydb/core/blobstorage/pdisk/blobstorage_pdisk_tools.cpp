@@ -99,7 +99,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
         file.Close();
     }
 
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
     THolder<NPDisk::TPDisk> pDisk(new NPDisk::TPDisk(cfg, counters));
 
@@ -114,7 +114,7 @@ void FormatPDisk(TString path, ui64 diskSizeBytes, ui32 sectorSizeBytes, ui32 us
 
 bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TKey &mainKey, TPDiskInfo &outInfo,
         const bool doLock, TIntrusivePtr<NPDisk::TSectorMap> sectorMap) {
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
     auto mon = std::make_unique<TPDiskMon>(counters, 0, nullptr);
 
     bool useSdpkNvmeDriver = path.StartsWith("PCIe:");

@@ -133,8 +133,8 @@ private:
 
 private:
     TString RootUrl_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> YmqRootCounters_;
     std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters_;
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_;
     TUsersMap Users_;

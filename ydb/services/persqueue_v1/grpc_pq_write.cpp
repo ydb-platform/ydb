@@ -18,14 +18,14 @@ using namespace PersQueue::V1;
 ///////////////////////////////////////////////////////////////////////////////
 
 IActor* CreatePQWriteService(const TActorId& schemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
+                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions) {
     return new TPQWriteService(schemeCache, counters, maxSessions);
 }
 
 
 
 TPQWriteService::TPQWriteService(const TActorId& schemeCache,
-                             TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
+                             TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const ui32 maxSessions)
     : SchemeCache(schemeCache)
     , Counters(counters)
     , MaxSessions(maxSessions)

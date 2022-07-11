@@ -82,7 +82,7 @@ class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     TBlobStorageController::THostRecordMap HostRecords;
     ui32 GroupReserveMin = 0;
     ui32 GroupReservePart = 0;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     std::unordered_set<std::tuple<TString>> PDiskFilterCounters;
     std::unordered_set<std::tuple<TString, TString>> ErasureCounters;
     TActorId StorageStatsCalculatorId;
@@ -93,7 +93,7 @@ public:
         return NKikimrServices::TActivity::BSC_SYSTEM_VIEWS_COLLECTOR;
     }
 
-    TSystemViewsCollector(NMonitoring::TDynamicCounterPtr counters)
+    TSystemViewsCollector(::NMonitoring::TDynamicCounterPtr counters)
         : Counters(std::move(counters))
     {}
 

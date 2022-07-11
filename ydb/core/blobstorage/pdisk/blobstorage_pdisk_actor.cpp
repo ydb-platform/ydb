@@ -69,7 +69,7 @@ class TPDiskActor : public TActorBootstrapped<TPDiskActor> {
     TIntrusivePtr<TPDiskConfig> Cfg;
     TKey MainKey;
     TList<TInitQueueItem> InitQueue;
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> PDiskCounters;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> PDiskCounters;
     TIntrusivePtr<TPDisk> PDisk;
     bool IsMagicAlreadyChecked = false;
 
@@ -196,7 +196,7 @@ public:
     }
 
     TPDiskActor(const TIntrusivePtr<TPDiskConfig>& cfg, const NPDisk::TKey &mainKey,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Cfg(cfg)
         , MainKey(mainKey)
         , PDiskCounters(GetServiceCounters(counters, "pdisks")
@@ -1077,7 +1077,7 @@ public:
 // PDisk Creation
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &mainKey,
-        const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) {
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     return new NPDisk::TPDiskActor(cfg, mainKey, counters);
 }
 

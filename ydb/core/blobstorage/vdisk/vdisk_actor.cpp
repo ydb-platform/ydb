@@ -6,7 +6,7 @@ namespace NKikimr {
 
     IActor* CreateVDisk(const TIntrusivePtr<TVDiskConfig> &cfg,
                         const TIntrusivePtr<TBlobStorageGroupInfo> &info,
-                        const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters) {
+                        const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
         // some global checks, it's better to VERIFY now than later
         IngressGlobalCheck(info.Get());
 

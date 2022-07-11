@@ -25,7 +25,7 @@ public:
     // Throws on error.
     static TPtr Make(
         const THttpGatewayConfig* httpGatewaysCfg = nullptr,
-        NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
+        ::NMonitoring::TDynamicCounterPtr counters = MakeIntrusive<::NMonitoring::TDynamicCounters>());
 
     class TContentBase : protected TString {
     protected:

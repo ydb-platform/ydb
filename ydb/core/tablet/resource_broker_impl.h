@@ -92,7 +92,7 @@ using TTaskPtr = TIntrusivePtr<TTask>;
 class TBaseCounters : public TThrRefBase {
 public:
     TBaseCounters() = default;
-    TBaseCounters(const NMonitoring::TDynamicCounterPtr &counters);
+    TBaseCounters(const ::NMonitoring::TDynamicCounterPtr &counters);
     TBaseCounters(const TBaseCounters &other) = default;
     TBaseCounters(TBaseCounters &&other) = default;
 
@@ -103,10 +103,10 @@ public:
     void ReleaseResources(const TResourceValues &values);
 
 public:
-    std::array<NMonitoring::TDynamicCounters::TCounterPtr, RESOURCE_COUNT> Consumption;
-    NMonitoring::TDynamicCounters::TCounterPtr FinishedTasks;
-    NMonitoring::TDynamicCounters::TCounterPtr EnqueuedTasks;
-    NMonitoring::TDynamicCounters::TCounterPtr InFlyTasks;
+    std::array<::NMonitoring::TDynamicCounters::TCounterPtr, RESOURCE_COUNT> Consumption;
+    ::NMonitoring::TDynamicCounters::TCounterPtr FinishedTasks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr EnqueuedTasks;
+    ::NMonitoring::TDynamicCounters::TCounterPtr InFlyTasks;
 };
 
 /**
@@ -114,7 +114,7 @@ public:
  */
 class TQueueCounters : public TBaseCounters {
 public:
-    TQueueCounters(const NMonitoring::TDynamicCounterPtr &counters);
+    TQueueCounters(const ::NMonitoring::TDynamicCounterPtr &counters);
 };
 using TQueueCountersPtr = TIntrusivePtr<TQueueCounters>;
 
@@ -124,7 +124,7 @@ using TQueueCountersPtr = TIntrusivePtr<TQueueCounters>;
 class TTaskCounters : public TBaseCounters {
 public:
     TTaskCounters() = default;
-    TTaskCounters(const NMonitoring::TDynamicCounterPtr &counters);
+    TTaskCounters(const ::NMonitoring::TDynamicCounterPtr &counters);
     TTaskCounters(const TTaskCounters &other) = default;
     TTaskCounters(TTaskCounters &&other) = default;
 
@@ -213,7 +213,7 @@ private:
 
 public:
     TTaskQueue(const NKikimrResourceBroker::TQueueConfig &config,
-               const NMonitoring::TDynamicCounterPtr &counters,
+               const ::NMonitoring::TDynamicCounterPtr &counters,
                TResourceLimitPtr totalLimit, TQueueCountersPtr totalCounters);
 
     /**
@@ -301,7 +301,7 @@ private:
     };
 
 public:
-    TScheduler(const NMonitoring::TDynamicCounterPtr &counters);
+    TScheduler(const ::NMonitoring::TDynamicCounterPtr &counters);
     ~TScheduler();
 
     /**
@@ -392,9 +392,9 @@ private:
     THashMap<TString, TTaskConfig> TaskConfigs;
     TResourceLimitPtr ResourceLimit;
     THashMap<std::pair<TActorId, ui64>, TTaskPtr> Tasks;
-    const NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
     TQueueCountersPtr TotalCounters;
-    NMonitoring::TDynamicCounters::TCounterPtr MissingTaskTypeCounter;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MissingTaskTypeCounter;
     ui64 NextTaskId;
 };
 
@@ -404,7 +404,7 @@ private:
 class TResourceBroker : public IResourceBroker {
 public:
     TResourceBroker(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-                    const NMonitoring::TDynamicCounterPtr &counters,
+                    const ::NMonitoring::TDynamicCounterPtr &counters,
                     TActorSystem *actorSystem);
 
     bool SubmitTaskInstant(const TEvResourceBroker::TEvSubmitTask &ev, const TActorId &sender) override;
@@ -441,7 +441,7 @@ public:
     }
 
     TResourceBrokerActor(const NKikimrResourceBroker::TResourceBrokerConfig &config,
-                         const NMonitoring::TDynamicCounterPtr &counters);
+                         const ::NMonitoring::TDynamicCounterPtr &counters);
 
     void Bootstrap(const TActorContext &ctx);
 
@@ -477,7 +477,7 @@ private:
     void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx);
 
     NKikimrResourceBroker::TResourceBrokerConfig Config;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<TResourceBroker> ResourceBroker;
 };
 

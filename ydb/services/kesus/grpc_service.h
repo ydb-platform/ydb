@@ -20,7 +20,7 @@ class TKesusGRpcService
 public:
     TKesusGRpcService(
         NActors::TActorSystem* actorSystem,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         NActors::TActorId id);
     ~TKesusGRpcService();
 
@@ -35,7 +35,7 @@ private:
 
 private:
     NActors::TActorSystem* ActorSystem;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     NActors::TActorId GRpcRequestProxyId;
 
     grpc::ServerCompletionQueue* CQ = nullptr;

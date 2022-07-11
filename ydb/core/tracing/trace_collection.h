@@ -32,7 +32,7 @@ public:
     using MainQueueType = TList<TTabletData>;
     using IndexType = THashMap<ui64, MainQueueType::iterator>;
 
-    TTraceCollection(TIntrusivePtr<NMonitoring::TDynamicCounters> counters);
+    TTraceCollection(TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
     void AddTrace(ui64 tabletID, ITrace* trace) override;
     // Shows all tablet IDs for which it has data
@@ -52,10 +52,10 @@ private:
     IndexType Indexes;
     ui64 TotalSize = 0;
 
-    NMonitoring::TDynamicCounters::TCounterPtr ReportedSize;
-    NMonitoring::TDynamicCounters::TCounterPtr ReportedCurrentCount;
-    NMonitoring::TDynamicCounters::TCounterPtr ReportedTotalCount;
-    NMonitoring::TDynamicCounters::TCounterPtr ReportedTabletCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReportedSize;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReportedCurrentCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReportedTotalCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ReportedTabletCount;
     bool Reporting = false;
 };
 

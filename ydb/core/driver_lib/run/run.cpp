@@ -322,7 +322,7 @@ public:
 
 TKikimrRunner::TKikimrRunner(std::shared_ptr<TModuleFactories> factories)
     : ModuleFactories(std::move(factories))
-    , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
+    , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
     , PollerThreads(new NInterconnect::TPollerThreads)
 {
 }

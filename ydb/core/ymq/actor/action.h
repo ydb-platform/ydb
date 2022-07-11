@@ -763,8 +763,8 @@ protected:
     TMaybe<ui32> TablesFormat_;
     TInstant StartTs_;
     TInstant FinishTs_;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
-    TIntrusivePtr<NMonitoring::TDynamicCounters> YmqRootCounters_; // Raw counters interface. Is is not prefered to use them
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> SqsCoreCounters_; // Raw counters interface. Is is not prefered to use them
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> YmqRootCounters_; // Raw counters interface. Is is not prefered to use them
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TQueueCounters> QueueCounters_;
     TMaybe<TSqsEvents::TQueueAttributes> QueueAttributes_;

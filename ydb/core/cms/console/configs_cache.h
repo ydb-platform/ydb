@@ -52,7 +52,7 @@ private:
 
     NKikimrConfig::TAppConfig CurrentConfig;
 
-    NMonitoring::TDynamicCounters::TCounterPtr OutdatedConfiguration;
+    ::NMonitoring::TDynamicCounters::TCounterPtr OutdatedConfiguration;
 };
 
 IActor *CreateConfigsCacheActor(const TString &pathToConfigCacheFile);

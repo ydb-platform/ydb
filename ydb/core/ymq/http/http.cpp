@@ -997,8 +997,8 @@ TAsyncHttpServer::~TAsyncHttpServer() {
 }
 
 void TAsyncHttpServer::Initialize(
-        NActors::TActorSystem* as, TIntrusivePtr<NMonitoring::TDynamicCounters> sqsCounters,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters, ui32 poolId
+        NActors::TActorSystem* as, TIntrusivePtr<::NMonitoring::TDynamicCounters> sqsCounters,
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters, ui32 poolId
 ) {
     ActorSystem_ = as;
     HttpCounters_ = new THttpCounters(Config, sqsCounters->GetSubgroup("subsystem", "http"));

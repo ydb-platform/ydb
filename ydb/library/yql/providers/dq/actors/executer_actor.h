@@ -13,7 +13,7 @@ NActors::IActor* MakeDqExecuter(
     const NActors::TActorId& printerId,
     const TString& traceId, const TString& username,
     const TDqConfiguration::TPtr& settings,
-    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
     TInstant requestStartTime = TInstant::Now(),
     bool createTaskSuspended = false
 );

@@ -13,7 +13,7 @@ class TLoaderActor : public TActorBootstrapped<TLoaderActor> {
     const NBackpressure::TQueueClientId ClientId;
     const TVDiskID VDiskId;
     const TActorId VDiskActorId;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TBSProxyContextPtr BSProxyCtx;
     TIntrusivePtr<NBackpressure::TFlowRecord> FlowRecord;
     TActorId QueueId;
@@ -28,7 +28,7 @@ public:
         : ClientId(std::move(clientId))
         , VDiskId(std::move(vdiskId))
         , VDiskActorId(std::move(vdiskActorId))
-        , Counters(MakeIntrusive<NMonitoring::TDynamicCounters>())
+        , Counters(MakeIntrusive<::NMonitoring::TDynamicCounters>())
         , BSProxyCtx(MakeIntrusive<TBSProxyContext>(Counters))
         , FlowRecord(MakeIntrusive<NBackpressure::TFlowRecord>())
     {

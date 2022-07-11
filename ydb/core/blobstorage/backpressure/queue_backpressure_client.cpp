@@ -30,7 +30,7 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     TBSProxyContextPtr BSProxyCtx;
     TString LogPrefix;
     const TString QueueName;
-    const NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
     TBlobStorageQueue Queue;
     TActorId BlobStorageProxy;
     const TVDiskIdShort VDiskIdShort;
@@ -74,7 +74,7 @@ public:
     }
 
     TVDiskBackpressureClientActor(const TIntrusivePtr<TBlobStorageGroupInfo>& info, TVDiskIdShort vdiskId,
-            NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+            NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
             const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
             ui32 interconnectChannel, bool /*local*/, TDuration watchdogTimeout,
             TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility)
@@ -836,7 +836,7 @@ private:
     XX(TEvents::TSystem::Poison, Poison) \
     // END
 
-#define XX(EVENT, NAME) NMonitoring::TDynamicCounters::TCounterPtr EventCounter##NAME;
+#define XX(EVENT, NAME) ::NMonitoring::TDynamicCounters::TCounterPtr EventCounter##NAME;
     DEFINE_EVENTS(XX)
 #undef XX
 
@@ -926,7 +926,7 @@ namespace NKikimr {
 // QUEUE CREATOR
 ////////////////////////////////////////////////////////////////////////////
 IActor* CreateVDiskBackpressureClient(const TIntrusivePtr<TBlobStorageGroupInfo>& info, TVDiskIdShort vdiskId,
-        NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        NKikimrBlobStorage::EVDiskQueueId queueId,const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         const TBSProxyContextPtr& bspctx, const NBackpressure::TQueueClientId& clientId, const TString& queueName,
         ui32 interconnectChannel, bool local, TDuration watchdogTimeout,
         TIntrusivePtr<NBackpressure::TFlowRecord> &flowRecord, NMonitoring::TCountableBase::EVisibility visibility) {

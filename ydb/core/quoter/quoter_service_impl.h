@@ -150,15 +150,15 @@ struct TResource {
     TInstant StartStarvationTime = TInstant::Zero();
 
     struct {
-        NMonitoring::TDynamicCounters::TCounterPtr Consumed;
-        NMonitoring::TDynamicCounters::TCounterPtr Requested;
-        NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
-        NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecInStarvation;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Consumed;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Requested;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RequestsCount;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ElapsedMicrosecInStarvation;
         NMonitoring::THistogramPtr RequestQueueTime;
         NMonitoring::THistogramPtr RequestTime;
     } Counters;
 
-    TResource(ui64 quoterId, ui64 resourceId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig, const NMonitoring::TDynamicCounterPtr& quoterCounters)
+    TResource(ui64 quoterId, ui64 resourceId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig, const ::NMonitoring::TDynamicCounterPtr& quoterCounters)
         : QuoterId(quoterId)
         , ResourceId(resourceId)
         , Quoter(quoter)
@@ -199,17 +199,17 @@ struct TQuoterState {
     TMap<TString, TSet<ui32>> WaitingResource; // => requests
 
     struct {
-        NMonitoring::TDynamicCounterPtr QuoterCounters;
+        ::NMonitoring::TDynamicCounterPtr QuoterCounters;
     } Counters;
 
     TResource& GetOrCreate(ui64 quoterId, ui64 resId, const TString& quoter, const TString& resource, const TQuoterServiceConfig &quoterServiceConfig);
     bool Empty();
 
-    void InitCounters(const NMonitoring::TDynamicCounterPtr& serviceCounters) {
+    void InitCounters(const ::NMonitoring::TDynamicCounterPtr& serviceCounters) {
         Counters.QuoterCounters = serviceCounters->GetSubgroup(QUOTER_COUNTER_SENSOR_NAME, QuoterName);
     }
 
-    TQuoterState(const TString& quoterName, const NMonitoring::TDynamicCounterPtr& serviceCounters)
+    TQuoterState(const TString& quoterName, const ::NMonitoring::TDynamicCounterPtr& serviceCounters)
         : QuoterName(quoterName)
     {
         if (serviceCounters) {
@@ -241,15 +241,15 @@ class TQuoterService : public TActorBootstrapped<TQuoterService> {
     TMap<ui64, TDeque<TEvQuota::TProxyStat>> StatsToPublish; // quoterId -> stats
 
     struct {
-        NMonitoring::TDynamicCounterPtr ServiceCounters;
-        NMonitoring::TDynamicCounters::TCounterPtr ActiveQuoterProxies;
-        NMonitoring::TDynamicCounters::TCounterPtr ActiveProxyResources;
-        NMonitoring::TDynamicCounters::TCounterPtr KnownLocalResources;
-        NMonitoring::TDynamicCounters::TCounterPtr RequestsInFly;
-        NMonitoring::TDynamicCounters::TCounterPtr Requests;
-        NMonitoring::TDynamicCounters::TCounterPtr ResultOk;
-        NMonitoring::TDynamicCounters::TCounterPtr ResultDeadline;
-        NMonitoring::TDynamicCounters::TCounterPtr ResultError;
+        ::NMonitoring::TDynamicCounterPtr ServiceCounters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ActiveQuoterProxies;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ActiveProxyResources;
+        ::NMonitoring::TDynamicCounters::TCounterPtr KnownLocalResources;
+        ::NMonitoring::TDynamicCounters::TCounterPtr RequestsInFly;
+        ::NMonitoring::TDynamicCounters::TCounterPtr Requests;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultOk;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultDeadline;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultError;
         NMonitoring::THistogramPtr RequestLatency;
     } Counters;
 

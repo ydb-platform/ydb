@@ -47,7 +47,7 @@ public:
 
 
 
-IEventsWriterWrapper::TPtr TSqsEventsWriterFactory::CreateEventsWriter(const NKikimrConfig::TSqsConfig& config,  const NMonitoring::TDynamicCounterPtr&) const {
+IEventsWriterWrapper::TPtr TSqsEventsWriterFactory::CreateEventsWriter(const NKikimrConfig::TSqsConfig& config,  const ::NMonitoring::TDynamicCounterPtr&) const {
     const auto& ycSearchCfg = config.GetYcSearchEventsConfig();
     switch (ycSearchCfg.OutputMethod_case()) {
         case NKikimrConfig::TSqsConfig::TYcSearchEventsConfig::kOutputFileName:

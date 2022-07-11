@@ -15,8 +15,8 @@ using namespace NActors;
 
 namespace NKikimr {
 
-using TDynamicCountersPtr = TIntrusivePtr<NMonitoring::TDynamicCounters>;
-using TDynamicCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+using TDynamicCountersPtr = TIntrusivePtr<::NMonitoring::TDynamicCounters>;
+using TDynamicCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 using THistogramPtr = NMonitoring::THistogramPtr;
 
 static void FormatPrettyNumber(IOutputStream& out, ssize_t val) {

@@ -18,7 +18,7 @@ namespace NPDisk {
 
 class TDriveEstimator {
     TString Filename;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
     TPDiskMon PDiskMon;
     std::unique_ptr<TActorSystemCreator> ActorSystemCreator;
     TActorSystem *ActorSystem;

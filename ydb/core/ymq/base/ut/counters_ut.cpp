@@ -9,7 +9,7 @@
 
 namespace NKikimr::NSQS {
 
-TString CountersString(const TIntrusivePtr<NMonitoring::TDynamicCounters>& root) {
+TString CountersString(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& root) {
     TStringStream ss;
     root->OutputPlainText(ss);
     return ss.Str();
@@ -36,10 +36,10 @@ std::vector<std::pair<TString, TString>> ParseCounterPath(const TString& path) {
 // "counters" - simple counter.
 // "path/counter" - simple path.
 // "user=my_user/queue=my_queue/TransactionCount" - with nondefault names.
-void AssertCounterValue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const TString& path, i64 expectedValue) {
+void AssertCounterValue(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& path, i64 expectedValue) {
     const auto pathComponents = ParseCounterPath(path);
     UNIT_ASSERT_GT(pathComponents.size(), 0);
-    TIntrusivePtr<NMonitoring::TDynamicCounters> parent = counters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> parent = counters;
     for (size_t i = 0; i < pathComponents.size() - 1; ++i) {
         parent = parent->FindSubgroup(pathComponents[i].first, pathComponents[i].second);
         UNIT_ASSERT_C(parent, "Subgroup \"" << pathComponents[i].first << "=" << pathComponents[i].second << "\" was not found. Level: " << i);
@@ -52,7 +52,7 @@ void AssertCounterValue(const TIntrusivePtr<NMonitoring::TDynamicCounters>& coun
                                << "\nCounters string:\n" << CountersString(counters));
 }
 
-void AssertCounterValues(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, const std::vector<std::pair<TString, i64>>& expectedValues) {
+void AssertCounterValues(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const std::vector<std::pair<TString, i64>>& expectedValues) {
     for (const auto& [path, expectedValue] : expectedValues) {
         AssertCounterValue(counters, path, expectedValue);
     }
@@ -60,7 +60,7 @@ void AssertCounterValues(const TIntrusivePtr<NMonitoring::TDynamicCounters>& cou
 
 Y_UNIT_TEST_SUITE(LazyCounterTest) {
     Y_UNIT_TEST(LazyCounterTest) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> root = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> root = new ::NMonitoring::TDynamicCounters();
         TLazyCachedCounter counter, counter2, counter3;
         counter.Init(root, ELifetime::Persistent, EValueType::Absolute, "A", ELaziness::OnDemand);
         counter3.Init(root, ELifetime::Persistent, EValueType::Absolute, "B", ELaziness::OnStart);
@@ -71,7 +71,7 @@ Y_UNIT_TEST_SUITE(LazyCounterTest) {
     }
 
     void AggregationTest(ELaziness lazy) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters();
         TLazyCachedCounter parent;
         parent.Init(counters, ELifetime::Persistent, EValueType::Absolute, "parent", lazy);
 
@@ -164,7 +164,7 @@ Y_UNIT_TEST_SUITE(LazyCounterTest) {
     }
 
     Y_UNIT_TEST(HistogramAggregationTest) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters();
         const NMonitoring::TBucketBounds buckets = { 1, 3, 5 };
         TLazyCachedHistogram parent;
         parent.Init(counters, ELifetime::Persistent, buckets, "parent", ELaziness::OnStart);
@@ -218,8 +218,8 @@ Y_UNIT_TEST_SUITE(UserCountersTest) {
     Y_UNIT_TEST(DisableCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> core = new ::NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<TUserCounters> user1 = new TUserCounters(cfg, core, ymqCounters, nullptr, "user1", nullptr);
         TIntrusivePtr<TUserCounters> user2 = new TUserCounters(cfg, core, ymqCounters, nullptr, "user2", nullptr);
         ASSERT_USER_PRESENT("user1");
@@ -270,8 +270,8 @@ Y_UNIT_TEST_SUITE(UserCountersTest) {
     Y_UNIT_TEST(RemoveUserCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> core = new ::NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters = new ::NMonitoring::TDynamicCounters();
 
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
         ASSERT_USER_PRESENT("my_user");
@@ -283,8 +283,8 @@ Y_UNIT_TEST_SUITE(UserCountersTest) {
     Y_UNIT_TEST(CountersAggregationTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> core = new ::NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr);
         total->ShowDetailedCounters(TInstant::Max());
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total);
@@ -346,8 +346,8 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
     Y_UNIT_TEST(InsertCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> core = new ::NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
         ASSERT_USER_PRESENT("my_user");
 
@@ -375,8 +375,8 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
     void RemoveQueueCountersTest(bool leader, const TString& folderId) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> core = new ::NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", nullptr);
         TIntrusivePtr<TQueueCounters> queue = user->CreateQueueCounters("my_queue", folderId, true);
         if (leader) {
@@ -407,8 +407,8 @@ Y_UNIT_TEST_SUITE(QueueCountersTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetYandexCloudMode(cloudMode);
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> core = new NMonitoring::TDynamicCounters();
-        TIntrusivePtr<NMonitoring::TDynamicCounters> ymqCounters = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> core = new ::NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> ymqCounters = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<TUserCounters> total = new TUserCounters(cfg, core, ymqCounters, nullptr, TOTAL_COUNTER_LABEL, nullptr);
         total->ShowDetailedCounters(TInstant::Max());
         TIntrusivePtr<TUserCounters> user = new TUserCounters(cfg, core, ymqCounters, nullptr, "my_user", total);
@@ -481,7 +481,7 @@ Y_UNIT_TEST_SUITE(HttpCountersTest) {
     Y_UNIT_TEST(CountersAggregationTest) {
         NKikimrConfig::TSqsConfig cfg;
         cfg.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> root = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> root = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<THttpCounters> http = new THttpCounters(cfg, root);
         TIntrusivePtr<THttpUserCounters> user = http->GetUserCounters("my_user");
 
@@ -504,7 +504,7 @@ Y_UNIT_TEST_SUITE(MeteringCountersTest) {
     Y_UNIT_TEST(CountersAggregationTest) {
         NKikimrConfig::TSqsConfig config;
         config.SetCreateLazyCounters(false);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> metering = new NMonitoring::TDynamicCounters();
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> metering = new ::NMonitoring::TDynamicCounters();
         TIntrusivePtr<TMeteringCounters> counters = new TMeteringCounters(config, metering, {"inet", "yandex", "unknown", "cloud"});
         *counters->ClassifierRequestsResults["inet"] = 33;
         *counters->ClassifierRequestsResults["yandex"] = 42;

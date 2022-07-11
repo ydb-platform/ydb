@@ -10,7 +10,7 @@ class ILogBackendFactory {
 public:
     virtual TAutoPtr<TLogBackend> CreateLogBackend(
             const TKikimrRunConfig& runConfig,
-            NMonitoring::TDynamicCounterPtr counters) = 0;
+            ::NMonitoring::TDynamicCounterPtr counters) = 0;
 
     virtual ~ILogBackendFactory() {}
 };
@@ -23,7 +23,7 @@ protected:
 public:
     virtual TAutoPtr<TLogBackend> CreateLogBackend(
             const TKikimrRunConfig& runConfig,
-            NMonitoring::TDynamicCounterPtr counters) override;
+            ::NMonitoring::TDynamicCounterPtr counters) override;
 };
 
 } // NKikimr

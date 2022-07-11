@@ -17,7 +17,7 @@ private:
     constexpr static i64 DEFAULT_MAX_IN_FLIGHT = 200;
 
 public:
-    TGRpcYdbClickhouseInternalService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+    TGRpcYdbClickhouseInternalService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
         TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> inFlightLimiterRegistry, NActors::TActorId id);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
@@ -31,7 +31,7 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_ = nullptr;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> LimiterRegistry_;
     NActors::TActorId GRpcRequestProxyId_;
     NGrpc::TGlobalLimiter* Limiter_ = nullptr;

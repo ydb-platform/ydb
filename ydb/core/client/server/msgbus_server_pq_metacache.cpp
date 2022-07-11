@@ -24,7 +24,7 @@ namespace NPqMetaCacheV2 {
 using namespace NSchemeCache;
 
 
-IActor* CreateSchemeCache(const TActorContext& ctx, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) {
+IActor* CreateSchemeCache(const TActorContext& ctx, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) {
     auto appData = AppData(ctx);
     auto cacheCounters = GetServiceCounters(counters, "pqproxy|schemecache");
     auto cacheConfig = MakeIntrusive<TSchemeCacheConfig>(appData, cacheCounters);
@@ -37,7 +37,7 @@ public:
     TPersQueueMetaCacheActor(TPersQueueMetaCacheActor&&) = default;
     TPersQueueMetaCacheActor& operator=(TPersQueueMetaCacheActor&&) = default;
 
-    TPersQueueMetaCacheActor(const NMonitoring::TDynamicCounterPtr& counters,
+    TPersQueueMetaCacheActor(const ::NMonitoring::TDynamicCounterPtr& counters,
                              const TDuration& versionCheckInterval)
         : Counters(counters)
         , VersionCheckInterval(versionCheckInterval)
@@ -518,7 +518,7 @@ private:
         TString Cluster;
     };
 
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     TString VersionQuery;
     TString TopicsQuery;
 
@@ -551,7 +551,7 @@ private:
 
 };
 
-IActor* CreatePQMetaCache(const NMonitoring::TDynamicCounterPtr& counters, const TDuration& versionCheckInterval) {
+IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters, const TDuration& versionCheckInterval) {
     return new TPersQueueMetaCacheActor(counters, versionCheckInterval);
 }
 

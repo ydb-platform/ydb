@@ -11,7 +11,7 @@ namespace NMemory {
 
 NActors::IActor* CreateMemoryTrackerActor(
     TDuration updateInterval,
-    NMonitoring::TDynamicCounterPtr counters);
+    ::NMonitoring::TDynamicCounterPtr counters);
 
 }
 }

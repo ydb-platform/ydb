@@ -52,7 +52,7 @@ public:
     virtual NMonitoring::IMonPage* RegisterActorPage(TRegisterActorPageFields fields) = 0;
     NMonitoring::IMonPage* RegisterActorPage(NMonitoring::TIndexMonPage* index, const TString& relPath,
         const TString& title, bool preTag, TActorSystem* actorSystem, const TActorId& actorId, bool useAuth = true);
-    virtual NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<NMonitoring::TDynamicCounters> counters) = 0;
+    virtual NMonitoring::IMonPage* RegisterCountersPage(const TString& path, const TString& title, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters) = 0;
     virtual NMonitoring::IMonPage* FindPage(const TString& relPath) = 0;
 };
 

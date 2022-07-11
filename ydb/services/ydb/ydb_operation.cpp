@@ -8,7 +8,7 @@
 namespace NKikimr {
 namespace NGRpcService {
 
-TGRpcOperationService::TGRpcOperationService(NActors::TActorSystem *system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+TGRpcOperationService::TGRpcOperationService(NActors::TActorSystem *system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id)

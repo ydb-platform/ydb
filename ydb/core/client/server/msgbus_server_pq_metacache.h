@@ -110,7 +110,7 @@ struct TEvPqNewMetaCache {
         {}
     };
 };
-IActor* CreatePQMetaCache(const NMonitoring::TDynamicCounterPtr& counters,
+IActor* CreatePQMetaCache(const ::NMonitoring::TDynamicCounterPtr& counters,
                           const TDuration& versionCheckInterval = TDuration::Seconds(1));
 
 IActor* CreatePQMetaCache(const NActors::TActorId& schemeBoardCacheId,

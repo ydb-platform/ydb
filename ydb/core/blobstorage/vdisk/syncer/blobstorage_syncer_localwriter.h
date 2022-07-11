@@ -56,7 +56,7 @@ namespace NKikimr {
         NKikimrProto::EReplyStatus Status;
 
         TEvLocalSyncDataResult(NKikimrProto::EReplyStatus status, const TInstant &now,
-                               NMonitoring::TDynamicCounters::TCounterPtr counterPtr,
+                               ::NMonitoring::TDynamicCounters::TCounterPtr counterPtr,
                                NVDiskMon::TLtcHistoPtr histoPtr, NWilson::TTraceId traceId)
             : TEvVResultBase(now, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, counterPtr, histoPtr,
                 std::move(traceId))

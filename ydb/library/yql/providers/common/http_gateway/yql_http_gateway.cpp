@@ -24,7 +24,7 @@ public:
         PUT
     };
 
-    TEasyCurl(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, const NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, bool withBody = false)
+    TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, bool withBody = false)
         : Offset(offset), Handle(curl_easy_init()), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes)
     {
         switch (method) {
@@ -103,9 +103,9 @@ private:
     const size_t Offset;
     CURL *const Handle;
     curl_slist* Headers = nullptr;
-    const NMonitoring::TDynamicCounters::TCounterPtr Counter;
-    const NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
-    const NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
 };
 
 class TEasyCurlBuffer : public TEasyCurl {
@@ -113,14 +113,14 @@ public:
     using TPtr = std::shared_ptr<TEasyCurlBuffer>;
     using TWeakPtr = std::weak_ptr<TEasyCurlBuffer>;
 
-    TEasyCurlBuffer(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, const NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback)
+    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback)
         : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, method, offset, !data.empty()), ExpectedSize(expectedSize), Data(std::move(data)), Input(Data), Output(Buffer)
     {
         Output.Reserve(ExpectedSize);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, const NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback) {
+    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback) {
         return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data), std::move(headers), offset, expectedSize, std::move(callback));
     }
 
@@ -188,11 +188,11 @@ public:
     using TPtr = std::shared_ptr<TEasyCurlStream>;
     using TWeakPtr = std::weak_ptr<TEasyCurlStream>;
 
-    TEasyCurlStream(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, const NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, IHTTPGateway::THeaders headers, size_t offset, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish)
+    TEasyCurlStream(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, IHTTPGateway::THeaders headers, size_t offset, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish)
         : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, EMethod::GET, offset), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish)), Counter(std::make_shared<std::atomic_size_t>(0ULL))
     {}
 
-    static TPtr Make(const NMonitoring::TDynamicCounters::TCounterPtr&  counter, const NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, IHTTPGateway::THeaders headers, size_t offset, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish) {
+    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, IHTTPGateway::THeaders headers, size_t offset, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish) {
         return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, std::move(onNewData), std::move(onFinish));
     }
 
@@ -267,7 +267,7 @@ public:
 
     explicit THTTPMultiGateway(
         const THttpGatewayConfig* httpGatewaysCfg,
-        NMonitoring::TDynamicCounterPtr counters)
+        ::NMonitoring::TDynamicCounterPtr counters)
         : Counters(std::move(counters))
         , Rps(Counters->GetCounter("Requests", true))
         , InFlight(Counters->GetCounter("InFlight"))
@@ -577,19 +577,19 @@ private:
     static std::mutex CreateSync;
     static TWeakPtr Singleton;
 
-    const NMonitoring::TDynamicCounterPtr Counters;
-    const NMonitoring::TDynamicCounters::TCounterPtr Rps;
-    const NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-    const NMonitoring::TDynamicCounters::TCounterPtr InFlightStreams;
-    const NMonitoring::TDynamicCounters::TCounterPtr MaxInFlight;
-    const NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory;
-    const NMonitoring::TDynamicCounters::TCounterPtr MaxAllocatedMemory;
-    const NMonitoring::TDynamicCounters::TCounterPtr OutputMemory;
-    const NMonitoring::TDynamicCounters::TCounterPtr PerformCycles;
-    const NMonitoring::TDynamicCounters::TCounterPtr AwaitQueue;
-    const NMonitoring::TDynamicCounters::TCounterPtr AwaitQueueTopExpectedSize;
-    const NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
-    const NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
+    const ::NMonitoring::TDynamicCounterPtr Counters;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr Rps;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr InFlightStreams;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr MaxInFlight;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr AllocatedMemory;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr MaxAllocatedMemory;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr OutputMemory;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr PerformCycles;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueue;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueueTopExpectedSize;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
 
     TTaskScheduler TaskScheduler;
 };
@@ -658,7 +658,7 @@ TString IHTTPGateway::TCountedContent::Extract() {
 }
 
 IHTTPGateway::TPtr
-IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, NMonitoring::TDynamicCounterPtr counters) {
+IHTTPGateway::Make(const THttpGatewayConfig* httpGatewaysCfg, ::NMonitoring::TDynamicCounterPtr counters) {
     const std::unique_lock lock(THTTPMultiGateway::CreateSync);
     if (const auto g = THTTPMultiGateway::Singleton.lock())
         return g;

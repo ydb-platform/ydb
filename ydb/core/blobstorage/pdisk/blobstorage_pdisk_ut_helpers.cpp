@@ -60,7 +60,7 @@ void ReadPdiskFile(TTestContext *tc, ui32 dataSize, NPDisk::TAlignedData &outDat
     VERBOSE_COUT("ReadPdiskFile");
     TString path = EnsurePDiskExists(tc);
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
@@ -95,7 +95,7 @@ ui64 DestroyLastSectors(TTestContext *tc, NPDisk::TAlignedData &dataBefore, NPDi
     ASSERT_YTHROW(lastDifference > i64(sectorSize * count) + 8, "No remotely sutable data changes detected.");
     ui64 offset = ((lastDifference - 8) / sectorSize + 1 - count) * sectorSize;
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         NPDisk::TAlignedData buffer(sectorSize * count);
         memset(buffer.Get(), 0xf, sectorSize * count);
@@ -134,7 +134,7 @@ ui64 RestoreLastSectors(TTestContext *tc, NPDisk::TAlignedData &dataBefore, NPDi
     ASSERT_YTHROW(lastDifference > i64(sectorSize * count) + 8, "No remotely sutable data changes detected.");
     ui64 offset = ((lastDifference - 8) / sectorSize + 1 - count) * sectorSize;
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
@@ -172,7 +172,7 @@ void FillDeviceWithPattern(TTestContext *tc, ui64 chunkSize, ui64 pattern) {
     Fill((ui64*)data.Get(), (ui64*)(data.Get() + data.Size()), pattern);
 
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
@@ -195,7 +195,7 @@ void WriteSectors(TTestContext *tc, NPDisk::TAlignedData &dataAfter, ui64 firstS
     ui32 sectorSize = 4096;
     ui64 offset = firstSector * sectorSize;
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         TActorSystemCreator creator;
         THolder<NPDisk::IBlockDevice> device(NPDisk::CreateRealBlockDeviceWithDefaults(path, *mon,
@@ -214,7 +214,7 @@ void DestroySectors(TTestContext *tc, const NPDisk::TAlignedData &dataAfter,
 
     ui32 sectorSize = 4096;
     {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters = new NMonitoring::TDynamicCounters;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters = new ::NMonitoring::TDynamicCounters;
         THolder<TPDiskMon> mon(new TPDiskMon(counters, 0, nullptr));
         NPDisk::TAlignedData buffer((dataSize + sectorSize - 1)/ sectorSize * sectorSize);
         memcpy(buffer.Get(), dataAfter.Get(), dataSize);

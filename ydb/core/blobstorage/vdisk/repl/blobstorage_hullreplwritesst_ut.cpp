@@ -11,7 +11,7 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
     auto baseInfo = TVDiskConfig::TBaseInfo::SampleForTests();
     baseInfo.VDiskIdShort = TVDiskIdShort(vdisks[0]);
     auto vdiskCfg = MakeIntrusive<TVDiskConfig>(baseInfo);
-    auto counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
     auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(0, 1, 0, 0, 0),
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
     auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(512u << 10u, nullptr);
@@ -30,7 +30,7 @@ std::shared_ptr<TReplCtx> CreateReplCtx(TVector<TVDiskID>& vdisks, const TIntrus
 }
 
 TVDiskContextPtr CreateVDiskContext(const TBlobStorageGroupInfo& info) {
-    return MakeIntrusive<TVDiskContext>(TActorId(), info.PickTopology(), new NMonitoring::TDynamicCounters(), TVDiskID(),
+    return MakeIntrusive<TVDiskContext>(TActorId(), info.PickTopology(), new ::NMonitoring::TDynamicCounters(), TVDiskID(),
         nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
 }
 

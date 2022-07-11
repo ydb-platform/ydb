@@ -13,7 +13,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TString path = "/tmp/asdqwe";
         TIntrusivePtr<TPDiskConfig> cfg = new TPDiskConfig(path, 12345, 0xffffffffull,
                     TPDiskCategory(NPDisk::DEVICE_TYPE_ROT, 0).GetRaw());
-        const TIntrusivePtr<NMonitoring::TDynamicCounters> counters(new NMonitoring::TDynamicCounters);
+        const TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(new ::NMonitoring::TDynamicCounters);
 
         THolder<NPDisk::IPDisk> pDisk = MakeHolder<NPDisk::TPDisk>(cfg, counters);
         pDisk->Wakeup();
@@ -99,7 +99,7 @@ public:
             Runtime->Send(new IEventHandle(*PDiskActor, Sender, new TKikimrEvents::TEvPoisonPill));
         }
 
-        auto mainCounters = TIntrusivePtr<NMonitoring::TDynamicCounters>(new NMonitoring::TDynamicCounters());
+        auto mainCounters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
         IActor* pDiskActor = CreatePDisk(cfg.Get(), MainKey, mainCounters);
         PDiskActor = Runtime->Register(pDiskActor);
     }

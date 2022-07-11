@@ -525,7 +525,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
     Y_VERIFY(systemConfig.ExecutorSize());
 
     const ui32 systemPoolId = appData->SystemPoolId;
-    const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters = appData->Counters;
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters = appData->Counters;
 
     setup->NodeId = NodeId;
     setup->MaxActivityType = GetActivityTypeCount();
@@ -1034,8 +1034,8 @@ void TSharedCacheInitializer::InitializeServices(
     config->TotalAsyncQueueInFlyLimit = cfg.GetAsyncQueueInFlyLimit();
     config->TotalScanQueueInFlyLimit = cfg.GetScanQueueInFlyLimit();
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> sausageGroup = tabletGroup->GetSubgroup("type", "S_CACHE");
 
     config->CacheConfig = new TCacheCacheConfig(cfg.GetMemoryLimit(),
             sausageGroup->GetCounter("fresh"),
@@ -1061,8 +1061,8 @@ void TBlobCacheInitializer::InitializeServices(
         NActors::TActorSystemSetup* setup,
         const NKikimr::TAppData* appData) {
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> blobCacheGroup = tabletGroup->GetSubgroup("type", "BLOB_CACHE");
 
     static const constexpr ui64 DEFAULT_CACHE_SIZE_BYTES = 1000ull << 20;
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(NBlobCache::MakeBlobCacheServiceId(),
@@ -1084,7 +1084,7 @@ TLoggerInitializer::TLoggerInitializer(const TKikimrRunConfig& runConfig,
 void TLoggerInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
     // log settings must be initialized before calling this method
     NActors::TLoggerActor *loggerActor = new NActors::TLoggerActor(LogSettings, LogBackend, utilsCounters);
@@ -1129,7 +1129,7 @@ TProfilerInitializer::TProfilerInitializer(const TKikimrRunConfig& runConfig)
 void TProfilerInitializer::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
     TActorSetupCmd profilerSetup(CreateProfilerActor(utilsCounters, "/var/tmp"), TMailboxType::HTSwap, 0);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(MakeProfilerID(NodeId), profilerSetup));
@@ -1166,7 +1166,7 @@ void TResourceBrokerInitializer::InitializeServices(
 
 // TRestartsCountPublisher
 
-void TRestartsCountPublisher::PublishRestartsCount(const NMonitoring::TDynamicCounters::TCounterPtr& counter,
+void TRestartsCountPublisher::PublishRestartsCount(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter,
                                                       const TString& restartsCountFile) {
     if (restartsCountFile.size()) {
         try {
@@ -1189,7 +1189,7 @@ void TRestartsCountPublisher::InitializeServices(
             NActors::TActorSystemSetup* setup,
             const NKikimr::TAppData* appData) {
     Y_UNUSED(setup);
-    const TIntrusivePtr<NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters> utilsCounters = GetServiceCounters(appData->Counters, "utils");
 
     if (Config.HasRestartsCountConfig()) {
         const auto& restartsCountConfig = Config.GetRestartsCountConfig();
@@ -1877,8 +1877,8 @@ void TPersQueueL2CacheInitializer::InitializeServices(NActors::TActorSystemSetup
             params.KeepTime = TDuration::Seconds(cfg.GetCacheKeepTimeSec());
     }
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
-    TIntrusivePtr<NMonitoring::TDynamicCounters> pqCacheGroup = tabletGroup->GetSubgroup("type", "PQ_CACHE");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletGroup = GetServiceCounters(appData->Counters, "tablets");
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> pqCacheGroup = tabletGroup->GetSubgroup("type", "PQ_CACHE");
 
     IActor* actor = NPQ::CreateNodePersQueueL2Cache(params, pqCacheGroup);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(

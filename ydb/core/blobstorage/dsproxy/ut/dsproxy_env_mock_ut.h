@@ -33,7 +33,7 @@ struct TDSProxyEnv {
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
     TBSProxyContextPtr BSProxyCtxPtr;
-    TIntrusivePtr<NMonitoring::TDynamicCounters> DynCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> DynCounters;
     TIntrusivePtr<NKikimr::TStoragePoolCounters> StoragePoolCounters;
     TDiskResponsivenessTracker::TPerDiskStatsPtr PerDiskStatsPtr;
     TNodeLayoutInfoPtr NodeLayoutInfo;
@@ -67,11 +67,11 @@ struct TDSProxyEnv {
         RealProxyActorId = MakeBlobStorageProxyID(groupId);
         TIntrusivePtr<TDsProxyNodeMon> nodeMon = new TDsProxyNodeMon(runtime.GetAppData(nodeIndex).Counters, true);
         TString name = Sprintf("%09" PRIu64, groupId);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> group = GetServiceCounters(
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> group = GetServiceCounters(
                 runtime.GetAppData(0).Counters, "dsproxy")->GetSubgroup("blobstorageproxy", name);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> percentileGroup = GetServiceCounters(
                 runtime.GetAppData(0).Counters, "dsproxy_percentile")->GetSubgroup("blobstorageproxy", name);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> overviewGroup = GetServiceCounters(
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> overviewGroup = GetServiceCounters(
                 runtime.GetAppData(0).Counters, "dsproxy_overview");
         BSProxyCtxPtr.Reset(new TBSProxyContext(group->GetSubgroup("subsystem", "memproxy")));
         Mon = new TBlobStorageGroupProxyMon(group, percentileGroup, overviewGroup, Info, nodeMon, false);
@@ -90,7 +90,7 @@ struct TDSProxyEnv {
         auto queues = runtime.GrabEdgeEventRethrow<TEvProxySessionsState>(handle);
         GroupQueues = queues->GroupQueues;
         NodeLayoutInfo = nullptr;
-        DynCounters = new NMonitoring::TDynamicCounters();
+        DynCounters = new ::NMonitoring::TDynamicCounters();
         StoragePoolCounters = new NKikimr::TStoragePoolCounters(DynCounters, "", {});
         PerDiskStatsPtr = new TDiskResponsivenessTracker::TPerDiskStats;
     }

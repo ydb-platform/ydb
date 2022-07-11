@@ -45,7 +45,7 @@ TRunActorParams::TRunActorParams(
     bool automatic,
     const TString& queryName,
     const TInstant& deadline,
-    const NMonitoring::TDynamicCounterPtr& clientCounters,
+    const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     TInstant createdAt,
     const TString& tenantName,
     uint64_t resultBytesLimit

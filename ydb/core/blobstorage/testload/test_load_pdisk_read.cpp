@@ -107,10 +107,10 @@ class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoad
     ui64 DeletedChunksCount = 0;
 
     // Monitoring
-    NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> ResponseTimes;
 
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LoadCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
     TIntrusivePtr<TLoadReport> Report;
     TIntrusivePtr<NMonitoring::TCounterForPtr> PDiskBytesRead;
     TMap<double, TIntrusivePtr<NMonitoring::TCounterForPtr>> DevicePercentiles;
@@ -122,7 +122,7 @@ public:
     }
 
     TPDiskReaderTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskReadLoadStart& cmd, const TActorId& parent,
-            const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+            const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , MaxInFlight(4, 0, 65536)
@@ -176,10 +176,10 @@ public:
         TVector<float> percentiles {0.1f, 0.5f, 0.9f, 0.99f, 0.999f, 1.0f};
         ResponseTimes.Initialize(LoadCounters, "subsystem", "LoadActorReadDuration", "Time in microseconds", percentiles);
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> pDiskCounters = GetServiceCounters(counters, "pdisks")->
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> pDiskCounters = GetServiceCounters(counters, "pdisks")->
             GetSubgroup("pdisk", Sprintf("%09" PRIu32, PDiskId));
         PDiskBytesRead = pDiskCounters->GetSubgroup("subsystem", "device")->GetCounter("DeviceBytesRead", true);
-        TIntrusivePtr<NMonitoring::TDynamicCounters> percentilesGroup;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> percentilesGroup;
         percentilesGroup = pDiskCounters->GetSubgroup("subsystem", "deviceReadDuration")->GetSubgroup("sensor", "Time in microsec");
         for (double percentile : {0.1, 0.5, 0.9, 0.99, 0.999, 1.0}) {
             DevicePercentiles.emplace(percentile, percentilesGroup->GetNamedCounter("percentile",
@@ -585,7 +585,7 @@ public:
 };
 
 IActor *CreatePDiskReaderTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskReadLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters,
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters,
         ui64 index, ui64 tag) {
     return new TPDiskReaderTestLoadActor(cmd, parent, counters, index, tag);
 }

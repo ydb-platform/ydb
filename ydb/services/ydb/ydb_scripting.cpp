@@ -9,7 +9,7 @@ namespace NKikimr {
 namespace NGRpcService {
 
 TGRpcYdbScriptingService::TGRpcYdbScriptingService(NActors::TActorSystem *system,
-    TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId id)
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(id) {}

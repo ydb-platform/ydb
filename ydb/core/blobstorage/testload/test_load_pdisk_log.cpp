@@ -62,7 +62,7 @@ class TWorker {
 
     TIntrusivePtr<TPDiskParams> PDiskParams;
 
-    NMonitoring::TDynamicCounters::TCounterPtr LogEntriesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LogEntriesWritten;
 
     NPDisk::TLogPosition LogReadPosition{0, 0};
 
@@ -286,7 +286,7 @@ class TPDiskLogWriterTestLoadActor : public TActorBootstrapped<TPDiskLogWriterTe
     TReallyFastRng32 Rng;
 
     // Monitoring
-    TIntrusivePtr<NMonitoring::TDynamicCounters> LoadCounters;
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> LoadCounters;
     TInstant TestStartTime;
 
     ui32 PDiskId;
@@ -295,7 +295,7 @@ class TPDiskLogWriterTestLoadActor : public TActorBootstrapped<TPDiskLogWriterTe
     bool IsWardenlessTest = false;
     bool IsDying = false;
 
-    NMonitoring::TDynamicCounters::TCounterPtr LogBytesWritten;
+    ::NMonitoring::TDynamicCounters::TCounterPtr LogBytesWritten;
     ui64 ReqIdx = 0;
     TMap<ui64, TLogWriteCookie> InFlightLogWrites;
     NMonitoring::TPercentileTrackerLg<6, 5, 15> LogResponseTimes;
@@ -306,7 +306,7 @@ public:
     }
 
     TPDiskLogWriterTestLoadActor(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
-            const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
+            const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag)
         : Parent(parent)
         , Tag(tag)
         , Rng(Now().GetValue())
@@ -694,7 +694,7 @@ public:
 };
 
 IActor *CreatePDiskLogWriterTestLoad(const NKikimrBlobStorage::TEvTestLoadRequest::TPDiskLogLoadStart& cmd,
-        const TActorId& parent, const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
+        const TActorId& parent, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, ui64 index, ui64 tag) {
     return new TPDiskLogWriterTestLoadActor(cmd, parent, counters, index, tag);
 }
 

@@ -49,7 +49,7 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
 
 TGRpcLocalDiscoveryService::TGRpcLocalDiscoveryService(const NKikimrConfig::TGRpcConfig& grpcConfig,
                                 NActors::TActorSystem *system,
-                                TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                                TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                                 NActors::TActorId id)
     : GrpcConfig(grpcConfig)
     , ActorSystem_(system)

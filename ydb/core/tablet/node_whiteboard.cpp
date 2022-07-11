@@ -38,8 +38,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        TIntrusivePtr<NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets");
-        TIntrusivePtr<NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> tabletsGroup = GetServiceCounters(AppData(ctx)->Counters, "tablets");
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> introspectionGroup = tabletsGroup->GetSubgroup("type", "introspection");
         TabletIntrospectionData.Reset(NTracing::CreateTraceCollection(introspectionGroup));
 
         SystemStateInfo.SetNumberOfCpus(NSystemInfo::NumberOfCpus());
@@ -648,12 +648,12 @@ protected:
 //    void Handle(TEvWhiteboard::TEvNodeStateRequest::TPtr &ev, const TActorContext &ctx) {
 //        TAutoPtr<TEvWhiteboard::TEvNodeStateResponse> response = new TEvWhiteboard::TEvNodeStateResponse();
 //        auto& record = response->Record;
-//        const TIntrusivePtr<NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
-//        TIntrusivePtr<NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
+//        const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters = AppData(ctx)->Counters;
+//        TIntrusivePtr<::NMonitoring::TDynamicCounters> interconnectCounters = GetServiceCounters(counters, "interconnect");
 //        interconnectCounters->EnumerateSubgroups([&record, &interconnectCounters](const TString &name, const TString &value) -> void {
 //            NKikimrWhiteboard::TNodeStateInfo &nodeStateInfo = *record.AddNodeStateInfo();
-//            TIntrusivePtr<NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);
-//            NMonitoring::TDynamicCounters::TCounterPtr connectedCounter = peerCounters->GetCounter("Connected");
+//            TIntrusivePtr<::NMonitoring::TDynamicCounters> peerCounters = interconnectCounters->GetSubgroup(name, value);
+//            ::NMonitoring::TDynamicCounters::TCounterPtr connectedCounter = peerCounters->GetCounter("Connected");
 //            nodeStateInfo.SetPeerName(value);
 //            nodeStateInfo.SetConnected(connectedCounter->Val());
 //        });

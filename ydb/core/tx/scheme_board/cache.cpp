@@ -542,7 +542,7 @@ namespace {
 
 class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     class TCounters {
-        using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+        using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
         using THistogramPtr = NMonitoring::THistogramPtr;
 
         TCounterPtr InFlight;
@@ -557,7 +557,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TCounterPtr PerEntrySyncs;
 
     public:
-        explicit TCounters(NMonitoring::TDynamicCounterPtr counters)
+        explicit TCounters(::NMonitoring::TDynamicCounterPtr counters)
             : InFlight(counters->GetCounter("InFlight", false))
             , Requests(counters->GetCounter("Requests", true))
             , Hits(counters->GetCounter("Hits", true))

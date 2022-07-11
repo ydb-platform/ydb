@@ -23,16 +23,16 @@ namespace NKikimr {
 
         std::optional<NKikimrVDiskData::TScrubState> State;
 
-        NMonitoring::TDynamicCounterPtr Counters;
-        NMonitoring::TDynamicCounters::TCounterPtr SstProcessed;
-        NMonitoring::TDynamicCounters::TCounterPtr HugeBlobsRead;
-        NMonitoring::TDynamicCounters::TCounterPtr HugeBlobBytesRead;
-        NMonitoring::TDynamicCounters::TCounterPtr SmallBlobIntervalsRead;
-        NMonitoring::TDynamicCounters::TCounterPtr SmallBlobIntervalBytesRead;
-        NMonitoring::TDynamicCounters::TCounterPtr SmallBlobsRead;
-        NMonitoring::TDynamicCounters::TCounterPtr SmallBlobBytesRead;
-        NMonitoring::TDynamicCounters::TCounterPtr UnreadableBlobsFound;
-        NMonitoring::TDynamicCounters::TCounterPtr BlobsFixed;
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SstProcessed;
+        ::NMonitoring::TDynamicCounters::TCounterPtr HugeBlobsRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr HugeBlobBytesRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SmallBlobIntervalsRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SmallBlobIntervalBytesRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SmallBlobsRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr SmallBlobBytesRead;
+        ::NMonitoring::TDynamicCounters::TCounterPtr UnreadableBlobsFound;
+        ::NMonitoring::TDynamicCounters::TCounterPtr BlobsFixed;
 
         TRopeArena Arena;
 

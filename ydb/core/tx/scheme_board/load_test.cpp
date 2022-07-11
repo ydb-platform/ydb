@@ -309,11 +309,11 @@ public:
 private:
     const ui64 Owner;
     const TTestConfig Config;
-    NMonitoring::TDynamicCounters::TCounterPtr SyncDuration;
-    NMonitoring::TDynamicCounters::TCounterPtr TotalPaths;
-    NMonitoring::TDynamicCounters::TCounterPtr ModifiedPaths;
-    NMonitoring::TDynamicCounters::TCounterPtr CreatedPaths;
-    NMonitoring::TDynamicCounters::TCounterPtr DeletedPaths;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SyncDuration;
+    ::NMonitoring::TDynamicCounters::TCounterPtr TotalPaths;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ModifiedPaths;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CreatedPaths;
+    ::NMonitoring::TDynamicCounters::TCounterPtr DeletedPaths;
 
     TDescriptions Descriptions;
     ui64 NextPathId;
@@ -404,7 +404,7 @@ private:
     const TTestConfig Config;
     NMonitoring::THistogramPtr Latency;
     NMonitoring::THistogramPtr LatencyDir;
-    NMonitoring::TDynamicCounters::TCounterPtr SubscribersCount;
+    ::NMonitoring::TDynamicCounters::TCounterPtr SubscribersCount;
 
     ui64 MaxPathId;
     TVector<TActorId> Subscribers;

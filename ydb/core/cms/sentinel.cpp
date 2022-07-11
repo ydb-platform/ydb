@@ -724,8 +724,8 @@ private:
 
 class TSentinel: public TActorBootstrapped<TSentinel> {
     struct TCounters {
-        using TDynamicCounters = NMonitoring::TDynamicCounters;
-        using TDynamicCounterPtr = NMonitoring::TDynamicCounterPtr;
+        using TDynamicCounters = ::NMonitoring::TDynamicCounters;
+        using TDynamicCounterPtr = ::NMonitoring::TDynamicCounterPtr;
 
         TDynamicCounterPtr Group;
         TDynamicCounters::TCounterPtr PDisksTotal;

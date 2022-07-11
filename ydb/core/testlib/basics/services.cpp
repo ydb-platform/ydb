@@ -49,7 +49,7 @@ namespace NPDisk {
     {
         auto cacheConfig = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
         cacheConfig->Roots.emplace_back(1, TTestTxConfig::SchemeShard, root);
-        cacheConfig->Counters = new NMonitoring::TDynamicCounters();
+        cacheConfig->Counters = new ::NMonitoring::TDynamicCounters();
 
         runtime.AddLocalService(MakeSchemeCacheID(),
             TActorSetupCmd(CreateSchemeBoardSchemeCache(cacheConfig.Get()), TMailboxType::Revolving, 0), nodeIndex);

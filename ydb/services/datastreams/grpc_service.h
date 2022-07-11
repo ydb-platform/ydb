@@ -10,7 +10,7 @@ namespace NKikimr::NGRpcService {
     {
     public:
         TGRpcDataStreamsService(NActors::TActorSystem* system,
-                        TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
                         NActors::TActorId id);
 
         void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
@@ -25,7 +25,7 @@ namespace NKikimr::NGRpcService {
         NActors::TActorSystem* ActorSystem_;
         grpc::ServerCompletionQueue* CQ_ = nullptr;
 
-        TIntrusivePtr<NMonitoring::TDynamicCounters> Counters_;
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
         NActors::TActorId GRpcRequestProxyId_;
         NGrpc::TGlobalLimiter* Limiter_ = nullptr;
     };

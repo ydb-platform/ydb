@@ -112,7 +112,7 @@ private:
     TEvBiStreamPingRequest::TResponse Resp_;
 };
 
-TGRpcYdbDummyService::TGRpcYdbDummyService(NActors::TActorSystem* system, TIntrusivePtr<NMonitoring::TDynamicCounters> counters, NActors::TActorId proxyActorId)
+TGRpcYdbDummyService::TGRpcYdbDummyService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, NActors::TActorId proxyActorId)
     : ActorSystem_(system)
     , Counters_(counters)
     , GRpcRequestProxyId_(proxyActorId)

@@ -104,11 +104,14 @@ TString ResolveUDFNameByCompression(std::string_view input) {
 } // namespace
 
 TRuntimeNode BuildParseCall(
+    TPosition pos,
     TRuntimeNode input,
+    TMaybe<TRuntimeNode> extraColumnsByPathIndex,
     const std::string_view& format,
     const std::string_view& compression,
     TType* inputType,
     TType* outputItemType,
+    TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx)
 {
     if (!compression.empty()) {
@@ -122,52 +125,100 @@ TRuntimeNode BuildParseCall(
         MKQL_ENSURE(1U == structType->GetMembersCount(), "Expected single column.");
         bool isOptional;
         const auto schemeType = UnpackOptionalData(structType->GetMemberType(0U), isOptional)->GetSchemeType();
-        return ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(input),
-            [&](TRuntimeNode item)->TRuntimeNode::TList {
-                return { NUdf::TDataType<const char*>::Id == schemeType ?
-                    isOptional ? ctx.ProgramBuilder.NewOptional(item) : item :
-                    (ctx.ProgramBuilder.*(isOptional ? &TProgramBuilder::FromString : &TProgramBuilder::StrictFromString))
-                        (item, ctx.ProgramBuilder.NewDataType(schemeType, isOptional))
-                };
+        auto parseLambda = [&](TRuntimeNode item) {
+            TRuntimeNode converted;
+            if (NUdf::TDataType<const char*>::Id == schemeType) {
+                converted = isOptional ? ctx.ProgramBuilder.NewOptional(item) : item;
+            } else {
+                auto type = ctx.ProgramBuilder.NewDataType(schemeType, isOptional);
+                converted = isOptional ? ctx.ProgramBuilder.FromString(item, type) :
+                                         ctx.ProgramBuilder.StrictFromString(item, type);
+            }
+
+            return ctx.ProgramBuilder.NewStruct(outputItemType, {{structType->GetMemberName(0), converted }});
+        };
+
+        input = ctx.ProgramBuilder.Map(ctx.ProgramBuilder.ToFlow(input),
+            [&](TRuntimeNode item) {
+                if (extraColumnsByPathIndex) {
+                    auto data = ctx.ProgramBuilder.Nth(item, 0);
+                    auto pathInd = ctx.ProgramBuilder.Nth(item, 1);
+                    return ctx.ProgramBuilder.NewTuple({ parseLambda(data), pathInd });
+                }
+                return parseLambda(item);
             }
         );
     } else if (format == "json_list") {
+        auto parseToListLambda = [&](TRuntimeNode blob) {
+            const auto json = ctx.ProgramBuilder.StrictFromString(blob, ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
+            const auto dom = ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ParseJson"), {json});
+            const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}), ctx.ProgramBuilder.NewStructType({}), ctx.ProgramBuilder.NewListType(outputItemType)});
+            return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType), {dom});
+        };
+
         input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input),
             [&](TRuntimeNode blob) {
-                const auto json = ctx.ProgramBuilder.StrictFromString(blob, ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
-                const auto dom = ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ParseJson"), {json});
-                const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}), ctx.ProgramBuilder.NewStructType({}), ctx.ProgramBuilder.NewListType(outputItemType)});
-                return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType), {dom});
+                TRuntimeNode parsedList;
+                if (extraColumnsByPathIndex) {
+                    auto data = ctx.ProgramBuilder.Nth(blob, 0);
+                    auto pathInd = ctx.ProgramBuilder.Nth(blob, 1);
+
+                    parsedList = ctx.ProgramBuilder.Map(parseToListLambda(data),
+                        [&](TRuntimeNode item) {
+                            return ctx.ProgramBuilder.NewTuple({ item, pathInd });
+                        }
+                    );
+                } else {
+                    parsedList = parseToListLambda(blob);
+                }
+                return parsedList;
             });
     } else {
-        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputType}), ctx.ProgramBuilder.NewStructType({}), outputItemType});
-        input = TType::EKind::Resource == static_cast<TStreamType*>(inputType)->GetItemType()->GetKind() ?
+        TType* userOutputType = outputItemType;
+        TType* inputDataType = static_cast<TStreamType*>(inputType)->GetItemType();
+        if (extraColumnsByPathIndex) {
+            userOutputType = ctx.ProgramBuilder.NewTupleType({ userOutputType, ctx.ProgramBuilder.NewDataType(NUdf::EDataSlot::Uint64)});
+            inputDataType = static_cast<TTupleType*>(inputDataType)->GetElementType(0);
+        }
+        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputType}), ctx.ProgramBuilder.NewStructType({}), userOutputType});
+        input = TType::EKind::Resource == inputDataType->GetKind() ?
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input}));
+    }
+
+    const auto finalStructType = static_cast<const TStructType*>(finalItemType);
+    if (extraColumnsByPathIndex) {
+        return ctx.ProgramBuilder.ExpandMap(input,
+            [&](TRuntimeNode item) {
+                // find extra columns by path index and combine them with parsed output
+                auto data = ctx.ProgramBuilder.Nth(item, 0);
+                auto pathInd = ctx.ProgramBuilder.Nth(item, 1);
+
+                auto extra = ctx.ProgramBuilder.Lookup(ctx.ProgramBuilder.ToIndexDict(*extraColumnsByPathIndex), pathInd);
+                extra = ctx.ProgramBuilder.Unwrap(extra,
+                    ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>("Failed to lookup path index"),
+                    pos.File, pos.Row, pos.Column);
+
+                TRuntimeNode::TList fields;
+                fields.reserve(finalStructType->GetMembersCount());
+                for (ui32 i = 0; i < finalStructType->GetMembersCount(); ++i) {
+                    TStringBuf name = finalStructType->GetMemberName(i);
+                    const bool inData = structType->FindMemberIndex(name).Defined();
+                    fields.push_back(ctx.ProgramBuilder.Member(inData ? data : extra, name));
+                }
+                return fields;
+            }
+        );
     }
 
     return ctx.ProgramBuilder.ExpandMap(input,
         [&](TRuntimeNode item) {
             TRuntimeNode::TList fields;
-            fields.reserve(structType->GetMembersCount());
+            fields.reserve(finalStructType->GetMembersCount());
             auto j = 0U;
-            std::generate_n(std::back_inserter(fields), structType->GetMembersCount(), [&](){ return ctx.ProgramBuilder.Member(item, structType->GetMemberName(j++)); });
+            std::generate_n(std::back_inserter(fields), finalStructType->GetMembersCount(), [&](){ return ctx.ProgramBuilder.Member(item, finalStructType->GetMemberName(j++)); });
             return fields;
         });
-}
-
-NCommon::IMkqlCallableCompiler::TCompiler BuildCompiler(const std::string_view& providerName) {
-    return [providerName](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
-        if (const auto wrapper = TDqSourceWideWrap(&node); wrapper.DataSource().Category().Value() == providerName) {
-            const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
-            const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
-            const auto outputItemType = NCommon::BuildType(wrapper.RowType().Ref(), *wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
-            const auto& settings = GetSettings(wrapper.Settings().Cast().Ref());
-            return BuildParseCall(input, GetFormat(wrapper.Settings().Cast().Ref()).Content() + settings.front(), settings.back(), inputItemType, outputItemType, ctx);
-        }
-
-        return TRuntimeNode();
-    };
 }
 
 TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWideWrap& wrapper, NCommon::TMkqlBuildContext& ctx) {
@@ -178,9 +229,24 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWideWrap& wrapper, NCommon
 
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
     const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
-    const auto outputItemType = NCommon::BuildType(wrapper.RowType().Ref(), *wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), ctx.ProgramBuilder);
+
+    const TStructExprType* rowType = wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+    const TStructExprType* parsedType = rowType;
+
+    TMaybe<TRuntimeNode> extraColumns;
+    if (auto extraColumnsSetting = GetSetting(wrapper.Settings().Cast().Ref(), "extraColumns")) {
+        extraColumns = MkqlBuildExpr(extraColumnsSetting->Tail(), ctx);
+        const TStructExprType* extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        auto parsedItems = rowType->GetItems();
+        EraseIf(parsedItems, [extraType](const auto& item) { return extraType->FindItem(item->GetName()); });
+        parsedType = ctx.ExprCtx.MakeType<TStructExprType>(parsedItems);
+    }
+
+    const auto outputItemType = NCommon::BuildType(wrapper.RowType().Ref(), *parsedType, ctx.ProgramBuilder);
+    const auto finalItemType = NCommon::BuildType(wrapper.RowType().Ref(), *rowType, ctx.ProgramBuilder);
     const auto& settings = GetSettings(wrapper.Settings().Cast().Ref());
-    return BuildParseCall(input, format.Content() + settings.front(), settings.back(), inputItemType, outputItemType, ctx);
+    TPosition pos = ctx.ExprCtx.GetPosition(wrapper.Pos());
+    return BuildParseCall(pos, input, extraColumns, format.Content() + settings.front(), settings.back(), inputItemType, outputItemType, finalItemType, ctx);
 }
 
 }

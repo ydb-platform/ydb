@@ -58,9 +58,11 @@ public:
         }
 
         partitions.reserve(parts.size());
+        ui64 startIdx = 0;
         for (const auto& part : parts) {
             NS3::TRange range;
-            std::for_each(part.cbegin(), part.cend(), [&range](const TString& path) { range.AddPath(path); });
+            range.SetStartPathIndex(startIdx);
+            std::for_each(part.cbegin(), part.cend(), [&range, &startIdx](const TString& path) { range.AddPath(path); ++startIdx; });
 
             partitions.emplace_back();
             TStringOutput out(partitions.back());
@@ -95,6 +97,22 @@ public:
                         .Add(1, s3ReadObject.Object().Format().Ptr())
                     .Seal().Build()
             );
+
+            TExprNodeList extraColumns;
+            for (size_t i = 0; i < s3ReadObject.Object().Paths().Size(); ++i) {
+                extraColumns.push_back(s3ReadObject.Object().Paths().Item(i).ExtraColumns().Ptr());
+            }
+            YQL_ENSURE(!extraColumns.empty());
+            if (extraColumns.front()->GetTypeAnn()->Cast<TStructExprType>()->GetSize()) {
+                settings.push_back(
+                    ctx.Builder(s3ReadObject.Object().Pos())
+                        .List()
+                            .Atom(0, "extraColumns")
+                            .Add(1, ctx.NewCallable(s3ReadObject.Object().Pos(), "AsList", std::move(extraColumns)))
+                        .Seal()
+                        .Build()
+                );
+            }
 
             if (const auto useCoro = State_->Configuration->SourceCoroActor.Get(); (!useCoro || *useCoro) && !s3ReadObject.Object().Format().Ref().IsAtom({"raw", "json_list"}))
                 return Build<TDqSourceWrap>(ctx, read->Pos())
@@ -150,6 +168,8 @@ public:
             srcDesc.SetToken(settings.Token().Name().StringValue());
 
             const auto& paths = settings.Paths();
+            YQL_ENSURE(paths.Size() > 0);
+            const TStructExprType* extraColumnsType = paths.Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>();
             for (auto i = 0U; i < paths.Size(); ++i) {
                 const auto p = srcDesc.AddPath();
                 p->SetPath(paths.Item(i).Path().StringValue());
@@ -159,7 +179,16 @@ public:
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();
                 srcDesc.SetFormat(parseSettings.Format().StringValue().c_str());
-                srcDesc.SetRowType(NCommon::WriteTypeToYson(parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType(), NYT::NYson::EYsonFormat::Text));
+
+                const TStructExprType* fullRowType = parseSettings.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+                // exclude extra columns to get actual row type we need to read from input
+                auto rowTypeItems = fullRowType->GetItems();
+                EraseIf(rowTypeItems, [extraColumnsType](const auto& item) { return extraColumnsType->FindItem(item->GetName()); });
+                {
+                    // TODO: pass context
+                    TExprContext ctx;
+                    srcDesc.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(rowTypeItems), NYT::NYson::EYsonFormat::Text));
+                }
 
                 if (const auto maySettings = parseSettings.Settings()) {
                     const auto& settings = maySettings.Cast();
@@ -167,6 +196,10 @@ public:
                         srcDesc.MutableSettings()->insert({TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content())});
                     }
                 }
+            }
+
+            if (extraColumnsType->GetSize()) {
+                srcDesc.MutableSettings()->insert({"addPathIndex", "true"});
             }
 
             protoSettings.PackFrom(srcDesc);

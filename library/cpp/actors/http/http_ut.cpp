@@ -379,6 +379,7 @@ CRA/5XcX13GJwHHj6LCoc3sL7mt8qV9HKY2AOZ88mpObzISZxgPpdKCfjsrdm63V
 
     Y_UNIT_TEST(TooLongHeader) {
         NActors::TTestActorRuntimeBase actorSystem;
+        actorSystem.SetUseRealInterconnect();
         TPortManager portManager;
         TIpPort port = portManager.GetTcpPort();
         TAutoPtr<NActors::IEventHandle> handle;

@@ -4039,30 +4039,40 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         {
-            NTabletPipe::TClientConfig pipeConfig;
-            pipeConfig.ForceLocal = true;
             ui32 total = 0;
             ui32 leaders = 0;
             ui32 followers = 0;
-            for (ui32 node = 0; node < NODES; ++node) {
-                bool leader;
-                if (CheckTabletIsUp(runtime, tabletId, node, &pipeConfig, &leader)) {
-                    if (leader) {
-                        leaders++;
-                        total++;
+            int iterations = 100;
+            while (--iterations > 0) {
+                NTabletPipe::TClientConfig pipeConfig;
+                pipeConfig.ForceLocal = true;
+                total = 0;
+                leaders = 0;
+                followers = 0;
+                for (ui32 node = 0; node < NODES; ++node) {
+                    bool leader;
+                    if (CheckTabletIsUp(runtime, tabletId, node, &pipeConfig, &leader)) {
+                        if (leader) {
+                            leaders++;
+                            total++;
+                        }
                     }
                 }
-            }
-            pipeConfig.AllowFollower = true;
-            pipeConfig.ForceFollower = true;
-            for (ui32 node = 0; node < NODES; ++node) {
-                bool leader;
-                if (CheckTabletIsUp(runtime, tabletId, node, &pipeConfig, &leader)) {
-                    if (!leader) {
-                        total++;
-                        followers++;
+                pipeConfig.AllowFollower = true;
+                pipeConfig.ForceFollower = true;
+                for (ui32 node = 0; node < NODES; ++node) {
+                    bool leader;
+                    if (CheckTabletIsUp(runtime, tabletId, node, &pipeConfig, &leader)) {
+                        if (!leader) {
+                            total++;
+                            followers++;
+                        }
                     }
                 }
+                if (followers >= (FOLLOWERS * DCS - 1) && leaders == 1 && total >= FOLLOWERS * DCS) {
+                    break;
+                }
+                runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
             }
             UNIT_ASSERT(followers >= (FOLLOWERS * DCS - 1));
             UNIT_ASSERT_VALUES_EQUAL(leaders, 1);

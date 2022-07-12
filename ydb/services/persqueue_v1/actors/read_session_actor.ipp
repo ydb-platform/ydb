@@ -9,7 +9,7 @@
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
-#include <contrib/libs/protobuf_std/src/google/protobuf/util/time_util.h>
+#include <google/protobuf/util/time_util.h>
 
 #include <util/string/join.h>
 #include <util/string/strip.h>

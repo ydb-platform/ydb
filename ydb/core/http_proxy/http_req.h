@@ -47,7 +47,7 @@ private:
 
 
 struct THttpResponseData {
-    NYdb::EStatus Status = NYdb::EStatus::SUCCESS;
+    NYdb::EStatus Status{NYdb::EStatus::SUCCESS};
     NJson::TJsonValue Body;
     TString ErrorText;
 
@@ -84,7 +84,7 @@ struct THttpRequestContext {
     TString SourceAddress;
     TString MethodName;
     TString ApiVersion;
-    MimeTypes ContentType;
+    MimeTypes ContentType{MIME_UNKNOWN};
     TString IamToken;
     TString SerializedUserToken;
 

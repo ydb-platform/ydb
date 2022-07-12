@@ -8,7 +8,7 @@ import "google/protobuf/descriptor.proto";
 package Ydb.DataStreams.V1;
 option java_package = "com.yandex.ydb.datastreams.v1";
 
-// Extsions to simplify json <-> proto conversion
+// Extensions to simplify json <-> proto conversion
 enum EFieldTransformationType {
     TRANSFORM_NONE = 0;
     TRANSFORM_BASE64 = 1;
@@ -80,7 +80,7 @@ message StreamDescription {
         DELETING = 2;
         // Stream is ready for read & write operations or deletion
         ACTIVE = 3;
-        // Shards in the stream are being merged ot split
+        // Shards in the stream are being merged on split
         UPDATING = 4;
     }
 
@@ -299,7 +299,7 @@ message ListStreamsRequest {
     string exclusive_start_stream_name = 2;
     // Max number of entries to return
     int32 limit = 3;
-    // Will make recurse listing if set to true. Otherwise will return only streams from root directory.
+    // Will make recursive listing if set to true. Otherwise will return only streams from root directory.
     bool recurse = 4;
 }
 
@@ -661,7 +661,7 @@ message DescribeStreamSummaryResponse {
 }
 
 message DescribeStreamSummaryResult {
-    // Stream description sumary
+    // Stream description summary
     StreamDescriptionSummary stream_description_summary = 1;
 }
 

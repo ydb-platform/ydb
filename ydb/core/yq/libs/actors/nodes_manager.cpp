@@ -42,7 +42,7 @@ public:
         const ::NYql::NCommon::TServiceCounters& serviceCounters,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
-        const TString&,
+        const TString& dataCenter,
         const TString& tenant,
         ui64 mkqlInitialMemoryLimit)
         : WorkerManagerCounters(workerManagerCounters)
@@ -54,7 +54,7 @@ public:
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
-        , DataCenter("")
+        , DataCenter(dataCenter)
         , InternalServiceId(MakeInternalServiceActorId())
 
     {

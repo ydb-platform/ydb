@@ -207,7 +207,7 @@ void Init(
             protoConfig.GetPrivateApi(),
             yqSharedResources,
             icPort,
-            protoConfig.GetNodesManager().GetDataCenter(),
+            protoConfig.GetNodesManager().GetUseDataCenter() ? protoConfig.GetNodesManager().GetDataCenter() : "",
             tenant,
             mkqlInitialMemoryLimit);
 

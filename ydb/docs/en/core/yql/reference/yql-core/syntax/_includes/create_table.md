@@ -10,23 +10,22 @@ The `CREATE TABLE` call creates a {% if concept_table %}[table]({{ concept_table
 
     CREATE TABLE table_name (
         column1 type1,
-
 {% if feature_not_null == true %}         column2 type2 NOT NULL,{% else %}         column2 type2,{% endif %}
-...
-columnN typeN,
+        ...
+        columnN typeN,
 {% if feature_secondary_index == true %}
-INDEX index1_name GLOBAL ON ( column ),
-INDEX index2_name GLOBAL ON ( column1, column2, ... ),
+        INDEX index1_name GLOBAL ON ( column ),
+        INDEX index2_name GLOBAL ON ( column1, column2, ... ),
 {% endif %}
 {% if feature_map_tables %}
-PRIMARY KEY (column, ...),
-FAMILY column_family ()
+        PRIMARY KEY (column, ...),
+        FAMILY column_family ()
 {% else %}
-...
+        ...
 {% endif %}
-)
+    )
 {% if feature_map_tables %}
-WITH ( key = value, ... )
+    WITH ( key = value, ... )
 {% endif %}
 
 ## Columns {#columns}

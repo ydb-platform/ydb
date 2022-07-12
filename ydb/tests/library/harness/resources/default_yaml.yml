@@ -183,6 +183,7 @@ pqconfig:
   topics_are_first_class_citizen: {ydb_pq_topics_are_first_class_citizen}
   check_acl: false
   require_credentials_in_new_protocol: false
+  enable_proto_source_id_info: true
   cluster_table_path: "{ydb_pq_cluster_table_path}"
   version_table_path: "{ydb_pq_version_table_path}"
   root: "{ydb_pq_root}"

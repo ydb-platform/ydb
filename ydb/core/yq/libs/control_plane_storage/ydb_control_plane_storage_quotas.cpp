@@ -21,15 +21,10 @@
 
 namespace NYq {
 
-struct TCloudAggregator {
-    TAtomic Started = 0;
-    TAtomic Finished = 0;
-};
-
 using TQuotaCountExecuter = TDbExecuter<THashMap<TString, ui32>>;
 
-void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev)
-{
+void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
+
     if (ev->Get()->SubjectType != SUBJECT_TYPE_CLOUD || ev->Get()->MetricName != QUOTA_COUNT_LIMIT) {
         Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, 0));
     }

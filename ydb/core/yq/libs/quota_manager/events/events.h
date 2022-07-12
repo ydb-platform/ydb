@@ -18,9 +18,11 @@ constexpr auto QUOTA_COUNT_LIMIT  = "fq.queryLimit.count";
 
 struct TQuotaInfo {
     ui64 DefaultLimit;
+    ui64 HardLimit;
     NActors::TActorId UsageUpdater;
-    TQuotaInfo(ui64 defaultLimit, NActors::TActorId usageUpdater = {})
+    TQuotaInfo(ui64 defaultLimit, ui64 hardLimit = 0, NActors::TActorId usageUpdater = {})
         : DefaultLimit(defaultLimit)
+        , HardLimit(hardLimit)
         , UsageUpdater(usageUpdater)
     {
     }
@@ -30,10 +32,10 @@ struct TQuotaDescription {
     TString SubjectType;
     TString MetricName;
     TQuotaInfo Info;
-    TQuotaDescription(const TString& subjectType, const TString& metricName, ui64 defaultLimit, NActors::TActorId usageUpdater = {})
+    TQuotaDescription(const TString& subjectType, const TString& metricName, ui64 defaultLimit, ui64 hardLimit = 0, NActors::TActorId usageUpdater = {})
         : SubjectType(subjectType)
         , MetricName(metricName)
-        , Info(defaultLimit, usageUpdater)
+        , Info(defaultLimit, hardLimit, usageUpdater)
     {
     }
 };
@@ -42,6 +44,8 @@ struct TQuotaUsage {
     ui64 Limit;
     TMaybe<ui64> Usage;
     TInstant UpdatedAt;
+    TQuotaUsage() = default;
+    TQuotaUsage(const TQuotaUsage&) = default;
     TQuotaUsage(ui64 limit) : Limit(limit), UpdatedAt(TInstant::Zero()) {}
     TQuotaUsage(ui64 limit, ui64 usage, const TInstant& updatedAt = Now())
       : Limit(limit), Usage(usage), UpdatedAt(updatedAt) {}
@@ -57,6 +61,10 @@ struct TEvQuotaService {
         EvQuotaChangeNotification,
         EvQuotaUsageRequest,
         EvQuotaUsageResponse,
+        EvQuotaSetRequest,
+        EvQuotaSetResponse,
+        EvQuotaLimitChangeRequest,
+        EvQuotaLimitChangeResponse,
         EvEnd,
     };
 
@@ -73,6 +81,8 @@ struct TEvQuotaService {
 
     // Quota request never fails, if no quota exist (i.e. SubjectType is incorrect) empty list will be returned
     struct TQuotaGetResponse : public NActors::TEventLocal<TQuotaGetResponse, EvQuotaGetResponse> {
+        TString SubjectType;
+        TString SubjectId;
         TQuotaMap Quotas;
     };
 
@@ -103,6 +113,45 @@ struct TEvQuotaService {
             : SubjectType(subjectType), SubjectId(subjectId), MetricName(metricName), Usage(usage)
         {}
     };
+
+    struct TQuotaSetRequest : public NActors::TEventLocal<TQuotaSetRequest, EvQuotaSetRequest> {
+        TString SubjectType;
+        TString SubjectId;
+        THashMap<TString, ui64> Limits;
+        TQuotaSetRequest(const TString& subjectType, const TString& subjectId)
+            : SubjectType(subjectType), SubjectId(subjectId)
+        {}
+    };
+
+    struct TQuotaSetResponse : public NActors::TEventLocal<TQuotaSetResponse, EvQuotaSetResponse> {
+        TString SubjectType;
+        TString SubjectId;
+        THashMap<TString, ui64> Limits;
+        TQuotaSetResponse(const TString& subjectType, const TString& subjectId)
+            : SubjectType(subjectType), SubjectId(subjectId)
+        {}
+    };
+
+    struct TQuotaLimitChangeRequest : public NActors::TEventLocal<TQuotaLimitChangeRequest, EvQuotaLimitChangeRequest> {
+        TString SubjectType;
+        TString SubjectId;
+        TQuotaUsage Quota;
+        ui64 LimitRequested;
+        TQuotaLimitChangeRequest(const TString& subjectType, const TString& subjectId)
+            : SubjectType(subjectType), SubjectId(subjectId)
+        {}
+    };
+
+    struct TQuotaLimitChangeResponse : public NActors::TEventLocal<TQuotaLimitChangeResponse, EvQuotaLimitChangeResponse> {
+        TString SubjectType;
+        TString SubjectId;
+        TQuotaUsage Quota;
+        ui64 LimitRequested;
+        TQuotaLimitChangeResponse(const TString& subjectType, const TString& subjectId)
+            : SubjectType(subjectType), SubjectId(subjectId)
+        {}
+    };
+
 };
 
 } /* NYq */

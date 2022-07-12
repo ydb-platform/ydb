@@ -190,13 +190,13 @@ public:
         WriteByteDataOk(resp);
     }
 
-    void ReplyError(grpc::StatusCode code, const TString& msg) override {
-        FinishGrpcStatus(code, msg, false);
+    void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details) override {
+        FinishGrpcStatus(code, msg, details, false);
     }
 
     void ReplyUnauthenticated(const TString& in) override {
         const TString message = in.empty() ? TString("unauthenticated") : TString("unauthenticated, ") + in;
-        FinishGrpcStatus(grpc::StatusCode::UNAUTHENTICATED, message, false);
+        FinishGrpcStatus(grpc::StatusCode::UNAUTHENTICATED, message, "", false);
     }
 
     void SetNextReplyCallback(TOnNextReply&& cb) override {
@@ -302,7 +302,7 @@ private:
         }
     }
 
-    void FinishGrpcStatus(grpc::StatusCode code, const TString& msg, bool urgent) {
+    void FinishGrpcStatus(grpc::StatusCode code, const TString& msg, const TString& details, bool urgent) {
         Y_VERIFY(code != grpc::OK);
         if (code == grpc::StatusCode::UNAUTHENTICATED) {
             Counters_->CountNotAuthenticated();
@@ -315,16 +315,16 @@ private:
                 Name_, msg.c_str(), this->Context.peer().c_str(), (int)code);
             StateFunc_ = &TThis::SetFinishError;
             TOut resp;
-            Writer_->Finish(TUniversalResponseRef<TOut>(&resp), grpc::Status(code, msg), GetGRpcTag());
+            Writer_->Finish(TUniversalResponseRef<TOut>(&resp), grpc::Status(code, msg, details), GetGRpcTag());
         } else {
             GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
                                     " (enqueued)", this, Name_, msg.c_str(), this->Context.peer().c_str(), (int)code);
-            auto cb = [this, code, msg]() {
+            auto cb = [this, code, msg, details]() {
                 GRPC_LOG_DEBUG(Logger_, "[%p] issuing response Name# %s nodata (%s) peer# %s, grpc status# (%d)"
                                         " (pushed to grpc)", this, Name_, msg.c_str(),
                                this->Context.peer().c_str(), (int)code);
                 StateFunc_ = &TThis::SetFinishError;
-                StreamWriter_->Finish(grpc::Status(code, msg), GetGRpcTag());
+                StreamWriter_->Finish(grpc::Status(code, msg, details), GetGRpcTag());
             };
             StreamAdaptor_->Enqueue(std::move(cb), urgent);
         }
@@ -392,7 +392,7 @@ private:
         } else {
             //This request has not been counted
             SkipUpdateCountersOnError = true;
-            FinishGrpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, "no resource", true);
+            FinishGrpcStatus(grpc::StatusCode::RESOURCE_EXHAUSTED, "no resource", "", true);
         }
         return true;
     }

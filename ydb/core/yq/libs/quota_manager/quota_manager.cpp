@@ -72,16 +72,27 @@ private:
         hFunc(TEvQuotaService::TQuotaGetRequest, Handle)
         hFunc(TEvQuotaService::TQuotaChangeNotification, Handle)
         hFunc(TEvQuotaService::TQuotaUsageResponse, Handle)
+        hFunc(TEvQuotaService::TQuotaSetRequest, Handle)
     );
 
     void Handle(TEvQuotaService::TQuotaGetRequest::TPtr& ev) {
         auto subjectType = ev->Get()->SubjectType;
         auto subjectId = ev->Get()->SubjectId;
         auto& subjectMap = QuotaCacheMap[subjectType];
-        auto it = subjectMap.find(subjectId);
-
-        bool pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];
+
+        if (subjectId.empty()) { // Just get defaults
+            auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
+            response->SubjectType = subjectType;
+            for (auto& it : infoMap) {
+                response->Quotas.emplace(it.first, TQuotaUsage(it.second.DefaultLimit));
+            }
+            Send(ev->Sender, response.Release());
+            return;
+        }
+
+        auto it = subjectMap.find(subjectId);
+        bool pended = false;
 
         // Load into cache, if needed
         if (it == subjectMap.end()) {
@@ -94,13 +105,13 @@ private:
                     }
                 }
             }
-            // 2. Load from DB (TBD)
-            // 3. Append defaults
+            // 2. Append defaults
             for (auto& it : infoMap) {
                 if (cache.UsageMap.find(it.first) == cache.UsageMap.end()) {
                     cache.UsageMap.emplace(it.first, TQuotaCachedUsage(it.second.DefaultLimit));
                 }
             }
+            // 3. Load from DB
             subjectMap.emplace(subjectId, cache);
         }
 
@@ -131,6 +142,8 @@ private:
 
         if (!pended) {
             auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
+            response->SubjectType = subjectType;
+            response->SubjectId = subjectId;
             for (auto it : cache.UsageMap) {
                 response->Quotas.emplace(it.first, it.second.Usage);
             }
@@ -176,6 +189,8 @@ private:
         if (cache.PendingUsage.size() == 0) {
             for (auto& itR : cache.PendingRequests) {
                 auto response = MakeHolder<TEvQuotaService::TQuotaGetResponse>();
+                response->SubjectType = subjectType;
+                response->SubjectId = subjectId;
                 for (auto it : cache.UsageMap) {
                     response->Quotas.emplace(it.first, it.second.Usage);
                 }
@@ -183,6 +198,65 @@ private:
             }
             cache.PendingRequests.clear();
         }
+    }
+
+    void Handle(TEvQuotaService::TQuotaSetRequest::TPtr& ev) {
+        auto subjectType = ev->Get()->SubjectType;
+        auto subjectId = ev->Get()->SubjectId;
+        auto& subjectMap = QuotaCacheMap[subjectType];
+        auto& infoMap = QuotaInfoMap[subjectType];
+
+        auto it = subjectMap.find(subjectId);
+
+        // Load into cache, if needed
+        if (it == subjectMap.end()) {
+            TQuotaCache cache;
+            // 1. Load from Config 
+            for (const auto& quota : Config.GetQuotas()) {
+                if (quota.GetSubjectType() == subjectType && quota.GetSubjectId() == subjectId) {
+                    for (const auto& limit : quota.GetLimit()) {
+                        cache.UsageMap.emplace(limit.GetName(), TQuotaCachedUsage(limit.GetLimit()));
+                    }
+                }
+            }
+            // 2. Load from DB (TBD)
+            // 3. Append defaults
+            for (auto& it : infoMap) {
+                if (cache.UsageMap.find(it.first) == cache.UsageMap.end()) {
+                    cache.UsageMap.emplace(it.first, TQuotaCachedUsage(it.second.DefaultLimit));
+                }
+            }
+            bool _;
+            std::tie(it, _) = subjectMap.emplace(subjectId, cache);
+        }
+
+        auto& cache = it->second;
+
+        for (auto metricLimit : ev->Get()->Limits) {
+            auto& name = metricLimit.first;
+            auto it = cache.UsageMap.find(name);
+            if (it != cache.UsageMap.end()) {
+                auto& cached = it->second;
+                auto limit = metricLimit.second;
+                if (cached.Usage.Limit == 0 || limit == 0 || limit > cached.Usage.Limit) {
+                    // check hard limit only if quota is increased
+                    auto itI = infoMap.find(name);
+                    if (itI != infoMap.end()) {
+                        auto& info = itI->second;
+                        if (info.HardLimit != 0 && (limit == 0 || limit > info.HardLimit)) {
+                            limit = info.HardLimit;
+                        }
+                    }
+                }
+                cached.Usage.Limit = limit;
+            }
+        }
+
+        auto response = MakeHolder<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
+        for (auto it : cache.UsageMap) {
+            response->Limits.emplace(it.first, it.second.Usage.Limit);
+        }
+        Send(ev->Sender, response.Release());
     }
 
     NConfig::TQuotasManagerConfig Config;

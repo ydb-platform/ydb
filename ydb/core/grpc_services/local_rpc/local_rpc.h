@@ -144,13 +144,11 @@ public:
     void SetRuHeader(ui64) override {}
 
     // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString& msg = "") override {
-        Y_UNUSED(msg);
+    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
         Y_FAIL("Unimplemented for local rpc");
     }
 
-    void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&& cb) override {
-        Y_UNUSED(cb);
+    void SetStreamingNotify(NGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_FAIL("Unimplemented for local rpc");
     }
 
@@ -158,9 +156,7 @@ public:
         Y_FAIL("Unimplemented for local rpc");
     }
 
-    virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) override {
-        Y_UNUSED(in);
-        Y_UNUSED(status);
+    virtual void SendSerializedResult(TString&&, Ydb::StatusIds::StatusCode) override {
         Y_FAIL("Unimplemented for local rpc");
     }
 

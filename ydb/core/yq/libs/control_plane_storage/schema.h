@@ -74,6 +74,7 @@ namespace NYq {
 #define SUBJECT_TYPE_COLUMN_NAME "subject_type"
 #define SUBJECT_ID_COLUMN_NAME "subject_id"
 #define METRIC_NAME_COLUMN_NAME "metric_name"
-#define METRIC_VALUE_COLUMN_NAME "metric_value"
+#define METRIC_LIMIT_COLUMN_NAME "metric_limit"
+#define METRIC_USAGE_COLUMN_NAME "metric_usage"
 
 } // namespace NYq

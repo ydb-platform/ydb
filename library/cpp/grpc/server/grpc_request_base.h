@@ -68,7 +68,7 @@ public:
     virtual void ReplyUnauthenticated(const TString& in) = 0;
 
     //! Send grpc error
-    virtual void ReplyError(grpc::StatusCode code, const TString& msg) = 0;
+    virtual void ReplyError(grpc::StatusCode code, const TString& msg, const TString& details = "") = 0;
 
     //! Returns deadline (server epoch related) if peer set it on its side, or Instanse::Max() otherwise
     virtual TInstant Deadline() const = 0;

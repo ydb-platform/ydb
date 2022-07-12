@@ -46,6 +46,7 @@ void TYdbControlPlaneStorageActor::Bootstrap() {
     CreateResultSetsTable();
     CreateJobsTable();
     CreateNodesTable();
+    // CreateQuotasTable(); // not yet
     Become(&TThis::StateFunc);
 }
 
@@ -239,7 +240,8 @@ void TYdbControlPlaneStorageActor::CreateQuotasTable()
         .AddNullableColumn(SUBJECT_TYPE_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(SUBJECT_ID_COLUMN_NAME, EPrimitiveType::String)
         .AddNullableColumn(METRIC_NAME_COLUMN_NAME, EPrimitiveType::String)
-        .AddNullableColumn(METRIC_VALUE_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(METRIC_LIMIT_COLUMN_NAME, EPrimitiveType::Int64)
+        .AddNullableColumn(METRIC_USAGE_COLUMN_NAME, EPrimitiveType::Int64)
         .SetPrimaryKeyColumns({SUBJECT_TYPE_COLUMN_NAME, SUBJECT_ID_COLUMN_NAME, METRIC_NAME_COLUMN_NAME})
         .Build();
 

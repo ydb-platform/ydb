@@ -255,7 +255,7 @@ public:
     // Reply using YDB status code
     virtual void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) = 0;
     // Reply using "transport error code"
-    virtual void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "") = 0;
+    virtual void ReplyWithRpcStatus(grpc::StatusCode code, const TString& msg = "", const TString& details = "") = 0;
     // Return address of the peer
     virtual TString GetPeerName() const = 0;
     // Return deadile of request execution, calculated from client timeout by grpc
@@ -375,7 +375,6 @@ public:
 
     virtual void SendSerializedResult(TString&& in, Ydb::StatusIds::StatusCode status) = 0;
 
-private:
     virtual void Reply(NProtoBuf::Message* resp, ui32 status = 0) = 0;
 };
 
@@ -484,7 +483,7 @@ public:
         return false;
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override {
+    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
         Y_FAIL("Unimplemented");
     }
 
@@ -620,7 +619,7 @@ public:
         return Ctx_->GetAuthState();
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override {
+    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
         Y_FAIL("Unimplemented");
     }
 
@@ -637,14 +636,14 @@ public:
         Ctx_->Attach(TActorId());
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), Ydb::StatusIds::UNAVAILABLE);
-        Ctx_->WriteAndFinish(std::move(resp), grpc::Status());
+        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
 
     void ReplyWithYdbStatus(Ydb::StatusIds::StatusCode status) override {
         Ctx_->Attach(TActorId());
         TResponse resp;
         FillYdbStatus(resp, IssueManager_.GetIssues(), status);
-        Ctx_->WriteAndFinish(std::move(resp), grpc::Status());
+        Ctx_->WriteAndFinish(std::move(resp), grpc::Status::OK);
     }
 
     void RaiseIssue(const NYql::TIssue& issue) override {
@@ -887,8 +886,8 @@ public:
         return Ctx_->GetAuthState();
     }
 
-    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason) override {
-        Ctx_->ReplyError(code, reason);
+    void ReplyWithRpcStatus(grpc::StatusCode code, const TString& reason, const TString& details) override {
+        Ctx_->ReplyError(code, reason, details);
     }
 
     void ReplyUnauthenticated(const TString& in) override {
@@ -1072,6 +1071,10 @@ public:
 
     void Pass(const IFacilityProvider&) override {
         Y_FAIL("unimplemented");
+    }
+
+    void ReplyGrpcError(grpc::StatusCode code, const TString& msg, const TString& details = "") {
+        Ctx_->ReplyError(code, msg, details);
     }
 
 private:

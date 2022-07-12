@@ -579,7 +579,7 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
         .AppendTopics({"TestTopic"})
         .ConsumerName("TestConsumer")
         .RetryPolicy(NYdb::NPersQueue::IRetryPolicy::GetFixedIntervalPolicy(TDuration::MilliSeconds(10)))
-        .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        .Counters(MakeIntrusive<NYdb::NPersQueue::TReaderCounters>(MakeIntrusive<::NMonitoring::TDynamicCounters>()));
 
     Log.SetFormatter(GetPrefixLogFormatter(""));
 

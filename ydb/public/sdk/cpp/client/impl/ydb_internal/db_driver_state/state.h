@@ -97,7 +97,7 @@ public:
     );
     NThreading::TFuture<void> SendNotification(
         TDbDriverState::ENotifyType type);
-    void SetMetricRegistry(NMonitoring::TMetricRegistry *sensorsRegistry);
+    void SetMetricRegistry(::NMonitoring::TMetricRegistry *sensorsRegistry);
 private:
     IInternalClient* DiscoveryClient_;
     std::unordered_map<TStateKey, std::weak_ptr<TDbDriverState>, TStateKeyHash> States_;

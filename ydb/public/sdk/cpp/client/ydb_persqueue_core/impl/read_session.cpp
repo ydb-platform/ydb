@@ -2610,7 +2610,7 @@ void TDeferredCommit::TImpl::Commit() {
 
 #define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
 
-TReaderCounters::TReaderCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) {
+TReaderCounters::TReaderCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     Errors = counters->GetCounter("errors", true);
     CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
     BytesRead = counters->GetCounter("bytesRead", true);

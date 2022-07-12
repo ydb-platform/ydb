@@ -5,7 +5,7 @@
 /* #undef CURLDEBUG */
 
 /* Location of default ca bundle */
-/* #undef CURL_CA_BUNDLE */
+#define CURL_CA_BUNDLE "/etc/ssl/certs/ca-certificates.crt"
 
 /* define "1" to use built in CA store of SSL library */
 #define CURL_CA_FALLBACK 1
@@ -42,6 +42,9 @@
 
 /* to disable Gopher */
 /* #undef CURL_DISABLE_GOPHER */
+
+/* disable headers-api */
+/* #undef CURL_DISABLE_HEADERS_API */
 
 /* disable alt-svc */
 /* #undef CURL_DISABLE_HSTS */
@@ -151,6 +154,9 @@
 /* Define to 1 if you have the <assert.h> header file. */
 #define HAVE_ASSERT_H 1
 
+/* Define to 1 if you have _Atomic support. */
+#define HAVE_ATOMIC 1
+
 /* Define to 1 if you have the basename function. */
 #define HAVE_BASENAME 1
 
@@ -199,6 +205,9 @@
 
 /* Define to 1 if you have the <err.h> header file. */
 /* #undef HAVE_ERR_H */
+
+/* Define to 1 if you have the `fchmod' function. */
+#define HAVE_FCHMOD 1
 
 /* Define to 1 if you have the fcntl function. */
 #define HAVE_FCNTL 1
@@ -462,6 +471,9 @@
 /* Define to 1 if you have the <netinet/tcp.h> header file. */
 #define HAVE_NETINET_TCP_H 1
 
+/* Define to 1 if you have the <netinet/udp.h> header file. */
+#define HAVE_NETINET_UDP_H 1
+
 /* Define to 1 if you have the <net/if.h> header file. */
 #define HAVE_NET_IF_H 1
 
@@ -551,11 +563,17 @@
 /* Define to 1 if you have the <rsa.h> header file. */
 /* #undef HAVE_RSA_H */
 
+/* Define to 1 if you have the `sched_yield' function. */
+#define HAVE_SCHED_YIELD 1
+
 /* Define to 1 if you have the select function. */
 #define HAVE_SELECT 1
 
 /* Define to 1 if you have the send function. */
 #define HAVE_SEND 1
+
+/* Define to 1 if you have the `sendmsg' function. */
+#define HAVE_SENDMSG 1
 
 /* Define to 1 if you have the <setjmp.h> header file. */
 #define HAVE_SETJMP_H 1
@@ -948,9 +966,6 @@
 
 /* GSASL support enabled */
 /* #undef USE_GSASL */
-
-/* enable headers-api */
-/* #undef USE_HEADERS_API */
 
 /* if hyper is in use */
 /* #undef USE_HYPER */

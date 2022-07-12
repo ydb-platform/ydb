@@ -24,39 +24,48 @@
 
 #include "curl_setup.h"
 
-#if !defined(CURL_DISABLE_COOKIES) || !defined(CURL_DISABLE_ALTSVC) ||  \
-  !defined(CURL_DISABLE_HSTS)
+#define GLOBAL_INIT_IS_THREADSAFE
 
-#include "curl_get_line.h"
-#include "curl_memory.h"
-/* The last #include file should be: */
-#include "memdebug.h"
+#if defined(_WIN32_WINNT) && _WIN32_WINNT >= 0x600
 
-/*
- * get_line() makes sure to only return complete whole lines that fit in 'len'
- * bytes and end with a newline.
- */
-char *Curl_get_line(char *buf, int len, FILE *input)
+#define curl_simple_lock SRWLOCK
+#define CURL_SIMPLE_LOCK_INIT SRWLOCK_INIT
+
+#define curl_simple_lock_lock(m) AcquireSRWLockExclusive(m)
+#define curl_simple_lock_unlock(m) ReleaseSRWLockExclusive(m)
+
+#elif defined (HAVE_ATOMIC)
+#include <stdatomic.h>
+
+#define curl_simple_lock atomic_bool
+#define CURL_SIMPLE_LOCK_INIT false
+
+static inline void curl_simple_lock_lock(curl_simple_lock *lock)
 {
-  bool partial = FALSE;
-  while(1) {
-    char *b = fgets(buf, len, input);
-    if(b) {
-      size_t rlen = strlen(b);
-      if(rlen && (b[rlen-1] == '\n')) {
-        if(partial) {
-          partial = FALSE;
-          continue;
-        }
-        return b;
-      }
-      /* read a partial, discard the next piece that ends with newline */
-      partial = TRUE;
-    }
-    else
+  for(;;) {
+    if(!atomic_exchange_explicit(lock, true, memory_order_acquire))
       break;
+    /* Reduce cache coherency traffic */
+    while(atomic_load_explicit(lock, memory_order_relaxed)) {
+      /* Reduce load (not mandatory) */
+#if defined(__i386__) || defined(__x86_64__)
+      __builtin_ia32_pause();
+#elif defined(__aarch64__)
+      asm volatile("yield" ::: "memory");
+#elif defined(HAVE_SCHED_YIELD)
+      sched_yield();
+#endif
+    }
   }
-  return NULL;
 }
 
-#endif /* if not disabled */
+static inline void curl_simple_lock_unlock(curl_simple_lock *lock)
+{
+  atomic_store_explicit(lock, false, memory_order_release);
+}
+
+#else
+
+#undef  GLOBAL_INIT_IS_THREADSAFE
+
+#endif

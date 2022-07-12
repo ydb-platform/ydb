@@ -21,6 +21,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 #include "curl_setup.h"
 
@@ -60,7 +62,6 @@ CURLcode Curl_verify_certificate(struct Curl_easy *data,
 #ifdef EXPOSE_SCHANNEL_INTERNAL_STRUCTS
 
 #ifdef __MINGW32__
-#include <_mingw.h>
 #ifdef __MINGW64_VERSION_MAJOR
 #define HAS_MANUAL_VERIFY_API
 #endif

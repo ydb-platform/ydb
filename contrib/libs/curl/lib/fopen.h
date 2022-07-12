@@ -1,5 +1,5 @@
-#ifndef HEADER_CURL_FTPLISTPARSER_H
-#define HEADER_CURL_FTPLISTPARSER_H
+#ifndef HEADER_CURL_FOPEN_H
+#define HEADER_CURL_FOPEN_H
 /***************************************************************************
  *                                  _   _ ____  _
  *  Project                     ___| | | |  _ \| |
@@ -23,21 +23,8 @@
  * SPDX-License-Identifier: curl
  *
  ***************************************************************************/
-#include "curl_setup.h"
 
-#ifndef CURL_DISABLE_FTP
+CURLcode Curl_fopen(struct Curl_easy *data, const char *filename,
+                    FILE **fh, char **tempname);
 
-/* WRITEFUNCTION callback for parsing LIST responses */
-size_t Curl_ftp_parselist(char *buffer, size_t size, size_t nmemb,
-                          void *connptr);
-
-struct ftp_parselist_data; /* defined inside ftplibparser.c */
-
-CURLcode Curl_ftp_parselist_geterror(struct ftp_parselist_data *pl_data);
-
-struct ftp_parselist_data *Curl_ftp_parselist_data_alloc(void);
-
-void Curl_ftp_parselist_data_free(struct ftp_parselist_data **pl_data);
-
-#endif /* CURL_DISABLE_FTP */
-#endif /* HEADER_CURL_FTPLISTPARSER_H */
+#endif

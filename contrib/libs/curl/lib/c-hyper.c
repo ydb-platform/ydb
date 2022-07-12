@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -288,7 +290,7 @@ static CURLcode status_line(struct Curl_easy *data,
              len);
 
   if(!data->state.hconnect || !data->set.suppress_connect_headers) {
-    writetype = CLIENTWRITE_HEADER;
+    writetype = CLIENTWRITE_HEADER|CLIENTWRITE_STATUS;
     if(data->set.include_header)
       writetype |= CLIENTWRITE_BODY;
     result = Curl_client_write(data, writetype,
@@ -1046,6 +1048,21 @@ CURLcode Curl_http(struct Curl_easy *data, bool *done)
     if(result)
       goto error;
   }
+
+#ifndef CURL_DISABLE_ALTSVC
+  if(conn->bits.altused && !Curl_checkheaders(data, STRCONST("Alt-Used"))) {
+    char *altused = aprintf("Alt-Used: %s:%d\r\n",
+                            conn->conn_to_host.name, conn->conn_to_port);
+    if(!altused) {
+      result = CURLE_OUT_OF_MEMORY;
+      goto error;
+    }
+    result = Curl_hyper_header(data, headers, altused);
+    if(result)
+      goto error;
+    free(altused);
+  }
+#endif
 
 #ifndef CURL_DISABLE_PROXY
   if(conn->bits.httpproxy && !conn->bits.tunnel_proxy &&

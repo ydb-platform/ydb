@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -2709,12 +2711,14 @@ CURLcode Curl_http_bodysend(struct Curl_easy *data, struct connectdata *conn,
 }
 
 #if !defined(CURL_DISABLE_COOKIES)
+
 CURLcode Curl_http_cookies(struct Curl_easy *data,
                            struct connectdata *conn,
                            struct dynbuf *r)
 {
   CURLcode result = CURLE_OK;
   char *addcookies = NULL;
+  bool linecap = FALSE;
   if(data->set.str[STRING_COOKIE] &&
      !Curl_checkheaders(data, STRCONST("Cookie")))
     addcookies = data->set.str[STRING_COOKIE];
@@ -2732,7 +2736,7 @@ CURLcode Curl_http_cookies(struct Curl_easy *data,
         !strcmp(host, "127.0.0.1") ||
         !strcmp(host, "[::1]") ? TRUE : FALSE;
       Curl_share_lock(data, CURL_LOCK_DATA_COOKIE, CURL_LOCK_ACCESS_SINGLE);
-      co = Curl_cookie_getlist(data->cookies, host, data->state.up.path,
+      co = Curl_cookie_getlist(data, data->cookies, host, data->state.up.path,
                                secure_context);
       Curl_share_unlock(data, CURL_LOCK_DATA_COOKIE);
     }
@@ -2746,6 +2750,13 @@ CURLcode Curl_http_cookies(struct Curl_easy *data,
             if(result)
               break;
           }
+          if((Curl_dyn_len(r) + strlen(co->name) + strlen(co->value) + 1) >=
+             MAX_COOKIE_HEADER_LEN) {
+            infof(data, "Restricted outgoing cookies due to header size, "
+                  "'%s' not sent", co->name);
+            linecap = TRUE;
+            break;
+          }
           result = Curl_dyn_addf(r, "%s%s=%s", count?"; ":"",
                                  co->name, co->value);
           if(result)
@@ -2756,7 +2767,7 @@ CURLcode Curl_http_cookies(struct Curl_easy *data,
       }
       Curl_cookie_freelist(store);
     }
-    if(addcookies && !result) {
+    if(addcookies && !result && !linecap) {
       if(!count)
         result = Curl_dyn_addn(r, STRCONST("Cookie: "));
       if(!result) {
@@ -3799,11 +3810,16 @@ static CURLcode verify_header(struct Curl_easy *data)
   if(k->headerline < 2)
     /* the first "header" is the status-line and it has no colon */
     return CURLE_OK;
-  ptr = memchr(header, ':', hlen);
-  if(!ptr) {
-    /* this is bad, bail out */
-    failf(data, "Header without colon");
-    return CURLE_WEIRD_SERVER_REPLY;
+  if(((header[0] == ' ') || (header[0] == '\t')) && k->headerline > 2)
+    /* line folding, can't happen on line 2 */
+    ;
+  else {
+    ptr = memchr(header, ':', hlen);
+    if(!ptr) {
+      /* this is bad, bail out */
+      failf(data, "Header without colon");
+      return CURLE_WEIRD_SERVER_REPLY;
+    }
   }
   return CURLE_OK;
 }

@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -308,7 +310,7 @@ int Curl_resolver_getsock(struct Curl_easy *data,
  * 2) wait for the timeout period to check for action on ares' sockets.
  * 3) tell ares to act on all the sockets marked as "with action"
  *
- * return number of sockets it worked on
+ * return number of sockets it worked on, or -1 on error
  */
 
 static int waitperform(struct Curl_easy *data, timediff_t timeout_ms)
@@ -340,8 +342,11 @@ static int waitperform(struct Curl_easy *data, timediff_t timeout_ms)
       break;
   }
 
-  if(num)
+  if(num) {
     nfds = Curl_poll(pfd, num, timeout_ms);
+    if(nfds < 0)
+      return -1;
+  }
   else
     nfds = 0;
 
@@ -378,7 +383,8 @@ CURLcode Curl_resolver_is_resolved(struct Curl_easy *data,
   DEBUGASSERT(dns);
   *dns = NULL;
 
-  waitperform(data, 0);
+  if(waitperform(data, 0) < 0)
+    return CURLE_UNRECOVERABLE_POLL;
 
 #ifndef HAVE_CARES_GETADDRINFO
   /* Now that we've checked for any last minute results above, see if there are
@@ -477,7 +483,8 @@ CURLcode Curl_resolver_wait_resolv(struct Curl_easy *data,
     else
       timeout_ms = 1000;
 
-    waitperform(data, timeout_ms);
+    if(waitperform(data, timeout_ms) < 0)
+      return CURLE_UNRECOVERABLE_POLL;
     result = Curl_resolver_is_resolved(data, entry);
 
     if(result || data->state.async.done)

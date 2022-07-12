@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 /***
@@ -33,8 +35,9 @@ struct CookieInfo *Curl_cookie_init(struct Curl_easy *data,
         called before any cookies are set.
 
 struct Cookie *Curl_cookie_add(struct Curl_easy *data,
-                 struct CookieInfo *c, bool httpheader, char *lineptr,
-                 const char *domain, const char *path);
+                 struct CookieInfo *c, bool httpheader, bool noexpire,
+                 char *lineptr, const char *domain, const char *path,
+                 bool secure);
 
         The 'lineptr' parameter is a full "Set-cookie:" line as
         received from a server.
@@ -96,8 +99,8 @@ Example set of cookies:
 #include "curl_get_line.h"
 #include "curl_memrchr.h"
 #include "parsedate.h"
-#include "rand.h"
 #include "rename.h"
+#include "fopen.h"
 
 /* The last 3 #include files should be in this order */
 #include "curl_printf.h"
@@ -468,6 +471,8 @@ Curl_cookie_add(struct Curl_easy *data,
   struct Cookie *clist;
   struct Cookie *co;
   struct Cookie *lastc = NULL;
+  struct Cookie *replace_co = NULL;
+  struct Cookie *replace_clist = NULL;
   time_t now = time(NULL);
   bool replace_old = FALSE;
   bool badcookie = FALSE; /* cookies are good by default. mmmmm yummy */
@@ -476,6 +481,10 @@ Curl_cookie_add(struct Curl_easy *data,
 #ifdef CURL_DISABLE_VERBOSE_STRINGS
   (void)data;
 #endif
+
+  DEBUGASSERT(MAX_SET_COOKIE_AMOUNT <= 255); /* counter is an unsigned char */
+  if(data->req.setcookies >= MAX_SET_COOKIE_AMOUNT)
+    return NULL;
 
   /* First, alloc and init a new struct for it */
   co = calloc(1, sizeof(struct Cookie));
@@ -816,7 +825,7 @@ Curl_cookie_add(struct Curl_easy *data,
       freecookie(co);
       return NULL;
     }
-
+    data->req.setcookies++;
   }
   else {
     /*
@@ -1020,11 +1029,52 @@ Curl_cookie_add(struct Curl_easy *data,
   }
 #endif
 
+  /* A non-secure cookie may not overlay an existing secure cookie. */
   myhash = cookiehash(co->domain);
   clist = c->cookies[myhash];
-  replace_old = FALSE;
   while(clist) {
     if(strcasecompare(clist->name, co->name)) {
+      /* the names are identical */
+      bool matching_domains = FALSE;
+
+      if(clist->domain && co->domain) {
+        if(strcasecompare(clist->domain, co->domain))
+          /* The domains are identical */
+          matching_domains = TRUE;
+      }
+      else if(!clist->domain && !co->domain)
+        matching_domains = TRUE;
+
+      if(matching_domains && /* the domains were identical */
+         clist->spath && co->spath && /* both have paths */
+         clist->secure && !co->secure && !secure) {
+        size_t cllen;
+        const char *sep;
+
+        /*
+         * A non-secure cookie may not overlay an existing secure cookie.
+         * For an existing cookie "a" with path "/login", refuse a new
+         * cookie "a" with for example path "/login/en", while the path
+         * "/loginhelper" is ok.
+         */
+
+        sep = strchr(clist->spath + 1, '/');
+
+        if(sep)
+          cllen = sep - clist->spath;
+        else
+          cllen = strlen(clist->spath);
+
+        if(strncasecompare(clist->spath, co->spath, cllen)) {
+          infof(data, "cookie '%s' for domain '%s' dropped, would "
+                "overlay an existing cookie", co->name, co->domain);
+          freecookie(co);
+          return NULL;
+        }
+      }
+    }
+
+    if(!replace_co && strcasecompare(clist->name, co->name)) {
       /* the names are identical */
 
       if(clist->domain && co->domain) {
@@ -1040,30 +1090,7 @@ Curl_cookie_add(struct Curl_easy *data,
         /* the domains were identical */
 
         if(clist->spath && co->spath) {
-          if(clist->secure && !co->secure && !secure) {
-            size_t cllen;
-            const char *sep;
-
-            /*
-             * A non-secure cookie may not overlay an existing secure cookie.
-             * For an existing cookie "a" with path "/login", refuse a new
-             * cookie "a" with for example path "/login/en", while the path
-             * "/loginhelper" is ok.
-             */
-
-            sep = strchr(clist->spath + 1, '/');
-
-            if(sep)
-              cllen = sep - clist->spath;
-            else
-              cllen = strlen(clist->spath);
-
-            if(strncasecompare(clist->spath, co->spath, cllen)) {
-              freecookie(co);
-              return NULL;
-            }
-          }
-          else if(strcasecompare(clist->spath, co->spath))
+          if(strcasecompare(clist->spath, co->spath))
             replace_old = TRUE;
           else
             replace_old = FALSE;
@@ -1085,41 +1112,36 @@ Curl_cookie_add(struct Curl_easy *data,
         freecookie(co);
         return NULL;
       }
-
       if(replace_old) {
-        co->next = clist->next; /* get the next-pointer first */
-
-        /* when replacing, creationtime is kept from old */
-        co->creationtime = clist->creationtime;
-
-        /* then free all the old pointers */
-        free(clist->name);
-        free(clist->value);
-        free(clist->domain);
-        free(clist->path);
-        free(clist->spath);
-        free(clist->expirestr);
-        free(clist->version);
-        free(clist->maxage);
-
-        *clist = *co;  /* then store all the new data */
-
-        free(co);   /* free the newly allocated memory */
-        co = clist; /* point to the previous struct instead */
-
-        /*
-         * We have replaced a cookie, now skip the rest of the list but make
-         * sure the 'lastc' pointer is properly set
-         */
-        do {
-          lastc = clist;
-          clist = clist->next;
-        } while(clist);
-        break;
+        replace_co = co;
+        replace_clist = clist;
       }
     }
     lastc = clist;
     clist = clist->next;
+  }
+  if(replace_co) {
+    co = replace_co;
+    clist = replace_clist;
+    co->next = clist->next; /* get the next-pointer first */
+
+    /* when replacing, creationtime is kept from old */
+    co->creationtime = clist->creationtime;
+
+    /* then free all the old pointers */
+    free(clist->name);
+    free(clist->value);
+    free(clist->domain);
+    free(clist->path);
+    free(clist->spath);
+    free(clist->expirestr);
+    free(clist->version);
+    free(clist->maxage);
+
+    *clist = *co;  /* then store all the new data */
+
+    free(co);   /* free the newly allocated memory */
+    co = clist;
   }
 
   if(c->running)
@@ -1357,7 +1379,8 @@ static struct Cookie *dup_cookie(struct Cookie *src)
  *
  * It shall only return cookies that haven't expired.
  */
-struct Cookie *Curl_cookie_getlist(struct CookieInfo *c,
+struct Cookie *Curl_cookie_getlist(struct Curl_easy *data,
+                                   struct CookieInfo *c,
                                    const char *host, const char *path,
                                    bool secure)
 {
@@ -1412,6 +1435,11 @@ struct Cookie *Curl_cookie_getlist(struct CookieInfo *c,
             mainco = newco;
 
             matches++;
+            if(matches >= MAX_COOKIE_SEND_AMOUNT) {
+              infof(data, "Included max number of cookies (%u) in request!",
+                    matches);
+              break;
+            }
           }
           else
             goto fail;
@@ -1613,20 +1641,9 @@ static CURLcode cookie_output(struct Curl_easy *data,
     use_stdout = TRUE;
   }
   else {
-    unsigned char randsuffix[9];
-
-    if(Curl_rand_hex(data, randsuffix, sizeof(randsuffix)))
-      return 2;
-
-    tempstore = aprintf("%s.%s.tmp", filename, randsuffix);
-    if(!tempstore)
-      return CURLE_OUT_OF_MEMORY;
-
-    out = fopen(tempstore, FOPEN_WRITETEXT);
-    if(!out) {
-      error = CURLE_WRITE_ERROR;
+    error = Curl_fopen(data, filename, &out, &tempstore);
+    if(error)
       goto error;
-    }
   }
 
   fputs("# Netscape HTTP Cookie File\n"
@@ -1673,7 +1690,7 @@ static CURLcode cookie_output(struct Curl_easy *data,
   if(!use_stdout) {
     fclose(out);
     out = NULL;
-    if(Curl_rename(tempstore, filename)) {
+    if(tempstore && Curl_rename(tempstore, filename)) {
       unlink(tempstore);
       error = CURLE_WRITE_ERROR;
       goto error;

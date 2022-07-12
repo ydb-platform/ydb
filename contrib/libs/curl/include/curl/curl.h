@@ -20,6 +20,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 /*
@@ -613,6 +615,7 @@ typedef enum {
   CURLE_QUIC_CONNECT_ERROR,      /* 96 - QUIC connection error */
   CURLE_PROXY,                   /* 97 - proxy handshake error */
   CURLE_SSL_CLIENTCERT,          /* 98 - client-side certificate required */
+  CURLE_UNRECOVERABLE_POLL,      /* 99 - poll/select returned fatal error */
   CURL_LAST /* never use! */
 } CURLcode;
 
@@ -855,7 +858,18 @@ typedef int
                           const struct curl_khkey *knownkey, /* known */
                           const struct curl_khkey *foundkey, /* found */
                           enum curl_khmatch, /* libcurl's view on the keys */
-                          void *clientp); /* custom pointer passed from app */
+                          void *clientp); /* custom pointer passed with */
+                                          /* CURLOPT_SSH_KEYDATA */
+
+typedef int
+  (*curl_sshhostkeycallback) (void *clientp,/* custom pointer passed*/
+                                            /* with CURLOPT_SSH_HOSTKEYDATA */
+                          int keytype, /* CURLKHTYPE */
+                          const char *key, /*hostkey to check*/
+                          size_t keylen); /*length of the key*/
+                          /*return CURLE_OK to accept*/
+                          /*or something else to refuse*/
+
 
 /* parameter for the CURLOPT_USE_SSL option */
 typedef enum {
@@ -2122,6 +2136,13 @@ typedef enum {
   /* Set MIME option flags. */
   CURLOPT(CURLOPT_MIME_OPTIONS, CURLOPTTYPE_LONG, 315),
 
+  /* set the SSH host key callback, must point to a curl_sshkeycallback
+     function */
+  CURLOPT(CURLOPT_SSH_HOSTKEYFUNCTION, CURLOPTTYPE_FUNCTIONPOINT, 316),
+
+  /* set the SSH host key callback custom pointer */
+  CURLOPT(CURLOPT_SSH_HOSTKEYDATA, CURLOPTTYPE_CBPOINT, 317),
+
   CURLOPT_LASTENTRY /* the last unused */
 } CURLoption;
 
@@ -2589,8 +2610,10 @@ CURL_EXTERN void curl_free(void *p);
  *
  * curl_global_init() should be invoked exactly once for each application that
  * uses libcurl and before any call of other libcurl functions.
- *
- * This function is not thread-safe!
+
+ * This function is thread-safe if CURL_VERSION_THREADSAFE is set in the
+ * curl_version_info_data.features flag (fetch by curl_version_info()).
+
  */
 CURL_EXTERN CURLcode curl_global_init(long flags);
 
@@ -2799,8 +2822,9 @@ typedef enum {
   CURLINFO_EFFECTIVE_METHOD = CURLINFO_STRING + 58,
   CURLINFO_PROXY_ERROR      = CURLINFO_LONG + 59,
   CURLINFO_REFERER          = CURLINFO_STRING + 60,
-
-  CURLINFO_LASTONE          = 60
+  CURLINFO_CAINFO           = CURLINFO_STRING + 61,
+  CURLINFO_CAPATH           = CURLINFO_STRING + 62,
+  CURLINFO_LASTONE          = 62
 } CURLINFO;
 
 /* CURLINFO_RESPONSE_CODE is the new name for the option previously known as
@@ -3006,6 +3030,7 @@ typedef struct curl_version_info_data curl_version_info_data;
 #define CURL_VERSION_UNICODE      (1<<27) /* Unicode support on Windows */
 #define CURL_VERSION_HSTS         (1<<28) /* HSTS is supported */
 #define CURL_VERSION_GSASL        (1<<29) /* libgsasl is supported */
+#define CURL_VERSION_THREADSAFE   (1<<30) /* libcurl API is thread-safe */
 
  /*
  * NAME curl_version_info()

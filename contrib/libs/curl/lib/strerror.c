@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -317,6 +319,9 @@ curl_easy_strerror(CURLcode error)
   case CURLE_SSL_CLIENTCERT:
     return "SSL Client Certificate required";
 
+  case CURLE_UNRECOVERABLE_POLL:
+    return "Unrecoverable error in select/poll";
+
     /* error codes not used by current libcurl */
   case CURLE_OBSOLETE20:
   case CURLE_OBSOLETE24:
@@ -399,6 +404,9 @@ curl_multi_strerror(CURLMcode error)
 
   case CURLM_ABORTED_BY_CALLBACK:
     return "Operation was aborted by an application callback";
+
+  case CURLM_UNRECOVERABLE_POLL:
+    return "Unrecoverable error in select/poll";
 
   case CURLM_LAST:
     break;

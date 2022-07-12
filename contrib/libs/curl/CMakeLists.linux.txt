@@ -74,6 +74,7 @@ target_sources(contrib-libs-curl PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/escape.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/file.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/fileinfo.c
+  ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/fopen.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/formdata.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/ftp.c
   ${CMAKE_SOURCE_DIR}/contrib/libs/curl/lib/ftplistparser.c

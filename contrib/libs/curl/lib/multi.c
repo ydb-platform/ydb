@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -1314,6 +1316,8 @@ static CURLMcode multi_wait(struct Curl_multi *multi,
 #else
     pollrc = Curl_poll(ufds, nfds, timeout_ms); /* wait... */
 #endif
+    if(pollrc < 0)
+      return CURLM_UNRECOVERABLE_POLL;
 
     if(pollrc > 0) {
       retcode = pollrc;

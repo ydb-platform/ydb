@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -498,6 +500,18 @@ bool Curl_quic_data_pending(const struct Curl_easy *data)
   struct HTTP *stream = data->req.p.http;
   H3BUGF(infof((struct Curl_easy *)data, "Curl_quic_data_pending"));
   return stream->recv_header_len || stream->recv_data_len;
+}
+
+/*
+ * Called from transfer.c:Curl_readwrite when neither HTTP level read
+ * nor write is performed. It is a good place to handle timer expiry
+ * for QUIC transport.
+ */
+CURLcode Curl_quic_idle(struct Curl_easy *data)
+{
+  (void)data;
+  H3BUGF(infof(data, "Curl_quic_idle"));
+  return CURLE_OK;
 }
 
 #endif /* USE_MSH3 */

@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -352,8 +354,12 @@ int Curl_poll(struct pollfd ufds[], unsigned int nfds, timediff_t timeout_ms)
      value).
   */
   r = our_select(maxfd, &fds_read, &fds_write, &fds_err, timeout_ms);
-  if(r <= 0)
+  if(r <= 0) {
+    if((r == -1) && (SOCKERRNO == EINTR))
+      /* make EINTR from select or poll not a "lethal" error */
+      r = 0;
     return r;
+  }
 
   r = 0;
   for(i = 0; i < nfds; i++) {

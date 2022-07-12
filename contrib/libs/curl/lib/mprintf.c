@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  *
  * Purpose:
  *  A merge of Bjorn Reese's format() function and Daniel's dsprintf()
@@ -956,9 +958,16 @@ static int dprintf_formatf(
 
         *fptr = 0; /* and a final zero termination */
 
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
         /* NOTE NOTE NOTE!! Not all sprintf implementations return number of
            output characters */
         (sprintf)(work, formatbuf, p->data.dnum);
+#ifdef __clang__
+#pragma clang diagnostic pop
+#endif
         DEBUGASSERT(strlen(work) <= sizeof(work));
         for(fptr = work; *fptr; fptr++)
           OUTCHAR(*fptr);

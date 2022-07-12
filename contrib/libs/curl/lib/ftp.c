@@ -18,6 +18,8 @@
  * This software is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY
  * KIND, either express or implied.
  *
+ * SPDX-License-Identifier: curl
+ *
  ***************************************************************************/
 
 #include "curl_setup.h"
@@ -783,8 +785,9 @@ static CURLcode ftp_state_user(struct Curl_easy *data,
                                   &conn->proto.ftpc.pp, "USER %s",
                                   conn->user?conn->user:"");
   if(!result) {
+    struct ftp_conn *ftpc = &conn->proto.ftpc;
+    ftpc->ftp_trying_alternative = FALSE;
     state(data, FTP_USER);
-    data->state.ftp_trying_alternative = FALSE;
   }
   return result;
 }
@@ -2622,13 +2625,13 @@ static CURLcode ftp_state_user_resp(struct Curl_easy *data,
     (the server denies to log the specified user) */
 
     if(data->set.str[STRING_FTP_ALTERNATIVE_TO_USER] &&
-        !data->state.ftp_trying_alternative) {
+       !ftpc->ftp_trying_alternative) {
       /* Ok, USER failed.  Let's try the supplied command. */
       result =
         Curl_pp_sendf(data, &ftpc->pp, "%s",
                       data->set.str[STRING_FTP_ALTERNATIVE_TO_USER]);
       if(!result) {
-        data->state.ftp_trying_alternative = TRUE;
+        ftpc->ftp_trying_alternative = TRUE;
         state(data, FTP_USER);
       }
     }
@@ -2701,10 +2704,11 @@ static CURLcode ftp_statemachine(struct Curl_easy *data,
            set a valid level */
         Curl_sec_request_prot(conn, data->set.str[STRING_KRB_LEVEL]);
 
-        if(Curl_sec_login(data, conn))
-          infof(data, "Logging in with password in cleartext");
-        else
-          infof(data, "Authentication successful");
+        if(Curl_sec_login(data, conn)) {
+          failf(data, "secure login failed");
+          return CURLE_WEIRD_SERVER_REPLY;
+        }
+        infof(data, "Authentication successful");
       }
 #endif
 
@@ -3561,8 +3565,10 @@ static CURLcode ftp_do_more(struct Curl_easy *data, int *completep)
   bool connected = FALSE;
   bool complete = FALSE;
 
-  /* the ftp struct is inited in ftp_connect() */
-  struct FTP *ftp = data->req.p.ftp;
+  /* the ftp struct is inited in ftp_connect(). If we are connecting to an HTTP
+   * proxy then the state will not be valid until after that connection is
+   * complete */
+  struct FTP *ftp = NULL;
 
   /* if the second connection isn't done yet, wait for it */
   if(!conn->bits.tcpconnect[SECONDARYSOCKET]) {
@@ -3602,6 +3608,9 @@ static CURLcode ftp_do_more(struct Curl_easy *data, int *completep)
      Curl_connect_ongoing(conn))
     return result;
 #endif
+
+  /* Curl_proxy_connect might have moved the protocol state */
+  ftp = data->req.p.ftp;
 
   if(ftpc->state) {
     /* already in a state so skip the initial commands.

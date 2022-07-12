@@ -1012,5 +1012,6 @@ NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots
             .EnablePipeRetries(false)
             .EnableAsyncIndexes(true)
             .EnableNotNullColumns(true)
-            .EnableProtoSourceIdInfo(true);
+            .EnableProtoSourceIdInfo(true)
+            .DisableStatsBatching(true);
 }

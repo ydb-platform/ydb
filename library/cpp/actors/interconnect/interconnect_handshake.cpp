@@ -551,6 +551,7 @@ namespace NActors {
 
             // set up incoming socket
             SetupSocket();
+            RegisterInPoller();
 
             // wait for initial request packet
             TInitialPacket request;
@@ -878,8 +879,11 @@ namespace NActors {
                 // start connecting
                 err = -Socket->Connect(address);
                 if (err == EINPROGRESS) {
+                    RegisterInPoller();
                     WaitPoller(false, true, "WaitConnect");
                     err = Socket->GetConnectStatus();
+                } else if (!err) {
+                    RegisterInPoller();
                 }
 
                 // check if connection succeeded
@@ -915,9 +919,6 @@ namespace NActors {
 
             // setup send buffer size
             Socket->SetSendBufferSize(Common->Settings.GetSendBufferSize());
-
-            // register in poller
-            RegisterInPoller();
         }
 
         void RegisterInPoller() {

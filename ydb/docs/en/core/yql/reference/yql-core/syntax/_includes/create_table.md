@@ -49,13 +49,12 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
     CREATE TABLE my_table (
         a Uint64,
         b Bool,
-
-{% if feature_not_null %}         c Float NOT NULL,{% else %}         c Float,{% endif %}
+{% if feature_not_null %}        c Float NOT NULL,{% else %}        c Float,{% endif %}
 {% if feature_column_container_type %}         d "List<List<Int32>>"{% endif %}
 {% if feature_map_tables %}
-PRIMARY KEY (b, a)
+        PRIMARY KEY (b, a)
 {% endif %}
-)
+    )
 
 {% if feature_secondary_index %}
 

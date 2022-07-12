@@ -33,7 +33,7 @@ conan_cmake_configure(
   GENERATORS cmake_find_package
   REQUIRES
     bison/3.5.3
-    c-ares/1.17.2
+    c-ares/1.18.1
     libiconv/1.15
     openssl/1.1.1l
     ragel/6.10

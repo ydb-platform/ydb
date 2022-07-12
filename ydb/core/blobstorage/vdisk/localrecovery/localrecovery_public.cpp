@@ -563,28 +563,29 @@ namespace NKikimr {
             }
         }
 
-        void Bootstrap(const TActorContext &ctx) {
-            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
-                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
-
-
+        void SendYardInit(const TActorContext &ctx, TDuration yardInitDelay) {
             auto ev = std::make_unique<NPDisk::TEvYardInit>(Config->BaseInfo.InitOwnerRound, SelfVDiskId,
                 Config->BaseInfo.PDiskGuid, SkeletonId, SkeletonFrontId, Config->BaseInfo.VDiskSlotId);
-            const TActorId nodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
             auto handle = std::make_unique<IEventHandle>(Config->BaseInfo.PDiskActorID, SelfId(), ev.release(),
-                IEventHandle::FlagForwardOnNondelivery, 0, &nodeWardenId);
-            if (const TDuration delay = Config->BaseInfo.YardInitDelay; delay != TDuration::Zero()) {
-                TActivationContext::Schedule(delay, handle.release());
+                IEventHandle::FlagTrackDelivery);
+            if (yardInitDelay != TDuration::Zero()) {
+                TActivationContext::Schedule(yardInitDelay, handle.release());
             } else {
                 ctx.Send(handle.release());
             }
 
-            LOG_DEBUG(ctx, BS_LOGCUTTER,
+            LOG_DEBUG(ctx, BS_LOCALRECOVERY,
                        VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
-                            "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s",
+                            "Sending TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s delay %lf sec",
                             ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
-                            ctx.SelfID.ToString().data()));
+                            ctx.SelfID.ToString().data(), yardInitDelay.SecondsFloat()));
+        }
 
+        void Bootstrap(const TActorContext &ctx) {
+            LOG_NOTICE(ctx, BS_LOCALRECOVERY,
+                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "LocalRecovery START"));
+
+            SendYardInit(ctx, Config->BaseInfo.YardInitDelay);
             Become(&TThis::StateInitialize, ctx, VDiskCooldownTimeout, new TEvents::TEvWakeup);
             VDiskMonGroup.VDiskLocalRecoveryState() = TDbMon::TDbLocalRecovery::YardInit;
         }
@@ -609,6 +610,16 @@ namespace NKikimr {
                 AfterDatabaseLoaded(ctx);
         }
 
+        void HandleUndelivered(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
+            LOG_DEBUG(ctx, BS_LOCALRECOVERY,
+                       VDISKP(LocRecCtx->VCtx->VDiskLogPrefix,
+                            "Undelivered TEvYardInit: pdiskGuid# %" PRIu64 " skeletonid# %s selfid# %s",
+                            ui64(Config->BaseInfo.PDiskGuid), SkeletonId.ToString().data(),
+                            ctx.SelfID.ToString().data()));
+
+            SendYardInit(ctx, TDuration::Seconds(1));
+        }
+
         void HandlePoison(const TActorContext &ctx) {
             ActiveActors.KillAndClear(ctx);
             Die(ctx);
@@ -624,6 +635,7 @@ namespace NKikimr {
 
         STRICT_STFUNC(StateInitialize,
             HFunc(NPDisk::TEvYardInitResult, Handle)
+            HFunc(TEvents::TEvUndelivered, HandleUndelivered)
             CFunc(NActors::TEvents::TSystem::PoisonPill, HandlePoison)
             HFunc(NMon::TEvHttpInfo, Handle)
             CFunc(TEvents::TSystem::Wakeup, HandleWakeup);

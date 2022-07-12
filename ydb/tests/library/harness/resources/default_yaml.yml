@@ -144,6 +144,7 @@ grpc_config:
   - "pq"
   - "pqcd"
   - "pqv1"
+  - "topic"
   - "datastreams"
   - "scripting"
   - "s3_internal"

@@ -17,6 +17,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <util/system/sanitizers.h>
+
 
 namespace NKikimr {
 namespace NKqp {
@@ -42,8 +44,8 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         runtime->SetLogPriority(NKikimrServices::KQP_GATEWAY, NActors::NLog::PRI_DEBUG);
         runtime->SetLogPriority(NKikimrServices::KQP_RESOURCE_MANAGER, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::LONG_TX_SERVICE, NActors::NLog::PRI_DEBUG);
-        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
-        runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
+        //runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_TRACE);
+        //runtime->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::TX_OLAPSHARD, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_DEBUG);
         //runtime->SetLogPriority(NKikimrServices::BLOB_CACHE, NActors::NLog::PRI_DEBUG);
@@ -1403,9 +1405,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         InitRoot(server, sender);
         EnableDebugLogging(runtime);
 
-        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", 1000, 1000);
+        ui32 numShards = NSan::PlainOrUnderSanitizer(1000, 10);
+        ui32 numIterations = NSan::PlainOrUnderSanitizer(50, 10);
+        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
-        for(ui64 i = 0; i < 100; ++i) {
+        for(ui64 i = 0; i < numIterations; ++i) {
             SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
@@ -1470,16 +1474,18 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         InitRoot(server, sender);
         EnableDebugLogging(runtime);
 
-        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", 100, 100);
+        ui32 numShards = NSan::PlainOrUnderSanitizer(100, 10);
+        ui32 numIterations = NSan::PlainOrUnderSanitizer(100, 10);
+        CreateTestOlapTable(*server, "largeOlapTable", "largeOlapStore", numShards, numShards);
         ui32 insertRows = 0;
-        for(ui64 i = 0; i < 100; ++i) {
+
+        for(ui64 i = 0; i < numIterations; ++i) {
             SendDataViaActorSystem(runtime, "/Root/largeOlapStore/largeOlapTable", 0, 1000000 + i*1000000, 2000);
             insertRows += 2000;
         }
 
         ui64 result = 0;
         THashSet<TActorId> columnShardScans;
-        std::set<ui64> tabletIds;
         bool prevIsFinished = false;
 
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &ev) -> auto {
@@ -1490,7 +1496,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     for (auto& [shardId, nodeId]: msg->ShardNodes) {
                         Cerr << "-- nodeId: " << nodeId << Endl;
                         nodeId = runtime->GetNodeId(0);
-                        tabletIds.insert(shardId);
                     }
                     break;
                 }
@@ -1516,7 +1521,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 case NKqp::TKqpComputeEvents::EvScanData: {
                     auto [it, success] = columnShardScans.emplace(ev->Sender);
                     auto* msg = ev->Get<NKqp::TEvKqpCompute::TEvScanData>();
-                    Cerr << (TStringBuilder() << "-- EvScanData from " << ev->Sender << Endl);
                     if (success) {
                         // first scan response.
                         prevIsFinished = msg->Finished;

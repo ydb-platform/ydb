@@ -282,6 +282,11 @@ static struct aws_error_info s_errors[] = {
     AWS_DEFINE_ERROR_INFO_IO(
        AWS_ERROR_PKCS11_ENCODING_ERROR,
        "A PKCS#11 (Cryptoki) library function was unable to ASN.1 (DER) encode a data structure. See log for more details."),
+    AWS_DEFINE_ERROR_INFO_IO(
+       AWS_IO_TLS_ERROR_DEFAULT_TRUST_STORE_NOT_FOUND,
+        "Default TLS trust store not found on this system."
+        " Trusted CA certificates must be installed,"
+        " or \"override default trust store\" must be used while creating the TLS context."),
 };
 /* clang-format on */
 

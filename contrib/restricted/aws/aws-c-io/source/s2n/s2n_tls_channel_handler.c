@@ -189,11 +189,19 @@ void aws_tls_init_static_state(struct aws_allocator *alloc) {
 
     s_default_ca_dir = s_determine_default_pki_dir();
     s_default_ca_file = s_determine_default_pki_ca_file();
-    AWS_LOGF_DEBUG(
-        AWS_LS_IO_TLS,
-        "ctx: Based on OS, we detected the default PKI path as %s, and ca file as %s",
-        s_default_ca_dir,
-        s_default_ca_file);
+    if (s_default_ca_dir || s_default_ca_file) {
+        AWS_LOGF_DEBUG(
+            AWS_LS_IO_TLS,
+            "ctx: Based on OS, we detected the default PKI path as %s, and ca file as %s",
+            s_default_ca_dir,
+            s_default_ca_file);
+    } else {
+        AWS_LOGF_WARN(
+            AWS_LS_IO_TLS,
+            "Default TLS trust store not found on this system."
+            " TLS connections will fail unless trusted CA certificates are installed,"
+            " or \"override default trust store\" is used while creating the TLS context.");
+    }
 }
 
 void aws_tls_clean_up_static_state(void) {
@@ -210,11 +218,6 @@ bool aws_tls_is_cipher_pref_supported(enum aws_tls_cipher_pref cipher_pref) {
             return true;
             /* PQ Crypto no-ops on android for now */
 #ifndef ANDROID
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2019_06:
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2019_11:
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_02:
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2020_02:
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_07:
         case AWS_IO_TLS_CIPHER_PREF_PQ_TLSv1_0_2021_05:
             return true;
 #endif
@@ -1369,21 +1372,6 @@ static struct aws_tls_ctx *s_tls_ctx_new(
         case AWS_IO_TLS_CIPHER_PREF_SYSTEM_DEFAULT:
             /* No-Op, if the user configured a minimum_tls_version then a version-specific Cipher Preference was set */
             break;
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2019_06:
-            s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "KMS-PQ-TLS-1-0-2019-06");
-            break;
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2019_11:
-            s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "PQ-SIKE-TEST-TLS-1-0-2019-11");
-            break;
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_02:
-            s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "KMS-PQ-TLS-1-0-2020-02");
-            break;
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2020_02:
-            s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "PQ-SIKE-TEST-TLS-1-0-2020-02");
-            break;
-        case AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_07:
-            s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "KMS-PQ-TLS-1-0-2020-07");
-            break;
         case AWS_IO_TLS_CIPHER_PREF_PQ_TLSv1_0_2021_05:
             s2n_config_set_cipher_preferences(s2n_ctx->s2n_config, "PQ-TLS-1-0-2021-05-26");
             break;
@@ -1507,7 +1495,7 @@ static struct aws_tls_ctx *s_tls_ctx_new(
                     goto cleanup_s2n_config;
                 }
             }
-        } else {
+        } else if (s_default_ca_file || s_default_ca_dir) {
             /* User wants to use the system's default trust store.
              *
              * Note that s2n's trust store always starts with libcrypto's default locations.
@@ -1522,6 +1510,14 @@ static struct aws_tls_ctx *s_tls_ctx_new(
                     AWS_LS_IO_TLS, "Failed to set ca_path: %s and ca_file %s\n", s_default_ca_dir, s_default_ca_file);
                 goto cleanup_s2n_config;
             }
+        } else {
+            /* Cannot find system's trust store */
+            aws_raise_error(AWS_IO_TLS_ERROR_DEFAULT_TRUST_STORE_NOT_FOUND);
+            AWS_LOGF_ERROR(
+                AWS_LS_IO_TLS,
+                "Default TLS trust store not found on this system."
+                " Install CA certificates, or \"override default trust store\".");
+            goto cleanup_s2n_config;
         }
 
         if (mode == S2N_SERVER && s2n_config_set_client_auth_type(s2n_ctx->s2n_config, S2N_CERT_AUTH_REQUIRED)) {

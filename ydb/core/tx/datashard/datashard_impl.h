@@ -2549,12 +2549,13 @@ protected:
             ev->Record.MutableTableStats()->SetTxRejectedByOverload(TabletCounters->Cumulative()[COUNTER_PREPARE_OVERLOADED].Get());
             ev->Record.MutableTableStats()->SetTxRejectedBySpace(TabletCounters->Cumulative()[COUNTER_PREPARE_OUT_OF_SPACE].Get());
             ev->Record.MutableTableStats()->SetTxCompleteLagMsec(TabletCounters->Simple()[COUNTER_TX_COMPLETE_LAG].Get());
-            ev->Record.MutableTableStats()->SetInFlightTxCount(TabletCounters->Simple()[COUNTER_TX_IN_FLY].Get() +
-                 TabletCounters->Simple()[COUNTER_IMMEDIATE_TX_IN_FLY].Get());
+            ev->Record.MutableTableStats()->SetInFlightTxCount(TabletCounters->Simple()[COUNTER_TX_IN_FLY].Get()
+                + TabletCounters->Simple()[COUNTER_IMMEDIATE_TX_IN_FLY].Get());
 
-            ev->Record.MutableTableStats()->SetRowUpdates(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_UPDATE_ROW].Get() +
-                                                          TabletCounters->Cumulative()[COUNTER_UPLOAD_ROWS].Get());
-            ev->Record.MutableTableStats()->SetRowDeletes(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_ERASE_ROW].Get());
+            ev->Record.MutableTableStats()->SetRowUpdates(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_UPDATE_ROW].Get()
+                + TabletCounters->Cumulative()[COUNTER_UPLOAD_ROWS].Get());
+            ev->Record.MutableTableStats()->SetRowDeletes(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_ERASE_ROW].Get()
+                + TabletCounters->Cumulative()[COUNTER_ERASE_ROWS].Get());
             ev->Record.MutableTableStats()->SetRowReads(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_ROW].Get());
             ev->Record.MutableTableStats()->SetRangeReads(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_RANGE].Get());
             ev->Record.MutableTableStats()->SetRangeReadRows(TabletCounters->Cumulative()[COUNTER_ENGINE_HOST_SELECT_RANGE_ROWS].Get());

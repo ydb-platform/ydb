@@ -20,6 +20,7 @@ enum ESimpleCounters {
     COUNTER_MVCC_STATE_CHANGE_WAIT_TX_IN_FLY = 10                  [(CounterOpts) = {Name: "MvccStateChangeWaitTxInFly"}];
     COUNTER_MVCC_STATE_CHANGE_WAIT_IMMEDIATE_TX_IN_FLY = 11        [(CounterOpts) = {Name: "MvccStateChangeWaitImmediateTxInFly"}];
     COUNTER_MVCC_ENABLED = 12                                      [(CounterOpts) = {Name: "MvccEnabled"}];
+    COUNTER_CHANGE_QUEUE_SIZE  = 13                                [(CounterOpts) = {Name: "ChangeQueueSize"}];
 }
 
 enum ECumulativeCounters {
@@ -111,6 +112,8 @@ enum ECumulativeCounters {
     COUNTER_FULL_COMPACTION_DONE = 85                     [(CounterOpts) = {Name: "FullCompactionCount"}];
     COUNTER_TX_BACKGROUND_COMPACTION_FAILED_LOANED = 86   [(CounterOpts) = {Name: "TxCompactTableFailedLoaned"}];
     COUNTER_TX_COMPACT_BORROWED = 87                      [(CounterOpts) = {Name: "TxCompactBorrowed"}];
+    COUNTER_CHANGE_RECORDS_ENQUEUED = 88                  [(CounterOpts) = {Name: "ChangeRecordsEnqueued"}];
+    COUNTER_CHANGE_RECORDS_REMOVED = 89                   [(CounterOpts) = {Name: "ChangeRecordsRemoved"}];
 }
 
 enum EPercentileCounters {

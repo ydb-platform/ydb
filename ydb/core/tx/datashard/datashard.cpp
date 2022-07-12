@@ -601,6 +601,9 @@ void TDataShard::RemoveChangeRecord(NIceDb::TNiceDb& db, ui64 order) {
     }
 
     ChangesQueue.erase(it);
+
+    IncCounter(COUNTER_CHANGE_RECORDS_REMOVED);
+    SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
 }
 
 void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChange>&& records) {
@@ -626,6 +629,9 @@ void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChang
             }
         }
     }
+
+    IncCounter(COUNTER_CHANGE_RECORDS_ENQUEUED, forward.size());
+    SetCounter(COUNTER_CHANGE_QUEUE_SIZE, ChangesQueue.size());
 
     Y_VERIFY(OutChangeSender);
     Send(OutChangeSender, new TEvChangeExchange::TEvEnqueueRecords(std::move(forward)));

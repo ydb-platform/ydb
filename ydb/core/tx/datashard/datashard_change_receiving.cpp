@@ -266,6 +266,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         }
 
         txc.DB.Update(tableInfo.LocalTid, rop, Key, Value, TRowVersion(record.GetStep(), record.GetTxId()));
+        tableInfo.Stats.UpdateTime = TAppData::TimeProvider->Now();
         AddRecordStatus(ctx, record.GetOrder(), NKikimrChangeExchange::TEvStatus::STATUS_OK);
 
         return true;

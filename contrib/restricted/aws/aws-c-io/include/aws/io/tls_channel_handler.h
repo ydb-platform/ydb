@@ -24,11 +24,19 @@ enum aws_tls_versions {
 
 enum aws_tls_cipher_pref {
     AWS_IO_TLS_CIPHER_PREF_SYSTEM_DEFAULT = 0,
-    AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2019_06 = 1,
-    AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2019_11 = 2,
-    AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_02 = 3,
-    AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2020_02 = 4,
-    AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_07 = 5,
+
+    /* Deprecated */ AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2019_06 = 1,
+    /* Deprecated */ AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2019_11 = 2,
+    /* Deprecated */ AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_02 = 3,
+    /* Deprecated */ AWS_IO_TLS_CIPHER_PREF_KMS_PQ_SIKE_TLSv1_0_2020_02 = 4,
+    /* Deprecated */ AWS_IO_TLS_CIPHER_PREF_KMS_PQ_TLSv1_0_2020_07 = 5,
+
+    /*
+     * This TLS cipher preference list contains post-quantum key exchange algorithms that have been submitted to NIST
+     * for potential future standardization. Support for this preference list, or PQ algorithms present in it, may be
+     * removed at any time in the future. PQ algorithms in this preference list will be used in hybrid mode, and always
+     * combined with a classical ECDHE key exchange.
+     */
     AWS_IO_TLS_CIPHER_PREF_PQ_TLSv1_0_2021_05 = 6,
 
     AWS_IO_TLS_CIPHER_PREF_END_RANGE = 0xFFFF

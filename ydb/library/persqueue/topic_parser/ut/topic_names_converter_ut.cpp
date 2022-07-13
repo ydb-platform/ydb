@@ -222,6 +222,26 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         }
 
     }
+    Y_UNIT_TEST(NoTopicName) {
+        TConverterTestWrapper wrapper(false, "/Root/PQ", "dc1");
+        {
+            NKikimrPQ::TPQTabletConfig pqConfig;
+            pqConfig.SetTopic("topic");
+            pqConfig.SetTopicPath("/Root/PQ/rt3.dc1--account@path--topic");
+            pqConfig.SetFederationAccount("account");
+            pqConfig.SetDC("dc1");
+            pqConfig.SetLocalDC(true);
+
+            wrapper.SetConverter(pqConfig);
+
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account@path--topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account@path--topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc1--account@path--topic");
+
+        }
+    }
 
     Y_UNIT_TEST(FirstClass) {
         TConverterTestWrapper wrapper(true, "", "");

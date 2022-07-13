@@ -253,8 +253,7 @@ void* TAlignedPagePool::GetPage() {
 }
 
 void TAlignedPagePool::ReturnPage(void* addr) noexcept {
-    auto str = TStringBuilder() << __func__ << " this: " << (void*)this << " addr: " << addr << Endl;
-    Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end(), "%s", str.Data());
+    Y_VERIFY_DEBUG(AllPages.find(addr) != AllPages.end());
 #ifdef PROFILE_MEMORY_ALLOCATIONS
     ReturnBlock(addr, POOL_PAGE_SIZE);
 #else

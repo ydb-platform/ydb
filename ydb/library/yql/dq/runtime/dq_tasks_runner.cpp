@@ -257,7 +257,7 @@ public:
 
         auto& typeEnv = TypeEnv();
 
-        const NDqProto::TProgram &program = task.GetProgram();
+        const NDqProto::TProgram& program = task.GetProgram();
         YQL_ENSURE(program.GetRuntimeVersion());
         YQL_ENSURE(program.GetRuntimeVersion() <= NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
 

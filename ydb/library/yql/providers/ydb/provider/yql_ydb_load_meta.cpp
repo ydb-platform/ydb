@@ -12,7 +12,6 @@
 #include <ydb/library/yql/ast/yql_expr.h>
 
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
-#include <ydb/public/lib/experimental/ydb_experimental.h>
 
 namespace NYql {
 

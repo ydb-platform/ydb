@@ -7,7 +7,6 @@
 #include <ydb/library/yql/providers/common/structured_token/yql_token_builder.h>
 
 #include <ydb/public/lib/experimental/ydb_clickhouse_internal.h>
-#include <ydb/public/lib/experimental/ydb_experimental.h>
 
 #include <ydb/core/scheme/scheme_tablecell.h>
 

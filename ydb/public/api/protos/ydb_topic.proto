@@ -347,7 +347,9 @@ message StreamReadMessage {
             google.protobuf.Timestamp created_at = 3;
             // Compressed client message body.
             bytes data = 5;
-            // Uncompressed size of client message body.
+            // Uncompressed size of client message body. 
+            // sent as is from WriteRequest, without check on server side. May be empty (for writes from old client) or wrong (if bug in writer).
+            // Use it for optimization purposes only, don't trust it.
             int64 uncompressed_size = 6;
 
             // Filled if message_group_id was set on message write.

@@ -110,6 +110,23 @@ public:
             YQL_ENSURE(object.IsCallable("MrTableConcat"));
             size_t readSize = 0;
             TExprNode::TListType pathNodes;
+
+            TString formatName;
+            {
+                const auto& settings = *read.Ref().Child(4);
+                auto format = GetSetting(settings, "format");
+                if (format && format->ChildrenSize() >= 2) {
+                    formatName = format->Child(1)->Content();
+                }
+            }
+            auto fileSizeLimit = State_->Configuration->FileSizeLimit;
+            if (formatName) {
+                auto it = State_->Configuration->FormatSizeLimits.find(formatName);
+                if (it != State_->Configuration->FormatSizeLimits.end() && fileSizeLimit > it->second) {
+                    fileSizeLimit = it->second;
+                }
+            }
+
             for (auto& req : requests) {
                 auto it = pendingRequests.find(req);
                 YQL_ENSURE(it != pendingRequests.end());
@@ -134,6 +151,13 @@ public:
                     return TStatus::Error;
                 }
                 for (auto& entry : listEntries) {
+
+                    if (entry.Size > fileSizeLimit) {
+                        ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
+                            TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
+                        return TStatus::Error;
+                    }
+
                     TExprNodeList extraColumnsAsStructArgs;
                     if (auto confIt = GenColumnsByNode_.find(node); confIt != GenColumnsByNode_.end()) {
                         const TGeneratedColumnsConfig& config = confIt->second;

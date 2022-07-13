@@ -337,10 +337,16 @@ message TS3ClusterConfig {
     repeated TAttr Settings = 100;
 }
 
+message TS3FormatSizeLimit {
+    optional string Name = 1;          // Format name i.e. csv_with_names
+    optional uint64 FileSizeLimit = 2; // Max allowed size for this format
+}
+
 message TS3GatewayConfig {
     repeated TS3ClusterConfig ClusterMapping = 1;
 
-    optional uint64 FileSizeLimit = 2;
+    optional uint64 FileSizeLimit = 2;               // Global limit
+    repeated TS3FormatSizeLimit FormatSizeLimit = 6; // Format limits
     optional uint64 MaxFilesPerQuery = 3;
     optional uint64 MaxReadSizePerQuery = 4;
     optional uint64 MaxDiscoveryFilesPerQuery = 5;

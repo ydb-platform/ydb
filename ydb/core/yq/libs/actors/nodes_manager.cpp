@@ -42,6 +42,7 @@ public:
         const ::NYql::NCommon::TServiceCounters& serviceCounters,
         const NConfig::TPrivateApiConfig& privateApiConfig,
         const ui32& icPort,
+        bool useDataCenter,
         const TString& dataCenter,
         const TString& tenant,
         ui64 mkqlInitialMemoryLimit)
@@ -54,6 +55,7 @@ public:
         , MkqlInitialMemoryLimit(mkqlInitialMemoryLimit)
         , YqSharedResources(yqSharedResources)
         , IcPort(icPort)
+        , UseDataCenter(useDataCenter)
         , DataCenter(dataCenter)
         , InternalServiceId(MakeInternalServiceActorId())
 
@@ -110,7 +112,7 @@ private:
                             NextPeer = 0;
                         }
 
-                        if (    (DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
+                        if (    (!UseDataCenter || DataCenter.empty() || nextNode.DataCenter.empty() || DataCenter == nextNode.DataCenter) // non empty DC must match
                              && (   nextNode.MemoryLimit == 0 // memory is NOT limited
                                  || nextNode.MemoryLimit >= nextNode.MemoryAllocated + MkqlInitialMemoryLimit) // or enough
                         ) {
@@ -272,6 +274,7 @@ private:
     NYq::TYqSharedResources::TPtr YqSharedResources;
 
     const ui32 IcPort; // Interconnect Port
+    bool UseDataCenter;
     TString DataCenter;
 
     struct TPeer {
@@ -303,11 +306,12 @@ IActor* CreateNodesManager(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
     const ui32& icPort,
     const TString& dataCenter,
+    bool useDataCenter,
     const TString& tenant,
     ui64 mkqlInitialMemoryLimit) {
     return new TNodesManagerActor(yqSharedResources, workerManagerCounters,
         timeProvider, randomProvider,
-        serviceCounters, privateApiConfig, icPort, dataCenter, tenant, mkqlInitialMemoryLimit);
+        serviceCounters, privateApiConfig, icPort, useDataCenter, dataCenter, tenant, mkqlInitialMemoryLimit);
 }
 
 } // namespace NYq

@@ -30,12 +30,12 @@ using namespace PersQueue::V1;
 
 //TODO: add here tracking of bytes in/out
 
-template<bool UseMigrationProtocol>
-TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
-        TEvStreamPQReadRequest* request, const ui64 cookie, const TActorId& schemeCache, const TActorId& newSchemeCache,
-        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
-        const NPersQueue::TTopicsListController& topicsHandler
-)
+template <bool UseMigrationProtocol>
+TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(TEvStreamPQReadRequest* request, const ui64 cookie,
+                                                           const TActorId& schemeCache, const TActorId& newSchemeCache,
+                                                           TIntrusivePtr<NMonitoring::TDynamicCounters> counters,
+                                                           const TMaybe<TString> clientDC,
+                                                           const NPersQueue::TTopicsListController& topicsHandler)
     : Request(request)
     , ClientDC(clientDC ? *clientDC : "other")
     , StartTimestamp(TInstant::Now())
@@ -52,6 +52,7 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , MaxReadSize(0)
     , MaxTimeLagMs(0)
     , ReadTimestampMs(0)
+    , ReadSizeBudget(0)
     , ForceACLCheck(false)
     , RequestNotChecked(true)
     , LastACLCheckTimestamp(TInstant::Zero())
@@ -62,11 +63,9 @@ TReadSessionActor<UseMigrationProtocol>::TReadSessionActor(
     , BytesInflight_(0)
     , RequestedBytes(0)
     , ReadsInfly(0)
-    , TopicsHandler(topicsHandler)
-{
+    , TopicsHandler(topicsHandler) {
     Y_ASSERT(Request);
 }
-
 
 template<bool UseMigrationProtocol>
 TReadSessionActor<UseMigrationProtocol>::~TReadSessionActor() = default;
@@ -254,7 +253,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 break;
             }
             case TClientMessage::kReadRequest: {
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvRead()); // Proto read message have no parameters
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvRead(request.read_request().bytes_size()));
                 break;
             }
             case TClientMessage::kPartitionSessionStatusRequest: {
@@ -682,8 +681,6 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
         MaxReadSize = NormalizeMaxReadSize(0);
         MaxTimeLagMs = 0; // max_lag per topic only
         ReadTimestampMs = 0; // read_from per topic only
-        // MaxTimeLagMs = ::google::protobuf::util::TimeUtil::DurationToMilliseconds(init.max_lag());
-        // ReadTimestampMs = ::google::protobuf::util::TimeUtil::TimestampToMilliseconds(init.read_from());
         ReadOnlyLocal = true;
     }
     if (MaxTimeLagMs < 0) {
@@ -1531,7 +1528,11 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvRead::TPtr& 
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got read request with guid: " << event->Guid);
 
-    Reads.emplace_back(event.Release());
+    if constexpr (UseMigrationProtocol) {
+        Reads.emplace_back(event.Release());
+    } else {
+        ReadSizeBudget += event->MaxSize;
+    }
 
     ProcessReads(ctx);
 }
@@ -1683,20 +1684,21 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext&
 
     RequestedBytes -= formedResponse->RequestedBytes;
     ReadsInfly--;
+    if constexpr (!UseMigrationProtocol) {
+        ReadSizeBudget += formedResponse->RequestedBytes;
+        ReadSizeBudget -= diff;
+    }
 
     // Bring back available partitions.
     // If some partition was removed from partitions container, it is not bad because it will be checked during read processing.
     AvailablePartitions.insert(formedResponse->PartitionsBecameAvailable.begin(), formedResponse->PartitionsBecameAvailable.end());
 
-    if (!hasMessages) {
-        // process new read
-        TClientMessage req;
-        if constexpr(UseMigrationProtocol) {
-            req.mutable_read();
-        } else {
-            req.mutable_read_request();
+    if constexpr (UseMigrationProtocol) {
+        if (!hasMessages) {
+            // process new read
+            // Start new reading request with the same guid
+            Reads.emplace_back(new TEvPQProxy::TEvRead(formedResponse->Guid));
         }
-        Reads.emplace_back(new TEvPQProxy::TEvRead(formedResponse->Guid)); // Start new reading request with the same guid
     }
 
     ProcessReads(ctx); // returns false if actor died
@@ -1727,12 +1729,27 @@ ui32 TReadSessionActor<UseMigrationProtocol>::NormalizeMaxReadSize(ui32 sourceVa
 
 template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& ctx) {
-    while (!Reads.empty() && BytesInflight_ + RequestedBytes < MAX_INFLY_BYTES && ReadsInfly < MAX_INFLY_READS) {
+    auto ShouldContinueReads = [this]() {
+        if constexpr (UseMigrationProtocol) {
+            return !Reads.empty() && ReadsInfly < MAX_INFLY_READS;
+        } else {
+            return ReadSizeBudget > 0;
+        }
+    };
+
+    while (ShouldContinueReads() && BytesInflight_ + RequestedBytes < MAX_INFLY_BYTES) {
         ui32 count = MaxReadMessagesCount;
         ui64 size = MaxReadSize;
         ui32 partitionsAsked = 0;
 
-        typename TFormedReadResponse<TServerMessage>::TPtr formedResponse = new TFormedReadResponse<TServerMessage>(Reads.front()->Guid, ctx.Now());
+        TString guid;
+        if constexpr (UseMigrationProtocol) {
+            guid = Reads.front()->Guid;
+        } else {
+            guid = CreateGuidAsString();
+        }
+        typename TFormedReadResponse<TServerMessage>::TPtr formedResponse =
+            new TFormedReadResponse<TServerMessage>(guid, ctx.Now());
         while (!AvailablePartitions.empty()) {
             auto part = *AvailablePartitions.begin();
             AvailablePartitions.erase(AvailablePartitions.begin());
@@ -1746,7 +1763,10 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             const ui32 ccount = Min<ui32>(part.MsgLag * LAG_GROW_MULTIPLIER, count);
             count -= ccount;
-            const ui64 csize = (ui64)Min<double>(part.SizeLag * LAG_GROW_MULTIPLIER, size);
+            ui64 csize = (ui64)Min<double>(part.SizeLag * LAG_GROW_MULTIPLIER, size);
+            if constexpr (!UseMigrationProtocol) {
+                csize = Min<i64>(csize, ReadSizeBudget);
+            }
             size -= csize;
             Y_VERIFY(csize < Max<i32>());
 
@@ -1765,9 +1785,9 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             auto lags_it = MaxLagByTopic.find(it->second.Topic->GetInternalName());
             Y_VERIFY(lags_it != MaxLagByTopic.end());
-            ui32 maxLag = Max(MaxTimeLagMs, lags_it->second);
+            ui32 maxLag = lags_it->second;
 
-            TAutoPtr<TEvPQProxy::TEvRead> read = new TEvPQProxy::TEvRead(Reads.front()->Guid, ccount, csize, maxLag, readTimestampMs);
+            TAutoPtr<TEvPQProxy::TEvRead> read = new TEvPQProxy::TEvRead(guid, ccount, csize, maxLag, readTimestampMs);
 
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX
                                         << " performing read request with guid " << read->Guid
@@ -1786,14 +1806,21 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
 
             RequestedBytes += csize;
             formedResponse->RequestedBytes += csize;
+            ReadSizeBudget -= csize;
 
             ctx.Send(it->second.Actor, read.Release());
             const auto insertResult = PartitionToReadResponse.insert(std::make_pair(it->second.Actor, formedResponse));
             Y_VERIFY(insertResult.second);
 
+            // Only from single partition
+            if constexpr (!UseMigrationProtocol) {
+                break;
+            }
+
             if (count == 0 || size == 0)
                 break;
         }
+
         if (partitionsAsked == 0)
             break;
         ReadsTotal.Inc();
@@ -1807,7 +1834,9 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
         if (BytesInflight) {
             (*BytesInflight) += diff;
         }
-        Reads.pop_front();
+        if constexpr (UseMigrationProtocol) {
+            Reads.pop_front();
+        }
     }
 }
 

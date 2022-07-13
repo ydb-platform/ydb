@@ -523,7 +523,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["pq"] = &hasPQ;
         bool hasPQv1 = services.empty();
         names["pqv1"] = &hasPQv1;
-        bool hasTopic = false;
+        bool hasTopic = services.empty();
         names["topic"] = &hasTopic;
         bool hasPQCD = services.empty();
         names["pqcd"] = &hasPQCD;

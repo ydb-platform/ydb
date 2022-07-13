@@ -434,9 +434,9 @@ private:
             std::bind(&TS3ReadCoroActor::OnDownloadFinished, TActivationContext::ActorSystem(), self, parent, retryStuff, std::placeholders::_1));
     }
 
-    TAutoPtr<IEventHandle> AfterRegister(const TActorId& self, const TActorId& parent) {
-        DownloadStart(RetryStuff, self, parent);
-        return TActorCoro::AfterRegister(self, parent);
+    void Registered(TActorSystem* sys, const TActorId& parent) override {
+        TActorCoro::Registered(sys, parent); // Calls TActorCoro::OnRegister and sends bootstrap event to ourself.
+        DownloadStart(RetryStuff, SelfId(), parent);
     }
 
     static IHTTPGateway::THeaders MakeHeader(const TString& token) {

@@ -41,21 +41,21 @@ TString GetBranchName(TString url) {
 
 void CheckVersionTag() {
     if (VERSION) {
-        const char *version = GetProgramSvnVersion();
-        const char *p = strstr(version, "URL: ");
-        if (p) {
-            p += 5; // shift "URL: "
-            const char *end = strchr(p, '\n');
-            if (end) {
-                while (end > p && std::isspace(end[-1])) {
-                    --end;
-                }
-                TString url(p, end);
-                TString branch = GetBranchName(url);
-                if (branch != "trunk" && VERSION->Tag == "trunk") {
-                    Y_FAIL("non-trunk branch %s from URL# %s contains VersionTag# trunk", branch.data(), url.data());
-                }
-            }
+        const char* begin = GetBranch();
+        const char* end = begin + strlen(begin);
+
+        while (begin != end && std::isspace(begin[0])) {
+            ++begin;
+        }
+        while (begin != end && std::isspace(end[-1])) {
+            --end;
+        }
+
+        TString branch(begin, end);
+        const char* arcadia_url = GetArcadiaSourceUrl();
+
+        if (branch != "trunk" && VERSION->Tag == "trunk") {
+            Y_FAIL("non-trunk branch %s with ARCADIA_SOURCE_URL# %s contains VersionTag# trunk", branch.data(), arcadia_url);
         }
     }
 }

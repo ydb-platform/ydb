@@ -13,6 +13,7 @@ import "ydb/public/api/protos/annotations/validation.proto";
 import "ydb/public/api/protos/yq.proto";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 ////////////////////////////////////////////////////////////
 
@@ -71,7 +72,6 @@ message GetTaskResult {
         repeated TopicConsumer created_topic_consumers = 19;
         int32 dq_graph_index = 20;
         map<string, string> sensor_labels = 21;
-
         bool automatic = 22;
         string query_name = 23;
         google.protobuf.Timestamp deadline = 24;
@@ -80,6 +80,8 @@ message GetTaskResult {
 
         YandexQuery.Limits limits = 27;
         string rate_limiter = 28; // Kesus path // If empty, rate limiting is off.
+        google.protobuf.Duration execution_limit = 29;
+        google.protobuf.Timestamp request_started_at = 30;
     }
     repeated Task tasks = 1;
 }

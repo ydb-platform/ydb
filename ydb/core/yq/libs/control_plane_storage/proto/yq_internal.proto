@@ -10,19 +10,21 @@ import "ydb/library/yql/dq/proto/dq_tasks.proto";
 import "ydb/public/api/protos/yq.proto";
 import "ydb/core/yq/libs/protos/yq_private.proto";
 
+import "google/protobuf/duration.proto";
+
 message Consumer {
     string name = 1;
 }
 
 message QueryInternal {
     string token = 1;
-    repeated NYql.NDqProto.TDqTask task = 2; // deprected and should not be used, will be removed in future
+    repeated NYql.NDqProto.TDqTask task = 2; // deprecated and should not be used, will be removed in future
     repeated Yql.DqsProto.TAttr settings = 3;
     repeated Consumer consumer = 4;
     repeated YandexQuery.Connection connection = 5;
     repeated YandexQuery.Binding binding = 6;
     YandexQuery.QueryAction action = 7;
-    string ast = 8; // deprected and should not be used, will be removed in future
+    string ast = 8; // deprecated and should not be used, will be removed in future
     ExecuteMode execute_mode = 9;
     StateLoadMode state_load_mode = 10;
     string cloud_id = 11;
@@ -31,6 +33,7 @@ message QueryInternal {
     int32 dq_graph_index = 14;
     StreamingDisposition disposition = 15;
     uint64 result_limit = 16;
+    google.protobuf.Duration execution_ttl = 17;
 }
 
 message JobInternal {

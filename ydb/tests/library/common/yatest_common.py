@@ -62,7 +62,7 @@ execute = ya_common.execute
 
 def plain_or_under_sanitizer(plain, sanitized):
     """
-    Ment to be used in test code for constants (timeouts, etc)
+    Meant to be used in test code for constants (timeouts, etc)
     See also arcadia/util/system/sanitizers.h
 
     :return: plain if no sanitizer enabled or sanitized otherwise

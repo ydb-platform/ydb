@@ -7,6 +7,8 @@
 #include <ydb/core/yq/libs/control_plane_storage/schema.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
+
 namespace NYq {
 
 namespace {
@@ -314,8 +316,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         });
     });
 
-    auto prepare = [response] { 
-        
+    auto prepare = [response] {
+
         Yq::Private::GetTaskResult result;
         const auto& tasks = std::get<0>(*response);
 
@@ -327,6 +329,16 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                     << YandexQuery::QueryContent::QueryType_Name(queryType)
                     << " unsupported";
             }
+
+            auto userExecutionLimit = TDuration::MilliSeconds(task.Query.content().Getlimits().vcpu_time_limit());
+            auto systemExecutionLimit = NProtoInterop::CastFromProto(task.Internal.execution_ttl());
+            auto executionLimit = std::min(userExecutionLimit, systemExecutionLimit);
+            if (systemExecutionLimit == TDuration::Zero()) {
+                executionLimit = userExecutionLimit;
+            } else if (userExecutionLimit == TDuration::Zero()) {
+                executionLimit = systemExecutionLimit;
+            }
+
             auto* newTask = result.add_tasks();
             newTask->set_query_type(queryType);
             newTask->set_execute_mode(task.Query.meta().execute_mode());
@@ -349,6 +361,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
             newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
             newTask->set_result_limit(task.Internal.result_limit());
+            *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(executionLimit);
+            *newTask->mutable_request_started_at() = task.Query.meta().started_at();
 
             for (const auto& connection: task.Internal.connection()) {
                 const auto serviceAccountId = ExtractServiceAccountId(connection);
@@ -366,7 +380,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             newTask->set_scope(task.Scope);
         }
 
-        return result; 
+        return result;
     };
     auto success = SendResponse<TEvControlPlaneStorage::TEvGetTaskResponse, Yq::Private::GetTaskResult>
         ("GetTaskRequest",

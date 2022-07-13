@@ -78,6 +78,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     const TString cloudId = event.CloudId;
     auto it = event.Quotas.find(QUOTA_RESULT_LIMIT);
     ui64 resultLimit = (it != event.Quotas.end()) ? it->second.Limit : 0;
+    auto exec_ttl_it = event.Quotas.find(QUOTA_TIME_LIMIT);
+    ui64 executionLimitMills = (exec_ttl_it != event.Quotas.end()) ? exec_ttl_it->second.Limit : 0;
     const TString scope = event.Scope;
     TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_QUERY);
     requestCounters->InFly->Inc();
@@ -206,10 +208,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         if (!Config.Proto.GetDisableCurrentIam()) {
             queryInternal.set_token(token);
         }
+
         queryInternal.set_cloud_id(cloudId);
         queryInternal.set_state_load_mode(YandexQuery::StateLoadMode::EMPTY);
         queryInternal.mutable_disposition()->CopyFrom(request.disposition());
         queryInternal.set_result_limit(resultLimit);
+        *queryInternal.mutable_execution_ttl() = NProtoInterop::CastToProto(TDuration::MilliSeconds(executionLimitMills));
 
         if (request.execute_mode() != YandexQuery::SAVE) {
             // TODO: move to run actor priority selection

@@ -50,6 +50,7 @@
 #include <ydb/core/yq/libs/private_client/internal_service.h>
 
 #include <library/cpp/actors/core/log.h>
+#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/library/security/util.h>
 
@@ -328,7 +329,10 @@ private:
             ClientCounters,
             createdAt,
             TenantName,
-            task.result_limit());
+            task.result_limit(),
+            NProtoInterop::CastFromProto(task.execution_limit()),
+            NProtoInterop::CastFromProto(task.request_started_at())
+            );
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 

@@ -48,7 +48,9 @@ TRunActorParams::TRunActorParams(
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
     TInstant createdAt,
     const TString& tenantName,
-    uint64_t resultBytesLimit
+    uint64_t resultBytesLimit,
+    TDuration executionTtl,
+    TInstant requestStartedAt
     )
     : YqSharedResources(yqSharedResources)
     , CredentialsProviderFactory(credentialsProviderFactory)
@@ -94,6 +96,8 @@ TRunActorParams::TRunActorParams(
     , CreatedAt(createdAt)
     , TenantName(tenantName)
     , ResultBytesLimit(resultBytesLimit)
+    , ExecutionTtl(executionTtl)
+    , RequestStartedAt(requestStartedAt)
     {
     }
 

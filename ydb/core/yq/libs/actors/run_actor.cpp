@@ -281,6 +281,7 @@ public:
 
     void Bootstrap() {
         LOG_D("Start run actor. Compute state: " << YandexQuery::QueryMeta::ComputeStatus_Name(Params.Status));
+
         QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
         LogReceivedParams();
         Pinger = Register(
@@ -297,6 +298,7 @@ public:
                 CreatedAt
                 ));
         Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);
+
         try {
             Run();
         } catch (const std::exception&) {
@@ -305,6 +307,11 @@ public:
     }
 
 private:
+    enum RunActorWakeupTag : ui64 {
+        ExecutionTimeout = 1
+    };
+
+
     template <void (TRunActor::* DelegatedStateFunc)(STFUNC_SIG)>
     STFUNC(StateFuncWrapper) {
         try {
@@ -321,6 +328,7 @@ private:
         hFunc(TEvents::TEvGraphParams, Handle);
         hFunc(TEvents::TEvDataStreamsReadRulesCreationResult, Handle);
         hFunc(NYql::NDqs::TEvQueryResponse, Handle);
+        hFunc(NActors::TEvents::TEvWakeup, Handle);
         hFunc(TEvents::TEvQueryActionResult, Handle);
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
@@ -381,9 +389,32 @@ private:
         NActors::TActorBootstrapped<TRunActor>::PassAway();
     }
 
+    bool TimeLimitExceeded() {
+        if (Params.ExecutionTtl != TDuration::Zero()) {
+            auto currentTime = TInstant::Now();
+            auto started_at = Params.RequestStartedAt;
+            if (started_at == TInstant::Zero()) {
+                started_at = currentTime;
+            }
+            auto deadline = started_at  + Params.ExecutionTtl;
+
+            if (currentTime >= deadline) {
+                Abort("Execution time limit exceeded", YandexQuery::QueryMeta::ABORTING_BY_SYSTEM);
+                return true;
+            } else {
+                Schedule(deadline, new NActors::TEvents::TEvWakeup(RunActorWakeupTag::ExecutionTimeout));
+            }
+        }
+        return false;
+    }
+
     void Run() {
         if (!Params.DqGraphs.empty() && Params.Status != YandexQuery::QueryMeta::STARTING) {
             FillDqGraphParams();
+        }
+
+        if (TimeLimitExceeded()) {
+            return;
         }
 
         switch (Params.Status) {
@@ -560,6 +591,18 @@ private:
                         }
                     }
                 }
+            }
+        }
+    }
+
+    void Handle(NActors::TEvents::TEvWakeup::TPtr& ev) {
+        auto tag = (RunActorWakeupTag) ev->Get()->Tag;
+        switch (tag) {
+            case RunActorWakeupTag::ExecutionTimeout: {
+                Abort("Execution timeout", YandexQuery::QueryMeta::ABORTING_BY_SYSTEM);
+            }
+            default: {
+                Y_VERIFY(false);
             }
         }
     }
@@ -865,29 +908,29 @@ private:
 
             IDqGateway::TResult QueryResult;
 
-            auto& result = ev->Get()->Record;		
+            auto& result = ev->Get()->Record;
 
             LOG_D("Query evaluation response. Issues count: " << result.IssuesSize()
                 << ". Rows count: " << result.GetRowsCount());
 
-            QueryResult.Data = result.yson();	
+            QueryResult.Data = result.yson();
 
-            TIssues issues;		
-            IssuesFromMessage(result.GetIssues(), issues);		
-            bool error = false;		
-            for (const auto& issue : issues) {		
-                if (issue.GetSeverity() <= TSeverityIds::S_ERROR) {		
-                    error = true;		
-                }		
-            }		
+            TIssues issues;
+            IssuesFromMessage(result.GetIssues(), issues);
+            bool error = false;
+            for (const auto& issue : issues) {
+                if (issue.GetSeverity() <= TSeverityIds::S_ERROR) {
+                    error = true;
+                }
+            }
 
-            if (!error) {		
-                QueryResult.SetSuccess();		
-            }		
+            if (!error) {
+                QueryResult.SetSuccess();
+            }
 
-            QueryResult.AddIssues(issues);		
-            QueryResult.Truncated = result.GetTruncated();		
-            QueryResult.RowsCount = result.GetRowsCount();		
+            QueryResult.AddIssues(issues);
+            QueryResult.Truncated = result.GetTruncated();
+            QueryResult.RowsCount = result.GetRowsCount();
             EvaluationResult.SetValue(QueryResult);
 
             EvaluationInProgress = false;
@@ -1491,7 +1534,7 @@ private:
 
 /*
         return RunProgram(
-            Params.FunctionRegistry, 
+            Params.FunctionRegistry,
             Params.NextUniqueId,
             dataProvidersInit,
             Params.ModuleResolver,
@@ -1504,7 +1547,7 @@ private:
 */
         ProgramRunnerId = Register(new TProgramRunnerActor(
             SelfId(),
-            Params.FunctionRegistry, 
+            Params.FunctionRegistry,
             Params.NextUniqueId,
             dataProvidersInit,
             Params.ModuleResolver,

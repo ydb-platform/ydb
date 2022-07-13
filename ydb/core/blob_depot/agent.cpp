@@ -4,13 +4,15 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (TabletId, TabletID()), (Msg, ev->Get()->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (TabletId, TabletID()),
+            (PipeServerId, ev->Get()->ServerId));
         const auto [it, inserted] = PipeServerToNode.emplace(ev->Get()->ServerId, std::nullopt);
         Y_VERIFY(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (TabletId, TabletID()), (Msg, ev->Get()->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (TabletId, TabletID()),
+            (PipeServerId, ev->Get()->ServerId));
         const auto it = PipeServerToNode.find(ev->Get()->ServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         if (const auto& nodeId = it->second) {
@@ -31,17 +33,18 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
-        const auto& req = ev->Get()->Record;
-
-        const auto it = PipeServerToNode.find(ev->Recipient);
-        Y_VERIFY(it != PipeServerToNode.end());
         const ui32 nodeId = ev->Sender.NodeId();
+        const TActorId& pipeServerId = ev->Recipient;
+        const auto& req = ev->Get()->Record;
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, req), (NodeId, nodeId),
+            (PipeServerId, pipeServerId));
+
+        const auto it = PipeServerToNode.find(pipeServerId);
+        Y_VERIFY(it != PipeServerToNode.end());
         Y_VERIFY(!it->second || *it->second == nodeId);
         it->second = nodeId;
         auto& agent = Agents[nodeId];
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, req), (NodeId, nodeId),
-            (PipeServerId, it->first));
-        agent.ConnectedAgent = it->first;
+        agent.ConnectedAgent = pipeServerId;
         agent.ConnectedNodeId = nodeId;
         agent.ExpirationTimestamp = TInstant::Max();
 
@@ -125,6 +128,9 @@ namespace NKikimr::NBlobDepot {
             for (const auto& range : givenIdRange->GetChannelRanges()) {
                 agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
                 Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "IssueNewRange", (TabletId, TabletID()),
+                    (AgentId, agent.ConnectedNodeId), (Channel, range.GetChannel()),
+                    (Begin, range.GetBegin()), (End, range.GetEnd()));
             }
         }
 
@@ -149,6 +155,11 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::ResetAgent(TAgent& agent) {
         for (auto& [channel, agentGivenIdRange] : agent.GivenIdRanges) {
             Channels[channel].GivenIdRanges.Subtract(agentGivenIdRange);
+            const ui32 channel_ = channel;
+            const auto& agentGivenIdRange_ = agentGivenIdRange;
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "ResetAgent", (TabletId, TabletID()), (AgentId, agent.ConnectedNodeId),
+                (Channel, channel_), (GivenIdRanges, Channels[channel_].GivenIdRanges),
+                (Agent.GivenIdRanges, agentGivenIdRange_));
             agentGivenIdRange = {};
         }
         Data->HandleTrash();

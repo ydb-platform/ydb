@@ -246,8 +246,8 @@ namespace NKikimr::NBlobDepot {
             std::set<TLogoBlobID> Trash; // committed trash
             std::vector<TLogoBlobID> TrashInFlight;
             ui32 PerGenerationCounter = 1;
-            ui64 LastConfirmedGenStep = 0;
-            ui64 NextGenStep = 0;
+            TGenStep IssuedGenStep; // currently in flight or already confirmed
+            TGenStep LastConfirmedGenStep;
             bool CollectGarbageRequestInFlight = false;
 
             TRecordsPerChannelGroup(ui64 tabletId, ui8 channel, ui32 groupId)
@@ -264,6 +264,7 @@ namespace NKikimr::NBlobDepot {
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
 
+        class TTxIssueGC;
         class TTxConfirmGC;
 
     public:
@@ -307,7 +308,7 @@ namespace NKikimr::NBlobDepot {
 
         void AddDataOnLoad(TKey key, TString value);
         void AddTrashOnLoad(TLogoBlobID id);
-        void AddConfirmedGenStepOnLoad(ui8 channel, ui32 groupId, ui64 confirmedGenStep);
+        void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
         void PutKey(TKey key, TValue&& data);
 
@@ -319,6 +320,8 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId);
+
+        bool CanBeCollected(ui32 groupId, TBlobSeqId id) const;
 
         static TString ToValueProto(const TValue& value);
 

@@ -198,14 +198,14 @@ namespace NKikimr::NBlobDepot {
                     TABLEH() { Stream << "soft"; }
                     TABLEH() { Stream << "hard"; }
                 } else {
-                    Self->BarrierServer->Enumerate([&](ui64 tabletId, ui8 channel, ui32 recordGen, ui32 recordCounter,
-                                ui32 softGen, ui32 softStep, ui32 hardGen, ui32 hardStep) {
+                    Self->BarrierServer->Enumerate([&](ui64 tabletId, ui8 channel, ui32 recordGen, ui32 perGenerationCounter,
+                            TGenStep soft, TGenStep hard) {
                         TABLER() {
                             TABLED() { Stream << tabletId; }
                             TABLED() { Stream << int(channel); }
-                            TABLED() { Stream << recordGen << ":" << recordCounter; }
-                            TABLED() { Stream << softGen << ":" << softStep; }
-                            TABLED() { Stream << hardGen << ":" << hardStep; }
+                            TABLED() { Stream << recordGen << ":" << perGenerationCounter; }
+                            TABLED() { soft.Output(Stream); }
+                            TABLED() { hard.Output(Stream); }
                         }
                     });
                 }

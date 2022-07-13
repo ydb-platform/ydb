@@ -4,8 +4,10 @@ namespace NKikimr::NBlobDepot {
 
     void TGivenIdRange::IssueNewRange(ui64 begin, ui64 end) {
         Y_VERIFY(begin < end);
+
         const auto [it, inserted] = Ranges.emplace(begin, end);
         Y_VERIFY(inserted);
+
         if (it != Ranges.begin()) {
             const auto& prev = *std::prev(it);
             Y_VERIFY(prev.End <= begin);
@@ -14,6 +16,7 @@ namespace NKikimr::NBlobDepot {
             const auto& next = *std::next(it);
             Y_VERIFY(end <= next.Begin);
         }
+
         NumAvailableItems += end - begin;
     }
 
@@ -22,16 +25,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TGivenIdRange::RemovePoint(ui64 value) {
-        const auto it = Ranges.upper_bound(value);
+        auto it = Ranges.upper_bound(value);
         Y_VERIFY(it != Ranges.begin());
-        auto& range = const_cast<TRange&>(*std::prev(it));
-        Y_VERIFY(range.Begin <= value && value < range.End);
-        Y_VERIFY(range.Bits[value - range.Begin]);
-        range.Bits.Reset(value - range.Begin);
-        if (range.Bits.Empty()) {
-            Ranges.erase(it);
-        }
-        --NumAvailableItems;
+        Pop(std::prev(it), value);
     }
 
     bool TGivenIdRange::IsEmpty() const {
@@ -45,23 +41,15 @@ namespace NKikimr::NBlobDepot {
     ui64 TGivenIdRange::GetMinimumValue() const {
         Y_VERIFY(!Ranges.empty());
         const auto& range = *Ranges.begin();
+        Y_VERIFY(range.NumSetBits);
         size_t offset = range.Bits.FirstNonZeroBit();
         Y_VERIFY(offset != range.Bits.Size());
         return range.Begin + offset;
     }
 
     ui64 TGivenIdRange::Allocate() {
-        Y_VERIFY(!Ranges.empty());
-        const auto it = Ranges.begin();
-        auto& range = const_cast<TRange&>(*it);
-        size_t offset = range.Bits.FirstNonZeroBit();
-        Y_VERIFY(offset != range.Bits.Size());
-        range.Bits.Reset(offset);
-        const ui64 value = range.Begin + offset;
-        if (range.Bits.Empty()) {
-            Ranges.erase(it);
-        }
-        --NumAvailableItems;
+        const ui64 value = GetMinimumValue();
+        Pop(Ranges.begin(), value);
         return value;
     }
 
@@ -77,6 +65,7 @@ namespace NKikimr::NBlobDepot {
             } else if (range.Begin < validSince) {
                 const ui32 len = validSince - range.Begin;
                 for (ui32 i = 0; i < len; ++i) {
+                    range.NumSetBits -= range.Bits[i];
                     NumAvailableItems -= range.Bits[i];
                 }
                 range.Bits.Reset(0, len);
@@ -91,8 +80,9 @@ namespace NKikimr::NBlobDepot {
             const auto it = Ranges.find(range.Begin);
             Y_VERIFY(it != Ranges.end());
             Y_VERIFY(range.End == it->End);
+            Y_VERIFY(range.NumSetBits == it->NumSetBits);
             Y_VERIFY(range.Bits == it->Bits);
-            NumAvailableItems -= range.Bits.Count();
+            NumAvailableItems -= range.NumSetBits;
             Ranges.erase(it);
         }
     }
@@ -103,11 +93,10 @@ namespace NKikimr::NBlobDepot {
             if (it != Ranges.begin()) {
                 s << " ";
             }
-            s << it->Begin << "-" << it->End << "[";
+            s << "[" << it->Begin << "," << it->End << "):";
             for (ui32 i = 0, count = it->End - it->Begin; i < count; ++i) {
                 s << int(it->Bits[i]);
             }
-            s << "]";
         }
         s << "}";
     }
@@ -116,6 +105,19 @@ namespace NKikimr::NBlobDepot {
         TStringStream s;
         Output(s);
         return s.Str();
+    }
+
+    void TGivenIdRange::Pop(TRanges::iterator it, ui64 value) {
+        TRange& range = const_cast<TRange&>(*it);
+        Y_VERIFY(range.Begin <= value && value < range.End);
+        const size_t offset = value - range.Begin;
+        Y_VERIFY(range.Bits[offset]);
+        range.Bits.Reset(offset);
+        --range.NumSetBits;
+        if (!range.NumSetBits) {
+            Ranges.erase(it);
+        }
+        --NumAvailableItems;
     }
 
 } // NKikimr::NBlobDepot

@@ -15,7 +15,6 @@ namespace NKikimr::NBlobDepot {
     struct TVirtualGroupBlobFooter {
         TLogoBlobID StoredBlobId;
     };
-
 #pragma pack(pop)
 
     static constexpr ui32 MaxBlobSize = 10 << 20; // 10 MB BlobStorage hard limit
@@ -101,11 +100,13 @@ namespace NKikimr::NBlobDepot {
         struct TRange {
             const ui64 Begin;
             const ui64 End;
+            ui32 NumSetBits = 0;
             TDynBitMap Bits;
 
             TRange(ui64 begin, ui64 end)
                 : Begin(begin)
                 , End(end)
+                , NumSetBits(end - begin)
             {
                 Bits.Set(0, end - begin);
             }
@@ -118,7 +119,8 @@ namespace NKikimr::NBlobDepot {
             };
         };
 
-        std::set<TRange, TRange::TCompare> Ranges;
+        using TRanges = std::set<TRange, TRange::TCompare>; // FIXME: deque?
+        TRanges Ranges;
         ui32 NumAvailableItems = 0;
 
     public:
@@ -137,6 +139,9 @@ namespace NKikimr::NBlobDepot {
 
         void Output(IOutputStream& s) const;
         TString ToString() const;
+
+    private:
+        void Pop(TRanges::iterator it, ui64 value);
     };
 
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
@@ -156,16 +161,57 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    inline ui64 GenStep(ui32 gen, ui32 step) {
-        return static_cast<ui64>(gen) << 32 | step;
-    }
+    class TGenStep {
+        ui64 Value = 0;
 
-    inline ui64 GenStep(TLogoBlobID id) {
-        return GenStep(id.Generation(), id.Step());
-    }
+    public:
+        TGenStep() = default;
+        TGenStep(const TGenStep&) = default;
 
-    inline ui64 GenStep(TBlobSeqId id) {
-        return GenStep(id.Generation, id.Step);
-    }
+        explicit TGenStep(ui64 value)
+            : Value(value)
+        {}
+
+        TGenStep(ui32 gen, ui32 step)
+            : Value(ui64(gen) << 32 | step)
+        {}
+
+        explicit TGenStep(const TLogoBlobID& id)
+            : TGenStep(id.Generation(), id.Step())
+        {}
+        
+        explicit TGenStep(const TBlobSeqId& id)
+            : TGenStep(id.Generation, id.Step)
+        {}
+
+        explicit operator ui64() const {
+            return Value;
+        }
+
+        ui32 Generation() const {
+            return Value >> 32;
+        }
+
+        ui32 Step() const {
+            return Value;
+        }
+
+        void Output(IOutputStream& s) const {
+            s << Generation() << ":" << Step();
+        }
+
+        TString ToString() const {
+            TStringStream s;
+            Output(s);
+            return s.Str();
+        }
+
+        friend bool operator ==(const TGenStep& x, const TGenStep& y) { return x.Value == y.Value; }
+        friend bool operator !=(const TGenStep& x, const TGenStep& y) { return x.Value != y.Value; }
+        friend bool operator < (const TGenStep& x, const TGenStep& y) { return x.Value <  y.Value; }
+        friend bool operator <=(const TGenStep& x, const TGenStep& y) { return x.Value <= y.Value; }
+        friend bool operator > (const TGenStep& x, const TGenStep& y) { return x.Value >  y.Value; }
+        friend bool operator >=(const TGenStep& x, const TGenStep& y) { return x.Value >= y.Value; }
+    };
 
 } // NKikimr::NBlobDepot

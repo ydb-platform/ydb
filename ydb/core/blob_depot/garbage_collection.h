@@ -9,9 +9,11 @@ namespace NKikimr::NBlobDepot {
         TBlobDepot* const Self;
 
         struct TBarrier {
-            ui64 LastRecordGenStep = 0;
-            ui64 Soft = 0;
-            ui64 Hard = 0;
+            ui32 RecordGeneration = 0;
+            ui32 PerGenerationCounter = 0;
+            TGenStep Soft;
+            TGenStep Hard;
+            std::deque<std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>> ProcessingQ;
         };
 
         THashMap<std::pair<ui64, ui8>, TBarrier> Barriers;
@@ -24,7 +26,8 @@ namespace NKikimr::NBlobDepot {
             : Self(self)
         {}
 
-        void AddBarrierOnLoad(ui64 tabletId, ui8 channel, ui64 lastRecordGenStep, ui64 soft, ui64 hard);
+        void AddBarrierOnLoad(ui64 tabletId, ui8 channel, ui32 recordGeneration, ui32 perGenerationCounter, TGenStep soft,
+            TGenStep hard);
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
         bool CheckBlobForBarrier(TLogoBlobID id) const;
         void GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const;
@@ -32,9 +35,7 @@ namespace NKikimr::NBlobDepot {
         template<typename TCallback>
         void Enumerate(TCallback&& callback) {
             for (const auto& [key, value] : Barriers) {
-                callback(key.first, key.second, static_cast<ui32>(value.LastRecordGenStep >> 32),
-                    static_cast<ui32>(value.LastRecordGenStep), static_cast<ui32>(value.Soft >> 32),
-                    static_cast<ui32>(value.Soft), static_cast<ui32>(value.Hard >> 32), static_cast<ui32>(value.Hard));
+                callback(key.first, key.second, value.RecordGeneration, value.PerGenerationCounter, value.Soft, value.Hard);
             }
         }
     };

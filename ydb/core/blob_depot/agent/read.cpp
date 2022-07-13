@@ -58,14 +58,17 @@ namespace NKikimr::NBlobDepot {
                 return false;
             }
 
-            const ui64 partLen = end - begin;
+            // calculate the whole length of current part
+            ui64 partLen = end - begin;
             if (offset >= partLen) {
                 // just skip this part
                 offset -= partLen;
                 continue;
             }
 
-            const ui64 partSize = Min(size ? size : Max<ui64>(), partLen - offset);
+            // adjust it to fit size and offset
+            partLen = Min(size ? size : Max<ui64>(), partLen - offset);
+            Y_VERIFY(partLen);
 
             auto blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
 
@@ -75,19 +78,20 @@ namespace NKikimr::NBlobDepot {
                 const ui32 blobSize = totalDataLen + (composite ? sizeof(TVirtualGroupBlobFooter) : 0);
                 const auto id = blobSeqId.MakeBlobId(TabletId, type, 0, blobSize);
                 items.push_back(TReadItem{locator.GetGroupId(), id, static_cast<ui32>(offset + begin),
-                    static_cast<ui32>(partSize), outputOffset});
+                    static_cast<ui32>(partLen), outputOffset});
             } else {
                 Y_FAIL();
             }
 
+            outputOffset += partLen;
+            offset = 0;
+
             if (size) {
-                size -= partSize;
+                size -= partLen;
                 if (!size) {
                     break;
                 }
             }
-            offset = 0;
-            outputOffset += partSize;
         }
 
         if (size) {
@@ -130,7 +134,8 @@ namespace NKikimr::NBlobDepot {
                 readContext.ReadOffsets.erase(it);
 
                 for (const ui64 offset : v) {
-                    Y_VERIFY(offset + blob.Buffer.size() <= readContext.Size);
+                    Y_VERIFY_S(offset + blob.Buffer.size() <= readContext.Size, "offset# " << offset << " Buffer.size# "
+                        << blob.Buffer.size() << " Size# " << readContext.Size);
                     if (!readContext.Buffer && !offset) {
                         readContext.Buffer = std::move(blob.Buffer);
                         readContext.Buffer.resize(readContext.Size);

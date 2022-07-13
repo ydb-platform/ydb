@@ -23,6 +23,7 @@ namespace NKikimr::NBlobDepot {
                 std::tie(Response, responseRecord) = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId());
 
                 TAgent& agent = Self->GetAgent(Request->Recipient);
+                const ui32 generation = Self->Executor()->Generation();
 
                 for (const auto& item : Request->Get()->Record.GetItems()) {
                     auto *responseItem = responseRecord->AddItems();
@@ -36,7 +37,20 @@ namespace NKikimr::NBlobDepot {
                     auto *locator = chain->MutableLocator();
                     locator->CopyFrom(item.GetBlobLocator());
 
-                    MarkGivenIdCommitted(agent, TBlobSeqId::FromProto(locator->GetBlobSeqId()));
+                    const auto blobSeqId = TBlobSeqId::FromProto(locator->GetBlobSeqId());
+                    const bool canBeCollected = Self->Data->CanBeCollected(locator->GetGroupId(), blobSeqId);
+
+                    if (blobSeqId.Generation == generation) {
+                        // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
+                        Y_VERIFY(!canBeCollected);
+                    } else if (canBeCollected) {
+                        // we can't accept this record, because it is potentially under already issued barrier
+                        responseItem->SetStatus(NKikimrProto::ERROR);
+                        responseItem->SetErrorReason("generation race");
+                        continue;
+                    }
+
+                    MarkGivenIdCommitted(agent, blobSeqId);
 
                     if (!CheckKeyAgainstBarrier(item.GetKey(), responseItem)) {
                         continue;
@@ -63,11 +77,13 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY(blobSeqId.Generation == Self->Executor()->Generation());
                 Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
 
-                auto& channel = Self->Channels[blobSeqId.Channel];
-
                 const ui64 value = blobSeqId.ToSequentialNumber();
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "MarkGivenIdCommitted", (TabletId, Self->TabletID()),
+                    (AgentId, agent.ConnectedNodeId), (BlobSeqId, blobSeqId), (Value, value),
+                    (GivenIdRanges, Self->Channels[blobSeqId.Channel].GivenIdRanges),
+                    (Agent.GivenIdRanges, agent.GivenIdRanges[blobSeqId.Channel]));
                 agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
-                channel.GivenIdRanges.RemovePoint(value);
+                Self->Channels[blobSeqId.Channel].GivenIdRanges.RemovePoint(value);
             }
 
             bool CheckKeyAgainstBarrier(const TString& key, NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {

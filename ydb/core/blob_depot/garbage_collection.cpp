@@ -7,7 +7,10 @@ namespace NKikimr::NBlobDepot {
     class TBlobDepot::TBarrierServer::TTxCollectGarbage : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
         std::optional<TString> Error;
 
-        std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> Request;
+        TBarrier& Barrier;
+        std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>& Request;
+        const ui64 TabletId;
+        const ui8 Channel;
         int KeepIndex = 0;
         int DoNotKeepIndex = 0;
         ui32 NumKeysProcessed = 0;
@@ -16,10 +19,12 @@ namespace NKikimr::NBlobDepot {
         static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
 
     public:
-        TTxCollectGarbage(TBlobDepot *self, std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle> request,
-                ui32 keepIndex = 0, ui32 doNotKeepIndex = 0)
+        TTxCollectGarbage(TBlobDepot *self, ui64 tabletId, ui8 channel, ui32 keepIndex = 0, ui32 doNotKeepIndex = 0)
             : TTransactionBase(self)
-            , Request(std::move(request))
+            , Barrier(Self->BarrierServer->Barriers[std::make_pair(tabletId, channel)])
+            , Request(Barrier.ProcessingQ.front())
+            , TabletId(tabletId)
+            , Channel(channel)
             , KeepIndex(keepIndex)
             , DoNotKeepIndex(doNotKeepIndex)
         {}
@@ -42,9 +47,13 @@ namespace NKikimr::NBlobDepot {
                 auto [response, _] = TEvBlobDepot::MakeResponseFor(*Request, Self->SelfId(),
                     Error ? NKikimrProto::ERROR : NKikimrProto::OK, std::move(Error));
                 TActivationContext::Send(response.release());
+                Barrier.ProcessingQ.pop_front();
                 Self->Data->HandleTrash();
+                if (!Barrier.ProcessingQ.empty()) {
+                    Self->Execute(std::make_unique<TTxCollectGarbage>(Self, TabletId, Channel));
+                }
             } else {
-                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, std::move(Request), KeepIndex, DoNotKeepIndex));
+                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, TabletId, Channel, KeepIndex, DoNotKeepIndex));
             }
         }
 
@@ -60,17 +69,23 @@ namespace NKikimr::NBlobDepot {
                     const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
                     auto& barriers = Self->BarrierServer->Barriers;
                     if (const auto it = barriers.find(key); it != barriers.end()) {
+                        // extract existing barrier record
                         auto& barrier = it->second;
-                        const ui64 recordGenStep = GenStep(record.GetGeneration(), record.GetPerGenerationCounter());
-                        const ui64 collectGenStep = GenStep(record.GetCollectGeneration(), record.GetCollectStep());
-                        ui64& currentGenStep = record.GetHard() ? barrier.Hard : barrier.Soft;
-                        if (recordGenStep < barrier.LastRecordGenStep) {
+                        const auto barrierGenCounter = std::make_tuple(barrier.RecordGeneration, barrier.PerGenerationCounter);
+                        const TGenStep barrierGenStep = record.GetHard() ? barrier.Hard : barrier.Soft;
+
+                        // extract new parameters from protobuf
+                        const auto genCounter = std::make_tuple(record.GetGeneration(), record.GetPerGenerationCounter());
+                        const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
+
+                        // validate them
+                        if (genCounter < barrierGenCounter) {
                             Error = "record generation:counter is obsolete";
-                        } else if (recordGenStep == barrier.LastRecordGenStep) {
-                            if (currentGenStep != collectGenStep) {
+                        } else if (genCounter == barrierGenCounter) {
+                            if (barrierGenStep != collectGenStep) {
                                 Error = "repeated command with different collect parameters received";
                             }
-                        } else if (collectGenStep < currentGenStep) {
+                        } else if (collectGenStep < barrierGenStep) {
                             Error = "decreasing barrier";
                         }
                     }
@@ -133,18 +148,21 @@ namespace NKikimr::NBlobDepot {
                 const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
                 auto& barriers = Self->BarrierServer->Barriers;
                 auto& barrier = barriers[key];
-                const ui64 recordGenStep = GenStep(record.GetGeneration(), record.GetPerGenerationCounter());
-                const ui64 collectGenStep = GenStep(record.GetCollectGeneration(), record.GetCollectStep());
-                ui64& currentGenStep = record.GetHard() ? barrier.Hard : barrier.Soft;
-                Y_VERIFY(barrier.LastRecordGenStep <= recordGenStep);
-                barrier.LastRecordGenStep = recordGenStep;
-                Y_VERIFY(currentGenStep <= collectGenStep);
-                currentGenStep = collectGenStep;
+                auto barrierGenCounter = std::tie(barrier.RecordGeneration, barrier.PerGenerationCounter);
+                TGenStep& barrierGenStep = record.GetHard() ? barrier.Hard : barrier.Soft;
+
+                const auto genCounter = std::make_tuple(record.GetGeneration(), record.GetPerGenerationCounter());
+                const TGenStep collectGenStep(record.GetCollectGeneration(), record.GetCollectStep());
+                Y_VERIFY(barrierGenCounter <= genCounter);
+                barrierGenCounter = genCounter;
+                Y_VERIFY(barrierGenStep <= collectGenStep);
+                barrierGenStep = collectGenStep;
 
                 db.Table<Schema::Barriers>().Key(record.GetTabletId(), record.GetChannel()).Update(
-                    NIceDb::TUpdate<Schema::Barriers::LastRecordGenStep>(recordGenStep),
-                    NIceDb::TUpdate<Schema::Barriers::Soft>(barrier.Soft),
-                    NIceDb::TUpdate<Schema::Barriers::Hard>(barrier.Hard)
+                    NIceDb::TUpdate<Schema::Barriers::RecordGeneration>(std::get<0>(genCounter)),
+                    NIceDb::TUpdate<Schema::Barriers::PerGenerationCounter>(std::get<1>(genCounter)),
+                    NIceDb::TUpdate<Schema::Barriers::Soft>(ui64(barrier.Soft)),
+                    NIceDb::TUpdate<Schema::Barriers::Hard>(ui64(barrier.Hard))
                 );
             }
 
@@ -152,30 +170,34 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    void TBlobDepot::TBarrierServer::AddBarrierOnLoad(ui64 tabletId, ui8 channel, ui64 lastRecordGenStep,
-            ui64 soft, ui64 hard) {
+    void TBlobDepot::TBarrierServer::AddBarrierOnLoad(ui64 tabletId, ui8 channel, ui32 recordGeneration, ui32 perGenerationCounter,
+            TGenStep soft, TGenStep hard) {
         Barriers[std::make_pair(tabletId, channel)] = {
-            .LastRecordGenStep = lastRecordGenStep,
+            .RecordGeneration = recordGeneration,
+            .PerGenerationCounter = perGenerationCounter,
             .Soft = soft,
             .Hard = hard,
         };
     }
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
-        Self->Execute(std::make_unique<TTxCollectGarbage>(Self,
-            std::unique_ptr<TEvBlobDepot::TEvCollectGarbage::THandle>(ev.Release())));
+        const auto& record = ev->Get()->Record;
+        const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
+        auto& barrier = Barriers[key];
+        barrier.ProcessingQ.emplace_back(ev.Release());
+        if (barrier.ProcessingQ.size() == 1) {
+            Self->Execute(std::make_unique<TTxCollectGarbage>(Self, record.GetTabletId(), record.GetChannel()));
+        }
     }
 
     bool TBlobDepot::TBarrierServer::CheckBlobForBarrier(TLogoBlobID id) const {
-        const auto key = std::make_pair(id.TabletID(), id.Channel());
-        const auto it = Barriers.find(key);
-        return it == Barriers.end() || GenStep(id) > Max(it->second.Soft, it->second.Hard);
+        const auto it = Barriers.find(std::make_pair(id.TabletID(), id.Channel()));
+        return it == Barriers.end() || TGenStep(id) > Max(it->second.Soft, it->second.Hard);
     }
 
     void TBlobDepot::TBarrierServer::GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const {
-        const auto key = std::make_pair(id.TabletID(), id.Channel());
-        const auto it = Barriers.find(key);
-        const ui64 genStep = GenStep(id);
+        const auto it = Barriers.find(std::make_pair(id.TabletID(), id.Channel()));
+        const TGenStep genStep(id);
         *underSoft = it == Barriers.end() ? false : genStep <= it->second.Soft;
         *underHard = it == Barriers.end() ? false : genStep <= it->second.Hard;
     }

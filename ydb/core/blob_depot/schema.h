@@ -40,15 +40,17 @@ namespace NKikimr::NBlobDepot {
         struct Barriers : Table<3> {
             struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Channel : Column<2, NScheme::NTypeIds::Uint8> {};
-            struct LastRecordGenStep : Column<3, NScheme::NTypeIds::Uint64> {};
-            struct Soft : Column<4, NScheme::NTypeIds::Uint64> {};
-            struct Hard : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct RecordGeneration : Column<3, NScheme::NTypeIds::Uint32> {};
+            struct PerGenerationCounter : Column<4, NScheme::NTypeIds::Uint32> {};
+            struct Soft : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct Hard : Column<6, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TabletId, Channel>;
             using TColumns = TableColumns<
                 TabletId,
                 Channel,
-                LastRecordGenStep,
+                RecordGeneration,
+                PerGenerationCounter,
                 Soft,
                 Hard
             >;
@@ -75,13 +77,14 @@ namespace NKikimr::NBlobDepot {
             using TColumns = TableColumns<BlobId>;
         };
 
-        struct ConfirmedGC : Table<6> {
+        struct GC : Table<6> {
             struct Channel : Column<1, NScheme::NTypeIds::Uint8> {};
             struct GroupId : Column<2, NScheme::NTypeIds::Uint32> {};
-            struct ConfirmedGenStep : Column<3, NScheme::NTypeIds::Uint64> {};
+            struct IssuedGenStep : Column<3, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
+            struct ConfirmedGenStep : Column<4, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
 
             using TKey = TableKey<Channel, GroupId>;
-            using TColumns = TableColumns<Channel, GroupId, ConfirmedGenStep>;
+            using TColumns = TableColumns<Channel, GroupId, IssuedGenStep, ConfirmedGenStep>;
         };
 
         using TTables = SchemaTables<
@@ -90,7 +93,7 @@ namespace NKikimr::NBlobDepot {
             Barriers,
             Data,
             Trash,
-            ConfirmedGC
+            GC
         >;
 
         using TSettings = SchemaSettings<

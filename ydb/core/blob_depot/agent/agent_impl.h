@@ -61,6 +61,8 @@ namespace NKikimr::NBlobDepot {
             TEvBlobStorage::TEvPutResult*
         >;
 
+        static TString ToString(const TResponse& response);
+
     public:
         TRequestSender(TBlobDepotAgent& agent);
         virtual ~TRequestSender();

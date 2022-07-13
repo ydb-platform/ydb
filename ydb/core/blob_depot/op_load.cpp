@@ -65,9 +65,10 @@ namespace NKikimr::NBlobDepot {
                         Self->BarrierServer->AddBarrierOnLoad(
                             table.GetValue<Schema::Barriers::TabletId>(),
                             table.GetValue<Schema::Barriers::Channel>(),
-                            table.GetValue<Schema::Barriers::LastRecordGenStep>(),
-                            table.GetValue<Schema::Barriers::Soft>(),
-                            table.GetValue<Schema::Barriers::Hard>()
+                            table.GetValue<Schema::Barriers::RecordGeneration>(),
+                            table.GetValue<Schema::Barriers::PerGenerationCounter>(),
+                            TGenStep(table.GetValue<Schema::Barriers::Soft>()),
+                            TGenStep(table.GetValue<Schema::Barriers::Hard>())
                         );
                         if (!table.Next()) {
                             return false;
@@ -107,16 +108,18 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                // ConfirmedGC
+                // GC
                 {
-                    auto table = db.Table<Schema::ConfirmedGC>().Select();
+                    using T = Schema::GC;
+                    auto table = db.Table<T>().Select();
                     if (!table.IsReady()) {
                         return false;
                     }
                     while (table.IsValid()) {
-                        Self->Data->AddConfirmedGenStepOnLoad(table.GetValue<Schema::ConfirmedGC::Channel>(),
-                            table.GetValue<Schema::ConfirmedGC::GroupId>(),
-                            table.GetValue<Schema::ConfirmedGC::ConfirmedGenStep>());
+                        Self->Data->AddGenStepOnLoad(table.GetValue<T::Channel>(),
+                            table.GetValue<T::GroupId>(),
+                            TGenStep(table.GetValueOrDefault<T::IssuedGenStep>()),
+                            TGenStep(table.GetValueOrDefault<T::ConfirmedGenStep>()));
                         if (!table.Next()) {
                             return false;
                         }
@@ -132,7 +135,7 @@ namespace NKikimr::NBlobDepot {
                 auto barriers = db.Table<Schema::Barriers>().Select();
                 auto data = db.Table<Schema::Data>().Select();
                 auto trash = db.Table<Schema::Trash>().Select();
-                auto confirmedGC = db.Table<Schema::ConfirmedGC>().Select();
+                auto confirmedGC = db.Table<Schema::GC>().Select();
                 return config.IsReady() && blocks.IsReady() && barriers.IsReady() && data.IsReady() && trash.IsReady() &&
                     confirmedGC.IsReady();
             }

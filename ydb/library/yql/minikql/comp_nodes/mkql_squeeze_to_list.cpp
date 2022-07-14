@@ -33,7 +33,7 @@ public:
 
         bool Push(NUdf::TUnboxedValuePod value) {
             Accumulator.emplace_back(std::move(value));
-            return Limit <= Accumulator.size();
+            return Limit != 0 && Limit <= Accumulator.size();
         }
     private:
         const ui64 Limit;

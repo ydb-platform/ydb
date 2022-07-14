@@ -110,14 +110,18 @@ TExprBase DqBuildPartitionsStageStub(TExprBase node, TExprContext& ctx, const TP
     auto handler = partition.ListHandlerLambda();
 
     if constexpr(std::is_base_of<TCoPartitionsByKeys, TPartition>::value) {
-        if (ETypeAnnotationKind::List == handler.Ref().GetTypeAnn()->GetKind()) {
+        if (ETypeAnnotationKind::List == partition.Input().Ref().GetTypeAnn()->GetKind()) {
             handler = Build<TCoLambda>(ctx, handler.Pos())
                 .Args({"flow"})
-                .template Body<TCoToFlow>()
-                    .template Input<TExprApplier>()
-                        .Apply(handler)
-                        .template With<TCoForwardList>(0)
-                            .Stream("flow")
+                .template Body<TCoFlatMap>()
+                    .template Input<TCoSqueezeToList>()
+                        .Stream("flow")
+                    .Build()
+                    .Lambda()
+                        .Args({"list"})
+                        .template Body<TExprApplier>()
+                            .Apply(handler)
+                            .With(0, "list")
                         .Build()
                     .Build()
                 .Build().Done();

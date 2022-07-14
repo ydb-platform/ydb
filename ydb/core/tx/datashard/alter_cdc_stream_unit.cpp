@@ -34,7 +34,6 @@ public:
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto streamPathId = PathIdFromPathId(streamDesc.GetPathId());
-        Y_VERIFY(streamPathId.OwnerId == DataShard.GetPathOwnerId());
 
         Y_VERIFY_S(streamDesc.GetState() == NKikimrSchemeOp::ECdcStreamStateDisabled, "Unexpected alter cdc stream"
             << ": desc# " << streamDesc.ShortDebugString());

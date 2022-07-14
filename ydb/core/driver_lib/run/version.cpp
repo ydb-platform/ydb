@@ -54,8 +54,8 @@ void CheckVersionTag() {
         TString branch(begin, end);
         const char* arcadia_url = GetArcadiaSourceUrl();
 
-        if (branch != "trunk" && VERSION->Tag == "trunk") {
-            Y_FAIL("non-trunk branch %s with ARCADIA_SOURCE_URL# %s contains VersionTag# trunk", branch.data(), arcadia_url);
+        if ((branch.StartsWith("releases/") || branch.StartsWith("tags/releases/")) && VERSION->Tag == "trunk") {
+            Y_FAIL("release branch %s with ARCADIA_SOURCE_URL# %s contains VersionTag# trunk", branch.data(), arcadia_url);
         }
     }
 }

@@ -24,21 +24,28 @@ def _create_table(root, session, table_name, columns, keys_count, queue_type=Non
     table_path = get_table_path(root, table_name, queue_type)
     keys = [name for name, _ in columns[:keys_count]]
     columns = [ydb.Column(name, ydb.OptionalType(column_type)) for name, column_type in columns]
-    ydb.retry_operation_sync(lambda: session.create_table(
-        table_path,
-        ydb.TableDescription()
-            .with_primary_keys(*keys)
-            .with_columns(*columns)
-            .with_profile(
-                ydb.TableProfile()
-                .with_partitioning_policy(
-                    ydb.PartitioningPolicy()
-                    .with_auto_partitioning(
-                        ydb.AutoPartitioningPolicy.AUTO_SPLIT
-                    )
+
+    if queue_type:
+        ydb.retry_operation_sync(lambda: session.create_table(
+            table_path,
+            ydb.TableDescription()
+                .with_primary_keys(*keys)
+                .with_columns(*columns)
+                .with_uniform_partitions(10)
+                .with_partitioning_settings(
+                    ydb.PartitioningSettings()
+                        .with_min_partitions_count(10)
+                        .with_partitioning_by_size(ydb.FeatureFlag.ENABLED)
+                        .with_partitioning_by_load(ydb.FeatureFlag.ENABLED)
                 )
-            )
-    ))
+        ))
+    else:
+        ydb.retry_operation_sync(lambda: session.create_table(
+            table_path,
+            ydb.TableDescription()
+                .with_primary_keys(*keys)
+                .with_columns(*columns)
+        ))
 
 
 def get_table_keys_for_queue(with_shard=False):

@@ -59,7 +59,11 @@ private:
     void HandleInsertQueueCounters(TSqsEvents::TEvInsertQueueCounters::TPtr& ev);
     void HandleUserSettingsChanged(TSqsEvents::TEvUserSettingsChanged::TPtr& ev);
     void HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev);
+    void HandleNodeTrackingSubscriptionStatus(TSqsEvents::TEvNodeTrackerSubscriptionStatus::TPtr& ev);
+    void CreateNodeTrackingSubscription(TQueueInfoPtr queueInfo);
+    void CancleNodeTrackingSubscription(TQueueInfoPtr queueInfo);
 
+    void ProcessConnectTimeoutToLeader();
     void ScheduleRequestSqsUsersList();
     void RequestSqsUsersList();
 
@@ -73,7 +77,7 @@ private:
     void RemoveUser(const TString& userName);
     std::map<TString, TQueueInfoPtr>::iterator AddQueue(const TString& userName, const TString& queue, ui64 leaderTabletId,
                                                         const TString& customName, const TString& folderId, const ui32 tablesFormat, const ui64 version,
-                                                        const ui64 shardsCount, const TInstant createdTimestamp);
+                                                        const ui64 shardsCount, const TInstant createdTimestamp, bool isFifo);
 
     void AnswerNoUserToRequests();
     void AnswerNoQueueToRequests(const TUserInfoPtr& user);
@@ -138,7 +142,6 @@ private:
     std::shared_ptr<TAlignedPagePoolCounters> AllocPoolCounters_;
     TIntrusivePtr<TUserCounters> AggregatedUserCounters_;
     TUsersMap Users_;
-    THashMap<ui64, TQueueInfoPtr> LeaderTabletIdToQueue_;
     THashMap<TActorId, TQueueInfoPtr> LocalLeaderRefs_; // referer -> queue info
     TActorId SchemeCache_;
     TActorId QueuesListReader_;
@@ -159,6 +162,11 @@ private:
     THashMultiMap<TString, TSqsEvents::TEvGetQueueFolderIdAndCustomName::TPtr> GetQueueFolderIdAndCustomNameRequests_; // user name -> request
     THashMultiMap<TString, TSqsEvents::TEvCountQueues::TPtr> CountQueuesRequests_; // user name -> request
 
+    TActorId NodeTrackerActor_;
+    THashMap<ui64, TQueueInfoPtr> QueuePerNodeTrackingSubscription;
+    ui64 MaxNodeTrackingSubscriptionId = 0;
+
+    THashSet<TQueueInfoPtr> QueuesWithGetNodeWaitingRequests;
 
     struct TYcSearchEventsConfig {
         TString Database;

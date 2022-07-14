@@ -260,7 +260,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
                 master_is_updated = True
                 break
             except RuntimeError as ex:
-                assert str(ex).find('master session error') != -1
+                assert str(ex).find('master session error') != -1 or str(ex).find('failed because of an unknown error, exception or failure') != -1
                 time.sleep(0.5)  # wait master update time
 
         assert_that(master_is_updated)

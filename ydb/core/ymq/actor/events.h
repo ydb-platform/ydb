@@ -126,6 +126,10 @@ struct TSqsEvents {
 
         EvCleanupQueryComplete,
 
+        EvNodeTrackerSubscribeRequest,
+        EvNodeTrackerUnsubscribeRequest,
+        EvNodeTrackerSubscriptionStatus,
+
         EvEnd,
     };
 
@@ -801,6 +805,7 @@ struct TSqsEvents {
             ui64 Version = 0;
             ui64 ShardsCount = 0;
             TInstant CreatedTimestamp;
+            bool IsFifo = false;
 
             bool operator<(const TQueueRecord& r) const {
                 return std::tie(UserName, QueueName) < std::tie(r.UserName, r.QueueName);
@@ -889,6 +894,44 @@ struct TSqsEvents {
         }
         TString Name;
         ui64 Type;
+    };
+
+    struct TEvNodeTrackerSubscribeRequest 
+        : public NActors::TEventLocal<TEvNodeTrackerSubscribeRequest, EvNodeTrackerSubscribeRequest>
+    {
+        explicit TEvNodeTrackerSubscribeRequest(
+            ui64 subscriptionId,
+            ui64 queueIdNumber,
+            bool isFifo,
+            std::optional<ui64> tabletId = {}
+        )
+            : SubscriptionId(subscriptionId)
+            , QueueIdNumber(queueIdNumber)
+            , IsFifo(isFifo)
+            , TabletId(tabletId)
+        {}
+        ui64 SubscriptionId;
+        ui64 QueueIdNumber;
+        bool IsFifo;
+        std::optional<ui64> TabletId;
+    };
+    
+    struct TEvNodeTrackerUnsubscribeRequest 
+        : public NActors::TEventLocal<TEvNodeTrackerUnsubscribeRequest, EvNodeTrackerUnsubscribeRequest>
+    {
+        TEvNodeTrackerUnsubscribeRequest(ui64 subscriptionId)
+            : SubscriptionId(subscriptionId)
+        {}
+        ui64 SubscriptionId;
+    };
+
+    struct TEvNodeTrackerSubscriptionStatus : public NActors::TEventLocal<TEvNodeTrackerSubscriptionStatus, EvNodeTrackerSubscriptionStatus> {
+        explicit TEvNodeTrackerSubscriptionStatus(ui64 subscriptionId, ui32 nodeId)
+            : SubscriptionId(subscriptionId)
+            , NodeId(nodeId)
+        {}
+        ui64 SubscriptionId;
+        ui32 NodeId;
     };
 };
 

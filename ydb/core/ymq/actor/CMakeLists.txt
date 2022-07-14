@@ -84,6 +84,7 @@ target_sources(core-ymq-actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/metering.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/migration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/modify_permissions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/node_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/proxy_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/purge.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/purge_queue.cpp

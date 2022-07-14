@@ -12,6 +12,7 @@
 #include "user_settings_names.h"
 #include "user_settings_reader.h"
 #include "index_events_processor.h"
+#include "node_tracker.h"
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
@@ -55,10 +56,12 @@ using NKikimr::NClient::TValue;
 const TString LEADER_CREATE_REASON_USER_REQUEST = "UserRequestOnNode";
 const TString LEADER_CREATE_REASON_LOCAL_TABLET = "LocalTablet";
 const TString LEADER_DESTROY_REASON_LAST_REF = "LastReference";
-const TString LEADER_DESTROY_REASON_TABLET_PIPE_CLOSED = "TabletPipeClosed";
+const TString LEADER_DESTROY_REASON_TABLET_ON_ANOTHER_NODE = "LeaderTabletOnAnotherNode";
+const TString LEADER_DESTROY_REASON_REMOVE_INFO = "RemoveQueueInfo";
 
 constexpr ui64 LIST_USERS_WAKEUP_TAG = 1;
 constexpr ui64 LIST_QUEUES_WAKEUP_TAG = 2;
+constexpr ui64 CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG = 3;
 
 constexpr size_t EARLY_REQUEST_USERS_LIST_MAX_BUDGET = 10;
 constexpr i64 EARLY_REQUEST_QUEUES_LIST_MAX_BUDGET = 5; // per user
@@ -69,7 +72,7 @@ bool IsInternalFolder(const TString& folder) {
 
 struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     TQueueInfo(
-            TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, TString customName,
+            TString userName, TString queueName, TString rootUrl, ui64 leaderTabletId, bool isFifo, TString customName,
             TString folderId, ui32 tablesFormat, ui64 version, ui64 shardsCount, const TIntrusivePtr<TUserCounters>& userCounters,
             const TIntrusivePtr<TFolderCounters>& folderCounters,
             const TActorId& schemeCache, TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> quoterResourcesForUser,
@@ -84,6 +87,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
         , ShardsCount_(shardsCount)
         , RootUrl_(std::move(rootUrl))
         , LeaderTabletId_(leaderTabletId)
+        , IsFifo_(isFifo)
         , Counters_(userCounters->CreateQueueCounters(QueueName_, FolderId_, insertCounters))
         , UserCounters_(userCounters)
         , FolderCounters_(folderCounters)
@@ -92,36 +96,19 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     {
     }
 
-    void ConnectToLeaderTablet(bool firstTime = true) {
-        if (ConnectingToLeaderTablet_) {
+    bool LeaderMustBeOnCurrentNode() const {
+        return LeaderNodeId_ && LeaderNodeId_.value() == SelfId().NodeId();
+    }
+
+    void SetLeaderNodeId(ui32 nodeId) {
+        if (LeaderNodeId_ && LeaderNodeId_ == nodeId) {
             return;
         }
-        ClosePipeToLeaderTablet();
-        ConnectingToLeaderTablet_ = true;
-        NTabletPipe::TClientConfig cfg;
-        cfg.AllowFollower = false;
-        cfg.CheckAliveness = true;
-        cfg.RetryPolicy = {.RetryLimitCount = 3, .MinRetryTime = TDuration::MilliSeconds(100), .DoFirstRetryInstantly = firstTime};
-        PipeClient_ = TActivationContext::Register(NTabletPipe::CreateClient(SelfId(), LeaderTabletId_, cfg));
-        LOG_SQS_DEBUG("Connect to leader tablet [" << LeaderTabletId_ << "] for queue [" << UserName_ << "/" << QueueName_ << "]. Pipe client actor: " << PipeClient_);
-    }
-
-    void SetLeaderPipeServer(const TActorId& pipeServer) {
-        LeaderPipeServer_ = pipeServer;
-
-        const ui64 nodeId = LeaderPipeServer_.NodeId();
-        if (nodeId == SelfId().NodeId()) {
-            IncLocalLeaderRef(LEADER_CREATE_REASON_LOCAL_TABLET); // ref for service
-        }
-    }
-
-    void ClosePipeToLeaderTablet() {
-        if (LeaderPipeServer_.NodeId() == SelfId().NodeId()) {
-            DecLocalLeaderRef(LEADER_DESTROY_REASON_TABLET_PIPE_CLOSED); // ref for service
-        }
-        if (PipeClient_) {
-            NTabletPipe::CloseClient(SelfId(), PipeClient_);
-            PipeClient_ = LeaderPipeServer_ = TActorId();
+        LeaderNodeId_ = nodeId;
+        if (LeaderMustBeOnCurrentNode()) {
+            StartLocalLeader(LEADER_CREATE_REASON_LOCAL_TABLET);
+        } else {
+            StopLocalLeaderIfNeeded(LEADER_DESTROY_REASON_TABLET_ON_ANOTHER_NODE);
         }
     }
 
@@ -137,6 +124,12 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
                 FolderCounters_->InitCounters();
                 INC_COUNTER(FolderCounters_, total_count);
             }
+        }
+    }
+
+    void StopLocalLeaderIfNeeded(const TString& reason) {
+        if (!LeaderMustBeOnCurrentNode() && LocalLeaderRefCount_ == 0) {
+            StopLocalLeader(reason);
         }
     }
 
@@ -162,9 +155,7 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     void DecLocalLeaderRef(const TString& reason) {
         Y_VERIFY(LocalLeaderRefCount_ > 0);
         --LocalLeaderRefCount_;
-        if (LocalLeaderRefCount_ == 0) {
-            StopLocalLeader(reason);
-        }
+        StopLocalLeaderIfNeeded(reason);
     }
 
     TActorIdentity SelfId() const {
@@ -180,20 +171,21 @@ struct TSqsService::TQueueInfo : public TAtomicRefCount<TQueueInfo> {
     ui64 ShardsCount_;
     TString RootUrl_;
     ui64 LeaderTabletId_ = 0;
+    bool IsFifo_ = false;
     TIntrusivePtr<TQueueCounters> Counters_;
     TIntrusivePtr<TUserCounters> UserCounters_;
     TIntrusivePtr<TFolderCounters> FolderCounters_;
-    TActorId PipeClient_;
-    TActorId LeaderPipeServer_;
+    std::optional<ui32> LeaderNodeId_;
+    ui64 NodeTrackingSubscriptionId = 0;
+
     TActorId LocalLeader_;
     TActorId SchemeCache_;
     ui64 LocalLeaderRefCount_ = 0;
     TIntrusivePtr<TSqsEvents::TQuoterResourcesForActions> QuoterResourcesForUser_;
 
     // State machine
-    bool ConnectingToLeaderTablet_ = false;
-    TInstant DisconnectedFrom_ = TInstant::Now();
     THashSet<TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> GetLeaderNodeRequests_;
+    TInstant NodeUnknownSince_ = TInstant::Now();
 };
 
 struct TSqsService::TUserInfo : public TAtomicRefCount<TUserInfo> {
@@ -300,6 +292,7 @@ void TSqsService::Bootstrap() {
     AggregatedUserCounters_->ShowDetailedCounters(TInstant::Max());
 
     InitSchemeCache();
+    NodeTrackerActor_ = Register(new TNodeTrackerActor(SchemeCache_));
 
     Register(new TUserSettingsReader(AggregatedUserCounters_->GetTransactionCounters()));
     QueuesListReader_ = Register(new TQueuesListReader(AggregatedUserCounters_->GetTransactionCounters()));
@@ -341,8 +334,7 @@ STATEFN(TSqsService::StateFunc) {
         hFunc(TEvWakeup, HandleWakeup);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleDescribeSchemeResult);
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-        hFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeClientDisconnected);
-        hFunc(TEvTabletPipe::TEvClientConnected, HandlePipeClientConnected);
+        hFunc(TSqsEvents::TEvNodeTrackerSubscriptionStatus, HandleNodeTrackingSubscriptionStatus);
         hFunc(TSqsEvents::TEvGetConfiguration, HandleGetConfiguration);
         hFunc(TSqsEvents::TEvSqsRequest, HandleSqsRequest);
         hFunc(TSqsEvents::TEvInsertQueueCounters, HandleInsertQueueCounters);
@@ -436,15 +428,23 @@ void TSqsService::HandleGetLeaderNodeForQueueRequest(TSqsEvents::TEvGetLeaderNod
         return;
     }
 
-    if (!queueIt->second->LeaderPipeServer_) {
+    auto queuePtr = queueIt->second;
+    if (!queuePtr->LeaderNodeId_) {
         LWPROBE(QueueRequestCacheMiss, userName, queueName, reqId, ev->Get()->ToStringHeader());
         RLOG_SQS_REQ_DEBUG(reqId, "Queue [" << userName << "/" << queueName << "] is waiting for connection to leader tablet.");
-        auto& queue = queueIt->second;
-        queue->GetLeaderNodeRequests_.emplace(std::move(ev));
+        
+        queuePtr->GetLeaderNodeRequests_.emplace(std::move(ev));
+        if (QueuesWithGetNodeWaitingRequests.empty()) {
+            Schedule(
+                TDuration::MilliSeconds(Cfg().GetLeaderConnectTimeoutMs()),
+                new TEvWakeup(CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG)
+            );
+        }
+        QueuesWithGetNodeWaitingRequests.insert(queuePtr);
         return;
     }
 
-    const ui64 nodeId = queueIt->second->LeaderPipeServer_.NodeId();
+    const ui32 nodeId = queuePtr->LeaderNodeId_.value();
     RLOG_SQS_REQ_DEBUG(reqId, "Leader node for queue [" << userName << "/" << queueName << "] is " << nodeId);
     Send(ev->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(reqId, userName, queueName, nodeId));
 }
@@ -737,50 +737,28 @@ TSqsService::TUserInfoPtr TSqsService::GetUserOrWait(TAutoPtr<TEvent>& ev) {
     return userIt->second;
 }
 
-void TSqsService::HandlePipeClientConnected(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-    auto queueIt = LeaderTabletIdToQueue_.find(ev->Get()->TabletId);
-    if (queueIt == LeaderTabletIdToQueue_.end()) {
-        LOG_SQS_WARN("Connected to unknown queue leader. Tablet id: [" << ev->Get()->TabletId << "]. Client pipe actor: " << ev->Get()->ClientId << ". Server pipe actor: " << ev->Get()->ServerId);
+void TSqsService::HandleNodeTrackingSubscriptionStatus(TSqsEvents::TEvNodeTrackerSubscriptionStatus::TPtr& ev) {
+    ui64 subscriptionId = ev->Get()->SubscriptionId;
+    auto it = QueuePerNodeTrackingSubscription.find(subscriptionId);
+    if (it == QueuePerNodeTrackingSubscription.end()) {
+        LOG_SQS_WARN("Get node tracking status for unknown subscription id: " << subscriptionId);
+        Send(NodeTrackerActor_, new TSqsEvents::TEvNodeTrackerUnsubscribeRequest(subscriptionId));
         return;
     }
-    const auto& queue = queueIt->second;
-    queue->ConnectingToLeaderTablet_ = false;
-
-    if (ev->Get()->Status != NKikimrProto::OK) {
-        LOG_SQS_WARN("Failed to connect to queue [" << queue->UserName_ << "/" << queue->QueueName_ << "] leader tablet. Tablet id: [" << ev->Get()->TabletId << "]. Status: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
-        const TInstant now = TActivationContext::Now();
-        const TDuration timeDisconnecned = now - queue->DisconnectedFrom_;
-        const TDuration leaderConnectTimeout = TDuration::MilliSeconds(Cfg().GetLeaderConnectTimeoutMs());
-        if (timeDisconnecned >= leaderConnectTimeout) {
-            for (auto& req : queue->GetLeaderNodeRequests_) {
-                RLOG_SQS_REQ_WARN(req->Get()->RequestId, "Can't connect to leader tablet for " << timeDisconnecned);
-                Send(req->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(req->Get()->RequestId, req->Get()->UserName, req->Get()->QueueName, TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::FailedToConnectToLeader));
-            }
-            queue->GetLeaderNodeRequests_.clear();
-        }
-        queue->ConnectToLeaderTablet(false);
-        return;
+    auto queuePtr = it->second;
+    auto& queue = *queuePtr;
+    auto nodeId = ev->Get()->NodeId;
+    queue.SetLeaderNodeId(nodeId);
+    LOG_SQS_DEBUG(
+        "Got node leader for queue [" << queue.UserName_ << "/" << queue.QueueName_ 
+        << "]. Node: " << nodeId << " subscription id: " << subscriptionId
+    );
+    for (auto& req : queue.GetLeaderNodeRequests_) {
+        RLOG_SQS_REQ_DEBUG(req->Get()->RequestId, "Got node leader. Node id: " << nodeId);
+        Send(req->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(req->Get()->RequestId, req->Get()->UserName, req->Get()->QueueName, nodeId));
     }
-
-    LOG_SQS_DEBUG("Connected to queue [" << queueIt->second->UserName_ << "/" << queueIt->second->QueueName_ << "] leader. Tablet id: [" << ev->Get()->TabletId << "]. Client pipe actor: " << ev->Get()->ClientId << ". Server pipe actor: " << ev->Get()->ServerId);
-    queue->SetLeaderPipeServer(ev->Get()->ServerId);
-    for (auto& req : queue->GetLeaderNodeRequests_) {
-        RLOG_SQS_REQ_DEBUG(req->Get()->RequestId, "Connected to leader tablet. Node id: " << queue->LeaderPipeServer_.NodeId());
-        Send(req->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(req->Get()->RequestId, req->Get()->UserName, req->Get()->QueueName, queue->LeaderPipeServer_.NodeId()));
-    }
-    queue->GetLeaderNodeRequests_.clear();
-}
-
-void TSqsService::HandlePipeClientDisconnected(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-    auto queueIt = LeaderTabletIdToQueue_.find(ev->Get()->TabletId);
-    if (queueIt != LeaderTabletIdToQueue_.end()) {
-        queueIt->second->ConnectingToLeaderTablet_ = false;
-        queueIt->second->DisconnectedFrom_ = TActivationContext::Now();
-        LOG_SQS_DEBUG("Disconnected from queue [" << queueIt->second->UserName_ << "/" << queueIt->second->QueueName_ << "] leader. Tablet id: [" << ev->Get()->TabletId << "]. Client pipe actor: " << ev->Get()->ClientId << ". Server pipe actor: " << ev->Get()->ServerId);
-        queueIt->second->ConnectToLeaderTablet(false);
-    } else {
-        LOG_SQS_WARN("Disconnected from unknown queue leader. Tablet id: [" << ev->Get()->TabletId << "]. Client pipe actor: " << ev->Get()->ClientId << ". Server pipe actor: " << ev->Get()->ServerId);
-    }
+    queue.GetLeaderNodeRequests_.clear();
+    QueuesWithGetNodeWaitingRequests.erase(queuePtr);
 }
 
 void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
@@ -798,9 +776,9 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
             auto oldListIt = user->Queues_.begin();
             while (oldListIt != user->Queues_.end() && newListIt != ev->Get()->SortedQueues.end() && newListIt->UserName == user->UserName_) {
                 if (oldListIt->first == newListIt->QueueName) { // the same queue
-                    if (oldListIt->second->LeaderTabletId_ != newListIt->LeaderTabletId) {
-                        LOG_SQS_WARN("Leader tablet id for queue " << oldListIt->first << " has been changed from "
-                                   << oldListIt->second->LeaderTabletId_ << " to " << newListIt->LeaderTabletId << " (queue was recreated)");
+                    if (oldListIt->second->Version_ != newListIt->Version) {
+                        LOG_SQS_WARN("Queue version for queue " << oldListIt->first << " has been changed from "
+                                   << oldListIt->second->Version_ << " to " << newListIt->Version << " (queue was recreated)");
                         THashSet<TSqsEvents::TEvGetLeaderNodeForQueueRequest::TPtr> oldQueueRequests;
                         oldQueueRequests.swap(oldListIt->second->GetLeaderNodeRequests_);
 
@@ -813,9 +791,12 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                            newListIt->TablesFormat,
                                            newListIt->Version,
                                            newListIt->ShardsCount,
-                                           newListIt->CreatedTimestamp);
-                        Y_VERIFY(oldListIt->second->ConnectingToLeaderTablet_);
+                                           newListIt->CreatedTimestamp,
+                                           newListIt->IsFifo);
                         oldQueueRequests.swap(oldListIt->second->GetLeaderNodeRequests_);
+                        if (!oldListIt->second->GetLeaderNodeRequests_.empty()) {
+                            QueuesWithGetNodeWaitingRequests.insert(oldListIt->second);
+                        }
                     }
                     ++oldListIt;
                     ++newListIt;
@@ -832,7 +813,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                                        newListIt->TablesFormat,
                                        newListIt->Version,
                                        newListIt->ShardsCount,
-                                       newListIt->CreatedTimestamp);
+                                       newListIt->CreatedTimestamp,
+                                       newListIt->IsFifo);
                     ++oldListIt;
                     ++newListIt;
                 }
@@ -851,7 +833,8 @@ void TSqsService::HandleQueuesList(TSqsEvents::TEvQueuesList::TPtr& ev) {
                          newListIt->TablesFormat,
                          newListIt->Version,
                          newListIt->ShardsCount,
-                         newListIt->CreatedTimestamp);
+                         newListIt->CreatedTimestamp,
+                         newListIt->IsFifo);
                 ++newListIt;
             }
 
@@ -1018,13 +1001,12 @@ void TSqsService::RemoveQueue(const TString& userName, const TString& queue) {
     }
 
     auto queuePtr = queueIt->second;
-    queuePtr->ClosePipeToLeaderTablet();
+    CancleNodeTrackingSubscription(queuePtr);
     for (auto& req : queuePtr->GetLeaderNodeRequests_) {
         RLOG_SQS_REQ_DEBUG(req->Get()->RequestId, "Removing queue [" << req->Get()->UserName << "/" << req->Get()->QueueName << "] from sqs service info");
         Send(req->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(req->Get()->RequestId, req->Get()->UserName, req->Get()->QueueName, TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::NoQueue));
     }
     queuePtr->GetLeaderNodeRequests_.clear();
-    LeaderTabletIdToQueue_.erase(queuePtr->LeaderTabletId_);
     userIt->second->QueueByNameAndFolder_.erase(std::make_pair(queuePtr->CustomName_, queuePtr->FolderId_));
     auto queuesCount = userIt->second->CountQueuesInFolder(queuePtr->FolderId_);
     if (!queuesCount) {
@@ -1042,12 +1024,12 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
                                                                               const ui32 tablesFormat,
                                                                               const ui64 version,
                                                                               const ui64 shardsCount,
-                                                                              const TInstant createdTimestamp) {
+                                                                              const TInstant createdTimestamp,
+                                                                              bool isFifo) {
     auto user = MutableUser(userName, false); // don't move requests because they are already moved in our caller
     const TInstant now = TActivationContext::Now();
     const TInstant timeToInsertCounters = createdTimestamp + TDuration::MilliSeconds(Cfg().GetQueueCountersExportDelayMs());
     const bool insertCounters = now >= timeToInsertCounters;
-
     auto folderCntrIter = user->FolderCounters_.find(folderId);
     if (folderCntrIter == user->FolderCounters_.end()) {
         folderCntrIter = user->FolderCounters_.insert(std::make_pair(folderId, user->Counters_->CreateFolderCounters(folderId, true))).first;
@@ -1057,12 +1039,11 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
     }
 
     auto ret = user->Queues_.insert(std::make_pair(queue, TQueueInfoPtr(new TQueueInfo(
-            userName, queue, RootUrl_, leaderTabletId, customName, folderId, tablesFormat, version, shardsCount,
+            userName, queue, RootUrl_, leaderTabletId, isFifo, customName, folderId, tablesFormat, version, shardsCount,
             user->Counters_, folderCntrIter->second, SchemeCache_, user->QuoterResources_, insertCounters)))
     ).first;
 
     auto queueInfo = ret->second;
-    LeaderTabletIdToQueue_[leaderTabletId] = queueInfo;
     user->QueueByNameAndFolder_.emplace(std::make_pair(customName, folderId), queueInfo);
 
     {
@@ -1109,10 +1090,52 @@ std::map<TString, TSqsService::TQueueInfoPtr>::iterator TSqsService::AddQueue(co
         }
         user->GetQueueFolderIdAndCustomNameRequests_.erase(requests.first, requests.second);
     }
-
-    queueInfo->ConnectToLeaderTablet();
-    LOG_SQS_DEBUG("Created queue record. Queue: [" << queue << "]. Leader tablet id: [" << leaderTabletId << "]. Pipe client actor: " << queueInfo->PipeClient_);
+    
+    CreateNodeTrackingSubscription(queueInfo);
+    LOG_SQS_DEBUG("Created queue record. Queue: [" << queue << "]. QueueIdNumber: " << queueInfo->Version_ << ". Leader tablet id: [" << leaderTabletId << "]. Node tracker subscription: " << queueInfo->NodeTrackingSubscriptionId);
     return ret;
+}
+
+void TSqsService::CreateNodeTrackingSubscription(TQueueInfoPtr queueInfo) {
+    Y_VERIFY(!queueInfo->NodeTrackingSubscriptionId);
+    queueInfo->NodeTrackingSubscriptionId = ++MaxNodeTrackingSubscriptionId;
+    LOG_SQS_DEBUG("Create node tracking subscription queue_id_number=" << queueInfo->Version_
+        << " tables_format=" << queueInfo->TablesFormat_ << " subscription_id=" << queueInfo->NodeTrackingSubscriptionId
+    );
+
+    QueuePerNodeTrackingSubscription[queueInfo->NodeTrackingSubscriptionId] = queueInfo;
+
+    std::optional<ui64> fixedLeaderTabletId;
+    if (queueInfo->TablesFormat_ == 0) {
+        fixedLeaderTabletId = queueInfo->LeaderTabletId_;
+    }
+    Send(
+        NodeTrackerActor_,
+        new TSqsEvents::TEvNodeTrackerSubscribeRequest(
+            queueInfo->NodeTrackingSubscriptionId,
+            queueInfo->Version_,
+            queueInfo->IsFifo_,
+            fixedLeaderTabletId
+        )
+    );
+}
+
+void TSqsService::CancleNodeTrackingSubscription(TQueueInfoPtr queueInfo) {
+    LOG_SQS_DEBUG("Cancle node tracking subscription queue_id_number=" << queueInfo->Version_
+        << " tables_format=" << queueInfo->TablesFormat_ << " subscription_id=" << queueInfo->NodeTrackingSubscriptionId
+    );
+    Y_VERIFY(queueInfo->NodeTrackingSubscriptionId);
+    auto id = queueInfo->NodeTrackingSubscriptionId;
+    queueInfo->NodeTrackingSubscriptionId = 0;
+
+    QueuePerNodeTrackingSubscription.erase(id);
+    queueInfo->LeaderNodeId_.reset();
+    queueInfo->StopLocalLeaderIfNeeded(LEADER_DESTROY_REASON_REMOVE_INFO);
+
+    Send(
+        NodeTrackerActor_,
+        new TSqsEvents::TEvNodeTrackerUnsubscribeRequest(id)
+    );
 }
 
 void TSqsService::AnswerNoUserToRequests() {
@@ -1146,6 +1169,32 @@ void TSqsService::AnswerErrorToRequests(const TUserInfoPtr& user) {
     AnswerErrorToRequests(user, user->CountQueuesRequests_);
 }
 
+void TSqsService::ProcessConnectTimeoutToLeader() {
+    TDuration nextRunAfter = TDuration::Max();
+    TDuration leaderConnectTimeout = TDuration::MilliSeconds(Cfg().GetLeaderConnectTimeoutMs());
+    auto it = QueuesWithGetNodeWaitingRequests.begin();
+    while(it != QueuesWithGetNodeWaitingRequests.end()) {
+        auto& queue = **it;
+        auto nodeUnknownTime = TActivationContext::Now() - queue.NodeUnknownSince_;
+        auto timeLeft = leaderConnectTimeout - nodeUnknownTime;
+        if (timeLeft == TDuration::Zero()) {
+            for (auto& req : queue.GetLeaderNodeRequests_) {
+                RLOG_SQS_REQ_WARN(req->Get()->RequestId, "Can't connect to leader tablet for " << nodeUnknownTime);
+                Send(req->Sender, new TSqsEvents::TEvGetLeaderNodeForQueueResponse(req->Get()->RequestId, req->Get()->UserName, req->Get()->QueueName, TSqsEvents::TEvGetLeaderNodeForQueueResponse::EStatus::FailedToConnectToLeader));
+            }
+            queue.GetLeaderNodeRequests_.clear();
+            auto toRemoveIt = it++;
+            QueuesWithGetNodeWaitingRequests.erase(toRemoveIt);
+        } else {
+            nextRunAfter = Min(nextRunAfter, timeLeft);
+            ++it;
+        }
+    }
+    if (nextRunAfter != TDuration::Max()) {
+        Schedule(nextRunAfter, new TEvWakeup(CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG)); 
+    }
+}
+
 void TSqsService::HandleWakeup(TEvWakeup::TPtr& ev) {
     Y_VERIFY(ev->Get()->Tag != 0);
     switch (ev->Get()->Tag) {
@@ -1166,6 +1215,9 @@ void TSqsService::HandleWakeup(TEvWakeup::TPtr& ev) {
             --EarlyRequestQueuesListMinBudget_;
             RequestSqsQueuesList();
         }
+        break;
+    case CONNECT_TIMEOUT_TO_LEADER_WAKEUP_TAG:
+        ProcessConnectTimeoutToLeader();
         break;
     }
 }

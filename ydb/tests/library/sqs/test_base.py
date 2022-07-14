@@ -259,7 +259,7 @@ class KikimrSqsTestBase(object):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.INFO},
+            additional_log_configs={'SQS': LogLevels.DEBUG},
             enable_sqs=True,
         )
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root

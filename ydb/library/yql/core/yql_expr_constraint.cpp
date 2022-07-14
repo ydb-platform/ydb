@@ -875,7 +875,10 @@ private:
 
         if (input->Head().GetConstraint<TUniqueConstraintNode>()) {
             if (const auto lambdaUnique = GetConstraintFromLambda<TUniqueConstraintNode, WideOutput>(input->Tail(), ctx)) {
-                input->AddConstraint(lambdaUnique);
+                const auto outItemType = GetItemType(*input->GetTypeAnn());
+                if (outItemType && outItemType->GetKind() == ETypeAnnotationKind::Struct) {
+                    input->AddConstraint(lambdaUnique);
+                }
             }
         }
 

@@ -1971,12 +1971,26 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
     TExprNode::TPtr addMemberChain;
     TExprNode::TListType renames;
 
+    YQL_ENSURE(input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);
+    auto inputRowType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    YQL_ENSURE(inputRowType->GetKind() == ETypeAnnotationKind::Struct);
+
     static const TStringBuf inputTable = "_yql_injoin_input";
     auto inputTableAtom = ctx.NewAtom(input->Pos(), inputTable);
 
+    size_t startColumnIndex = 0;
+    for (;;) {
+        auto col = TStringBuilder() << "_yql_injoin_column_" << startColumnIndex;
+        if (inputRowType->Cast<TStructExprType>()->FindItem(col)) {
+            ++startColumnIndex;
+        } else {
+            break;
+        }
+    }
+
     for (size_t i = 0; i < chain.size(); ++i) {
         const TString tableName = TStringBuilder() << "_yql_injoin_" << i;
-        const TString columnName = TStringBuilder() << "_yql_injoin_column_" << i;
+        const TString columnName = TStringBuilder() << "_yql_injoin_column_" << (i + startColumnIndex);
         const auto pos = chain[i].SqlInPos;
 
         auto equiJoinArg = ctx.Builder(pos)
@@ -2040,10 +2054,6 @@ TExprNode::TPtr BuildEquiJoinForSqlInChain(const TExprNode::TPtr& flatMapNode, c
                 .Build();
         }
     }
-
-    YQL_ENSURE(input->GetTypeAnn()->GetKind() == ETypeAnnotationKind::List);
-    auto inputRowType = input->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-    YQL_ENSURE(inputRowType->GetKind() == ETypeAnnotationKind::Struct);
 
     for (const auto& i : inputRowType->Cast<TStructExprType>()->GetItems()) {
         auto rename = ctx.Builder(input->Pos())

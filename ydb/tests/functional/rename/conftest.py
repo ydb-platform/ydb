@@ -22,6 +22,8 @@ def local_cluster_configuration():
             'FLAT_TX_SCHEMESHARD': 7,
             'SCHEME_BOARD_POPULATOR': 4,
             'SCHEME_BOARD_SUBSCRIBER': 4,
+            'TX_DATASHARD': 7,
+            'CHANGE_EXCHANGE': 7,
         }
     )
     return configurator

@@ -638,6 +638,136 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    Y_UNIT_TEST(TopicServiceReadBudget) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
+        server.EnablePQLogs({NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY});
+        server.EnablePQLogs({NKikimrServices::KQP_PROXY}, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({NKikimrServices::FLAT_TX_SCHEMESHARD}, NLog::EPriority::PRI_ERROR);
+
+        auto readStream = StubP_ -> StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        auto driver = pqClient -> GetDriver();
+        auto writer = CreateSimpleWriter(*driver, "acc/topic1", "source", /*partitionGroup=*/{}, /*codec=*/{"raw"});
+
+        Ydb::Topic::StreamReadMessage::FromClient req;
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+
+        auto WriteSome = [&](ui64 size) {
+            TString data(size, 'x');
+            UNIT_ASSERT(writer->Write(data));
+        };
+
+        i64 budget = 0;
+        auto AwaitExpected = [&](int count) {
+            while (count > 0) {
+                UNIT_ASSERT(readStream->Read(&resp));
+                Cerr << "Got read response " << resp << "\n";
+                UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse,
+                              resp);
+                UNIT_ASSERT(resp.read_response().partition_data_size() == 1);
+                UNIT_ASSERT(resp.read_response().partition_data(0).batches_size() == 1);
+                int got = resp.read_response().partition_data(0).batches(0).message_data_size();
+                Cerr << "TAGX got response with size " << resp.read_response().bytes_size() << " with " << got << ", awaited for " << count << " more\n";
+                budget -= resp.read_response().bytes_size();
+                Cerr << "TAGX Budget deced, now " << budget << "\n";
+                UNIT_ASSERT(got >= 1 && got <= count);
+                count -= got;
+            }
+        };
+
+        // init read session
+        {
+            req.mutable_init_request()->add_topics_read_settings()->set_path("acc/topic1");
+            req.mutable_init_request()->set_consumer("user");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+        }
+
+        WriteSome(10_KB);
+
+        req.Clear();
+        req.mutable_read_request()->set_bytes_size(50_KB);
+        budget += 50_KB;
+        Cerr << "TAGX Budget inced with 50k, now " << budget << "\n";
+        if (!readStream->Write(req)) {
+            ythrow yexception() << "write fail";
+        }
+
+        // await and confirm CreatePartitionStreamRequest from server
+        i64 assignId = 0;
+        {
+            // lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() ==
+                        Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT_VALUES_EQUAL(resp.start_partition_session_request().partition_session().path(), "acc/topic1");
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().partition_id() == 0);
+
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        AwaitExpected(1);
+
+        for (int i = 0; i < 3; ++i) {
+            WriteSome(10_KB);
+        }
+
+        AwaitExpected(3);
+
+        for (int i = 0; i < 6; ++i) {
+            WriteSome(10_KB);
+        }
+
+        AwaitExpected(1);
+
+        req.Clear();
+        req.mutable_read_request()->set_bytes_size(25_KB);
+        budget += 25_KB;
+        Cerr << "TAGX Budget inced with 25k, now " << budget << "\n";
+        if (!readStream->Write(req)) {
+            ythrow yexception() << "write fail";
+        }
+
+        AwaitExpected(3); //why 3? 2!
+
+        req.Clear();
+        req.mutable_read_request()->set_bytes_size(7_KB);
+        budget += 7_KB;
+        Cerr << "TAGX Budget inced with 7k, now " << budget << "\n";
+
+        if (!readStream->Write(req)) {
+            ythrow yexception() << "write fail";
+        }
+
+        AwaitExpected(1);
+
+        req.Clear();
+        req.mutable_read_request()->set_bytes_size(14_KB);
+        budget += 14_KB;
+        Cerr << "TAGX Budget inced with 14k, now " << budget << "\n";
+        if (!readStream->Write(req)) {
+            ythrow yexception() << "write fail";
+        }
+
+        AwaitExpected(1);
+
+        UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
+    } // Y_UNIT_TEST(TopicServiceReadBudget)
+
     void SetupWriteSessionImpl(bool rr) {
         NPersQueue::TTestServer server{PQSettings(0, 2, rr), false};
         server.ServerSettings.SetEnableSystemViews(false);

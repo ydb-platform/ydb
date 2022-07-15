@@ -595,7 +595,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
             hasYqlInternal = true;
         }
 
-        if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport) {
+        if (hasTableService || hasYqlInternal || hasPQ || hasKesus || hasPQv1 || hasExport || hasImport || hasTopic) {
             hasSchemeService = true;
             hasOperationService = true;
             // backward compatability

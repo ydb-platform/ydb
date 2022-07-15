@@ -1645,6 +1645,10 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext&
     } else {
         hasMessages = RemoveEmptyMessages(*formedResponse->Response.mutable_read_response());
     }
+    ui64 sizeEstimation = hasMessages ? formedResponse->Response.ByteSize() : 0;
+    if constexpr (!UseMigrationProtocol) {
+        formedResponse->Response.mutable_read_response()->set_bytes_size(sizeEstimation);
+    }
 
     if (hasMessages) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " response to read " << formedResponse->Guid);
@@ -1686,7 +1690,7 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessAnswer(const TActorContext&
     ReadsInfly--;
     if constexpr (!UseMigrationProtocol) {
         ReadSizeBudget += formedResponse->RequestedBytes;
-        ReadSizeBudget -= diff;
+        ReadSizeBudget -= sizeEstimation;
     }
 
     // Bring back available partitions.

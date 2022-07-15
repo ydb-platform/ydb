@@ -429,6 +429,7 @@ void TestTwoHotTiers(bool reboot) {
     TestTwoTiers(spec, true, reboot);
 }
 
+#if 0
 void TestHotAndColdTiers(bool reboot) {
 #if 1
     TString bucket = "ydb";
@@ -464,6 +465,7 @@ void TestHotAndColdTiers(bool reboot) {
 
     TestTwoTiers(spec, false, reboot);
 }
+#endif
 
 void TestDrop(bool reboots) {
     TTestBasicRuntime runtime;
@@ -606,12 +608,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
     }
 
     Y_UNIT_TEST(ColdTiers) {
-        TestHotAndColdTiers(false);
+        // Disabled KIKIMR-14942
+        //TestHotAndColdTiers(false);
     }
 
     Y_UNIT_TEST(RebootColdTiers) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestHotAndColdTiers(true);
+        // Disabled KIKIMR-14942
+        //NColumnShard::gAllowLogBatchingDefaultValue = false;
+        //TestHotAndColdTiers(true);
     }
 
     Y_UNIT_TEST(Drop) {

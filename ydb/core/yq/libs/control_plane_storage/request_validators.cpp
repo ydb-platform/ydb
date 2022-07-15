@@ -105,4 +105,18 @@ NYql::TIssues ValidateConnectionSetting(const YandexQuery::ConnectionSetting& se
     return issues;
 }
 
+NYql::TIssues ValidateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting) {
+     NYql::TIssues issues;
+    for (const auto& [key, value]: formatSetting) {
+        if (key == "data.interval.unit") {
+            if (!IsValidIntervalUnit(value)) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown value for data.interval.unit " + value));
+            }
+        } else {
+            issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "unknown format setting " + key));
+        }
+    }
+     return issues;
+}
+
 } // namespace NYq

@@ -127,5 +127,7 @@ bool ValidateCompression(TStringBuf compression, TExprContext& ctx);
 
 bool ValidateFormat(TStringBuf format, TExprContext& ctx);
 
+bool ValidateIntervalUnit(TStringBuf format, TExprContext& ctx);
+
 } // namespace NCommon
 } // namespace NYql

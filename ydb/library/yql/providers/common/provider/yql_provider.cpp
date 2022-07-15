@@ -40,6 +40,15 @@ namespace {
         "bzip2"sv,
         "xz"sv
     };
+    constexpr std::array<std::string_view, 10> IntervalUnits = {
+        "MICROSECONDS"sv,
+        "MILLISECONDS"sv,
+        "SECONDS"sv,
+        "MINUTES"sv,
+        "HOURS"sv,
+        "DAYS"sv,
+        "WEEKS"sv
+    };
 } // namespace
 
 bool TCommitSettings::EnsureModeEmpty(TExprContext& ctx) {
@@ -1095,6 +1104,15 @@ bool ValidateFormat(TStringBuf format, TExprContext& ctx) {
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
         << ". Use one of: " << JoinSeq(", ", Formats)));
+    return false;
+}
+
+bool ValidateIntervalUnit(TStringBuf unit, TExprContext& ctx) {
+    if (unit.empty() || IsIn(IntervalUnits, unit)) {
+        return true;
+    }
+    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << unit
+        << ". Use one of: " << JoinSeq(", ", IntervalUnits)));
     return false;
 }
 

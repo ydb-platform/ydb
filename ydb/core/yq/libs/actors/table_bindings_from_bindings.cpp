@@ -16,6 +16,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
     TString format;
     TString compression;
     TString schema;
+    THashMap<TString, TString> formatSettings;
     switch (binding.content().setting().binding_case()) {
     case YandexQuery::BindingSetting::kDataStreams: {
         clusterType = PqProviderName;
@@ -24,6 +25,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
         format = yds.format();
         compression = yds.compression();
         schema = FormatSchema(yds.schema());
+        formatSettings = {yds.format_setting().begin(), yds.format_setting().end()};
         break;
     }
     case YandexQuery::BindingSetting::kObjectStorage: {
@@ -38,6 +40,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
         format = s.format();
         compression = s.compression();
         schema = FormatSchema(s.schema());
+        formatSettings = {s.format_setting().begin(), s.format_setting().end()};
         break;
     }
 
@@ -54,6 +57,7 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
 
     NSQLTranslation::TTableBindingSettings bindSettings;
     bindSettings.ClusterType = clusterType;
+    bindSettings.Settings = formatSettings;
     bindSettings.Settings["cluster"] = connectionPtr->content().name();
     bindSettings.Settings["path"] = path;
     bindSettings.Settings["format"] = format;

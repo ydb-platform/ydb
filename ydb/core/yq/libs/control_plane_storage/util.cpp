@@ -175,4 +175,17 @@ std::pair<TString, TString> SplitId(const TString& id, char delim) {
         (it != id.end() ? id.substr(it - id.begin() + 1) : TString{""}));
 }
 
+bool IsValidIntervalUnit(const TString& unit) {
+    static constexpr std::array<std::string_view, 10> IntervalUnits = {
+        "MICROSECONDS"sv,
+        "MILLISECONDS"sv,
+        "SECONDS"sv,
+        "MINUTES"sv,
+        "HOURS"sv,
+        "DAYS"sv,
+        "WEEKS"sv
+    };
+    return IsIn(IntervalUnits, unit);
+}
+
 } //namespace NYq

@@ -292,9 +292,9 @@ TDuration FromUnit(int64_t interval, EIntervalUnit unit) {
     case EIntervalUnit::WEEKS:
         return TDuration::Days(interval *  7);
     case EIntervalUnit::MONTHS:
-        return TDuration::Days(interval *  30);
+        return TDuration::Seconds(interval *  2629746LL); /// Exactly 1/12 of a year.
     case EIntervalUnit::YEARS:
-        return TDuration::Days(interval * 365);
+        return TDuration::Seconds(interval * 31556952LL); /// The average length of a Gregorian year is equal to 365.2425 days
     default:
         ythrow yexception() << "Only the " << GetEnumAllNames<EIntervalUnit>() << " units are supported but got " << unit;
     }

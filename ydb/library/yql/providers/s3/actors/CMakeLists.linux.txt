@@ -22,14 +22,15 @@ target_link_libraries(providers-s3-actors PUBLIC
   contrib-libs-fmt
   libs-poco-Util
   cpp-xml-document
-  yql-minikql-computation
-  common-token_accessor-client
-  common-schema-mkql
-  yql-public-types
   dq-actors-compute
+  yql-minikql-computation
   providers-common-http_gateway
-  providers-s3-proto
+  common-schema-mkql
+  common-token_accessor-client
   providers-s3-compressors
+  providers-s3-proto
+  providers-s3-serializations
+  yql-public-types
   clickhouse_client_udf
 )
 target_sources(providers-s3-actors PRIVATE

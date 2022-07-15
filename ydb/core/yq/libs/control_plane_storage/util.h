@@ -44,4 +44,6 @@ NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items);
 
 std::pair<TString, TString> SplitId(const TString& id, char delim = '-');
 
+bool IsValidIntervalUnit(const TString& unit);
+
 } // namespace NYq

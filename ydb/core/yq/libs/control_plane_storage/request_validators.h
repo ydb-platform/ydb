@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util.h"
+
 #include <ydb/core/yq/libs/config/yq_issue.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/yq.pb.h>
@@ -71,8 +73,10 @@ NYql::TIssues ValidateQuery(T& ev, size_t maxSize)
     return issues;
 }
 
+NYql::TIssues ValidateFormatSetting(const google::protobuf::Map<TString, TString>& formatSetting);
+
 template<typename T>
-    NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
+NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::BindingSetting::BindingCase>& availableBindings)
 {
     const auto& request = ev->Get()->Request;
     NYql::TIssues issues = ValidateEvent(ev, maxSize);
@@ -102,6 +106,7 @@ template<typename T>
             if (!dataStreams.has_schema()) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "data streams with empty schema is forbidden"));
             }
+            issues.AddIssues(ValidateFormatSetting(dataStreams.format_setting()));
             break;
         }
         case YandexQuery::BindingSetting::BINDING_NOT_SET: {
@@ -110,6 +115,10 @@ template<typename T>
         }
             // Do not replace with default. Adding a new binding should cause a compilation error
         case YandexQuery::BindingSetting::kObjectStorage:
+            const YandexQuery::ObjectStorageBinding objectStorage = setting.object_storage();
+            for (const auto& subset: objectStorage.subset()) {
+                issues.AddIssues(ValidateFormatSetting(subset.format_setting()));
+            }
             break;
         }
     } else {

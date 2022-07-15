@@ -241,7 +241,7 @@ public:
 
         if (input->ChildrenSize() > TS3Object::idx_Settings) {
             auto validator = [](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
-                if ((name == "compression" || name == "projection") && setting.ChildrenSize() != 2) {
+                if ((name == "compression" || name == "projection" || name == "data.interval.unit") && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
                     return false;
@@ -288,6 +288,24 @@ public:
                     return true;
                 }
 
+                if (name == "data.interval.unit") {
+                    auto& value = setting.Tail();
+                    TStringBuf unit;
+                    if (value.IsAtom()) {
+                        unit = value.Content();
+                    } else {
+                        if (!EnsureStringOrUtf8Type(value, ctx)) {
+                            return false;
+                        }
+                        if (!value.IsCallable({"String", "Utf8"})) {
+                            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "Expected literal string as compression value"));
+                            return false;
+                        }
+                        unit = value.Head().Content();
+                    }
+                    return NCommon::ValidateIntervalUnit(unit, ctx);
+                }
+
                 YQL_ENSURE(name == "projection");
                 if (!EnsureAtom(setting.Tail(), ctx)) {
                     return false;
@@ -306,7 +324,7 @@ public:
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression", "partitionedby", "projection" }, validator, ctx))
+                                     { "compression", "partitionedby", "projection", "data.interval.unit" }, validator, ctx))
             {
                 return TStatus::Error;
             }

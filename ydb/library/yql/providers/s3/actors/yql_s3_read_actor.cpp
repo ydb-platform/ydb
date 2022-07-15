@@ -1,14 +1,15 @@
 #ifdef __linux__
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesNumber.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeArray.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeFactory.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeInterval.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeNothing.h>
-#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeTuple.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeNullable.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeString.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeTuple.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeUUID.h>
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypesNumber.h>
 
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/IO/ReadBuffer.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/Core/Block.h>
@@ -32,6 +33,7 @@
 
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
+#include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -590,20 +592,20 @@ private:
 
 using namespace NKikimr::NMiniKQL;
 
-NDB::DataTypePtr MetaToClickHouse(const TType* type) {
+NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializationInterval::EUnit unit) {
     switch (type->GetKind()) {
         case TType::EKind::EmptyList:
             return std::make_shared<NDB::DataTypeArray>(std::make_shared<NDB::DataTypeNothing>());
         case TType::EKind::Optional:
-            return makeNullable(MetaToClickHouse(static_cast<const TOptionalType*>(type)->GetItemType()));
+            return makeNullable(MetaToClickHouse(static_cast<const TOptionalType*>(type)->GetItemType(), unit));
         case TType::EKind::List:
-            return std::make_shared<NDB::DataTypeArray>(MetaToClickHouse(static_cast<const TListType*>(type)->GetItemType()));
+            return std::make_shared<NDB::DataTypeArray>(MetaToClickHouse(static_cast<const TListType*>(type)->GetItemType(), unit));
         case TType::EKind::Tuple: {
             const auto tupleType = static_cast<const TTupleType*>(type);
             NDB::DataTypes elems;
             elems.reserve(tupleType->GetElementsCount());
             for (auto i = 0U; i < tupleType->GetElementsCount(); ++i)
-                elems.emplace_back(MetaToClickHouse(tupleType->GetElementType(i)));
+                elems.emplace_back(MetaToClickHouse(tupleType->GetElementType(i), unit));
             return std::make_shared<NDB::DataTypeTuple>(elems);
         }
         case TType::EKind::Data: {
@@ -642,6 +644,8 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type) {
                 return std::make_shared<NDB::DataTypeDateTime>();
             case NUdf::EDataSlot::Uuid:
                 return std::make_shared<NDB::DataTypeUUID>();
+            case NUdf::EDataSlot::Interval:
+                return NSerialization::GetInterval(unit);
             default:
                 break;
             }
@@ -702,6 +706,11 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         addPathIndex = FromString<bool>(it->second);
     }
 
+    NYql::NSerialization::TSerializationInterval::EUnit intervalUnit = NYql::NSerialization::TSerializationInterval::EUnit::MICROSECONDS;
+    if (auto it = settings.find("data.interval.unit"); it != settings.cend()) {
+        intervalUnit = NYql::NSerialization::TSerializationInterval::ToUnit(it->second);
+    }
+
     if (params.HasFormat() && params.HasRowType()) {
         const auto pb = std::make_unique<TProgramBuilder>(typeEnv, functionRegistry);
         const auto outputItemType = NCommon::ParseTypeFromYson(TStringBuf(params.GetRowType()), *pb,  Cerr);
@@ -711,7 +720,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         readSpec->Columns.resize(structType->GetMembersCount());
         for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
             auto& colsumn = readSpec->Columns[i];
-            colsumn.type = MetaToClickHouse(structType->GetMemberType(i));
+            colsumn.type = MetaToClickHouse(structType->GetMemberType(i), intervalUnit);
             colsumn.name = structType->GetMemberName(i);
         }
         readSpec->Format = params.GetFormat();

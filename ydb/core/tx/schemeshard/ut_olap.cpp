@@ -130,7 +130,7 @@ void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 tabletId, ui6
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateStore) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         const TString& olapSchema = defaultStoreSchema;
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CreateStoreWithDirs) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TestCreateOlapStore(runtime, ++txId, "/MyRoot", R"(
@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CreateTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         const TString& olapSchema = defaultStoreSchema;
@@ -314,7 +314,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CustomDefaultPresets) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         const TString& olapSchema = defaultStoreSchema;
@@ -335,7 +335,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CreateDropTable) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         const TString& olapSchema = defaultStoreSchema;
@@ -377,7 +377,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(CreateTableTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TString olapSchema = R"(
@@ -468,7 +468,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(AlterStore) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         const TString& olapSchema = defaultStoreSchema;
@@ -520,7 +520,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(AlterTtl) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         ui64 txId = 100;
 
         TString olapSchema = R"(
@@ -609,7 +609,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
     Y_UNIT_TEST(StoreStats) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime, TTestEnvOptions().EnableOlapSchemaOperations(true));
+        TTestEnv env(runtime);
         runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
         runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
 

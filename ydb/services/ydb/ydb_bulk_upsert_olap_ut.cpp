@@ -75,7 +75,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
     Y_UNIT_TEST(UpsertArrowBatch) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -161,7 +160,6 @@ Y_UNIT_TEST_SUITE(YdbTableBulkUpsertOlap) {
 
     Y_UNIT_TEST(UpsertCSV) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 

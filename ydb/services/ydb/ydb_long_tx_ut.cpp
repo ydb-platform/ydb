@@ -122,7 +122,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(BeginWriteCommit) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -150,7 +149,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(BeginWriteRollback) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -178,7 +176,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(BeginRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -202,7 +199,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(WriteThenRead) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -280,7 +276,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(ReadFutureSnapshot) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 
@@ -335,7 +330,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(WriteAclChecks) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
@@ -399,7 +393,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(ReadAclChecks) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         appConfig.MutableDomainsConfig()->MutableSecurityConfig()->SetEnforceUserTokenRequirement(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
@@ -453,7 +446,6 @@ Y_UNIT_TEST_SUITE(YdbLongTx) {
 
     Y_UNIT_TEST(CreateOlapWithDirs) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         server.Server_->GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
 

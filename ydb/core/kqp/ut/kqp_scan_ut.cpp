@@ -1837,7 +1837,6 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     Y_UNIT_TEST_TWIN(LMapFunction, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
 
         TKikimrRunner kikimr(settings);

@@ -513,7 +513,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(SimpleQueryOlap, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -546,7 +545,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(SimpleLookupOlap, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -578,7 +576,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(SimpleRangeOlap, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -611,7 +608,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(CompositeRangeOlap, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -771,7 +767,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(QueryOltpAndOlap, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -805,7 +800,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(EmptyRange, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -829,7 +823,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(Aggregation, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -907,7 +900,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto doTest = [](std::optional<bool> viaSettings, std::optional<bool> viaPragma, bool pushdownPresent) {
             auto settings = TKikimrSettings()
                 .SetWithSampleTables(false)
-                .SetEnableOlapSchemaOperations(true)
                 .SetEnableKqpSessionActor(UseSessionActor);
 
             if (enableLog) {
@@ -1004,7 +996,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(PKDescScan, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -1081,7 +1072,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(ExtractRanges, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -1110,7 +1100,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(ExtractRangesReverse, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -1142,7 +1131,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         constexpr bool logQueries = false;
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -1283,7 +1271,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(StatsSysView, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
@@ -1326,7 +1313,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(StatsSysViewTable, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
@@ -1397,7 +1383,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
         server->GetRuntime()->GetAppData().FeatureFlags.SetEnableKqpScanQueryMultipleOlapShardsReads(true);
-        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
         auto runtime = server->GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
@@ -1466,7 +1451,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         Tests::TServer::TPtr server = new Tests::TServer(settings);
 
         server->GetRuntime()->GetAppData().FeatureFlags.SetEnableKqpScanQueryMultipleOlapShardsReads(true);
-        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
         auto runtime = server->GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
@@ -1555,7 +1539,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(StatsSysViewColumns, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
@@ -1617,7 +1600,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(StatsSysViewRanges, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
@@ -1704,7 +1686,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(StatsSysViewFilter, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -1779,7 +1760,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(StatsSysViewAggregation, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
         static ui32 numKinds = 5;
@@ -1958,7 +1938,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         constexpr bool logQueries = true;
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -2043,7 +2022,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(PredicatePushdownParameterTypesValidation, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 
@@ -2101,7 +2079,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     Y_UNIT_TEST_TWIN(PredicatePushdownCastErrors, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
-            .SetEnableOlapSchemaOperations(true)
             .SetEnableKqpSessionActor(UseSessionActor);
         TKikimrRunner kikimr(settings);
 

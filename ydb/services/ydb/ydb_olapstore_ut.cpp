@@ -238,7 +238,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     Y_UNIT_TEST(BulkUpsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -285,7 +284,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     void TestManyTables(const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -323,7 +321,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     void TestDuplicateRows(const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -374,7 +371,6 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
 
     void TestQuery(const TString& query, const TString& sharding) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig, {}, {}, false, &UdfFrFactory);
 
         auto connection = ConnectToServer(server);

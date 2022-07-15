@@ -36,10 +36,6 @@ public:
         SetEnableBackgroundCompactionServerless(value);
     }
 
-    inline void SetEnableOlapSchemaOperationsForTest(bool value) {
-        SetEnableOlapSchemaOperations(value);
-    }
-
     inline void SetEnableMvccForTest(bool value) {
         SetEnableMvcc(value
             ? NKikimrConfig::TFeatureFlags::VALUE_TRUE

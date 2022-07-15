@@ -61,7 +61,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(LogStore) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -105,7 +104,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(LogStoreTiers) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -156,7 +154,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(LogStoreNegative) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -221,7 +218,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(Dirs) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -278,7 +274,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(LogTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -417,7 +412,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(AlterLogStore) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 
@@ -434,7 +428,6 @@ Y_UNIT_TEST_SUITE(YdbLogStore) {
 
     Y_UNIT_TEST(AlterLogTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableOlapSchemaOperations(true);
         TKikimrWithGrpcAndRootSchema server(appConfig);
         EnableDebugLogs(server);
 

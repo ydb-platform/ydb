@@ -9,7 +9,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateStore) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -45,7 +44,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -84,7 +82,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateDropTable) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -125,7 +122,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateMultipleTables) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -170,7 +166,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(DropMultipleTables) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -221,7 +216,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(CreateDropStore) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -263,7 +257,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(DropTableThenStore) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);
@@ -311,7 +304,6 @@ Y_UNIT_TEST_SUITE(TOlapReboots) {
     Y_UNIT_TEST(AlterTtlSettings) {
         TTestWithReboots t(false);
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
-            runtime.GetAppData().FeatureFlags.SetEnableOlapSchemaOperationsForTest(true);
 
             {
                 TInactiveZone inactive(activeZone);

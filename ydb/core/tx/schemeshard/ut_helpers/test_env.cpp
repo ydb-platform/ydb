@@ -505,6 +505,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableProtoSourceIdInfo(opts.EnableProtoSourceIdInfo_);
     app.SetEnableBackgroundCompaction(opts.EnableBackgroundCompaction_);
     app.FeatureFlags.SetEnablePublicApiExternalBlobs(true);
+    app.SetEnableMoveIndex(opts.EnableMoveIndex_);
 
     if (opts.DisableStatsBatching_.value_or(false)) {
         app.SchemeShardConfig.SetStatsMaxBatchSize(0);
@@ -1013,5 +1014,6 @@ NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots
             .EnableAsyncIndexes(true)
             .EnableNotNullColumns(true)
             .EnableProtoSourceIdInfo(true)
-            .DisableStatsBatching(true);
+            .DisableStatsBatching(true)
+            .EnableMoveIndex(true);
 }

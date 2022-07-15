@@ -128,19 +128,6 @@ void CreateTableWithData(
     WriteData(runtime, name, 0, 100);
 }
 
-void SetConfig(
-    TTestActorRuntime &runtime,
-    ui64 schemeShard,
-    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
-{
-    auto sender = runtime.AllocateEdgeActor();
-
-    runtime.SendToPipe(schemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
-
-    TAutoPtr<IEventHandle> handle;
-    runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
-}
-
 THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> GetTestCompactionConfig() {
     auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
 

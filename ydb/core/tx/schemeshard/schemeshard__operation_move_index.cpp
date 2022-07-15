@@ -498,6 +498,11 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
 
     TVector<ISubOperationBase::TPtr> result;
 
+    if (!context.SS->EnableMoveIndex) {
+        TString errStr = "Move index is not supported yet";
+        return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
+    }
+
     {
         TString errStr;
         if (!context.SS->CheckApplyIf(tx, errStr)) {

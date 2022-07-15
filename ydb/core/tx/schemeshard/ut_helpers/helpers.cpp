@@ -21,6 +21,19 @@
 namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
+    void SetConfig(
+    TTestActorRuntime &runtime,
+    ui64 schemeShard,
+    THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request)
+    {
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SendToPipe(schemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+        TAutoPtr<IEventHandle> handle;
+        runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvConfigNotificationResponse>(handle);
+    }
+
     template <typename TEvResponse, typename TEvRequest, typename TStatus>
     static ui32 ReliableProposeImpl(
         NActors::TTestActorRuntime& runtime, const TActorId& proposer,

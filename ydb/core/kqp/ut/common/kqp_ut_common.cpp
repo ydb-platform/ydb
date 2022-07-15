@@ -112,6 +112,7 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     ServerSettings->SetFrFactory(&UdfFrFactory);
     ServerSettings->SetEnableNotNullColumns(true);
     ServerSettings->SetEnableKqpScanQueryStreamLookup(false);
+    ServerSettings->SetEnableMoveIndex(true);
     if (settings.LogStream)
         ServerSettings->SetLogBackend(new TStreamLogBackend(settings.LogStream));
 

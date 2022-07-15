@@ -3835,6 +3835,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     EnableBackgroundCompaction = appData->FeatureFlags.GetEnableBackgroundCompaction();
     EnableBackgroundCompactionServerless = appData->FeatureFlags.GetEnableBackgroundCompactionServerless();
+    EnableMoveIndex = appData->FeatureFlags.GetEnableMoveIndex();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -6118,6 +6119,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
 
     EnableBackgroundCompaction = featureFlags.GetEnableBackgroundCompaction();
     EnableBackgroundCompactionServerless = featureFlags.GetEnableBackgroundCompactionServerless();
+    EnableMoveIndex = featureFlags.GetEnableMoveIndex();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {

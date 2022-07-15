@@ -14,6 +14,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 #include <ydb/core/tx/schemeshard/schemeshard_types.h>
+#include <ydb/core/cms/console/console.h>
+
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
 
@@ -32,6 +34,11 @@ namespace NSchemeShardUT_Private {
     using namespace NKikimr;
 
     using TEvTx = TEvSchemeShard::TEvModifySchemeTransaction;
+
+    void SetConfig(
+        TTestActorRuntime &runtime,
+        ui64 schemeShard,
+        THolder<NConsole::TEvConsole::TEvConfigNotificationRequest> request);
 
     ////////// tablet
     NKikimrProto::EReplyStatus LocalMiniKQL(TTestActorRuntime& runtime, ui64 tabletId, const TString& query, NKikimrMiniKQL::TResult& result, TString& err);

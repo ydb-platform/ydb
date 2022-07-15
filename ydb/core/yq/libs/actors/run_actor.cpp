@@ -399,7 +399,7 @@ private:
             auto deadline = started_at  + Params.ExecutionTtl;
 
             if (currentTime >= deadline) {
-                Abort("Execution time limit exceeded", YandexQuery::QueryMeta::ABORTING_BY_SYSTEM);
+                Abort("Execution time limit exceeded", YandexQuery::QueryMeta::ABORTED_BY_SYSTEM);
                 return true;
             } else {
                 Schedule(deadline, new NActors::TEvents::TEvWakeup(RunActorWakeupTag::ExecutionTimeout));
@@ -599,7 +599,8 @@ private:
         auto tag = (RunActorWakeupTag) ev->Get()->Tag;
         switch (tag) {
             case RunActorWakeupTag::ExecutionTimeout: {
-                Abort("Execution timeout", YandexQuery::QueryMeta::ABORTING_BY_SYSTEM);
+                Abort("Execution timeout", YandexQuery::QueryMeta::ABORTED_BY_SYSTEM);
+                break;
             }
             default: {
                 Y_VERIFY(false);

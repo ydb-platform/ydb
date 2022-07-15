@@ -1439,9 +1439,9 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                 return false;
             }
 
-            for (ui32 pass = 0; pass < 2; ++pass) {
+            for (bool external : { false, true }) {
                 for (auto& x : inputs) {
-                    if (!pass == x.External) {
+                    if (external != x.External) {
                         continue;
                     }
 
@@ -1482,10 +1482,10 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
             }
 
             TString foundAlias;
-            for (ui32 pass = 0; pass < 2; ++pass) {
+            for (bool external : { false, true }) {
                 ui32 matches = 0;
                 for (auto& x : inputs) {
-                    if (!pass == x.External) {
+                    if (external != x.External) {
                         continue;
                     }
 
@@ -1516,7 +1516,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                     break;
                 }
 
-                if (!matches && pass == 1) {
+                if (!matches && external) {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
                         TStringBuilder() << "No such column: " << node->Tail().Content()));
                     isError = true;
@@ -1661,9 +1661,9 @@ void AddColumns(const TInputs& inputs, const bool* hasStar, const THashSet<TStri
     TVector<const TItemExprType*>& items, TExprContext& ctx) {
     THashSet<TString> usedRefs;
     THashSet<TString> usedAliases;
-    for (ui32 pass = 0; pass < 2; ++pass) {
+    for (bool external : { false, true }) {
         for (const auto& x : inputs) {
-            if (!pass == x.External) {
+            if (external != x.External) {
                 continue;
             }
 
@@ -1739,9 +1739,9 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
     return OptimizeExpr(root, newRoot, [&](const TExprNode::TPtr& node, TExprContext&) -> TExprNode::TPtr {
         if (node->IsCallable("PgStar")) {
             TExprNode::TListType orderAtoms;
-            for (ui32 pass = 0; pass < 2; ++pass) {
+            for (bool external : { false, true }) {
                 for (const auto& x : inputs) {
-                    if (!pass == x.External) {
+                    if (external != x.External) {
                         continue;
                     }
 
@@ -1778,9 +1778,9 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
         }
 
         if (node->IsCallable("PgColumnRef")) {
-            for (ui32 pass = 0; pass < 2; ++pass) {
+            for (bool external : { false, true }) {
                 for (const auto& x : inputs) {
-                    if (!pass == x.External) {
+                    if (external != x.External) {
                         continue;
                     }
 
@@ -1807,9 +1807,9 @@ IGraphTransformer::TStatus RebuildLambdaColumns(const TExprNode::TPtr& root, con
 
         if (node->IsCallable("PgQualifiedStar")) {
             TExprNode::TListType members;
-            for (ui32 pass = 0; pass < 2; ++pass) {
+            for (bool external : { false, true }) {
                 for (const auto& x : inputs) {
-                    if (!pass == x.External) {
+                    if (external != x.External) {
                         continue;
                     }
 

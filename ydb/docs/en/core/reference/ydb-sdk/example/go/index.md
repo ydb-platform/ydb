@@ -51,7 +51,7 @@ db, err := ydb.Open(
   dsn,
 //  yc.WithInternalCA(), // using Yandex.Cloud certificates
   ydb.WithAccessTokenCredentials(token), // token-based authentication
-//  ydb.WithAnonimousCredentials(token), // anonymous authentication (for example, in docker ydb)
+//  ydb.WithAnonimousCredentials(), // anonymous authentication (for example, in docker ydb)
 //  yc.WithMetadataCredentials(token), // authentication from inside a VM in Yandex.Cloud or a function in Yandex Functions
 //  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // authentication in Yandex.Cloud using a service account file
 //  environ.WithEnvironCredentials(ctx), // authentication using environment variables

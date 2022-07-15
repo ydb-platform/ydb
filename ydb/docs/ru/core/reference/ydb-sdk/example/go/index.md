@@ -53,7 +53,7 @@ db, err := ydb.Open(
   dsn,
 //  yc.WithInternalCA(), // используем сертификаты Яндекс Облака
   ydb.WithAccessTokenCredentials(token), // аутентификация с помощью токена
-//  ydb.WithAnonimousCredentials(token), // анонимная аутентификация (например, в docker ydb)
+//  ydb.WithAnonimousCredentials(), // анонимная аутентификация (например, в docker ydb)
 //  yc.WithMetadataCredentials(token), // аутентификация изнутри виртуальной машины в Яндекс Облаке или из Яндекс Функции
 //  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // аутентификация в Яндекс Облаке с помощью файла сервисного аккаунта
 //  environ.WithEnvironCredentials(ctx), // аутентификация с использованием переменных окружения

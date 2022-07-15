@@ -27,15 +27,17 @@ public:
      *  Optimized for the case of read-intensive workloads.
      *  Cheap (just one atomic increment and no spinning if no writers are present).
      *  Don't use this call if forks are possible: forking at some
-     *  intermediate point inside #AcquireReader may leave the lock
-     *  forever stuck for the child process.
+     *  intermediate point inside #AcquireReader may corrupt the lock state and
+     *  leave lock forever stuck for the child process.
      */
     void AcquireReader() noexcept;
     //! Acquires the reader lock.
     /*!
      *  A more expensive version of #AcquireReader (includes at least
      *  one atomic load and CAS; also may spin even if just readers are present).
-     *  In contrast to #AcquireReader, this call is safe to use in presence of forks.
+     *  In contrast to #AcquireReader, this method can be used in the presence of forks.
+     *  Note that fork-friendliness alone does not provide fork-safety: additional
+     *  actions must be performed to release the lock after a fork.
      */
     void AcquireReaderForkFriendly() noexcept;
     //! Tries acquiring the reader lock; see #AcquireReader.

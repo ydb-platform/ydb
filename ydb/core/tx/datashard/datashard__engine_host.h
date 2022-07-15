@@ -37,6 +37,11 @@ public:
         ui64 TotalKeysSize = 0;
     };
 
+    struct TColumnWriteMeta {
+        NTable::TColumn Column;
+        ui32 MaxValueSizeBytes = 0;
+    };
+
     TEngineBay(TDataShard * self, TTransactionContext& txc, const TActorContext& ctx,
                std::pair<ui64, ui64> stepTxId);
 
@@ -61,9 +66,10 @@ public:
     }
 
     void AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range,
-                      const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
+        const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
 
-    void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes);
+    void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes,
+        const TVector<TColumnWriteMeta>& columns);
 
     void MarkTxLoaded() {
         Info.Loaded = true;

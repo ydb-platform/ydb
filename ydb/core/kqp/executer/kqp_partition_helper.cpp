@@ -15,12 +15,17 @@ namespace {
 
 using namespace NYql;
 
+struct TColumnStats {
+    ui32 MaxValueSizeBytes = 0;
+};
+
 struct TShardParamValuesAndRanges {
     NDqProto::TData ParamValues;
     NKikimr::NMiniKQL::TType* ParamType;
     // either FullRange or Ranges are set
     TVector<TSerializedPointOrRange> Ranges;
     std::optional<TSerializedTableRange> FullRange;
+    THashMap<TString, TShardInfo::TColumnWriteInfo> ColumnWrites;
 };
 
 THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlValueRef& param, const TTableId& tableId,
@@ -51,19 +56,34 @@ THashMap<ui64, TShardParamValuesAndRanges> PartitionParamByKey(const NDq::TMkqlV
     NUdf::TUnboxedValue paramValue;
     auto it = value.GetListIterator();
     while (it.Next(paramValue)) {
-        auto keyValue = MakeKeyCells(paramValue, table.KeyColumnTypes, keyColumnIndices, typeEnv, /* copyValues */ true);
+        auto keyValue = MakeKeyCells(paramValue, table.KeyColumnTypes, keyColumnIndices,
+            typeEnv, /* copyValues */ true);
         Y_VERIFY_DEBUG(keyValue.size() == keyLen);
 
         ui32 partitionIndex = FindKeyPartitionIndex(keyValue, key.GetPartitions(), table.KeyColumnTypes,
             [] (const auto& partition) { return *partition.Range; });
 
+        auto point = TSerializedCellVec(TSerializedCellVec::Serialize(keyValue));
+
         ui64 shardId = key.GetPartitions()[partitionIndex].ShardId;
+        auto& shardData = ret[shardId];
+
+        for (ui32 i = 0; i < structType->GetMembersCount(); ++i) {
+            TString columnName(structType->GetMemberName(i));
+            auto columnType = structType->GetMemberType(i);
+            auto columnValue = paramValue.GetElement(i);
+
+            ui32 sizeBytes = NDq::TDqDataSerializer::EstimateSize(columnValue, columnType);
+
+            // Sanity check, we only expect table columns in param values
+            Y_VERIFY_DEBUG(table.Columns.contains(columnName));
+
+            auto& columnWrite = shardData.ColumnWrites[columnName];
+            columnWrite.MaxValueSizeBytes = std::max(columnWrite.MaxValueSizeBytes, sizeBytes);
+        }
 
         shardParamValues[shardId].emplace_back(std::move(paramValue));
 
-        auto point = TSerializedCellVec(TSerializedCellVec::Serialize(keyValue));
-
-        auto& shardData = ret[shardId];
         if (key.GetPartitions()[partitionIndex].Range->IsPoint) {
             // singular case when partition is just a point
             shardData.FullRange.emplace(TSerializedTableRange(point.GetBuffer(), "", true, true));
@@ -838,6 +858,8 @@ THashMap<ui64, TShardInfo> PruneEffectPartitionsImpl(const TKqpTableKeys& tableK
                     shardInfo.KeyWriteRanges->Add(std::move(range));
                 }
             }
+
+            shardInfo.ColumnWrites = shardData.ColumnWrites;
         }
     } else {
         FillFullRange(stageInfo, shardInfoMap, /* read */ false);

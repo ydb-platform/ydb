@@ -150,6 +150,11 @@ message TKqpTransaction {
         optional uint32 Type = 3;
     }
 
+    message TColumnWriteMeta {
+        optional TColumnMeta Column = 1;
+        optional uint32 MaxValueSizeBytes = 2;
+    }
+
     message TTableKeyRange {
         // ordered lists of non-intersecting ranges and points
         repeated NKikimrTx.TKeyRange KeyRanges = 1;
@@ -185,6 +190,7 @@ message TKqpTransaction {
 
         message TWriteOpMeta {
             optional TKeyRange Range = 1;
+            repeated TColumnWriteMeta Columns = 3;
         }
 
         optional TTableMeta Table = 1;

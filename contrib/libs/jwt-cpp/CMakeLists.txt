@@ -9,6 +9,9 @@
 find_package(OpenSSL REQUIRED)
 
 add_library(contrib-libs-jwt-cpp INTERFACE)
+target_include_directories(contrib-libs-jwt-cpp INTERFACE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/jwt-cpp/include
+)
 target_link_libraries(contrib-libs-jwt-cpp INTERFACE
   OpenSSL::OpenSSL
 )

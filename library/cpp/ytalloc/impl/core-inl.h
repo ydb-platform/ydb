@@ -7,6 +7,7 @@
 
 #include <library/cpp/yt/containers/intrusive_linked_list.h>
 
+#include <library/cpp/yt/threading/at_fork.h>
 #include <library/cpp/yt/threading/fork_aware_spin_lock.h>
 
 #include <util/system/tls.h>
@@ -1847,11 +1848,10 @@ public:
     {
         pthread_key_create(&ThreadDtorKey_, DestroyThread);
 
-        NThreading::TForkAwareSpinLock::AtFork(
-            this,
+        NThreading::RegisterAtForkHandlers(
             nullptr,
             nullptr,
-            &AfterFork);
+            [=] { AfterFork(); });
     }
 
     // Returns TThreadState for the current thread; the caller guarantees that this
@@ -2022,8 +2022,7 @@ private:
 
     void DestroyThreadState(TThreadState* state);
 
-    static void AfterFork(void* cookie);
-    void DoAfterFork();
+    void AfterFork();
 
 private:
     // TThreadState instance for the current thread.
@@ -4208,11 +4207,10 @@ public:
     TBackgroundThreadBase()
         : State_(new TState())
     {
-        NThreading::TForkAwareSpinLock::AtFork(
-            static_cast<T*>(this),
-            &BeforeFork,
-            &AfterForkParent,
-            &AfterForkChild);
+        NThreading::RegisterAtForkHandlers(
+            [=] { BeforeFork(); },
+            [=] { AfterForkParent(); },
+            [=] { AfterForkChild(); });
     }
 
     virtual ~TBackgroundThreadBase()
@@ -4240,12 +4238,7 @@ private:
     TState* State_;
 
 private:
-    static void BeforeFork(void* cookie)
-    {
-        static_cast<T*>(cookie)->DoBeforeFork();
-    }
-
-    void DoBeforeFork()
+    void BeforeFork()
     {
         bool stopped = Stop();
         if (State_->ForkDepth++ == 0) {
@@ -4253,12 +4246,7 @@ private:
         }
     }
 
-    static void AfterForkParent(void* cookie)
-    {
-        static_cast<T*>(cookie)->DoAfterForkParent();
-    }
-
-    void DoAfterForkParent()
+    void AfterForkParent()
     {
         if (--State_->ForkDepth == 0) {
             if (State_->RestartAfterFork) {
@@ -4267,12 +4255,7 @@ private:
         }
     }
 
-    static void AfterForkChild(void* cookie)
-    {
-        static_cast<T*>(cookie)->DoAfterForkChild();
-    }
-
-    void DoAfterForkChild()
+    void AfterForkChild()
     {
         bool restart = State_->RestartAfterFork;
         State_ = new TState();
@@ -4531,12 +4514,7 @@ void TThreadManager::DestroyThreadState(TThreadState* state)
     ThreadStatePool_.Free(state);
 }
 
-void TThreadManager::AfterFork(void* cookie)
-{
-    static_cast<TThreadManager*>(cookie)->DoAfterFork();
-}
-
-void TThreadManager::DoAfterFork()
+void TThreadManager::AfterFork()
 {
     auto guard = GuardWithTiming(ThreadRegistryLock_);
     ThreadRegistry_.Clear();

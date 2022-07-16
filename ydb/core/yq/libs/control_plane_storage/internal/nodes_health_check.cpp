@@ -27,11 +27,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const auto ttl = TDuration::Seconds(5);
     const auto deadline = startTime + ttl * 3;
 
-    CPS_LOG_T("NodesHealthCheck: " << tenant << " " << nodeId << " " << instanceId << " " << hostName << " " << node.node_address() << ":" << node.interconnect_port());
+    CPS_LOG_T("NodesHealthCheck: {" << request.DebugString() << "}");
 
     NYql::TIssues issues = ValidateNodesHealthCheck(tenant, instanceId, hostName);
     if (issues) {
-        CPS_LOG_D("NodesHealthCheckRequest, validation failed: " << issues.ToString());
+        CPS_LOG_W("NodesHealthCheckRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(NodesHealthCheckRequest, "", 0, "", "", delta, false);
@@ -110,7 +110,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     TAsyncStatus status = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Yq::Private::NodesHealthCheckResult>(
-        "NodesHealthCheckRequest",
+        "NodesHealthCheckRequest - NodesHealthCheckResult",
         NActors::TActivationContext::ActorSystem(),
         status,
         SelfId(),

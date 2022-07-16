@@ -137,7 +137,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                     }
                 }
             }
-            CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
+            CPS_LOG_AS_T(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
         }
 
         if (queryStatus) {
@@ -402,13 +402,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     const TString owner = request.owner_id();
     const TInstant deadline = NProtoInterop::CastFromProto(request.deadline());
 
-    CPS_LOG_T("PingTaskRequest: " << request.tenant() << " " << scope << " " << queryId
-        << " " << owner << " " << deadline << " "
-        << (request.status() ? YandexQuery::QueryMeta_ComputeStatus_Name(request.status()) : "no status"));
+    CPS_LOG_T("PingTaskRequest: {" << request.DebugString() << "}");
 
     NYql::TIssues issues = ValidatePingTask(scope, queryId, owner, deadline, Config.ResultSetsTtl);
     if (issues) {
-        CPS_LOG_D("PingTaskRequest, validation failed: " << scope << " " << queryId  << " " << owner << " " << deadline << issues.ToString());
+        CPS_LOG_W("PingTaskRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvPingTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(PingTaskRequest, queryId, delta, false);
@@ -430,7 +428,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     auto result = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery, readParams, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvPingTaskResponse, Yq::Private::PingTaskResult>(
-        "PingTaskRequest",
+        "PingTaskRequest - PingTaskResult",
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),

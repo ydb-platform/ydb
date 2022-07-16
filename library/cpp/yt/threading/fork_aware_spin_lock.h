@@ -6,8 +6,8 @@ namespace NYT::NThreading {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-//! Wraps TSpinLock and additionally acquires a global read lock preventing
-//! concurrent forks from happening.
+//! Wraps TSpinLock and additionally acquires a global fork lock (in read mode)
+//! preventing concurrent forks from happening.
 class TForkAwareSpinLock
 {
 public:
@@ -19,13 +19,6 @@ public:
     void Release() noexcept;
 
     bool IsLocked() noexcept;
-
-    using TAtForkHandler = void(*)(void*);
-    static void AtFork(
-        void* cookie,
-        TAtForkHandler prepare,
-        TAtForkHandler parent,
-        TAtForkHandler child);
 
 private:
     TSpinLock SpinLock_;

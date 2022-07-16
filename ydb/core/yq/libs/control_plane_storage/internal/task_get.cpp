@@ -177,11 +177,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     const ui64 tasksBatchSize = Config.Proto.GetTasksBatchSize();
     const ui64 numTasksProportion = Config.Proto.GetNumTasksProportion();
 
-    CPS_LOG_T("GetTaskRequest: " << owner << " " << hostName);
+    CPS_LOG_T("GetTaskRequest: {" << request.DebugString() << "}");
 
     NYql::TIssues issues = ValidateGetTask(owner, hostName);
     if (issues) {
-        CPS_LOG_D("GetTaskRequest, validation failed: " << owner << " " << hostName << " " << issues.ToString());
+        CPS_LOG_W("GetTaskRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetTaskResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetTaskRequest, owner, hostName, delta, false);
@@ -235,12 +235,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             auto lastSeenAt = parser.ColumnParser(LAST_SEEN_AT_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero());
 
             if (previousOwner) { // task lease timeout case only, other cases are updated at ping time
-                CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
+                CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " Lease TIMEOUT, RetryCounterUpdatedAt " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                     << " LastSeenAt: " << lastSeenAt);
                 taskInternal.ShouldAbortTask = !taskInternal.RetryLimiter.UpdateOnRetry(lastSeenAt, Config.TaskLeaseRetryPolicy, now);
             }
 
-            CPS_LOG_AS_D(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryLimiter.RetryRate
+            CPS_LOG_AS_T(*actorSystem, "Task (Query): " << task.QueryId <<  " RetryRate: " << taskInternal.RetryLimiter.RetryRate
                 << " RetryCounter: " << taskInternal.RetryLimiter.RetryCount << " At: " << taskInternal.RetryLimiter.RetryCounterUpdatedAt
                 << (taskInternal.ShouldAbortTask ? " ABORTED" : ""));
         }
@@ -383,7 +383,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
         return result;
     };
     auto success = SendResponse<TEvControlPlaneStorage::TEvGetTaskResponse, Yq::Private::GetTaskResult>
-        ("GetTaskRequest",
+        ("GetTaskRequest - GetTaskResult",
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),

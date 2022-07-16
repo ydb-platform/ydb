@@ -17,6 +17,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     const Ydb::ResultSet& resultSet = request.result_set();
     const int byteSize = resultSet.ByteSize();
 
+
     CPS_LOG_T("WriteResultDataRequest: " << resultId << " " << resultSetId << " " << startRowId << " " << resultSet.ByteSize() << " " << deadline);
 
     NYql::TIssues issues = ValidateWriteResultData(resultId, resultSet, deadline, Config.ResultSetsTtl);
@@ -68,7 +69,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvWriteResult
     TAsyncStatus result = Write(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
     auto success = SendResponse<TEvControlPlaneStorage::TEvWriteResultDataResponse, Yq::Private::WriteTaskResultResult>(
-        "WriteResultDataRequest",
+        "WriteResultDataRequest - WriteResultDataResult",
         NActors::TActivationContext::ActorSystem(),
         result,
         SelfId(),

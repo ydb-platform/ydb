@@ -153,7 +153,7 @@ private:
     TRetryEventsQueue EventsQueue;
 
     // Restore
-    NYql::NDqProto::NDqStateLoadPlan::TTaskPlan TaskLoadPlan;
+    NYql::NDqProto::NDqStateLoadPlan::TTaskPlan StateLoadPlan;
     NDqProto::TCheckpoint RestoringTaskRunnerForCheckpoint;
     ui64 RestoringTaskRunnerForEvent;
 

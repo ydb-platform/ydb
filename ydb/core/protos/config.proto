@@ -1048,7 +1048,7 @@ message TTableServiceConfig {
     }
 
     message TSessionBalancerSettings {
-        optional bool Enabled = 1 [default = true];
+        optional bool Enabled = 1 [default = false];
 
         enum EEnableTier  {
             TIER_DISABLED = 1;
@@ -1095,7 +1095,7 @@ message TTableServiceConfig {
 
         optional uint32 BoardPublishIntervalMs = 10 [default = 1000];
         optional uint32 BoardLookupIntervalMs = 11 [default = 30000];
-        optional EEnableTier EnableTier = 12 [ default = TIER_DISABLED ];
+        optional EEnableTier EnableTier = 12 [ default = TIER_ENABLED_FOR_SESSIONS_WITH_SUPPORT ];
         optional EBalancingStrategy Strategy = 13 [ default = BALANCE_BY_COUNT ];
         optional bool SupportRemoteSessionCreation = 14 [ default = false ];
     }

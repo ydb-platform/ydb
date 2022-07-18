@@ -259,7 +259,9 @@ private:
             try {
                 // auto guard = taskRunner->BindAllocator(); // only for local mode
                 auto source = taskRunner->GetSource(index);
-                (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(strings), space);
+                if (!strings.empty()) {
+                    (static_cast<NTaskRunnerProxy::IStringSource*>(source.Get()))->PushString(std::move(strings), space);
+                }
                 if (finish) {
                     source->Finish();
                 }

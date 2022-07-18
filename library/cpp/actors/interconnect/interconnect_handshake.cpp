@@ -1,4 +1,5 @@
 #include "interconnect_handshake.h"
+#include "handshake_broker.h"
 #include "interconnect_tcp_proxy.h"
 
 #include <library/cpp/actors/core/actor_coroutine.h>
@@ -96,6 +97,7 @@ namespace NActors {
         THashMap<ui32, TInstant> LastLogNotice;
         const TDuration MuteDuration = TDuration::Seconds(15);
         TInstant Deadline;
+        TActorId HandshakeBroker;
 
     public:
         static constexpr IActor::EActivityType ActorActivityType() {
@@ -117,6 +119,7 @@ namespace NActors {
             Y_VERIFY(SelfVirtualId);
             Y_VERIFY(SelfVirtualId.NodeId());
             Y_VERIFY(PeerNodeId);
+            HandshakeBroker = MakeHandshakeBrokerOutId();
         }
 
         THandshakeActor(TInterconnectProxyCommon::TPtr common, TSocketPtr socket)
@@ -132,6 +135,7 @@ namespace NActors {
             } else {
                 PeerAddr.clear();
             }
+            HandshakeBroker = MakeHandshakeBrokerInId();
         }
 
         void UpdatePrefix() {
@@ -141,45 +145,62 @@ namespace NActors {
         void Run() override {
             UpdatePrefix();
 
-            // set up overall handshake process timer
-            TDuration timeout = Common->Settings.Handshake;
-            if (timeout == TDuration::Zero()) {
-                timeout = DEFAULT_HANDSHAKE_TIMEOUT;
+            bool isBrokerActive = false;
+
+            if (Send(HandshakeBroker, new TEvHandshakeBrokerTake())) {
+                isBrokerActive = true;
+                WaitForSpecificEvent<TEvHandshakeBrokerPermit>("HandshakeBrokerPermit");
             }
-            timeout += ResolveTimeout * 2;
-            Deadline = Now() + timeout;
-            Schedule(Deadline, new TEvents::TEvWakeup);
 
             try {
-                if (Socket) {
-                    PerformIncomingHandshake();
-                } else {
-                    PerformOutgoingHandshake();
+                // set up overall handshake process timer
+                TDuration timeout = Common->Settings.Handshake;
+                if (timeout == TDuration::Zero()) {
+                    timeout = DEFAULT_HANDSHAKE_TIMEOUT;
                 }
+                timeout += ResolveTimeout * 2;
+                Deadline = Now() + timeout;
+                Schedule(Deadline, new TEvents::TEvWakeup);
 
-                // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
-                if (ProgramInfo) {
-                    if (Params.Encryption) {
-                        EstablishSecureConnection();
-                    } else if (Common->Settings.EncryptionMode == EEncryptionMode::REQUIRED && !Params.AuthOnly) {
-                        Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer doesn't support encryption, which is required");
+                try {
+                    if (Socket) {
+                        PerformIncomingHandshake();
+                    } else {
+                        PerformOutgoingHandshake();
                     }
+
+                    // establish encrypted channel, or, in case when encryption is disabled, check if it matches settings
+                    if (ProgramInfo) {
+                        if (Params.Encryption) {
+                            EstablishSecureConnection();
+                        } else if (Common->Settings.EncryptionMode == EEncryptionMode::REQUIRED && !Params.AuthOnly) {
+                            Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "Peer doesn't support encryption, which is required");
+                        }
+                    }
+                } catch (const TExHandshakeFailed&) {
+                    ProgramInfo.Clear();
                 }
-            } catch (const TExHandshakeFailed&) {
-                ProgramInfo.Clear();
+
+                if (ProgramInfo) {
+                    LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH04", NLog::PRI_INFO, "handshake succeeded");
+                    Y_VERIFY(NextPacketFromPeer);
+                    if (PollerToken) {
+                        Y_VERIFY(PollerToken->RefCount() == 1);
+                        PollerToken.Reset(); // ensure we are going to destroy poller token here as we will re-register the socket within other actor
+                    }
+                    SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(Socket), PeerVirtualId, SelfVirtualId,
+                        *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
+                }
+            } catch(...) {
+                if (isBrokerActive) {
+                    Send(HandshakeBroker, new TEvHandshakeBrokerFree());
+                }
+                throw;
             }
 
-            if (ProgramInfo) {
-                LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH04", NLog::PRI_INFO, "handshake succeeded");
-                Y_VERIFY(NextPacketFromPeer);
-                if (PollerToken) {
-                    Y_VERIFY(PollerToken->RefCount() == 1);
-                    PollerToken.Reset(); // ensure we are going to destroy poller token here as we will re-register the socket within other actor
-                }
-                SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(Socket), PeerVirtualId, SelfVirtualId,
-                    *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
+            if (isBrokerActive) {
+                Send(HandshakeBroker, new TEvHandshakeBrokerFree());
             }
-
             Socket.Reset();
         }
 

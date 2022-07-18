@@ -169,6 +169,7 @@
 #include <library/cpp/actors/interconnect/interconnect_tcp_proxy.h>
 #include <library/cpp/actors/interconnect/interconnect_proxy_wrapper.h>
 #include <library/cpp/actors/interconnect/interconnect_tcp_server.h>
+#include <library/cpp/actors/interconnect/handshake_broker.h>
 #include <library/cpp/actors/interconnect/load.h>
 #include <library/cpp/actors/interconnect/poller_actor.h>
 #include <library/cpp/actors/interconnect/poller_tcp.h>
@@ -636,6 +637,13 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
 
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(), TMailboxType::ReadAsFilled, systemPoolId));
+
+            // create handshake broker actor
+            setup->LocalServices.emplace_back(MakeHandshakeBrokerOutId(), TActorSetupCmd(CreateHandshakeBroker(),
+                TMailboxType::ReadAsFilled, systemPoolId));
+
+            setup->LocalServices.emplace_back(MakeHandshakeBrokerInId(), TActorSetupCmd(CreateHandshakeBroker(),
+                TMailboxType::ReadAsFilled, systemPoolId));
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 

@@ -1,41 +1,41 @@
-#pragma once
+// TODO: remove YQ-1055
 
-#include "message_builders_yq.h"
+#pragma once
 
 #include <util/datetime/base.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
-#include <ydb/public/api/protos/fq.pb.h>
+#include <ydb/public/api/protos/yq.pb.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 
 #include <library/cpp/protobuf/interop/cast.h>
 
-namespace NFq {
+namespace NYq {
 
 // Queries
 
 class TCreateQueryBuilder {
-    FederatedQuery::CreateQueryRequest Request;
+    YandexQuery::CreateQueryRequest Request;
 
 public:
     TCreateQueryBuilder()
     {
-        SetMode(FederatedQuery::RUN);
-        SetType(FederatedQuery::QueryContent::ANALYTICS);
+        SetMode(YandexQuery::RUN);
+        SetType(YandexQuery::QueryContent::ANALYTICS);
         SetName("test_query_name_1");
-        SetVisibility(FederatedQuery::Acl::SCOPE);
+        SetVisibility(YandexQuery::Acl::SCOPE);
         SetText("SELECT 1;");
     }
 
-    TCreateQueryBuilder& SetMode(FederatedQuery::ExecuteMode mode)
+    TCreateQueryBuilder& SetMode(YandexQuery::ExecuteMode mode)
     {
         Request.set_execute_mode(mode);
         return *this;
     }
 
-    TCreateQueryBuilder& SetType(FederatedQuery::QueryContent::QueryType type)
+    TCreateQueryBuilder& SetType(YandexQuery::QueryContent::QueryType type)
     {
         Request.mutable_content()->set_type(type);
         return *this;
@@ -47,7 +47,7 @@ public:
         return *this;
     }
 
-    TCreateQueryBuilder& SetVisibility(FederatedQuery::Acl::Visibility visibility)
+    TCreateQueryBuilder& SetVisibility(YandexQuery::Acl::Visibility visibility)
     {
         Request.mutable_content()->mutable_acl()->set_visibility(visibility);
         return *this;
@@ -71,7 +71,7 @@ public:
         return *this;
     }
 
-    TCreateQueryBuilder& SetDisposition(const FederatedQuery::StreamingDisposition& disposition)
+    TCreateQueryBuilder& SetDisposition(const YandexQuery::StreamingDisposition& disposition)
     {
         *Request.mutable_disposition() = disposition;
         return *this;
@@ -83,14 +83,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::CreateQueryRequest& Build()
+    const YandexQuery::CreateQueryRequest& Build()
     {
         return Request;
     }
 };
 
 class TListQueriesBuilder {
-    FederatedQuery::ListQueriesRequest Request;
+    YandexQuery::ListQueriesRequest Request;
 
 public:
     TListQueriesBuilder()
@@ -110,14 +110,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ListQueriesRequest& Build()
+    const YandexQuery::ListQueriesRequest& Build()
     {
         return Request;
     }
 };
 
 class TDescribeQueryBuilder {
-    FederatedQuery::DescribeQueryRequest Request;
+    YandexQuery::DescribeQueryRequest Request;
 
 public:
     TDescribeQueryBuilder& SetQueryId(const TString& queryId)
@@ -126,14 +126,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DescribeQueryRequest& Build()
+    const YandexQuery::DescribeQueryRequest& Build()
     {
         return Request;
     }
 };
 
 class TGetQueryStatusBuilder {
-    FederatedQuery::GetQueryStatusRequest Request;
+    YandexQuery::GetQueryStatusRequest Request;
 
 public:
     TGetQueryStatusBuilder& SetQueryId(const TString& queryId)
@@ -142,14 +142,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::GetQueryStatusRequest& Build()
+    const YandexQuery::GetQueryStatusRequest& Build()
     {
         return Request;
     }
 };
 
 class TDeleteQueryBuilder {
-    FederatedQuery::DeleteQueryRequest Request;
+    YandexQuery::DeleteQueryRequest Request;
 
 public:
     TDeleteQueryBuilder& SetQueryId(const TString& queryId)
@@ -170,22 +170,22 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DeleteQueryRequest& Build()
+    const YandexQuery::DeleteQueryRequest& Build()
     {
         return Request;
     }
 };
 
 class TModifyQueryBuilder {
-    FederatedQuery::ModifyQueryRequest Request;
+    YandexQuery::ModifyQueryRequest Request;
 
 public:
     TModifyQueryBuilder()
     {
         SetName("test_query_name_2");
-        SetMode(FederatedQuery::RUN);
-        SetType(FederatedQuery::QueryContent::ANALYTICS);
-        SetVisibility(FederatedQuery::Acl::SCOPE);
+        SetMode(YandexQuery::RUN);
+        SetType(YandexQuery::QueryContent::ANALYTICS);
+        SetVisibility(YandexQuery::Acl::SCOPE);
         SetText("SELECT 1;");
     }
 
@@ -195,19 +195,19 @@ public:
         return *this;
     }
 
-    TModifyQueryBuilder& SetType(FederatedQuery::QueryContent::QueryType type)
+    TModifyQueryBuilder& SetType(YandexQuery::QueryContent::QueryType type)
     {
         Request.mutable_content()->set_type(type);
         return *this;
     }
 
-    TModifyQueryBuilder& SetVisibility(FederatedQuery::Acl::Visibility visibility)
+    TModifyQueryBuilder& SetVisibility(YandexQuery::Acl::Visibility visibility)
     {
         Request.mutable_content()->mutable_acl()->set_visibility(visibility);
         return *this;
     }
 
-    TModifyQueryBuilder& SetMode(FederatedQuery::ExecuteMode mode)
+    TModifyQueryBuilder& SetMode(YandexQuery::ExecuteMode mode)
     {
         Request.set_execute_mode(mode);
         return *this;
@@ -225,13 +225,13 @@ public:
         return *this;
     }
 
-    TModifyQueryBuilder& SetDisposition(const FederatedQuery::StreamingDisposition& disposition)
+    TModifyQueryBuilder& SetDisposition(const YandexQuery::StreamingDisposition& disposition)
     {
         *Request.mutable_disposition() = disposition;
         return *this;
     }
 
-    TModifyQueryBuilder& SetState(const FederatedQuery::StateLoadMode& state)
+    TModifyQueryBuilder& SetState(const YandexQuery::StateLoadMode& state)
     {
         Request.set_state_load_mode(state);
         return *this;
@@ -261,22 +261,22 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ModifyQueryRequest& Build()
+    const YandexQuery::ModifyQueryRequest& Build()
     {
         return Request;
     }
 };
 
 class TControlQueryBuilder {
-    FederatedQuery::ControlQueryRequest Request;
+    YandexQuery::ControlQueryRequest Request;
 
 public:
     TControlQueryBuilder()
     {
-        SetAction(FederatedQuery::ABORT);
+        SetAction(YandexQuery::ABORT);
     }
 
-    TControlQueryBuilder& SetAction(const FederatedQuery::QueryAction& action)
+    TControlQueryBuilder& SetAction(const YandexQuery::QueryAction& action)
     {
         Request.set_action(action);
         return *this;
@@ -300,7 +300,7 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ControlQueryRequest& Build()
+    const YandexQuery::ControlQueryRequest& Build()
     {
         return Request;
     }
@@ -309,7 +309,7 @@ public:
 // Results
 
 class TGetResultDataBuilder {
-    FederatedQuery::GetResultDataRequest Request;
+    YandexQuery::GetResultDataRequest Request;
 
 public:
     TGetResultDataBuilder()
@@ -341,7 +341,7 @@ public:
         return *this;
     }
 
-    const FederatedQuery::GetResultDataRequest& Build()
+    const YandexQuery::GetResultDataRequest& Build()
     {
         return Request;
     }
@@ -350,7 +350,7 @@ public:
 // Jobs
 
 class TListJobsBuilder {
-    FederatedQuery::ListJobsRequest Request;
+    YandexQuery::ListJobsRequest Request;
 
 public:
     TListJobsBuilder()
@@ -376,14 +376,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ListJobsRequest& Build()
+    const YandexQuery::ListJobsRequest& Build()
     {
         return Request;
     }
 };
 
 class TDescribeJobBuilder {
-    FederatedQuery::DescribeJobRequest Request;
+    YandexQuery::DescribeJobRequest Request;
 
 public:
     TDescribeJobBuilder& SetJobId(const TString& jobId)
@@ -392,7 +392,7 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DescribeJobRequest& Build()
+    const YandexQuery::DescribeJobRequest& Build()
     {
         return Request;
     }
@@ -401,13 +401,13 @@ public:
 // Connections
 
 class TCreateConnectionBuilder {
-    FederatedQuery::CreateConnectionRequest Request;
+    YandexQuery::CreateConnectionRequest Request;
 
 public:
     TCreateConnectionBuilder()
     {
         SetName("test_connection_name_1");
-        SetVisibility(FederatedQuery::Acl::SCOPE);
+        SetVisibility(YandexQuery::Acl::SCOPE);
         CreateDataStreams("my_database_id", "");
     }
 
@@ -479,7 +479,7 @@ public:
         return *this;
     }
 
-    TCreateConnectionBuilder& SetVisibility(FederatedQuery::Acl::Visibility visibility)
+    TCreateConnectionBuilder& SetVisibility(YandexQuery::Acl::Visibility visibility)
     {
         Request.mutable_content()->mutable_acl()->set_visibility(visibility);
         return *this;
@@ -503,14 +503,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::CreateConnectionRequest& Build()
+    const YandexQuery::CreateConnectionRequest& Build()
     {
         return Request;
     }
 };
 
 class TListConnectionsBuilder {
-    FederatedQuery::ListConnectionsRequest Request;
+    YandexQuery::ListConnectionsRequest Request;
 
 public:
     TListConnectionsBuilder()
@@ -530,14 +530,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ListConnectionsRequest& Build()
+    const YandexQuery::ListConnectionsRequest& Build()
     {
         return Request;
     }
 };
 
 class TDescribeConnectionBuilder {
-    FederatedQuery::DescribeConnectionRequest Request;
+    YandexQuery::DescribeConnectionRequest Request;
 
 public:
     TDescribeConnectionBuilder& SetConnectionId(const TString& connectionId)
@@ -546,20 +546,20 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DescribeConnectionRequest& Build()
+    const YandexQuery::DescribeConnectionRequest& Build()
     {
         return Request;
     }
 };
 
 class TModifyConnectionBuilder {
-    FederatedQuery::ModifyConnectionRequest Request;
+    YandexQuery::ModifyConnectionRequest Request;
 
 public:
     TModifyConnectionBuilder()
     {
         SetName("test_connection_name_2");
-        SetVisibility(FederatedQuery::Acl::SCOPE);
+        SetVisibility(YandexQuery::Acl::SCOPE);
         CreateDataStreams("my_database_id", "");
     }
 
@@ -617,7 +617,7 @@ public:
         return *this;
     }
 
-    TModifyConnectionBuilder& SetVisibility(FederatedQuery::Acl::Visibility visibility)
+    TModifyConnectionBuilder& SetVisibility(YandexQuery::Acl::Visibility visibility)
     {
         Request.mutable_content()->mutable_acl()->set_visibility(visibility);
         return *this;
@@ -653,14 +653,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ModifyConnectionRequest& Build()
+    const YandexQuery::ModifyConnectionRequest& Build()
     {
         return Request;
     }
 };
 
 class TDeleteConnectionBuilder {
-    FederatedQuery::DeleteConnectionRequest Request;
+    YandexQuery::DeleteConnectionRequest Request;
 
 public:
     TDeleteConnectionBuilder& SetConnectionId(const TString& connectionId)
@@ -681,7 +681,7 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DeleteConnectionRequest& Build()
+    const YandexQuery::DeleteConnectionRequest& Build()
     {
         return Request;
     }
@@ -690,14 +690,14 @@ public:
 // Bindings
 
 class TCreateBindingBuilder {
-    FederatedQuery::CreateBindingRequest Request;
+    YandexQuery::CreateBindingRequest Request;
 
 public:
     TCreateBindingBuilder()
     {
         SetName("test_binding_name_1");
-        SetVisibility(FederatedQuery::Acl::SCOPE);
-        FederatedQuery::DataStreamsBinding binding;
+        SetVisibility(YandexQuery::Acl::SCOPE);
+        YandexQuery::DataStreamsBinding binding;
         binding.set_stream_name("my_stream");
         binding.set_format("json");
         binding.set_compression("zip");
@@ -713,19 +713,19 @@ public:
         return *this;
     }
 
-    TCreateBindingBuilder& CreateDataStreams(const FederatedQuery::DataStreamsBinding& binding)
+    TCreateBindingBuilder& CreateDataStreams(const YandexQuery::DataStreamsBinding& binding)
     {
         *Request.mutable_content()->mutable_setting()->mutable_data_streams() = binding;
         return *this;
     }
 
-    TCreateBindingBuilder& CreateObjectStorage(const FederatedQuery::ObjectStorageBinding& binding)
+    TCreateBindingBuilder& CreateObjectStorage(const YandexQuery::ObjectStorageBinding& binding)
     {
         *Request.mutable_content()->mutable_setting()->mutable_object_storage() = binding;
         return *this;
     }
 
-    TCreateBindingBuilder& SetVisibility(FederatedQuery::Acl::Visibility visibility)
+    TCreateBindingBuilder& SetVisibility(YandexQuery::Acl::Visibility visibility)
     {
         Request.mutable_content()->mutable_acl()->set_visibility(visibility);
         return *this;
@@ -749,14 +749,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::CreateBindingRequest& Build()
+    const YandexQuery::CreateBindingRequest& Build()
     {
         return Request;
     }
 };
 
 class TListBindingsBuilder {
-    FederatedQuery::ListBindingsRequest Request;
+    YandexQuery::ListBindingsRequest Request;
 
 public:
     TListBindingsBuilder()
@@ -782,14 +782,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ListBindingsRequest& Build()
+    const YandexQuery::ListBindingsRequest& Build()
     {
         return Request;
     }
 };
 
 class TDescribeBindingBuilder {
-    FederatedQuery::DescribeBindingRequest Request;
+    YandexQuery::DescribeBindingRequest Request;
 
 public:
     TDescribeBindingBuilder& SetBindingId(const TString& bindingId)
@@ -798,21 +798,21 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DescribeBindingRequest& Build()
+    const YandexQuery::DescribeBindingRequest& Build()
     {
         return Request;
     }
 };
 
 class TModifyBindingBuilder {
-    FederatedQuery::ModifyBindingRequest Request;
+    YandexQuery::ModifyBindingRequest Request;
 
 public:
     TModifyBindingBuilder()
     {
         SetName("test_binding_name_2");
-        SetVisibility(FederatedQuery::Acl::SCOPE);
-        FederatedQuery::DataStreamsBinding binding;
+        SetVisibility(YandexQuery::Acl::SCOPE);
+        YandexQuery::DataStreamsBinding binding;
         binding.set_stream_name("my_stream");
         binding.set_format("json");
         binding.set_compression("zip");
@@ -828,19 +828,19 @@ public:
         return *this;
     }
 
-    TModifyBindingBuilder& CreateDataStreams(const FederatedQuery::DataStreamsBinding& binding)
+    TModifyBindingBuilder& CreateDataStreams(const YandexQuery::DataStreamsBinding& binding)
     {
         *Request.mutable_content()->mutable_setting()->mutable_data_streams() = binding;
         return *this;
     }
 
-    TModifyBindingBuilder& CreateObjectStorage(const FederatedQuery::ObjectStorageBinding& binding)
+    TModifyBindingBuilder& CreateObjectStorage(const YandexQuery::ObjectStorageBinding& binding)
     {
         *Request.mutable_content()->mutable_setting()->mutable_object_storage() = binding;
         return *this;
     }
 
-    TModifyBindingBuilder& SetVisibility(FederatedQuery::Acl::Visibility visibility)
+    TModifyBindingBuilder& SetVisibility(YandexQuery::Acl::Visibility visibility)
     {
         Request.mutable_content()->mutable_acl()->set_visibility(visibility);
         return *this;
@@ -876,14 +876,14 @@ public:
         return *this;
     }
 
-    const FederatedQuery::ModifyBindingRequest& Build()
+    const YandexQuery::ModifyBindingRequest& Build()
     {
         return Request;
     }
 };
 
 class TDeleteBindingBuilder {
-    FederatedQuery::DeleteBindingRequest Request;
+    YandexQuery::DeleteBindingRequest Request;
 
 public:
     TDeleteBindingBuilder& SetBindingId(const TString& bindingId)
@@ -904,7 +904,7 @@ public:
         return *this;
     }
 
-    const FederatedQuery::DeleteBindingRequest& Build()
+    const YandexQuery::DeleteBindingRequest& Build()
     {
         return Request;
     }
@@ -959,9 +959,9 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest> Build()
+    std::unique_ptr<TEvControlPlaneStorage::TEvWriteResultDataRequest> Build()
     {
-        auto request = std::make_unique<NYq::TEvControlPlaneStorage::TEvWriteResultDataRequest>();
+        auto request = std::make_unique<TEvControlPlaneStorage::TEvWriteResultDataRequest>();
         request->Request.mutable_result_id()->set_value(ResultId);
         *request->Request.mutable_result_set() = ResultSet;
         request->Request.set_result_set_id(ResultSetId);
@@ -1006,9 +1006,9 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvGetTaskRequest> Build()
+    std::unique_ptr<TEvControlPlaneStorage::TEvGetTaskRequest> Build()
     {
-        auto request = std::make_unique<NYq::TEvControlPlaneStorage::TEvGetTaskRequest>();
+        auto request = std::make_unique<TEvControlPlaneStorage::TEvGetTaskRequest>();
         request->Request.set_tenant(TenantName);
         request->Request.set_owner_id(Owner);
         request->Request.set_host(HostName);
@@ -1024,11 +1024,11 @@ class TPingTaskBuilder {
     TString ResultId;
     TString Owner;
     TInstant Deadline;
-    TMaybe<FederatedQuery::QueryMeta::ComputeStatus> Status;
+    TMaybe<YandexQuery::QueryMeta::ComputeStatus> Status;
     TMaybe<NYql::TIssues> Issues;
     TMaybe<NYql::TIssues> TransientIssues;
     TMaybe<TString> Statistics;
-    TMaybe<TVector<FederatedQuery::ResultSetMeta>> ResultSetMetas;
+    TMaybe<TVector<YandexQuery::ResultSetMeta>> ResultSetMetas;
     TMaybe<TString> Ast;
     TMaybe<TString> Plan;
     TMaybe<TInstant> StartedAt;
@@ -1088,7 +1088,7 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetStatus(const FederatedQuery::QueryMeta::ComputeStatus& status)
+    TPingTaskBuilder& SetStatus(const YandexQuery::QueryMeta::ComputeStatus& status)
     {
         Status = status;
         return *this;
@@ -1112,7 +1112,7 @@ public:
         return *this;
     }
 
-    TPingTaskBuilder& SetResultSetMetas(const TVector<FederatedQuery::ResultSetMeta>& resultSetMetas)
+    TPingTaskBuilder& SetResultSetMetas(const TVector<YandexQuery::ResultSetMeta>& resultSetMetas)
     {
         ResultSetMetas = resultSetMetas;
         return *this;
@@ -1172,14 +1172,14 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvPingTaskRequest> Build()
+    std::unique_ptr<TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
         Yq::Private::PingTaskRequest request;
         request.set_owner_id(Owner);
         request.mutable_query_id()->set_value(QueryId);
         request.mutable_result_id()->set_value(ResultId);
         if (Status) {
-            request.set_status((YandexQuery::QueryMeta::ComputeStatus)*Status);
+            request.set_status(*Status);
         }
         request.set_status_code(StatusCode);
         if (Issues) {
@@ -1193,9 +1193,7 @@ public:
         }
         if (ResultSetMetas) {
             for (const auto& meta : *ResultSetMetas) {
-                YandexQuery::ResultSetMeta casted;
-                casted.CopyFrom(meta);
-                *request.add_result_set_meta() = casted;
+                *request.add_result_set_meta() = meta;
             }
         }
         for (const auto& dqGraph : DqGraphs) {
@@ -1230,7 +1228,7 @@ public:
             *request.mutable_finished_at() = NProtoInterop::CastToProto(*FinishedAt);
         }
 
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
+        return std::make_unique<TEvControlPlaneStorage::TEvPingTaskRequest>(std::move(request));
     }
 };
 
@@ -1289,7 +1287,7 @@ public:
         return *this;
     }
 
-    std::unique_ptr<NYq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
+    std::unique_ptr<TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
     {
         Yq::Private::NodesHealthCheckRequest request;
         request.set_tenant(TenantName);
@@ -1300,7 +1298,7 @@ public:
         node.set_active_workers(ActiveWorkers);
         node.set_memory_limit(MemoryLimit);
         node.set_memory_allocated(MemoryAllocated);
-        return std::make_unique<NYq::TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request));
+        return std::make_unique<TEvControlPlaneStorage::TEvNodesHealthCheckRequest>(std::move(request));
     }
 };
 

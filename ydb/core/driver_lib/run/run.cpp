@@ -78,31 +78,33 @@
 
 #include <library/cpp/grpc/server/actors/logger.h>
 
-#include <ydb/services/yq/private_grpc.h>
+#include <ydb/services/auth/grpc_service.h>
 #include <ydb/services/cms/grpc_service.h>
 #include <ydb/services/datastreams/grpc_service.h>
+#include <ydb/services/discovery/grpc_service.h>
+#include <ydb/services/fq/grpc_service.h>
+#include <ydb/services/fq/private_grpc.h>
 #include <ydb/services/kesus/grpc_service.h>
+#include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
-#include <ydb/services/auth/grpc_service.h>
+#include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
+#include <ydb/services/persqueue_v1/persqueue.h>
+#include <ydb/services/persqueue_v1/topic.h>
+#include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/ydb/ydb_clickhouse_internal.h>
 #include <ydb/services/ydb/ydb_dummy.h>
 #include <ydb/services/ydb/ydb_experimental.h>
 #include <ydb/services/ydb/ydb_export.h>
 #include <ydb/services/ydb/ydb_import.h>
+#include <ydb/services/ydb/ydb_logstore.h>
+#include <ydb/services/ydb/ydb_long_tx.h>
 #include <ydb/services/ydb/ydb_operation.h>
 #include <ydb/services/ydb/ydb_s3_internal.h>
 #include <ydb/services/ydb/ydb_scheme.h>
 #include <ydb/services/ydb/ydb_scripting.h>
 #include <ydb/services/ydb/ydb_table.h>
-#include <ydb/services/ydb/ydb_long_tx.h>
-#include <ydb/services/ydb/ydb_logstore.h>
-#include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
-#include <ydb/services/persqueue_v1/persqueue.h>
-#include <ydb/services/persqueue_v1/topic.h>
-#include <ydb/services/rate_limiter/grpc_service.h>
-#include <ydb/services/discovery/grpc_service.h>
-#include <ydb/services/local_discovery/grpc_service.h>
 #include <ydb/services/yq/grpc_service.h>
+#include <ydb/services/yq/private_grpc.h>
 
 #include <ydb/core/yq/libs/init/init.h>
 
@@ -737,10 +739,13 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasYandexQuery) {
             server.AddService(new NGRpcService::TGRpcYandexQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcFederatedQueryService(ActorSystem.Get(), Counters, grpcRequestProxyId));
             // TODO: REMOVE next line after migration to "yq_private"
             server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }   /* REMOVE */ else /* THIS else as well and separate ifs */ if (hasYandexQueryPrivate) {
             server.AddService(new NGRpcService::TGRpcYqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
+            server.AddService(new NGRpcService::TGRpcFqPrivateTaskService(ActorSystem.Get(), Counters, grpcRequestProxyId));
         }
 
         if (hasLogStore) {

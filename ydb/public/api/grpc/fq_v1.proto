@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package FederatedQuery.V1;
+option java_package = "com.federated.query.v1";
+
+import "ydb/public/api/protos/fq.proto";
+
+service FederatedQueryService {
+    // Query
+    // Query is the text of an SQL request, the results of the last run and the state after the last run (partitions offsets, consumer in YDS)
+    // Create a query object with a given SQL
+    rpc CreateQuery(FederatedQuery.CreateQueryRequest) returns (FederatedQuery.CreateQueryResponse);
+
+    // Get a list of brief queries objects
+    rpc ListQueries(FederatedQuery.ListQueriesRequest) returns (FederatedQuery.ListQueriesResponse);
+
+    // Get full information about the object of the query
+    rpc DescribeQuery(FederatedQuery.DescribeQueryRequest) returns (FederatedQuery.DescribeQueryResponse);
+
+    // Get status of the query
+    rpc GetQueryStatus(FederatedQuery.GetQueryStatusRequest) returns (FederatedQuery.GetQueryStatusResponse);
+
+    // Change the attributes of the query (acl, name, ...)
+    rpc ModifyQuery(FederatedQuery.ModifyQueryRequest) returns (FederatedQuery.ModifyQueryResponse);
+
+    // Completely delete the query
+    rpc DeleteQuery(FederatedQuery.DeleteQueryRequest) returns (FederatedQuery.DeleteQueryResponse);
+
+    // Change the state of the query lifecycle
+    rpc ControlQuery(FederatedQuery.ControlQueryRequest) returns (FederatedQuery.ControlQueryResponse);
+
+    // Get a results page
+    rpc GetResultData(FederatedQuery.GetResultDataRequest) returns (FederatedQuery.GetResultDataResponse);
+
+    // Job
+    // Job - appears immediately after starting the request and contains the request metadata
+    // Get a list of jobs
+    rpc ListJobs(FederatedQuery.ListJobsRequest) returns (FederatedQuery.ListJobsResponse);
+
+    // Get information about the job
+    rpc DescribeJob(FederatedQuery.DescribeJobRequest) returns (FederatedQuery.DescribeJobResponse);
+
+    // Connection
+    // Connection - entity that describes connection points. This can be imagined as an analogue of a network address.
+    // Create a connection object (ObjectStorage, YDB, YDS, ...)
+    rpc CreateConnection(FederatedQuery.CreateConnectionRequest) returns (FederatedQuery.CreateConnectionResponse);
+
+    // Get a list of connections objects
+    rpc ListConnections(FederatedQuery.ListConnectionsRequest) returns (FederatedQuery.ListConnectionsResponse);
+
+    // Get information about the object of the connection
+    rpc DescribeConnection(FederatedQuery.DescribeConnectionRequest) returns (FederatedQuery.DescribeConnectionResponse);
+
+    // Change the attributes of the connection
+    rpc ModifyConnection(FederatedQuery.ModifyConnectionRequest) returns (FederatedQuery.ModifyConnectionResponse);
+
+    // Completely delete the connection
+    rpc DeleteConnection(FederatedQuery.DeleteConnectionRequest) returns (FederatedQuery.DeleteConnectionResponse);
+
+    // Test the connection (permissions, network, ...)
+    rpc TestConnection(FederatedQuery.TestConnectionRequest) returns (FederatedQuery.TestConnectionResponse);
+
+    // Binding
+    // Binding - entity using which a schema is assigned to non-schematic data
+    // Create a binding object - bind schema with ObjectStorage object or YDS stream
+    rpc CreateBinding(FederatedQuery.CreateBindingRequest) returns (FederatedQuery.CreateBindingResponse);
+
+    // Get a list of bindings objects
+    rpc ListBindings(FederatedQuery.ListBindingsRequest) returns (FederatedQuery.ListBindingsResponse);
+
+    // Get information about the object of the binding
+    rpc DescribeBinding(FederatedQuery.DescribeBindingRequest) returns (FederatedQuery.DescribeBindingResponse);
+
+    // Change the attributes of the binding
+    rpc ModifyBinding(FederatedQuery.ModifyBindingRequest) returns (FederatedQuery.ModifyBindingResponse);
+
+    // Completely delete the binding
+    rpc DeleteBinding(FederatedQuery.DeleteBindingRequest) returns (FederatedQuery.DeleteBindingResponse);
+}

@@ -117,6 +117,7 @@ target_link_libraries(run PUBLIC
   ydb-services-cms
   ydb-services-datastreams
   ydb-services-discovery
+  ydb-services-fq
   ydb-services-kesus
   ydb-services-local_discovery
   ydb-services-monitoring

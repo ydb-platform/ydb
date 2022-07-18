@@ -1,3 +1,5 @@
+// DEPRECATED!!! use rpc_fq.cpp
+
 #include "rpc_common.h"
 #include "rpc_deferrable.h"
 
@@ -236,7 +238,7 @@ using TYandexQueryGetResultDataRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvGetResultDataRequest,
     NYq::TEvControlPlaneProxy::TEvGetResultDataResponse>;
 
-void DoGetResultDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryGetResultDataRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryGetResultDataRPC(p.release()));
 }
 
@@ -245,7 +247,7 @@ using TYandexQueryListJobsRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvListJobsRequest,
     NYq::TEvControlPlaneProxy::TEvListJobsResponse>;
 
-void DoListJobsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryListJobsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryListJobsRPC(p.release()));
 }
 
@@ -254,7 +256,7 @@ using TYandexQueryDescribeJobRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvDescribeJobRequest,
     NYq::TEvControlPlaneProxy::TEvDescribeJobResponse>;
 
-void DoDescribeJobRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryDescribeJobRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryDescribeJobRPC(p.release()));
 }
 
@@ -263,7 +265,7 @@ using TYandexQueryCreateConnectionRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvCreateConnectionRequest,
     NYq::TEvControlPlaneProxy::TEvCreateConnectionResponse>;
 
-void DoCreateConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryCreateConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryCreateConnectionRPC(p.release()));
 }
 
@@ -272,7 +274,7 @@ using TYandexQueryListConnectionsRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvListConnectionsRequest,
     NYq::TEvControlPlaneProxy::TEvListConnectionsResponse>;
 
-void DoListConnectionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryListConnectionsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryListConnectionsRPC(p.release()));
 }
 
@@ -281,7 +283,7 @@ using TYandexQueryDescribeConnectionRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvDescribeConnectionRequest,
     NYq::TEvControlPlaneProxy::TEvDescribeConnectionResponse>;
 
-void DoDescribeConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryDescribeConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryDescribeConnectionRPC(p.release()));
 }
 
@@ -290,7 +292,7 @@ using TYandexQueryModifyConnectionRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvModifyConnectionRequest,
     NYq::TEvControlPlaneProxy::TEvModifyConnectionResponse>;
 
-void DoModifyConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryModifyConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryModifyConnectionRPC(p.release()));
 }
 
@@ -299,7 +301,7 @@ using TYandexQueryDeleteConnectionRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvDeleteConnectionRequest,
     NYq::TEvControlPlaneProxy::TEvDeleteConnectionResponse>;
 
-void DoDeleteConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryDeleteConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryDeleteConnectionRPC(p.release()));
 }
 
@@ -308,7 +310,7 @@ using TYandexQueryTestConnectionRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvTestConnectionRequest,
     NYq::TEvControlPlaneProxy::TEvTestConnectionResponse>;
 
-void DoTestConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryTestConnectionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryTestConnectionRPC(p.release()));
 }
 
@@ -317,7 +319,7 @@ using TYandexQueryCreateBindingRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvCreateBindingRequest,
     NYq::TEvControlPlaneProxy::TEvCreateBindingResponse>;
 
-void DoCreateBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& ) {
+void DoYandexQueryCreateBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& ) {
     TActivationContext::AsActorContext().Register(new TYandexQueryCreateBindingRPC(p.release()));
 }
 
@@ -326,7 +328,7 @@ using TYandexQueryListBindingsRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvListBindingsRequest,
     NYq::TEvControlPlaneProxy::TEvListBindingsResponse>;
 
-void DoListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryListBindingsRPC(p.release()));
 }
 
@@ -335,7 +337,7 @@ using TYandexQueryDescribeBindingRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvDescribeBindingRequest,
     NYq::TEvControlPlaneProxy::TEvDescribeBindingResponse>;
 
-void DoDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryDescribeBindingRPC(p.release()));
 }
 
@@ -344,7 +346,7 @@ using TYandexQueryModifyBindingRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvModifyBindingRequest,
     NYq::TEvControlPlaneProxy::TEvModifyBindingResponse>;
 
-void DoModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryModifyBindingRPC(p.release()));
 }
 
@@ -353,7 +355,7 @@ using TYandexQueryDeleteBindingRPC = TYandexQueryRequestRPC<
     NYq::TEvControlPlaneProxy::TEvDeleteBindingRequest,
     NYq::TEvControlPlaneProxy::TEvDeleteBindingResponse>;
 
-void DoDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+void DoYandexQueryDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TYandexQueryDeleteBindingRPC(p.release()));
 }
 

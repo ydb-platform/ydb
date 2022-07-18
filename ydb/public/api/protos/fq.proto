@@ -1,11 +1,9 @@
-// DEPRECATED!! use fq.proto
-
 syntax = "proto3";
 option cc_enable_arenas = true;
 
-package YandexQuery;
+package FederatedQuery;
 option java_package = "com.yandex.query";
-option java_outer_classname = "YandexQueryProtos";
+option java_outer_classname = "FederatedQueryProtos";
 
 import "ydb/public/api/protos/annotations/sensitive.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
@@ -21,7 +19,7 @@ import "google/protobuf/empty.proto";
 
 // === Query API ===
 
-// Header: x-yq-scope => yandexcloud://cloud_id/folder_id
+// Header: ydb-fq-project => yandexcloud://cloud_id/folder_id
 
 message Acl {
     enum Visibility {

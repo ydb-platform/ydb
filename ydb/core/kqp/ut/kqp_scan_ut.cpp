@@ -1234,7 +1234,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto part = it.ReadNext().GetValueSync();
 
         UNIT_ASSERT_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED, part.GetStatus());
-        UNIT_ASSERT_STRINGS_EQUAL(part.GetIssues().back().GetSubIssues().back()->Message, "Requested too many execution units: 12");
+        UNIT_ASSERT_STRINGS_EQUAL(part.GetIssues().back().GetSubIssues().back()->Message, "Requested too many execution units: 32");
 
         part = it.ReadNext().GetValueSync();
         UNIT_ASSERT(part.EOS());
@@ -1680,11 +1680,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(SecondaryIndex, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor)
-            .SetEnableKqpScanQueryStreamLookup(true);
-
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1966,11 +1962,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookup, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor)
-            .SetEnableKqpScanQueryStreamLookup(true);
-
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 
@@ -1999,11 +1991,7 @@ Y_UNIT_TEST_SUITE(KqpScan) {
     }
 
     Y_UNIT_TEST_TWIN(StreamLookupByPkPrefix, UseSessionActor) {
-        auto settings = TKikimrSettings()
-            .SetEnableKqpSessionActor(UseSessionActor)
-            .SetEnableKqpScanQueryStreamLookup(true);
-
-        TKikimrRunner kikimr(settings);
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
         auto db = kikimr.GetTableClient();
         CreateSampleTables(kikimr);
 

@@ -65,11 +65,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
-        auto right = FindPlanNodeByKv(join, "Table", "KeyValue");
+        auto lookup = FindPlanNodeByKv(join, "Node Type", "TableLookup");
+        UNIT_ASSERT(lookup.IsDefined());
+        auto right = FindPlanNodeByKv(lookup, "Table", "KeyValue");
         UNIT_ASSERT(right.IsDefined());
     }
 
@@ -91,11 +93,13 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan");
+        auto join = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
-        auto right = FindPlanNodeByKv(join, "Table", "KeyValue");
+        auto lookup = FindPlanNodeByKv(join, "Node Type", "TableLookup");
+        UNIT_ASSERT(lookup.IsDefined());
+        auto right = FindPlanNodeByKv(lookup, "Table", "KeyValue");
         UNIT_ASSERT(right.IsDefined());
     }
 
@@ -179,12 +183,14 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         auto join = FindPlanNodeByKv(
             plan,
             "Node Type",
-            "Aggregate-InnerJoin (MapJoin)-Filter-TableFullScan"
+            "Aggregate-InnerJoin (MapJoin)-Filter"
         );
         UNIT_ASSERT(join.IsDefined());
         auto left = FindPlanNodeByKv(join, "Table", "EightShard");
         UNIT_ASSERT(left.IsDefined());
-        auto right = FindPlanNodeByKv(join, "Table", "FourShard");
+        auto lookup = FindPlanNodeByKv(join, "Node Type", "TableLookup");
+        UNIT_ASSERT(lookup.IsDefined());
+        auto right = FindPlanNodeByKv(lookup, "Table", "FourShard");
         UNIT_ASSERT(right.IsDefined());
     }
 
@@ -319,7 +325,7 @@ Y_UNIT_TEST_SUITE(KqpExplain) {
         NJson::TJsonValue plan;
         NJson::ReadJsonTree(*res.PlanJson, &plan, true);
 
-        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter-Aggregate");
+        auto join1 = FindPlanNodeByKv(plan, "Node Type", "Sort-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join1.IsDefined());
         auto join2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-InnerJoin (MapJoin)-Filter");
         UNIT_ASSERT(join2.IsDefined());

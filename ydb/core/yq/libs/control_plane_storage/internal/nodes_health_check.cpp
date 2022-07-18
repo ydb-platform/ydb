@@ -27,7 +27,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     const auto ttl = TDuration::Seconds(5);
     const auto deadline = startTime + ttl * 3;
 
-    CPS_LOG_T("NodesHealthCheck: {" << request.DebugString() << "}");
+    CPS_LOG_T("NodesHealthCheckRequest: {" << request.DebugString() << "}");
 
     NYql::TIssues issues = ValidateNodesHealthCheck(tenant, instanceId, hostName);
     if (issues) {

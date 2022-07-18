@@ -535,7 +535,7 @@ private:
             const auto& request = ev->Get()->Request;
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << ": {" << request.DebugString() << "} ERROR: " << internalIssues.ToOneLineString());
+                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(request.DebugString()) << "} ERROR: " << internalIssues.ToOneLineString());
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -548,7 +548,7 @@ private:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << request.DebugString() << "} SUCCESS");
+                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(result.DebugString()) << "} SUCCESS");
                 auto event = std::make_unique<ResponseEvent>(result);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -740,6 +740,10 @@ private:
 
     static TString MakeUserInfo(const TString& user, const TString& token = "") {
         return "[" + user + (token ? ", " + NKikimr::MaskTicket(token) : "") + "] ";
+    }
+
+    static TString TrimForLogs(const TString& s, ui64 maxLength = 4096) {
+        return s.size() > maxLength ? (s.substr(0, maxLength - 3) + "...") : s;
     }
 
     struct TPickTaskParams {

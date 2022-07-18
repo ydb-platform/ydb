@@ -11,6 +11,8 @@
 #include <util/system/types.h>
 
 namespace NYql::NDq {
+#define CAMQ_LOG_T(s) \
+    LOG_TRACE_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define CAMQ_LOG_D(s) \
     LOG_DEBUG_S(*ActorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define CAMQ_LOG_I(s) \
@@ -53,14 +55,14 @@ namespace NYql::NDq {
                         MkqlMemoryLimit = newLimit;
                         alloc->SetLimit(newLimit);
                         MemoryLimits.FreeMemoryFn(TxId, TaskId, freedSize);
-                        CAMQ_LOG_I("[Mem] memory shrinked, new limit: " << MkqlMemoryLimit);
+                        CAMQ_LOG_D("[Mem] memory shrinked, new limit: " << MkqlMemoryLimit);
                     }
                 }
             }
 
             if (Y_UNLIKELY(ProfileStats)) {
                 ProfileStats->MkqlMaxUsedMemory = std::max(ProfileStats->MkqlMaxUsedMemory, alloc->GetPeakAllocated());
-                CAMQ_LOG_D("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
+                CAMQ_LOG_T("Peak memory usage: " << ProfileStats->MkqlMaxUsedMemory);
             }
         }
 
@@ -95,14 +97,12 @@ namespace NYql::NDq {
         void RequestExtraMemory(ui64 memory, NKikimr::NMiniKQL::TScopedAlloc* alloc) {
             memory = std::max(AlignMemorySizeToMbBoundary(memory), MemoryLimits.MinMemAllocSize);
 
-            CAMQ_LOG_I("not enough memory, request +" << memory);
-
             if (MemoryLimits.AllocateMemoryFn(TxId, TaskId, memory)) {
                 MkqlMemoryLimit += memory;
-                CAMQ_LOG_I("[Mem] memory granted, new limit: " << MkqlMemoryLimit);
+                CAMQ_LOG_D("[Mem] memory " << memory << " granted, new limit: " << MkqlMemoryLimit);
                 alloc->SetLimit(MkqlMemoryLimit);
             } else {
-                CAMQ_LOG_W("[Mem] memory not granted");
+                CAMQ_LOG_W("[Mem] memory " << memory << " NOT granted");
                 //            throw yexception() << "Can not allocate extra memory, limit: " << MkqlMemoryLimit
                 //                << ", requested: " << memory << ", host: " << HostName();
             }

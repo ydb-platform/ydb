@@ -1,6 +1,9 @@
 #pragma once
 
+#include "public.h"
+
 #include <util/system/spinlock.h>
+#include <util/system/src_location.h>
 
 namespace NYT::NThreading {
 
@@ -11,9 +14,14 @@ namespace NYT::NThreading {
 class TForkAwareSpinLock
 {
 public:
-    TForkAwareSpinLock() = default;
     TForkAwareSpinLock(const TForkAwareSpinLock&) = delete;
     TForkAwareSpinLock& operator =(const TForkAwareSpinLock&) = delete;
+
+    constexpr TForkAwareSpinLock() = default;
+
+    // TODO(babenko): make use of location.
+    explicit constexpr TForkAwareSpinLock(const ::TSourceLocation& /*location*/)
+    { }
 
     void Acquire() noexcept;
     void Release() noexcept;

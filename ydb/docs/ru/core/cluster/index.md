@@ -1,12 +1,9 @@
-# Управление кластером YDB
+# Управление кластером {{ ydb-short-name }}
 
-В данном разделе находятся статьи, описывающие процедуры развертывания, конфигурирования, обслуживания, мониторинга и диагностики многоузловых кластеров YDB.
+В этом разделе описано развертывание, конфигурирование, обслуживание, мониторинг и диагностика многоузловых [кластеров {{ ydb-short-name }}](../concepts/cluster/index.md).
 
-Статьи опираются на описание внутреннего устройства кластеров YDB, приведенное в разделе [Концепции - Кластер](../concepts/cluster/index.md).
-
-{% include [addition_overlay](_includes/addition_overlay.md) %}
-
-- [Развертывание и конфигурирование кластера](../deploy/index.md) в Kubernetes и на виртуальных/железных серверах
-- [Встроенный UI](../maintenance/embedded_monitoring/index.md)
-- [Системные таблицы кластера](../troubleshooting/system_views_cluster.md)
-
+* [{#T}](../deploy/index.md).
+* [{#T}](../maintenance/embedded_monitoring/index.md).
+* [{#T}](../maintenance/manual/index.md)
+* [{#T}](../troubleshooting/system_views_cluster.md).
+* [{#T}](../administration/monitoring.md).

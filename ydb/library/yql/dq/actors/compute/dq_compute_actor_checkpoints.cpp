@@ -238,8 +238,8 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvInjectCheckpoint::TPtr&
     YQL_ENSURE(IngressTask, "Shouldn't inject barriers into non-ingress tasks");
     YQL_ENSURE(!PendingCheckpoint);
 
-    LOG_PCP_D("TEvInjectCheckpoint");
     StartCheckpoint(ev->Get()->Record.GetCheckpoint());
+    LOG_PCP_D("TEvInjectCheckpoint");
     ComputeActor->ResumeExecution();
 }
 

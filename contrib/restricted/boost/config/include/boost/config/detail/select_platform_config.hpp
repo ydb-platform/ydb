@@ -130,7 +130,7 @@
 #  include "boost/config/platform/aix.hpp"
 #  include "boost/config/platform/amigaos.hpp"
 #  include "boost/config/platform/qnxnto.hpp"
-#error #include "boost/config/platform/vxworks.hpp"
+#  error #include "boost/config/platform/vxworks.hpp"
 #  include "boost/config/platform/symbian.hpp" 
 #  include "boost/config/platform/cray.hpp" 
 #  include "boost/config/platform/vms.hpp" 

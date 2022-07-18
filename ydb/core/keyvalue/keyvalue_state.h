@@ -562,8 +562,8 @@ public:
     TPrepareResult InitGetStatusCommand(TIntermediate::TGetStatus &cmd,
         NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel, const TTabletStorageInfo *info);
     void ReplyError(const TActorContext &ctx, TString errorDescription,
-        NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info = nullptr);
+        NMsgBusProxy::EResponseStatus oldStatus, NKikimrKeyValue::Statuses::ReplyStatus newStatus,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info = nullptr);
 
     template <typename TResponse>
     void ReplyError(const TActorContext &ctx, TString errorDescription,

@@ -1495,7 +1495,7 @@ bool TKeyValueState::CheckCmdRenames(THolder<TIntermediate>& intermediate, const
     for (const auto& cmd : intermediate->Renames) {
         const auto &[ok, msg] = CheckCmd(cmd, keys, index++);
         if (!ok) {
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info);
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate, info);
             return false;
         }
     }
@@ -1509,7 +1509,7 @@ bool TKeyValueState::CheckCmdConcats(THolder<TIntermediate>& intermediate, const
     for (const auto& cmd : intermediate->Concats) {
         const auto &[ok, msg] = CheckCmd(cmd, keys, index++);
         if (!ok) {
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info);
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate, info);
             return false;
         }
     }
@@ -1563,8 +1563,8 @@ bool TKeyValueState::CheckCmds(THolder<TIntermediate>& intermediate, const TActo
 
     for (const auto& cmd : intermediate->Commands) {
         const auto &[ok, msg] = std::visit(visitor, cmd);
-        if (!ok) {
-            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, intermediate, info);
+        if (!ok) { 
+            ReplyError(ctx, msg, NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_NOT_FOUND, intermediate, info);
             return false;
         }
     }
@@ -1584,7 +1584,7 @@ void TKeyValueState::ProcessCmds(THolder<TIntermediate> &intermediate, ISimpleDb
         str << "KeyValue# " << TabletId
             << " Generation changed during command execution, aborted"
             << " Marker# KV04";
-        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_REJECTED, intermediate, info);
+        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_REJECTED, NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, intermediate, info);
         success = false;
     }
 
@@ -1751,7 +1751,7 @@ bool TKeyValueState::CheckDeadline(const TActorContext &ctx, NKikimrClient::TKey
             str << " Deadline reached before processing the request!";
             str << " DeadlineInstantMs# " << (ui64)kvRequest.GetDeadlineInstantMs();
             str << " < Now# " << (ui64)now.MilliSeconds();
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_TIMEOUT, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_TIMEOUT, NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT, intermediate);
             return true;
         }
     }
@@ -1769,7 +1769,7 @@ bool TKeyValueState::CheckGeneration(const TActorContext &ctx, NKikimrClient::TK
             str << " Generation mismatch! Requested# " << kvRequest.GetGeneration();
             str << " Actual# " << StoredState.GetUserGeneration();
             str << " Marker# KV01";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_REJECTED, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_REJECTED, NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION, intermediate);
             return true;
         }
     } else {
@@ -1993,7 +1993,7 @@ bool TKeyValueState::PrepareCmdRead(const TActorContext &ctx, NKikimrClient::TKe
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing Key in CmdRead(" << (ui32)i << ") Marker# KV02";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
 
@@ -2083,7 +2083,7 @@ bool TKeyValueState::PrepareCmdReadRange(const TActorContext &ctx, NKikimrClient
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing Range in CmdReadRange(" << i << ") Marker# KV03";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
 
@@ -2115,14 +2115,14 @@ bool TKeyValueState::PrepareCmdRename(const TActorContext &ctx, NKikimrClient::T
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing OldKey in CmdRename(" << i << ") Marker# KV06";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
         if (!request.HasNewKey()) {
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing NewKey in CmdRename(" << i << ") Marker# KV07";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
 
@@ -2144,7 +2144,7 @@ bool TKeyValueState::PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::T
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing Range in CmdDelete(" << i << ") Marker# KV08";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
         if (!ConvertRange(request.GetRange(), &interm.Range, ctx, intermediate, "CmdDelete", i)) {
@@ -2160,7 +2160,7 @@ bool TKeyValueState::PrepareCmdDelete(const TActorContext &ctx, NKikimrClient::T
             str << "KeyValue# " << TabletId;
             str << " Can't delete Range, in CmdDelete(" << i << "), total limit of deletions per request ("
                 << DeletesPerRequestLimit << ") reached, Marker# KV32";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
     }
@@ -2207,14 +2207,14 @@ bool TKeyValueState::PrepareCmdWrite(const TActorContext &ctx, NKikimrClient::TK
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing Key in CmdWrite(" << i << ") Marker# KV09";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
         if (!request.HasValue()) {
             TStringStream str;
             str << "KeyValue# " << TabletId;
             str << " Missing Value in CmdWrite(" << i << ") Marker# KV10";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
 
@@ -2350,7 +2350,7 @@ bool TKeyValueState::PrepareCmdCopyRange(const TActorContext& ctx, NKikimrClient
             TStringStream str;
             str << "KeyValue# " << TabletId
                 << " Missing or empty both PrefixToAdd and PrefixToRemove in CmdCopyRange(" << i << ") Marker# KV11";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
         if (!request.HasRange()) {
@@ -2374,7 +2374,7 @@ bool TKeyValueState::PrepareCmdConcat(const TActorContext& ctx, NKikimrClient::T
         if (!request.HasOutputKey()) {
             TStringStream str;
             str << "KeyValue# " << TabletId << " Missing OutputKey in CmdConcat(" << i << ") Marker# KV12";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_INTERNALERROR, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, intermediate);
             return true;
         }
 
@@ -2561,26 +2561,63 @@ TPrepareResult TKeyValueState::PrepareCommands(NKikimrKeyValue::ExecuteTransacti
     return {};
 }
 
+NKikimrKeyValue::Statuses::ReplyStatus ConvertStatus(NMsgBusProxy::EResponseStatus status) {
+    switch (status) {
+    case NMsgBusProxy::MSTATUS_ERROR:
+        return NKikimrKeyValue::Statuses::RSTATUS_ERROR;
+    case NMsgBusProxy::MSTATUS_TIMEOUT:
+        return NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT;
+    case NMsgBusProxy::MSTATUS_REJECTED:
+        return NKikimrKeyValue::Statuses::RSTATUS_WRONG_LOCK_GENERATION;
+    case NMsgBusProxy::MSTATUS_INTERNALERROR:
+        return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
+    default:
+        return NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR;
+    };
+}
+
 void TKeyValueState::ReplyError(const TActorContext &ctx, TString errorDescription,
-        NMsgBusProxy::EResponseStatus status, THolder<TIntermediate> &intermediate,
-        const TTabletStorageInfo *info) {
+        NMsgBusProxy::EResponseStatus oldStatus, NKikimrKeyValue::Statuses::ReplyStatus newStatus,
+        THolder<TIntermediate> &intermediate, const TTabletStorageInfo *info) {
     LOG_INFO_S(ctx, NKikimrServices::KEYVALUE, errorDescription);
     Y_VERIFY(!intermediate->IsReplied);
-    THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
-    if (intermediate->HasCookie) {
-        response->Record.SetCookie(intermediate->Cookie);
+
+    if (intermediate->EvType == TEvKeyValue::TEvRequest::EventType) {
+        THolder<TEvKeyValue::TEvResponse> response(new TEvKeyValue::TEvResponse);
+        if (intermediate->HasCookie) {
+            response->Record.SetCookie(intermediate->Cookie);
+        }
+        response->Record.SetErrorReason(errorDescription);
+        response->Record.SetStatus(oldStatus);
+        ResourceMetrics->Network.Increment(response->Record.ByteSize());
+        intermediate->IsReplied = true;
+        ctx.Send(intermediate->RespondTo, response.Release());
     }
-    response->Record.SetErrorReason(errorDescription);
-    response->Record.SetStatus(status);
+    if (intermediate->EvType == TEvKeyValue::TEvExecuteTransaction::EventType) {
+        ReplyError<TEvKeyValue::TEvExecuteTransactionResponse>(ctx, errorDescription,
+                newStatus, intermediate, info);
+        return;
+    }
+    if (intermediate->EvType == TEvKeyValue::TEvGetStorageChannelStatus::EventType) {
+        ReplyError<TEvKeyValue::TEvGetStorageChannelStatusResponse>(ctx, errorDescription,
+                newStatus, intermediate, info);
+        return;
+    }
+    if (intermediate->EvType == TEvKeyValue::TEvRead::EventType) {
+        ReplyError<TEvKeyValue::TEvReadResponse>(ctx, errorDescription,
+                newStatus, intermediate, info);
+        return;
+    }
+    if (intermediate->EvType == TEvKeyValue::TEvReadRange::EventType) {
+        ReplyError<TEvKeyValue::TEvReadRangeResponse>(ctx, errorDescription,
+                newStatus, intermediate, info);
+        return;
+    }
 
-    ResourceMetrics->Network.Increment(response->Record.ByteSize());
-
-    intermediate->IsReplied = true;
-    ctx.Send(intermediate->RespondTo, response.Release());
     if (info) {
         intermediate->UpdateStat();
         OnRequestComplete(intermediate->RequestUid, intermediate->CreatedAtGeneration, intermediate->CreatedAtStep,
-                ctx, info, status, intermediate->Stat);
+                ctx, info, oldStatus, intermediate->Stat);
     } else { //metrics change report in OnRequestComplete is not done
         ResourceMetrics->TryUpdate(ctx);
         RequestInputTime.erase(intermediate->RequestUid);
@@ -2722,12 +2759,12 @@ bool TKeyValueState::PrepareExecuteTransactionRequest(const TActorContext &ctx,
 
     intermediate->HasCookie = true;
     intermediate->Cookie = request.cookie();
+    intermediate->EvType = TEvKeyValue::TEvExecuteTransaction::EventType;
     intermediate->ExecuteTransactionResponse.set_cookie(request.cookie());
 
     intermediate->RequestUid = NextRequestUid;
     ++NextRequestUid;
     RequestInputTime[intermediate->RequestUid] = TAppData::TimeProvider->Now();
-    intermediate->EvType = TEvKeyValue::TEvExecuteTransaction::EventType;
 
     if (CheckDeadline(ctx, ev->Get(), intermediate)) {
         return false;
@@ -3154,7 +3191,7 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
         str << "KeyValue# " << TabletId
             << " Range.IncludeFrom unexpectedly set without Range.From in " << cmd << "(" << index << ")"
             << " Marker# KV13";
-        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, intermediate);
+        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate);
         return false;
     }
 
@@ -3167,7 +3204,7 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
         str << "KeyValue# " << TabletId
             << " Range.IncludeTo unexpectedly set without Range.To in " << cmd << "(" << index << ")"
             << " Marker# KV14";
-        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, intermediate);
+        ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate);
         return false;
     }
 
@@ -3177,14 +3214,14 @@ bool TKeyValueState::ConvertRange(const NKikimrClient::TKeyValueRequest::TKeyRan
             str << "KeyValue# " << TabletId
                 << " Range.KeyFrom >= Range.KeyTo in " << cmd << "(" << index << ")"
                 << " Marker# KV15";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate);
             return false;
         } else if (to->KeyFrom > to->KeyTo) {
             TStringStream str;
             str << "KeyValue# " << TabletId
                 << " Range.KeyFrom > Range.KeyTo in " << cmd << "(" << index << ")"
                 << " Marker# KV16";
-            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, intermediate);
+            ReplyError(ctx, str.Str(), NMsgBusProxy::MSTATUS_ERROR, NKikimrKeyValue::Statuses::RSTATUS_ERROR, intermediate);
             return false;
         }
     }

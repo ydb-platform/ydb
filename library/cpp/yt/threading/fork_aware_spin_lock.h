@@ -18,7 +18,7 @@ public:
     void Acquire() noexcept;
     void Release() noexcept;
 
-    bool IsLocked() noexcept;
+    bool IsLocked() const noexcept;
 
 private:
     TSpinLock SpinLock_;

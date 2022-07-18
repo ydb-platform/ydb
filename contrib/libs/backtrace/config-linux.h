@@ -86,6 +86,9 @@
 /* Define to 1 if you have the <sys/ldr.h> header file. */
 /* #undef HAVE_SYS_LDR_H */
 
+/* Define to 1 if you have the <sys/link.h> header file. */
+/* #undef HAVE_SYS_LINK_H */
+
 /* Define to 1 if you have the <sys/mman.h> header file. */
 #define HAVE_SYS_MMAN_H 1
 

@@ -1,5 +1,5 @@
 /* internal.h -- Internal header file for stack backtrace library.
-   Copyright (C) 2012-2020 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -53,6 +53,14 @@ POSSIBILITY OF SUCH DAMAGE.  */
 #  define ATTRIBUTE_MALLOC __attribute__ ((__malloc__))
 # else
 #  define ATTRIBUTE_MALLOC
+# endif
+#endif
+
+#ifndef ATTRIBUTE_FALLTHROUGH
+# if (GCC_VERSION >= 7000)
+#  define ATTRIBUTE_FALLTHROUGH __attribute__ ((__fallthrough__))
+# else
+#  define ATTRIBUTE_FALLTHROUGH
 # endif
 #endif
 

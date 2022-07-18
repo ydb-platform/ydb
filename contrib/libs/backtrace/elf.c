@@ -1,5 +1,5 @@
 /* elf.c -- Get debug data from an ELF file for backtraces.
-   Copyright (C) 2012-2020 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,12 @@ POSSIBILITY OF SUCH DAMAGE.  */
 #include <unistd.h>
 
 #ifdef HAVE_DL_ITERATE_PHDR
-#include <link.h>
+ #ifdef HAVE_LINK_H
+  #include <link.h>
+ #endif
+ #ifdef HAVE_SYS_LINK_H
+  #error #include <sys/link.h>
+ #endif
 #endif
 
 #include "backtrace.h"
@@ -1796,7 +1801,7 @@ elf_zlib_inflate (const unsigned char *pin, size_t sin, uint16_t *zdebug_table,
 	      /* An uncompressed block.  */
 
 	      /* If we've read ahead more than a byte, back up.  */
-	      while (bits > 8)
+	      while (bits >= 8)
 		{
 		  --pin;
 		  bits -= 8;
@@ -2081,10 +2086,10 @@ elf_zlib_inflate (const unsigned char *pin, size_t sin, uint16_t *zdebug_table,
 			{
 			case 6:
 			  *plen++ = prev;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 5:
 			  *plen++ = prev;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 4:
 			  *plen++ = prev;
 			}
@@ -2115,22 +2120,22 @@ elf_zlib_inflate (const unsigned char *pin, size_t sin, uint16_t *zdebug_table,
 			{
 			case 10:
 			  *plen++ = 0;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 9:
 			  *plen++ = 0;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 8:
 			  *plen++ = 0;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 7:
 			  *plen++ = 0;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 6:
 			  *plen++ = 0;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 5:
 			  *plen++ = 0;
-			  /* fallthrough */
+			  ATTRIBUTE_FALLTHROUGH;
 			case 4:
 			  *plen++ = 0;
 			}

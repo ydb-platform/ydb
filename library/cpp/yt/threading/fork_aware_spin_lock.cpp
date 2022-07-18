@@ -18,7 +18,7 @@ void TForkAwareSpinLock::Release() noexcept
     GetForkLock()->ReleaseReader();
 }
 
-bool TForkAwareSpinLock::IsLocked() noexcept
+bool TForkAwareSpinLock::IsLocked() const noexcept
 {
     return SpinLock_.IsLocked();
 }

@@ -1,5 +1,5 @@
 /* dwarf.c -- Get file/line information from DWARF for backtraces.
-   Copyright (C) 2012-2020 Free Software Foundation, Inc.
+   Copyright (C) 2012-2021 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Google.
 
 Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,7 @@ enum dwarf_tag {
   DW_TAG_compile_unit = 0x11,
   DW_TAG_inlined_subroutine = 0x1d,
   DW_TAG_subprogram = 0x2e,
+  DW_TAG_skeleton_unit = 0x4a,
 };
 
 enum dwarf_form {
@@ -743,13 +744,13 @@ struct dwarf_data
 /* Report an error for a DWARF buffer.  */
 
 static void
-dwarf_buf_error (struct dwarf_buf *buf, const char *msg)
+dwarf_buf_error (struct dwarf_buf *buf, const char *msg, int errnum)
 {
   char b[200];
 
   snprintf (b, sizeof b, "%s in %s at %d",
 	    msg, buf->name, (int) (buf->buf - buf->start));
-  buf->error_callback (buf->data, b, 0);
+  buf->error_callback (buf->data, b, errnum);
 }
 
 /* Require at least COUNT bytes in BUF.  Return 1 if all is well, 0 on
@@ -763,7 +764,7 @@ require (struct dwarf_buf *buf, size_t count)
 
   if (!buf->reported_underflow)
     {
-      dwarf_buf_error (buf, "DWARF underflow");
+      dwarf_buf_error (buf, "DWARF underflow", 0);
       buf->reported_underflow = 1;
     }
 
@@ -925,7 +926,7 @@ read_address (struct dwarf_buf *buf, int addrsize)
     case 8:
       return read_uint64 (buf);
     default:
-      dwarf_buf_error (buf, "unrecognized address size");
+      dwarf_buf_error (buf, "unrecognized address size", 0);
       return 0;
     }
 }
@@ -976,7 +977,7 @@ read_uleb128 (struct dwarf_buf *buf)
 	ret |= ((uint64_t) (b & 0x7f)) << shift;
       else if (!overflow)
 	{
-	  dwarf_buf_error (buf, "LEB128 overflows uint64_t");
+	  dwarf_buf_error (buf, "LEB128 overflows uint64_t", 0);
 	  overflow = 1;
 	}
       shift += 7;
@@ -1011,7 +1012,7 @@ read_sleb128 (struct dwarf_buf *buf)
 	val |= ((uint64_t) (b & 0x7f)) << shift;
       else if (!overflow)
 	{
-	  dwarf_buf_error (buf, "signed LEB128 overflows uint64_t");
+	  dwarf_buf_error (buf, "signed LEB128 overflows uint64_t", 0);
 	  overflow = 1;
 	}
       shift += 7;
@@ -1151,7 +1152,7 @@ read_attribute (enum dwarf_form form, uint64_t implicit_val,
 	offset = read_offset (buf, is_dwarf64);
 	if (offset >= dwarf_sections->size[DEBUG_STR])
 	  {
-	    dwarf_buf_error (buf, "DW_FORM_strp out of range");
+	    dwarf_buf_error (buf, "DW_FORM_strp out of range", 0);
 	    return 0;
 	  }
 	val->encoding = ATTR_VAL_STRING;
@@ -1166,7 +1167,7 @@ read_attribute (enum dwarf_form form, uint64_t implicit_val,
 	offset = read_offset (buf, is_dwarf64);
 	if (offset >= dwarf_sections->size[DEBUG_LINE_STR])
 	  {
-	    dwarf_buf_error (buf, "DW_FORM_line_strp out of range");
+	    dwarf_buf_error (buf, "DW_FORM_line_strp out of range", 0);
 	    return 0;
 	  }
 	val->encoding = ATTR_VAL_STRING;
@@ -1213,7 +1214,8 @@ read_attribute (enum dwarf_form form, uint64_t implicit_val,
 	if (form == DW_FORM_implicit_const)
 	  {
 	    dwarf_buf_error (buf,
-			     "DW_FORM_indirect to DW_FORM_implicit_const");
+			     "DW_FORM_indirect to DW_FORM_implicit_const",
+			     0);
 	    return 0;
 	  }
 	return read_attribute ((enum dwarf_form) form, 0, buf, is_dwarf64,
@@ -1346,7 +1348,7 @@ read_attribute (enum dwarf_form form, uint64_t implicit_val,
 	  }
 	if (offset >= altlink->dwarf_sections.size[DEBUG_STR])
 	  {
-	    dwarf_buf_error (buf, "DW_FORM_strp_sup out of range");
+	    dwarf_buf_error (buf, "DW_FORM_strp_sup out of range", 0);
 	    return 0;
 	  }
 	val->encoding = ATTR_VAL_STRING;
@@ -1355,7 +1357,7 @@ read_attribute (enum dwarf_form form, uint64_t implicit_val,
 	return 1;
       }
     default:
-      dwarf_buf_error (buf, "unrecognized DWARF form");
+      dwarf_buf_error (buf, "unrecognized DWARF form", -1);
       return 0;
     }
 }
@@ -1386,7 +1388,7 @@ resolve_string (const struct dwarf_sections *dwarf_sections, int is_dwarf64,
 
 	offset = val->u.uint * (is_dwarf64 ? 8 : 4) + str_offsets_base;
 	if (offset + (is_dwarf64 ? 8 : 4)
-	    >= dwarf_sections->size[DEBUG_STR_OFFSETS])
+	    > dwarf_sections->size[DEBUG_STR_OFFSETS])
 	  {
 	    error_callback (data, "DW_FORM_strx value out of range", 0);
 	    return 0;
@@ -1404,7 +1406,9 @@ resolve_string (const struct dwarf_sections *dwarf_sections, int is_dwarf64,
 	offset = read_offset (&offset_buf, is_dwarf64);
 	if (offset >= dwarf_sections->size[DEBUG_STR])
 	  {
-	    dwarf_buf_error (&offset_buf, "DW_FORM_strx offset out of range");
+	    dwarf_buf_error (&offset_buf,
+			     "DW_FORM_strx offset out of range",
+			     0);
 	    return 0;
 	  }
 	*string = (const char *) dwarf_sections->data[DEBUG_STR] + offset;
@@ -1430,7 +1434,7 @@ resolve_addr_index (const struct dwarf_sections *dwarf_sections,
   struct dwarf_buf addr_buf;
 
   offset = addr_index * addrsize + addr_base;
-  if (offset + addrsize >= dwarf_sections->size[DEBUG_ADDR])
+  if (offset + addrsize > dwarf_sections->size[DEBUG_ADDR])
     {
       error_callback (data, "DW_FORM_addrx value out of range", 0);
       return 0;
@@ -2212,7 +2216,7 @@ add_ranges_from_rnglists (
 	  break;
 
 	default:
-	  dwarf_buf_error (&rnglists_buf, "unrecognized DW_RLE value");
+	  dwarf_buf_error (&rnglists_buf, "unrecognized DW_RLE value", -1);
 	  return 0;
 	}
     }
@@ -2319,14 +2323,16 @@ find_address_ranges (struct backtrace_state *state, uintptr_t base_address,
 	      break;
 
 	    case DW_AT_stmt_list:
-	      if (abbrev->tag == DW_TAG_compile_unit
+	      if ((abbrev->tag == DW_TAG_compile_unit
+		   || abbrev->tag == DW_TAG_skeleton_unit)
 		  && (val.encoding == ATTR_VAL_UINT
 		      || val.encoding == ATTR_VAL_REF_SECTION))
 		u->lineoff = val.u.uint;
 	      break;
 
 	    case DW_AT_name:
-	      if (abbrev->tag == DW_TAG_compile_unit)
+	      if (abbrev->tag == DW_TAG_compile_unit
+		  || abbrev->tag == DW_TAG_skeleton_unit)
 		{
 		  name_val = val;
 		  have_name_val = 1;
@@ -2334,7 +2340,8 @@ find_address_ranges (struct backtrace_state *state, uintptr_t base_address,
 	      break;
 
 	    case DW_AT_comp_dir:
-	      if (abbrev->tag == DW_TAG_compile_unit)
+	      if (abbrev->tag == DW_TAG_compile_unit
+		  || abbrev->tag == DW_TAG_skeleton_unit)
 		{
 		  comp_dir_val = val;
 		  have_comp_dir_val = 1;
@@ -2342,19 +2349,22 @@ find_address_ranges (struct backtrace_state *state, uintptr_t base_address,
 	      break;
 
 	    case DW_AT_str_offsets_base:
-	      if (abbrev->tag == DW_TAG_compile_unit
+	      if ((abbrev->tag == DW_TAG_compile_unit
+		   || abbrev->tag == DW_TAG_skeleton_unit)
 		  && val.encoding == ATTR_VAL_REF_SECTION)
 		u->str_offsets_base = val.u.uint;
 	      break;
 
 	    case DW_AT_addr_base:
-	      if (abbrev->tag == DW_TAG_compile_unit
+	      if ((abbrev->tag == DW_TAG_compile_unit
+		   || abbrev->tag == DW_TAG_skeleton_unit)
 		  && val.encoding == ATTR_VAL_REF_SECTION)
 		u->addr_base = val.u.uint;
 	      break;
 
 	    case DW_AT_rnglists_base:
-	      if (abbrev->tag == DW_TAG_compile_unit
+	      if ((abbrev->tag == DW_TAG_compile_unit
+		   || abbrev->tag == DW_TAG_skeleton_unit)
 		  && val.encoding == ATTR_VAL_REF_SECTION)
 		u->rnglists_base = val.u.uint;
 	      break;
@@ -2382,7 +2392,8 @@ find_address_ranges (struct backtrace_state *state, uintptr_t base_address,
 	}
 
       if (abbrev->tag == DW_TAG_compile_unit
-	  || abbrev->tag == DW_TAG_subprogram)
+	  || abbrev->tag == DW_TAG_subprogram
+	  || abbrev->tag == DW_TAG_skeleton_unit)
 	{
 	  if (!add_ranges (state, dwarf_sections, base_address,
 			   is_bigendian, u, pcrange.lowpc, &pcrange,
@@ -2390,9 +2401,10 @@ find_address_ranges (struct backtrace_state *state, uintptr_t base_address,
 			   (void *) addrs))
 	    return 0;
 
-	  /* If we found the PC range in the DW_TAG_compile_unit, we
-	     can stop now.  */
-	  if (abbrev->tag == DW_TAG_compile_unit
+	  /* If we found the PC range in the DW_TAG_compile_unit or
+	     DW_TAG_skeleton_unit, we can stop now.  */
+	  if ((abbrev->tag == DW_TAG_compile_unit
+	       || abbrev->tag == DW_TAG_skeleton_unit)
 	      && (pcrange.have_ranges
 		  || (pcrange.have_lowpc && pcrange.have_highpc)))
 	    return 1;
@@ -2479,7 +2491,7 @@ build_address_map (struct backtrace_state *state, uintptr_t base_address,
       version = read_uint16 (&unit_buf);
       if (version < 2 || version > 5)
 	{
-	  dwarf_buf_error (&unit_buf, "unrecognized DWARF version");
+	  dwarf_buf_error (&unit_buf, "unrecognized DWARF version", -1);
 	  goto fail;
 	}
 
@@ -2551,6 +2563,9 @@ build_address_map (struct backtrace_state *state, uintptr_t base_address,
       u->comp_dir = NULL;
       u->abs_filename = NULL;
       u->lineoff = 0;
+      u->str_offsets_base = 0;
+      u->addr_base = 0;
+      u->rnglists_base = 0;
 
       /* The actual line number mappings will be read as needed.  */
       u->lines = NULL;
@@ -2677,19 +2692,20 @@ read_v2_paths (struct backtrace_state *state, struct unit *u,
       ++hdr->dirs_count;
     }
 
-  hdr->dirs = NULL;
-  if (hdr->dirs_count != 0)
-    {
-      hdr->dirs = ((const char **)
-		   backtrace_alloc (state,
-				    hdr->dirs_count * sizeof (const char *),
-				    hdr_buf->error_callback,
-				    hdr_buf->data));
-      if (hdr->dirs == NULL)
-	return 0;
-    }
+  /* The index of the first entry in the list of directories is 1.  Index 0 is
+     used for the current directory of the compilation.  To simplify index
+     handling, we set entry 0 to the compilation unit directory.  */
+  ++hdr->dirs_count;
+  hdr->dirs = ((const char **)
+	       backtrace_alloc (state,
+				hdr->dirs_count * sizeof (const char *),
+				hdr_buf->error_callback,
+				hdr_buf->data));
+  if (hdr->dirs == NULL)
+    return 0;
 
-  i = 0;
+  hdr->dirs[0] = u->comp_dir;
+  i = 1;
   while (*hdr_buf->buf != '\0')
     {
       if (hdr_buf->reported_underflow)
@@ -2716,6 +2732,10 @@ read_v2_paths (struct backtrace_state *state, struct unit *u,
       ++hdr->filenames_count;
     }
 
+  /* The index of the first entry in the list of file names is 1.  Index 0 is
+     used for the DW_AT_name of the compilation unit.  To simplify index
+     handling, we set entry 0 to the compilation unit file name.  */
+  ++hdr->filenames_count;
   hdr->filenames = ((const char **)
 		    backtrace_alloc (state,
 				     hdr->filenames_count * sizeof (char *),
@@ -2723,7 +2743,8 @@ read_v2_paths (struct backtrace_state *state, struct unit *u,
 				     hdr_buf->data));
   if (hdr->filenames == NULL)
     return 0;
-  i = 0;
+  hdr->filenames[0] = u->filename;
+  i = 1;
   while (*hdr_buf->buf != '\0')
     {
       const char *filename;
@@ -2737,7 +2758,7 @@ read_v2_paths (struct backtrace_state *state, struct unit *u,
 	return 0;
       dir_index = read_uleb128 (hdr_buf);
       if (IS_ABSOLUTE_PATH (filename)
-	  || (dir_index == 0 && u->comp_dir == NULL))
+	  || (dir_index < hdr->dirs_count && hdr->dirs[dir_index] == NULL))
 	hdr->filenames[i] = filename;
       else
 	{
@@ -2746,15 +2767,14 @@ read_v2_paths (struct backtrace_state *state, struct unit *u,
 	  size_t filename_len;
 	  char *s;
 
-	  if (dir_index == 0)
-	    dir = u->comp_dir;
-	  else if (dir_index - 1 < hdr->dirs_count)
-	    dir = hdr->dirs[dir_index - 1];
+	  if (dir_index < hdr->dirs_count)
+	    dir = hdr->dirs[dir_index];
 	  else
 	    {
 	      dwarf_buf_error (hdr_buf,
 			       ("invalid directory index in "
-				"line number program header"));
+				"line number program header"),
+			       0);
 	      return 0;
 	    }
 	  dir_len = strlen (dir);
@@ -2823,7 +2843,8 @@ read_lnct (struct backtrace_state *state, struct dwarf_data *ddata,
 		{
 		  dwarf_buf_error (hdr_buf,
 				   ("invalid directory index in "
-				    "line number program header"));
+				    "line number program header"),
+				   0);
 		  return 0;
 		}
 	      dir = hdr->dirs[val.u.uint];
@@ -2838,7 +2859,8 @@ read_lnct (struct backtrace_state *state, struct dwarf_data *ddata,
   if (path == NULL)
     {
       dwarf_buf_error (hdr_buf,
-		       "missing file name in line number program header");
+		       "missing file name in line number program header",
+		       0);
       return 0;
     }
 
@@ -2965,7 +2987,7 @@ read_line_header (struct backtrace_state *state, struct dwarf_data *ddata,
   hdr->version = read_uint16 (line_buf);
   if (hdr->version < 2 || hdr->version > 5)
     {
-      dwarf_buf_error (line_buf, "unsupported line number version");
+      dwarf_buf_error (line_buf, "unsupported line number version", -1);
       return 0;
     }
 
@@ -2979,7 +3001,8 @@ read_line_header (struct backtrace_state *state, struct dwarf_data *ddata,
       if (read_byte (line_buf) != 0)
 	{
 	  dwarf_buf_error (line_buf,
-			   "non-zero segment_selector_size not supported");
+			   "non-zero segment_selector_size not supported",
+			   -1);
 	  return 0;
 	}
     }
@@ -3037,8 +3060,8 @@ read_line_header (struct backtrace_state *state, struct dwarf_data *ddata,
 
 static int
 read_line_program (struct backtrace_state *state, struct dwarf_data *ddata,
-		   struct unit *u, const struct line_header *hdr,
-		   struct dwarf_buf *line_buf, struct line_vector *vec)
+		   const struct line_header *hdr, struct dwarf_buf *line_buf,
+		   struct line_vector *vec)
 {
   uint64_t address;
   unsigned int op_index;
@@ -3048,8 +3071,8 @@ read_line_program (struct backtrace_state *state, struct dwarf_data *ddata,
 
   address = 0;
   op_index = 0;
-  if (hdr->filenames_count > 0)
-    reset_filename = hdr->filenames[0];
+  if (hdr->filenames_count > 1)
+    reset_filename = hdr->filenames[1];
   else
     reset_filename = "";
   filename = reset_filename;
@@ -3114,15 +3137,14 @@ read_line_program (struct backtrace_state *state, struct dwarf_data *ddata,
 		    size_t f_len;
 		    char *p;
 
-		    if (dir_index == 0 && hdr->version < 5)
-		      dir = u->comp_dir;
-		    else if (dir_index - 1 < hdr->dirs_count)
-		      dir = hdr->dirs[dir_index - 1];
+		    if (dir_index < hdr->dirs_count)
+		      dir = hdr->dirs[dir_index];
 		    else
 		      {
 			dwarf_buf_error (line_buf,
 					 ("invalid directory index "
-					  "in line number program"));
+					  "in line number program"),
+					 0);
 			return 0;
 		      }
 		    dir_len = strlen (dir);
@@ -3180,19 +3202,15 @@ read_line_program (struct backtrace_state *state, struct dwarf_data *ddata,
 		uint64_t fileno;
 
 		fileno = read_uleb128 (line_buf);
-		if (fileno == 0)
-		  filename = "";
-		else
+		if (fileno >= hdr->filenames_count)
 		  {
-		    if (fileno - 1 >= hdr->filenames_count)
-		      {
-			dwarf_buf_error (line_buf,
-					 ("invalid file number in "
-					  "line number program"));
-			return 0;
-		      }
-		    filename = hdr->filenames[fileno - 1];
+		    dwarf_buf_error (line_buf,
+				     ("invalid file number in "
+				      "line number program"),
+				     0);
+		    return 0;
 		  }
+		filename = hdr->filenames[fileno];
 	      }
 	      break;
 	    case DW_LNS_set_column:
@@ -3281,7 +3299,7 @@ read_line_info (struct backtrace_state *state, struct dwarf_data *ddata,
   if (!read_line_header (state, ddata, u, is_dwarf64, &line_buf, hdr))
     goto fail;
 
-  if (!read_line_program (state, ddata, u, hdr, &line_buf, &vec))
+  if (!read_line_program (state, ddata, hdr, &line_buf, &vec))
     goto fail;
 
   if (line_buf.reported_underflow)
@@ -3423,7 +3441,9 @@ read_referenced_name (struct dwarf_data *ddata, struct unit *u,
   code = read_uleb128 (&unit_buf);
   if (code == 0)
     {
-      dwarf_buf_error (&unit_buf, "invalid abstract origin or specification");
+      dwarf_buf_error (&unit_buf,
+		       "invalid abstract origin or specification",
+		       0);
       return NULL;
     }
 
@@ -3596,7 +3616,8 @@ read_function_entry (struct backtrace_state *state, struct dwarf_data *ddata,
 
 	  /* The compile unit sets the base address for any address
 	     ranges in the function entries.  */
-	  if (abbrev->tag == DW_TAG_compile_unit
+	  if ((abbrev->tag == DW_TAG_compile_unit
+	       || abbrev->tag == DW_TAG_skeleton_unit)
 	      && abbrev->attrs[i].name == DW_AT_low_pc)
 	    {
 	      if (val.encoding == ATTR_VAL_ADDRESS)
@@ -3618,20 +3639,15 @@ read_function_entry (struct backtrace_state *state, struct dwarf_data *ddata,
 		case DW_AT_call_file:
 		  if (val.encoding == ATTR_VAL_UINT)
 		    {
-		      if (val.u.uint == 0)
-			function->caller_filename = "";
-		      else
+		      if (val.u.uint >= lhdr->filenames_count)
 			{
-			  if (val.u.uint - 1 >= lhdr->filenames_count)
-			    {
-			      dwarf_buf_error (unit_buf,
-					       ("invalid file number in "
-						"DW_AT_call_file attribute"));
-			      return 0;
-			    }
-			  function->caller_filename =
-			    lhdr->filenames[val.u.uint - 1];
+			  dwarf_buf_error (unit_buf,
+					   ("invalid file number in "
+					    "DW_AT_call_file attribute"),
+					   0);
+			  return 0;
 			}
+		      function->caller_filename = lhdr->filenames[val.u.uint];
 		    }
 		  break;
 

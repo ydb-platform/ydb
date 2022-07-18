@@ -1,4 +1,3 @@
-#undef __STDC_FORMAT_MACROS
 #include <contrib/libs/jwt-cpp/include/jwt-cpp/jwt.h>
 #include <library/cpp/digest/argonish/argon2.h>
 #include <library/cpp/string_utils/base64/base64.h>

@@ -113,7 +113,7 @@ public:
             auto promise = NThreading::NewPromise();
             handles.emplace_back(promise.GetFuture());
 
-            Gateway_->Download(std::move(url), {}, 0U, std::bind(&TClickHouseLoadTableMetadataTransformer::OnDiscovery, Results_.emplace(item, std::make_shared<TMapType::mapped_type::element_type>()).first->second, std::placeholders::_1, std::move(promise)), std::move(sql));
+            Gateway_->Upload(std::move(url), {}, std::move(sql), std::bind(&TClickHouseLoadTableMetadataTransformer::OnDiscovery, Results_.emplace(item, std::make_shared<TMapType::mapped_type::element_type>()).first->second, std::placeholders::_1, std::move(promise)));
         }
 
         if (handles.empty()) {

@@ -62,7 +62,7 @@ public:
 
     void Bootstrap() {
         Become(&TClickHouseReadActor::StateFunc);
-        Gateway->Download(Url, {}, 0U, std::bind(&TClickHouseReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1), Query);
+        Gateway->Upload(Url, {}, Query, std::bind(&TClickHouseReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1));
     }
 
     static constexpr char ActorName[] = "ClickHouse_READ_ACTOR";

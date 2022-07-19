@@ -2129,7 +2129,76 @@ Y_UNIT_TEST_SUITE(KqpScan) {
             PRAGMA kikimr.OptEnablePredicateExtract = "false";
             SELECT Value FROM `/Root/Table` WHERE Key IN AsList(1, 2, 3);
         )");
+    }
 
+    Y_UNIT_TEST_TWIN(LimitOverSecondaryIndexRead, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+
+        TStreamExecScanQuerySettings querySettings;
+        querySettings.Explain(true);
+
+        auto itIndex = db.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `/Root/SecondaryComplexKeys` VIEW Index
+            WHERE Fk1 == 1
+            LIMIT 2;
+        )", querySettings).GetValueSync();
+
+        UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+
+        auto res = CollectStreamResult(itIndex);
+        UNIT_ASSERT(res.PlanJson);
+
+        Cerr << *res.PlanJson;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        UNIT_ASSERT(indexRead.IsDefined());
+        auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
+        UNIT_ASSERT(indexTable.IsDefined());
+        auto limit = FindPlanNodeByKv(indexRead, "Limit", "2");
+        UNIT_ASSERT(limit.IsDefined());
+    }
+
+    Y_UNIT_TEST_TWIN(TopSortOverSecondaryIndexRead, UseSessionActor) {
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateSampleTablesWithIndex(session);
+
+        TStreamExecScanQuerySettings querySettings;
+        querySettings.Explain(true);
+
+        auto itIndex = db.StreamExecuteScanQuery(R"(
+            SELECT *
+            FROM `/Root/SecondaryComplexKeys` VIEW Index
+            WHERE Fk1 == 1
+            ORDER BY Fk1 LIMIT 2;
+        )", querySettings).GetValueSync();
+
+        UNIT_ASSERT_C(itIndex.IsSuccess(), itIndex.GetIssues().ToString());
+
+        auto res = CollectStreamResult(itIndex);
+        UNIT_ASSERT(res.PlanJson);
+
+        Cerr << *res.PlanJson;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(*res.PlanJson, &plan, true);
+
+        auto indexRead = FindPlanNodeByKv(plan, "Node Type", "Limit-TablePointLookup");
+        UNIT_ASSERT(indexRead.IsDefined());
+        auto indexTable = FindPlanNodeByKv(indexRead, "Table", "SecondaryComplexKeys/Index/indexImplTable");
+        UNIT_ASSERT(indexTable.IsDefined());
+        auto limit = FindPlanNodeByKv(indexRead, "Limit", "2");
+        UNIT_ASSERT(limit.IsDefined());
     }
 }
 

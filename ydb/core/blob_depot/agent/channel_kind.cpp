@@ -23,6 +23,13 @@ namespace NKikimr::NBlobDepot {
     }
 
     ui32 TBlobDepotAgent::TChannelKind::GetNumAvailableItems() const {
+#ifndef NDEBUG
+        ui32 count = 0;
+        for (const auto& [_, givenIdRanges] : GivenIdRangePerChannel) {
+            count += givenIdRanges.GetNumAvailableItems();
+        }
+        Y_VERIFY(count == NumAvailableItems);
+#endif
         return NumAvailableItems;
     }
 
@@ -55,14 +62,21 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TChannelKind::Trim(ui8 channel, ui32 generation, ui32 invalidatedStep) {
-        GivenIdRangePerChannel[channel].Trim(channel, generation, invalidatedStep);
+        const TBlobSeqId trimmedBlobSeqId{channel, generation, invalidatedStep, TBlobSeqId::MaxIndex};
+        const ui64 validSince = trimmedBlobSeqId.ToSequentialNumber() + 1;
+        auto& givenIdRanges = GivenIdRangePerChannel[channel];
+        NumAvailableItems -= givenIdRanges.GetNumAvailableItems();
+        givenIdRanges.Trim(validSince);
+        NumAvailableItems += givenIdRanges.GetNumAvailableItems();
         RebuildHeap();
     }
 
     void TBlobDepotAgent::TChannelKind::RebuildHeap() {
         GivenIdRangeHeap.clear();
         for (auto& kv : GivenIdRangePerChannel) {
-            GivenIdRangeHeap.push_back(&kv);
+            if (!kv.second.IsEmpty()) {
+                GivenIdRangeHeap.push_back(&kv);
+            }
         }
         std::make_heap(GivenIdRangeHeap.begin(), GivenIdRangeHeap.end(), TGivenIdRangeHeapComp());
     }
@@ -74,9 +88,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::TChannelKind::ProcessQueriesWaitingForId() {
         TIntrusiveList<TQuery, TPendingId> temp;
         temp.Swap(QueriesWaitingForId);
-        for (TQuery& query : temp) {
-            query.OnIdAllocated();
-        }
+        temp.ForEach([&](TQuery *query) { query->OnIdAllocated(); });
     }
 
 } // NKikimr::NBlobDepot

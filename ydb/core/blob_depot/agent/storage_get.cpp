@@ -29,20 +29,23 @@ namespace NKikimr::NBlobDepot {
 
                 for (ui32 i = 0; i < msg.QuerySize; ++i) {
                     auto& query = msg.Queries[i];
-                    TString blobId(reinterpret_cast<const char*>(query.Id.GetRaw()), 3 * sizeof(ui64));
-                    if (const TValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
-                            std::make_shared<TResolveKeyContext>(i))) {
-                        ProcessSingleResult(i, value);
-                    }
 
                     auto& response = Response->Responses[i];
                     response.Id = query.Id;
                     response.Shift = query.Shift;
                     response.RequestedSize = query.Size;
+
+                    TString blobId(reinterpret_cast<const char*>(query.Id.GetRaw()), 3 * sizeof(ui64));
+                    if (const TValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
+                            std::make_shared<TResolveKeyContext>(i))) {
+                        if (!ProcessSingleResult(i, value)) {
+                            return;
+                        }
+                    }
                 }
             }
 
-            void ProcessSingleResult(ui32 queryIdx, const TValueChain *value) {
+            bool ProcessSingleResult(ui32 queryIdx, const TValueChain *value) {
                 auto& msg = GetQuery();
 
                 if (!value) {
@@ -57,11 +60,14 @@ namespace NKikimr::NBlobDepot {
                         msg.GetHandleClass, msg.MustRestoreFirst, this, queryIdx, true, &error);
                     if (!success) {
                         EndWithError(NKikimrProto::ERROR, std::move(error));
+                        return false;
                     }
                 }
                 if (!AnswersRemain) {
                     EndWithSuccess(std::move(Response));
+                    return false;
                 }
+                return true;
             }
 
             void OnRead(ui64 tag, NKikimrProto::EReplyStatus status, TString buffer) override {

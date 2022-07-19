@@ -26,7 +26,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA06, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA06, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
             (Msg, msg));
         Registered = true;
         BlobDepotGeneration = msg.GetGeneration();
@@ -63,12 +63,21 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA07, "kind vanished", (VirtualGroupId, VirtualGroupId), (Kind, kind));
             ChannelKinds.erase(kind);
         }
+
+        for (const auto& [channel, kind] : ChannelToKind) {
+            kind->Trim(channel, BlobDepotGeneration - 1, Max<ui32>());
+
+            auto& wif = kind->WritesInFlight;
+            const TBlobSeqId min{channel, 0, 0, 0};
+            const TBlobSeqId max{channel, BlobDepotGeneration - 1, Max<ui32>(), TBlobSeqId::MaxIndex};
+            wif.erase(wif.lower_bound(min), wif.upper_bound(max));
+        }
     }
 
     void TBlobDepotAgent::IssueAllocateIdsIfNeeded(TChannelKind& kind) {
         if (!kind.IdAllocInFlight && kind.GetNumAvailableItems() < 100 && PipeId) {
             const ui64 id = NextRequestId++;
-            STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA08, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA08, "IssueAllocateIdsIfNeeded", (VirtualGroupId, VirtualGroupId),
                 (ChannelKind, NKikimrBlobDepot::TChannelKind::E_Name(kind.Kind)),
                 (IdAllocInFlight, kind.IdAllocInFlight), (NumAvailableItems, kind.GetNumAvailableItems()),
                 (RequestId, id));
@@ -79,9 +88,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvAllocateIdsResult& msg) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
-            (Msg, msg));
-
         auto& allocateIdsContext = context->Obtain<TAllocateIdsContext>();
         const auto it = ChannelKinds.find(allocateIdsContext.ChannelKind);
         Y_VERIFY_S(it != ChannelKinds.end(), "Kind# " << NKikimrBlobDepot::TChannelKind::E_Name(allocateIdsContext.ChannelKind)
@@ -97,11 +103,12 @@ namespace NKikimr::NBlobDepot {
         if (msg.HasGivenIdRange()) {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
         }
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA09, "TEvAllocateIdsResult", (VirtualGroupId, VirtualGroupId),
+            (Msg, msg), (NumAvailableItems, kind.GetNumAvailableItems()));
     }
 
     void TBlobDepotAgent::OnDisconnect() {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA10, "OnDisconnect", (VirtualGroupId, VirtualGroupId));
-
         for (auto& [id, request] : std::exchange(TabletRequestInFlight, {})) {
             request.Sender->OnRequestComplete(id, TTabletDisconnected{});
         }
@@ -154,6 +161,9 @@ namespace NKikimr::NBlobDepot {
         auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
 
         auto& msg = ev->Get()->Record;
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (VirtualGroupId, VirtualGroupId), (Msg, msg));
+
         BlocksManager.OnBlockedTablets(msg.GetBlockedTablets());
 
         for (const auto& item : msg.GetInvalidatedSteps()) {
@@ -162,6 +172,7 @@ namespace NKikimr::NBlobDepot {
             const auto it = ChannelToKind.find(channel);
             Y_VERIFY(it != ChannelToKind.end());
             TChannelKind& kind = *it->second;
+            const ui32 numAvailableItemsBefore = kind.GetNumAvailableItems();
             kind.Trim(channel, item.GetGeneration(), item.GetInvalidatedStep());
 
             // report writes in flight that are trimmed
@@ -170,6 +181,12 @@ namespace NKikimr::NBlobDepot {
             for (auto it = kind.WritesInFlight.lower_bound(first); it != kind.WritesInFlight.end() && *it <= last; ++it) {
                 it->ToProto(record->AddWritesInFlight());
             }
+
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TrimChannel", (VirtualGroupId, VirtualGroupId),
+                (Channel, int(channel)), (NumAvailableItemsBefore, numAvailableItemsBefore),
+                (NumAvailableItemsAfter, kind.GetNumAvailableItems()));
+
+           IssueAllocateIdsIfNeeded(kind);
         }
 
         TActivationContext::Send(response.release());

@@ -98,8 +98,8 @@ namespace NKikimr::NBlobDepot {
 
     class TGivenIdRange {
         struct TRange {
-            const ui64 Begin;
-            const ui64 End;
+            ui64 Begin;
+            ui64 End;
             ui32 NumSetBits = 0;
             TDynBitMap Bits;
 
@@ -109,6 +109,16 @@ namespace NKikimr::NBlobDepot {
                 , NumSetBits(end - begin)
             {
                 Bits.Set(0, end - begin);
+            }
+
+            static constexpr struct TZero {} Zero{};
+
+            TRange(ui64 begin, ui64 end, TZero)
+                : Begin(begin)
+                , End(end)
+                , NumSetBits(0)
+            {
+                Bits.Reset(0, end - begin);
             }
 
             struct TCompare {
@@ -126,7 +136,8 @@ namespace NKikimr::NBlobDepot {
     public:
         void IssueNewRange(ui64 begin, ui64 end);
         void AddPoint(ui64 value);
-        void RemovePoint(ui64 value);
+        void RemovePoint(ui64 value, bool *wasLeast);
+        bool GetPoint(ui64 value) const;
 
         bool IsEmpty() const;
         ui32 GetNumAvailableItems() const;
@@ -134,11 +145,13 @@ namespace NKikimr::NBlobDepot {
         ui64 Allocate();
 
         void Subtract(const TGivenIdRange& other);
-
-        void Trim(ui8 channel, ui32 generation, ui32 invalidatedStep);
+        TGivenIdRange Trim(ui64 trimUpTo);
 
         void Output(IOutputStream& s) const;
         TString ToString() const;
+
+        std::vector<bool> ToDebugArray(size_t numItems) const;
+        void CheckConsistency() const;
 
     private:
         void Pop(TRanges::iterator it, ui64 value);

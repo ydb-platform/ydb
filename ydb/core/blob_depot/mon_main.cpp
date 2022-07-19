@@ -270,6 +270,56 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::RenderMainPage(IOutputStream& s) {
         HTML(s) {
             s << "<a href='app?TabletID=" << TabletID() << "&page=data'>Contained data</a><br>";
+
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
+                    s << "Stats";
+                }
+                DIV_CLASS("panel-body") {
+                    TABLE_CLASS("table") {
+                        TABLEHEAD() {
+                            TABLER() {
+                                TABLEH() { s << "Parameter"; }
+                                TABLEH() { s << "Value"; }
+                            }
+                        }
+                        TABLEBODY() {
+                            auto outSize = [&](ui64 size) {
+                                static const char *suffixes[] = {
+                                    "B", "KiB", "MiB", "GiB", "TiB", "PiB", nullptr
+                                };
+                                FormatHumanReadable(s, size, 1024, 2, suffixes);
+                            };
+                            TABLER() {
+                                TABLED() { s << "Data, bytes"; }
+                                TABLED() {
+                                    ui64 total = 0;
+                                    Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
+                                        total += id.BlobSize();
+                                    });
+                                    outSize(total);
+                                }
+                            }
+
+                            ui64 trashInFlight = 0;
+                            ui64 trashPending = 0;
+                            Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
+                                (inFlight ? trashInFlight : trashPending) += id.BlobSize();
+                            });
+
+                            TABLER() {
+                                TABLED() { s << "Trash in flight, bytes"; }
+                                TABLED() { outSize(trashInFlight); }
+                            }
+
+                            TABLER() {
+                                TABLED() { s << "Trash pending, bytes"; }
+                                TABLED() { outSize(trashPending); }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

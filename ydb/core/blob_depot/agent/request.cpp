@@ -95,12 +95,11 @@ namespace NKikimr::NBlobDepot {
     template void TBlobDepotAgent::HandleOtherResponse(TEvBlobStorage::TEvPutResult::TPtr ev);
 
     void TBlobDepotAgent::OnRequestComplete(ui64 id, TResponse response, TRequestsInFlight& map) {
-        const auto it = map.find(id);
-        Y_VERIFY_S(it != map.end(), "id# " << id << " response# " << TRequestSender::ToString(response));
-        TRequestInFlight request = std::move(it->second);
-        map.erase(it);
-
-        request.Sender->OnRequestComplete(id, std::move(response));
+        if (const auto it = map.find(id); it != map.end()) {
+            TRequestInFlight request = std::move(it->second);
+            map.erase(it);
+            request.Sender->OnRequestComplete(id, std::move(response));
+        }
     }
 
 } // NKikimr::NBlobDepot

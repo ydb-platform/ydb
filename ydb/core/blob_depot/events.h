@@ -54,7 +54,7 @@ namespace NKikimr {
         BLOBDEPOT_EVENT_PB(EvApplyConfig, TxId);
         BLOBDEPOT_EVENT_PB(EvApplyConfigResult, TabletId, TxId);
         BLOBDEPOT_EVENT_PB(EvRegisterAgent, VirtualGroupId, AgentInstanceId);
-        BLOBDEPOT_EVENT_PB_NO_ARGS(EvRegisterAgentResult);
+        BLOBDEPOT_EVENT_PB(EvRegisterAgentResult, Generation);
         BLOBDEPOT_EVENT_PB(EvAllocateIds, ChannelKind, Count);
         BLOBDEPOT_EVENT_PB(EvAllocateIdsResult, ChannelKind, Generation);
         BLOBDEPOT_EVENT_PB_NO_ARGS(EvPushNotify);
@@ -73,15 +73,15 @@ namespace NKikimr {
         template<typename TEvent>
         struct TResponseFor {};
 
-        template<> struct TResponseFor<TEvApplyConfig> { using Type = TEvApplyConfigResult; };
-        template<> struct TResponseFor<TEvRegisterAgent> { using Type = TEvRegisterAgentResult; };
-        template<> struct TResponseFor<TEvAllocateIds> { using Type = TEvAllocateIdsResult; };
-        template<> struct TResponseFor<TEvPushNotify> { using Type = TEvPushNotifyResult; };
-        template<> struct TResponseFor<TEvBlock> { using Type = TEvBlockResult; };
-        template<> struct TResponseFor<TEvQueryBlocks> { using Type = TEvQueryBlocksResult; };
+        template<> struct TResponseFor<TEvApplyConfig>    { using Type = TEvApplyConfigResult; };
+        template<> struct TResponseFor<TEvRegisterAgent>  { using Type = TEvRegisterAgentResult; };
+        template<> struct TResponseFor<TEvAllocateIds>    { using Type = TEvAllocateIdsResult; };
+        template<> struct TResponseFor<TEvPushNotify>     { using Type = TEvPushNotifyResult; };
+        template<> struct TResponseFor<TEvBlock>          { using Type = TEvBlockResult; };
+        template<> struct TResponseFor<TEvQueryBlocks>    { using Type = TEvQueryBlocksResult; };
         template<> struct TResponseFor<TEvCollectGarbage> { using Type = TEvCollectGarbageResult; };
-        template<> struct TResponseFor<TEvCommitBlobSeq> { using Type = TEvCommitBlobSeqResult; };
-        template<> struct TResponseFor<TEvResolve> { using Type = TEvResolveResult; };
+        template<> struct TResponseFor<TEvCommitBlobSeq>  { using Type = TEvCommitBlobSeqResult; };
+        template<> struct TResponseFor<TEvResolve>        { using Type = TEvResolveResult; };
 
         template<typename TRequestEvent, typename... TArgs>
         static auto MakeResponseFor(TEventHandle<TRequestEvent>& ev, TActorId selfId, TArgs&&... args) {

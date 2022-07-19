@@ -33,7 +33,8 @@ namespace NKikimr::NBlobDepot {
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
         struct TAgent {
-            std::optional<TActorId> ConnectedAgent;
+            std::optional<TActorId> PipeServerId;
+            std::optional<TActorId> AgentId;
             ui32 ConnectedNodeId;
             TInstant ExpirationTimestamp;
             std::optional<ui64> AgentInstanceId;
@@ -70,11 +71,11 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        std::deque<std::unique_ptr<IEventHandle>> InitialEventsQ;
-
         void Enqueue(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
-            InitialEventsQ.emplace_back(ev.Release());
+            Y_FAIL("unexpected event Type# %08" PRIx32, ev->GetTypeRewrite());
         }
+
+        void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "OnActivateExecutor", (TabletId, TabletID()));
@@ -84,9 +85,7 @@ namespace NKikimr::NBlobDepot {
         void OnLoadFinished() {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "OnLoadFinished", (TabletId, TabletID()));
             Become(&TThis::StateWork);
-            for (auto&& ev : std::exchange(InitialEventsQ, {})) {
-                TActivationContext::Send(ev.release());
-            }
+            SignalTabletActive(TActivationContext::AsActorContext());
         }
 
         void OnDetach(const TActorContext&) override {

@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
             ui32 NumDoNotKeep;
             ui32 CounterShift = 0;
             bool IsLast;
+            bool QueryInFlight = false;
 
         public:
             using TQuery::TQuery;
@@ -63,6 +64,9 @@ namespace NKikimr::NBlobDepot {
 
                 Agent.Issue(std::move(record), this, nullptr);
 
+                Y_VERIFY(!QueryInFlight);
+                QueryInFlight = true;
+
                 ++CounterShift;
             }
 
@@ -85,6 +89,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleCollectGarbageResult(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvCollectGarbageResult& msg) {
+                Y_VERIFY(QueryInFlight);
+                QueryInFlight = false;
+
                 if (!msg.HasStatus()) {
                     EndWithError(NKikimrProto::ERROR, "incorrect TEvCollectGarbageResult protobuf");
                 } else if (const auto status = msg.GetStatus(); status != NKikimrProto::OK) {

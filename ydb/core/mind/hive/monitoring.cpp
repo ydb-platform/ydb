@@ -1101,7 +1101,7 @@ public:
         case TTabletTypes::ReplicationController:
             return "RC";
         case TTabletTypes::BlobDepot:
-            return "BS";
+            return "BD";
         default:
             return Sprintf("%d", (int)type);
         }

@@ -17,9 +17,10 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(it != PipeServerToNode.end());
         if (const auto& nodeId = it->second) {
             if (const auto agentIt = Agents.find(*nodeId); agentIt != Agents.end()) {
-                if (TAgent& agent = agentIt->second; agent.ConnectedAgent == it->first) {
+                if (TAgent& agent = agentIt->second; agent.PipeServerId == it->first) {
                     OnAgentDisconnect(agent);
-                    agent.ConnectedAgent.reset();
+                    agent.PipeServerId.reset();
+                    agent.AgentId.reset();
                     agent.ConnectedNodeId = 0;
                     agent.ExpirationTimestamp = TActivationContext::Now() + ExpirationTimeout;
                 }
@@ -37,14 +38,15 @@ namespace NKikimr::NBlobDepot {
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, req), (NodeId, nodeId),
-            (PipeServerId, pipeServerId));
+            (PipeServerId, pipeServerId), (Id, ev->Cookie));
 
         const auto it = PipeServerToNode.find(pipeServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         Y_VERIFY(!it->second || *it->second == nodeId);
         it->second = nodeId;
         auto& agent = Agents[nodeId];
-        agent.ConnectedAgent = pipeServerId;
+        agent.PipeServerId = pipeServerId;
+        agent.AgentId = ev->Sender;
         agent.ConnectedNodeId = nodeId;
         agent.ExpirationTimestamp = TInstant::Max();
 
@@ -55,9 +57,8 @@ namespace NKikimr::NBlobDepot {
 
         OnAgentConnect(agent);
 
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
+        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId(), Executor()->Generation());
 
-        record->SetGeneration(Executor()->Generation());
         for (const auto& [k, v] : ChannelKinds) {
             auto *proto = record->AddChannelKinds();
             proto->SetChannelKind(k);
@@ -127,7 +128,14 @@ namespace NKikimr::NBlobDepot {
             TAgent& agent = GetAgent(ev->Recipient);
             for (const auto& range : givenIdRange->GetChannelRanges()) {
                 agent.GivenIdRanges[range.GetChannel()].IssueNewRange(range.GetBegin(), range.GetEnd());
-                Channels[range.GetChannel()].GivenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
+
+                auto& givenIdRanges = Channels[range.GetChannel()].GivenIdRanges;
+                const bool wasEmpty = givenIdRanges.IsEmpty();
+                givenIdRanges.IssueNewRange(range.GetBegin(), range.GetEnd());
+                if (wasEmpty) {
+                    Data->OnLeastExpectedBlobIdChange(range.GetChannel());
+                }
+
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "IssueNewRange", (TabletId, TabletID()),
                     (AgentId, agent.ConnectedNodeId), (Channel, range.GetChannel()),
                     (Begin, range.GetBegin()), (End, range.GetEnd()));
@@ -142,14 +150,16 @@ namespace NKikimr::NBlobDepot {
         Y_VERIFY(it != PipeServerToNode.end());
         Y_VERIFY(it->second);
         TAgent& agent = GetAgent(*it->second);
-        Y_VERIFY(agent.ConnectedAgent == pipeServerId);
+        Y_VERIFY(agent.PipeServerId == pipeServerId);
         return agent;
     }
 
     TBlobDepot::TAgent& TBlobDepot::GetAgent(ui32 nodeId) {
         const auto agentIt = Agents.find(nodeId);
         Y_VERIFY(agentIt != Agents.end());
-        return agentIt->second;
+        TAgent& agent = agentIt->second;
+        Y_VERIFY(agent.ConnectedNodeId == nodeId);
+        return agent;
     }
 
     void TBlobDepot::ResetAgent(TAgent& agent) {

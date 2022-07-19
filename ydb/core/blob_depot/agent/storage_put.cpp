@@ -117,7 +117,25 @@ namespace NKikimr::NBlobDepot {
                 --PutsInFlight;
                 if (msg.Status != NKikimrProto::OK) {
                     EndWithError(msg.Status, std::move(msg.ErrorReason));
-                } else if (!PutsInFlight) {
+                } else if (PutsInFlight) {
+                    // wait for all puts to complete
+                } else if (BlobSeqId.Generation != Agent.BlobDepotGeneration) {
+                    // FIXME: although this is error now, we can handle this in the future, when BlobDepot picks records
+                    // on restarts; it may have scanned written record and already updated it in its local database;
+                    // however, if it did not, we can't try to commit this records as it may be already scheduled for
+                    // garbage collection by the tablet
+                    EndWithError(NKikimrProto::ERROR, "BlobDepot tablet was restarting during write");
+                } else {
+                    // find and remove the write in flight record to ensure it won't be reported upon TEvPushNotify
+                    // reception AND to check that it wasn't already trimmed by answering TEvPushNotifyResult
+                    const auto it = Agent.ChannelKinds.find(NKikimrBlobDepot::TChannelKind::Data);
+                    if (it == Agent.ChannelKinds.end()) {
+                        return EndWithError(NKikimrProto::ERROR, "no Data channels");
+                    }
+                    auto& kind = it->second;
+                    const size_t numErased = kind.WritesInFlight.erase(BlobSeqId);
+                    Y_VERIFY(numErased);
+
                     NKikimrBlobDepot::TEvCommitBlobSeq request;
 
                     auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();

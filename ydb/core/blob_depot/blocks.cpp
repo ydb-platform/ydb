@@ -102,7 +102,7 @@ namespace NKikimr::NBlobDepot {
             item->SetBlockedGeneration(BlockedGeneration);
 
             TAgent& agent = Self->GetAgent(agentId);
-            if (const auto& actorId = agent.ConnectedAgent) {
+            if (const auto& actorId = agent.AgentId) {
                 Send(*actorId, ev.release(), 0, IssuerGuid);
             }
             NodesWaitingForPushResult.insert(agentId);
@@ -124,7 +124,7 @@ namespace NKikimr::NBlobDepot {
 
         void IssueBlocksToStorage() {
             THashSet<ui32> processedGroups;
-            for (const auto& [_, kind] : Self->ChannelKinds) {
+            for (const auto& [_, kind] : Self->ChannelKinds) { // FIXME: SIGSEGV here?
                 for (const auto& [channel, groupId] : kind.ChannelGroups) {
                     // FIXME: consider previous group generations (because agent can write in obsolete tablet generation)
                     // !!!!!!!!!!!
@@ -138,14 +138,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            STLOG(PRI_INFO, BLOB_DEPOT, BDT06, "issing TEvBlock", (TabletId, Self->TabletID()), (BlockedTabletId,
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "issing TEvBlock", (TabletId, Self->TabletID()), (BlockedTabletId,
                 TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, groupId), (IssuerGuid, IssuerGuid));
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
                 IssuerGuid), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-            STLOG(PRI_INFO, BLOB_DEPOT, BDT07, "TEvBlockResult", (TabletId, Self->TabletID()), (Msg, ev->Get()->ToString()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "TEvBlockResult", (TabletId, Self->TabletID()), (Msg, ev->Get()->ToString()),
                 (BlockedTabletId, TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, ev->Cookie));
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:

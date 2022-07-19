@@ -42,7 +42,7 @@ namespace NKikimr::NBlobDepot {
 
                     if (blobSeqId.Generation == generation) {
                         // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
-                        Y_VERIFY(!canBeCollected);
+                        Y_VERIFY_S(!canBeCollected, "BlobSeqId# " << blobSeqId.ToString());
                     } else if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
                         responseItem->SetStatus(NKikimrProto::ERROR);
@@ -82,8 +82,14 @@ namespace NKikimr::NBlobDepot {
                     (AgentId, agent.ConnectedNodeId), (BlobSeqId, blobSeqId), (Value, value),
                     (GivenIdRanges, Self->Channels[blobSeqId.Channel].GivenIdRanges),
                     (Agent.GivenIdRanges, agent.GivenIdRanges[blobSeqId.Channel]));
-                agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value);
-                Self->Channels[blobSeqId.Channel].GivenIdRanges.RemovePoint(value);
+
+                agent.GivenIdRanges[blobSeqId.Channel].RemovePoint(value, nullptr);
+
+                bool wasLeast;
+                Self->Channels[blobSeqId.Channel].GivenIdRanges.RemovePoint(value, &wasLeast);
+                if (wasLeast) {
+                    Self->Data->OnLeastExpectedBlobIdChange(blobSeqId.Channel);
+                }
             }
 
             bool CheckKeyAgainstBarrier(const TString& key, NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {

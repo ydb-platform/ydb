@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA14, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
             (QueryId, QueryId), (Response, response->ToString()));
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         delete this;

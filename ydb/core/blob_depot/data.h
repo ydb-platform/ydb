@@ -10,14 +10,9 @@ namespace NKikimr::NBlobDepot {
 
     public:
         class alignas(TString) TKey {
-            union {
-                ui64 Raw64[4];
-                ui8 Bytes[32];
-                char String[31];
-                struct {
-                    ui8 Padding[31];
-                    ui8 Type;
-                };
+            struct TData {
+                ui8 Bytes[31];
+                ui8 Type;
             } Data;
 
             static constexpr size_t TypeLenByteIdx = 31;
@@ -25,9 +20,12 @@ namespace NKikimr::NBlobDepot {
             static constexpr char BlobIdType = 32;
             static constexpr char StringType = 33;
 
+            static_assert(sizeof(Data) == 32);
+
         public:
             TKey() {
-                Reset();
+                Data.Type = EncodeInlineStringLenAsTypeByte(0);
+                Data.Bytes[0] = 0;
             }
 
             explicit TKey(TLogoBlobID id) {
@@ -35,22 +33,14 @@ namespace NKikimr::NBlobDepot {
                 reinterpret_cast<TLogoBlobID&>(Data.Bytes) = id;
             }
 
-            explicit TKey(TStringBuf value) {
+            template<typename T, typename = std::enable_if_t<std::is_constructible_v<TString, T&&>>>
+            explicit TKey(T&& value) {
                 if (value.size() <= MaxInlineStringLen) {
                     Data.Type = EncodeInlineStringLenAsTypeByte(value.size());
-                    memcpy(Data.String, value.data(), value.size());
-                    Data.String[value.size()] = 0;
-                } else {
-                    Data.Type = StringType;
-                    new(Data.Bytes) TString(value);
-                }
-            }
-
-            explicit TKey(TString value) {
-                if (value.size() <= MaxInlineStringLen) {
-                    Data.Type = EncodeInlineStringLenAsTypeByte(value.size());
-                    memcpy(Data.String, value.data(), value.size());
-                    Data.String[value.size()] = 0;
+                    memcpy(Data.Bytes, value.data(), value.size());
+                    if (value.size() != MaxInlineStringLen) {
+                        Data.Bytes[value.size()] = 0;
+                    }
                 } else {
                     Data.Type = StringType;
                     new(Data.Bytes) TString(std::move(value));
@@ -187,13 +177,14 @@ namespace NKikimr::NBlobDepot {
                     GetString().~TString();
                 }
                 Data.Type = EncodeInlineStringLenAsTypeByte(0);
+                Data.Bytes[0] = 0;
             }
 
             TStringBuf GetStringBuf() const {
                 if (Data.Type == StringType) {
                     return GetString();
                 } else {
-                    return TStringBuf(Data.String, DecodeInlineStringLenFromTypeByte(Data.Type));
+                    return TStringBuf(reinterpret_cast<const char*>(Data.Bytes), DecodeInlineStringLenFromTypeByte(Data.Type));
                 }
             }
 
@@ -249,12 +240,19 @@ namespace NKikimr::NBlobDepot {
             TGenStep IssuedGenStep; // currently in flight or already confirmed
             TGenStep LastConfirmedGenStep;
             bool CollectGarbageRequestInFlight = false;
+            TBlobSeqId LeastExpectedBlobId;
 
             TRecordsPerChannelGroup(ui64 tabletId, ui8 channel, ui32 groupId)
                 : TabletId(tabletId)
                 , Channel(channel)
                 , GroupId(groupId)
             {}
+
+            void MoveToTrash(TData *self, TLogoBlobID id);
+            void OnSuccessfulCollect(TData *self);
+            void OnLeastExpectedBlobIdChange(TData *self, TBlobSeqId leastExpectedBlobId);
+            void ClearInFlight(TData *self);
+            void EnqueueForCollectionIfPossible(TData *self);
         };
 
         std::map<TKey, TValue> Data;
@@ -312,7 +310,6 @@ namespace NKikimr::NBlobDepot {
 
         void PutKey(TKey key, TValue&& data);
 
-        void OnTrashInserted(TRecordsPerChannelGroup& record);
         std::optional<TString> UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState);
         void DeleteKey(const TKey& key, const std::function<void(TLogoBlobID)>& updateTrash, void *cookie);
         void CommitTrash(void *cookie);
@@ -322,6 +319,8 @@ namespace NKikimr::NBlobDepot {
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId);
 
         bool CanBeCollected(ui32 groupId, TBlobSeqId id) const;
+
+        void OnLeastExpectedBlobIdChange(ui8 channel);
 
         static TString ToValueProto(const TValue& value);
 

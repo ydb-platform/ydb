@@ -21,6 +21,8 @@ namespace NKikimr::NBlobDepot {
             Agent.Issue(std::move(queryBlocks), this, std::make_shared<TQueryBlockContext>(
                 TActivationContext::Monotonic(), tabletId));
             block.RefreshInFlight = true;
+        }
+        if (status == NKikimrProto::UNKNOWN) {
             block.PendingBlockChecks.PushBack(query);
         }
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA01, "CheckBlockForTablet", (QueryId, query->GetQueryId()),
@@ -44,7 +46,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TBlocksManager::Handle(TRequestContext::TPtr context, NKikimrBlobDepot::TEvQueryBlocksResult& msg) {
         auto& queryBlockContext = context->Obtain<TQueryBlockContext>();
-        STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA02, "TEvQueryBlocksResult", (VirtualGroupId, Agent.VirtualGroupId),
             (Msg, msg), (TabletId, queryBlockContext.TabletId));
         auto& block = Blocks[queryBlockContext.TabletId];
         Y_VERIFY(msg.BlockedGenerationsSize() == 1);

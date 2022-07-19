@@ -79,7 +79,8 @@ public:
     const TString& GetReason() const;
     const TString& GetOriginalTopic() const;
     TTopicConverterPtr UpgradeToFullConverter(const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-                                              const TString& ydbDatabaseRootOverride);
+                                              const TString& ydbDatabaseRootOverride,
+                                              const TMaybe<TString>& clientsideNameOverride = {});
 
     TString GetPrintableString() const;
 
@@ -172,7 +173,8 @@ protected:
                         const TString& pqPrefix,
                         //const TVector<TString>& rootDatabases,
                         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-                        const TString& ydbDatabaseRootOverride);
+                        const TString& ydbDatabaseRootOverride,
+                        const TMaybe<TString>& clientsideNameOverride = {});
 public:
 
     static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);

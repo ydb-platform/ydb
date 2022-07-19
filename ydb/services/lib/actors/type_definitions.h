@@ -16,6 +16,7 @@ namespace NKikimr::NGRpcProxy {
         TString FolderId;
         NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
         NPersQueue::TTopicConverterPtr FullConverter;
+        TMaybe<TString> CdcStreamPath;
 
         TVector<ui32> Groups;
         TMap<ui64, ui64> Partitions;

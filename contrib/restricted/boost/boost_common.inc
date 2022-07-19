@@ -6,10 +6,6 @@ LICENSE(BSL-1.0)
 
 SET(BOOST_ROOT contrib/restricted/boost)
 
-ADDINCL(
-    ${BOOST_ROOT}/boost/predef
-)
-
 # XXX: fix selective checkout
 SRCDIR(${BOOST_ROOT}/boost)
 

@@ -18,8 +18,25 @@ namespace NKikimr::NYaml {
         return false;
     }
 
+    static const TString& GetStringSafe(const NJson::TJsonValue& json, const TStringBuf& key) {
+        auto& value = json[key];
+        Y_ENSURE_BT(value.IsString(), "Unexpected value for key: " << key << ", expected string value.");
+        return value.GetStringSafe();
+    }
+
+    static ui64 GetUnsignedIntegerSafe(const NJson::TJsonValue& json, const TStringBuf& key) {
+        Y_ENSURE_BT(json.Has(key), "Value is not set for key: " << key);
+        auto& value = json[key];
+        Y_ENSURE_BT(value.IsUInteger(), "Unexpected value for key: " << key << ", expected integer value.");
+        return value.GetUIntegerSafe();
+    }
+
+    void EnsureJsonFieldIsArray(const NJson::TJsonValue& json, const TStringBuf& key) {
+        Y_ENSURE_BT(json.Has(key) && json[key].IsArray(), "Array field `" << key << "` must be specified.");
+    }
+
     NJson::TJsonValue Yaml2Json(const YAML::Node& yaml, bool isRoot) {
-        Y_ENSURE(!isRoot || yaml.IsMap(), "YAML root is expected to be a map");
+        Y_ENSURE_BT(!isRoot || yaml.IsMap(), "YAML root is expected to be a map");
 
         NJson::TJsonValue json;
 
@@ -27,7 +44,7 @@ namespace NKikimr::NYaml {
             for (const auto& it : yaml) {
                 const auto& key = it.first.as<TString>();
 
-                Y_ENSURE(!json.Has(key), "Duplicate key entry: " << key);
+                Y_ENSURE_BT(!json.Has(key), "Duplicate key entry: " << key);
 
                 json[key] = Yaml2Json(it.second, false);
             }
@@ -76,7 +93,7 @@ namespace NKikimr::NYaml {
     }
 
    static NJson::TJsonValue BuildDefaultChannels(NJson::TJsonValue& json) {
-        TString erasureName = json["static_erasure"].GetStringSafe();
+        const TString& erasureName = GetStringSafe(json, "static_erasure");
         NJson::TJsonValue channelsInfo;
         channelsInfo.SetType(NJson::EJsonValueType::JSON_ARRAY);
         for(ui32 channelId = 0; channelId < 3; ++channelId) {
@@ -121,7 +138,7 @@ namespace NKikimr::NYaml {
                 return cnt;
             }
         }
-        Y_ENSURE(false, "unknown tablet " << type);
+        Y_ENSURE_BT(false, "unknown tablet " << type);
     }
 
     bool isUnique(TString& type) {
@@ -138,10 +155,10 @@ namespace NKikimr::NYaml {
     }
 
     TString HostAndICPort(const NJson::TJsonValue& host) {
-        TString hostname = host["host"].GetStringSafe();
+        TString hostname = GetStringSafe(host, "host");
         ui32 InterconnectPort = 19001;
         if (host.Has("port")) {
-            InterconnectPort = host["port"].GetUIntegerSafe();
+            InterconnectPort = GetUnsignedIntegerSafe(host, "port");
         }
 
         return TStringBuilder() << hostname << ":" << InterconnectPort;
@@ -151,7 +168,7 @@ namespace NKikimr::NYaml {
         ui32 foundCandidates = 0;
         NJson::TJsonValue result;
         for(auto& host: json["nameservice_config"]["node"].GetArraySafe()) {
-            if (data == host["host"].GetStringSafe()) {
+            if (data == GetStringSafe(host, "host")) {
                 result = host;
                 ++foundCandidates;
             }
@@ -169,7 +186,7 @@ namespace NKikimr::NYaml {
             }
         }
 
-        Y_ENSURE(foundCandidates == 1, "Cannot find node_id for " << data);
+        Y_ENSURE_BT(foundCandidates == 1, "Cannot find node_id for " << data);
         return result;
     }
 
@@ -178,8 +195,9 @@ namespace NKikimr::NYaml {
             return host.GetUIntegerSafe();
         }
 
+        Y_ENSURE_BT(host.IsString(), "host value must be either integer or string.");
         auto node = FindNodeByString(json, host.GetStringSafe());
-        return node["node_id"].GetUIntegerSafe();
+        return GetUnsignedIntegerSafe(node, "node_id");
     }
 
     ui64 GetNextTabletID(TString& type, ui32 idx) {
@@ -197,14 +215,12 @@ namespace NKikimr::NYaml {
         };
 
         auto it = tablets.find(type);
-        Y_ENSURE(it != tablets.end());
+        Y_ENSURE_BT(it != tablets.end());
         return it->second;
     }
 
     const NJson::TJsonArray::TArray& GetTabletsFor(NJson::TJsonValue& json, TString type) {
         auto& systemTabletsConfig = json["system_tablets"];
-        Y_ENSURE(json.Has("static_erasure"));
-        TString erasureName = json["static_erasure"].GetStringSafe();
         TString toLowerType = to_lower(type);
 
         if (!systemTabletsConfig.Has(toLowerType)) {
@@ -232,12 +248,12 @@ namespace NKikimr::NYaml {
                 tablet.InsertValue("type", type);
             }
 
-            Y_ENSURE(tablet["node"].IsArray());
+            EnsureJsonFieldIsArray(tablet, "node");
 
             NJson::TJsonValue& tabletInfo = tablet["info"];
 
             if (!tabletInfo.Has("tablet_id")) {
-                Y_ENSURE(idx <= GetDefaultTabletCount(type));
+                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
                 tabletInfo.InsertValue("tablet_id", NJson::TJsonValue(GetNextTabletID(type, idx)));
             }
 
@@ -262,7 +278,7 @@ namespace NKikimr::NYaml {
             if (!config.Has(fieldName)) {
                 ui32 executorID = 0;
                 for(const auto& executor: executors.GetArraySafe()) {
-                    if (to_lower(executor["name"].GetStringSafe()) == to_lower(name)) {
+                    if (to_lower(GetStringSafe(executor, "name")) == to_lower(name)) {
                         config.InsertValue(fieldName, executorID);
                         break;
                     }
@@ -271,7 +287,7 @@ namespace NKikimr::NYaml {
                 }
             }
 
-            Y_ENSURE(config.Has(fieldName), "cannot deduce executor id for " << fieldName);
+            Y_ENSURE_BT(config.Has(fieldName), "cannot deduce executor id for " << fieldName);
         }
 
         if (!config.Has("service_executor")) {
@@ -280,7 +296,7 @@ namespace NKikimr::NYaml {
             ui32 executorID = 0;
 
             for(const auto& executor: executors.GetArraySafe()) {
-                if (to_lower(executor["name"].GetStringSafe()) == "ic") {
+                if (to_lower(GetStringSafe(executor, "name")) == "ic") {
                     NJson::TJsonValue val;
                     val.InsertValue("service_name", "Interconnect");
                     val.InsertValue("executor_id", executorID);
@@ -301,12 +317,12 @@ namespace NKikimr::NYaml {
             return 2;
         }
 
-        Y_ENSURE(false, "unknown pdisk category " << data);
+        Y_ENSURE_BT(false, "unknown pdisk category " << data);
     }
 
     ui32 ErasureStrToNum(const TString& info) {
         TErasureType::EErasureSpecies species = TErasureType::ErasureSpeciesByName(info);
-        Y_ENSURE(species != TErasureType::ErasureSpeciesCount, "unknown erasure " << info);
+        Y_ENSURE_BT(species != TErasureType::ErasureSpeciesCount, "unknown erasure " << info);
         return species;
     }
 
@@ -316,7 +332,7 @@ namespace NKikimr::NYaml {
         }
 
         auto& config = json["blob_storage_config"];
-        Y_ENSURE(config["service_set"].IsMap());
+        Y_ENSURE_BT(config["service_set"].IsMap(), "service_set field in blob_storage_config must be json map.");
 
         auto& serviceSet = config["service_set"];
         if (!serviceSet.Has("availability_domains")) {
@@ -326,7 +342,7 @@ namespace NKikimr::NYaml {
             serviceSet.InsertValue("availability_domains", arr);
         }
 
-        Y_ENSURE(serviceSet.Has("groups"));
+        Y_ENSURE_BT(serviceSet.Has("groups"), "groups field should be specified in service_set field of blob_storage_config");
         auto& groups = serviceSet["groups"];
         bool shouldFillVdisks = !serviceSet.Has("vdisks");
         auto& vdisksServiceSet = serviceSet["vdisks"];
@@ -351,18 +367,17 @@ namespace NKikimr::NYaml {
                 group.InsertValue("group_id", NJson::TJsonValue(groupID));
             }
 
-            ui32 groupID = group["group_id"].GetUIntegerSafe();
-            ui32 groupGeneration = group["group_generation"].GetUIntegerSafe();
-            Y_ENSURE(group.Has("erasure_species"));
+            ui32 groupID = GetUnsignedIntegerSafe(group, "group_id");
+            ui32 groupGeneration = GetUnsignedIntegerSafe(group, "group_generation");
+            Y_ENSURE_BT(group.Has("erasure_species"), "erasure species are not specified for group, id " << groupID);
             if (group["erasure_species"].IsString()) {
-                auto species = group["erasure_species"].GetStringSafe();
+                auto species = GetStringSafe(group, "erasure_species");
                 ui32 num = ErasureStrToNum(species);
                 group.EraseValue("erasure_species");
                 group.InsertValue("erasure_species", NJson::TJsonValue(num));
             }
 
-            Y_ENSURE(group.Has("rings"));
-            Y_ENSURE(group["rings"].IsArray());
+            EnsureJsonFieldIsArray(group, "rings");
 
             auto& ringsInfo = group["rings"].GetArraySafe();
 
@@ -371,22 +386,22 @@ namespace NKikimr::NYaml {
             std::unordered_map<ui32, std::unordered_set<ui32>> UniquePdiskGuids;
 
             for(auto& ring: ringsInfo) {
-                Y_ENSURE(ring["fail_domains"].IsArray());
+                EnsureJsonFieldIsArray(ring, "fail_domains");
 
                 auto& failDomains = ring["fail_domains"].GetArraySafe();
                 ui32 failDomainID = 0;
                 for(auto& failDomain: failDomains) {
-                    Y_ENSURE(failDomain["vdisk_locations"].IsArray());
-                    Y_ENSURE(failDomain["vdisk_locations"].GetArraySafe().size() == 1);
+                    EnsureJsonFieldIsArray(failDomain, "vdisk_locations");
+                    Y_ENSURE_BT(failDomain["vdisk_locations"].GetArraySafe().size() == 1);
 
                     for(auto& vdiskLocation: failDomain["vdisk_locations"].GetArraySafe()) {
-                        Y_ENSURE(vdiskLocation.Has("node_id"));
+                        Y_ENSURE_BT(vdiskLocation.Has("node_id"));
                         vdiskLocation.InsertValue("node_id", FindNodeId(json, vdiskLocation["node_id"]));
                         if (!vdiskLocation.Has("vdisk_slot_id")) {
                             vdiskLocation.InsertValue("vdisk_slot_id", NJson::TJsonValue(0));
                         }
 
-                        ui64 myNodeId = vdiskLocation["node_id"].GetUIntegerSafe();
+                        ui64 myNodeId = GetUnsignedIntegerSafe(vdiskLocation, "node_id");
                         if (!vdiskLocation.Has("pdisk_guid")) {
                             for(ui32 pdiskGuid = 1; ; pdiskGuid++) {
                                 if (UniquePdiskGuids[myNodeId].find(pdiskGuid) == UniquePdiskGuids[myNodeId].end()) {
@@ -396,7 +411,11 @@ namespace NKikimr::NYaml {
                             }
                         }
 
-                        Y_ENSURE(UniquePdiskGuids[myNodeId].insert(vdiskLocation["pdisk_guid"].GetUIntegerSafe()).second, "pdisk guids should be unique");
+                        {
+                            ui64 guid = GetUnsignedIntegerSafe(vdiskLocation, "pdisk_guid");
+                            auto [it, success] = UniquePdiskGuids[myNodeId].insert(guid);
+                            Y_ENSURE_BT(success, "pdisk guids should be unique, non-unique guid is " << guid);
+                        }
 
                         if (!vdiskLocation.Has("pdisk_id")) {
                             for(ui32 pdiskID = 1; ; pdiskID++) {
@@ -407,7 +426,11 @@ namespace NKikimr::NYaml {
                             }
                         }
 
-                        Y_ENSURE(UniquePdiskIds[myNodeId].insert(vdiskLocation["pdisk_id"].GetUIntegerSafe()).second, "pdisk ids should be unique");
+                        {
+                            ui64 pdiskId = GetUnsignedIntegerSafe(vdiskLocation, "pdisk_id");
+                            auto [it, success] = UniquePdiskIds[myNodeId].insert(pdiskId);
+                            Y_ENSURE_BT(success, "pdisk ids should be unique, non unique pdisk_id : " << pdiskId);
+                        }
 
                         if (shouldFillPdisks) {
                             NJson::TJsonValue pdiskInfo = vdiskLocation;
@@ -417,7 +440,7 @@ namespace NKikimr::NYaml {
 
                             if (pdiskInfo.Has("pdisk_category")) {
                                 if (pdiskInfo["pdisk_category"].IsString()) {
-                                    auto cat = pdiskInfo["pdisk_category"].GetStringSafe();
+                                    auto cat = GetStringSafe(pdiskInfo, "pdisk_category");
                                     pdiskInfo.InsertValue("pdisk_category", NJson::TJsonValue(PdiskCategoryFromString(cat)));
                                 }
                             }
@@ -471,12 +494,12 @@ namespace NKikimr::NYaml {
         }
 
         if (!json["system_tablets"].Has("default_node")) {
-            Y_ENSURE(json["nameservice_config"]["node"].IsArray());
+            Y_ENSURE_BT(json["nameservice_config"]["node"].IsArray());
 
             auto& config = json["system_tablets"]["default_node"];
             config.SetType(NJson::EJsonValueType::JSON_ARRAY);
             for(auto node: json["nameservice_config"]["node"].GetArraySafe()) {
-                Y_ENSURE(node["node_id"].IsUInteger(), "node_id must be specified");
+                Y_ENSURE_BT(node["node_id"].IsUInteger(), "node_id must be specified");
                 auto nodeId = node["node_id"];
                 config.AppendValue(nodeId);
             }
@@ -506,14 +529,14 @@ namespace NKikimr::NYaml {
 
     void PrepareDomainsConfig(NJson::TJsonValue& json) {
 
-        Y_ENSURE(json.Has("domains_config"));
-        Y_ENSURE(json["domains_config"].IsMap());
+        Y_ENSURE_BT(json.Has("domains_config"));
+        Y_ENSURE_BT(json["domains_config"].IsMap());
         NJson::TJsonValue& domainsConfig = json["domains_config"];
 
-        Y_ENSURE(domainsConfig.Has("domain"));
+        Y_ENSURE_BT(domainsConfig.Has("domain"));
         NJson::TJsonValue& domains = domainsConfig["domain"];
 
-        Y_ENSURE(domains.GetArraySafe().size() == 1);
+        Y_ENSURE_BT(domains.GetArraySafe().size() == 1);
 
         if (!domainsConfig.Has("hive_config")) {
             auto& hiveConfig = domainsConfig["hive_config"];
@@ -526,10 +549,10 @@ namespace NKikimr::NYaml {
         }
 
         for(NJson::TJsonValue& domain: domains.GetArraySafe()) {
-            Y_ENSURE(domain.Has("name"));
+            Y_ENSURE_BT(domain.Has("name"));
 
             if (domain.Has("domain_id")) {
-                Y_ENSURE(domain["domain_id"].GetUIntegerSafe() == 1);
+                Y_ENSURE_BT(GetUnsignedIntegerSafe(domain, "domain_id") == 1);
             } else {
                 domain.InsertValue("domain_id", std::move(NJson::TJsonValue(static_cast<ui64>(1))));
             }
@@ -542,7 +565,7 @@ namespace NKikimr::NYaml {
                 domain.InsertValue("plan_resolution", std::move(NJson::TJsonValue(10)));
             }
 
-            Y_ENSURE(domain.Has("plan_resolution"));
+            Y_ENSURE_BT(domain.Has("plan_resolution"));
 
             if (!domain.Has("hive_uid")) {
                 auto& hiveUids = domain["hive_uid"];
@@ -558,19 +581,19 @@ namespace NKikimr::NYaml {
 
             const std::vector<std::pair<TString, TString>> exps = {{"explicit_coordinators", "FLAT_TX_COORDINATOR"}, {"explicit_allocators", "TX_ALLOCATOR"}, {"explicit_mediators", "TX_MEDIATOR"}};
             for(auto [field, type] : exps) {
-                Y_ENSURE(!domain.Has(field));
+                Y_ENSURE_BT(!domain.Has(field));
                 auto& arr = domain[field];
                 arr.SetType(NJson::EJsonValueType::JSON_ARRAY);
                 for(auto tablet: GetTabletsFor(json, type)) {
-                    arr.AppendValue(tablet["info"]["tablet_id"].GetUIntegerSafe());
+                    arr.AppendValue(GetUnsignedIntegerSafe(tablet["info"], "tablet_id"));
                 }
             }
         }
     }
 
     void PrepareSecurityConfig(NJson::TJsonValue& json) {
-        Y_ENSURE(json.Has("domains_config"));
-        Y_ENSURE(json["domains_config"].IsMap());
+        Y_ENSURE_BT(json.Has("domains_config"));
+        Y_ENSURE_BT(json["domains_config"].IsMap());
 
         bool disabledDefaultSecurity = false;
         NJson::TJsonValue& domainsConfig = json["domains_config"];
@@ -584,11 +607,11 @@ namespace NKikimr::NYaml {
 
         if (securityConfig.Has("default_users")) {
             NJson::TJsonValue& defaultUsers = securityConfig["default_users"];
-            Y_ENSURE(defaultUsers.IsArray());
-            Y_ENSURE(defaultUsers.GetArraySafe().size() > 0);
+            Y_ENSURE_BT(defaultUsers.IsArray());
+            Y_ENSURE_BT(defaultUsers.GetArraySafe().size() > 0);
             NJson::TJsonValue& defaultUser = defaultUsers.GetArraySafe()[0];
-            Y_ENSURE(defaultUser.IsMap());
-            defaultUserName = defaultUser["password"].GetStringRobust();
+            Y_ENSURE_BT(defaultUser.IsMap());
+            defaultUserName = defaultUser["name"].GetStringRobust();
         } else if (!disabledDefaultSecurity) {
             NJson::TJsonValue& defaultUser = securityConfig["default_users"].AppendValue({});
             defaultUser["name"] = defaultUserName = "root";
@@ -673,7 +696,7 @@ namespace NKikimr::NYaml {
 
     void PrepareNameserviceConfig(NJson::TJsonValue& json) {
         if (json.Has("nameservice_config")) {
-            Y_ENSURE(json["nameservice_config"].IsMap());
+            Y_ENSURE_BT(json["nameservice_config"].IsMap());
             if (json["nameservice_config"].Has("node")) {
                 return;
             }
@@ -696,7 +719,7 @@ namespace NKikimr::NYaml {
 
         auto& nodes = config["node"];
 
-        Y_ENSURE(json["hosts"].IsArray());
+        EnsureJsonFieldIsArray(json, "hosts");
         ui32 nodeID = 0;
 
         for(auto& host : json["hosts"].GetArraySafe()) {
@@ -771,7 +794,9 @@ namespace NKikimr::NYaml {
     NKikimrBlobStorage::TConfigRequest BuildInitDistributedStorageCommand(const TString& data) {
         auto yamlNode = YAML::Load(data);
         NJson::TJsonValue json = Yaml2Json(yamlNode, true);
-        Y_ENSURE(json.Has("hosts"));
+        Y_ENSURE_BT(json.Has("hosts") && json["hosts"].IsArray(), "Specify hosts list to use blobstorage init command");
+        Y_ENSURE_BT(json["host_configs"].IsArray(), "Specify host_configs to use blobstorage init command");
+
         PrepareNameserviceConfig(json);
 
         NKikimrBlobStorage::TConfigRequest result;
@@ -784,20 +809,17 @@ namespace NKikimr::NYaml {
         auto *defineBox = result.AddCommand()->MutableDefineBox();
         defineBox->SetBoxId(1);
         if (json.Has("storage_config_generation")) {
-            defineBox->SetItemConfigGeneration(json["storage_config_generation"].GetUIntegerSafe());
+            defineBox->SetItemConfigGeneration(GetUnsignedIntegerSafe(json, "storage_config_generation"));
         } else {
             defineBox->SetItemConfigGeneration(0);
         }
 
-        Y_ENSURE(json["hosts"].IsArray());
-        Y_ENSURE(json["host_configs"].IsArray());
-
         for(auto jsonHost: json["hosts"].GetArraySafe()) {
             auto* host = defineBox->AddHost();
             host->MutableKey()->SetNodeId(FindNodeId(json, jsonHost["node_id"]));
-            host->MutableKey()->SetFqdn(jsonHost["host"].GetStringSafe());
-            host->MutableKey()->SetIcPort(jsonHost["port"].GetUIntegerSafe());
-            host->SetHostConfigId(jsonHost["host_config_id"].GetUIntegerSafe());
+            host->MutableKey()->SetFqdn(GetStringSafe(jsonHost, "host"));
+            host->MutableKey()->SetIcPort(GetUnsignedIntegerSafe(jsonHost, "port"));
+            host->SetHostConfigId(GetUnsignedIntegerSafe(jsonHost, "host_config_id"));
         }
 
         return result;

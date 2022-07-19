@@ -52,7 +52,6 @@ protected:
     size_t CompileInflightLimit; // MiniKQLCompileService
     TString UDFsDir;
     TVector<TString> UDFsPaths;
-    TString HostLabelOverride;
     TString TenantName;
     TString TenantDomain;
     TString TenantSlotType;
@@ -149,8 +148,8 @@ protected:
         config.Opts->AddLongOption("syslog-service-tag", "unique tag for syslog").RequiredArgument("NAME").StoreResult(&SysLogServiceTag);
         config.Opts->AddLongOption("log-file-name", "file name for log backend").RequiredArgument("NAME").StoreResult(&LogFileName);
         config.Opts->AddLongOption("tcp", "start tcp interconnect").NoArgument();
-        config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port, or 'dynamic' for dynamic nodes, or 'dynamic-fixed' for dynamic nodes with infinite node ID lease (for dynamic storage nodes)")
-            .RequiredArgument("[NUM|static|dynamic]").StoreResult(&NodeIdValue);
+        config.Opts->AddLongOption('n', "node", "Node ID or 'static' to auto-detect using naming file and ic-port.")
+            .RequiredArgument("[NUM|static]").StoreResult(&NodeIdValue);
         config.Opts->AddLongOption("node-broker", "node broker address host:port")
                 .RequiredArgument("ADDR").AppendTo(&NodeBrokerAddresses);
         config.Opts->AddLongOption("node-broker-port", "node broker port (hosts from naming file are used)")
@@ -170,7 +169,6 @@ protected:
         config.Opts->AddLongOption("sqs-port", "sqs port")
                 .RequiredArgument("NUM").StoreResult(&SqsHttpPort);
         config.Opts->AddLongOption("proxy", "Bind to proxy(-ies)").RequiredArgument("ADDR").AppendTo(&ProxyBindToProxy);
-        config.Opts->AddLongOption("host-label-override", "overrides host label for slot").RequiredArgument("NAME").StoreResult(&HostLabelOverride);
         config.Opts->AddLongOption("tenant", "add binding for Local service to specified tenant, might be one of {'no', 'dynamic', '/<root>', '/<root>/<path_to_user>'}")
             .RequiredArgument("NAME").StoreResult(&TenantName);
         config.Opts->AddLongOption("tenant-slot-type", "set tenant slot type for dynamic tenant")
@@ -191,7 +189,6 @@ protected:
         config.Opts->AddLongOption("mon-threads", "Monitoring http server threads").RequiredArgument("NUM").StoreResult(&MonitoringThreads);
         config.Opts->AddLongOption("suppress-version-check", "Suppress version compatibility checking via IC").NoArgument();
 
-//        config.Opts->AddLongOption('u', "url-base", "url base to request configs from").OptionalArgument("URL");
         config.Opts->AddLongOption("sys-file", "actor system config file (use dummy config by default)").OptionalArgument("PATH");
         config.Opts->AddLongOption("naming-file", "static nameservice config file").OptionalArgument("PATH");
         config.Opts->AddLongOption("domains-file", "domain config file").OptionalArgument("PATH");
@@ -310,6 +307,22 @@ protected:
         return res;
     }
 
+    ui32 FindStaticNodeId() const {
+        std::vector<TString> candidates = {HostName(), FQDNHostName()};
+        for(auto& candidate: candidates) {
+            candidate.to_lower();
+
+            const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig();
+            for (const auto& node : nameserviceConfig.GetNode()) {
+                if (node.GetHost() == candidate && InterconnectPort == node.GetPort()) {
+                    return node.GetNodeId();
+                }
+            }
+        }
+
+        return 0;
+    }
+
     virtual void Parse(TConfig& config) override {
         TClientCommand::Parse(config);
 
@@ -340,29 +353,18 @@ protected:
             if (NodeIdValue == "static") {
                 if (!AppConfig.HasNameserviceConfig() || !InterconnectPort)
                     ythrow yexception() << "'--node static' requires naming file and IC port to be specified";
-                TString hostname;
                 try {
-                    hostname = HostName();
-                    hostname.to_lower();
-                    const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig();
-                    for (const auto& node : nameserviceConfig.GetNode()) {
-                        if (node.GetHost() == hostname && InterconnectPort == node.GetPort()) {
-                            NodeId = node.GetNodeId();
-                            break;
-                        }
-                    }
+                    NodeId = FindStaticNodeId();
                 } catch(TSystemError& e) {
                     ythrow yexception() << "cannot detect host name: " << e.what();
                 }
                 if (!NodeId)
-                    ythrow yexception() << "cannot detect node ID for " << hostname << ":" << InterconnectPort;
+                    ythrow yexception() << "cannot detect node ID for " << HostName() << ":" << InterconnectPort
+                        << " and for " << FQDNHostName() << ":" << InterconnectPort << Endl;
                 Cout << "Determined node ID: " << NodeId << Endl;
-            } else if (NodeIdValue == "dynamic") {
-            } else if (NodeIdValue == "dynamic-fixed") {
-                FixedNodeID = true;
             } else {
                 if (!TryFromString(NodeIdValue, NodeId))
-                    ythrow yexception() << "wrong '--node' value (should be NUM, 'static', or 'dynamic')";
+                    ythrow yexception() << "wrong '--node' value (should be NUM, 'static')";
             }
         }
 
@@ -493,31 +495,6 @@ protected:
         if (NodeId)
             RunConfig.NodeId = NodeId;
 
-        bool nodeIdFoundInConfig = false;
-        if (AppConfig.HasNameserviceConfig() && NodeId) {
-            TString localhost("localhost");
-            TString hostname;
-            try {
-                hostname = HostName();
-                hostname.to_lower();
-                const NKikimrConfig::TStaticNameserviceConfig& nameserviceConfig = AppConfig.GetNameserviceConfig();
-                for (const auto& node : nameserviceConfig.GetNode()) {
-                    Y_VERIFY(node.HasPort());
-                    Y_VERIFY(node.HasHost());
-                    Y_VERIFY(node.HasNodeId());
-                    if (node.GetNodeId() == NodeId) {
-                        nodeIdFoundInConfig = true;
-                        if ((node.GetHost() != hostname && node.GetHost() != localhost) ||
-                            (InterconnectPort && InterconnectPort != node.GetPort())) {
-                            Y_FAIL("Cannot find passed NodeId = %" PRIu32 " for hostname %s", NodeId, hostname.data());
-                            break;
-                        }
-                    }
-                }
-            } catch(TSystemError& e) {
-            }
-        }
-
         if (NodeKind == NODE_KIND_YQ && InterconnectPort) {
             auto& yqConfig = *AppConfig.MutableYandexQueryConfig();
             auto& nmConfig = *yqConfig.MutableNodesManager();
@@ -596,13 +573,9 @@ protected:
         if (config.ParseResult->Has("node-type"))
             AppConfig.MutableTenantPoolConfig()->SetNodeType(NodeType);
 
-        if (config.ParseResult->Has("host-label-override")) {
-            AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostLabelOverride);
-        } else {
-            if (config.ParseResult->Has("tenant")) {
-                if (TenantName != "no" && TenantName != "dynamic" && InterconnectPort != DefaultInterconnectPort) {
-                    AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
-                }
+        if (config.ParseResult->Has("tenant")) {
+            if (TenantName != "no" && TenantName != "dynamic" && InterconnectPort != DefaultInterconnectPort) {
+                AppConfig.MutableMonitoringConfig()->SetHostLabelOverride(HostAndICPort());
             }
         }
 

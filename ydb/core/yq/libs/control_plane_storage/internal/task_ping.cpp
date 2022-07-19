@@ -183,6 +183,20 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             job.mutable_plan()->set_json(request.plan());
         }
 
+        if (request.ast_compressed().data()) {
+            internal.mutable_ast_compressed()->set_method(request.ast_compressed().method());
+            internal.mutable_ast_compressed()->set_data(request.ast_compressed().data());
+            // todo: keep AST compressed in JobInternal
+            // job.mutable_ast()->set_data(request.ast());
+        }
+
+        if (request.plan_compressed().data()) {
+            internal.mutable_plan_compressed()->set_method(request.plan_compressed().method());
+            internal.mutable_plan_compressed()->set_data(request.plan_compressed().data());
+            // todo: keep plan compressed in JobInternal
+            // job.mutable_plan()->set_json(request.plan());
+        }
+
         if (request.has_started_at()) {
             *query.mutable_meta()->mutable_started_at() = request.started_at();
             *job.mutable_query_meta()->mutable_started_at() = request.started_at();
@@ -221,7 +235,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
         if (request.status() && IsFinishedStatus(request.status())) {
             internal.clear_created_topic_consumers();
-            internal.clear_dq_graph();
+            // internal.clear_dq_graph(); keep for debug
             internal.clear_dq_graph_index();
         }
 
@@ -241,6 +255,10 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 
         if (!request.dq_graph().empty()) {
             *internal.mutable_dq_graph() = request.dq_graph();
+        }
+
+        if (!request.dq_graph_compressed().empty()) {
+            *internal.mutable_dq_graph_compressed() = request.dq_graph_compressed();
         }
 
         if (request.dq_graph_index()) {

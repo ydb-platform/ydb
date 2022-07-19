@@ -70,6 +70,7 @@
 #include <ydb/core/yq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/yq/libs/checkpointing_common/defs.h>
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
+#include <ydb/core/yq/libs/common/compression.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 
 #define LOG_E(stream) \
@@ -273,6 +274,7 @@ public:
         , QueryCounters(queryCounters)
         , EnableCheckpointCoordinator(Params.QueryType == YandexQuery::QueryContent::STREAMING && Params.CheckpointCoordinatorConfig.GetEnabled())
         , MaxTasksPerOperation(Params.CommonConfig.GetMaxTasksPerOperation() ? Params.CommonConfig.GetMaxTasksPerOperation() : 40)
+        , Compressor(Params.CommonConfig.GetQueryArtifactsCompressionMethod(), Params.CommonConfig.GetQueryArtifactsCompressionMinSize())
     {
         QueryCounters.SetUptimePublicAndServiceCounter(0);
     }
@@ -721,8 +723,19 @@ private:
 
     void UpdateAstAndPlan(const TString& plan, const TString& expr) {
         Yq::Private::PingTaskRequest request;
-        request.set_ast(expr);
-        request.set_plan(plan);
+        if (Compressor.IsEnabled()) {
+            auto [astCompressionMethod, astCompressed] = Compressor.Compress(expr);
+            request.mutable_ast_compressed()->set_method(astCompressionMethod);
+            request.mutable_ast_compressed()->set_data(astCompressed);
+
+            auto [planCompressionMethod, planCompressed] = Compressor.Compress(plan);
+            request.mutable_plan_compressed()->set_method(planCompressionMethod);
+            request.mutable_plan_compressed()->set_data(planCompressed);
+        } else {
+            request.set_ast(expr); // todo: remove after migration
+            request.set_plan(plan); // todo: remove after migration
+        }
+
         Send(Pinger, new TEvents::TEvForwardPingRequest(request));
     }
 
@@ -765,7 +778,15 @@ private:
         }
 
         for (const auto& graphParams : DqGraphParams) {
-            request.add_dq_graph(graphParams.SerializeAsString());
+            const TString& serializedGraph = graphParams.SerializeAsString();
+            if (Compressor.IsEnabled()) {
+                auto& dq_graph_compressed = *request.add_dq_graph_compressed();
+                auto [method, data] = Compressor.Compress(serializedGraph);
+                dq_graph_compressed.set_method(method);
+                dq_graph_compressed.set_data(data);
+            } else {
+                request.add_dq_graph(serializedGraph); // todo: remove after migration
+            }
         }
 
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveQueryInfoCookie);
@@ -1679,7 +1700,8 @@ private:
     bool EnableCheckpointCoordinator = false;
     Yq::Private::PingTaskRequest QueryStateUpdateRequest;
 
-    const ui64 MaxTasksPerOperation = 100;
+    const ui64 MaxTasksPerOperation;
+    const TCompressor Compressor;
 
     // Consumers creation
     TVector<NYql::NPq::NProto::TDqPqTopicSource> TopicsForConsumersCreation;

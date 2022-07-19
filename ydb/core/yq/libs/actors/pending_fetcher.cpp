@@ -42,6 +42,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_result/result.h>
 
+#include <ydb/core/yq/libs/common/compression.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
 #include <ydb/core/yq/libs/events/events.h>
 
@@ -50,7 +51,6 @@
 #include <ydb/core/yq/libs/private_client/internal_service.h>
 
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/library/security/util.h>
 
@@ -297,7 +297,17 @@ private:
 
         queryCounters.InitUptimeCounter();
         const auto createdAt = TInstant::Now();
-
+        TVector<TString> dqGraphs;
+        if (!task.dq_graph_compressed().empty()) {
+            dqGraphs.reserve(task.dq_graph_compressed().size());
+            for (auto& g : task.dq_graph_compressed()) {
+                TCompressor compressor(g.method());
+                dqGraphs.emplace_back(compressor.Decompress(g.data()));
+            }
+        } else {
+            // todo: remove after migration
+            dqGraphs = VectorFromProto(task.dq_graph());
+        }
         TRunActorParams params(
             YqSharedResources, CredentialsProviderFactory, S3Gateway,
             FunctionRegistry, RandomProvider,
@@ -320,7 +330,7 @@ private:
             task.status(),
             cloudId,
             VectorFromProto(task.result_set_meta()),
-            VectorFromProto(task.dq_graph()),
+            std::move(dqGraphs),
             task.dq_graph_index(),
             VectorFromProto(task.created_topic_consumers()),
             task.automatic(),

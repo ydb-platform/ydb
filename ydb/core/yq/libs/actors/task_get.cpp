@@ -10,7 +10,6 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
-#include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/core/yq/libs/common/entity_id.h>
 

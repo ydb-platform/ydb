@@ -29,14 +29,20 @@ message QueryInternal {
     StateLoadMode state_load_mode = 10;
     string cloud_id = 11;
     repeated Yq.Private.TopicConsumer created_topic_consumers = 12;
-    repeated bytes dq_graph = 13;
+    repeated bytes dq_graph = 13; // deprecated: use dq_graph_compressed
     int32 dq_graph_index = 14;
     StreamingDisposition disposition = 15;
     uint64 result_limit = 16;
     google.protobuf.Duration execution_ttl = 17;
+    Yq.Private.CompressedData ast_compressed = 18;
+    Yq.Private.CompressedData plan_compressed = 19;
+    repeated Yq.Private.CompressedData dq_graph_compressed = 20;
 }
 
 message JobInternal {
+    Yq.Private.CompressedData ast_compressed = 1;
+    Yq.Private.CompressedData plan_compressed = 2;
+    repeated Yq.Private.CompressedData dq_graph_compressed = 3;
 }
 
 message ConnectionInternal {

@@ -17,6 +17,11 @@ import "google/protobuf/duration.proto";
 
 ////////////////////////////////////////////////////////////
 
+message CompressedData {
+    string method = 1;
+    bytes data = 2;
+}
+
 message GetTaskRequest {
     string tenant = 1;
     string owner_id = 2; // guid, should be refreshed on node restart
@@ -47,14 +52,13 @@ message TopicConsumer {
 
 message GetTaskResult {
     message Task {
-        // come back later in 10 sec ?
         SignedIdentity result_id = 1;
         SignedIdentity query_id = 2;
         SignedIdentity job_id = 3;
         uint64 generation = 4;
 
         bool streaming = 5;
-        repeated bytes dq_graph = 6;
+        repeated bytes dq_graph = 6; // deprecated: use dq_graph_compressed
         // text, connection and binding are empty if dq_graph is not empty
         string text = 7;
         repeated YandexQuery.Connection connection = 8;
@@ -77,11 +81,11 @@ message GetTaskResult {
         google.protobuf.Timestamp deadline = 24;
         YandexQuery.StreamingDisposition disposition = 25;
         uint64 result_limit = 26;
-
         YandexQuery.Limits limits = 27;
-        string rate_limiter = 28; // Kesus path // If empty, rate limiting is off.
+        string rate_limiter = 28; // Kesus path. If empty, rate limiting is off.
         google.protobuf.Duration execution_limit = 29;
         google.protobuf.Timestamp request_started_at = 30;
+        repeated CompressedData dq_graph_compressed = 31;
     }
     repeated Task tasks = 1;
 }
@@ -102,28 +106,31 @@ message PingTaskRequest {
     SignedIdentity job_id = 3;
     SignedIdentity result_id = 4;
     YandexQuery.QueryMeta.ComputeStatus status = 5;
-    NYql.NDqProto.StatusIds.StatusCode status_code = 21;
     repeated Ydb.Issue.IssueMessage issues = 6;
-    repeated Ydb.Issue.IssueMessage transient_issues = 16;
     uint32 result_set_count = 7;
     string statistics = 8;
     repeated YandexQuery.ResultSetMeta result_set_meta = 9;
     string executer_info = 10;
-    repeated bytes dq_graph = 11;
-    int32 dq_graph_index = 20;
-    string ast = 12;
-    string plan = 13;
+    repeated bytes dq_graph = 11; // deprecated: use dq_graph_compressed
+    string ast = 12; // deprecated: use ast_compressed
+    string plan = 13; // deprecated: use plan_compressed
     bool resign_query = 14;
+    Ydb.Operations.OperationParams operation_params = 15;
+    repeated Ydb.Issue.IssueMessage transient_issues = 16;
     repeated TopicConsumer created_topic_consumers = 17;
     YandexQuery.StateLoadMode state_load_mode = 18;
     YandexQuery.StreamingDisposition disposition = 19;
-    Ydb.Operations.OperationParams operation_params = 15;
+    int32 dq_graph_index = 20;
+    NYql.NDqProto.StatusIds.StatusCode status_code = 21;
     RateLimiterResources rate_limiter_resources = 22;
+    repeated CompressedData dq_graph_compressed = 23;
+    CompressedData ast_compressed = 24;
+    CompressedData plan_compressed = 25;
     string scope = 100;
-    string tenant = 104;
     google.protobuf.Timestamp started_at = 101;
     google.protobuf.Timestamp finished_at = 102;
     google.protobuf.Timestamp deadline = 103;
+    string tenant = 104;
 }
 
 message PingTaskResult {

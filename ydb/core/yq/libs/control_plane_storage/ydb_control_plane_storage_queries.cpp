@@ -6,6 +6,7 @@
 #include <util/generic/yexception.h>
 #include <util/string/join.h>
 
+#include <ydb/core/yq/libs/common/compression.h>
 #include <ydb/core/yq/libs/common/entity_id.h>
 #include <ydb/core/yq/libs/control_plane_storage/events/events.h>
 #include <ydb/core/yq/libs/control_plane_storage/schema.h>
@@ -19,6 +20,8 @@
 #include <util/digest/multi.h>
 
 namespace {
+
+constexpr ui64 GRPC_MESSAGE_SIZE_LIMIT = 64000000;
 
 YandexQuery::IamAuth::IdentityCase GetIamAuth(const YandexQuery::Connection& connection) {
     const auto& setting = connection.content().setting();
@@ -539,7 +542,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     queryBuilder.AddString("query_id", queryId);
     queryBuilder.AddTimestamp("now", TInstant::Now());
     queryBuilder.AddText(
-        "SELECT `" QUERY_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
+        "SELECT `" QUERY_COLUMN_NAME "`, `" INTERNAL_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
         "WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND (`" EXPIRE_AT_COLUMN_NAME "` is NULL OR `" EXPIRE_AT_COLUMN_NAME "` > $now);"
     );
     const auto query = queryBuilder.Build();
@@ -570,10 +573,35 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
             ythrow TControlPlaneStorageException(TIssuesIds::ACCESS_DENIED) << "Query does not exist or permission denied. Please check the id of the query or your access rights";
         }
 
-        if (!permissions.Check(TPermissions::VIEW_AST)) {
-            result.mutable_query()->clear_ast();
+        YandexQuery::Internal::QueryInternal internal;
+        if (!internal.ParseFromString(*parser.ColumnParser(INTERNAL_COLUMN_NAME).GetOptionalString())) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Error parsing proto message for query internal. Please contact internal support";
         }
 
+        // decompress plan
+        if (internal.plan_compressed().data()) { // todo: remove this if after migration
+            TCompressor compressor(internal.plan_compressed().method());
+            result.mutable_query()->mutable_plan()->set_json(compressor.Decompress(internal.plan_compressed().data()));
+        }
+        if (!permissions.Check(TPermissions::VIEW_AST)) {
+            result.mutable_query()->clear_ast();
+        } else {
+            // decompress AST
+            if (internal.ast_compressed().data()) { // todo: remove this if after migration
+                TCompressor compressor(internal.ast_compressed().method());
+                result.mutable_query()->mutable_ast()->set_data(compressor.Decompress(internal.ast_compressed().data()));
+            }
+            if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
+                if (result.query().ast().data().size() > 1000) {
+                    // modifing AST this way should definitely reduce query msg size
+                    result.mutable_query()->mutable_ast()->set_data(TStringBuilder() << "Message is too big: " << result.query().ByteSizeLong() << " bytes, dropping AST of size " << result.query().ast().data().size() << " bytes");
+                }
+            }
+        }
+
+        if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
+            ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Resulting query of size " << result.query().ByteSizeLong() << " bytes is too big";
+        }
         return result;
     };
 
@@ -899,6 +927,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             query.mutable_meta()->clear_result_expire_at();
             query.mutable_meta()->set_started_by(user);
             query.mutable_meta()->clear_action();
+
+            internal.clear_plan_compressed();
+            internal.clear_ast_compressed();
+            internal.clear_dq_graph_compressed();
 
             auto& jobMeta = *job.mutable_meta();
             jobMeta.set_id(jobId);

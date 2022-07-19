@@ -375,6 +375,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
             *newTask->mutable_dq_graph() = task.Internal.dq_graph();
             newTask->set_dq_graph_index(task.Internal.dq_graph_index());
+            *newTask->mutable_dq_graph_compressed() = task.Internal.dq_graph_compressed();
 
             *newTask->mutable_result_set_meta() = task.Query.result_set_meta();
             newTask->set_scope(task.Scope);

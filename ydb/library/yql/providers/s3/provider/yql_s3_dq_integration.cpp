@@ -10,6 +10,7 @@
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
+#include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
@@ -17,6 +18,8 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+using namespace NYql::NS3Details;
 
 class TS3DqIntegration: public TDqIntegrationBase {
 public:
@@ -27,13 +30,16 @@ public:
 
     ui64 Partition(const TDqSettings&, size_t maxPartitions, const TExprNode& node, TVector<TString>& partitions, TString*, TExprContext&, bool) override {
         TString cluster;
-        std::vector<std::vector<TString>> parts;
+        std::vector<std::vector<std::pair<TString, ui64>>> parts;
         if (const TMaybeNode<TDqSource> source = &node) {
             cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().Value();
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
             parts.reserve(settings.Paths().Size());
             for (auto i = 0u; i < settings.Paths().Size(); ++i)
-                parts.emplace_back(std::vector<TString>(1U, settings.Paths().Item(i).Path().StringValue()));
+                parts.emplace_back(1U,
+                    std::pair(
+                        settings.Paths().Item(i).Path().StringValue(),
+                        FromString<ui64>(settings.Paths().Item(i).Size().Value())));
         }
 
         if (maxPartitions && parts.size() > maxPartitions) {
@@ -62,7 +68,9 @@ public:
         for (const auto& part : parts) {
             NS3::TRange range;
             range.SetStartPathIndex(startIdx);
-            std::for_each(part.cbegin(), part.cend(), [&range, &startIdx](const TString& path) { range.AddPath(path); ++startIdx; });
+            TFileTreeBuilder builder;
+            std::for_each(part.cbegin(), part.cend(), [&builder, &startIdx](const std::pair<TString, ui64>& f) { builder.AddPath(f.first, f.second); ++startIdx; });
+            builder.Save(&range);
 
             partitions.emplace_back();
             TStringOutput out(partitions.back());
@@ -170,11 +178,6 @@ public:
             const auto& paths = settings.Paths();
             YQL_ENSURE(paths.Size() > 0);
             const TStructExprType* extraColumnsType = paths.Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>();
-            for (auto i = 0U; i < paths.Size(); ++i) {
-                const auto p = srcDesc.AddPath();
-                p->SetPath(paths.Item(i).Path().StringValue());
-                p->SetSize(FromString<ui64>(paths.Item(i).Size().Value()));
-            }
 
             if (const auto mayParseSettings = settings.Maybe<TS3ParseSettings>()) {
                 const auto parseSettings = mayParseSettings.Cast();

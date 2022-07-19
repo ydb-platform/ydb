@@ -4,6 +4,14 @@ option cc_enable_arenas = true;
 package NYql.NS3;
 
 message TRange {
-    repeated string Path = 2;
+    repeated string DeprecatedPath = 2; // deprecated
     uint64 StartPathIndex = 3;
+    repeated TPath Paths = 4;
+
+    message TPath {
+        string Name = 1;
+        repeated TPath Children = 2;
+        uint64 Size = 3;
+        bool Read = 4; // Read this path
+    }
 }

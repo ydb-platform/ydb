@@ -43,6 +43,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-result-expr_nodes
   providers-s3-expr_nodes
   providers-s3-proto
+  providers-s3-range_helpers
   library-yql-utils
 )
 target_sources(providers-s3-provider PRIVATE

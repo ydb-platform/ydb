@@ -33,8 +33,8 @@
 
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
+#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/s3/serializations/serialization_interval.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/actor_coroutine.h>
@@ -48,7 +48,8 @@
 
 namespace NYql::NDq {
 
-using namespace NActors;
+using namespace ::NActors;
+using namespace ::NYql::NS3Details;
 
 namespace {
 
@@ -104,9 +105,6 @@ struct TEvPrivate {
         const size_t PathIndex;
     };
 };
-
-using TPath = std::tuple<TString, size_t>;
-using TPathList = std::vector<TPath>;
 
 class TRetryParams {
 public:
@@ -673,28 +671,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
     const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
 {
     const IFunctionRegistry& functionRegistry = *holderFactory.GetFunctionRegistry();
-    std::unordered_map<TString, size_t> map(params.GetPath().size());
-    for (auto i = 0; i < params.GetPath().size(); ++i)
-        map.emplace(params.GetPath().Get(i).GetPath(), params.GetPath().Get(i).GetSize());
 
     TPathList paths;
     ui64 startPathIndex = 0;
-    if (const auto taskParamsIt = taskParams.find(S3ProviderName); taskParamsIt != taskParams.cend()) {
-        NS3::TRange range;
-        TStringInput input(taskParamsIt->second);
-        range.Load(&input);
-        startPathIndex = range.GetStartPathIndex();
-        for (auto i = 0; i < range.GetPath().size(); ++i) {
-            const auto& path = range.GetPath().Get(i);
-            auto it = map.find(path);
-            YQL_ENSURE(it != map.end());
-            paths.emplace_back(path, it->second);
-        }
-    } else {
-        for (auto i = 0; i < params.GetPath().size(); ++i) {
-            paths.emplace_back(params.GetPath().Get(i).GetPath(), params.GetPath().Get(i).GetSize());
-        }
-    }
+    ReadPathsList(params, taskParams, paths, startPathIndex);
 
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);

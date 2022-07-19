@@ -29,6 +29,7 @@ target_link_libraries(providers-s3-actors PUBLIC
   common-token_accessor-client
   providers-s3-compressors
   providers-s3-proto
+  providers-s3-range_helpers
   providers-s3-serializations
   yql-public-types
   clickhouse_client_udf

@@ -377,10 +377,9 @@ namespace NProtobufJson {
             return;
         }
 
-        Y_ENSURE(json.IsMap(), "expected json map");
-
         const google::protobuf::Descriptor* descriptor = proto.GetDescriptor();
         Y_ASSERT(!!descriptor);
+        Y_ENSURE(json.IsMap(), "Failed to merge json to proto for message: " << descriptor->full_name() << ", expected json map.");
 
         for (int f = 0, endF = descriptor->field_count(); f < endF; ++f) {
             const google::protobuf::FieldDescriptor* field = descriptor->field(f);

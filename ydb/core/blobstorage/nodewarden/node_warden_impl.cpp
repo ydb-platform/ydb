@@ -1,5 +1,6 @@
 #include "node_warden_impl.h"
 
+#include <ydb/core/blobstorage/crypto/secured_block.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/library/pdisk_io/file_params.h>
 
@@ -471,6 +472,9 @@ bool ObtainKey(TEncryptionKey *key, const NKikimrProto::TKeyRecord& record) {
 
     key->Version = version;
     key->Id = keyId;
+
+    SecureWipeBuffer((ui8*)data.Detach(), data.size());
+
     return true;
 }
 

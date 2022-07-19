@@ -14,6 +14,7 @@ target_link_libraries(core-blobstorage-nodewarden PUBLIC
   library-cpp-json
   ydb-core-base
   core-blob_depot-agent
+  core-blobstorage-crypto
   core-blobstorage-groupinfo
   core-blobstorage-pdisk
   ydb-core-control

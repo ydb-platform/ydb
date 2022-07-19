@@ -16,10 +16,14 @@ void registerInputFormatProcessorRawBLOB(FormatFactory & factory);
 void registerInputFormatProcessorORC(FormatFactory & factory);
 void registerInputFormatProcessorArrow(FormatFactory & factory);
 void registerInputFormatProcessorParquet(FormatFactory & factory);
+void registerOutputFormatProcessorParquet(FormatFactory & factory);
 void registerInputFormatProcessorAvro(FormatFactory & factory);
 void registerInputFormatProcessorCSV(FormatFactory & factory);
+void registerOutputFormatProcessorCSV(FormatFactory & factory);
 void registerInputFormatProcessorTSKV(FormatFactory & factory);
+void registerOutputFormatProcessorTSKV(FormatFactory & factory);
 void registerInputFormatProcessorTabSeparated(FormatFactory & factory);
+void registerOutputFormatProcessorTabSeparated(FormatFactory & factory);
 
 void registerFormats()
 {
@@ -35,10 +39,14 @@ void registerFormats()
         registerInputFormatProcessorORC(factory);
         registerInputFormatProcessorArrow(factory);
         registerInputFormatProcessorParquet(factory);
+        registerOutputFormatProcessorParquet(factory);
         registerInputFormatProcessorAvro(factory);
         registerInputFormatProcessorCSV(factory);
+        registerOutputFormatProcessorCSV(factory);
         registerInputFormatProcessorTSKV(factory);
+        registerOutputFormatProcessorTSKV(factory);
         registerInputFormatProcessorTabSeparated(factory);
+        registerOutputFormatProcessorTabSeparated(factory);
     }
 }
 

@@ -8,7 +8,7 @@ namespace NDataShard {
 class TMoveTableUnit : public TExecutionUnit {
 public:
     TMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline)
-        : TExecutionUnit(EExecutionUnitKind::DropIndexNotice, false, dataShard, pipeline)
+        : TExecutionUnit(EExecutionUnitKind::MoveTable, false, dataShard, pipeline)
     { }
 
     bool IsReadyToExecute(TOperation::TPtr) const override {

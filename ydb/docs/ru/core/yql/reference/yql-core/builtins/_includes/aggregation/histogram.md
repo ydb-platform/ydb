@@ -131,3 +131,18 @@ SELECT
     LogarithmicHistogram(numeric_column, 2)
 FROM my_table;
 ```
+## CDF (cumulative distribution function) {#histogramcdf}
+
+К каждому виду функции Histogram можно приписать суффикс CDF для построения кумулятивной функции распределения. Конструкции
+``` yql
+SELECT
+    Histogram::ToCumulativeDistributionFunction(Histogram::Normalize(<вид_функции>Histogram(numeric_column)))
+FROM my_table;
+```
+и
+``` yql
+SELECT
+    <вид_функции>HistogramCDF(numeric_column)
+FROM my_table;
+```
+полностью эквивалентны.

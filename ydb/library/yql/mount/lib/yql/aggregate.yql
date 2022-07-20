@@ -2,6 +2,7 @@
 (
 
 (let empty_list (lambda '(list_type) (MatchType list_type 'Null (lambda '() (EmptyList)) (lambda '() (List list_type)))))
+(let to_cdf (lambda '(item) (Apply (Udf 'Histogram.ToCumulativeDistributionFunction) (Apply (Udf 'Histogram.Normalize) item))))
 
 # list_type:type function:lambda
 # doesn't support optional values
@@ -205,15 +206,15 @@
 (let covariance_population_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '0))))
 (let covariance_sample_traits_factory_raw (lambda '(list_type) (Apply covariance_traits_factory_raw list_type (Bool '1))))
 
-# list_type:type histogram:atom value:lambda weight:lambda intervals:integer
+# list_type:type histogram:atom value:lambda weight:lambda intervals:integer adjust_resullt:lambda
 # doesn't support optional values
-(let histogram_traits_factory_raw (lambda '(list_type histogram value weight intervals) (block '(
+(let histogram_traits_factory_raw (lambda '(list_type histogram value weight intervals adjust_resullt) (block '(
     (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) (Apply weight row) intervals) (AsStruct) (DependsOn parent))))
     (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Apply weight row)) (AsStruct) (DependsOn parent))))
     (let save (lambda '(state) (Apply (Udf (Combine histogram '_Serialize)) state)))
     (let load (lambda '(state) (Apply (Udf (Combine histogram '_Deserialize)) state intervals)))
     (let merge (lambda '(one two) (Apply (Udf (Combine histogram '_Merge)) one two)))
-    (let finish (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state)))
+    (let finish (lambda '(state) (Apply adjust_resullt (Apply (Udf (Combine histogram '_GetResult)) state))))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
 ))))
 
@@ -369,28 +370,35 @@
 
 # list_type:type value:lambda weight:lambda intervals:integer
 # doesn't support optional values
-(let histogram_adaptive_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals)))
-(let histogram_adaptive_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWeightHistogram value weight intervals)))
-(let histogram_adaptive_distance_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveDistanceHistogram value weight intervals)))
-(let histogram_block_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.BlockWardHistogram value weight intervals)))
-(let histogram_block_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.BlockWeightHistogram value weight intervals)))
+(let histogram_adaptive_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals (lambda '(item) item))))
+(let histogram_cdf_adaptive_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals to_cdf)))
+(let histogram_adaptive_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWeightHistogram value weight intervals (lambda '(item) item))))
+(let histogram_cdf_adaptive_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals to_cdf)))
+(let histogram_adaptive_distance_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveDistanceHistogram value weight intervals (lambda '(item) item))))
+(let histogram_cdf_adaptive_distance_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals to_cdf)))
+(let histogram_block_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.BlockWardHistogram value weight intervals (lambda '(item) item))))
+(let histogram_cdf_block_ward_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals to_cdf)))
+(let histogram_block_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.BlockWeightHistogram value weight intervals (lambda '(item) item))))
+(let histogram_cdf_block_weight_traits_factory_raw (lambda '(list_type value weight intervals) (Apply histogram_traits_factory_raw list_type 'Histogram.AdaptiveWardHistogram value weight intervals to_cdf)))
 
-# list_type:type histogram:atom value:lamba binsize:double minimum:double maximum:double
+# list_type:type histogram:atom value:lamba binsize:double minimum:double maximum:double adjust_result:lambda
 # doesn't support optional values
-(let histogram_linear_traits_factory_impl (lambda '(list_type histogram value binsize minimum maximum) (block '(
+(let histogram_linear_traits_factory_impl (lambda '(list_type histogram value binsize minimum maximum adjust_result) (block '(
     (let init (lambda '(row parent) (NamedApply (Udf (Combine histogram '_Create)) '((Apply value row) binsize minimum maximum) (AsStruct) (DependsOn parent))))
     (let update (lambda '(row state parent) (NamedApply (Udf (Combine histogram '_AddValue)) '(state (Apply value row) (Double '"1.0")) (AsStruct) (DependsOn parent))))
     (let save (lambda '(state) (Apply (Udf (Combine histogram '_Serialize)) state)))
     (let load (lambda '(state) (Apply (Udf (Combine histogram '_Deserialize)) state binsize minimum maximum)))
     (let merge (lambda '(one two) (Apply (Udf (Combine histogram '_Merge)) one two)))
-    (let finish (lambda '(state) (Apply (Udf (Combine histogram '_GetResult)) state)))
+    (let finish (lambda '(state) (Apply adjust_result (Apply (Udf (Combine histogram '_GetResult)) state))))
     (return (AggregationTraits (ListItemType list_type) init update save load merge finish (Null)))
 ))))
 
 # list_type:type value:lambda binsize:double minimum:double maximum:double
 # doesn't support optional values
-(let histogram_linear_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LinearHistogram value binsize minimum maximum)))
-(let histogram_logarithmic_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LogarithmicHistogram value binsize minimum maximum)))
+(let histogram_linear_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LinearHistogram value binsize minimum maximum (lambda '(item) item))))
+(let histogram_cdf_linear_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LinearHistogram value binsize minimum maximum to_cdf)))
+(let histogram_logarithmic_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LogarithmicHistogram value binsize minimum maximum (lambda '(item) item))))
+(let histogram_cdf_logarithmic_traits_factory_raw (lambda '(list_type value binsize minimum maximum) (Apply histogram_linear_traits_factory_impl list_type 'Histogram.LogarithmicHistogram value binsize minimum maximum to_cdf)))
 
 # list_type:type factory:lambda
 # support optional values
@@ -842,15 +850,22 @@
 # list_type:type value:lambda weight:lambda intervals:integer
 # support optional values
 (let histogram_adaptive_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
+(let histogram_cdf_adaptive_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_cdf_adaptive_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 (let histogram_adaptive_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
+(let histogram_cdf_adaptive_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_cdf_adaptive_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 (let histogram_adaptive_distance_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_adaptive_distance_traits_factory_raw list_type value weight intervals)) list_type value weight)))
+(let histogram_cdf_adaptive_distance_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_cdf_adaptive_distance_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 (let histogram_block_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
+(let histogram_cdf_block_ward_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_cdf_block_ward_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 (let histogram_block_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_block_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
+(let histogram_cdf_block_weight_traits_factory (lambda '(list_type value weight intervals) (Apply double_traits_factory_opt_parent (lambda '(list_type value weight) (Apply histogram_cdf_block_weight_traits_factory_raw list_type value weight intervals)) list_type value weight)))
 
 # list_type:type value:lambda binsize:double minimum:double maximum:double
 # support optional values
 (let histogram_linear_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_linear_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
+(let histogram_cdf_linear_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_cdf_linear_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
 (let histogram_logarithmic_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_logarithmic_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
+(let histogram_cdf_logarithmic_traits_factory (lambda '(list_type value binsize minimum maximum) (Apply double_traits_factory_opt_parent (lambda '(list_type value binsize) (Apply histogram_cdf_logarithmic_traits_factory_raw list_type value binsize minimum maximum)) list_type value binsize)))
 
 (let compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_raw list_type compare first second limit)) list_type first second)))
 (let list_compare_by_traits_factory_opt (lambda '(list_type compare first second limit) (Apply double_traits_factory_opt (lambda '(list_type first second) (Apply compare_traits_factory_list_raw list_type compare first second limit)) list_type first second)))
@@ -933,12 +948,19 @@
 (export covariance_population_traits_factory)
 (export covariance_sample_traits_factory)
 (export histogram_adaptive_ward_traits_factory)
+(export histogram_cdf_adaptive_ward_traits_factory)
 (export histogram_adaptive_weight_traits_factory)
+(export histogram_cdf_adaptive_weight_traits_factory)
 (export histogram_adaptive_distance_traits_factory)
+(export histogram_cdf_adaptive_distance_traits_factory)
 (export histogram_block_ward_traits_factory)
+(export histogram_cdf_block_ward_traits_factory)
 (export histogram_block_weight_traits_factory)
+(export histogram_cdf_block_weight_traits_factory)
 (export histogram_linear_traits_factory)
+(export histogram_cdf_linear_traits_factory)
 (export histogram_logarithmic_traits_factory)
+(export histogram_cdf_logarithmic_traits_factory)
 (export udaf_traits_factory)
 (export percentile_traits_factory)
 (export set_traits_factory)

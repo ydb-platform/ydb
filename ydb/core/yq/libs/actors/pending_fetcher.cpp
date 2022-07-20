@@ -144,6 +144,7 @@ public:
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , PqCmConnections(std::move(pqCmConnections))
+        , FetcherGuid(CreateGuidAsString())
         , ClientCounters(clientCounters)
         , TenantName(tenantName)
         , InternalServiceId(MakeInternalServiceActorId())
@@ -164,9 +165,7 @@ public:
         DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
 
-        TString guidActor = CreateGuidAsString();
-        LOG_I("STARTED " + guidActor);
-        LogScope.ConstructInPlace(NActors::TActivationContext::ActorSystem(), NKikimrServices::YQL_PROXY, guidActor);
+        LogScope.ConstructInPlace(NActors::TActivationContext::ActorSystem(), NKikimrServices::YQL_PROXY, FetcherGuid);
     }
 
 private:
@@ -240,10 +239,10 @@ private:
     }
 
     void GetPendingTask() {
-        OwnerId = CreateGuidAsString();
-        LOG_D("Request Private::GetTask" << ", Owner: " << OwnerId << ", Host: " << HostName() << ", Tenant: " << TenantName);
+        FetcherGeneration++;
+        LOG_D("Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
         Yq::Private::GetTaskRequest request;
-        request.set_owner_id(OwnerId);
+        request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
         request.set_tenant(TenantName);
         Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
@@ -254,6 +253,10 @@ private:
             RunTask(task);
         }
 
+    }
+
+    TString GetOwnerId() const {
+        return FetcherGuid + ToString(FetcherGeneration);
     }
 
     void RunTask(const Yq::Private::GetTaskResult::Task& task) {
@@ -317,7 +320,7 @@ private:
             PrivateApiConfig, GatewaysConfig, PingerConfig,
             task.text(), task.scope(), task.user_token(),
             DatabaseResolver, queryId,
-            task.user_id(), OwnerId, task.generation(),
+            task.user_id(), GetOwnerId(), task.generation(),
             VectorFromProto(task.connection()),
             VectorFromProto(task.binding()),
             CredentialsFactory,
@@ -386,7 +389,8 @@ private:
     const IHTTPGateway::TPtr S3Gateway;
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
 
-    TString OwnerId;
+    const TString FetcherGuid;
+    uint64_t FetcherGeneration = 0;
     const ::NMonitoring::TDynamicCounterPtr ClientCounters;
 
     TMaybe<NYql::NLog::TScopedBackend<NYql::NDq::TYqlLogScope>> LogScope;

@@ -3,6 +3,7 @@
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/common/mkql/parser.h>
 
+#include <library/cpp/json/json_writer.h>
 #include <util/stream/str.h>
 
 namespace NYql {
@@ -12,11 +13,10 @@ using namespace NNodes;
 
 namespace {
 
-
 TRuntimeNode BuildSerializeCall(
     TRuntimeNode input,
+    const std::vector<std::string_view>& keys,
     const std::string_view& format,
-    const std::string_view& /*compression*/,
     TType* inputType,
     NCommon::TMkqlBuildContext& ctx)
 {
@@ -40,14 +40,62 @@ TRuntimeNode BuildSerializeCall(
         );
     }
 
-    const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewStreamType(inputItemType)})});
-    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format), {ctx.ProgramBuilder.FromFlow(input)}));
+    TString settings;
+    if (!keys.empty()) {
+        const std::unordered_set<std::string_view> set(keys.cbegin(), keys.cend());
+        const auto structType = AS_TYPE(TStructType, inputItemType);
+        MKQL_ENSURE(set.size() < structType->GetMembersCount(), "Expected non key columns.");
+        std::vector<std::pair<std::string_view, TType*>> types(structType->GetMembersCount());
+        const auto keyType = ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
+        for (auto i = 0U; i < types.size(); ++i) {
+            const auto& name = structType->GetMemberName(i);
+            types[i].first = name;
+            types[i].second = set.contains(name) ? keyType : structType->GetMemberType(i);
+        }
+
+        if (const auto newStructType = static_cast<TStructType*>(ctx.ProgramBuilder.NewStructType(types)); !newStructType->IsSameType(*structType)) {
+            input = ctx.ProgramBuilder.Map(input,
+                [&](TRuntimeNode item) {
+                    std::vector<std::pair<std::string_view, TRuntimeNode>> members(types.size());
+                    for (auto i = 0U; i < members.size(); ++i) {
+                        const auto& name = members[i].first = types[i].first;
+                        members[i].second = ctx.ProgramBuilder.Member(item, name);
+                        if (const auto oldType = structType->GetMemberType(i); !newStructType->GetMemberType(i)->IsSameType(*oldType)) {
+                            const auto dataType = AS_TYPE(TDataType, oldType);
+                            members[i].second = dataType->GetSchemeType() == NUdf::TDataType<const char*>::Id ?
+                                ctx.ProgramBuilder.StrictFromString(members[i].second, newStructType->GetMemberType(i)):
+                                ctx.ProgramBuilder.ToString<true>(members[i].second);
+                        }
+                    }
+
+                    return ctx.ProgramBuilder.NewStruct(newStructType, members);
+                }
+            );
+        }
+
+        TStringOutput stream(settings);
+        NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
+        writer.OpenMap();
+            writer.WriteKey("keys");
+            writer.OpenArray();
+                std::for_each(keys.cbegin(), keys.cend(), [&writer](const std::string_view& key){ writer.Write(key); });
+            writer.CloseArray();
+        writer.CloseMap();
+        writer.Flush();
+    }
+
+    input = ctx.ProgramBuilder.FromFlow(input);
+    const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({input.GetStaticType()})});
+    return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format + settings), {input}));
 }
 
 TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, NCommon::TMkqlBuildContext& ctx) {
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
     const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
-    return BuildSerializeCall(input, wrapper.Format().Value(), "TODO", inputItemType,  ctx);
+    std::vector<std::string_view> keys;
+    keys.reserve(wrapper.KeyColumns().Size());
+    wrapper.KeyColumns().Ref().ForEachChild([&](const TExprNode& key){ keys.emplace_back(key.Content()); });
+    return BuildSerializeCall(input, keys, wrapper.Format().Value(), inputItemType,  ctx);
 }
 
 }

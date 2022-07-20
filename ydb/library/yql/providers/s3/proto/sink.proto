@@ -7,5 +7,6 @@ message TSink {
     string Url = 1;
     string Token = 2;
     string Path = 3;
+    optional uint32 Keys = 4;
 }
 

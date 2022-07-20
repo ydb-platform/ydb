@@ -19,6 +19,15 @@ using namespace NNodes;
 
 namespace {
 
+std::string_view GetKeys(const TExprNode& settings) {
+    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
+        const auto& child = *settings.Child(i);
+        if (child.Head().IsAtom("keys"))
+            return child.Tail().Content();
+    }
+    return {};
+}
+
 using namespace NYql::NS3Details;
 
 class TS3DqIntegration: public TDqIntegrationBase {
@@ -221,6 +230,8 @@ public:
             sinkDesc.SetUrl(connect.Url);
             sinkDesc.SetToken(settings.Token().Name().StringValue());
             sinkDesc.SetPath(settings.Path().StringValue());
+            if (const auto& keys = GetKeys(maySettings.Settings().Ref()); !keys.empty())
+                sinkDesc.SetKeys(::FromString<ui32>(keys));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

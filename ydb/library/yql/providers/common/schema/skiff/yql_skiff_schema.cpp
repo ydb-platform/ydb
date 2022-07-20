@@ -84,7 +84,11 @@ struct TSkiffTypeLoader {
         ythrow yexception() << "Unsupported data type" << NUdf::GetDataTypeInfo(*slot).Name;
     }
 
-    TMaybe<TType> LoadPgType(const TString& pgType, ui32 /*level*/) {
+    TMaybe<TType> LoadPgType(const TString& pgType, ui32 level) {
+        if (!(NativeYTTypesFlags & NTCF_COMPLEX) && level > 1) {
+            return NYT::TNode()("wire_type", "yson32");
+        }
+
         TType itemType;
         if (pgType == "bool") {
             itemType = NYT::TNode()("wire_type", "boolean");

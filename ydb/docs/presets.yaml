@@ -21,7 +21,7 @@ default:
   objstorage-full-name: Yandex Object Storage
   sf-name: Cloud Functions
   concept_secondary_index: ../../../../concepts/secondary_indexes
-  concept_table: ../../../../concepts/datamodel#table
+  concept_table: ../../../../concepts/datamodel/table
   ydb_local_docker_image: cr.yandex/yc/yandex-docker-local-ydb
   ydb_local_docker_image_tag: latest
   managed-k8s-full-name: Yandex Managed Service for Kubernetes

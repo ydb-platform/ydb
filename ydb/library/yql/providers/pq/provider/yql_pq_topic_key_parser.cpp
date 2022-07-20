@@ -21,19 +21,40 @@ TTopicKeyParser::TTopicKeyParser(const TExprNode& expr, TExprNode::TPtr readSett
 }
 
 bool TTopicKeyParser::Parse(const TExprNode& expr, TExprNode::TPtr readSettings, TExprContext& ctx) {
-    if (expr.IsCallable("MrTableConcat")) {
-        return TryParseKey(expr.Head(), ctx);
+    if (readSettings && expr.IsCallable("MrObject")) { // todo: remove MrObject support
+        return TryParseObject(expr, readSettings);
+    }
+
+    if (!expr.IsCallable("MrTableConcat") && !expr.IsCallable(NNodes::TCoKey::CallableName())) {
+        ctx.AddError(TIssue(ctx.GetPosition(expr.Pos()), "Expected MrTableConcat or Key"));
+        return false;
     }
 
     if (expr.IsCallable(NNodes::TCoKey::CallableName())) {
         return TryParseKey(expr, ctx);
     }
 
-    if (readSettings && expr.IsCallable("MrObject")) {
-        return TryParseObject(expr, readSettings);
+    if (readSettings) {
+        for (auto i = 0U; i < readSettings->ChildrenSize(); ++i) {
+            if (readSettings->Child(i)->Head().IsAtom("userschema")) {
+                UserSchema = readSettings->Child(i)->ChildPtr(1);
+                if (readSettings->Child(i)->ChildrenSize() > 2) {
+                    ColumnOrder = readSettings->Child(i)->TailPtr();
+                }
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("format")) {
+                Format = readSettings->Child(i)->Child(1)->Content();
+                continue;
+            }
+            if (readSettings->Child(i)->Head().IsAtom("compression")) {
+                Compression = readSettings->Child(i)->Child(1)->Content();
+                continue;
+            }
+        }
     }
-    ctx.AddError(TIssue(ctx.GetPosition(expr.Pos()), "Expected MrTableConcat or Key or MrObject"));
-    return false;
+
+    return TryParseKey(expr.Head(), ctx);
 }
 
 bool TTopicKeyParser::TryParseKey(const TExprNode& expr, TExprContext& ctx) {

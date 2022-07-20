@@ -171,6 +171,7 @@ void Init(
         }
         NYql::NDqs::TLocalWorkerManagerOptions lwmOptions;
         lwmOptions.Counters = workerManagerCounters;
+        lwmOptions.DqTaskCounters = appData->Counters->GetSubgroup("counters", "dq_tasks");
         lwmOptions.Factory = NYql::NTaskRunnerProxy::CreateFactory(appData->FunctionRegistry, dqCompFactory, dqTaskTransformFactory, false);
         lwmOptions.AsyncIoFactory = asyncIoFactory;
         lwmOptions.FunctionRegistry = appData->FunctionRegistry;

@@ -167,7 +167,9 @@ protected:
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, NDqProto::TDqTask&& task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, bool ownMemoryQuota = true, bool passExceptions = false)
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
+        bool ownMemoryQuota = true, bool passExceptions = false,
+        ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
@@ -186,12 +188,14 @@ protected:
             BasicStats = std::make_unique<TBasicStats>();
         }
         InitializeTask();
+        InitMonCounters(taskCounters);
     }
 
     TDqComputeActorBase(const NActors::TActorId& executerId, const TTxId& txId, const NDqProto::TDqTask& task,
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits)
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
+        ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task)
@@ -208,6 +212,22 @@ protected:
             BasicStats = std::make_unique<TBasicStats>();
         }
         InitializeTask();
+        InitMonCounters(taskCounters);
+    }
+
+    void InitMonCounters(::NMonitoring::TDynamicCounterPtr taskCounters) {
+        if (taskCounters) {
+            MkqlMemoryUsage = taskCounters->GetSubgroup("subsystem", "mkql")->GetCounter("MemoryUsage");
+            MkqlMemoryLimit = taskCounters->GetSubgroup("subsystem", "mkql")->GetCounter("MemoryLimit");
+            MonCountersProvided = true;
+        }
+    }
+
+    void UpdateMonCounters() {
+        if (MonCountersProvided) {
+            *MkqlMemoryUsage = GetProfileStats()->MkqlMaxUsedMemory;
+            *MkqlMemoryLimit = GetMkqlMemoryLimit();
+        }
     }
 
     void ReportEventElapsedTime() {
@@ -1798,6 +1818,10 @@ private:
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;
+protected:
+    bool MonCountersProvided = false;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryUsage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryLimit;
 };
 
 } // namespace NYql

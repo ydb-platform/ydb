@@ -13,6 +13,7 @@ NActors::IActor* CreateComputeActor(
     const TString& operationId,
     NYql::NDqProto::TDqTask&& task,
     const TString& computeActorType,
-    const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory);
+    const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
+    ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);
 
 } // namespace NYql

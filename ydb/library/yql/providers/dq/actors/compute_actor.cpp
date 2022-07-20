@@ -22,7 +22,8 @@ IActor* CreateComputeActor(
     const TString& operationId,
     NYql::NDqProto::TDqTask&& task,
     const TString& computeActorType,
-    const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
+    const NDq::NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
+    ::NMonitoring::TDynamicCounterPtr taskCounters)
 {
     auto memoryLimits = NDq::TComputeMemoryLimits();
     memoryLimits.ChannelBufferSize = 1000000;
@@ -69,7 +70,8 @@ IActor* CreateComputeActor(
             options.FunctionRegistry,
             computeRuntimeSettings,
             memoryLimits,
-            taskRunnerFactory);
+            taskRunnerFactory,
+            taskCounters);
     } else {
         return NYql::NDq::CreateDqAsyncComputeActor(
             executerId,
@@ -79,7 +81,8 @@ IActor* CreateComputeActor(
             options.FunctionRegistry,
             computeRuntimeSettings,
             memoryLimits,
-            taskRunnerActorFactory);
+            taskRunnerActorFactory,
+            taskCounters);
     }
 }
 

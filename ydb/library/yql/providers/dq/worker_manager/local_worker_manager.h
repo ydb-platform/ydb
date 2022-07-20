@@ -20,6 +20,7 @@ namespace NYql::NDqs {
 
     struct TLocalWorkerManagerOptions {
         TWorkerManagerCounters Counters;
+        ::NMonitoring::TDynamicCounterPtr DqTaskCounters;
         NTaskRunnerProxy::IProxyFactory::TPtr Factory;
         NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
         const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;

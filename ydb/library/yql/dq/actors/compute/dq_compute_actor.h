@@ -259,7 +259,8 @@ NActors::IActor* CreateDqComputeActor(const NActors::TActorId& executerId, const
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    const TTaskRunnerFactory& taskRunnerFactory);
+    const TTaskRunnerFactory& taskRunnerFactory,
+    ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr);
 
 } // namespace NDq
 } // namespace NYql

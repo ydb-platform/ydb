@@ -245,17 +245,20 @@ private:
                 THolder<NActors::IActor> actor;
 
                 if (createComputeActor) {
+                    auto id = tasks[i].GetId();
+                    auto stageId = tasks[i].GetStageId();
                     YQL_CLOG(DEBUG, ProviderDq) << "Create compute actor: " << computeActorType;
-                    actor.Reset(
-                        NYql::CreateComputeActor(
-                            Options,
-                            Options.MkqlTotalMemoryLimit ? AllocateMemoryFn : nullptr,
-                            Options.MkqlTotalMemoryLimit ? FreeMemoryFn : nullptr,
-                            resultId,
-                            traceId,
-                            std::move(tasks[i]),
-                            computeActorType,
-                            Options.TaskRunnerActorFactory));
+                    auto taskCounters = Options.DqTaskCounters ? Options.DqTaskCounters->GetSubgroup("operation", traceId)->GetSubgroup("stage", ToString(stageId))->GetSubgroup("id", ToString(id)) : nullptr;
+                    actor.Reset(NYql::CreateComputeActor(
+                        Options,
+                        Options.MkqlTotalMemoryLimit ? AllocateMemoryFn : nullptr,
+                        Options.MkqlTotalMemoryLimit ? FreeMemoryFn : nullptr,
+                        resultId,
+                        traceId,
+                        std::move(tasks[i]),
+                        computeActorType,
+                        Options.TaskRunnerActorFactory,
+                        taskCounters));
                 } else {
                     actor.Reset(CreateWorkerActor(
                         Options.RuntimeData,

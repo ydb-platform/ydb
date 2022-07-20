@@ -33,8 +33,9 @@ public:
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
-        : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false)
+        const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
+        ::NMonitoring::TDynamicCounterPtr taskCounters)
+        : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false, false, taskCounters)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , ReadyToCheckpointFlag(false)
         , SentStatsRequest(false)
@@ -652,10 +653,11 @@ IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId,
     IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-    const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory)
+    const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
+    ::NMonitoring::TDynamicCounterPtr taskCounters)
 {
     return new TDqAsyncComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, taskRunnerActorFactory);
+        functionRegistry, settings, memoryLimits, taskRunnerActorFactory, taskCounters);
 }
 
 } // namespace NDq

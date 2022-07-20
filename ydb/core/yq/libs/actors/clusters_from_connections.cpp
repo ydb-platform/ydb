@@ -1,10 +1,13 @@
 #include "clusters_from_connections.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/utils/url_builder.h>
 
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <util/system/env.h>
+
+#include <library/cpp/string_utils/quote/quote.h>
 
 namespace NYq {
 
@@ -55,10 +58,14 @@ void FillS3ClusterConfig(NYql::TS3ClusterConfig& clusterConfig,
         const YandexQuery::ObjectStorageConnection& s3) {
     clusterConfig.SetName(name);
     TString objectStorageUrl;
+
+
     if (objectStorageEndpoint == "https://s3.mds.yandex.net") {
-        objectStorageUrl = TStringBuilder() << "https://" << s3.bucket() << ".s3.mds.yandex.net/";
+        TUrlBuilder builder{"https://"};
+        objectStorageUrl = builder.AddPathComponent(s3.bucket() + ".s3.mds.yandex.net/").Build();
     } else {
-        objectStorageUrl = TStringBuilder() << objectStorageEndpoint << '/' << s3.bucket() << '/';
+        TUrlBuilder builder{UrlEscapeRet(objectStorageEndpoint, true)};
+        objectStorageUrl = builder.AddPathComponent(s3.bucket() + "/").Build();
     }
     clusterConfig.SetUrl(objectStorageUrl);
     FillClusterAuth(clusterConfig, s3.auth(), authToken, accountIdSignatures);

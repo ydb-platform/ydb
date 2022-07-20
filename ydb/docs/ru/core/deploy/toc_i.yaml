@@ -5,5 +5,4 @@ items:
   href: manual/deploy-ydb-on-premises.md
 - name: Конфигурация
   href: configuration/config.md
-  # - name: Production checklist
-  #  href: ../deploy/production_checklist.md
+

@@ -1,9 +1,9 @@
 items:
+# - name: Requirements and recommendations
+#   href: ../deploy/system-requirements.md
 - name: Kubernetes
   include: { mode: link, path: orchestrated/toc_p.yaml }
 - name: VM / Baremetal
   href: manual/deploy-ydb-on-premises.md
 - name: Configuration
   href: configuration/config.md
-  # - name: Production checklist
-  #  href: ../deploy/production_checklist.md

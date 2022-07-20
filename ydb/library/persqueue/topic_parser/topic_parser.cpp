@@ -132,7 +132,6 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
     auto name = pqTabletConfig.GetTopicName();
     auto path = pqTabletConfig.GetTopicPath();
     if (name.empty()) {
-        Y_VERIFY(!pqTabletConfig.GetTopic().empty());
         Y_VERIFY(!path.empty());
         TStringBuf pathBuf(path), fst, snd;
         auto res = pathBuf.TryRSplit("/", fst, snd);

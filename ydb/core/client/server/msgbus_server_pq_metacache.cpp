@@ -36,7 +36,7 @@ void CheckEntrySetHasTopicPath(auto* scNavigate) {
         if (entry.PQGroupInfo && entry.PQGroupInfo->Description.HasPQTabletConfig()) {
             if (entry.PQGroupInfo->Description.GetPQTabletConfig().GetTopicPath().empty()) {
                 auto* newGroupInfo = new NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo(*entry.PQGroupInfo);
-                newGroupInfo->Description.MutablePQTabletConfig()->SetTopicPath(NKikimr::JoinPath(entry.Path));
+                newGroupInfo->Description.MutablePQTabletConfig()->SetTopicPath("/" + NKikimr::JoinPath(entry.Path));
                 entry.PQGroupInfo.Reset(newGroupInfo);
             }
         }

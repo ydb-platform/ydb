@@ -130,8 +130,8 @@ struct TRequestCreatePQ {
         auto config = req->MutableConfig();
         if (CacheSize)
             config->SetCacheSize(CacheSize);
-        config->SetTopicName(Topic);
-        config->SetTopicPath(TString("/Root/PQ/") + Topic);
+        //config->SetTopicName(Topic);
+        //config->SetTopicPath(TString("/Root/PQ/") + Topic);
         config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
         config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime);
         config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
@@ -211,12 +211,12 @@ struct TRequestAlterPQ {
 
         if (CacheSize) {
             auto* config = req->MutableConfig();
-            config->SetTopicName(Topic);
+//            config->SetTopicName(Topic);
             config->SetCacheSize(CacheSize);
         }
         if (FillPartitionConfig) {
             auto* config = req->MutableConfig();
-            config->SetTopicName(Topic);
+//            config->SetTopicName(Topic);
             config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
             if (MirrorFrom) {
                 config->MutablePartitionConfig()->MutableMirrorFrom()->CopyFrom(MirrorFrom.value());
@@ -750,7 +750,7 @@ public:
         UNIT_ASSERT(resp.TopicInfoSize() == 1);
         const auto& topicInfo = resp.GetTopicInfo(0);
         UNIT_ASSERT(topicInfo.GetTopic() == name);
-        UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
+        //UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
         if (cacheSize) {
             UNIT_ASSERT(topicInfo.GetConfig().HasCacheSize());
             ui64 actualSize = topicInfo.GetConfig().GetCacheSize();

@@ -2183,7 +2183,6 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
-
     Y_UNIT_TEST(AlterTableWithDecimalColumn) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

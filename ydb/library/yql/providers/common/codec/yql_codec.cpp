@@ -2173,6 +2173,8 @@ void WriteSkiffData(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, cons
 void WriteSkiffNativeYtValue(NKikimr::NMiniKQL::TType* type, ui64 nativeYtTypeFlags, const NKikimr::NUdf::TUnboxedValuePod& value, NCommon::TOutputBuf& buf) {
     if (type->IsData()) {
         WriteSkiffData(type, nativeYtTypeFlags, value, buf);
+    } else if (type->IsPg()) {
+        WriteSkiffPgValue(static_cast<TPgType*>(type), value, buf);
     } else if (type->IsOptional()) {
         if (!value) {
             buf.Write('\0');

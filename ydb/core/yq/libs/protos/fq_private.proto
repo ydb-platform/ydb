@@ -10,7 +10,6 @@ import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
-import "ydb/public/api/protos/fq.proto";
 import "ydb/public/api/protos/yq.proto";
 
 import "google/protobuf/duration.proto";

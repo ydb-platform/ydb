@@ -69,12 +69,13 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
 
     Ydb::PersQueue::V1::DescribeTopicResult result;
 
-    auto settings = result.mutable_settings();
     Ydb::Scheme::Entry *selfEntry = result.mutable_self();
-    const auto& selfInfo = response.Self->Info;
-    selfEntry->set_name(path + "/" + selfInfo.GetName());
-    selfEntry->set_type(static_cast<Ydb::Scheme::Entry::Type>(selfInfo.GetPathType()));
-    ConvertDirectoryEntry(selfInfo, selfEntry, true);
+    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+    if (const auto& name = GetCdcStreamName()) {
+        selfEntry->set_name(*name);
+    }
+
+    auto settings = result.mutable_settings();
     if (response.PQGroupInfo) {
         const auto &pqDescr = response.PQGroupInfo->Description;
         settings->set_partitions_count(pqDescr.GetTotalGroupCount());
@@ -459,10 +460,11 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
     Ydb::Topic::DescribeTopicResult result;
 
     Ydb::Scheme::Entry *selfEntry = result.mutable_self();
-    const auto& selfInfo = response.Self->Info;
-    selfEntry->set_name(path + "/" + selfInfo.GetName());
-    selfEntry->set_type(Ydb::Scheme::Entry::TOPIC);
-    ConvertDirectoryEntry(selfInfo, selfEntry, true);
+    ConvertDirectoryEntry(response.Self->Info, selfEntry, true);
+    if (const auto& name = GetCdcStreamName()) {
+        selfEntry->set_name(*name);
+    }
+
     if (response.PQGroupInfo) {
         const auto &pqDescr = response.PQGroupInfo->Description;
         result.mutable_partitioning_settings()->set_min_active_partitions(pqDescr.GetTotalGroupCount());

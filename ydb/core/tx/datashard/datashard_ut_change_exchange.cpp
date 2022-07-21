@@ -1112,6 +1112,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     // Yds specific
+    Y_UNIT_TEST(DescribeStream) {
+        TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+
+        auto res = env.GetClient().DescribeStream("/Root/Table/Stream").ExtractValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.GetResult().stream_description().stream_name(), "/Root/Table/Stream");
+    }
+
     Y_UNIT_TEST(UpdateStream) {
         TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
 

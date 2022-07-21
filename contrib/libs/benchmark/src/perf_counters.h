@@ -17,14 +17,22 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "benchmark/benchmark.h"
 #include "check.h"
 #include "log.h"
+#include "mutex.h"
 
 #ifndef BENCHMARK_OS_WINDOWS
 #include <unistd.h>
+#endif
+
+#if defined(_MSC_VER)
+#pragma warning(push)
+// C4251: <symbol> needs to have dll-interface to be used by clients of class
+#pragma warning(disable : 4251)
 #endif
 
 namespace benchmark {
@@ -66,17 +74,19 @@ class PerfCounterValues {
 // Collect PMU counters. The object, once constructed, is ready to be used by
 // calling read(). PMU counter collection is enabled from the time create() is
 // called, to obtain the object, until the object's destructor is called.
-class PerfCounters final {
+class BENCHMARK_EXPORT PerfCounters final {
  public:
   // True iff this platform supports performance counters.
   static const bool kSupported;
 
-  bool IsValid() const { return is_valid_; }
+  bool IsValid() const { return !counter_names_.empty(); }
   static PerfCounters NoCounters() { return PerfCounters(); }
 
-  ~PerfCounters();
+  ~PerfCounters() { CloseCounters(); }
   PerfCounters(PerfCounters&&) = default;
   PerfCounters(const PerfCounters&) = delete;
+  PerfCounters& operator=(PerfCounters&&) noexcept;
+  PerfCounters& operator=(const PerfCounters&) = delete;
 
   // Platform-specific implementations may choose to do some library
   // initialization here.
@@ -111,55 +121,66 @@ class PerfCounters final {
  private:
   PerfCounters(const std::vector<std::string>& counter_names,
                std::vector<int>&& counter_ids)
-      : counter_ids_(std::move(counter_ids)),
-        counter_names_(counter_names),
-        is_valid_(true) {}
-  PerfCounters() : is_valid_(false) {}
+      : counter_ids_(std::move(counter_ids)), counter_names_(counter_names) {}
+  PerfCounters() = default;
+
+  void CloseCounters() const;
 
   std::vector<int> counter_ids_;
-  const std::vector<std::string> counter_names_;
-  const bool is_valid_;
+  std::vector<std::string> counter_names_;
 };
 
 // Typical usage of the above primitives.
-class PerfCountersMeasurement final {
+class BENCHMARK_EXPORT PerfCountersMeasurement final {
  public:
-  PerfCountersMeasurement(PerfCounters&& c)
-      : counters_(std::move(c)),
-        start_values_(counters_.IsValid() ? counters_.names().size() : 0),
-        end_values_(counters_.IsValid() ? counters_.names().size() : 0) {}
+  PerfCountersMeasurement(const std::vector<std::string>& counter_names);
+  ~PerfCountersMeasurement();
 
-  bool IsValid() const { return counters_.IsValid(); }
+  // The only way to get to `counters_` is after ctor-ing a
+  // `PerfCountersMeasurement`, which means that `counters_`'s state is, here,
+  // decided (either invalid or valid) and won't change again even if a ctor is
+  // concurrently running with this. This is preferring efficiency to
+  // maintainability, because the address of the static can be known at compile
+  // time.
+  bool IsValid() const {
+    MutexLock l(mutex_);
+    return counters_.IsValid();
+  }
 
   BENCHMARK_ALWAYS_INLINE void Start() {
     assert(IsValid());
+    MutexLock l(mutex_);
     // Tell the compiler to not move instructions above/below where we take
     // the snapshot.
     ClobberMemory();
-    counters_.Snapshot(&start_values_);
+    valid_read_ &= counters_.Snapshot(&start_values_);
     ClobberMemory();
   }
 
-  BENCHMARK_ALWAYS_INLINE std::vector<std::pair<std::string, double>>
-  StopAndGetMeasurements() {
+  BENCHMARK_ALWAYS_INLINE bool Stop(
+      std::vector<std::pair<std::string, double>>& measurements) {
     assert(IsValid());
+    MutexLock l(mutex_);
     // Tell the compiler to not move instructions above/below where we take
     // the snapshot.
     ClobberMemory();
-    counters_.Snapshot(&end_values_);
+    valid_read_ &= counters_.Snapshot(&end_values_);
     ClobberMemory();
 
-    std::vector<std::pair<std::string, double>> ret;
     for (size_t i = 0; i < counters_.names().size(); ++i) {
       double measurement = static_cast<double>(end_values_[i]) -
                            static_cast<double>(start_values_[i]);
-      ret.push_back({counters_.names()[i], measurement});
+      measurements.push_back({counters_.names()[i], measurement});
     }
-    return ret;
+
+    return valid_read_;
   }
 
  private:
-  PerfCounters counters_;
+  static Mutex mutex_;
+  GUARDED_BY(mutex_) static int ref_count_;
+  GUARDED_BY(mutex_) static PerfCounters counters_;
+  bool valid_read_ = true;
   PerfCounterValues start_values_;
   PerfCounterValues end_values_;
 };
@@ -168,5 +189,9 @@ BENCHMARK_UNUSED static bool perf_init_anchor = PerfCounters::Initialize();
 
 }  // namespace internal
 }  // namespace benchmark
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #endif  // BENCHMARK_PERF_COUNTERS_H

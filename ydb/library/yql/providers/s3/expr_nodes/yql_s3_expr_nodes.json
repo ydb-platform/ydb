@@ -130,7 +130,7 @@
             "Match": {"Type": "Callable", "Name": "S3SinkSettings"},
             "Children": [
                 {"Index": 0, "Name": "Path", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"},
+                {"Index": 1, "Name": "Settings", "Type": "TExprList"},
                 {"Index": 2, "Name": "Token", "Type": "TCoSecureParam"}
             ]
         },

@@ -15,13 +15,21 @@ namespace {
 using namespace NNodes;
 using namespace NDq;
 
-TExprNode::TListType GetPartitionBy(const TExprNode& settings) {
+TExprNode::TPtr GetPartitionBy(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        if (settings.Child(i)->Head().IsAtom("partitionby")) {
-            auto children = settings.Child(i)->ChildrenList();
-            children.erase(children.cbegin());
-            return children;
+        if (settings.Child(i)->Head().IsAtom("partitionedby")) {
+            return settings.ChildPtr(i);
         }
+    }
+
+    return {};
+}
+
+TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
+    if (partBy) {
+        auto children = partBy->ChildrenList();
+        children.erase(children.cbegin());
+        return children;
     }
 
     return {};
@@ -43,7 +51,13 @@ public:
         const auto& targetNode = write.Target();
         const auto& cluster = write.DataSink().Cluster().StringValue();
         const auto token = "cluster:default_" + cluster;
-        const auto keys = GetPartitionBy(write.Target().Settings().Ref());
+        auto partBy = GetPartitionBy(write.Target().Settings().Ref());
+        auto keys = GetPartitionKeys(partBy);
+
+        auto sinkSettingsBuilder = Build<TExprList>(ctx, targetNode.Pos());
+        if (partBy)
+            sinkSettingsBuilder.Add(std::move(partBy));
+
 
         if (!FindNode(write.Input().Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << targetNode.Path().StringValue() << "` as stage with sink.";
@@ -69,7 +83,7 @@ public:
                                     .Index().Value("0").Build()
                                     .Settings<TS3SinkSettings>()
                                         .Path(write.Target().Path())
-                                        .Settings<TCoNameValueTupleList>().Build()
+                                        .Settings(sinkSettingsBuilder.Done())
                                         .Token<TCoSecureParam>()
                                             .Name().Build(token)
                                             .Build()
@@ -116,12 +130,7 @@ public:
                                     .Index().Value("0", TNodeFlags::Default).Build()
                                     .Settings<TS3SinkSettings>()
                                         .Path(write.Target().Path())
-                                        .Settings<TCoNameValueTupleList>()
-                                            .Add()
-                                                .Name().Build("keys", TNodeFlags::Default)
-                                                .Value<TCoAtom>().Build(ToString(keys.size()), TNodeFlags::Default)
-                                                .Build()
-                                            .Build()
+                                        .Settings(sinkSettingsBuilder.Done())
                                         .Token<TCoSecureParam>()
                                             .Name().Build(token)
                                             .Build()
@@ -153,12 +162,7 @@ public:
             .Index(dqUnion.Output().Index())
             .Settings<TS3SinkSettings>()
                 .Path(write.Target().Path())
-                .Settings<TCoNameValueTupleList>()
-                    .Add()
-                        .Name().Build("keys", TNodeFlags::Default)
-                        .Value<TCoAtom>().Build(ToString(keys.size()), TNodeFlags::Default)
-                        .Build()
-                    .Build()
+                .Settings(sinkSettingsBuilder.Done())
                 .Token<TCoSecureParam>()
                     .Name().Build(token)
                     .Build()

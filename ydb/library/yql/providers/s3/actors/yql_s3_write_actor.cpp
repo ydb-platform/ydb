@@ -8,6 +8,8 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/string_utils/base64/base64.h>
+#include <library/cpp/string_utils/quote/quote.h>
 
 #include <util/generic/size_literals.h>
 
@@ -116,7 +118,7 @@ public:
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
         , ActorSystem(TActivationContext::ActorSystem())
-        , Key(key), Url(url + key)
+        , Key(key), Url(url)
         , RetryConfig(retryConfig)
     {}
 
@@ -303,18 +305,20 @@ public:
     TS3WriteActor(ui64 outputIndex,
         IHTTPGateway::TPtr gateway,
         NYdb::TCredentialsProviderPtr credProvider,
+        IRandomProvider* randomProvider,
         const TString& url,
         const TString& path,
-        const ui32 keyWidth,
+        const std::vector<TString>& keys,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks,
         const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
+        , RandomProvider(randomProvider)
         , OutputIndex(outputIndex)
         , Callbacks(callbacks)
         , Url(url)
         , Path(path)
-        , KeyWidth(keyWidth)
+        , Keys(keys)
         , RetryConfig(retryConfig)
     {}
 
@@ -332,17 +336,22 @@ private:
     }
 
     TString MakeKey(const NUdf::TUnboxedValuePod v) const {
-        if (!KeyWidth)
+        if (Keys.empty())
             return {};
 
         auto elements = v.GetElements();
         TStringBuilder key;
-        for (auto k = KeyWidth; k; --k) {
+        for (const auto& k : Keys) {
             const std::string_view keyPart = (++elements)->AsStringRef();
             YQL_ENSURE(std::string_view::npos == keyPart.find('/'), "Invalid partition key, contains '/': " << keyPart);
-            key << keyPart << '/';
+            key << k << '=' << keyPart << '/';
         }
-        return key;
+        return UrlEscapeRet(key);
+    }
+
+    TString MakeSuffix() const {
+        const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
+        return Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -355,12 +364,12 @@ private:
             const auto& key = MakeKey(v);
             const auto ins = FileWriteActors.emplace(key, nullptr);
             if (ins.second) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(Gateway, CredProvider, key, Url + Path,  RetryConfig);
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(Gateway, CredProvider, key, Url + Path + key + MakeSuffix(),  RetryConfig);
                 ins.first->second = fileWrite.get();
                 RegisterWithSameMailbox(fileWrite.release());
             }
 
-            ins.first->second->SendData(TString((KeyWidth > 0U ? *v.GetElements() : v).AsStringRef()));
+            ins.first->second->SendData(TString((Keys.empty() ? v : *v.GetElements()).AsStringRef()));
         }
 
         if (finished)
@@ -385,13 +394,14 @@ private:
 
     const IHTTPGateway::TPtr Gateway;
     const NYdb::TCredentialsProviderPtr CredProvider;
+    IRandomProvider *const RandomProvider;
 
     const ui64 OutputIndex;
     IDqComputeActorAsyncOutput::ICallbacks *const Callbacks;
 
     const TString Url;
     const TString Path;
-    const ui32 KeyWidth;
+    const std::vector<TString> Keys;
 
     std::vector<TRetryParams> RetriesPerPath;
     const std::shared_ptr<NS3::TRetryConfig> RetryConfig;
@@ -404,6 +414,7 @@ private:
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const NKikimr::NMiniKQL::TTypeEnvironment&,
     const NKikimr::NMiniKQL::IFunctionRegistry&,
+    IRandomProvider* randomProvider,
     IHTTPGateway::TPtr gateway,
     NS3::TSink&& params,
     ui64 outputIndex,
@@ -415,7 +426,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto authToken = credentialsProviderFactory->CreateProvider();
-    const auto actor = new TS3WriteActor(outputIndex, std::move(gateway), credentialsProviderFactory->CreateProvider(), params.GetUrl(), params.GetPath(), params.HasKeys() ?  params.GetKeys() : 0U, callbacks, retryConfig);
+    const auto actor = new TS3WriteActor(outputIndex, std::move(gateway), credentialsProviderFactory->CreateProvider(), randomProvider, params.GetUrl(), params.GetPath(), std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()), callbacks, retryConfig);
     return {actor, actor};
 }
 

@@ -715,6 +715,10 @@ public:
         return Settings.TaskParams;
     }
 
+    IRandomProvider* GetRandomProvider() const override {
+        return Context.RandomProvider;
+    }
+
     void UpdateStats() override {
         if (Stats) {
             Stats->RunStatusTimeMetrics.UpdateStatusTime();

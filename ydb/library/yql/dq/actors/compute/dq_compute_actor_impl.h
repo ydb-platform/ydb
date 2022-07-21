@@ -1456,7 +1456,8 @@ protected:
                         .Callback = static_cast<TSinkCallbacks*>(this),
                         .SecureParams = secureParams,
                         .TypeEnv = typeEnv,
-                        .HolderFactory = holderFactory
+                        .HolderFactory = holderFactory,
+                        .RandomProvider = TaskRunner ? TaskRunner->GetRandomProvider() : nullptr
                     });
             } catch (const std::exception& ex) {
                 throw yexception() << "Failed to create sink " << outputDesc.GetSink().GetType() << ": " << ex.what();

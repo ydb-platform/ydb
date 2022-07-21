@@ -306,6 +306,8 @@ public:
     virtual std::pair<NUdf::TUnboxedValue, IDqAsyncInputBuffer::TPtr> GetInputTransform(ui64 inputIndex) = 0;
     virtual std::pair<IDqAsyncOutputBuffer::TPtr, IDqOutputConsumer::TPtr> GetOutputTransform(ui64 outputIndex) = 0;
 
+    virtual IRandomProvider* GetRandomProvider() const = 0;
+
     // if memoryLimit = Nothing()  then don't set memory limit, use existing one (if any)
     // if memoryLimit = 0          then set unlimited
     // otherwise use particular memory limit

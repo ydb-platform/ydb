@@ -160,6 +160,7 @@ public:
         const THashMap<TString, TString>& SecureParams;
         const NKikimr::NMiniKQL::TTypeEnvironment& TypeEnv;
         const NKikimr::NMiniKQL::THolderFactory& HolderFactory;
+        IRandomProvider *const RandomProvider;
     };
 
     struct TInputTransformArguments {

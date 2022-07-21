@@ -12,6 +12,7 @@ namespace NYql::NDq {
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
+    IRandomProvider*,
     IHTTPGateway::TPtr gateway,
     NS3::TSink&& params,
     ui64 inputIndex,

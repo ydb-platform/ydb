@@ -19,11 +19,13 @@ using namespace NNodes;
 
 namespace {
 
-std::string_view GetKeys(const TExprNode& settings) {
+TExprNode::TListType GetKeys(const TExprNode& settings) {
     for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
-        const auto& child = *settings.Child(i);
-        if (child.Head().IsAtom("keys"))
-            return child.Tail().Content();
+        if (const auto& child = *settings.Child(i); child.Head().IsAtom("partitionedby")) {
+            auto children = child.ChildrenList();
+            children.erase(children.cbegin());
+            return children;
+        }
     }
     return {};
 }
@@ -230,8 +232,8 @@ public:
             sinkDesc.SetUrl(connect.Url);
             sinkDesc.SetToken(settings.Token().Name().StringValue());
             sinkDesc.SetPath(settings.Path().StringValue());
-            if (const auto& keys = GetKeys(maySettings.Settings().Ref()); !keys.empty())
-                sinkDesc.SetKeys(::FromString<ui32>(keys));
+            for (const auto& key : GetKeys(maySettings.Settings().Ref()))
+                sinkDesc.MutableKeys()->Add(TString(key->Content()));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

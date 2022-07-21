@@ -1534,6 +1534,10 @@ public:
         return Delegate->IsAllocatorAttached();
     }
 
+    IRandomProvider* GetRandomProvider() const override {
+        return nullptr;
+    }
+
     void UpdateStats() override {
     }
 

@@ -66,6 +66,11 @@ private:
             return TStatus::Error;
         }
 
+        if (const auto& path = input->Child(TS3Target::idx_Path)->Content(); path.empty() || path.back() != '/') {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Expected non empty path to directory ends with '/'."));
+            return TStatus::Error;
+        }
+
         if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormat(input->Child(TS3Target::idx_Format)->Content(), ctx)) {
             return TStatus::Error;
         }

@@ -7,16 +7,12 @@
 
 
 
-add_library(contrib-restricted-boost INTERFACE)
-target_include_directories(contrib-restricted-boost INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost
+add_library(restricted-boost-assert INTERFACE)
+target_include_directories(restricted-boost-assert INTERFACE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/assert/include
 )
-target_link_libraries(contrib-restricted-boost INTERFACE
+target_link_libraries(restricted-boost-assert INTERFACE
   contrib-libs-cxxsupp
-  restricted-boost-assert
+  yutil
   restricted-boost-config
-  restricted-boost-io
-  restricted-boost-predef
-  restricted-boost-preprocessor
-  restricted-boost-winapi
 )

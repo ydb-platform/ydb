@@ -7,17 +7,12 @@
 
 
 
-add_library(contrib-restricted-boost INTERFACE)
-target_include_directories(contrib-restricted-boost INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost
+add_library(restricted-boost-mp11 INTERFACE)
+target_include_directories(restricted-boost-mp11 INTERFACE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/mp11/include
 )
-target_link_libraries(contrib-restricted-boost INTERFACE
+target_link_libraries(restricted-boost-mp11 INTERFACE
   contrib-libs-cxxsupp
-  restricted-boost-assert
+  yutil
   restricted-boost-config
-  restricted-boost-io
-  restricted-boost-mp11
-  restricted-boost-predef
-  restricted-boost-preprocessor
-  restricted-boost-winapi
 )

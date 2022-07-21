@@ -7,6 +7,7 @@
 #include <aws/common/string.h>
 
 #include <aws/common/json.h>
+#include <aws/common/private/json_impl.h>
 
 #include <aws/common/external/cJSON.h>
 
@@ -280,7 +281,10 @@ static void s_aws_cJSON_free(void *ptr) {
 void aws_json_module_init(struct aws_allocator *allocator) {
     if (!s_aws_json_module_initialized) {
         s_aws_json_module_allocator = allocator;
-        struct cJSON_Hooks allocation_hooks = {.malloc_fn = s_aws_cJSON_alloc, .free_fn = s_aws_cJSON_free};
+        struct cJSON_Hooks allocation_hooks = {
+            .malloc_fn = s_aws_cJSON_alloc,
+            .free_fn = s_aws_cJSON_free,
+        };
         cJSON_InitHooks(&allocation_hooks);
         s_aws_json_module_initialized = true;
     }

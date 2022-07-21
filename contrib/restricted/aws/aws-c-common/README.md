@@ -253,3 +253,11 @@ Not:
         AWS_LOGF_ERROR(AWS_LS_SOME_SUBJECT, "Invalid options - something is null");
         return aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
     }
+
+## CBMC
+
+To learn more about CBMC and proofs specifically, review the training material [here](https://model-checking.github.io/cbmc-training).
+
+The `verification/cbmc/proofs` directory contains CBMC proofs.
+
+In order to run these proofs you will need to install CBMC and other tools by following the instructions [here](https://model-checking.github.io/cbmc-training/installation.html).

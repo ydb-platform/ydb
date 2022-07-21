@@ -547,8 +547,13 @@ int aws_logger_init_noalloc(
         impl->file = options->file;
         impl->should_close = false;
     } else { /* _MSC_VER */
-        impl->file = aws_fopen(options->filename, "w");
-        impl->should_close = true;
+        if (options->filename != NULL) {
+            impl->file = aws_fopen(options->filename, "w");
+            impl->should_close = true;
+        } else {
+            impl->file = stderr;
+            impl->should_close = false;
+        }
     }
 
     aws_mutex_init(&impl->lock);

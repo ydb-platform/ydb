@@ -4,10 +4,10 @@
  */
 
 #include <aws/common/common.h>
-#include <aws/common/json.h>
 #include <aws/common/logging.h>
 #include <aws/common/math.h>
 #include <aws/common/private/dlloads.h>
+#include <aws/common/private/json_impl.h>
 #include <aws/common/private/thread_shared.h>
 
 #include <stdarg.h>

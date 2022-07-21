@@ -5,7 +5,6 @@
 
 namespace NKikimr::NKqp {
 
-NActors::IActor* CreateKqpShardsResolver(const NActors::TActorId& owner, ui64 txId, TSet<ui64>&& shardIds,
-    float failRatio);
+NActors::IActor* CreateKqpShardsResolver(const NActors::TActorId& owner, ui64 txId, TSet<ui64>&& shardIds);
 
 } // namespace NKikimr::NKqp

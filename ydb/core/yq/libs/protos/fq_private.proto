@@ -138,6 +138,7 @@ message PingTaskRequest {
 
 message PingTaskResult {
     YandexQuery.QueryAction action = 1;
+    google.protobuf.Timestamp expired_at = 2;
 }
 
 message PingTaskResponse {

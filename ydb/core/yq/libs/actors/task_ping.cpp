@@ -113,6 +113,7 @@ private:
             Fail("ControlPlane PingTaskError", Ydb::StatusIds::GENERIC_ERROR);
             return;
         }
+
         auto response = MakeHolder<TEvents::TEvPingTaskResponse>();
         response->Status = Ydb::StatusIds::SUCCESS;
         response->Record.ConstructInPlace(ev->Get()->Record);

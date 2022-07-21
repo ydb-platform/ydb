@@ -4,6 +4,8 @@
 
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 
+#include <google/protobuf/util/time_util.h>
+
 namespace NYq {
 
 namespace {
@@ -276,6 +278,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         writeQueryBuilder.AddString("result_id", request.result_id().value());
         writeQueryBuilder.AddString("query_id", request.query_id().value());
 
+        TInstant ttl;
         if (IsTerminalStatus(query.meta().status())) {
             // delete pending
             writeQueryBuilder.AddText(
@@ -284,8 +287,9 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             );
         } else {
             // update pending small
+            ttl = TInstant::Now() + backoff;
             writeQueryBuilder.AddTimestamp("now", TInstant::Now());
-            writeQueryBuilder.AddTimestamp("ttl", TInstant::Now() + backoff);
+            writeQueryBuilder.AddTimestamp("ttl", ttl);
             writeQueryBuilder.AddTimestamp("retry_counter_update_time", retryCounterUpdatedAt);
             writeQueryBuilder.AddDouble("retry_rate", retryRate);
             writeQueryBuilder.AddUint64("retry_counter", retryCounter);
@@ -335,7 +339,9 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         );
 
         response->set_action(internal.action());
-
+        if (ttl) {
+            *response->mutable_expired_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ttl.MilliSeconds());
+        }
         const auto writeQuery = writeQueryBuilder.Build();
         return std::make_pair(writeQuery.Sql, writeQuery.Params);
     };
@@ -386,11 +392,13 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             }
         }
 
+        TInstant ttl = TInstant::Now() + taskLeaseTtl;
         response->set_action(internal.action());
+        *response->mutable_expired_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(ttl.MilliSeconds());
 
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "SoftPingTask(write)");
         writeQueryBuilder.AddTimestamp("now", TInstant::Now());
-        writeQueryBuilder.AddTimestamp("ttl", TInstant::Now() + taskLeaseTtl);
+        writeQueryBuilder.AddTimestamp("ttl", ttl);
         writeQueryBuilder.AddString("tenant", request.tenant());
         writeQueryBuilder.AddString("scope", request.scope());
         writeQueryBuilder.AddString("query_id", request.query_id().value());

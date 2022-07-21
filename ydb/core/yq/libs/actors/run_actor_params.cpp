@@ -41,7 +41,7 @@ TRunActorParams::TRunActorParams(
     TVector<YandexQuery::ResultSetMeta> resultSetMetas,
     TVector<TString> dqGraphs,
     int32_t dqGraphIndex,
-    TVector<Yq::Private::TopicConsumer> createdTopicConsumers,
+    TVector<Fq::Private::TopicConsumer> createdTopicConsumers,
     bool automatic,
     const TString& queryName,
     const TInstant& deadline,

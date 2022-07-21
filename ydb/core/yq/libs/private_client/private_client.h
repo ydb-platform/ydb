@@ -4,8 +4,9 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/api/grpc/draft/yql_db_v1.grpc.pb.h>
+#include <ydb/core/yq/libs/protos/fq_private.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 template<class TProtoResult>
 class TProtoResultInternalWrapper : public NYdb::TStatus {
@@ -34,10 +35,10 @@ private:
 };
 
 
-using TGetTaskResult = TProtoResultInternalWrapper<Yq::Private::GetTaskResult>;
-using TPingTaskResult = TProtoResultInternalWrapper<Yq::Private::PingTaskResult>;
-using TWriteTaskResult = TProtoResultInternalWrapper<Yq::Private::WriteTaskResultResult>;
-using TNodesHealthCheckResult = TProtoResultInternalWrapper<Yq::Private::NodesHealthCheckResult>;
+using TGetTaskResult = TProtoResultInternalWrapper<Fq::Private::GetTaskResult>;
+using TPingTaskResult = TProtoResultInternalWrapper<Fq::Private::PingTaskResult>;
+using TWriteTaskResult = TProtoResultInternalWrapper<Fq::Private::WriteTaskResultResult>;
+using TNodesHealthCheckResult = TProtoResultInternalWrapper<Fq::Private::NodesHealthCheckResult>;
 
 using TAsyncGetTaskResult = NThreading::TFuture<TGetTaskResult>;
 using TAsyncPingTaskResult = NThreading::TFuture<TPingTaskResult>;
@@ -56,26 +57,26 @@ public:
     TPrivateClient(
         const NYdb::TDriver& driver,
         const NYdb::TCommonClientSettings& settings = NYdb::TCommonClientSettings(),
-        const ::NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<::NMonitoring::TDynamicCounters>());
+        const NMonitoring::TDynamicCounterPtr& counters = MakeIntrusive<NMonitoring::TDynamicCounters>());
 
     TAsyncGetTaskResult GetTask(
-        Yq::Private::GetTaskRequest&& request,
+        Fq::Private::GetTaskRequest&& request,
         const TGetTaskSettings& settings = TGetTaskSettings());
 
     TAsyncPingTaskResult PingTask(
-        Yq::Private::PingTaskRequest&& request,
+        Fq::Private::PingTaskRequest&& request,
         const TPingTaskSettings& settings = TPingTaskSettings());
 
     TAsyncWriteTaskResult WriteTaskResult(
-        Yq::Private::WriteTaskResultRequest&& request,
+        Fq::Private::WriteTaskResultRequest&& request,
         const TWriteTaskResultSettings& settings = TWriteTaskResultSettings());
 
     TAsyncNodesHealthCheckResult NodesHealthCheck(
-        Yq::Private::NodesHealthCheckRequest&& request,
+        Fq::Private::NodesHealthCheckRequest&& request,
         const TNodesHealthCheckSettings& settings = TNodesHealthCheckSettings());
 
 private:
     std::shared_ptr<TImpl> Impl;
 };
 
-} // namespace NYq
+} // namespace NFq

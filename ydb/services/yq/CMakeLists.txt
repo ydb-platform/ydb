@@ -20,5 +20,4 @@ target_link_libraries(ydb-services-yq PUBLIC
 )
 target_sources(ydb-services-yq PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/yq/grpc_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/services/yq/private_grpc.cpp
 )

@@ -317,8 +317,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     });
 
     auto prepare = [response] {
-
-        Yq::Private::GetTaskResult result;
+        Fq::Private::GetTaskResult result;
         const auto& tasks = std::get<0>(*response);
 
         for (const auto& task : tasks) {
@@ -383,7 +382,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
 
         return result;
     };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvGetTaskResponse, Yq::Private::GetTaskResult>
+    auto success = SendResponse<TEvControlPlaneStorage::TEvGetTaskResponse, Fq::Private::GetTaskResult>
         ("GetTaskRequest - GetTaskResult",
         NActors::TActivationContext::ActorSystem(),
         result,

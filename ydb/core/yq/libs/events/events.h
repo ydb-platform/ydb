@@ -7,7 +7,7 @@
 #include <ydb/library/yql/public/issue/yql_issue.h>
 
 #include <ydb/core/yq/libs/graph_params/proto/graph_params.pb.h>
-#include <ydb/core/yq/libs/protos/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/fq_private.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/yq/scope.h>
 
@@ -34,47 +34,47 @@ struct TEvents {
     };
 
     struct TEvPingTaskRequest : NActors::TEventLocal<TEvPingTaskRequest, TEventIds::EvPingTaskRequest>, TEvAnalyticsBase {
-        Yq::Private::PingTaskRequest Record;
+        Fq::Private::PingTaskRequest Record;
         TString User;
     };
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, TEventIds::EvPingTaskResponse> {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
-        TMaybe<Yq::Private::PingTaskResult> Record;
+        TMaybe<Fq::Private::PingTaskResult> Record;
     };
 
     struct TEvGetTaskRequest : NActors::TEventLocal<TEvGetTaskRequest, TEventIds::EvGetTaskRequest>, TEvAnalyticsBase {
-        Yq::Private::GetTaskRequest Record;
+        Fq::Private::GetTaskRequest Record;
         TString User;
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, TEventIds::EvGetTaskResponse> {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
-        TMaybe<Yq::Private::GetTaskResult> Record;
+        TMaybe<Fq::Private::GetTaskResult> Record;
     };
 
     struct TEvWriteTaskResultRequest : NActors::TEventLocal<TEvWriteTaskResultRequest, TEventIds::EvWriteTaskResultRequest>, TEvAnalyticsBase {
-        Yq::Private::WriteTaskResultRequest Record;
+        Fq::Private::WriteTaskResultRequest Record;
         TString User;
     };
 
     struct TEvWriteTaskResultResponse : NActors::TEventLocal<TEvWriteTaskResultResponse, TEventIds::EvWriteTaskResultResponse> {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
-        TMaybe<Yq::Private::WriteTaskResultResult> Record;
+        TMaybe<Fq::Private::WriteTaskResultResult> Record;
     };
 
     struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, TEventIds::EvNodesHealthCheckRequest>{
-        Yq::Private::NodesHealthCheckRequest Record;
+        Fq::Private::NodesHealthCheckRequest Record;
         TString User;
     };
 
     struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, TEventIds::EvNodesHealthCheckResponse> {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
-        TMaybe<Yq::Private::NodesHealthCheckResult> Record;
+        TMaybe<Fq::Private::NodesHealthCheckResult> Record;
     };
 
     struct TEvAsyncContinue : NActors::TEventLocal<TEvAsyncContinue, TEventIds::EvAsyncContinue> {
@@ -180,12 +180,12 @@ struct TEvents {
     };
 
     struct TEvForwardPingRequest : NActors::TEventLocal<TEvForwardPingRequest, TEventIds::EvForwardPingRequest> {
-        explicit TEvForwardPingRequest(const Yq::Private::PingTaskRequest& request, bool final = false)
+        explicit TEvForwardPingRequest(const Fq::Private::PingTaskRequest& request, bool final = false)
             : Request(request)
             , Final(final)
         { }
 
-        Yq::Private::PingTaskRequest Request;
+        Fq::Private::PingTaskRequest Request;
         bool Final; // Is this the last ping request.
     };
 

@@ -5,7 +5,7 @@
 #include <ydb/public/lib/fq/helpers.h>
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/mock/yql_mock.h>
-#include <ydb/core/yq/libs/private_client/private_client_fq.h>
+#include <ydb/core/yq/libs/private_client/private_client.h>
 
 #include <ydb/core/yq/libs/control_plane_storage/message_builders.h>
 #include <ydb/core/yq/libs/actors/database_resolver.h>
@@ -941,7 +941,7 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
             req.mutable_query_id()->set_value("id");
             req.set_scope(scope.ToString());
             req.set_owner_id("some_owner");
-            req.set_status(FederatedQuery::QueryMeta::COMPLETED);
+            req.set_status(YandexQuery::QueryMeta::COMPLETED);
             auto result = client.PingTask(std::move(req)).ExtractValueSync();
             result.GetIssues().PrintTo(Cerr);
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);

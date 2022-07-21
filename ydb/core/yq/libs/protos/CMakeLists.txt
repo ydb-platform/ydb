@@ -17,7 +17,6 @@ target_link_libraries(yq-libs-protos PUBLIC
 )
 target_proto_messages(yq-libs-protos PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/protos/fq_private.proto
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/protos/yq_private.proto
 )
 target_proto_addincls(yq-libs-protos
   ./

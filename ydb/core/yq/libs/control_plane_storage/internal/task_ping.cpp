@@ -18,7 +18,7 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 } // namespace
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
-    const Yq::Private::PingTaskRequest& request, std::shared_ptr<Yq::Private::PingTaskResult> response,
+    const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TRetryPolicyItem>& retryPolicies) {
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
@@ -240,7 +240,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         }
 
         if (!request.created_topic_consumers().empty()) {
-            std::set<Yq::Private::TopicConsumer, TTopicConsumerLess> mergedConsumers;
+            std::set<Fq::Private::TopicConsumer, TTopicConsumerLess> mergedConsumers;
             for (auto&& c : *internal.mutable_created_topic_consumers()) {
                 mergedConsumers.emplace(std::move(c));
             }
@@ -344,7 +344,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 }
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructSoftPingTask(
-    const Yq::Private::PingTaskRequest& request, std::shared_ptr<Yq::Private::PingTaskResult> response,
+    const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
     const TString& tablePathPrefix, const TDuration& taskLeaseTtl) {
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "SoftPingTask(read)");
     readQueryBuilder.AddString("tenant", request.tenant());
@@ -410,7 +410,7 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
-    Yq::Private::PingTaskRequest& request = ev->Get()->Request;
+    Fq::Private::PingTaskRequest& request = ev->Get()->Request;
     const TString cloudId = "";
     const TString scope = request.scope();
     TRequestCountersPtr requestCounters = Counters.GetScopeCounters("" /*CloudId*/, scope, RTS_PING_TASK);
@@ -431,7 +431,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
         return;
     }
 
-    std::shared_ptr<Yq::Private::PingTaskResult> response = std::make_shared<Yq::Private::PingTaskResult>();
+    std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
 
     if (request.status())
         Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(request.status());
@@ -445,7 +445,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     auto result = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery, readParams, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvPingTaskResponse, Yq::Private::PingTaskResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvPingTaskResponse, Fq::Private::PingTaskResult>(
         "PingTaskRequest - PingTaskResult",
         NActors::TActivationContext::ActorSystem(),
         result,

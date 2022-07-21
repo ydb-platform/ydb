@@ -4,9 +4,9 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* CreateLoopbackServiceActor(
     const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} /* NYq */
+} /* NFq */

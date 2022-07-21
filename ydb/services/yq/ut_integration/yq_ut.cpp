@@ -932,12 +932,12 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
-        ::NYq::TPrivateClient client(driver);
+        ::NFq::TPrivateClient client(driver);
         const TString historyId = "id";
         const TString folderId = "folder_id";
         const TScope scope(folderId);
         {
-            Yq::Private::PingTaskRequest req;
+            Fq::Private::PingTaskRequest req;
             req.mutable_query_id()->set_value("id");
             req.set_scope(scope.ToString());
             req.set_owner_id("some_owner");
@@ -953,9 +953,9 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
-        ::NYq::TPrivateClient client(driver);
+        ::NFq::TPrivateClient client(driver);
         {
-            Yq::Private::GetTaskRequest req;
+            Fq::Private::GetTaskRequest req;
             req.set_owner_id("owner_id");
             req.set_host("host");
             auto result = client.GetTask(std::move(req)).ExtractValueSync();
@@ -970,10 +970,10 @@ Y_UNIT_TEST_SUITE(PrivateApi) {
         ui16 grpc = server.GetPort();
         TString location = TStringBuilder() << "localhost:" << grpc;
         auto driver = TDriver(TDriverConfig().SetEndpoint(location).SetAuthToken("root@builtin"));
-        ::NYq::TPrivateClient client(driver);
+        ::NFq::TPrivateClient client(driver);
         const auto instanceId = CreateGuidAsString();
         {
-            Yq::Private::NodesHealthCheckRequest req;
+            Fq::Private::NodesHealthCheckRequest req;
             req.set_tenant("Tenant");
             auto& node = *req.mutable_node();
             node.set_hostname("hostname");

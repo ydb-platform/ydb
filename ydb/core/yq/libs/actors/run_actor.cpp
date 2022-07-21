@@ -84,6 +84,7 @@ namespace NYq {
 using namespace NActors;
 using namespace NYql;
 using namespace NDqs;
+using namespace NFq;
 
 namespace {
 
@@ -473,7 +474,7 @@ private:
         Issues.AddIssue("Internal Error");
 
         if (!ConsumersAreDeleted) {
-            for (const Yq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
+            for (const Fq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
                 TransientIssues.AddIssue(TStringBuilder() << "Created read rule `" << c.consumer_name() << "` for topic `" << c.topic_path() << "` (database id " << c.database_id() << ") maybe was left undeleted: internal error occurred");
                 TransientIssues.back().Severity = NYql::TSeverityIds::S_WARNING;
             }
@@ -706,7 +707,7 @@ private:
     }
 
     void Handle(TEvents::TEvRaiseTransientIssues::TPtr& ev) {
-        Yq::Private::PingTaskRequest request;
+        Fq::Private::PingTaskRequest request;
 
         NYql::IssuesToMessage(ev->Get()->TransientIssues, request.mutable_transient_issues());
 
@@ -722,7 +723,7 @@ private:
     }
 
     void UpdateAstAndPlan(const TString& plan, const TString& expr) {
-        Yq::Private::PingTaskRequest request;
+        Fq::Private::PingTaskRequest request;
         if (Compressor.IsEnabled()) {
             auto [astCompressionMethod, astCompressed] = Compressor.Compress(expr);
             request.mutable_ast_compressed()->set_method(astCompressionMethod);
@@ -744,7 +745,7 @@ private:
             return;
         }
 
-        Yq::Private::PingTaskRequest request;
+        Fq::Private::PingTaskRequest request;
 
         request.set_result_set_count(UpdateResultIndices());
         QueryStateUpdateRequest.set_result_set_count(UpdateResultIndices());
@@ -793,7 +794,7 @@ private:
     }
 
     void SetLoadFromCheckpointMode() {
-        Yq::Private::PingTaskRequest request;
+        Fq::Private::PingTaskRequest request;
         request.set_state_load_mode(YandexQuery::FROM_LAST_CHECKPOINT);
         request.mutable_disposition()->mutable_from_last_checkpoint();
 
@@ -1050,7 +1051,7 @@ private:
     void RunReadRulesDeletionActor() {
         TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials;
         credentials.reserve(Params.CreatedTopicConsumers.size());
-        for (const Yq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
+        for (const Fq::Private::TopicConsumer& c : Params.CreatedTopicConsumers) {
             if (const TString& tokenName = c.token_name()) {
                 credentials.emplace_back(
                     CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, FindTokenByName(tokenName), c.add_bearer_to_token()));
@@ -1081,7 +1082,7 @@ private:
 
         {
             Params.Status = YandexQuery::QueryMeta::RUNNING;
-            Yq::Private::PingTaskRequest request;
+            Fq::Private::PingTaskRequest request;
             request.set_status(YandexQuery::QueryMeta::RUNNING);
             *request.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(Now().MilliSeconds());
             Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateQueryInfoCookie);
@@ -1322,7 +1323,7 @@ private:
         const YandexQuery::QueryMeta::ComputeStatus finalizingStatus = GetFinalizingStatus();
         Params.Status = finalizingStatus;
         LOG_D("Write finalizing status: " << YandexQuery::QueryMeta::ComputeStatus_Name(finalizingStatus));
-        Yq::Private::PingTaskRequest request;
+        Fq::Private::PingTaskRequest request;
         request.set_status(finalizingStatus);
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, SaveFinalizingStatusCookie);
     }
@@ -1698,7 +1699,7 @@ private:
     ::NYql::NCommon::TServiceCounters QueryCounters;
     const ::NMonitoring::TDynamicCounters::TCounterPtr QueryUptime;
     bool EnableCheckpointCoordinator = false;
-    Yq::Private::PingTaskRequest QueryStateUpdateRequest;
+    Fq::Private::PingTaskRequest QueryStateUpdateRequest;
 
     const ui64 MaxTasksPerOperation;
     const TCompressor Compressor;

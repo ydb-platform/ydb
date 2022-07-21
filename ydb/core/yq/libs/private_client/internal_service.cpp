@@ -16,7 +16,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
 
-namespace NYq {
+namespace NFq {
 
 NActors::TActorId MakeInternalServiceActorId() {
     constexpr TStringBuf name = "FQINTSRV";
@@ -123,4 +123,4 @@ NActors::IActor* CreateInternalServiceActor(
         return new TInternalService(yqSharedResources, credentialsProviderFactory, privateApiConfig, counters);
 }
 
-} /* NYq */
+} /* NFq */

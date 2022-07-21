@@ -38,7 +38,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         return;
     }
 
-    std::shared_ptr<Yq::Private::NodesHealthCheckResult> response = std::make_shared<Yq::Private::NodesHealthCheckResult>();
+    std::shared_ptr<Fq::Private::NodesHealthCheckResult> response = std::make_shared<Fq::Private::NodesHealthCheckResult>();
     {
         auto* node = response->add_nodes();
         node->set_node_id(nodeId);
@@ -109,7 +109,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus status = ReadModifyWrite(NActors::TActivationContext::ActorSystem(), readQuery.Sql, readQuery.Params, prepareParams, requestCounters, debugInfo);
     auto prepare = [response] { return *response; };
-    auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Yq::Private::NodesHealthCheckResult>(
+    auto success = SendResponse<TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Fq::Private::NodesHealthCheckResult>(
         "NodesHealthCheckRequest - NodesHealthCheckResult",
         NActors::TActivationContext::ActorSystem(),
         status,

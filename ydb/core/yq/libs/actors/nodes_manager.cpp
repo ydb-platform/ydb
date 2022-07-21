@@ -57,7 +57,7 @@ public:
         , IcPort(icPort)
         , UseDataCenter(useDataCenter)
         , DataCenter(dataCenter)
-        , InternalServiceId(MakeInternalServiceActorId())
+        , InternalServiceId(NFq::MakeInternalServiceActorId())
 
     {
         InstanceId = GetGuidAsString(RandomProvider->GenUuid4());
@@ -173,7 +173,7 @@ private:
         hFunc(NDqs::TEvAllocateWorkersRequest, Handle)
         hFunc(NDqs::TEvFreeWorkersNotify, Handle)
         hFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
-        hFunc(TEvInternalService::TEvHealthCheckResponse, HandleResponse)
+        hFunc(NFq::TEvInternalService::TEvHealthCheckResponse, HandleResponse)
         )
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -192,7 +192,7 @@ private:
 
         ServiceCounters.Counters->GetCounter("NodesHealthCheck", true)->Inc();
 
-        Yq::Private::NodesHealthCheckRequest request;
+        Fq::Private::NodesHealthCheckRequest request;
         request.set_tenant(Tenant);
         auto& node = *request.mutable_node();
         node.set_node_id(SelfId().NodeId());
@@ -203,7 +203,7 @@ private:
         node.set_memory_allocated(AtomicGet(WorkerManagerCounters.MkqlMemoryAllocated->GetAtomic()));
         node.set_interconnect_port(IcPort);
         node.set_data_center(DataCenter);
-        Send(InternalServiceId, new TEvInternalService::TEvHealthCheckRequest(request));
+        Send(InternalServiceId, new NFq::TEvInternalService::TEvHealthCheckRequest(request));
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
@@ -211,7 +211,7 @@ private:
         ServiceCounters.Counters->GetCounter("OnUndelivered", true)->Inc();
     }
 
-    void HandleResponse(TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvInternalService::TEvHealthCheckResponse::TPtr& ev) {
         try {
             const auto& status = ev->Get()->Status.GetStatus();
             THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo());

@@ -118,5 +118,4 @@ target_sources(ydb-core-grpc_services PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_yq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/table_profiles.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/table_settings.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/grpc_services/rpc_analytics_internal.cpp
 )

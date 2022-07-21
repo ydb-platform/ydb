@@ -140,7 +140,7 @@ NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlane
     return config;
 }
 
-bool DoesPingTaskUpdateQueriesTable(const Yq::Private::PingTaskRequest& request) {
+bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request) {
     return request.status() != YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED
         || !request.issues().empty()
         || !request.transient_issues().empty()

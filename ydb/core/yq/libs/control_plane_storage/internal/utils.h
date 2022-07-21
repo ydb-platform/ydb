@@ -12,7 +12,7 @@
 namespace NYq {
 
 struct TTopicConsumerLess {
-    bool operator()(const Yq::Private::TopicConsumer& c1, const Yq::Private::TopicConsumer& c2) const {
+    bool operator()(const Fq::Private::TopicConsumer& c1, const Fq::Private::TopicConsumer& c2) const {
         // Cluster endpoint/use ssl are not in key
         return std::tie(c1.database_id(), c1.database(), c1.topic_path(), c1.consumer_name()) < std::tie(c2.database_id(), c2.database(), c2.topic_path(), c2.consumer_name());
     }

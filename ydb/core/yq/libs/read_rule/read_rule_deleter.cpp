@@ -66,7 +66,7 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
-        Yq::Private::TopicConsumer topic,
+        Fq::Private::TopicConsumer topic,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProvider,
         ui64 index,
         size_t maxRetries
@@ -168,7 +168,7 @@ private:
 private:
     const NActors::TActorId Owner;
     const TString QueryId;
-    const Yq::Private::TopicConsumer Topic;
+    const Fq::Private::TopicConsumer Topic;
     NYdb::TDriver YdbDriver;
     NYdb::NPersQueue::TPersQueueClient PqClient;
     ui64 Index = 0;
@@ -183,7 +183,7 @@ public:
         NActors::TActorId owner,
         TString queryId,
         NYdb::TDriver ydbDriver,
-        TVector<Yq::Private::TopicConsumer> topics,
+        TVector<Fq::Private::TopicConsumer> topics,
         TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials,
         size_t maxRetries
     )
@@ -256,7 +256,7 @@ private:
     const NActors::TActorId Owner;
     const TString QueryId;
     NYdb::TDriver YdbDriver;
-    const TVector<Yq::Private::TopicConsumer> Topics;
+    const TVector<Fq::Private::TopicConsumer> Topics;
     const TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> Credentials;
     const size_t MaxRetries;
     size_t ResultsGot = 0;
@@ -271,7 +271,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
-    TVector<Yq::Private::TopicConsumer> topics,
+    TVector<Fq::Private::TopicConsumer> topics,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
     size_t maxRetries
 )

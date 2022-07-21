@@ -22,12 +22,12 @@ using TEvFqPrivateWriteTaskResultRequest =
 using TEvFqPrivateNodesHealthCheckRequest =
     TGrpcRequestOperationCall<Fq::Private::NodesHealthCheckRequest, Fq::Private::NodesHealthCheckResponse>;
 
-template <typename RpcRequestType, typename EvRequestType, typename EvResponseType, typename CastRequest, typename CastResult>
+template <typename RpcRequestType, typename EvRequestType, typename EvResponseType>
 class TFqPrivateRequestRPC : public TRpcOperationRequestActor<
-    TFqPrivateRequestRPC<RpcRequestType,EvRequestType,EvResponseType,CastRequest,CastResult>, RpcRequestType> {
+    TFqPrivateRequestRPC<RpcRequestType,EvRequestType,EvResponseType>, RpcRequestType> {
 
     using TBase = TRpcOperationRequestActor<
-        TFqPrivateRequestRPC<RpcRequestType,EvRequestType,EvResponseType,CastRequest,CastResult>,
+        TFqPrivateRequestRPC<RpcRequestType,EvRequestType,EvResponseType>,
         RpcRequestType>;
 
 public:
@@ -36,10 +36,6 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
         const auto req = this->GetProtoRequest();
-        TProtoStringType protoString;
-        Y_ENSURE(req->SerializeToString(&protoString));
-        auto castedRequest = CastRequest();
-        Y_ENSURE(castedRequest.ParseFromString(protoString));
         auto ev = MakeHolder<EvRequestType>();
         auto request = dynamic_cast<RpcRequestType*>(this->Request_.get());
         Y_VERIFY(request);
@@ -51,10 +47,10 @@ public:
             NACLib::TUserToken userToken(internalToken);
             user = userToken.GetUserSID();
         }
-        ev->Record = castedRequest;
+        ev->Record = *req;
         ev->User = user;
         this->Send(NYq::MakeYqPrivateProxyId(), ev.Release());
-        this->Become(&TFqPrivateRequestRPC<RpcRequestType, EvRequestType, EvResponseType, CastRequest, CastResult>::StateFunc);
+        this->Become(&TFqPrivateRequestRPC<RpcRequestType, EvRequestType, EvResponseType>::StateFunc);
     }
 
 private:
@@ -73,12 +69,7 @@ private:
             req.RaiseIssues(ev->Get()->Issues);
             req.ReplyWithYdbStatus(ev->Get()->Status);
         } else {
-            TProtoStringType protoString;
-            Y_ENSURE(ev->Get()->Record->SerializeToString(&protoString));
-            auto castedResult = CastResult();
-            Y_ENSURE(castedResult.ParseFromString(protoString));
-
-            req.SendResult(castedResult, ev->Get()->Status);
+            req.SendResult(*ev->Get()->Record, ev->Get()->Status);
         }
     }
 };
@@ -86,30 +77,22 @@ private:
 using TFqPrivatePingTaskRPC = TFqPrivateRequestRPC<
     TEvFqPrivatePingTaskRequest,
     NYq::TEvents::TEvPingTaskRequest,
-    NYq::TEvents::TEvPingTaskResponse,
-    Yq::Private::PingTaskRequest,
-    Fq::Private::PingTaskResult>;
+    NYq::TEvents::TEvPingTaskResponse>;
 
 using TFqPrivateGetTaskRPC = TFqPrivateRequestRPC<
     TEvFqPrivateGetTaskRequest,
     NYq::TEvents::TEvGetTaskRequest,
-    NYq::TEvents::TEvGetTaskResponse,
-    Yq::Private::GetTaskRequest,
-    Fq::Private::GetTaskResult>;
+    NYq::TEvents::TEvGetTaskResponse>;
 
 using TFqPrivateWriteTaskResultRPC = TFqPrivateRequestRPC<
     TEvFqPrivateWriteTaskResultRequest,
     NYq::TEvents::TEvWriteTaskResultRequest,
-    NYq::TEvents::TEvWriteTaskResultResponse,
-    Yq::Private::WriteTaskResultRequest,
-    Fq::Private::WriteTaskResultResult>;
+    NYq::TEvents::TEvWriteTaskResultResponse>;
 
 using TFqPrivateNodesHealthCheckRPC = TFqPrivateRequestRPC<
     TEvFqPrivateNodesHealthCheckRequest,
     NYq::TEvents::TEvNodesHealthCheckRequest,
-    NYq::TEvents::TEvNodesHealthCheckResponse,
-    Yq::Private::NodesHealthCheckRequest,
-    Fq::Private::NodesHealthCheckResult>;
+    NYq::TEvents::TEvNodesHealthCheckResponse>;
 
 void DoFqPrivatePingTaskRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TFqPrivatePingTaskRPC(p.release()));

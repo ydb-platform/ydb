@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/yq/libs/protos/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/fq_private.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
 
@@ -11,7 +11,7 @@ NActors::IActor* MakeReadRuleDeleterActor(
     NActors::TActorId owner,
     TString queryId,
     NYdb::TDriver ydbDriver,
-    TVector<Yq::Private::TopicConsumer> topics,
+    TVector<Fq::Private::TopicConsumer> topics,
     TVector<std::shared_ptr<NYdb::ICredentialsProviderFactory>> credentials, // For each topic
     size_t maxRetries = 15
 );

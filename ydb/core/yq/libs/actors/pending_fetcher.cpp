@@ -71,6 +71,7 @@ namespace NYq {
 
 using namespace NActors;
 using namespace NYql;
+using namespace NFq;
 
 namespace {
 
@@ -241,14 +242,14 @@ private:
     void GetPendingTask() {
         FetcherGeneration++;
         LOG_D("Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
-        Yq::Private::GetTaskRequest request;
+        Fq::Private::GetTaskRequest request;
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());
         request.set_tenant(TenantName);
         Send(InternalServiceId, new TEvInternalService::TEvGetTaskRequest(request));
     }
 
-    void ProcessTask(const Yq::Private::GetTaskResult& result) {
+    void ProcessTask(const Fq::Private::GetTaskResult& result) {
         for (const auto& task : result.tasks()) {
             RunTask(task);
         }
@@ -259,7 +260,7 @@ private:
         return FetcherGuid + ToString(FetcherGeneration);
     }
 
-    void RunTask(const Yq::Private::GetTaskResult::Task& task) {
+    void RunTask(const Fq::Private::GetTaskResult::Task& task) {
         LOG_D("NewTask:"
               << " Scope: " << task.scope()
               << " Id: " << task.query_id().value()

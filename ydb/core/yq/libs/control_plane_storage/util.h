@@ -38,7 +38,7 @@ TDuration GetDuration(const TString& value, const TDuration& defaultValue);
 
 NConfig::TControlPlaneStorageConfig FillDefaultParameters(NConfig::TControlPlaneStorageConfig config);
 
-bool DoesPingTaskUpdateQueriesTable(const Yq::Private::PingTaskRequest& request);
+bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request);
 
 NYdb::TValue PackItemsToList(const TVector<NYdb::TValue>& items);
 

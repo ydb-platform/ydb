@@ -8,7 +8,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/interconnect/events_local.h>
 
-#include <ydb/core/yq/libs/protos/yq_private.pb.h>
+#include <ydb/core/yq/libs/protos/fq_private.pb.h>
 #include <ydb/public/api/protos/yq.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
 
@@ -362,7 +362,7 @@ struct TEvControlPlaneStorage {
         TEvWriteResultDataRequest() = default;
 
         explicit TEvWriteResultDataRequest(
-            Yq::Private::WriteTaskResultRequest&& request)
+            Fq::Private::WriteTaskResultRequest&& request)
             : Request(std::move(request))
         {}
 
@@ -371,13 +371,13 @@ struct TEvControlPlaneStorage {
                     + Request.ByteSizeLong();
         }
 
-        Yq::Private::WriteTaskResultRequest Request;
+        Fq::Private::WriteTaskResultRequest Request;
     };
 
     struct TEvWriteResultDataResponse : NActors::TEventLocal<TEvWriteResultDataResponse, EvWriteResultDataResponse> {
 
         explicit TEvWriteResultDataResponse(
-            const Yq::Private::WriteTaskResultResult& record)
+            const Fq::Private::WriteTaskResultResult& record)
             : Record(record)
         {}
 
@@ -393,7 +393,7 @@ struct TEvControlPlaneStorage {
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
-        Yq::Private::WriteTaskResultResult Record;
+        Fq::Private::WriteTaskResultResult Record;
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };
@@ -403,7 +403,7 @@ struct TEvControlPlaneStorage {
         TEvGetTaskRequest() = default;
 
         explicit TEvGetTaskRequest(
-            Yq::Private::GetTaskRequest&& request)
+            Fq::Private::GetTaskRequest&& request)
             : Request(std::move(request))
         {}
 
@@ -412,13 +412,13 @@ struct TEvControlPlaneStorage {
                     + Request.ByteSizeLong();
         }
 
-        Yq::Private::GetTaskRequest Request;
+        Fq::Private::GetTaskRequest Request;
     };
 
     struct TEvGetTaskResponse : NActors::TEventLocal<TEvGetTaskResponse, EvGetTaskResponse> {
 
         explicit TEvGetTaskResponse(
-            const Yq::Private::GetTaskResult& record)
+            const Fq::Private::GetTaskResult& record)
             : Record(record)
         {}
 
@@ -434,7 +434,7 @@ struct TEvControlPlaneStorage {
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
-        Yq::Private::GetTaskResult Record;
+        Fq::Private::GetTaskResult Record;
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };
@@ -466,7 +466,7 @@ struct TEvControlPlaneStorage {
         TEvPingTaskRequest() = default;
 
         explicit TEvPingTaskRequest(
-            Yq::Private::PingTaskRequest&& request)
+            Fq::Private::PingTaskRequest&& request)
             : Request(std::move(request))
         {}
 
@@ -475,13 +475,13 @@ struct TEvControlPlaneStorage {
                     + Request.ByteSizeLong();
         }
 
-        Yq::Private::PingTaskRequest Request;
+        Fq::Private::PingTaskRequest Request;
     };
 
     struct TEvPingTaskResponse : NActors::TEventLocal<TEvPingTaskResponse, EvPingTaskResponse> {
 
         explicit TEvPingTaskResponse(
-            const Yq::Private::PingTaskResult& record)
+            const Fq::Private::PingTaskResult& record)
             : Record(record)
         {}
 
@@ -497,17 +497,17 @@ struct TEvControlPlaneStorage {
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
-        Yq::Private::PingTaskResult Record;
+        Fq::Private::PingTaskResult Record;
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };
 
     struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, EvNodesHealthCheckRequest> {
-        
+
         TEvNodesHealthCheckRequest() = default;
 
         explicit TEvNodesHealthCheckRequest(
-            Yq::Private::NodesHealthCheckRequest&& request)
+            Fq::Private::NodesHealthCheckRequest&& request)
             : Request(std::move(request))
         {}
 
@@ -516,13 +516,13 @@ struct TEvControlPlaneStorage {
                     + Request.ByteSizeLong();
         }
 
-        Yq::Private::NodesHealthCheckRequest Request;
+        Fq::Private::NodesHealthCheckRequest Request;
     };
 
     struct TEvNodesHealthCheckResponse : NActors::TEventLocal<TEvNodesHealthCheckResponse, EvNodesHealthCheckResponse> {
 
         explicit TEvNodesHealthCheckResponse(
-            const Yq::Private::NodesHealthCheckResult& record)
+            const Fq::Private::NodesHealthCheckResult& record)
             : Record(record)
         {}
 
@@ -538,7 +538,7 @@ struct TEvControlPlaneStorage {
                     + GetDebugInfoByteSize(DebugInfo);
         }
 
-        Yq::Private::NodesHealthCheckResult Record;
+        Fq::Private::NodesHealthCheckResult Record;
         NYql::TIssues Issues;
         TDebugInfoPtr DebugInfo;
     };

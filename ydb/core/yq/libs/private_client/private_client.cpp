@@ -3,7 +3,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
 
-namespace NYq {
+namespace NFq {
 
 using namespace NYdb;
 
@@ -12,7 +12,7 @@ public:
     TImpl(
         std::shared_ptr<TGRpcConnectionsImpl>&& connections,
         const TCommonClientSettings& settings,
-        const ::NMonitoring::TDynamicCounterPtr& counters)
+        const NMonitoring::TDynamicCounterPtr& counters)
         : TClientImplCommon(std::move(connections), settings)
         , Counters(counters->GetSubgroup("subsystem", "private_api")->GetSubgroup("subcomponent", "ClientMetrics"))
         , PingTaskTime(Counters->GetHistogram("PingTaskMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
@@ -41,23 +41,23 @@ public:
     }
 
     TAsyncPingTaskResult PingTask(
-        Yq::Private::PingTaskRequest&& request,
+        Fq::Private::PingTaskRequest&& request,
         const TPingTaskSettings& settings) {
         const auto startedAt = TInstant::Now();
         auto promise = NThreading::NewPromise<TPingTaskResult>();
         auto future = promise.GetFuture();
 
         auto extractor = MakeResultExtractor<
-            Yq::Private::PingTaskResult,
+            Fq::Private::PingTaskResult,
             TPingTaskResult>(std::move(promise), PingTaskTime, startedAt);
 
         Connections_->RunDeferred<
-            Yq::Private::V1::YqPrivateTaskService,
-            Yq::Private::PingTaskRequest,
-            Yq::Private::PingTaskResponse>(
+            Fq::Private::V1::FqPrivateTaskService,
+            Fq::Private::PingTaskRequest,
+            Fq::Private::PingTaskResponse>(
                 std::move(request),
                 std::move(extractor),
-                &Yq::Private::V1::YqPrivateTaskService::Stub::AsyncPingTask,
+                &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncPingTask,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
                 TRpcRequestSettings::Make(settings),
@@ -67,22 +67,22 @@ public:
     }
 
     TAsyncGetTaskResult GetTask(
-        Yq::Private::GetTaskRequest&& request,
+        Fq::Private::GetTaskRequest&& request,
         const TGetTaskSettings& settings) {
         const auto startedAt = TInstant::Now();
         auto promise = NThreading::NewPromise<TGetTaskResult>();
         auto future = promise.GetFuture();
         auto extractor = MakeResultExtractor<
-            Yq::Private::GetTaskResult,
+            Fq::Private::GetTaskResult,
             TGetTaskResult>(std::move(promise), GetTaskTime, startedAt);
 
         Connections_->RunDeferred<
-            Yq::Private::V1::YqPrivateTaskService,
-            Yq::Private::GetTaskRequest,
-            Yq::Private::GetTaskResponse>(
+            Fq::Private::V1::FqPrivateTaskService,
+            Fq::Private::GetTaskRequest,
+            Fq::Private::GetTaskResponse>(
                 std::move(request),
                 std::move(extractor),
-                &Yq::Private::V1::YqPrivateTaskService::Stub::AsyncGetTask,
+                &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncGetTask,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
                 TRpcRequestSettings::Make(settings),
@@ -92,22 +92,22 @@ public:
     }
 
     TAsyncWriteTaskResult WriteTaskResult(
-        Yq::Private::WriteTaskResultRequest&& request,
+        Fq::Private::WriteTaskResultRequest&& request,
         const TWriteTaskResultSettings& settings) {
         const auto startedAt = TInstant::Now();
         auto promise = NThreading::NewPromise<TWriteTaskResult>();
         auto future = promise.GetFuture();
         auto extractor = MakeResultExtractor<
-            Yq::Private::WriteTaskResultResult,
+            Fq::Private::WriteTaskResultResult,
             TWriteTaskResult>(std::move(promise), WriteTaskResultTime, startedAt);
 
         Connections_->RunDeferred<
-            Yq::Private::V1::YqPrivateTaskService,
-            Yq::Private::WriteTaskResultRequest,
-            Yq::Private::WriteTaskResultResponse>(
+            Fq::Private::V1::FqPrivateTaskService,
+            Fq::Private::WriteTaskResultRequest,
+            Fq::Private::WriteTaskResultResponse>(
                 std::move(request),
                 std::move(extractor),
-                &Yq::Private::V1::YqPrivateTaskService::Stub::AsyncWriteTaskResult,
+                &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncWriteTaskResult,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
                 TRpcRequestSettings::Make(settings),
@@ -117,22 +117,22 @@ public:
     }
 
     TAsyncNodesHealthCheckResult NodesHealthCheck(
-        Yq::Private::NodesHealthCheckRequest&& request,
+        Fq::Private::NodesHealthCheckRequest&& request,
         const TNodesHealthCheckSettings& settings) {
         const auto startedAt = TInstant::Now();
         auto promise = NThreading::NewPromise<TNodesHealthCheckResult>();
         auto future = promise.GetFuture();
         auto extractor = MakeResultExtractor<
-            Yq::Private::NodesHealthCheckResult,
+            Fq::Private::NodesHealthCheckResult,
             TNodesHealthCheckResult>(std::move(promise), NodesHealthCheckTime, startedAt);
 
         Connections_->RunDeferred<
-            Yq::Private::V1::YqPrivateTaskService,
-            Yq::Private::NodesHealthCheckRequest,
-            Yq::Private::NodesHealthCheckResponse>(
+            Fq::Private::V1::FqPrivateTaskService,
+            Fq::Private::NodesHealthCheckRequest,
+            Fq::Private::NodesHealthCheckResponse>(
                 std::move(request),
                 std::move(extractor),
-                &Yq::Private::V1::YqPrivateTaskService::Stub::AsyncNodesHealthCheck,
+                &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncNodesHealthCheck,
                 DbDriverState_,
                 INITIAL_DEFERRED_CALL_DELAY,
                 TRpcRequestSettings::Make(settings),
@@ -141,7 +141,7 @@ public:
         return future;
     }
 private:
-    const ::NMonitoring::TDynamicCounterPtr Counters;
+    const NMonitoring::TDynamicCounterPtr Counters;
     const NMonitoring::THistogramPtr PingTaskTime;
     const NMonitoring::THistogramPtr GetTaskTime;
     const NMonitoring::THistogramPtr WriteTaskResultTime;
@@ -151,33 +151,32 @@ private:
 TPrivateClient::TPrivateClient(
     const TDriver& driver,
     const TCommonClientSettings& settings,
-    const ::NMonitoring::TDynamicCounterPtr& counters)
+    const NMonitoring::TDynamicCounterPtr& counters)
     : Impl(new TImpl(CreateInternalInterface(driver), settings, counters))
 {}
 
 TAsyncPingTaskResult TPrivateClient::PingTask(
-    Yq::Private::PingTaskRequest&& request,
+    Fq::Private::PingTaskRequest&& request,
     const TPingTaskSettings& settings) {
     return Impl->PingTask(std::move(request), settings);
 }
 
 TAsyncGetTaskResult TPrivateClient::GetTask(
-    Yq::Private::GetTaskRequest&& request,
+    Fq::Private::GetTaskRequest&& request,
     const TGetTaskSettings& settings) {
     return Impl->GetTask(std::move(request), settings);
 }
 
 TAsyncWriteTaskResult TPrivateClient::WriteTaskResult(
-    Yq::Private::WriteTaskResultRequest&& request,
+    Fq::Private::WriteTaskResultRequest&& request,
     const TWriteTaskResultSettings& settings) {
     return Impl->WriteTaskResult(std::move(request), settings);
 }
 
 TAsyncNodesHealthCheckResult TPrivateClient::NodesHealthCheck(
-    Yq::Private::NodesHealthCheckRequest&& request,
+    Fq::Private::NodesHealthCheckRequest&& request,
     const TNodesHealthCheckSettings& settings) {
     return Impl->NodesHealthCheck(std::move(request), settings);
 }
 
-} //NYq
-
+} //NFq

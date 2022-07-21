@@ -50,8 +50,8 @@ public:
         , TraceId(traceId)
         , Deadline(deadline)
         , ResultBytesLimit(resultBytesLimit)
-        , InternalServiceId(MakeInternalServiceActorId())
-    { 
+        , InternalServiceId(NFq::MakeInternalServiceActorId())
+    {
         if (!ResultBytesLimit) {
             ResultBytesLimit = 20_MB;
         }
@@ -73,7 +73,7 @@ private:
         HFunc(TEvReadyState, OnReadyState);
         HFunc(TEvQueryResponse, OnQueryResult);
 
-        hFunc(TEvInternalService::TEvWriteResultResponse, HandleResponse);
+        hFunc(NFq::TEvInternalService::TEvWriteResultResponse, HandleResponse);
     )
 
     void PassAway() {
@@ -118,7 +118,7 @@ private:
 
     void OnReadyState(TEvReadyState::TPtr&, const TActorContext&) { }
 
-    void HandleResponse(TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
+    void HandleResponse(NFq::TEvInternalService::TEvWriteResultResponse::TPtr& ev) {
         const auto& issues = ev->Get()->Status.GetIssues();
         if (issues) {
             SendIssuesAndSetErrorFlag(issues);
@@ -175,8 +175,8 @@ private:
         Send(ev->Sender, res.Release());
     }
 
-    Yq::Private::WriteTaskResultRequest CreateProtoRequestWithoutResultSet(ui64 startRowIndex) {
-        Yq::Private::WriteTaskResultRequest protoReq;
+    Fq::Private::WriteTaskResultRequest CreateProtoRequestWithoutResultSet(ui64 startRowIndex) {
+        Fq::Private::WriteTaskResultRequest protoReq;
         protoReq.set_owner_id(ResultId.Owner);
         protoReq.mutable_result_id()->set_value(ResultId.Id);
         protoReq.set_offset(startRowIndex);
@@ -191,7 +191,7 @@ private:
             return;
         }
         ++InflightCounter;
-        Send(InternalServiceId, new TEvInternalService::TEvWriteResultRequest(std::move(ResultChunks[CurChunkInd++])));
+        Send(InternalServiceId, new NFq::TEvInternalService::TEvWriteResultRequest(std::move(ResultChunks[CurChunkInd++])));
     }
 
     void ConstructResults(const Ydb::ResultSet& resultSet, ui64 startRowIndex) {
@@ -323,7 +323,7 @@ private:
     ui64 ResultBytesLimit;
     ui64 OccupiedSpace = 0;
 
-    TVector<Yq::Private::WriteTaskResultRequest> ResultChunks;
+    TVector<Fq::Private::WriteTaskResultRequest> ResultChunks;
     size_t CurChunkInd = 0;
     ui32 InflightCounter = 0;
     TActorId InternalServiceId;

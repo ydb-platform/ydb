@@ -33,6 +33,7 @@ namespace NYq {
 
 using namespace NActors;
 using namespace NYql;
+using namespace NFq;
 
 struct TEvPingResponse : public NActors::TEventLocal<TEvPingResponse, NActors::TEvents::TSystem::CallbackCompletion> {
     TPingTaskResult Result;
@@ -381,10 +382,10 @@ private:
         if (!retry) {
             RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
         }
-        Ping(Yq::Private::PingTaskRequest(), ContinueLeaseRequestCookie);
+        Ping(Fq::Private::PingTaskRequest(), ContinueLeaseRequestCookie);
     }
 
-    void Ping(Yq::Private::PingTaskRequest request, ui64 cookie) {
+    void Ping(Fq::Private::PingTaskRequest request, ui64 cookie) {
         QueryCounters.SetUptimePublicAndServiceCounter((TInstant::Now() - CreatedAt).Seconds());
         // Fill ids
         request.set_tenant(TenantName);

@@ -1174,7 +1174,7 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvPingTaskRequest> Build()
     {
-        Yq::Private::PingTaskRequest request;
+        Fq::Private::PingTaskRequest request;
         request.set_owner_id(Owner);
         request.mutable_query_id()->set_value(QueryId);
         request.mutable_result_id()->set_value(ResultId);
@@ -1289,7 +1289,7 @@ public:
 
     std::unique_ptr<TEvControlPlaneStorage::TEvNodesHealthCheckRequest> Build()
     {
-        Yq::Private::NodesHealthCheckRequest request;
+        Fq::Private::NodesHealthCheckRequest request;
         request.set_tenant(TenantName);
         auto& node = *request.mutable_node();
         node.set_node_id(NodeId);

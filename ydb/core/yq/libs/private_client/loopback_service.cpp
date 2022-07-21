@@ -18,7 +18,7 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
 
-namespace NYq {
+namespace NFq {
 
 class TLoopbackService : public NActors::TActorBootstrapped<TLoopbackService> {
 public:
@@ -144,4 +144,4 @@ NActors::IActor* CreateLoopbackServiceActor(
         return new TLoopbackService(counters);
 }
 
-} /* NYq */
+} /* NFq */

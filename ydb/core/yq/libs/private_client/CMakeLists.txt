@@ -25,6 +25,5 @@ target_link_libraries(yq-libs-private_client PUBLIC
 target_sources(yq-libs-private_client PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/internal_service.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/loopback_service.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/private_client_fq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/private_client/private_client.cpp
 )

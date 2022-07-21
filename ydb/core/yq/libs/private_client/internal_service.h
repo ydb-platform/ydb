@@ -14,7 +14,7 @@
 
 #include <ydb/core/yq/libs/control_plane_storage/proto/yq_internal.pb.h>
 
-namespace NYq {
+namespace NFq {
 
 NActors::IActor* CreateInternalServiceActor(
     const NYq::TYqSharedResources::TPtr& yqSharedResources,
@@ -22,4 +22,4 @@ NActors::IActor* CreateInternalServiceActor(
     const NYq::NConfig::TPrivateApiConfig& privateApiConfig,
     const ::NMonitoring::TDynamicCounterPtr& counters);
 
-} /* NYq */
+} /* NFq */

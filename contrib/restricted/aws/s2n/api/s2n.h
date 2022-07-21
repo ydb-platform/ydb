@@ -286,10 +286,8 @@ extern int s2n_config_free_cert_chain_and_key(struct s2n_config *config);
 /**
  * Callback function type used to get the system time.
  *
- * Takes two arguments. A pointer to arbitrary data for use within the callback and a pointer to a 64 bit int.
- * the callback and a pointer to a 64 bit int. The 64 bit pointer should be set to the
- * number of nanoseconds since the Unix epoch.
- *
+ * @param void* A pointer to arbitrary data for use within the callback
+ * @param uint64_t* A pointer that the callback will set to the time in nanoseconds
  * The function should return 0 on success and -1 on failure.
  */
 typedef int (*s2n_clock_time_nanoseconds) (void *, uint64_t *);
@@ -345,7 +343,11 @@ typedef int (*s2n_cache_delete_callback) (struct s2n_connection *conn,  void *, 
 
 /** 
  * Allows the caller to set a callback function that will be used to get the
- * system time. 
+ * system time. The time returned should be the number of nanoseconds since the
+ * Unix epoch (Midnight, January 1st, 1970).
+ *
+ * s2n-tls uses this clock for timestamps.
+ *
  * @param config The configuration object being updated
  * @param clock_fn The wall clock time callback function
  * @param ctx An opaque pointer that the callback will be invoked with
@@ -356,7 +358,11 @@ extern int s2n_config_set_wall_clock(struct s2n_config *config, s2n_clock_time_n
 
 /** 
  * Allows the caller to set a callback function that will be used to get 
- * monotonic time.
+ * monotonic time. The monotonic time is the time since an arbitrary, unspecified
+ * point. Unlike wall clock time, it MUST never move backwards.
+ *
+ * s2n-tls uses this clock for timers.
+ *
  * @param config The configuration object being updated
  * @param clock_fn The monotonic time callback function
  * @param ctx An opaque pointer that the callback will be invoked with
@@ -712,6 +718,29 @@ S2N_API
 extern s2n_cert_private_key *s2n_cert_chain_and_key_get_private_key(struct s2n_cert_chain_and_key *cert_and_key);
 
 /**
+ * Set the raw OCSP stapling data for a certificate chain.
+ *
+ * @param chain_and_key The certificate chain handle
+ * @param data A pointer to the raw OCSP stapling data bytes. The data will be copied.
+ * @param length The length of the data bytes.
+ * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
+ */
+S2N_API
+extern int s2n_cert_chain_and_key_set_ocsp_data(struct s2n_cert_chain_and_key *chain_and_key, const uint8_t *data, uint32_t length);
+
+/**
+ * Set the signed certificate timestamp (SCT) for a certificate chain.
+ * This is used for Certificate Transparency.
+ *
+ * @param chain_and_key The certificate chain handle
+ * @param data A pointer to the SCT data. The data will be copied.
+ * @param length The length of the data bytes.
+ * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
+ */
+S2N_API
+extern int s2n_cert_chain_and_key_set_sct_list(struct s2n_cert_chain_and_key *chain_and_key, const uint8_t *data, uint32_t length);
+
+/**
  * A callback function that is invoked if s2n-tls cannot resolve a conflict between 
  * two certificates with the same domain name. This function is invoked while certificates
  * are added to an `s2n_config`. 
@@ -738,16 +767,18 @@ S2N_API
 extern int s2n_config_set_cert_tiebreak_callback(struct s2n_config *config, s2n_cert_tiebreak_callback cert_tiebreak_cb);
 
 /**
- * Associates a certificate chain and a private key, with an `s2n_config` object. 
- * At present, only one certificate-chain/key pair may be associated with a config. 
+ * Associates a certificate chain and private key with an `s2n_config` object.
+ * Using this API, only one cert chain of each type (like ECDSA or RSA) may be associated with a config.
  * `cert_chain_pem` should be a PEM encoded certificate chain, with the first certificate 
- * in the chain being your servers certificate. `private_key_pem` should be a
+ * in the chain being your server's certificate. `private_key_pem` should be a
  * PEM encoded private key corresponding to the server certificate.
+ *
+ * @deprecated Use s2n_config_add_cert_chain_and_key_to_store instead.
  *
  * @param config The configuration object being updated
  * @param cert_chain_pem A byte array of a PEM encoded certificate chain.
  * @param private_key_pem A byte array of a PEM encoded key.
- * @returns S2N_SUCCESS on success. S2N_FAILURE on failure
+ * @returns S2N_SUCCESS on success. S2N_FAILURE on failure.
  */
 S2N_API
 extern int s2n_config_add_cert_chain_and_key(struct s2n_config *config, const char *cert_chain_pem, const char *private_key_pem);
@@ -1022,6 +1053,8 @@ extern int s2n_config_set_alert_behavior(struct s2n_config *config, s2n_alert_be
  * This method will clear any existing data that is set. If the data and length
  * parameters are set to NULL, no new data is set in the `s2n_config` object,
  * effectively clearing existing data.
+ *
+ * @deprecated Use s2n_cert_chain_and_key_set_ocsp_data and s2n_cert_chain_and_key_set_sct_list instead.
  *
  * @param config The configuration object being updated
  * @param type The extension type
@@ -1672,10 +1705,12 @@ S2N_API
 extern int s2n_connection_set_protocol_preferences(struct s2n_connection *conn, const char * const *protocols, int protocol_count);
 
 /**
- * Sets the server name for the connection. 
+ * Sets the server name for the connection.
  *
- * @note In the future, this can be used by clients who wish to use the TLS "Server Name indicator"
- * extension. At present, client functionality is disabled.
+ * It may be desirable for clients
+ * to provide this information to facilitate secure connections to
+ * servers that host multiple 'virtual' servers at a single underlying
+ * network address.
  *
  * @param conn The connection object being queried
  * @param server_name A pointer to a string containing the desired server name
@@ -1707,7 +1742,7 @@ S2N_API
 extern const char *s2n_get_application_protocol(struct s2n_connection *conn);
 
 /**
- * Query the connection for a buffer containing the OCSP reponse.
+ * Query the connection for a buffer containing the OCSP response.
  * 
  * @param conn The connection object being queried
  * @param length A pointer that is set to the certificate transparency response buffer's size

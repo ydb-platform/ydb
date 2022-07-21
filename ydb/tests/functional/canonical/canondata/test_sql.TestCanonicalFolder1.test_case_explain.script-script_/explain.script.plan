@@ -73,8 +73,6 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "GroupBy": "0",
-                                                        "Aggregation": "Inc(state)",
                                                         "Name": "Aggregate"
                                                     },
                                                     {
@@ -95,11 +93,14 @@
                                 ],
                                 "Operators": [
                                     {
+                                        "Name": "Aggregate"
+                                    },
+                                    {
                                         "Name": "Limit",
                                         "Limit": "1001"
                                     }
                                 ],
-                                "Node Type": "Limit"
+                                "Node Type": "Aggregate-Limit"
                             }
                         ],
                         "Node Type": "Precompute_0_0",
@@ -189,8 +190,6 @@
                                                 "PlanNodeId": 1,
                                                 "Operators": [
                                                     {
-                                                        "GroupBy": "0",
-                                                        "Aggregation": "Inc(state)",
                                                         "Name": "Aggregate"
                                                     },
                                                     {
@@ -211,11 +210,14 @@
                                 ],
                                 "Operators": [
                                     {
+                                        "Name": "Aggregate"
+                                    },
+                                    {
                                         "Name": "Limit",
                                         "Limit": "1001"
                                     }
                                 ],
-                                "Node Type": "Limit"
+                                "Node Type": "Aggregate-Limit"
                             }
                         ],
                         "Node Type": "Precompute_0_0",

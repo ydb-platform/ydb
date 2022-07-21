@@ -19,8 +19,8 @@ struct TParseLookupTableResult {
     TVector<ui32> KeyIndices;
     TVector<NUdf::TDataTypeId> KeyTypes;
 
-    TSmallVec<TKqpComputeContextBase::TColumn> Columns;
-    TSmallVec<TKqpComputeContextBase::TColumn> SystemColumns;
+    TSmallVec<NTable::TTag> Columns;
+    TSmallVec<NTable::TTag> SystemColumns;
     TSmallVec<bool> SkipNullKeys;
 };
 
@@ -88,8 +88,8 @@ public:
         , TypeEnv(typeEnv)
         , ParseResult(parseResult)
         , LookupKeysNode(lookupKeysNode)
-        , ColumnTags(ExtractTags(ParseResult.Columns))
-        , SystemColumnTags(ExtractTags(ParseResult.SystemColumns))
+        , ColumnTags(ParseResult.Columns)
+        , SystemColumnTags(ParseResult.SystemColumns)
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
         , TaskTableStats(ComputeCtx.GetTaskCounters(ComputeCtx.GetCurrentTaskId()))
     {
@@ -173,8 +173,8 @@ public:
         , TypeEnv(typeEnv)
         , ParseResult(parseResult)
         , LookupKeysNode(lookupKeysNode)
-        , ColumnTags(ExtractTags(ParseResult.Columns))
-        , SystemColumnTags(ExtractTags(ParseResult.SystemColumns))
+        , ColumnTags(ParseResult.Columns)
+        , SystemColumnTags(ParseResult.SystemColumns)
         , ShardTableStats(ComputeCtx.GetDatashardCounters())
         , TaskTableStats(ComputeCtx.GetTaskCounters(computeCtx.GetCurrentTaskId())) {}
 

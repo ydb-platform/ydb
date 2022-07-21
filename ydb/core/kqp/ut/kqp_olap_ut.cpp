@@ -510,6 +510,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         };
     }
 
+    void CheckPlanForAggregatePushdown(const TString& query, NYdb::NTable::TTableClient& tableClient) {
+        TStreamExecScanQuerySettings scanSettings;
+        scanSettings.Explain(true);
+        auto res = tableClient.StreamExecuteScanQuery(query, scanSettings).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto planRes = CollectStreamResult(res);
+        auto ast = planRes.QueryStats->Getquery_ast();
+
+        UNIT_ASSERT_C(ast.find("TKqpOlapAgg") != std::string::npos,
+            TStringBuilder() << "Aggregate was not pushed down. Query: " << query);
+    }
+
     Y_UNIT_TEST_TWIN(SimpleQueryOlap, UseSessionActor) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
@@ -1265,6 +1278,170 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
             UNIT_ASSERT_C(ast.find("KqpOlapFilter") == std::string::npos,
                           TStringBuilder() << "Predicate pushed down. Query: " << pushQuery);
+        }
+    }
+
+    Y_UNIT_TEST(AggregationPushdown) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+        CreateTestOlapTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                SELECT
+                    COUNT(level)
+                FROM `/Root/olapStore/olapTable`
+            )";
+            auto opStartTime = Now();
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cerr << "!!!\nPushdown query execution time: " << (Now() - opStartTime).MilliSeconds() << "\n!!!\n";
+            Cout << result << Endl;
+            CompareYson(result, R"([[23000u;]])");
+
+            // Check plan
+            CheckPlanForAggregatePushdown(query, tableClient);
+        }
+    }
+
+    Y_UNIT_TEST(AggregationGroupByPushdown) {
+        // remove this return when GROUP BY will be implemented on columnshard
+        return;
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+        CreateTestOlapTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                SELECT
+                    level, COUNT(level)
+                FROM `/Root/olapStore/olapTable`
+                GROUP BY level
+            )";
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[23000u;]])");
+
+            // Check plan
+            CheckPlanForAggregatePushdown(query, tableClient);
+        }
+    }
+
+    Y_UNIT_TEST(CountAllPushdown) {
+        // remove this return when COUNT(*) will be implemented on columnshard
+        return;
+
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+        CreateTestOlapTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )";
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[23000u;]])");
+
+            // Check plan
+            CheckPlanForAggregatePushdown(query, tableClient);
+        }
+    }
+
+    Y_UNIT_TEST(CountAllNoPushdown) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+        CreateTestOlapTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            auto it = tableClient.StreamExecuteScanQuery(R"(
+                --!syntax_v1
+                SELECT
+                    COUNT(*)
+                FROM `/Root/olapStore/olapTable`
+            )").GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            Cout << result << Endl;
+            CompareYson(result, R"([[23000u;]])");
         }
     }
 

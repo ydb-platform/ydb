@@ -666,4 +666,36 @@ NNodes::TExprBase DqPeepholeDropUnusedInputs(const NNodes::TExprBase& node, TExp
     return NNodes::TExprBase(ctx.ChangeChildren(node.Ref(), std::move(children)));
 }
 
+NNodes::TExprBase DqPeepholeRewriteLength(const NNodes::TExprBase& node, TExprContext& ctx) {
+    if (!node.Maybe<TDqPhyLength>()) {
+        return node;
+    }
+
+    auto dqPhyLength = node.Cast<TDqPhyLength>();
+
+    auto zero = Build<TCoUint64>(ctx, node.Pos())
+        .Literal().Build("0")
+        .Done();
+
+    return Build<TCoCondense>(ctx, node.Pos())
+        .Input(dqPhyLength.Input())
+        .State<TCoUint64>()
+            .Literal().Build("0")
+            .Build()
+        .SwitchHandler()
+            .Args({"item", "state"})
+            .Body(MakeBool<false>(node.Pos(), ctx))
+            .Build()
+        .UpdateHandler()
+            .Args({"item", "state"})
+            .Body<TCoAggrAdd>()
+                .Left("state")
+                .Right<TCoUint64>()
+                    .Literal().Build("1")
+                .Build()
+            .Build()
+        .Build()
+    .Done();
+}
+
 } // namespace NYql::NDq

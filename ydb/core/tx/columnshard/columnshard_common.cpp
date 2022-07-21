@@ -196,6 +196,9 @@ NArrow::TAggregateAssign MakeAggregate(const TContext& info, const std::string& 
             case TId::AGG_UNSPECIFIED:
                 break;
         }
+    } else if (func.ArgumentsSize() == 0 && func.GetId() == TId::AGG_COUNT) {
+        // COUNT(*) case
+        return TAggregateAssign(name, EAggregate::Count, {});
     }
     return TAggregateAssign(name, EAggregate::Unspecified, {});
 }
@@ -373,50 +376,51 @@ std::pair<TPredicate, TPredicate> RangePredicates(const TSerializedTableRange& r
         TPredicate(EOperation::Less, rightBorder, NArrow::MakeArrowSchema(rightColumns), toInclusive));
 }
 
-bool TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
+std::shared_ptr<NArrow::TSsaProgramSteps> TReadDescription::AddProgram(const IColumnResolver& columnResolver, const NKikimrSSA::TProgram& program)
 {
     using TId = NKikimrSSA::TProgram::TCommand;
 
+    auto programSteps = std::make_shared<NArrow::TSsaProgramSteps>();
     TContext info(columnResolver);
     auto step = std::make_shared<NArrow::TProgramStep>();
     for (auto& cmd : program.GetCommand()) {
         switch (cmd.GetLineCase()) {
             case TId::kAssign:
                 if (!ExtractAssign(info, *step, cmd.GetAssign(), ProgramParameters)) {
-                    return false;
+                    return nullptr;
                 }
                 break;
             case TId::kFilter:
                 if (!ExtractFilter(info, *step, cmd.GetFilter())) {
-                    return false;
+                    return nullptr;
                 }
                 break;
             case TId::kProjection:
                 if (!ExtractProjection(info, *step, cmd.GetProjection())) {
-                    return false;
+                    return nullptr;
                 }
-                Program.push_back(step);
+                programSteps->Program.push_back(step);
                 step = std::make_shared<NArrow::TProgramStep>();
                 break;
             case TId::kGroupBy:
                 if (!ExtractGroupBy(info, *step, cmd.GetGroupBy())) {
-                    return false;
+                    return nullptr;
                 }
-                Program.push_back(step);
+                programSteps->Program.push_back(step);
                 step = std::make_shared<NArrow::TProgramStep>();
                 break;
             case TId::LINE_NOT_SET:
-                return false;
+                return nullptr;
         }
     }
 
     // final step without final projection
     if (!step->Empty()) {
-        Program.push_back(step);
+        programSteps->Program.push_back(step);
     }
 
-    ProgramSourceColumns = std::move(info.Sources);
-    return true;
+    programSteps->ProgramSourceColumns = std::move(info.Sources);
+    return programSteps;
 }
 
 }

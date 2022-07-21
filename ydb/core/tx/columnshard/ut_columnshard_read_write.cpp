@@ -887,6 +887,7 @@ static NKikimrSSA::TProgram MakeSelect(TAssignment::EFunction compareId = TAssig
 // FIXME:
 // NotImplemented: Function any has no kernel matching input types (array[timestamp[us]])
 // NotImplemented: Function any has no kernel matching input types (array[string])
+// NotImplemented: Function any has no kernel matching input types (array[int32])
 // NotImplemented: Function min_max has no kernel matching input types (array[timestamp[us]])
 // NotImplemented: Function min_max has no kernel matching input types (array[string])
 //

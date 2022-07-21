@@ -17,8 +17,8 @@ struct TParseReadTableResultBase {
     ui32 CallableId = 0;
     TTableId TableId;
 
-    TSmallVec<TKqpComputeContextBase::TColumn> Columns;
-    TSmallVec<TKqpComputeContextBase::TColumn> SystemColumns;
+    TSmallVec<NTable::TTag> Columns;
+    TSmallVec<NTable::TTag> SystemColumns;
     TSmallVec<bool> SkipNullKeys;
     TNode* ItemsLimit = nullptr;
     bool Reverse = false;
@@ -36,7 +36,7 @@ struct TParseReadTableRangesResult : TParseReadTableResultBase {
 };
 
 void ParseReadColumns(const TType* readType, const TRuntimeNode& tagsNode,
-    TSmallVec<TKqpComputeContextBase::TColumn>& columns, TSmallVec<TKqpComputeContextBase::TColumn>& systemColumns);
+    TSmallVec<NTable::TTag>& columns, TSmallVec<NTable::TTag>& systemColumns);
 
 TParseReadTableResult ParseWideReadTable(TCallable& callable);
 TParseReadTableRangesResult ParseWideReadTableRanges(TCallable& callable);

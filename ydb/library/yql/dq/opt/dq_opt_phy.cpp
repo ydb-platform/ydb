@@ -1208,47 +1208,16 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
 
     auto field = BuildAtom("_dq_agg_cnt", node.Pos(), ctx);
 
-    auto combineLambda = Build<TCoLambda>(ctx, node.Pos())
+    auto dqLengthLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"stream"})
-        .Body<TCoCombineByKey>()
+        .Body<TDqPhyLength>()
             .Input("stream")
-            .PreMapLambda()
-                .Args({"item"})
-                .Body<TCoJust>()
-                    .Input("item")
-                    .Build()
-                .Build()
-            .KeySelectorLambda()
-                .Args({"item"})
-                .Body(zero)
-                .Build()
-            .InitHandlerLambda()
-                .Args({"key", "item"})
-                .Body<TCoUint64>()
-                    .Literal().Build("1")
-                    .Build()
-                .Build()
-            .UpdateHandlerLambda()
-                .Args({"key", "item", "state"})
-                .Body<TCoInc>()
-                    .Value("state")
-                    .Build()
-                .Build()
-            .FinishHandlerLambda()
-                .Args({"key", "state"})
-                .Body<TCoJust>()
-                    .Input<TCoAsStruct>()
-                        .Add<TCoNameValueTuple>()
-                            .Name(field)
-                            .Value("state")
-                            .Build()
-                        .Build()
-                    .Build()
-                .Build()
+            .Name(field)
             .Build()
         .Done();
 
-    auto result = DqPushLambdaToStageUnionAll(dqUnion, combineLambda, {}, ctx, optCtx);
+
+    auto result = DqPushLambdaToStageUnionAll(dqUnion, dqLengthLambda, {}, ctx, optCtx);
     if (!result) {
         return node;
     }
@@ -1270,10 +1239,7 @@ TExprBase DqRewriteLengthOfStageOutput(TExprBase node, TExprContext& ctx, IOptim
                     .Args({"item", "state"})
                     .Body<TCoAggrAdd>()
                         .Left("state")
-                        .Right<TCoMember>()
-                            .Struct("item")
-                            .Name(field)
-                            .Build()
+                        .Right("item")
                         .Build()
                     .Build()
                 .Build()

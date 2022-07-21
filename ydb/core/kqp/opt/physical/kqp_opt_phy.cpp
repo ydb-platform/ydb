@@ -34,6 +34,8 @@ public:
             HNDL(RemoveRedundantSortByPk));
         AddHandler(0, &TCoTake::Match, HNDL(ApplyLimitToReadTable));
         AddHandler(0, &TCoFlatMap::Match, HNDL(PushOlapFilter));
+        AddHandler(0, &TCoCombineByKey::Match, HNDL(PushOlapAggregate));
+        AddHandler(0, &TDqPhyLength::Match, HNDL(PushOlapLength));
         AddHandler(0, &TCoSkipNullMembers::Match, HNDL(PushSkipNullMembersToStage<false>));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(PushExtractMembersToStage<false>));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<false>));
@@ -131,6 +133,18 @@ protected:
     TMaybeNode<TExprBase> PushOlapFilter(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpPushOlapFilter(node, ctx, KqpCtx, TypesCtx);
         DumpAppliedRule("PushOlapFilter", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> PushOlapAggregate(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpPushOlapAggregate(node, ctx, KqpCtx);
+        DumpAppliedRule("PushOlapAggregate", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+    
+    TMaybeNode<TExprBase> PushOlapLength(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpPushOlapLength(node, ctx, KqpCtx);
+        DumpAppliedRule("PushOlapLength", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

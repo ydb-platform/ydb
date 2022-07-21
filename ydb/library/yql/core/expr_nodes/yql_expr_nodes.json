@@ -419,6 +419,23 @@
             ]
         },
         {
+            "Name": "TCoAggrCountInit",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "AggrCountInit"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoAggrCountUpdate",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "AggrCountUpdate"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"},
+                {"Index": 1, "Name": "State", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoMin",
             "VarArgBase": "TExprBase",
             "Match": {"Type": "Callable", "Name": "Min"}

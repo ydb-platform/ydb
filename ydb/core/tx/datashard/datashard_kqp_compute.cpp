@@ -14,14 +14,6 @@ namespace NMiniKQL {
 using namespace NTable;
 using namespace NUdf;
 
-TSmallVec<TTag> ExtractTags(const TSmallVec<TKqpComputeContextBase::TColumn>& columns) {
-    TSmallVec<TTag> tags;
-    for (const auto& column : columns) {
-        tags.push_back(column.Tag);
-    }
-    return tags;
-}
-
 typedef IComputationNode* (*TCallableDatashardBuilderFunc)(TCallable& callable,
     const TComputationNodeFactoryContext& ctx, TKqpDatashardComputeContext& computeCtx);
 

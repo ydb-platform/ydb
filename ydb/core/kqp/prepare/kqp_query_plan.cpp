@@ -790,7 +790,9 @@ private:
             })).Cast<TCoJoinDict>();
             operatorId = Visit(flatMap, join, planNode);
             node = join.Ptr();
-        } else if (auto maybeCondense = TMaybeNode<TCoCondense1>(node)) {
+        } else if (auto maybeCondense1 = TMaybeNode<TCoCondense1>(node)) {
+            operatorId = Visit(maybeCondense1.Cast(), planNode);
+        } else if (auto maybeCondense = TMaybeNode<TCoCondense>(node)) {
             operatorId = Visit(maybeCondense.Cast(), planNode);
         } else if (auto maybeCombiner = TMaybeNode<TCoCombineCore>(node)) {
             operatorId = Visit(maybeCombiner.Cast(), planNode);
@@ -834,6 +836,13 @@ private:
     }
 
     ui32 Visit(const TCoCondense1& /*condense*/, TQueryPlanNode& planNode) {
+        TOperator op;
+        op.Properties["Name"] = "Aggregate";
+
+        return AddOperator(planNode, "Aggregate", std::move(op));
+    }
+
+    ui32 Visit(const TCoCondense& /*condense*/, TQueryPlanNode& planNode) {
         TOperator op;
         op.Properties["Name"] = "Aggregate";
 

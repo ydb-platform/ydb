@@ -4,6 +4,7 @@
 #include "columnshard__index_scan.h"
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/indexed_read_data.h>
+#include <ydb/core/formats/ssa_program_optimizer.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -204,10 +205,18 @@ bool TTxReadBase::ParseProgram(const TActorContext& ctx, NKikimrSchemeOp::EOlapP
         read.ProgramParameters = NArrow::DeserializeBatch(olapProgram.GetParameters(), schema);
     }
 
-    if (!read.AddProgram(columnResolver, program)) {
+
+    auto ssaProgramSteps = read.AddProgram(columnResolver, program);
+    if (!ssaProgramSteps) {
         ErrorDescription = TStringBuilder() << "Wrong olap program";
         return false;
     }
+    if (!ssaProgramSteps->Program.empty() && Self->PrimaryIndex) {
+        ssaProgramSteps->Program = NKikimr::NSsaOptimizer::OptimizeProgram(ssaProgramSteps->Program, Self->PrimaryIndex->GetIndexInfo());
+    }
+        
+    read.Program = ssaProgramSteps->Program;
+    read.ProgramSourceColumns = ssaProgramSteps->ProgramSourceColumns;
     return true;
 }
 

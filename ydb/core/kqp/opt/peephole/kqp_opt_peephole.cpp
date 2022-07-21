@@ -37,6 +37,7 @@ public:
         AddHandler(0, &TDqPhyJoinDict::Match, HNDL(RewriteDictJoin));
         AddHandler(0, &TDqJoin::Match, HNDL(RewritePureJoin));
         AddHandler(0, TOptimizeTransformerBase::Any(), HNDL(BuildWideReadTable));
+        AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
 #undef HNDL
     }
 
@@ -74,6 +75,12 @@ protected:
     TMaybeNode<TExprBase> BuildWideReadTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpBuildWideReadTable(node, ctx);
         DumpAppliedRule("BuildWideReadTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> RewriteLength(TExprBase node, TExprContext& ctx) {
+        TExprBase output = DqPeepholeRewriteLength(node, ctx);
+        DumpAppliedRule("RewriteLength", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 };

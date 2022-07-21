@@ -4,6 +4,8 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <util/system/types.h>
 
+#include <ydb/core/scheme_types/scheme_types_defs.h>
+
 namespace NKikimr::NArrow {
 
 enum class EOperation {
@@ -200,7 +202,8 @@ public:
         , Operation(op)
         , Arguments({std::move(arg)})
     {
-        if (arg.empty()) {
+        if (arg.empty() && op != EAggregate::Count) {
+            // COUNT(*) doesn't have arguments
             op = EAggregate::Unspecified;
         }
     }
@@ -259,5 +262,10 @@ inline void ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch,
         step->Apply(batch, ctx);
     }
 }
+
+struct TSsaProgramSteps {
+    std::vector<std::shared_ptr<TProgramStep>> Program;
+    THashMap<ui32, TString> ProgramSourceColumns;
+};
 
 }

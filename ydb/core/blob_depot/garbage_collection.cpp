@@ -121,7 +121,7 @@ namespace NKikimr::NBlobDepot {
                 auto processKey = [&](const TData::TKey& key, const TData::TValue& value) {
                     if (value.KeepState != NKikimrBlobDepot::EKeepState::Keep || hard) {
                         const TLogoBlobID id(key.GetBlobId());
-                        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "DeleteKey", (TabletId, Self->TabletID()), (BlobId, id));
+                        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT14, "DeleteKey", (TabletId, Self->TabletID()), (BlobId, id));
                         db.Table<Schema::Data>().Key(key.MakeBinaryKey()).Delete();
                         auto updateTrash = [&](TLogoBlobID id) {
                             db.Table<Schema::Trash>().Key(TString(id.AsBinaryString())).Update();

@@ -2,6 +2,19 @@
 
 namespace NKikimr::NBlobDepot {
 
+    namespace {
+        TDynBitMap Compact(TDynBitMap value) {
+            const size_t valueBitCount = value.ValueBitCount();
+            TDynBitMap result;
+            result.Reserve(valueBitCount);
+            Y_VERIFY(result.GetChunkCount() <= value.GetChunkCount());
+            Y_VERIFY_DEBUG(result.GetChunkCount() < value.GetChunkCount());
+            const size_t numBytes = sizeof(TDynBitMap::TChunk) * result.GetChunkCount();
+            memcpy(const_cast<TDynBitMap::TChunk*>(result.GetChunks()), value.GetChunks(), numBytes);
+            return result;
+        }
+    }
+
     void TGivenIdRange::IssueNewRange(ui64 begin, ui64 end) {
         Y_VERIFY(begin < end);
         NumAvailableItems += end - begin;
@@ -229,6 +242,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TGivenIdRange::Pop(TRanges::iterator it, ui64 value) {
+        static constexpr size_t bitsPerChunk = CHAR_BIT * sizeof(TDynBitMap::TChunk);
+
         TRange& range = const_cast<TRange&>(*it);
         Y_VERIFY_S(range.Begin <= value && value < range.End, "value# " << value << " this# " << ToString());
         const size_t offset = value - range.Begin;
@@ -237,6 +252,11 @@ namespace NKikimr::NBlobDepot {
         --range.NumSetBits;
         if (!range.NumSetBits) {
             Ranges.erase(it);
+        } else if (const size_t index = range.Bits.FirstNonZeroBit(); index >= 2 * bitsPerChunk) {
+            // make its representation more compact
+            range.Bits >>= index;
+            range.Bits = Compact(range.Bits);
+            range.Begin += index;
         }
         --NumAvailableItems;
     }
@@ -244,7 +264,7 @@ namespace NKikimr::NBlobDepot {
     std::vector<bool> TGivenIdRange::ToDebugArray(size_t numItems) const {
         std::vector<bool> res(numItems, false);
         for (const TRange& item : Ranges) {
-            for (ui32 i = item.Bits.FirstNonZeroBit(); i != item.Bits.Size(); i = item.Bits.NextNonZeroBit(i)) {
+            Y_FOR_EACH_BIT(i, item.Bits) {
                 Y_VERIFY_S(i < item.End - item.Begin, "i# " << i << " this# " << ToString());
                 res[item.Begin + i] = true;
             }

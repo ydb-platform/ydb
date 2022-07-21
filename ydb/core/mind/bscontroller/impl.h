@@ -495,6 +495,8 @@ public:
         bool SeenOperational = false;
 
         Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::EGroupDecommitStatus::NONE;
+        TMaybe<Table::AssimilatorGroupId::Type> AssimilatorGroupId;
+
         TMaybe<Table::VirtualGroupPool::Type> VirtualGroupPool;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
         TMaybe<Table::ParentDir::Type> ParentDir;
@@ -505,6 +507,7 @@ public:
         TMaybe<Table::PathId::Type> PathId;
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
+        TMaybe<Table::NeedAlter::Type> NeedAlter;
         bool CommitInProgress = false;
 
         bool Down = false; // is group are down right now (not selectable)
@@ -561,6 +564,7 @@ public:
                     Table::MainKeyVersion,
                     Table::SeenOperational,
                     Table::DecommitStatus,
+                    Table::AssimilatorGroupId,
                     Table::VirtualGroupPool,
                     Table::VirtualGroupState,
                     Table::ParentDir,
@@ -570,7 +574,8 @@ public:
                     Table::TxId,
                     Table::PathId,
                     Table::BlobDepotId,
-                    Table::ErrorReason
+                    Table::ErrorReason,
+                    Table::NeedAlter
                 > adapter(
                     &TGroupInfo::Generation,
                     &TGroupInfo::Owner,
@@ -585,6 +590,7 @@ public:
                     &TGroupInfo::MainKeyVersion,
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
+                    &TGroupInfo::AssimilatorGroupId,
                     &TGroupInfo::VirtualGroupPool,
                     &TGroupInfo::VirtualGroupState,
                     &TGroupInfo::ParentDir,
@@ -594,7 +600,8 @@ public:
                     &TGroupInfo::TxId,
                     &TGroupInfo::PathId,
                     &TGroupInfo::BlobDepotId,
-                    &TGroupInfo::ErrorReason
+                    &TGroupInfo::ErrorReason,
+                    &TGroupInfo::NeedAlter
                 );
             callback(&adapter);
         }

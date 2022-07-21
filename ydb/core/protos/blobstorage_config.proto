@@ -23,11 +23,12 @@ enum EVirtualGroupState {
     CREATE_FAILED = 2; // error while creating VirtualGroup
     WORKING = 3; // operational
     WAIT_SCHEMESHARD_DELETE = 4; // waiting for path to be deleted
+    WAIT_SCHEMESHARD_ALTER = 5; // waiting for path to be altered (in case of configuration update)
 }
 
 enum EGroupDecommitStatus {
     NONE = 0; // no decomission
-    STARTING = 1; // decomission was asked
+    PENDING = 1; // decomission was asked
     NO_WRITES_QUORUM_OBTAINED = 2;
 }
 
@@ -472,6 +473,11 @@ message TAllocateVirtualGroup {
     uint64 BlobDepotId = 8; // when the tablet is already created; for testing purposes only
 }
 
+message TDecommitGroups {
+    uint32 VirtualGroupId = 1;
+    repeated uint32 DecommitGroups = 2;
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // INTERFACE PART
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -509,6 +515,7 @@ message TConfigRequest {
             TSetPDiskSpaceMarginPromille SetPDiskSpaceMarginPromille = 37;
             TUpdateSettings UpdateSettings = 38;
             TAllocateVirtualGroup AllocateVirtualGroup = 39;
+            TDecommitGroups DecommitGroups = 40;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;

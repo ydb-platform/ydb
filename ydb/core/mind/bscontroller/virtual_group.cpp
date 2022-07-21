@@ -82,22 +82,51 @@ namespace NKikimr::NBsController {
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetOperationMode(NKikimrBlobDepot::EOperationMode::VirtualGroup);
         config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
-        config.MutableDecommittingGroups()->CopyFrom(cmd.GetDecommitGroups());
 
         const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
         Y_VERIFY(success);
 
-        for (const TGroupId groupId : cmd.GetDecommitGroups()) {
-            auto *group = Groups.FindForUpdate(groupId);
-            if (!group) {
-                throw TExError() << "group id for decomission is not found" << TErrorParams::GroupId(groupId);
-            } else if (group->DecommitStatus != NKikimrBlobStorage::EGroupDecommitStatus::NONE) {
-                throw TExError() << "group is already being decommitted" << TErrorParams::GroupId(group->ID);
-            }
-            group->DecommitStatus = NKikimrBlobStorage::EGroupDecommitStatus::STARTING;
+        for (const TGroupId groupToDecommit : cmd.GetDecommitGroups()) {
+            InitiateGroupDecommission(group->ID, groupToDecommit);
         }
 
         status.AddGroupId(group->ID);
+    }
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& /*status*/) {
+        for (const TGroupId groupToDecommit : cmd.GetDecommitGroups()) {
+            InitiateGroupDecommission(cmd.GetVirtualGroupId(), groupToDecommit);
+        }
+    }
+
+    void TBlobStorageController::TConfigState::InitiateGroupDecommission(ui32 virtualGroupId, ui32 groupToDecommit) {
+        TGroupInfo *virtualGroup = Groups.FindForUpdate(virtualGroupId);
+        if (!virtualGroup) {
+            throw TExError() << "virtual group not found" << TErrorParams::GroupId(virtualGroupId);
+        } else if (!virtualGroup->BlobDepotConfig) {
+            throw TExError() << "virtual group blob depot config is not filled in" << TErrorParams::GroupId(virtualGroup->ID);
+        }
+
+        auto *group = Groups.FindForUpdate(groupToDecommit);
+        if (!group) {
+            throw TExError() << "group id for decomission is not found" << TErrorParams::GroupId(groupToDecommit);
+        } else if (group->DecommitStatus != NKikimrBlobStorage::EGroupDecommitStatus::NONE) {
+            throw TExError() << "group is already being decommitted" << TErrorParams::GroupId(group->ID);
+        } else if (group->AssimilatorGroupId) {
+            throw TExError() << "don't know how, but AssimilatorGroupId is already filled in" << TErrorParams::GroupId(group->ID);
+        }
+        group->DecommitStatus = NKikimrBlobStorage::EGroupDecommitStatus::PENDING;
+        group->AssimilatorGroupId = virtualGroup->ID;
+        ++group->Generation; // advance group generation to push configs forcibly to all concerned nodes
+
+        NKikimrBlobDepot::TBlobDepotConfig blobDepotConfig;
+        if (!blobDepotConfig.ParseFromString(*virtualGroup->BlobDepotConfig)) {
+            throw TExError() << "failed to parse virtual group blob depot config" << TErrorParams::GroupId(virtualGroup->ID);
+        }
+        blobDepotConfig.AddDecommittingGroups(groupToDecommit);
+        if (!blobDepotConfig.SerializeToString(&*virtualGroup->BlobDepotConfig)) {
+            throw TExError() << "failed to serialize virtual group blob depot config" << TErrorParams::GroupId(virtualGroup->ID);
+        }
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -135,6 +164,7 @@ namespace NKikimr::NBsController {
                 PARAM(PathId)
                 PARAM(BlobDepotId)
                 PARAM(ErrorReason)
+                PARAM(NeedAlter)
 #undef PARAM
                 if (group->SeenOperational) {
                     row.Update<T::SeenOperational>(true);
@@ -178,11 +208,11 @@ namespace NKikimr::NBsController {
 
             switch (*group->VirtualGroupState) {
                 case NKikimrBlobStorage::EVirtualGroupState::CREATED:
-                    IssueCreatePathRequest(group);
+                    IssueCreateOrAlterPathRequest(group, NKikimrSchemeOp::ESchemeOpCreateBlobDepot);
                     break;
 
-                case NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED:
                 case NKikimrBlobStorage::EVirtualGroupState::WORKING:
+                case NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED:
                     IssueNodeNotifications(group);
                     group->VirtualGroupSetupMachineId = {};
                     PassAway();
@@ -192,13 +222,18 @@ namespace NKikimr::NBsController {
                     SubscribeToSchemeshard(group);
                     break;
 
+                case NKikimrBlobStorage::EVirtualGroupState::WAIT_SCHEMESHARD_ALTER:
+                    IssueCreateOrAlterPathRequest(group, NKikimrSchemeOp::ESchemeOpAlterBlobDepot);
+                    group->NeedAlter = false;
+                    break;
+
                 default:
                     Y_FAIL();
             }
         }
 
-        void IssueCreatePathRequest(TGroupInfo *group) {
-            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG02, "IssueCreatePathRequest", (GroupId, GroupId),
+        void IssueCreateOrAlterPathRequest(TGroupInfo *group, NKikimrSchemeOp::EOperationType op) {
+            STLOG(PRI_DEBUG, BS_CONTROLLER, BSCVG02, "IssueCreateOrAlterPathRequest", (GroupId, GroupId),
                 (ParentDir, *group->ParentDir), (Name, *group->Name));
 
             auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -211,7 +246,7 @@ namespace NKikimr::NBsController {
             auto *tx = record.MutableTransaction();
             auto *scheme = tx->MutableModifyScheme();
             scheme->SetWorkingDir(*group->ParentDir);
-            scheme->SetOperationType(NKikimrSchemeOp::ESchemeOpCreateBlobDepot);
+            scheme->SetOperationType(op);
             scheme->SetInternal(true);
             scheme->SetFailOnExist(false); // this operation has to be idempotent
             auto *bd = scheme->MutableBlobDepot();
@@ -354,10 +389,20 @@ namespace NKikimr::NBsController {
 
     void TBlobStorageController::CommitVirtualGroupUpdates(TConfigState& state) {
         for (const auto& [base, overlay] : state.Groups.Diff()) {
-            if (!base && overlay->second->VirtualGroupState) {
-                state.Callbacks.push_back([this, group = overlay->second.Get()] { StartVirtualGroupSetupMachine(group); });
-            } else if (!overlay->second) {
+            TGroupInfo *group = overlay->second.Get();
+            auto startSetupMachine = [&] {
+                Y_VERIFY(group);
+                if (group->VirtualGroupState && !group->VirtualGroupSetupMachineId) {
+                    state.Callbacks.push_back(std::bind(&TThis::StartVirtualGroupSetupMachine, this, group));
+                }
+            };
+
+            if (!base) { // new group was created
+                startSetupMachine();
+            } else if (!overlay->second) { // existing group was just deleted
                 Y_VERIFY(!base->second->VirtualGroupSetupMachineId);
+            } else if (overlay->second->NeedAlter.GetOrElse(false)) {
+                startSetupMachine();
             }
         }
     }

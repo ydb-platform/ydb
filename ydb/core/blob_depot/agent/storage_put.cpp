@@ -43,7 +43,7 @@ namespace NKikimr::NBlobDepot {
                 auto& kind = it->second;
 
                 std::optional<TBlobSeqId> blobSeqId = kind.Allocate(Agent);
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA21, "allocated BlobSeqId", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, GetQueryId()), (BlobSeqId, blobSeqId));
                 if (!blobSeqId) {
                     return kind.EnqueueQueryWaitingForId(this);
@@ -114,6 +114,9 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandlePutResult(TRequestContext::TPtr /*context*/, TEvBlobStorage::TEvPutResult& msg) {
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA22, "TEvPutResult", (VirtualGroupId, Agent.VirtualGroupId),
+                    (QueryId, GetQueryId()), (Msg, msg));
+
                 --PutsInFlight;
                 if (msg.Status != NKikimrProto::OK) {
                     EndWithError(msg.Status, std::move(msg.ErrorReason));

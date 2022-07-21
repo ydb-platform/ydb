@@ -6,6 +6,8 @@ namespace NKikimr::NBlobDepot {
         using TValue = TBlobDepotAgent::TChannelKind::TGivenIdRangePerChannel::value_type*;
 
         bool operator ()(TValue x, TValue y) const {
+            // FIXME: incorrect algorithm with respect to steps; we need to balance using per-channel window of written
+            // bytes or items
             return x->second.GetMinimumValue() > y->second.GetMinimumValue();
         }
     };

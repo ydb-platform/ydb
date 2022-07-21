@@ -62,6 +62,7 @@ struct Schema : NIceDb::Schema {
         struct Down : Column<13, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EGroupDecommitStatus; };
+        struct AssimilatorGroupId : Column<16, Group::ID::ColumnType> {}; // for the group being decommitted
 
         // VirtualGroup management code
         struct VirtualGroupPool  : Column<101, NScheme::NTypeIds::Utf8>   {}; // VG pool identifier
@@ -74,12 +75,13 @@ struct Schema : NIceDb::Schema {
         struct PathId            : Column<108, NScheme::NTypeIds::Uint64> {}; // path id for created path
         struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
+        struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
 
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, VirtualGroupPool, VirtualGroupState, ParentDir, Name, SchemeshardId,
-              BlobDepotConfig, TxId, PathId, BlobDepotId, ErrorReason>;
+              SeenOperational, DecommitStatus, AssimilatorGroupId, VirtualGroupPool, VirtualGroupState, ParentDir, Name,
+              SchemeshardId, BlobDepotConfig, TxId, PathId, BlobDepotId, ErrorReason, NeedAlter>;
     };
 
     struct State : Table<1> {

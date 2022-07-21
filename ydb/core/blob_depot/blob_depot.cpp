@@ -34,7 +34,8 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvCollectGarbage, BarrierServer->Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
-                hFunc(TEvBlobDepot::TEvPushNotifyResult, Data->Handle);
+
+                hFunc(TEvBlobDepot::TEvPushNotifyResult, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);

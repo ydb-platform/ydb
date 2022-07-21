@@ -316,6 +316,19 @@ namespace NKikimr::NBlobDepot {
                                 TABLED() { s << "Trash pending, bytes"; }
                                 TABLED() { outSize(trashPending); }
                             }
+
+                            std::vector<ui32> groups;
+                            for (const auto& [groupId, _] : Groups) {
+                                groups.push_back(groupId);
+                            }
+                            std::sort(groups.begin(), groups.end());
+                            for (const ui32 groupId : groups) {
+                                TGroupInfo& group = Groups[groupId];
+                                TABLER() {
+                                    TABLED() { s << "Data in GroupId# " << groupId << ", bytes"; }
+                                    TABLED() { outSize(group.AllocatedBytes); }
+                                }
+                            }
                         }
                     }
                 }

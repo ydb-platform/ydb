@@ -106,6 +106,7 @@ namespace NKikimr::NBlobDepot {
         auto& record = GetRecordsPerChannelGroup(id);
         record.Trash.insert(id);
         record.EnqueueForCollectionIfPossible(this);
+        AccountBlob(id, true);
     }
 
     void TData::AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep) {
@@ -117,7 +118,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::PutKey(TKey key, TValue&& data) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "PutKey", (TabletId, Self->TabletID()), (Key, key.ToString(Self->Config)),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (TabletId, Self->TabletID()), (Key, key.ToString(Self->Config)),
             (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
 
         EnumerateBlobsForValueChain(data.ValueChain, Self->TabletID(), [&](TLogoBlobID id) {
@@ -126,6 +127,7 @@ namespace NKikimr::NBlobDepot {
                 auto& record = GetRecordsPerChannelGroup(id);
                 const auto [_, inserted] = record.Used.insert(id);
                 Y_VERIFY(inserted);
+                AccountBlob(id, 1);
             }
         });
 
@@ -284,7 +286,7 @@ namespace NKikimr::NBlobDepot {
 
             record.TIntrusiveListItem<TRecordsPerChannelGroup, TRecordWithTrash>::Unlink();
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "issuing TEvCollectGarbage", (TabletId, Self->TabletID()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "issuing TEvCollectGarbage", (TabletId, Self->TabletID()),
                 (Channel, int(record.Channel)), (GroupId, record.GroupId), (Msg, ev->ToString()),
                 (LastConfirmedGenStep, record.LastConfirmedGenStep), (IssuedGenStep, record.IssuedGenStep),
                 (TrashInFlight.size, record.TrashInFlight.size()));
@@ -306,12 +308,13 @@ namespace NKikimr::NBlobDepot {
             }
 
             Y_VERIFY(agent.AgentId);
+            agent.PushCallbacks.emplace(id, std::bind(&TData::OnPushNotifyResult, this, std::placeholders::_1));
             TActivationContext::Send(new IEventHandle(*agent.AgentId, Self->SelfId(), ev.release(), 0, id));
         }
     }
 
     void TData::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "TEvCollectGarbageResult", (TabletId, ev->Get()->TabletId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (TabletId, ev->Get()->TabletId),
             (Channel, ev->Get()->Channel), (GroupId, ev->Cookie), (Msg, ev->Get()->ToString()));
         const auto& key = std::make_tuple(ev->Get()->TabletId, ev->Get()->Channel, ev->Cookie);
         const auto it = RecordsPerChannelGroup.find(key);
@@ -328,8 +331,14 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TData::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
-        TAgent& agent = Self->GetAgent(ev->Sender.NodeId());
+    void TData::OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+        TAgent& agent = Self->GetAgent(ev->Recipient);
+
+        const auto it = agent.InvalidateStepRequests.find(ev->Cookie);
+        Y_VERIFY(it != agent.InvalidateStepRequests.end());
+        auto items = std::move(it->second);
+        agent.InvalidateStepRequests.erase(it);
+
         const ui32 generation = Self->Executor()->Generation();
 
         std::set<TBlobSeqId> writesInFlight;
@@ -337,52 +346,48 @@ namespace NKikimr::NBlobDepot {
             writesInFlight.insert(TBlobSeqId::FromProto(item));
         }
 
-        if (const auto it = agent.InvalidateStepRequests.find(ev->Cookie); it != agent.InvalidateStepRequests.end()) {
-            for (const auto& [channel, invalidatedStep] : it->second) {
-                const ui32 channel_ = channel;
-                const ui32 invalidatedStep_ = invalidatedStep;
-                auto& agentGivenIdRanges = agent.GivenIdRanges[channel];
-                auto& givenIdRanges = Self->Channels[channel].GivenIdRanges;
+        for (const auto& [channel, invalidatedStep] : items) {
+            const ui32 channel_ = channel;
+            const ui32 invalidatedStep_ = invalidatedStep;
+            auto& agentGivenIdRanges = agent.GivenIdRanges[channel];
+            auto& givenIdRanges = Self->Channels[channel].GivenIdRanges;
 
-                auto begin = writesInFlight.lower_bound(TBlobSeqId{channel, 0, 0, 0});
-                auto end = writesInFlight.upper_bound(TBlobSeqId{channel, Max<ui32>(), Max<ui32>(), TBlobSeqId::MaxIndex});
+            auto begin = writesInFlight.lower_bound(TBlobSeqId{channel, 0, 0, 0});
+            auto end = writesInFlight.upper_bound(TBlobSeqId{channel, Max<ui32>(), Max<ui32>(), TBlobSeqId::MaxIndex});
 
-                auto makeWritesInFlight = [&] {
-                    TStringStream s;
-                    s << "[";
-                    for (auto it = begin; it != end; ++it) {
-                        s << (it != begin ? " " : "") << it->ToString();
-                    }
-                    s << "]";
-                    return s.Str();
-                };
-
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "Trim", (TabletId, Self->TabletID()), (AgentId, agent.ConnectedNodeId),
-                    (Id, ev->Cookie), (Channel, channel_), (InvalidatedStep, invalidatedStep_),
-                    (GivenIdRanges, Self->Channels[channel_].GivenIdRanges),
-                    (Agent.GivenIdRanges, agent.GivenIdRanges[channel_]),
-                    (WritesInFlight, makeWritesInFlight()));
-
+            auto makeWritesInFlight = [&] {
+                TStringStream s;
+                s << "[";
                 for (auto it = begin; it != end; ++it) {
-                    Y_VERIFY_S(agentGivenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
-                    Y_VERIFY_S(givenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
+                    s << (it != begin ? " " : "") << it->ToString();
                 }
+                s << "]";
+                return s.Str();
+            };
 
-                const TBlobSeqId trimmedBlobSeqId{channel, generation, invalidatedStep, TBlobSeqId::MaxIndex};
-                const ui64 validSince = trimmedBlobSeqId.ToSequentialNumber() + 1;
-                givenIdRanges.Subtract(agentGivenIdRanges.Trim(validSince));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (TabletId, Self->TabletID()), (AgentId, agent.ConnectedNodeId),
+                (Id, ev->Cookie), (Channel, channel_), (InvalidatedStep, invalidatedStep_),
+                (GivenIdRanges, Self->Channels[channel_].GivenIdRanges),
+                (Agent.GivenIdRanges, agent.GivenIdRanges[channel_]),
+                (WritesInFlight, makeWritesInFlight()));
 
-                for (auto it = begin; it != end; ++it) {
-                    agentGivenIdRanges.AddPoint(it->ToSequentialNumber());
-                    givenIdRanges.AddPoint(it->ToSequentialNumber());
-                }
-
-                OnLeastExpectedBlobIdChange(channel);
+            for (auto it = begin; it != end; ++it) {
+                Y_VERIFY_S(agentGivenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
+                Y_VERIFY_S(givenIdRanges.GetPoint(it->ToSequentialNumber()), "blobSeqId# " << it->ToString());
             }
-            agent.InvalidateStepRequests.erase(it);
-        } else {
-            Y_VERIFY_DEBUG(false);
+
+            const TBlobSeqId trimmedBlobSeqId{channel, generation, invalidatedStep, TBlobSeqId::MaxIndex};
+            const ui64 validSince = trimmedBlobSeqId.ToSequentialNumber() + 1;
+            givenIdRanges.Subtract(agentGivenIdRanges.Trim(validSince));
+
+            for (auto it = begin; it != end; ++it) {
+                agentGivenIdRanges.AddPoint(it->ToSequentialNumber());
+                givenIdRanges.AddPoint(it->ToSequentialNumber());
+            }
+
+            OnLeastExpectedBlobIdChange(channel);
         }
+
         HandleTrash();
     }
 
@@ -391,6 +396,17 @@ namespace NKikimr::NBlobDepot {
         const auto it = RecordsPerChannelGroup.find(key);
         Y_VERIFY(it != RecordsPerChannelGroup.end());
         it->second.ClearInFlight(this);
+    }
+
+    void TData::AccountBlob(TLogoBlobID id, bool add) {
+        // account record
+        const ui32 groupId = Self->Info()->GroupFor(id.Channel(), id.Generation());
+        auto& groupStat = Self->Groups[groupId];
+        if (add) {
+            groupStat.AllocatedBytes += id.BlobSize();
+        } else {
+            groupStat.AllocatedBytes -= id.BlobSize();
+        }
     }
 
     bool TData::CanBeCollected(ui32 groupId, TBlobSeqId id) const {
@@ -430,6 +446,7 @@ namespace NKikimr::NBlobDepot {
             for (; it != Trash.end() && *it < id; ++it) {}
             Y_VERIFY(it != Trash.end() && *it == id);
             it = Trash.erase(it);
+            self->AccountBlob(id, false);
         }
         LastConfirmedGenStep = IssuedGenStep;
         EnqueueForCollectionIfPossible(self);

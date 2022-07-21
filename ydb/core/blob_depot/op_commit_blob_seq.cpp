@@ -43,6 +43,10 @@ namespace NKikimr::NBlobDepot {
                     if (blobSeqId.Generation == generation) {
                         // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
                         Y_VERIFY_S(!canBeCollected, "BlobSeqId# " << blobSeqId.ToString());
+
+                        // mark given blob as committed only when it was issued in current generation -- only for this
+                        // generation we have correct GivenIdRanges
+                        MarkGivenIdCommitted(agent, blobSeqId);
                     } else if (canBeCollected) {
                         // we can't accept this record, because it is potentially under already issued barrier
                         responseItem->SetStatus(NKikimrProto::ERROR);
@@ -50,13 +54,16 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
-                    MarkGivenIdCommitted(agent, blobSeqId);
+                    auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
 
-                    if (!CheckKeyAgainstBarrier(item.GetKey(), responseItem)) {
+                    if (!CheckKeyAgainstBarrier(key)) {
+                        responseItem->SetStatus(NKikimrProto::ERROR);
+                        responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString(Self->Config)
+                            << " is being put beyond the barrier");
                         continue;
                     }
 
-                    Self->Data->PutKey(TData::TKey::FromBinaryKey(item.GetKey(), Self->Config), {
+                    Self->Data->PutKey(std::move(key), {
                         .Meta = value.GetMeta(),
                         .ValueChain = std::move(*value.MutableValueChain()),
                         .KeepState = value.GetKeepState(),
@@ -74,11 +81,10 @@ namespace NKikimr::NBlobDepot {
             }
 
             void MarkGivenIdCommitted(TAgent& agent, const TBlobSeqId& blobSeqId) {
-                Y_VERIFY(blobSeqId.Generation == Self->Executor()->Generation());
                 Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
 
                 const ui64 value = blobSeqId.ToSequentialNumber();
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "MarkGivenIdCommitted", (TabletId, Self->TabletID()),
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "MarkGivenIdCommitted", (TabletId, Self->TabletID()),
                     (AgentId, agent.ConnectedNodeId), (BlobSeqId, blobSeqId), (Value, value),
                     (GivenIdRanges, Self->Channels[blobSeqId.Channel].GivenIdRanges),
                     (Agent.GivenIdRanges, agent.GivenIdRanges[blobSeqId.Channel]));
@@ -92,23 +98,10 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            bool CheckKeyAgainstBarrier(const TString& key, NKikimrBlobDepot::TEvCommitBlobSeqResult::TItem *responseItem) {
-                if (Self->Config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup) {
-                    if (key.size() != 3 * sizeof(ui64)) {
-                        responseItem->SetStatus(NKikimrProto::ERROR);
-                        responseItem->SetErrorReason("incorrect BlobId format");
-                        return false;
-                    }
-
-                    const TLogoBlobID id(reinterpret_cast<const ui64*>(key.data()));
-                    if (!Self->BarrierServer->CheckBlobForBarrier(id)) {
-                        responseItem->SetStatus(NKikimrProto::ERROR);
-                        responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << id << " is being put beyond the barrier");
-                        return false;
-                    }
-                }
-
-                return true;
+            bool CheckKeyAgainstBarrier(const TData::TKey& key) {
+                const auto& v = key.AsVariant();
+                const auto *id = std::get_if<TLogoBlobID>(&v);
+                return !id || Self->BarrierServer->CheckBlobForBarrier(*id);
             }
 
             void Complete(const TActorContext&) override {

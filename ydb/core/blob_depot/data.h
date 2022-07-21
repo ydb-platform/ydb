@@ -315,8 +315,10 @@ namespace NKikimr::NBlobDepot {
         void CommitTrash(void *cookie);
         void HandleTrash();
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
-        void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
+        void OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId);
+
+        void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(ui32 groupId, TBlobSeqId id) const;
 

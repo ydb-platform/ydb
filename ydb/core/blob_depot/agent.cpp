@@ -31,6 +31,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
         agent.InvalidateStepRequests.clear();
+        agent.PushCallbacks.clear();
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
@@ -69,6 +70,8 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
+        record->MutableDecommittingGroups()->CopyFrom(Config.GetDecommittingGroups());
+
         TActivationContext::Send(response.release());
     }
 
@@ -88,40 +91,66 @@ namespace NKikimr::NBlobDepot {
 
             // FIXME: optimize for faster range selection
 
-            // create array of channels appropriate for current selection
-            std::vector<TChannelInfo*> channels;
-            channels.reserve(kind.ChannelGroups.size());
-            for (const auto& [channel, _] : kind.ChannelGroups) {
+            struct THeapItem {
+                ui64 Size;
+                std::vector<TChannelInfo*> Channels;
+
+                struct TCompare {
+                    bool operator ()(const THeapItem& x, const THeapItem& y) const { return x.Size > y.Size; }
+                };
+
+                struct TChannelCompare {
+                    bool operator ()(TChannelInfo *x, TChannelInfo *y) const { return x->NextBlobSeqId > y->NextBlobSeqId; }
+                };
+
+                void MakeChannelHeap() {
+                    std::make_heap(Channels.begin(), Channels.end(), TChannelCompare());
+                }
+
+                std::pair<ui8, ui64> PickChannelBlobSeq() {
+                    std::pop_heap(Channels.begin(), Channels.end(), TChannelCompare());
+                    TChannelInfo *channel = Channels.back();
+                    auto res = std::make_pair(channel->Index, channel->NextBlobSeqId++);
+                    std::push_heap(Channels.begin(), Channels.end(), TChannelCompare());
+                    Size += 4 << 20; // assume each written blob of this size in a first approximation
+                    return res;
+                }
+            };
+            std::vector<THeapItem> heap;
+            THashMap<ui32, size_t> groupToHeapIndex;
+
+            for (const auto& [channel, groupId] : kind.ChannelGroups) {
                 Y_VERIFY_DEBUG(channel < Channels.size() && Channels[channel].ChannelKind == it->first);
-                channels.push_back(&Channels[channel]);
+
+                const auto [it, inserted] = groupToHeapIndex.emplace(groupId, heap.size());
+                if (inserted) {
+                    heap.push_back(THeapItem{Groups[groupId].AllocatedBytes, {1, &Channels[channel]}});
+                } else {
+                    heap[it->second].Channels.push_back(&Channels[channel]);
+                }
             }
 
-            // make a min heap
-            auto comp = [](TChannelInfo *x, const TChannelInfo *y) { return x->NextBlobSeqId > y->NextBlobSeqId; };
-            std::make_heap(channels.begin(), channels.end(), comp);
+            for (auto& item : heap) {
+                item.MakeChannelHeap();
+            }
+
+            std::make_heap(heap.begin(), heap.end(), THeapItem::TCompare());
 
             THashMap<ui8, NKikimrBlobDepot::TGivenIdRange::TChannelRange*> issuedRanges;
             for (ui32 i = 0, count = ev->Get()->Record.GetCount(); i < count; ++i) {
-                // extract element with the least NextBlobSeqId value
-                std::pop_heap(channels.begin(), channels.end(), comp);
-
-                // map it to channel index
-                TChannelInfo *channel = channels.back();
-                const ui64 value = channel->NextBlobSeqId;
-                const ui8 channelIndex = channel - Channels.data();
+                // pick channel/sequence number
+                std::pop_heap(heap.begin(), heap.end(), THeapItem::TCompare());
+                auto [channel, value] = heap.back().PickChannelBlobSeq();
+                std::push_heap(heap.begin(), heap.end(), THeapItem::TCompare());
 
                 // fill in range item
-                auto& range = issuedRanges[channelIndex];
+                auto& range = issuedRanges[channel];
                 if (!range || range->GetEnd() != value) {
                     range = givenIdRange->AddChannelRanges();
-                    range->SetChannel(channelIndex);
+                    range->SetChannel(channel);
                     range->SetBegin(value);
                 }
                 range->SetEnd(value + 1);
-
-                // update NextBlobSeqId value and put back into heap
-                ++channel->NextBlobSeqId;
-                std::push_heap(channels.begin(), channels.end(), comp);
             }
 
             // register issued ranges in agent and global records
@@ -136,7 +165,7 @@ namespace NKikimr::NBlobDepot {
                     Data->OnLeastExpectedBlobIdChange(range.GetChannel());
                 }
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "IssueNewRange", (TabletId, TabletID()),
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (TabletId, TabletID()),
                     (AgentId, agent.ConnectedNodeId), (Channel, range.GetChannel()),
                     (Begin, range.GetBegin()), (End, range.GetEnd()));
             }
@@ -158,7 +187,6 @@ namespace NKikimr::NBlobDepot {
         const auto agentIt = Agents.find(nodeId);
         Y_VERIFY(agentIt != Agents.end());
         TAgent& agent = agentIt->second;
-        Y_VERIFY(agent.ConnectedNodeId == nodeId);
         return agent;
     }
 
@@ -167,7 +195,7 @@ namespace NKikimr::NBlobDepot {
             Channels[channel].GivenIdRanges.Subtract(agentGivenIdRange);
             const ui32 channel_ = channel;
             const auto& agentGivenIdRange_ = agentGivenIdRange;
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT99, "ResetAgent", (TabletId, TabletID()), (AgentId, agent.ConnectedNodeId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (TabletId, TabletID()), (AgentId, agent.ConnectedNodeId),
                 (Channel, channel_), (GivenIdRanges, Channels[channel_].GivenIdRanges),
                 (Agent.GivenIdRanges, agentGivenIdRange_));
             agentGivenIdRange = {};
@@ -176,7 +204,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::InitChannelKinds() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "InitChannelKinds", (TabletId, TabletID()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (TabletId, TabletID()));
 
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();
@@ -192,6 +220,7 @@ namespace NKikimr::NBlobDepot {
                     p.ChannelToIndex[channel] = p.ChannelGroups.size();
                     p.ChannelGroups.emplace_back(channel, info->GroupFor(channel, generation));
                     Channels.push_back({
+                        ui8(channel),
                         kind,
                         &p,
                         {},
@@ -199,6 +228,7 @@ namespace NKikimr::NBlobDepot {
                     });
                 } else {
                     Channels.push_back({
+                        ui8(channel),
                         NKikimrBlobDepot::TChannelKind::System,
                         nullptr,
                         {},
@@ -207,6 +237,32 @@ namespace NKikimr::NBlobDepot {
                 }
             }
         }
+    }
+
+    void TBlobDepot::Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+        class TTxInvokeCallback : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            TEvBlobDepot::TEvPushNotifyResult::TPtr Ev;
+
+        public:
+            TTxInvokeCallback(TBlobDepot *self, TEvBlobDepot::TEvPushNotifyResult::TPtr ev)
+                : TTransactionBase(self)
+                , Ev(ev)
+            {}
+
+            bool Execute(TTransactionContext& /*txc*/, const TActorContext&) override {
+                TAgent& agent = Self->GetAgent(Ev->Recipient);
+                if (const auto it = agent.PushCallbacks.find(Ev->Cookie); it != agent.PushCallbacks.end()) {
+                    auto callback = std::move(it->second);
+                    agent.PushCallbacks.erase(it);
+                    callback(Ev);
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {}
+        };
+
+        Execute(std::make_unique<TTxInvokeCallback>(this, ev));
     }
 
 } // NKikimr::NBlobDepot

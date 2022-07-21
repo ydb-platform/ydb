@@ -323,6 +323,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(ForgetDriveSerial,    false, false)
                     HANDLE_COMMAND(MigrateToSerial,      false, false)
                     HANDLE_COMMAND(AllocateVirtualGroup, false, false)
+                    HANDLE_COMMAND(DecommitGroups,       false, false)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:

@@ -72,7 +72,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnUpdateBlock(bool success) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA17, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnUpdateBlock", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Success, success));
 
                 if (!success) {
@@ -91,7 +91,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void HandleResolveResult(ui64 id, TRequestContext::TPtr context, TEvBlobDepot::TEvResolveResult& msg) {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA19, "HandleResolveResult", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Msg, msg.Record));
 
                 Agent.BlobMappingCache.HandleResolveResult(msg.Record);
@@ -132,7 +132,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void OnRead(ui64 /*tag*/, NKikimrProto::EReplyStatus status, TString dataOrErrorReason) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA18, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
+                STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA20, "OnRead", (VirtualGroupId, Agent.VirtualGroupId),
                     (QueryId, QueryId), (Status, status));
 
                 if (status == NKikimrProto::OK) {

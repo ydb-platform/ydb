@@ -28,7 +28,6 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepotAgent::Handle(TRequestContext::TPtr /*context*/, NKikimrBlobDepot::TEvRegisterAgentResult& msg) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA06, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
             (Msg, msg));
-        Registered = true;
         BlobDepotGeneration = msg.GetGeneration();
 
         THashSet<NKikimrBlobDepot::TChannelKind::E> vanishedKinds;
@@ -55,8 +54,6 @@ namespace NKikimr::NBlobDepot {
                 v.ChannelGroups.emplace_back(channel, groupId);
                 ChannelToKind[channel] = &v;
             }
-
-            IssueAllocateIdsIfNeeded(v);
         }
 
         for (const NKikimrBlobDepot::TChannelKind::E kind : vanishedKinds) {
@@ -71,6 +68,10 @@ namespace NKikimr::NBlobDepot {
             const TBlobSeqId min{channel, 0, 0, 0};
             const TBlobSeqId max{channel, BlobDepotGeneration - 1, Max<ui32>(), TBlobSeqId::MaxIndex};
             wif.erase(wif.lower_bound(min), wif.upper_bound(max));
+        }
+
+        for (auto& [_, kind] : ChannelKinds) {
+            IssueAllocateIdsIfNeeded(kind);
         }
     }
 
@@ -116,8 +117,6 @@ namespace NKikimr::NBlobDepot {
         for (auto& [_, kind] : ChannelKinds) {
             kind.IdAllocInFlight = false;
         }
-
-        Registered = false;
     }
 
     void TBlobDepotAgent::ProcessResponse(ui64 /*id*/, TRequestContext::TPtr context, TResponse response) {
@@ -152,17 +151,18 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::Issue(std::unique_ptr<IEventBase> ev, TRequestSender *sender, TRequestContext::TPtr context) {
         const ui64 id = NextRequestId++;
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "Issue", (VirtualGroupId, VirtualGroupId), (Id, id), (Msg, ev->ToString()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA10, "Issue", (VirtualGroupId, VirtualGroupId), (Id, id), (Msg, ev->ToString()));
         NTabletPipe::SendData(SelfId(), PipeId, ev.release(), id);
         RegisterRequest(id, sender, std::move(context), {}, true);
     }
 
     void TBlobDepotAgent::Handle(TEvBlobDepot::TEvPushNotify::TPtr ev) {
-        auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, SelfId());
+        auto response = std::make_unique<TEvBlobDepot::TEvPushNotifyResult>();
 
         auto& msg = ev->Get()->Record;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (VirtualGroupId, VirtualGroupId), (Msg, msg));
+        STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TEvPushNotify", (VirtualGroupId, VirtualGroupId), (Msg, msg),
+            (Id, ev->Cookie));
 
         BlocksManager.OnBlockedTablets(msg.GetBlockedTablets());
 
@@ -179,17 +179,21 @@ namespace NKikimr::NBlobDepot {
             const TBlobSeqId first{channel, item.GetGeneration(), 0, 0};
             const TBlobSeqId last{channel, item.GetGeneration(), item.GetInvalidatedStep(), Max<ui32>()};
             for (auto it = kind.WritesInFlight.lower_bound(first); it != kind.WritesInFlight.end() && *it <= last; ++it) {
-                it->ToProto(record->AddWritesInFlight());
+                it->ToProto(response->Record.AddWritesInFlight());
             }
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA11, "TrimChannel", (VirtualGroupId, VirtualGroupId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA12, "TrimChannel", (VirtualGroupId, VirtualGroupId),
                 (Channel, int(channel)), (NumAvailableItemsBefore, numAvailableItemsBefore),
                 (NumAvailableItemsAfter, kind.GetNumAvailableItems()));
-
-           IssueAllocateIdsIfNeeded(kind);
         }
 
-        TActivationContext::Send(response.release());
+        // it is essential to send response through the pipe -- otherwise we can break order with, for example, commits:
+        // this message can outrun previously sent commit and lead to data loss
+        NTabletPipe::SendData(SelfId(), PipeId, response.release(), ev->Cookie);
+
+        for (auto& [_, kind] : ChannelKinds) {
+            IssueAllocateIdsIfNeeded(kind);
+        }
     }
 
 } // NKikimr::NBlobDepot

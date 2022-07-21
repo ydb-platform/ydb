@@ -392,19 +392,24 @@
                 "ColumnType": "Bool"
             },
             {
-                "ColumnId": 15,
-                "ColumnName": "DecommitStatus",
+                "ColumnId": 102,
+                "ColumnName": "VirtualGroupState",
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 102,
-                "ColumnName": "VirtualGroupState",
+                "ColumnId": 15,
+                "ColumnName": "DecommitStatus",
                 "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 103,
                 "ColumnName": "ParentDir",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 16,
+                "ColumnName": "AssimilatorGroupId",
+                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 104,
@@ -440,6 +445,11 @@
                 "ColumnId": 110,
                 "ColumnName": "ErrorReason",
                 "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 111,
+                "ColumnName": "NeedAlter",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -461,16 +471,18 @@
                     13,
                     101,
                     14,
-                    15,
                     102,
+                    15,
                     103,
+                    16,
                     104,
                     105,
                     106,
                     107,
                     108,
                     109,
-                    110
+                    110,
+                    111
                 ],
                 "RoomID": 0,
                 "Codec": 0,

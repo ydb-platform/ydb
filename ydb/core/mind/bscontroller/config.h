@@ -221,6 +221,8 @@ namespace NKikimr {
                 }
             }
 
+            void InitiateGroupDecommission(ui32 virtualGroupId, ui32 groupToDecommit);
+
         private:
             template<typename TCommand, typename TKey, typename TValue>
             static ui64 CheckGeneration(const TCommand &cmd, const TMap<TKey, TValue> &map, const TKey &id) {
@@ -257,6 +259,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TForgetDriveSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
         };
 
     } // NBsController

@@ -943,6 +943,11 @@ namespace NKikimr::NBsController {
             } else if (*groupInfo.VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED) {
                 group->SetBlobDepotId(0);
             }
+
+            if (groupInfo.DecommitStatus != NKikimrBlobStorage::EGroupDecommitStatus::NONE) {
+                Y_VERIFY(groupInfo.AssimilatorGroupId);
+                group->SetAssimilatorGroupId(*groupInfo.AssimilatorGroupId);
+            }
         }
 
 } // NKikimr::NBsController

@@ -103,7 +103,11 @@ namespace NKikimr::NBlobDepot {
 
             TAgent& agent = Self->GetAgent(agentId);
             if (const auto& actorId = agent.AgentId) {
-                Send(*actorId, ev.release(), 0, IssuerGuid);
+                const ui64 id = ++agent.LastRequestId;
+                agent.PushCallbacks.emplace(id, [selfId = SelfId()](TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
+                    TActivationContext::Send(ev->Forward(selfId));
+                });
+                Send(*actorId, ev.release(), 0, id);
             }
             NodesWaitingForPushResult.insert(agentId);
         }
@@ -111,7 +115,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev) {
             const ui32 agentId = ev->Sender.NodeId();
             const size_t numErased = NodesWaitingForPushResult.erase(agentId);
-            Y_VERIFY(numErased == 1 && ev->Cookie == IssuerGuid);
+            Y_VERIFY(numErased == 1);
 
             // mark lease as successfully revoked one
             auto& block = Self->BlocksManager->Blocks[TabletId];
@@ -138,14 +142,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "issing TEvBlock", (TabletId, Self->TabletID()), (BlockedTabletId,
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "issing TEvBlock", (TabletId, Self->TabletID()), (BlockedTabletId,
                 TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, groupId), (IssuerGuid, IssuerGuid));
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
                 IssuerGuid), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "TEvBlockResult", (TabletId, Self->TabletID()), (Msg, ev->Get()->ToString()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "TEvBlockResult", (TabletId, Self->TabletID()), (Msg, ev->Get()->ToString()),
                 (BlockedTabletId, TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, ev->Cookie));
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:

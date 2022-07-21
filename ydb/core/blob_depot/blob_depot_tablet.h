@@ -23,7 +23,7 @@ namespace NKikimr::NBlobDepot {
         ~TBlobDepot();
 
         void HandlePoison() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT19, "HandlePoison", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT23, "HandlePoison", (TabletId, TabletID()));
             Become(&TThis::StateZombie);
             Send(Tablet(), new TEvents::TEvPoison);
         }
@@ -43,6 +43,7 @@ namespace NKikimr::NBlobDepot {
 
             THashMap<ui8, ui32> InvalidatedStepInFlight;
             THashMap<ui64, THashMap<ui8, ui32>> InvalidateStepRequests;
+            THashMap<ui64, std::function<void(TEvBlobDepot::TEvPushNotifyResult::TPtr)>> PushCallbacks;
             ui64 LastRequestId = 0;
         };
 
@@ -52,12 +53,18 @@ namespace NKikimr::NBlobDepot {
         THashMap<NKikimrBlobDepot::TChannelKind::E, TChannelKind> ChannelKinds;
 
         struct TChannelInfo {
+            ui8 Index;
             NKikimrBlobDepot::TChannelKind::E ChannelKind;
             TChannelKind *KindPtr;
             TGivenIdRange GivenIdRanges; // accumulated through all agents
             ui64 NextBlobSeqId = 0;
         };
         std::vector<TChannelInfo> Channels;
+
+        struct TGroupInfo {
+            ui64 AllocatedBytes = 0;
+        };
+        THashMap<ui32, TGroupInfo> Groups;
 
         void Handle(TEvTabletPipe::TEvServerConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev);
@@ -68,6 +75,7 @@ namespace NKikimr::NBlobDepot {
         TAgent& GetAgent(const TActorId& pipeServerId);
         TAgent& GetAgent(ui32 nodeId);
         void ResetAgent(TAgent& agent);
+        void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -78,25 +86,25 @@ namespace NKikimr::NBlobDepot {
         void DefaultSignalTabletActive(const TActorContext&) override {} // signalled explicitly after load is complete
 
         void OnActivateExecutor(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "OnActivateExecutor", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT24, "OnActivateExecutor", (TabletId, TabletID()));
             ExecuteTxInitSchema();
         }
 
         void OnLoadFinished() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "OnLoadFinished", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT25, "OnLoadFinished", (TabletId, TabletID()));
             Become(&TThis::StateWork);
             SignalTabletActive(TActivationContext::AsActorContext());
         }
 
         void OnDetach(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "OnDetach", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT26, "OnDetach", (TabletId, TabletID()));
 
             // TODO: what does this callback mean
             PassAway();
         }
 
         void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& /*ev*/, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT22, "OnTabletDead", (TabletId, TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT27, "OnTabletDead", (TabletId, TabletID()));
             PassAway();
         }
 

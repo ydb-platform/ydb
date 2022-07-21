@@ -167,7 +167,6 @@ namespace NKikimr::NBlobDepot {
             {}
         };
 
-        bool Registered = false;
         ui32 BlobDepotGeneration = 0;
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);

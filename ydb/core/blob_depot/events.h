@@ -76,7 +76,6 @@ namespace NKikimr {
         template<> struct TResponseFor<TEvApplyConfig>    { using Type = TEvApplyConfigResult; };
         template<> struct TResponseFor<TEvRegisterAgent>  { using Type = TEvRegisterAgentResult; };
         template<> struct TResponseFor<TEvAllocateIds>    { using Type = TEvAllocateIdsResult; };
-        template<> struct TResponseFor<TEvPushNotify>     { using Type = TEvPushNotifyResult; };
         template<> struct TResponseFor<TEvBlock>          { using Type = TEvBlockResult; };
         template<> struct TResponseFor<TEvQueryBlocks>    { using Type = TEvQueryBlocksResult; };
         template<> struct TResponseFor<TEvCollectGarbage> { using Type = TEvCollectGarbageResult; };

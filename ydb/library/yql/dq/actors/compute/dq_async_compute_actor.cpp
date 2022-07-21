@@ -157,7 +157,7 @@ private:
             );
 
         outputChannel.PopStarted = true;
-        ProcessOutputsState.Inflight ++;
+        ProcessOutputsState.Inflight++;
         if (toSend <= 0) {
             if (Y_UNLIKELY(outputChannel.Stats)) {
                 outputChannel.Stats->BlockedByCapacity++;
@@ -196,7 +196,7 @@ private:
             );
 
         sinkInfo.PopStarted = true;
-        ProcessOutputsState.Inflight ++;
+        ProcessOutputsState.Inflight++;
         sinkInfo.FreeSpaceBeforeSend = sinkFreeSpaceBeforeSend;
         Send(TaskRunnerActorId, new NTaskRunnerActor::TEvSinkPop(outputIndex, sinkFreeSpaceBeforeSend));
     }
@@ -535,7 +535,7 @@ private:
         }
 
         sinkInfo.PopStarted = false;
-        ProcessOutputsState.Inflight --;
+        ProcessOutputsState.Inflight--;
         ProcessOutputsState.HasDataToSend |= !sinkInfo.Finished;
 
         {
@@ -545,7 +545,7 @@ private:
         }
 
         Y_VERIFY(batch.empty());
-        CA_LOG_D("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
+        CA_LOG_D("Sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
         CA_LOG_D("Drain sink " << outputIndex
             << ". Free space decreased: " << (sinkInfo.FreeSpaceBeforeSend - sinkInfo.AsyncOutput->GetFreeSpace())

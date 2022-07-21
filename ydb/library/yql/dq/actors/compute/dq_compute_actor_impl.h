@@ -1469,8 +1469,7 @@ protected:
     void PollAsyncInput(TAsyncInputInfoBase& info, ui64 inputIndex) {
         Y_VERIFY(!TaskRunner || info.Buffer);
         if (info.Finished) {
-            const ui64 indexForLogging = inputIndex; // Crutch for clang
-            CA_LOG_D("Skip polling async input[" << indexForLogging << "]: finished");
+            CA_LOG_D("Skip polling async input[" << inputIndex << "]: finished");
             return;
         }
         const i64 freeSpace = AsyncIoFreeSpace(info);

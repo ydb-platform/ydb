@@ -29,7 +29,7 @@ NYdb::NTable::TDataQueryResult ExecuteDataQuery(TSession& session, const TString
         TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
 }
 
-void CreateTableWithMultishardIndex(Tests::TClient& client) {
+void CreateTableWithMultishardIndex(Tests::TClient& client, bool async) {
     const TString scheme =  R"(Name: "MultiShardIndexed"
         Columns { Name: "key"    Type: "Uint64" }
         Columns { Name: "fk"    Type: "Uint32" }
@@ -42,8 +42,11 @@ void CreateTableWithMultishardIndex(Tests::TClient& client) {
     NKikimrSchemeOp::TTableDescription desc;
     bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
     UNIT_ASSERT(parseOk);
+    NKikimrSchemeOp::EIndexType type = async
+        ? NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync
+        : NKikimrSchemeOp::EIndexType::EIndexTypeGlobal;
 
-    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"});
+    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, type);
     UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 }
 
@@ -62,7 +65,7 @@ void CreateTableWithMultishardIndexAndDataColumn(Tests::TClient& client) {
     bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &desc);
     UNIT_ASSERT(parseOk);
 
-    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, {"value"});
+    auto status = client.TClient::CreateTableWithUniformShardedIndex("/Root", desc, "index", {"fk"}, NKikimrSchemeOp::EIndexType::EIndexTypeGlobal, {"value"});
     UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::MSTATUS_OK);
 }
 
@@ -128,7 +131,7 @@ void FillTable(NYdb::NTable::TSession& session) {
 Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
     Y_UNIT_TEST_NEW_ENGINE(SortedRangeReadDesc) {
         TKikimrRunner kikimr(SyntaxV1Settings());
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         FillTable<UseNewEngine>(session);
@@ -146,7 +149,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
     Y_UNIT_TEST_NEW_ENGINE(SecondaryIndexSelect) {
         TKikimrRunner kikimr(SyntaxV1Settings());
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
         FillTable<UseNewEngine>(session);
@@ -299,7 +302,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
     Y_UNIT_TEST(YqWorksFineAfterAlterIndexTableDirectly) {
         TKikimrRunner kikimr(SyntaxV1Settings());
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -1047,7 +1050,7 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), false);
         FillTable<UseNewEngine>(session);
 
         AssertSuccessResult(session.ExecuteDataQuery(Q1_(R"(
@@ -1098,12 +1101,13 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
         ])", FormatResultSetYson(result.GetResultSet(0)));
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingIndex) {
+    template<bool UseNewEngine>
+    void CheckWriteIntoRenamingIndex(bool asyncIndex) {
         TKikimrRunner kikimr;
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
-        CreateTableWithMultishardIndex(kikimr.GetTestClient());
+        CreateTableWithMultishardIndex(kikimr.GetTestClient(), asyncIndex);
 
         auto buildParam = [&db](ui64 id) {
             return db.GetParamsBuilder()
@@ -1214,6 +1218,14 @@ Y_UNIT_TEST_SUITE(KqpMultishardIndex) {
             }
             UNIT_ASSERT_VALUES_EQUAL(rowsInserted, rowsRead);
         }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingSyncIndex) {
+        CheckWriteIntoRenamingIndex<UseNewEngine>(false);
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(WriteIntoRenamingAsyncIndex) {
+        CheckWriteIntoRenamingIndex<UseNewEngine>(true);
     }
 }
 

@@ -1353,7 +1353,7 @@ namespace Tests {
 
     NMsgBusProxy::EResponseStatus TClient::CreateTableWithUniformShardedIndex(const TString& parent,
         const NKikimrSchemeOp::TTableDescription &table, const TString& indexName, const TVector<TString> indexColumns,
-        const TVector<TString> dataColumns, TDuration timeout)
+        NKikimrSchemeOp::EIndexType type, const TVector<TString> dataColumns, TDuration timeout)
     {
         TAutoPtr<NMsgBusProxy::TBusSchemeOperation> request(new NMsgBusProxy::TBusSchemeOperation());
         auto *op = request->Record.MutableTransaction()->MutableModifyScheme();
@@ -1373,7 +1373,7 @@ namespace Tests {
                 indexDesc->AddDataColumnNames(c);
             }
 
-            indexDesc->SetType(NKikimrSchemeOp::EIndexType::EIndexTypeGlobal);
+            indexDesc->SetType(type);
             indexDesc->MutableIndexImplTableDescription()->SetUniformPartitionsCount(16);
         }
 

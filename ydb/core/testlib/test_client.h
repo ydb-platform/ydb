@@ -378,7 +378,8 @@ namespace Tests {
         NMsgBusProxy::EResponseStatus CreateTable(const TString& parent, const NKikimrSchemeOp::TTableDescription &table, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CreateTableWithUniformShardedIndex(const TString& parent,
             const NKikimrSchemeOp::TTableDescription &table, const TString& indexName,
-            const TVector<TString> indexColumns, const TVector<TString> dataColumns = {}, TDuration timeout = TDuration::Seconds(5000));
+            const TVector<TString> indexColumns, NKikimrSchemeOp::EIndexType type,
+            const TVector<TString> dataColumns = {}, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus SplitTable(const TString& table, ui64 datashardId, ui64 border, TDuration timeout = TDuration::Seconds(5000));
         NMsgBusProxy::EResponseStatus CopyTable(const TString& parent, const TString& name, const TString& src);
         NMsgBusProxy::EResponseStatus CreateKesus(const TString& parent, const TString& name);

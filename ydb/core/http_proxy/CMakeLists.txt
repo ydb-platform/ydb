@@ -14,6 +14,7 @@ target_compile_options(ydb-core-http_proxy PRIVATE
 target_link_libraries(ydb-core-http_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-restricted-nlohmann_json
   cpp-actors-http
   cpp-actors-core
   ydb-core-base

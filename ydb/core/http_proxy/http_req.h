@@ -54,11 +54,6 @@ struct THttpResponseData {
     TString DumpBody(MimeTypes contentType);
 };
 
-struct THttpRequestData {
-    NJson::TJsonValue Body;
-    std::optional<NJson::TJsonValue> Parse(MimeTypes contentType, const TStringBuf& body);
-};
-
 struct THttpRequestContext {
     THttpRequestContext(const NKikimrConfig::TServerlessProxyConfig& config,
                         NHttp::THttpIncomingRequestPtr request,
@@ -72,18 +67,17 @@ struct THttpRequestContext {
     std::shared_ptr<NYdb::ICredentialsProvider> ServiceAccountCredentialsProvider;
 
     THttpResponseData ResponseData;
-    THttpRequestData RequestData;
     TString ServiceAccountId;
     TString RequestId;
     TString DiscoveryEndpoint;
     TString DatabaseName;
-    TString DatabaseId;
-    TString FolderId;
-    TString CloudId;
-    TString StreamName;
+    TString DatabaseId; // not in context
+    TString FolderId;   // not in context
+    TString CloudId;    // not in context
+    TString StreamName; // not in context
     TString SourceAddress;
-    TString MethodName;
-    TString ApiVersion;
+    TString MethodName; // used once
+    TString ApiVersion; // used once
     MimeTypes ContentType{MIME_UNKNOWN};
     TString IamToken;
     TString SerializedUserToken;
@@ -92,9 +86,11 @@ struct THttpRequestContext {
         return TStringBuilder() << "http request [" << MethodName << "] requestId [" << RequestId << "]";
     }
 
-    void ParseHeaders(TStringBuf headers);
-    void DoReply(const TActorContext& ctx);
+    THolder<NKikimr::NSQS::TAwsRequestSignV4> GetSignature();
     void SendBadRequest(NYdb::EStatus status, const TString& errorText, const TActorContext& ctx);
+    void DoReply(const TActorContext& ctx);
+    void ParseHeaders(TStringBuf headers);
+    void RequestBodyToProto(NProtoBuf::Message* request);
 };
 
 class IHttpRequestProcessor {

@@ -607,6 +607,11 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
             << ", intention to create new children: " << aliveStreams + 1)};
     }
 
+    if (!AppData()->PQConfig.GetEnableProtoSourceIdInfo()) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
+            << "Changefeeds require proto source id info to be enabled")};
+    }
+
     TString errStr;
     if (!context.SS->CheckApplyIf(tx, errStr)) {
         return {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, errStr)};

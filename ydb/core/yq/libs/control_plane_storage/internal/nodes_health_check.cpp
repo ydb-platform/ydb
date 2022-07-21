@@ -60,7 +60,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
         "WHERE `" TENANT_COLUMN_NAME"` = $tenant AND `" EXPIRE_AT_COLUMN_NAME "` >= $now;\n"
     );
 
-    auto prepareParams = [=](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, tablePathPrefix=YdbConnection->TablePathPrefix](const TVector<TResultSet>& resultSets) {
         for (const auto& resultSet : resultSets) {
             TResultSetParser parser(resultSet);
             while (parser.TryNextRow()) {
@@ -80,7 +80,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
             }
         }
 
-        TSqlQueryBuilder writeQueryBuilder(YdbConnection->TablePathPrefix, "NodesHealthCheck(write)");
+        TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "NodesHealthCheck(write)");
         writeQueryBuilder.AddString("tenant", tenant);
         writeQueryBuilder.AddUint32("node_id", nodeId);
         writeQueryBuilder.AddString("instance_id", instanceId);

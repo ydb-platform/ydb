@@ -1063,6 +1063,11 @@ TIndexRange ExtractIndexRangeFromKeys(const TVector<TString>& keys, const THashM
     return result;
 }
 
+TExprNode::TPtr MakeRangeAnd(TPositionHandle pos, TExprNodeList&& children, TExprContext& ctx) {
+    YQL_ENSURE(!children.empty());
+    return children.size() == 1 ? children.front() : ctx.NewCallable(pos, "RangeAnd", std::move(children));
+}
+
 TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const TExprNode::TPtr& range, const THashMap<TString, size_t>& indexKeysOrder,
     TIndexRange& resultIndexRange, TExprContext& ctx)
 {
@@ -1173,11 +1178,11 @@ TExprNode::TPtr DoRebuildRangeForIndexKeys(const TStructExprType& rowType, const
 
         for (auto& chain : childrenChains) {
             YQL_ENSURE(!chain.empty());
-            rebuilt.push_back(ctx.NewCallable(range->Pos(), "RangeAnd", std::move(chain)));
+            rebuilt.push_back(MakeRangeAnd(range->Pos(), std::move(chain), ctx));
         }
 
         if (!rests.empty()) {
-            rebuilt.push_back(RebuildAsRangeRest(rowType, *ctx.NewCallable(range->Pos(), "RangeAnd", std::move(rests)), ctx));
+            rebuilt.push_back(RebuildAsRangeRest(rowType, *MakeRangeAnd(range->Pos(), std::move(rests), ctx), ctx));
         }
     }
 

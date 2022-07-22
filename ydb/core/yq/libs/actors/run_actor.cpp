@@ -336,6 +336,7 @@ private:
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
         hFunc(TEvents::TEvRaiseTransientIssues, Handle);
+        hFunc(TEvDqStats, Handle);
     )
 
     STRICT_STFUNC(FinishStateFunc,
@@ -351,6 +352,7 @@ private:
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
         IgnoreFunc(TEvents::TEvRaiseTransientIssues);
+        IgnoreFunc(TEvDqStats);
     )
 
     void KillExecuter() {
@@ -712,6 +714,12 @@ private:
         NYql::IssuesToMessage(ev->Get()->TransientIssues, request.mutable_transient_issues());
 
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
+    }
+
+    void Handle(TEvDqStats::TPtr& ev) {
+        Fq::Private::PingTaskRequest request;
+        *request.mutable_transient_issues() = ev->Get()->Record.issues();
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
     }
 
     i32 UpdateResultIndices() {

@@ -4,6 +4,7 @@
 #include "proto_builder.h"
 #include "actor_helpers.h"
 #include "executer_actor.h"
+#include "grouped_issues.h"
 
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 
@@ -62,6 +63,7 @@ public:
         , ServiceCounters(serviceCounters, "task_controller")
         , PingPeriod(pingPeriod)
         , AggrPeriod(aggrPeriod)
+        , Issues(CreateDefaultTimeProvider())
     {
         if (Settings) {
             if (Settings->_AllResultsBytesLimit.Get()) {
@@ -110,6 +112,11 @@ private:
         OnError(statusCode, issues);
     }
 
+    void SendNonFatalIssues() {
+        auto req = MakeHolder<TEvDqStats>(Issues.ToIssues());
+        Send(ExecuterId, req.Release());
+    }
+
     void OnComputeActorState(NDq::TEvDqCompute::TEvState::TPtr& ev) {
         TActorId computeActor = ev->Sender;
         auto& state = ev->Get()->Record;
@@ -130,6 +137,10 @@ private:
             }
         }
 
+        TIssues localIssues;
+        // TODO: don't convert issues to string
+        NYql::IssuesFromMessage(state.GetIssues(), localIssues);
+
         switch (state.GetState()) {
             case NDqProto::COMPUTE_STATE_UNKNOWN: {
                 // TODO: use issues
@@ -138,17 +149,18 @@ private:
                 break;
             }
             case NDqProto::COMPUTE_STATE_FAILURE: {
-                // TODO: don't convert issues to string
-                NYql::IssuesFromMessage(state.GetIssues(), Issues);
-                OnError(state.GetStatusCode(), Issues);
+                Issues.AddIssues(localIssues);
+                OnError(state.GetStatusCode(), Issues.ToIssues());
                 break;
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {
+                Issues.AddIssues(localIssues);
                 YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " Executing TaskId: " << taskId;
                 if (!FinishedTasks.contains(taskId)) {
                     // may get late/reordered? message
                     Executing[taskId] = Now();
                 }
+                SendNonFatalIssues();
                 break;
             }
             case NDqProto::COMPUTE_STATE_FINISHED: {
@@ -522,7 +534,7 @@ private:
         YQL_ENSURE(!ev->Get()->Record.HasResultSet() && ev->Get()->Record.GetYson().empty());
         FinalStat().FlushCounters(ev->Get()->Record);
         if (!Issues.Empty()) {
-            IssuesToMessage(Issues, ev->Get()->Record.MutableIssues());
+            IssuesToMessage(Issues.ToIssues(), ev->Get()->Record.MutableIssues());
         }
         Send(ResultId, ev->Release().Release());
     }
@@ -530,6 +542,7 @@ private:
     TCounters FinalStat() {
         return AggrPeriod ? AggregateQueryStatsByStage(TaskStat, Stages) : TaskStat;
     }
+
 
     bool ChannelsUpdated = false;
     TVector<std::pair<NDqProto::TDqTask, TActorId>> Tasks;
@@ -547,7 +560,7 @@ private:
     NYql::NCommon::TServiceCounters ServiceCounters;
     TDuration PingPeriod = TDuration::Zero();
     TDuration AggrPeriod = TDuration::Zero();
-    TIssues Issues;
+    NYql::NDq::GroupedIssues Issues;
     ui64 PingCookie = 0;
 };
 

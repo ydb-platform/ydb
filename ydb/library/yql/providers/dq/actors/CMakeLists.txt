@@ -58,4 +58,5 @@ target_sources(providers-dq-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/result_receiver.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/full_result_writer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/proto_builder.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/dq/actors/grouped_issues.cpp
 )

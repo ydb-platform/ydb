@@ -107,6 +107,35 @@ private:
         WaitingForStateResponse.push_back({ev->Sender, ev->Cookie});
     }
 
+    void FillIssues(NYql::TIssues& issues) {
+        auto applyToAllIssuesHolders = [this](auto& function){
+            function(SourcesMap);
+            function(InputTransformsMap);
+            function(SinksMap);
+            function(OutputTransformsMap);
+        };
+
+        uint64_t expectingSize = 0;
+        auto addSize = [&expectingSize](auto& issuesHolder) {
+            for (auto& [inputIndex, source]: issuesHolder) {
+                expectingSize += source.IssuesBuffer.GetAllAddedIssuesCount();
+            }
+        };
+
+        auto exhaustIssues = [&issues](auto& issuesHolder){
+            for (auto& [inputIndex, source]: issuesHolder) {
+            auto sourceIssues = source.IssuesBuffer.Dump();
+                for (auto& issueInfo: sourceIssues) {
+                    issues.AddIssues(issueInfo.Issues);
+                }
+            }
+        };
+
+        applyToAllIssuesHolders(addSize);
+        issues.Reserve(expectingSize);
+        applyToAllIssuesHolders(exhaustIssues);
+    }
+
     void OnStatisticsResponse(NTaskRunnerActor::TEvStatistics::TPtr& ev) {
         SentStatsRequest = false;
         if (ev->Get()->Stats) {
@@ -117,6 +146,10 @@ private:
         record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         record.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
         record.SetTaskId(Task.GetId());
+        NYql::TIssues issues;
+        FillIssues(issues);
+
+        IssuesToMessage(issues, record.MutableIssues());
         FillStats(record.MutableStats(), /* last */ false);
         for (const auto& [actorId, cookie] : WaitingForStateResponse) {
             auto state = MakeHolder<TEvDqCompute::TEvState>();

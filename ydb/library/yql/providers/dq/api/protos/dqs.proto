@@ -189,6 +189,10 @@ message TDqFailure {
     NYql.NDqProto.StatusIds.StatusCode StatusCode = 8;
 };
 
+message TDqStats {
+    repeated Ydb.Issue.IssueMessage Issues = 1;
+};
+
 message TGraphRequest {
     Yql.DqsProto.ExecuteGraphRequest Request = 1;
     NActorsProto.TActorId ControlId = 2;

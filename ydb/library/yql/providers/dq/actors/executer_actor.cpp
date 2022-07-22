@@ -76,6 +76,7 @@ private:
         HFunc(TEvAllocateWorkersResponse, OnAllocateWorkersResponse);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         hFunc(NActors::TEvents::TEvPoisonTaken, Handle);
+        hFunc(TEvDqStats, OnTransientIssues);
         HFunc(TEvDqFailure, OnFailure);
         HFunc(TEvGraphFinished, OnGraphFinished);
         HFunc(TEvQueryResponse, OnQueryResponse);
@@ -294,6 +295,12 @@ private:
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         Send(PrinterId, ev->Release().Release());
         PassAway();
+    }
+
+    void OnTransientIssues(TEvDqStats::TPtr& ev) {
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+        Send(PrinterId, ev->Release().Release());
     }
 
     void Handle(NActors::TEvents::TEvPoisonTaken::TPtr&) {

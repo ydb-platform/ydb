@@ -58,6 +58,7 @@ struct TBaseDqExecuterEvents {
         ES_GRAPH,
         ES_GRAPH_FINISHED,
         ES_GRAPH_EXECUTION_EVENT,
+        ES_STATS,
     };
 };
 

@@ -27,6 +27,11 @@ namespace NYql::NDqs {
         TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& error);
     };
 
+    struct TEvDqStats : NActors::TEventPB<TEvDqStats, NDqProto::TDqStats, TDqExecuterEvents::ES_STATS> {
+        TEvDqStats() = default;
+        TEvDqStats(const TIssues& issues);
+    };
+
     struct TEvQueryResponse
         : NActors::TEventPB<TEvQueryResponse, NDqProto::TQueryResponse, TDqExecuterEvents::ES_RESULT_SET> {
         TEvQueryResponse() = default;
@@ -115,7 +120,7 @@ namespace NYql::NDqs {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvMessageProcessed, "");
 
         explicit TEvMessageProcessed(const TString& messageId);
-        
+
         const TString MessageId;
     };
 }

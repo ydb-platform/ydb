@@ -36,6 +36,13 @@ namespace NDriverClient {
                             break;
                         }
 
+                        case NMsgBusProxy::MTYPE_CLIENT_DS_LOAD_RESPONSE: {
+                            TAutoPtr<NMsgBusProxy::TBusDsTestLoadResponse> x(new NMsgBusProxy::TBusDsTestLoadResponse);
+                            x->Record = data.template GetResult<NKikimrClient::TDsTestLoadResponse>();
+                            response = x.Release();
+                            break;
+                        }
+
                         default:
                             Y_FAIL("unexpected reply message type");
                     }

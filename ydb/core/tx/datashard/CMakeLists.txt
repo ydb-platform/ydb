@@ -37,6 +37,7 @@ target_link_libraries(core-tx-datashard PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
+  tx-datashard-testload
   tx-long_tx_service-public
   ydb-core-util
   ydb-core-wrappers
@@ -283,6 +284,7 @@ target_link_libraries(core-tx-datashard.global PUBLIC
   ydb-core-protos
   ydb-core-tablet
   ydb-core-tablet_flat
+  tx-datashard-testload
   tx-long_tx_service-public
   ydb-core-util
   ydb-core-wrappers

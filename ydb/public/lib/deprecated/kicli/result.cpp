@@ -36,6 +36,11 @@ template <> const NKikimrClient::TBsTestLoadResponse& TResult::GetResult<NKikimr
     return static_cast<NMsgBusProxy::TBusBsTestLoadResponse*>(Reply.Get())->Record;
 }
 
+template <> const NKikimrClient::TDsTestLoadResponse& TResult::GetResult<NKikimrClient::TDsTestLoadResponse>() const {
+    Y_VERIFY(GetType() == NMsgBusProxy::MTYPE_CLIENT_DS_LOAD_RESPONSE, "Unexpected response type: %d", GetType());
+    return static_cast<NMsgBusProxy::TBusDsTestLoadResponse*>(Reply.Get())->Record;
+}
+
 NMsgBusProxy::EResponseStatus TResult::GetStatus() const {
     if (TransportStatus != NBus::MESSAGE_OK) {
         switch (TransportStatus) {

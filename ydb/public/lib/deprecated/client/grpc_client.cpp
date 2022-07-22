@@ -337,6 +337,7 @@ namespace NKikimr {
         IMPL_REQUEST(TabletKillRequest, TTabletKillRequest, TResponse)
         IMPL_REQUEST(InterconnectDebug, TInterconnectDebug, TResponse)
         IMPL_REQUEST(TabletStateRequest, TTabletStateRequest, TResponse)
+        IMPL_REQUEST(DataShardLoadRequest, TDsTestLoadRequest, TResponse)
         IMPL_REQUEST(BlobStorageLoadRequest, TBsTestLoadRequest, TResponse)
         IMPL_REQUEST(BlobStorageGetRequest, TBsGetRequest, TResponse)
         IMPL_REQUEST(DbSchema, TJSON, TJSON)

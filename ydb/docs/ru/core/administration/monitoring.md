@@ -30,7 +30,7 @@ http://localhost:31002/counters/counters=<servicename>/prometheus
 
 * `<servicename>` — имя подгруппы сенсоров.
 
-Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например [Zabbix](https://www.zabbix.com/ru/), [Amazon CloudWatch](https://aws.amazon.com/ru/cloudwatch/) или [Grafana](https://grafana.com/):
+Визуализировать данные можно с помощью любой системы, которая поддерживает формат Prometheus, например [Zabbix]{% if lang == "ru" %}(https://www.zabbix.com/ru/){% endif %}{% if lang == "en" %}(https://www.zabbix.com/){% endif %}, [Amazon CloudWatch]{% if lang == "ru" %}(https://aws.amazon.com/ru/cloudwatch/){% endif %}{% if lang == "en" %}(https://aws.amazon.com/cloudwatch/){% endif %} или [Grafana](https://grafana.com/):
 
 ![grafana-actors](../_assets/grafana-actors.png)
 

@@ -4,6 +4,6 @@
 
 * [{#T}](../deploy/index.md).
 * [{#T}](../maintenance/embedded_monitoring/index.md).
-* [{#T}](../maintenance/manual/index.md)
+* [{#T}](../maintenance/manual/index.md).
 * [{#T}](../troubleshooting/system_views_cluster.md).
 * [{#T}](../administration/monitoring.md).

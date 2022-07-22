@@ -1,12 +1,9 @@
-# Managing a YDB cluster
+# Managing a {{ ydb-short-name }} cluster
 
-This section contains articles on procedures of deployment, configuration, maintenance, monitoring and troubleshooting of multi-node YDB clusters.
+This section provides information about deploying, configuring, maintaining, monitoring, and performing diagnostics of multi-node [{{ ydb-short-name }} clusters](../concepts/cluster/index.md).
 
-Articles are based on the description of cluster structure provided in [Concepts - Cluster](../concepts/cluster/index.md).
-
-{% include [addition_overlay](_includes/addition_overlay.md) %}
-
-- [Cluster deployment and configuration](../deploy/index.md) in Kubernetes and on virtual / baremetal servers
-- [Embedded UI](../maintenance/embedded_monitoring/index.md)
-- [Cluster system tables](../troubleshooting/system_views_cluster.md)
-
+* [{#T}](../deploy/index.md).
+* [{#T}](../maintenance/embedded_monitoring/index.md).
+* [{#T}](../maintenance/manual/index.md).
+* [{#T}](../troubleshooting/system_views_cluster.md).
+* [{#T}](../administration/monitoring.md).

@@ -5,5 +5,11 @@ items:
   include: { mode: link, path: ../maintenance/manual/toc_p.yaml }
 - name: Embedded UI
   include: { mode: link, path: ../maintenance/embedded_monitoring/toc_p.yaml }
-- name: System views
+- name: Cluster system views
   href: ../troubleshooting/system_views_cluster.md
+- name: Monitoring
+  items:
+    - name: Setting up monitoring for a local YDB cluster
+      href: ../administration/monitoring.md
+    - name: Grafana dashboards
+      href: ../administration/grafana-dashboards.md

@@ -277,38 +277,42 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
                             serverMessage.server_message_case(), serverMessage);
     }
 
-    void TestWriteWithRateLimiter(TPersQueueV1TestServerWithRateLimiter& server) {
+    void TestWriteWithRateLimiter(TPersQueueV1TestServerWithRateLimiter& server, const TDuration& minTime) {
         const std::vector<TString> differentTopicPathsTypes = {
                 "account1/topic", // without folder
                 "account2/folder/topic", // with folder
                 "account3/folder1/folder2/topic", // complex
         };
-        const TString data = TString("12345") * 100;
+        const TString data = TString("1234567890") * 120000; // 1200000 bytes
         for (const TString &topicPath : differentTopicPathsTypes) {
-            server.CreateTopicWithQuota(topicPath);
-
+            server.CreateTopicWithQuota(topicPath, true, 10000000);
             auto driver = server.Server->AnnoyingClient->GetDriver();
+            auto start = TInstant::Now();
 
-            {
-                auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+            for (ui32 i = 0; i < 7; ++i) {
+                auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, TStringBuilder() << "123" << i, {}, "raw");
                 writer->Write(data);
                 bool res = writer->Close(TDuration::Seconds(10));
                 UNIT_ASSERT(res);
             }
+
+            Cerr << "DURATION " << (TInstant::Now() - start) << "\n";
+            UNIT_ASSERT(TInstant::Now() - start > minTime);
         }
     }
 
     Y_UNIT_TEST(TestWriteWithRateLimiterWithBlobsRateLimit) {
         TPersQueueV1TestServerWithRateLimiter server;
         server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE);
-        server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO);
-        TestWriteWithRateLimiter(server);
+        server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
+        TestWriteWithRateLimiter(server, TDuration::MilliSeconds(5200));
     }
 
     Y_UNIT_TEST(TestWriteWithRateLimiterWithUserPayloadRateLimit) {
         TPersQueueV1TestServerWithRateLimiter server;
         server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE);
-        TestWriteWithRateLimiter(server);
+        server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
+        TestWriteWithRateLimiter(server, TDuration::MilliSeconds(2500));
     }
 
     void TestRateLimiterLimitsWrite(TPersQueueV1TestServerWithRateLimiter& server) {
@@ -321,7 +325,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
 
         // Warm up write
         {
-            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123", {}, "raw");
 
             writer->Write(data);
             bool res = writer->Close(TDuration::Seconds(10));
@@ -334,7 +338,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
 
 
         {
-            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123", {}, "raw");
 
             writer->Write(data);
             bool res = writer->Close(TDuration::Seconds(10));
@@ -342,7 +346,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         }
 
         {
-            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123");
+            auto writer = CreateSimpleWriter(*driver, server.TenantModeEnabled() ? "/Root/PQ/" + topicPath : topicPath, "123", {}, "raw");
 
             writer->Write(data);
             bool res = writer->Close(TDuration::Seconds(10));
@@ -361,6 +365,22 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         }
 
     }
+
+    Y_UNIT_TEST(TestLimiterLimitsWithBlobsRateLimit) {
+        TPersQueueV1TestServerWithRateLimiter server;
+        server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE);
+        server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
+        TestRateLimiterLimitsWrite(server);
+    }
+
+    Y_UNIT_TEST(TestLimiterLimitsWithUserPayloadRateLimit) {
+        TPersQueueV1TestServerWithRateLimiter server;
+        server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::USER_PAYLOAD_SIZE);
+        server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_DEBUG);
+
+        TestRateLimiterLimitsWrite(server);
+    }
+
 }
 
 }

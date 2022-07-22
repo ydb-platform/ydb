@@ -30,8 +30,9 @@ void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
 
     auto sendResponse = [&] (TLogWrite *evLog) {
         Y_VERIFY_DEBUG(evLog->Result);
+        ui32 results = evLog->Result->Results.size();
         actorSystem->Send(evLog->Sender, evLog->Result.Release());
-        PDisk->Mon.WriteLog.CountResponse();
+        PDisk->Mon.WriteLog.CountMultipleResponses(results);
     };
 
     THashMap<ui64, TLogWrite *> batchMap;

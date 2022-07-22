@@ -68,7 +68,8 @@ If you plan to use more than one disk on each server, specify a label that is un
 Download an archive with the `ydbd` executable file and the libraries necessary for working with YDB:
 
 ```bash
-curl https://binaries.ydb.tech/ydbd-main-linux-amd64.tar.gz | tar -xz
+curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz -o ydbd-stable-linux-amd64.tar.gz
+tar -xz
 ```
 
 Create directories to run:
@@ -81,10 +82,10 @@ sudo chown -R ydb:ydb /opt/ydb
 3. Copy the binary file, libraries, and configuration file to the appropriate directories:
 
 ```bash
-sudo cp -i ydbd-main-linux-amd64/bin/ydbd /opt/ydb/bin/
-sudo cp -i ydbd-main-linux-amd64/lib/libaio.so /opt/ydb/lib/
-sudo cp -i ydbd-main-linux-amd64/lib/libiconv.so /opt/ydb/lib/
-sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
+sudo cp -i ydbd-stable-linux-amd64/bin/ydbd /opt/ydb/bin/
+sudo cp -i ydbd-stable-linux-amd64/lib/libaio.so /opt/ydb/lib/
+sudo cp -i ydbd-stable-linux-amd64/lib/libiconv.so /opt/ydb/lib/
+sudo cp -i ydbd-stable-linux-amd64/lib/libidn.so /opt/ydb/lib/
 ```
 
 3. Format the disk with the built-in command

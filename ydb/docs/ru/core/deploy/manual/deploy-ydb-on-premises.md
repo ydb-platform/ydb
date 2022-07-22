@@ -63,7 +63,8 @@ sudo partx --u /dev/nvme0n1
 Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы YDB библиотеками:
 
 ```bash
-curl https://binaries.ydb.tech/ydbd-main-linux-amd64.tar.gz | tar -xz
+curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz -o ydbd-stable-linux-amd64.tar.gz
+tar -xz ydbd-stable-linux-amd64.tar.gz
 ```
 
 Создайте директории для запуска:
@@ -75,10 +76,10 @@ sudo chown -R ydb:ydb /opt/ydb
 
 3. Скопируйте бинарник, библиотеки и конфигурационный файл в соответствующие директории:
 ```bash
-sudo cp -i ydbd-main-linux-amd64/bin/ydbd /opt/ydb/bin/
-sudo cp -i ydbd-main-linux-amd64/lib/libaio.so /opt/ydb/lib/
-sudo cp -i ydbd-main-linux-amd64/lib/libiconv.so /opt/ydb/lib/
-sudo cp -i ydbd-main-linux-amd64/lib/libidn.so /opt/ydb/lib/
+sudo cp -i ydbd-stable-linux-amd64/bin/ydbd /opt/ydb/bin/
+sudo cp -i ydbd-stable-linux-amd64/lib/libaio.so /opt/ydb/lib/
+sudo cp -i ydbd-stable-linux-amd64/lib/libiconv.so /opt/ydb/lib/
+sudo cp -i ydbd-stable-linux-amd64/lib/libidn.so /opt/ydb/lib/
 ```
 
 3. Отформатируйте диск встроенной командой

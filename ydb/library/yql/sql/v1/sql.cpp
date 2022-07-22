@@ -1479,8 +1479,6 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
         return false;
     }
 
-    const bool emitObject = bindSettings.ClusterType == PqProviderName;
-
     // ordered map ensures AST stability
     TMap<TString, TString> kvs(bindSettings.Settings.begin(), bindSettings.Settings.end());
     auto pullSettingOrFail = [&](const TString& name, TString& value) -> bool {
@@ -1530,35 +1528,16 @@ bool TSqlTranslation::ApplyTableBinding(const TString& binding, TTableRef& tr, T
 
     tr.Service = bindSettings.ClusterType;
     tr.Cluster = TDeferredAtom(Ctx.Pos(), cluster);
-    if (emitObject) {
-        TString func = "object";
-        MergeHints(hints, GetTableFuncHints(func));
-        TVector<TTableArg> args;
-        for (auto& arg : { path, format }) {
-            args.emplace_back();
-            args.back().Expr = BuildLiteralRawString(Ctx.Pos(), arg);
-        }
+    // put format back to hints
+    kvs["format"] = format;
 
-        for (auto& [key, value] : kvs) {
-            YQL_ENSURE(!key.empty());
-            args.emplace_back();
-            args.back().Expr = BuildLiteralRawString(Ctx.Pos(), value);
-            args.back().Expr->SetLabel(key);
-        }
-
-        tr.Keys = BuildTableKeys(Ctx.Pos(), tr.Service, tr.Cluster, func, args);
-    } else {
-        // put format back to hints
-        kvs["format"] = format;
-
-        for (auto& [key, value] : kvs) {
-            YQL_ENSURE(!key.empty());
-            hints[key] = { BuildQuotedAtom(Ctx.Pos(), value) };
-        }
-
-        const TString view = "";
-        tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), path), "");
+    for (auto& [key, value] : kvs) {
+        YQL_ENSURE(!key.empty());
+        hints[key] = { BuildQuotedAtom(Ctx.Pos(), value) };
     }
+
+    const TString view = "";
+    tr.Keys = BuildTableKey(Ctx.Pos(), tr.Service, tr.Cluster, TDeferredAtom(Ctx.Pos(), path), view);
 
     return true;
 }
@@ -5265,7 +5244,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                         "Or",
                         BuildBinaryOp(Ctx, pos, "<", res, SubExpr(alt.GetRule_eq_subexpr3(), {})),
                         BuildBinaryOp(Ctx, pos, ">", res, SubExpr(alt.GetRule_eq_subexpr5(), tail))
-                                        );
+                    );
                 } else {
                     Ctx.IncrementMonCounter("sql_features", "Between");
                     return BuildBinaryOp(

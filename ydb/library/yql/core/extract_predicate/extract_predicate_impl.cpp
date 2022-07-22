@@ -1025,7 +1025,11 @@ TExprNode::TPtr RebuildAsRangeRest(const TStructExprType& rowType, const TExprNo
 struct TIndexRange {
     size_t Begin = 0;
     size_t End = 0;
-    bool IsPoint = false;
+    size_t PointPrefixLen = 0;
+
+    bool IsPoint() const {
+        return !IsEmpty() && PointPrefixLen == (End - Begin);
+    }
 
     bool IsEmpty() const {
         return Begin >= End;
@@ -1058,7 +1062,8 @@ TIndexRange ExtractIndexRangeFromKeys(const TVector<TString>& keys, const THashM
     TIndexRange result;
     result.Begin = firstIt->second;
     result.End = lastIt->second + 1;
-    result.IsPoint = isPoint;
+    YQL_ENSURE(result.Begin < result.End);
+    result.PointPrefixLen = isPoint ? (result.End - result.Begin) : 0;
 
     return result;
 }
@@ -1358,7 +1363,7 @@ TExprNode::TPtr DoBuildMultiColumnComputeNode(const TStructExprType& rowType, co
         prunedRange = BuildRestTrue(pos, rowType, ctx);
         resultIndexRange.Begin = 0;
         resultIndexRange.End = 1;
-        resultIndexRange.IsPoint = false;
+        resultIndexRange.PointPrefixLen = 0;
         return ctx.Builder(pos)
             .Callable("If")
                 .Add(0, range->HeadPtr())
@@ -1384,7 +1389,7 @@ TExprNode::TPtr DoBuildMultiColumnComputeNode(const TStructExprType& rowType, co
             } else {
                 YQL_ENSURE(childIndexRange.Begin == resultIndexRange.Begin);
                 resultIndexRange.End = std::max(resultIndexRange.End, childIndexRange.End);
-                resultIndexRange.IsPoint = resultIndexRange.IsPoint && childIndexRange.IsPoint;
+                resultIndexRange.PointPrefixLen = std::min(resultIndexRange.PointPrefixLen, childIndexRange.PointPrefixLen);
             }
         }
 
@@ -1412,13 +1417,15 @@ TExprNode::TPtr DoBuildMultiColumnComputeNode(const TStructExprType& rowType, co
                 resultIndexRange = childIndexRange;
             } else {
                 if (childIndexRange.Begin != resultIndexRange.Begin)  {
+                    YQL_ENSURE(childIndexRange.Begin == resultIndexRange.End);
                     needAlign = false;
-                    if (!resultIndexRange.IsPoint) {
+                    if (!resultIndexRange.IsPoint()) {
                         prunedOutput.back() = RebuildAsRangeRest(rowType, *child, ctx);
+                    } else {
+                        resultIndexRange.PointPrefixLen += childIndexRange.PointPrefixLen;
                     }
-                    resultIndexRange.IsPoint = resultIndexRange.IsPoint && childIndexRange.IsPoint;
                 } else {
-                    resultIndexRange.IsPoint = resultIndexRange.IsPoint || childIndexRange.IsPoint;
+                    resultIndexRange.PointPrefixLen = std::max(resultIndexRange.PointPrefixLen, childIndexRange.PointPrefixLen);
                 }
                 resultIndexRange.End = std::max(resultIndexRange.End, childIndexRange.End);
             }
@@ -1456,10 +1463,12 @@ TExprNode::TPtr DoBuildMultiColumnComputeNode(const TStructExprType& rowType, co
 
 TExprNode::TPtr BuildMultiColumnComputeNode(const TStructExprType& rowType, const TExprNode::TPtr& range,
     const TVector<TString>& indexKeys, const THashMap<TString, size_t>& indexKeysOrder,
-    TExprNode::TPtr& prunedRange, const TPredicateExtractorSettings& settings, size_t usedPrefixLen, TExprContext& ctx)
+    TExprNode::TPtr& prunedRange, const TPredicateExtractorSettings& settings, size_t usedPrefixLen, size_t& pointPrefixLen, TExprContext& ctx)
 {
     TIndexRange resultIndexRange;
     auto result = DoBuildMultiColumnComputeNode(rowType, range, indexKeys, indexKeysOrder, prunedRange, resultIndexRange, settings, usedPrefixLen, ctx);
+    pointPrefixLen = resultIndexRange.PointPrefixLen;
+    YQL_ENSURE(pointPrefixLen <= usedPrefixLen);
     YQL_ENSURE(prunedRange);
     if (result) {
         YQL_ENSURE(!resultIndexRange.IsEmpty());
@@ -1591,7 +1600,7 @@ TPredicateRangeExtractor::TBuildResult TPredicateRangeExtractor::BuildComputeNod
     TExprNode::TPtr rebuiltRange = RebuildRangeForIndexKeys(*RowType, Range, indexKeysOrder, result.UsedPrefixLen, ctx);
     TExprNode::TPtr prunedRange;
     result.ComputeNode = BuildMultiColumnComputeNode(*RowType, rebuiltRange, effectiveIndexKeys, indexKeysOrder,
-        prunedRange, Settings, result.UsedPrefixLen, ctx);
+        prunedRange, Settings, result.UsedPrefixLen, result.PointPrefixLen, ctx);
     if (result.ComputeNode) {
         result.ExpectedMaxRanges = CalcMaxRanges(rebuiltRange, indexKeysOrder);
         if (result.ExpectedMaxRanges && *result.ExpectedMaxRanges < Settings.MaxRanges) {

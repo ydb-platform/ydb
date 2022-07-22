@@ -22,6 +22,7 @@ public:
         TExprNode::TPtr ComputeNode;
         TExprNode::TPtr PrunedLambda;
         size_t UsedPrefixLen = 0;
+        size_t PointPrefixLen = 0;
         TMaybe<size_t> ExpectedMaxRanges;
     };
 

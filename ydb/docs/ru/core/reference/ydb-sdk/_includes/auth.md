@@ -1,10 +1,10 @@
 # Аутентификация в SDK
 
-Как описано в статье о [подключении к серверу {{ ydb-short-name }}](../../../concepts/connect.md), клиент с каждым запросом должен отправить [аутентификационный токен](../../../concepts/connect.md#auth). Аутентификационный токен проверяется сервером и, в случае успешной аутентификации, запрос авторизуется и выполняется, иначе возвращается ошибка `Unauthenticated`.
+Как описано в статье о [подключении к серверу {{ ydb-short-name }}](../../../concepts/connect.md), клиент с каждым запросом должен отправить [аутентификационный токен](../../../concepts/auth.md). Аутентификационный токен проверяется сервером и, в случае успешной аутентификации, запрос авторизуется и выполняется, иначе возвращается ошибка `Unauthenticated`.
 
 {{ ydb-short-name }} SDK использует объект, отвечающий за генерацию таких токенов. SDK предоставляет встроенные cпособы получения такого объекта:
 
-1. Методы с явной передачей параметров, каждый из методов реализует один из [режимов аутентификации](../../../concepts/connect.md#auth-modes).
+1. Методы с явной передачей параметров, каждый из методов реализует один из [режимов аутентификации](../../../concepts/auth.md).
 2. Метод определения режима аутентификации и необходимых параметров из переменных окружения.
 
 Обычно объект генерации токенов создается перед инициализацией драйвера {{ ydb-short-name }} и передается параметром в его конструктор. C++ и Go SDK дополнительно позволяют через один драйвер работать с несколькими БД и объектами генерации токенов.
@@ -19,7 +19,7 @@
 
 - Python
 
-  [Режим](../../../concepts/connect.md#auth-modes) | Метод
+  Режим | Метод
   ----- | -----
   Anonymous | [`ydb.AnonymousCredentials()`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/anonymous-credentials)
   Access Token | [`ydb.AccessTokenCredentials( token )`](https://github.com/yandex-cloud/ydb-python-sdk/tree/master/examples/access-token-credentials)
@@ -29,7 +29,7 @@
 
 - Go
 
-  [Режим](../../../concepts/connect.md#auth-modes) | Пакет | Метод
+  Режим | Пакет | Метод
   ----- | ----- | ----
   Anonymous | [ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk/blob/master/go.mod) | [`ydb.WithAnonymousCredentials()`](https://github.com/ydb-platform/ydb-go-examples/tree/master/cmd/auth/anonymous_credentials)
   Access Token | [ydb-go-sdk/v3](https://github.com/ydb-platform/ydb-go-sdk/blob/master/go.mod) | [`ydb.WithAccessTokenCredentials( token )`](https://github.com/ydb-platform/ydb-go-examples/tree/master/cmd/auth/access_token_credentials)
@@ -39,7 +39,7 @@
 
 - Java
 
-  [Режим](../../../concepts/connect.md#auth-modes) | Метод
+  Режим | Метод
   ----- | -----
   Anonymous | [`com.yandex.ydb.core.auth.NopAuthProvider.INSTANCE`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/anonymous_credentials)
   Access Token | [`com.yandex.ydb.auth.iam.CloudAuthProvider.newAuthProvider(`</br>&nbsp;&nbsp;&nbsp;&nbsp;`yandex.cloud.sdk.auth.provider.IamTokenCredentialProvider`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.builder()`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.token(accessToken)`</br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`.build()`</br>`);`](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/auth/access_token_credentials)
@@ -49,7 +49,7 @@
 
 - Node.js
 
-  [Режим](../../../concepts/connect.md#auth-modes) | Метод
+  Режим | Метод
   ----- | -----
   Anonymous | [`new 'ydb-sdk'.AnonymousAuthService()`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/anonymous-credentials)
   Access Token | [`new 'ydb-sdk'.TokenAuthService( accessToken, database )`](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/access-token-credentials)
@@ -59,8 +59,8 @@
 
 - Rust
 
-  [Режим](../../../concepts/connect.md#auth-modes) | Метод
-    ----- | -----
+  Режим | Метод
+  ----- | -----
   Anonymous | ydb::StaticToken("")
   Access Token | ydb::StaticToken(token)
   Metadata | ydb::GCEMetadata, ydb::YandexMetadata

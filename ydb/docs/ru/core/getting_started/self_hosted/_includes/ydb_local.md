@@ -8,7 +8,7 @@
 
 - [Эндпоинт](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
 - [Путь базы данных](../../../concepts/connect.md#database): `/Root/test`
-- [Аутентификация](../../../concepts/connect.md#auth-modes): Анонимная (без аутентификации)
+- [Аутентификация](../../../concepts/auth.md): Анонимная (без аутентификации)
 
 ## Установка {#install}
 

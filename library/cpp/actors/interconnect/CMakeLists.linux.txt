@@ -9,9 +9,13 @@
 find_package(OpenSSL REQUIRED)
 
 add_library(cpp-actors-interconnect)
+target_include_directories(cpp-actors-interconnect PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/grpc
+)
 target_link_libraries(cpp-actors-interconnect PUBLIC
   contrib-libs-cxxsupp
   yutil
+  src-core-lib
   contrib-libs-libc_compat
   OpenSSL::OpenSSL
   cpp-actors-core
@@ -22,6 +26,7 @@ target_link_libraries(cpp-actors-interconnect PUBLIC
   cpp-actors-protos
   cpp-actors-util
   cpp-actors-wilson
+  cpp-grpc-common
   cpp-digest-crc32c
   library-cpp-json
   library-cpp-lwtrace

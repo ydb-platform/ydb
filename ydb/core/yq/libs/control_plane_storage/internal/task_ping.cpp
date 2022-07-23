@@ -21,12 +21,17 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
-    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TRetryPolicyItem>& retryPolicies) {
+    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TRetryPolicyItem>& retryPolicies,
+    ::NMonitoring::TDynamicCounterPtr rootCounters) {
+
+    auto scope = request.scope();
+    auto query_id = request.query_id().value();
+    auto counters = rootCounters->GetSubgroup("scope", scope)->GetSubgroup("query_id", query_id);
 
     TSqlQueryBuilder readQueryBuilder(tablePathPrefix, "HardPingTask(read)");
     readQueryBuilder.AddString("tenant", request.tenant());
-    readQueryBuilder.AddString("scope", request.scope());
-    readQueryBuilder.AddString("query_id", request.query_id().value());
+    readQueryBuilder.AddString("scope", scope);
+    readQueryBuilder.AddString("query_id", query_id);
     readQueryBuilder.AddText(
         "$last_job_id = SELECT `" LAST_JOB_ID_COLUMN_NAME "` FROM `" QUERIES_TABLE_NAME "`\n"
         "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
@@ -38,15 +43,12 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
-    auto prepareParams = [=, actorSystem = NActors::TActivationContext::ActorSystem()](const TVector<TResultSet>& resultSets) {
+    auto prepareParams = [=, counters=counters, actorSystem = NActors::TActivationContext::ActorSystem()](const TVector<TResultSet>& resultSets) {
         TString jobId;
         YandexQuery::Query query;
         YandexQuery::Internal::QueryInternal internal;
         YandexQuery::Job job;
         TString owner;
-        ui64 retryCounter = 0;
-        TInstant retryCounterUpdatedAt = TInstant::Zero();
-        double retryRate = 0.0;
 
         if (resultSets.size() != 3) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "RESULT SET SIZE of " << resultSets.size() << " != 3";
@@ -88,8 +90,8 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             }
             retryLimiter.Assign(
                 parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().GetOrElse(0),
-                retryCounterUpdatedAt = parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
-                retryRate = parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
+                parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().GetOrElse(TInstant::Zero()),
+                parser.ColumnParser(RETRY_RATE_COLUMN_NAME).GetOptionalDouble().GetOrElse(0.0)
             );
         }
 
@@ -286,13 +288,14 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 "WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
             );
         } else {
+            *counters->GetCounter("RetryCount") = retryLimiter.RetryCount;
             // update pending small
             ttl = TInstant::Now() + backoff;
             writeQueryBuilder.AddTimestamp("now", TInstant::Now());
             writeQueryBuilder.AddTimestamp("ttl", ttl);
-            writeQueryBuilder.AddTimestamp("retry_counter_update_time", retryCounterUpdatedAt);
-            writeQueryBuilder.AddDouble("retry_rate", retryRate);
-            writeQueryBuilder.AddUint64("retry_counter", retryCounter);
+            writeQueryBuilder.AddTimestamp("retry_counter_update_time", retryLimiter.RetryCounterUpdatedAt);
+            writeQueryBuilder.AddDouble("retry_rate", retryLimiter.RetryRate);
+            writeQueryBuilder.AddUint64("retry_counter", retryLimiter.RetryCount);
             writeQueryBuilder.AddString("owner", owner);
             writeQueryBuilder.AddText(
                 "UPDATE `" PENDING_SMALL_TABLE_NAME "` SET `" LAST_SEEN_AT_COLUMN_NAME "` = $now, `" ASSIGNED_UNTIL_COLUMN_NAME "` = $ttl,\n"
@@ -444,7 +447,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     if (request.status())
         Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(request.status());
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies) :
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies, Counters.Counters) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config.TaskLeaseTtl);
     auto readQuery = std::get<0>(pingTaskParams); // Use std::get for win compiler
     auto readParams = std::get<1>(pingTaskParams);

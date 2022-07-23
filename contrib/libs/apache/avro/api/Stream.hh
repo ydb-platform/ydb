@@ -19,9 +19,9 @@
 #ifndef avro_Stream_hh__
 #define avro_Stream_hh__
 
+#include <cstdint>
+#include <cstring>
 #include <memory>
-#include <string.h>
-#include <stdint.h>
 
 #include "boost/utility.hpp"
 
@@ -35,17 +35,16 @@ namespace avro {
  */
 class AVRO_DECL InputStream : boost::noncopyable {
 protected:
-
     /**
-     * An empty constuctor.
+     * An empty constructor.
      */
-    InputStream() { }
+    InputStream() = default;
 
 public:
     /**
      * Destructor.
      */
-    virtual ~InputStream() { }
+    virtual ~InputStream() = default;
 
     /**
      * Returns some of available data.
@@ -53,7 +52,7 @@ public:
      * Returns true if some data is available, false if no more data is
      * available or an error has occurred.
      */
-    virtual bool next(const uint8_t** data, size_t* len) = 0;
+    virtual bool next(const uint8_t **data, size_t *len) = 0;
 
     /**
      * "Returns" back some of the data to the stream. The returned
@@ -70,7 +69,7 @@ public:
     /**
      * Returns the number of bytes read from this stream so far.
      * All the bytes made available through next are considered
-     * to be used unless, retutned back using backup.
+     * to be used unless, returned back using backup.
      */
     virtual size_t byteCount() const = 0;
 };
@@ -82,17 +81,16 @@ typedef std::unique_ptr<InputStream> InputStreamPtr;
  */
 class AVRO_DECL SeekableInputStream : public InputStream {
 protected:
-
     /**
-     * An empty constuctor.
+     * An empty constructor.
      */
-    SeekableInputStream() { }
+    SeekableInputStream() = default;
 
 public:
     /**
      * Destructor.
      */
-    virtual ~SeekableInputStream() { }
+    ~SeekableInputStream() override = default;
 
     /**
      * Seek to a specific position in the stream. This may invalidate pointers
@@ -109,24 +107,23 @@ typedef std::unique_ptr<SeekableInputStream> SeekableInputStreamPtr;
  */
 class AVRO_DECL OutputStream : boost::noncopyable {
 protected:
-
     /**
-     * An empty constuctor.
+     * An empty constructor.
      */
-    OutputStream() { }
-public:
+    OutputStream() = default;
 
+public:
     /**
      * Destructor.
      */
-    virtual ~OutputStream() { }
+    virtual ~OutputStream() = default;
 
     /**
      * Returns a buffer that can be written into.
      * On successful return, data has the pointer to the buffer
      * and len has the number of bytes available at data.
      */
-    virtual bool next(uint8_t** data, size_t* len) = 0;
+    virtual bool next(uint8_t **data, size_t *len) = 0;
 
     /**
      * "Returns" back to the stream some of the buffer obtained
@@ -137,7 +134,7 @@ public:
     /**
      * Number of bytes written so far into this stream. The whole buffer
      * returned by next() is assumed to be written unless some of
-     * it was retutned using backup().
+     * it was returned using backup().
      */
     virtual uint64_t byteCount() const = 0;
 
@@ -160,23 +157,23 @@ AVRO_DECL OutputStreamPtr memoryOutputStream(size_t chunkSize = 4 * 1024);
  * It does not copy the data, the byte array should remain valid
  * until the InputStream is used.
  */
-AVRO_DECL InputStreamPtr memoryInputStream(const uint8_t* data, size_t len);
+AVRO_DECL InputStreamPtr memoryInputStream(const uint8_t *data, size_t len);
 
 /**
  * Returns a new InputStream with the contents written into an
- * outputstream. The output stream must have been returned by
+ * OutputStream. The output stream must have been returned by
  * an earlier call to memoryOutputStream(). The contents for the new
- * input stream are the snapshot of the outputstream. One can construct
+ * InputStream are the snapshot of the output stream. One can construct
  * any number of memory input stream from a single memory output stream.
  */
-AVRO_DECL InputStreamPtr memoryInputStream(const OutputStream& source);
+AVRO_DECL InputStreamPtr memoryInputStream(const OutputStream &source);
 
 /**
  * Returns the contents written so far into the output stream, which should
- * be a memory output stream. That is it must have been returned by a pervious
+ * be a memory output stream. That is it must have been returned by a previous
  * call to memoryOutputStream().
  */
-AVRO_DECL std::shared_ptr<std::vector<uint8_t> > snapshot(const OutputStream& source);
+AVRO_DECL std::shared_ptr<std::vector<uint8_t>> snapshot(const OutputStream &source);
 
 /**
  * Returns a new OutputStream whose contents would be stored in a file.
@@ -185,8 +182,8 @@ AVRO_DECL std::shared_ptr<std::vector<uint8_t> > snapshot(const OutputStream& so
  * If there is a file with the given name, it is truncated and overwritten.
  * If there is no file with the given name, it is created.
  */
-AVRO_DECL OutputStreamPtr fileOutputStream(const char* filename,
-    size_t bufferSize = 8 * 1024);
+AVRO_DECL OutputStreamPtr fileOutputStream(const char *filename,
+                                           size_t bufferSize = 8 * 1024);
 
 /**
  * Returns a new InputStream whose contents come from the given file.
@@ -202,8 +199,8 @@ AVRO_DECL SeekableInputStreamPtr fileSeekableInputStream(
  * std::ostream. The std::ostream object should outlive the returned
  * OutputStream.
  */
-AVRO_DECL OutputStreamPtr ostreamOutputStream(std::ostream& os,
-    size_t bufferSize = 8 * 1024);
+AVRO_DECL OutputStreamPtr ostreamOutputStream(std::ostream &os,
+                                              size_t bufferSize = 8 * 1024);
 
 /**
  * Returns a new InputStream whose contents come from the given
@@ -224,46 +221,45 @@ AVRO_DECL InputStreamPtr istreamInputStream(
  * InputStream.
  */
 AVRO_DECL InputStreamPtr nonSeekableIstreamInputStream(
-    std::istream& is, size_t bufferSize = 8 * 1024);
-
+    std::istream &is, size_t bufferSize = 8 * 1024);
 
 /** A convenience class for reading from an InputStream */
 struct StreamReader {
     /**
      * The underlying input stream.
      */
-    InputStream* in_;
+    InputStream *in_;
 
     /**
      * The next location to read from.
      */
-    const uint8_t* next_;
+    const uint8_t *next_;
 
     /**
      * One past the last valid location.
      */
-    const uint8_t* end_;
+    const uint8_t *end_;
 
     /**
      * Constructs an empty reader.
      */
-    StreamReader() : in_(0), next_(0), end_(0) { }
+    StreamReader() : in_(nullptr), next_(nullptr), end_(nullptr) {}
 
     /**
      * Constructs a reader with the given underlying stream.
      */
-    StreamReader(InputStream& in) : in_(0), next_(0), end_(0) { reset(in); }
+    explicit StreamReader(InputStream &in) : in_(nullptr), next_(nullptr), end_(nullptr) { reset(in); }
 
     /**
      * Replaces the current input stream with the given one after backing up
      * the original one if required.
      */
-    void reset(InputStream& is) {
-        if (in_ != 0 && end_ != next_) {
+    void reset(InputStream &is) {
+        if (in_ != nullptr && end_ != next_) {
             in_->backup(end_ - next_);
         }
         in_ = &is;
-        next_ = end_ = 0;
+        next_ = end_ = nullptr;
     }
 
     /**
@@ -281,7 +277,7 @@ struct StreamReader {
      * Reads the given number of bytes from the underlying stream.
      * If there are not that many bytes, throws an exception.
      */
-    void readBytes(uint8_t* b, size_t n) {
+    void readBytes(uint8_t *b, size_t n) {
         while (n > 0) {
             if (next_ == end_) {
                 more();
@@ -332,7 +328,7 @@ struct StreamReader {
      * Tries to get more data and if it cannot, throws an exception.
      */
     void more() {
-        if (! fill()) {
+        if (!fill()) {
             throw Exception("EOF reached");
         }
     }
@@ -341,7 +337,7 @@ struct StreamReader {
      * Returns true if and only if the end of stream is not reached.
      */
     bool hasMore() {
-        return (next_ == end_) ? fill() : true;
+        return next_ != end_ || fill();
     }
 
     /**
@@ -358,40 +354,40 @@ struct StreamReader {
 };
 
 /**
- * A convinience class to write data into an OutputStream.
+ * A convenience class to write data into an OutputStream.
  */
 struct StreamWriter {
     /**
      * The underlying output stream for this writer.
      */
-    OutputStream* out_;
+    OutputStream *out_;
 
     /**
      * The next location to write to.
      */
-    uint8_t* next_;
+    uint8_t *next_;
 
     /**
      * One past the last location one can write to.
      */
-    uint8_t* end_;
+    uint8_t *end_;
 
     /**
      * Constructs a writer with no underlying stream.
      */
-    StreamWriter() : out_(0), next_(0), end_(0) { }
+    StreamWriter() : out_(nullptr), next_(nullptr), end_(nullptr) {}
 
     /**
      * Constructs a new writer with the given underlying stream.
      */
-    StreamWriter(OutputStream& out) : out_(0), next_(0), end_(0) { reset(out); }
+    explicit StreamWriter(OutputStream &out) : out_(nullptr), next_(nullptr), end_(nullptr) { reset(out); }
 
     /**
      * Replaces the current underlying stream with a new one.
      * If required, it backs up unused bytes in the previous stream.
      */
-    void reset(OutputStream& os) {
-        if (out_ != 0 && end_ != next_) {
+    void reset(OutputStream &os) {
+        if (out_ != nullptr && end_ != next_) {
             out_->backup(end_ - next_);
         }
         out_ = &os;
@@ -411,7 +407,7 @@ struct StreamWriter {
     /**
      * Writes the specified number of bytes starting at \p b.
      */
-    void writeBytes(const uint8_t* b, size_t n) {
+    void writeBytes(const uint8_t *b, size_t n) {
         while (n > 0) {
             if (next_ == end_) {
                 more();
@@ -466,9 +462,8 @@ struct StreamWriter {
  * A convenience function to copy all the contents of an input stream into
  * an output stream.
  */
-inline void copy(InputStream& in, OutputStream& out)
-{
-    const uint8_t *p = 0;
+inline void copy(InputStream &in, OutputStream &out) {
+    const uint8_t *p = nullptr;
     size_t n = 0;
     StreamWriter w(out);
     while (in.next(&p, &n)) {
@@ -477,7 +472,5 @@ inline void copy(InputStream& in, OutputStream& out)
     w.flush();
 }
 
-}   // namespace avro
+} // namespace avro
 #endif
-
-

@@ -39,7 +39,7 @@ class AVRO_DECL Schema;
 
 class AVRO_DECL ValidSchema {
 public:
-    explicit ValidSchema(const NodePtr &root);
+    explicit ValidSchema(NodePtr root);
     explicit ValidSchema(const Schema &schema);
     ValidSchema();
 
@@ -54,10 +54,10 @@ public:
 
     void toFlatList(std::ostream &os) const;
 
-  protected:
+protected:
     NodePtr root_;
 
-  private:
+private:
     static std::string compactSchema(const std::string &schema);
 };
 

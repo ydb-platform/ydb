@@ -20,18 +20,18 @@
 #define avro_Encoder_hh__
 
 #include "Config.hh"
-#include <stdint.h>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
-#include "ValidSchema.hh"
 #include "Stream.hh"
+#include "ValidSchema.hh"
 
 /// \file
 ///
 /// Low level support for encoding avro values.
-/// This class has two types of funtions.  One type of functions support
+/// This class has two types of functions.  One type of functions support
 /// the writing of leaf values (for example, encodeLong and
 /// encodeString).  These functions have analogs in Decoder.
 ///
@@ -46,16 +46,16 @@ namespace avro {
 
 /**
  * The abstract base class for all Avro encoders. The implementations
- * differ in the method of encoding (binary vresus JSON) or in capabilities
+ * differ in the method of encoding (binary versus JSON) or in capabilities
  * such as ability to verify the order of invocation of different functions.
  */
 class AVRO_DECL Encoder {
 public:
-    virtual ~Encoder() { };
+    virtual ~Encoder() = default;
     /// All future encodings will go to os, which should be valid until
     /// it is reset with another call to init() or the encoder is
     /// destructed.
-    virtual void init(OutputStream& os) = 0;
+    virtual void init(OutputStream &os) = 0;
 
     /// Flushes any data in internal buffers.
     virtual void flush() = 0;
@@ -83,10 +83,10 @@ public:
     virtual void encodeDouble(double d) = 0;
 
     /// Encodes a UTF-8 string to the current stream.
-    virtual void encodeString(const std::string& s) = 0;
+    virtual void encodeString(const std::string &s) = 0;
 
     /**
-     * Encodes aribtray binary data into tthe current stream as Avro "bytes"
+     * Encodes arbitrary binary data into the current stream as Avro "bytes"
      * data type.
      * \param bytes Where the data is
      * \param len Number of bytes at \p bytes.
@@ -94,11 +94,11 @@ public:
     virtual void encodeBytes(const uint8_t *bytes, size_t len) = 0;
 
     /**
-     * Encodes aribtray binary data into tthe current stream as Avro "bytes"
+     * Encodes arbitrary binary data into the current stream as Avro "bytes"
      * data type.
      * \param bytes The data.
      */
-    void encodeBytes(const std::vector<uint8_t>& bytes) {
+    void encodeBytes(const std::vector<uint8_t> &bytes) {
         uint8_t b = 0;
         encodeBytes(bytes.empty() ? &b : bytes.data(), bytes.size());
     }
@@ -111,7 +111,7 @@ public:
      * \param bytes The fixed, the length of which is taken as the size
      * of fixed.
      */
-    void encodeFixed(const std::vector<uint8_t>& bytes) {
+    void encodeFixed(const std::vector<uint8_t> &bytes) {
         encodeFixed(bytes.data(), bytes.size());
     }
 
@@ -144,7 +144,7 @@ public:
 /**
  * Shared pointer to Encoder.
  */
-typedef std::shared_ptr<Encoder> EncoderPtr;
+using EncoderPtr = std::shared_ptr<Encoder>;
 
 /**
  *  Returns an encoder that can encode binary Avro standard.
@@ -155,19 +155,19 @@ AVRO_DECL EncoderPtr binaryEncoder();
  *  Returns an encoder that validates sequence of calls to an underlying
  *  Encoder against the given schema.
  */
-AVRO_DECL EncoderPtr validatingEncoder(const ValidSchema& schema,
-    const EncoderPtr& base);
+AVRO_DECL EncoderPtr validatingEncoder(const ValidSchema &schema,
+                                       const EncoderPtr &base);
 
 /**
  *  Returns an encoder that encodes Avro standard for JSON.
  */
-AVRO_DECL EncoderPtr jsonEncoder(const ValidSchema& schema);
+AVRO_DECL EncoderPtr jsonEncoder(const ValidSchema &schema);
 
 /**
  *  Returns an encoder that encodes Avro standard for pretty printed JSON.
  */
-AVRO_DECL EncoderPtr jsonPrettyEncoder(const ValidSchema& schema);
+AVRO_DECL EncoderPtr jsonPrettyEncoder(const ValidSchema &schema);
 
-}   // namespace avro
+} // namespace avro
 
 #endif

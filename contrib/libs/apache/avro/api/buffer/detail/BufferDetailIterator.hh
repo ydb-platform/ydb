@@ -40,17 +40,12 @@ namespace detail {
  * wraps the iterator with a cast operator to do this conversion.
  **/
 
-struct InputIteratorHelper
-{
+struct InputIteratorHelper {
     /// Construct a helper with an unnassigned iterator.
-    InputIteratorHelper() :
-        iter_()
-    {}
+    InputIteratorHelper() : iter_() {}
 
     /// Construct a helper with an iterator.
-    InputIteratorHelper(const BufferImpl::ChunkList::const_iterator &iter) :
-        iter_(iter)
-    {}
+    explicit InputIteratorHelper(const BufferImpl::ChunkList::const_iterator &iter) : iter_(iter) {}
 
     /// The location of valid data in this chunk.
     const data_type *data() const {
@@ -83,17 +78,12 @@ struct InputIteratorHelper
  * wraps the iterator with a cast operator to do this conversion.
  */
 
-struct OutputIteratorHelper
-{
+struct OutputIteratorHelper {
     /// Construct a helper with an unnassigned iterator.
-    OutputIteratorHelper() :
-            iter_()
-    {}
+    OutputIteratorHelper() : iter_() {}
 
     /// Construct a helper with an iterator.
-    OutputIteratorHelper(const BufferImpl::ChunkList::const_iterator &iter) :
-            iter_(iter)
-    {}
+    explicit OutputIteratorHelper(const BufferImpl::ChunkList::const_iterator &iter) : iter_(iter) {}
 
     /// The location of the first writable byte in this chunk.
     data_type *data() const {
@@ -123,11 +113,9 @@ struct OutputIteratorHelper
  **/
 
 template<typename Helper>
-class BufferIterator
-{
+class BufferIterator {
 
-  public:
-
+public:
     typedef BufferIterator<Helper> this_type;
 
     /**
@@ -144,14 +132,12 @@ class BufferIterator
     typedef std::forward_iterator_tag iterator_category; // this is a lie to appease asio
     typedef Helper value_type;
     typedef std::ptrdiff_t difference_type;
-    typedef value_type* pointer;
-    typedef value_type& reference;
+    typedef value_type *pointer;
+    typedef value_type &reference;
     //@}
 
     /// Construct an unitialized iterator.
-    BufferIterator() :
-        helper_()
-    { }
+    BufferIterator() : helper_() {}
 
     /* The default implementations are good here
     /// Copy constructor.
@@ -166,17 +152,15 @@ class BufferIterator
     */
 
     /// Construct iterator at the position in the buffer's chunk list.
-    explicit BufferIterator(BufferImpl::ChunkList::const_iterator iter) :
-        helper_(iter)
-    { }
+    explicit BufferIterator(BufferImpl::ChunkList::const_iterator iter) : helper_(iter) {}
 
     /// Dereference iterator, returns InputIteratorHelper or OutputIteratorHelper wrapper.
-    reference operator *() {
+    reference operator*() {
         return helper_;
     }
 
     /// Dereference iterator, returns const InputIteratorHelper or OutputIteratorHelper wrapper.
-    const value_type &operator *() const {
+    const value_type &operator*() const {
         return helper_;
     }
 
@@ -191,15 +175,13 @@ class BufferIterator
     }
 
     /// Increment to next chunk in list, or to end() iterator.
-    this_type& operator++()
-    {
+    this_type &operator++() {
         ++helper_.iter_;
         return *this;
     }
 
     /// Increment to next chunk in list, or to end() iterator.
-    this_type operator++(int)
-    {
+    this_type operator++(int) {
         this_type ret = *this;
         ++helper_.iter_;
         return ret;
@@ -215,16 +197,15 @@ class BufferIterator
         return (helper_.iter_ != rhs.helper_.iter_);
     }
 
-  private:
-
+private:
     Helper helper_;
 };
 
 typedef BufferIterator<InputIteratorHelper> InputBufferIterator;
 typedef BufferIterator<OutputIteratorHelper> OutputBufferIterator;
 
-} // detail namespace
+} // namespace detail
 
-} // namespace
+} // namespace avro
 
 #endif

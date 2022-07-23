@@ -26,7 +26,7 @@
 namespace avro {
 
 class AVRO_DECL LogicalType {
-  public:
+public:
     enum Type {
         NONE,
         DECIMAL,
@@ -52,14 +52,14 @@ class AVRO_DECL LogicalType {
     void setScale(int scale);
     int scale() const { return scale_; }
 
-    void printJson(std::ostream& os) const;
+    void printJson(std::ostream &os) const;
 
-  private:
+private:
     Type type_;
     int precision_;
     int scale_;
 };
 
-}  // namespace avro
+} // namespace avro
 
 #endif

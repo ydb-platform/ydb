@@ -24,21 +24,20 @@ namespace json {
 using std::ostringstream;
 using std::string;
 
-const char* const
-JsonParser::tokenNames[] = {
-    "Null",
-    "Bool",
-    "Integer",
-    "Double",
-    "String",
-    "Array start",
-    "Array end",
-    "Object start",
-    "Object end",
+const char *const
+    JsonParser::tokenNames[] = {
+        "Null",
+        "Bool",
+        "Integer",
+        "Double",
+        "String",
+        "Array start",
+        "Array end",
+        "Object start",
+        "Object end",
 };
 
-char JsonParser::next()
-{
+char JsonParser::next() {
     char ch = hasNext ? nextChar : ' ';
     while (isspace(ch)) {
         if (ch == '\n') {
@@ -50,20 +49,15 @@ char JsonParser::next()
     return ch;
 }
 
-void JsonParser::expectToken(Token tk)
-{
+void JsonParser::expectToken(Token tk) {
     if (advance() != tk) {
-        if (tk == tkDouble) {
-            if(cur() == tkString
+        if (tk == Token::Double) {
+            if (cur() == Token::String
                 && (sv == "Infinity" || sv == "-Infinity" || sv == "NaN")) {
-                curToken = tkDouble;
-                dv = sv == "Infinity" ?
-                    std::numeric_limits<double>::infinity() :
-                    sv == "-Infinity" ?
-                        -std::numeric_limits<double>::infinity() :
-                    std::numeric_limits<double>::quiet_NaN();
+                curToken = Token::Double;
+                dv = sv == "Infinity" ? std::numeric_limits<double>::infinity() : sv == "-Infinity" ? -std::numeric_limits<double>::infinity() : std::numeric_limits<double>::quiet_NaN();
                 return;
-            } else if (cur() == tkLong) {
+            } else if (cur() == Token::Long) {
                 dv = double(lv);
                 return;
             }
@@ -76,14 +70,13 @@ void JsonParser::expectToken(Token tk)
     }
 }
 
-JsonParser::Token JsonParser::doAdvance()
-{
+JsonParser::Token JsonParser::doAdvance() {
     char ch = next();
     if (ch == ']') {
         if (curState == stArray0 || curState == stArrayN) {
             curState = stateStack.top();
             stateStack.pop();
-            return tkArrayEnd;
+            return Token::ArrayEnd;
         } else {
             throw unexpected(ch);
         }
@@ -91,7 +84,7 @@ JsonParser::Token JsonParser::doAdvance()
         if (curState == stObject0 || curState == stObjectN) {
             curState = stateStack.top();
             stateStack.pop();
-            return tkObjectEnd;
+            return Token::ObjectEnd;
         } else {
             throw unexpected(ch);
         }
@@ -121,137 +114,138 @@ JsonParser::Token JsonParser::doAdvance()
     }
 
     switch (ch) {
-    case '[':
-        stateStack.push(curState);
-        curState = stArray0;
-        return tkArrayStart;
-    case '{':
-        stateStack.push(curState);
-        curState = stObject0;
-        return tkObjectStart;
-    case '"':
-        return tryString();
-    case 't':
-        bv = true;
-        return tryLiteral("rue", 3, tkBool);
-    case 'f':
-        bv = false;
-        return tryLiteral("alse", 4, tkBool);
-    case 'n':
-        return tryLiteral("ull", 3, tkNull);
-    default:
-        if (isdigit(ch) || ch == '-') {
-            return tryNumber(ch);
-        } else {
-            throw unexpected(ch);
-        }
+        case '[':
+            stateStack.push(curState);
+            curState = stArray0;
+            return Token::ArrayStart;
+        case '{':
+            stateStack.push(curState);
+            curState = stObject0;
+            return Token::ObjectStart;
+        case '"':
+            return tryString();
+        case 't':
+            bv = true;
+            return tryLiteral("rue", 3, Token::Bool);
+        case 'f':
+            bv = false;
+            return tryLiteral("alse", 4, Token::Bool);
+        case 'n':
+            return tryLiteral("ull", 3, Token::Null);
+        default:
+            if (isdigit(ch) || ch == '-') {
+                return tryNumber(ch);
+            } else {
+                throw unexpected(ch);
+            }
     }
 }
 
-JsonParser::Token JsonParser::tryNumber(char ch)
-{
+JsonParser::Token JsonParser::tryNumber(char ch) {
     sv.clear();
     sv.push_back(ch);
 
     hasNext = false;
     int state = (ch == '-') ? 0 : (ch == '0') ? 1 : 2;
-    for (; ;) {
+    for (;;) {
         switch (state) {
-        case 0:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (isdigit(ch)) {
-                    state = (ch == '0') ? 1 : 2;
-                    sv.push_back(ch);
-                    continue;
+            case 0:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (isdigit(ch)) {
+                        state = (ch == '0') ? 1 : 2;
+                        sv.push_back(ch);
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
-        case 1:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (ch == '.') {
-                    state = 3;
-                    sv.push_back(ch);
-                    continue;
-                } else if (ch == 'e' || ch == 'E') {
-                    sv.push_back(ch);
-                    state = 5;
-                    continue;
+                break;
+            case 1:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (ch == '.') {
+                        state = 3;
+                        sv.push_back(ch);
+                        continue;
+                    } else if (ch == 'e' || ch == 'E') {
+                        sv.push_back(ch);
+                        state = 5;
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
-        case 2:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (isdigit(ch)) {
-                    sv.push_back(ch);
-                    continue;
-                } else if (ch == '.') {
-                    state = 3;
-                    sv.push_back(ch);
-                    continue;
-                } else if (ch == 'e' || ch == 'E') {
-                    sv.push_back(ch);
-                    state = 5;
-                    continue;
+                break;
+            case 2:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (isdigit(ch)) {
+                        sv.push_back(ch);
+                        continue;
+                    } else if (ch == '.') {
+                        state = 3;
+                        sv.push_back(ch);
+                        continue;
+                    } else if (ch == 'e' || ch == 'E') {
+                        sv.push_back(ch);
+                        state = 5;
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
-        case 3:
-        case 6:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (isdigit(ch)) {
-                    sv.push_back(ch);
-                    state++;
-                    continue;
+                break;
+            case 3:
+            case 6:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (isdigit(ch)) {
+                        sv.push_back(ch);
+                        state++;
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
-        case 4:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (isdigit(ch)) {
-                    sv.push_back(ch);
-                    continue;
-                } else if (ch == 'e' || ch == 'E') {
-                    sv.push_back(ch);
-                    state = 5;
-                    continue;
+                break;
+            case 4:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (isdigit(ch)) {
+                        sv.push_back(ch);
+                        continue;
+                    } else if (ch == 'e' || ch == 'E') {
+                        sv.push_back(ch);
+                        state = 5;
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
-        case 5:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (ch == '+' || ch == '-') {
-                    sv.push_back(ch);
-                    state = 6;
-                    continue;
-                } else if (isdigit(ch)) {
-                    sv.push_back(ch);
-                    state = 7;
-                    continue;
+                break;
+            case 5:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (ch == '+' || ch == '-') {
+                        sv.push_back(ch);
+                        state = 6;
+                        continue;
+                    } else if (isdigit(ch)) {
+                        sv.push_back(ch);
+                        state = 7;
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
-        case 7:
-            if (in_.hasMore()) {
-                ch = in_.read();
-                if (isdigit(ch)) {
-                    sv.push_back(ch);
-                    continue;
+                break;
+            case 7:
+                if (in_.hasMore()) {
+                    ch = in_.read();
+                    if (isdigit(ch)) {
+                        sv.push_back(ch);
+                        continue;
+                    }
+                    hasNext = true;
                 }
-                hasNext = true;
-            }
-            break;
+                break;
+            default:
+                throw Exception("Unexpected JSON parse state");
         }
         if (state == 1 || state == 2 || state == 4 || state == 7) {
             if (hasNext) {
@@ -260,10 +254,10 @@ JsonParser::Token JsonParser::tryNumber(char ch)
             std::istringstream iss(sv);
             if (state == 1 || state == 2) {
                 iss >> lv;
-                return tkLong;
+                return Token::Long;
             } else {
                 iss >> dv;
-                return tkDouble;
+                return Token::Double;
             }
         } else {
             if (hasNext) {
@@ -275,50 +269,44 @@ JsonParser::Token JsonParser::tryNumber(char ch)
     }
 }
 
-JsonParser::Token JsonParser::tryString()
-{
+JsonParser::Token JsonParser::tryString() {
     sv.clear();
-    for ( ; ;) {
+    for (;;) {
         char ch = in_.read();
         if (ch == '"') {
-            return tkString;
+            return Token::String;
         } else if (ch == '\\') {
             ch = in_.read();
             switch (ch) {
-            case '"':
-            case '\\':
-            case '/':
-            case 'b':
-            case 'f':
-            case 'n':
-            case 'r':
-            case 't':
-                sv.push_back('\\');
-                sv.push_back(ch);
-                break;
-            case 'u':
-            case 'U':
-                {
-                    uint32_t n = 0;
-                    char e[4];
-                    in_.readBytes(reinterpret_cast<uint8_t*>(e), 4);
+                case '"':
+                case '\\':
+                case '/':
+                case 'b':
+                case 'f':
+                case 'n':
+                case 'r':
+                case 't':
                     sv.push_back('\\');
                     sv.push_back(ch);
-                    for (int i = 0; i < 4; i++) {
+                    break;
+                case 'u':
+                case 'U': {
+                    uint32_t n = 0;
+                    char e[4];
+                    in_.readBytes(reinterpret_cast<uint8_t *>(e), 4);
+                    sv.push_back('\\');
+                    sv.push_back(ch);
+                    for (char c : e) {
                         n *= 16;
-                        char c = e[i];
-                        if (isdigit(c) ||
-                            (c >= 'a' && c <= 'f') ||
-                            (c >= 'A' && c <= 'F')) {
+                        if (isdigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
                             sv.push_back(c);
                         } else {
                             throw unexpected(c);
                         }
                     }
-                }
-                break;
-            default:
-                throw unexpected(ch);
+                } break;
+                default:
+                    throw unexpected(ch);
             }
         } else {
             sv.push_back(ch);
@@ -326,44 +314,41 @@ JsonParser::Token JsonParser::tryString()
     }
 }
 
-
-string JsonParser::decodeString(const string& s, bool binary)
-{
+string JsonParser::decodeString(const string &s, bool binary) {
     string result;
     for (string::const_iterator it = s.begin(); it != s.end(); ++it) {
         char ch = *it;
         if (ch == '\\') {
             ch = *++it;
             switch (ch) {
-            case '"':
-            case '\\':
-            case '/':
-                result.push_back(ch);
-                continue;
-            case 'b':
-                result.push_back('\b');
-                continue;
-            case 'f':
-                result.push_back('\f');
-                continue;
-            case 'n':
-                result.push_back('\n');
-                continue;
-            case 'r':
-                result.push_back('\r');
-                continue;
-            case 't':
-                result.push_back('\t');
-                continue;
-            case 'u':
-            case 'U':
-                {
+                case '"':
+                case '\\':
+                case '/':
+                    result.push_back(ch);
+                    continue;
+                case 'b':
+                    result.push_back('\b');
+                    continue;
+                case 'f':
+                    result.push_back('\f');
+                    continue;
+                case 'n':
+                    result.push_back('\n');
+                    continue;
+                case 'r':
+                    result.push_back('\r');
+                    continue;
+                case 't':
+                    result.push_back('\t');
+                    continue;
+                case 'u':
+                case 'U': {
                     uint32_t n = 0;
                     char e[4];
-                    for (int i = 0; i < 4; i++) {
+                    for (char &i : e) {
                         n *= 16;
                         char c = *++it;
-                        e[i] = c;
+                        i = c;
                         if (isdigit(c)) {
                             n += c - '0';
                         } else if (c >= 'a' && c <= 'f') {
@@ -375,8 +360,8 @@ string JsonParser::decodeString(const string& s, bool binary)
                     if (binary) {
                         if (n > 0xff) {
                             throw Exception(boost::format(
-                                "Invalid byte for binary: %1%%2%") % ch %
-                                    string(e, 4));
+                                                "Invalid byte for binary: %1%%2%")
+                                            % ch % string(e, 4));
                         } else {
                             result.push_back(n);
                             continue;
@@ -389,20 +374,22 @@ string JsonParser::decodeString(const string& s, bool binary)
                         result.push_back((n & 0x3f) | 0x80);
                     } else if (n < 0x10000) {
                         result.push_back((n >> 12) | 0xe0);
-                        result.push_back(((n >> 6)& 0x3f) | 0x80);
+                        result.push_back(((n >> 6) & 0x3f) | 0x80);
                         result.push_back((n & 0x3f) | 0x80);
                     } else if (n < 110000) {
                         result.push_back((n >> 18) | 0xf0);
-                        result.push_back(((n >> 12)& 0x3f) | 0x80);
-                        result.push_back(((n >> 6)& 0x3f) | 0x80);
+                        result.push_back(((n >> 12) & 0x3f) | 0x80);
+                        result.push_back(((n >> 6) & 0x3f) | 0x80);
                         result.push_back((n & 0x3f) | 0x80);
                     } else {
                         throw Exception(boost::format(
-                            "Invalid unicode value: %1%i%2%") % ch %
-                                string(e, 4));
+                                            "Invalid unicode value: %1%i%2%")
+                                        % ch % string(e, 4));
                     }
                 }
-                continue;
+                    continue;
+                default:
+                    throw Exception("Unexpected JSON parse state");
             }
         } else {
             result.push_back(ch);
@@ -411,17 +398,15 @@ string JsonParser::decodeString(const string& s, bool binary)
     return result;
 }
 
-Exception JsonParser::unexpected(unsigned char c)
-{
+Exception JsonParser::unexpected(unsigned char c) {
     std::ostringstream oss;
     oss << "Unexpected character in json " << toHex(c / 16) << toHex(c % 16);
     return Exception(oss.str());
 }
 
-JsonParser::Token JsonParser::tryLiteral(const char exp[], size_t n, Token tk)
-{
+JsonParser::Token JsonParser::tryLiteral(const char exp[], size_t n, Token tk) {
     char c[100];
-    in_.readBytes(reinterpret_cast<uint8_t*>(c), n);
+    in_.readBytes(reinterpret_cast<uint8_t *>(c), n);
     for (size_t i = 0; i < n; ++i) {
         if (c[i] != exp[i]) {
             throw unexpected(c[i]);
@@ -437,6 +422,5 @@ JsonParser::Token JsonParser::tryLiteral(const char exp[], size_t n, Token tk)
     return tk;
 }
 
-}
-}
-
+} // namespace json
+} // namespace avro

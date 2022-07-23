@@ -21,53 +21,54 @@
 
 #include "Config.hh"
 
+#include <boost/noncopyable.hpp>
 #include <cassert>
 #include <memory>
-#include <boost/noncopyable.hpp>
+#include <utility>
 
 #include "Exception.hh"
 #include "LogicalType.hh"
-#include "Types.hh"
 #include "SchemaResolution.hh"
+#include "Types.hh"
 
 namespace avro {
 
 class Node;
 class GenericDatum;
 
-typedef std::shared_ptr<Node> NodePtr;
+using NodePtr = std::shared_ptr<Node>;
 
 class AVRO_DECL Name {
     std::string ns_;
     std::string simpleName_;
+
 public:
-    Name() { }
-    Name(const std::string& fullname);
-    Name(const std::string& simpleName, const std::string& ns) : ns_(ns), simpleName_(simpleName) { check(); }
+    Name() = default;
+    explicit Name(const std::string &fullname);
+    Name(std::string simpleName, std::string ns) : ns_(std::move(ns)), simpleName_(std::move(simpleName)) { check(); }
 
-    const std::string fullname() const;
-    const std::string& ns() const { return ns_; }
-    const std::string& simpleName() const { return simpleName_; }
+    std::string fullname() const;
+    const std::string &ns() const { return ns_; }
+    const std::string &simpleName() const { return simpleName_; }
 
-    void ns(const std::string& n) { ns_ = n; }
-    void simpleName(const std::string& n) { simpleName_ = n; }
-    void fullname(const std::string& n);
+    void ns(std::string n) { ns_ = std::move(n); }
+    void simpleName(std::string n) { simpleName_ = std::move(n); }
+    void fullname(const std::string &n);
 
-    bool operator < (const Name& n) const;
+    bool operator<(const Name &n) const;
     void check() const;
-    bool operator == (const Name& n) const;
-    bool operator != (const Name& n) const { return !((*this) == n); }
+    bool operator==(const Name &n) const;
+    bool operator!=(const Name &n) const { return !((*this) == n); }
     void clear() {
         ns_.clear();
         simpleName_.clear();
     }
-    operator std::string() const {
+    explicit operator std::string() const {
         return fullname();
     }
 };
 
-inline
-std::ostream& operator << (std::ostream& os, const Name& n) {
+inline std::ostream &operator<<(std::ostream &os, const Name &n) {
     return os << n.fullname();
 }
 
@@ -86,15 +87,11 @@ std::ostream& operator << (std::ostream& os, const Name& n) {
 /// different node types.
 ///
 
-class AVRO_DECL Node : private boost::noncopyable
-{
-  public:
-
-    Node(Type type) :
-        type_(type),
-        logicalType_(LogicalType::NONE),
-        locked_(false)
-    {}
+class AVRO_DECL Node : private boost::noncopyable {
+public:
+    explicit Node(Type type) : type_(type),
+                               logicalType_(LogicalType::NONE),
+                               locked_(false) {}
 
     virtual ~Node();
 
@@ -136,45 +133,44 @@ class AVRO_DECL Node : private boost::noncopyable
         doAddLeaf(newLeaf);
     }
     virtual size_t leaves() const = 0;
-    virtual const NodePtr& leafAt(int index) const = 0;
-    virtual const GenericDatum& defaultValueAt(int index) {
+    virtual const NodePtr &leafAt(size_t index) const = 0;
+    virtual const GenericDatum &defaultValueAt(size_t index) {
         throw Exception(boost::format("No default value at: %1%") % index);
     }
 
     void addName(const std::string &name) {
         checkLock();
-        checkName(name);
+        checkName(Name(name));
         doAddName(name);
     }
     virtual size_t names() const = 0;
-    virtual const std::string &nameAt(int index) const = 0;
+    virtual const std::string &nameAt(size_t index) const = 0;
     virtual bool nameIndex(const std::string &name, size_t &index) const = 0;
 
-    void setFixedSize(int size) {
+    void setFixedSize(size_t size) {
         checkLock();
         doSetFixedSize(size);
     }
-    virtual int fixedSize() const = 0;
+    virtual size_t fixedSize() const = 0;
 
     virtual bool isValid() const = 0;
 
     virtual SchemaResolution resolve(const Node &reader) const = 0;
 
-    virtual void printJson(std::ostream &os, int depth) const = 0;
+    virtual void printJson(std::ostream &os, size_t depth) const = 0;
 
     virtual void printBasicInfo(std::ostream &os) const = 0;
 
-    virtual void setLeafToSymbolic(int index, const NodePtr &node) = 0;
+    virtual void setLeafToSymbolic(size_t index, const NodePtr &node) = 0;
 
     // Serialize the default value GenericDatum g for the node contained
     // in a record node.
-    virtual void printDefaultToJson(const GenericDatum& g, std::ostream &os,
-                                    int depth) const = 0;
+    virtual void printDefaultToJson(const GenericDatum &g, std::ostream &os,
+                                    size_t depth) const = 0;
 
-  protected:
-
+protected:
     void checkLock() const {
-        if(locked()) {
+        if (locked()) {
             throw Exception("Cannot modify locked schema");
         }
     }
@@ -188,10 +184,9 @@ class AVRO_DECL Node : private boost::noncopyable
 
     virtual void doAddLeaf(const NodePtr &newLeaf) = 0;
     virtual void doAddName(const std::string &name) = 0;
-    virtual void doSetFixedSize(int size) = 0;
+    virtual void doSetFixedSize(size_t size) = 0;
 
-  private:
-
+private:
     const Type type_;
     LogicalType logicalType_;
     bool locked_;
@@ -200,12 +195,10 @@ class AVRO_DECL Node : private boost::noncopyable
 } // namespace avro
 
 namespace std {
-inline std::ostream& operator<<(std::ostream& os, const avro::Node& n)
-{
+inline std::ostream &operator<<(std::ostream &os, const avro::Node &n) {
     n.printJson(os, 0);
     return os;
 }
-}
-
+} // namespace std
 
 #endif

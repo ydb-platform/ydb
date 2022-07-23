@@ -20,7 +20,7 @@
 #define avro_Compiler_hh__
 
 #include "Config.hh"
-#include <stdint.h>
+#include <cstdint>
 #include <istream>
 
 namespace avro {
@@ -34,7 +34,7 @@ class AVRO_DECL InputStream;
 
 class AVRO_DECL ValidSchema;
 
-/// Given a stream comtaining a JSON schema, compiles the schema to a
+/// Given a stream containing a JSON schema, compiles the schema to a
 /// ValidSchema object.  Throws if the schema cannot be compiled to a valid
 /// schema
 
@@ -46,17 +46,17 @@ AVRO_DECL void compileJsonSchema(std::istream &is, ValidSchema &schema);
 ///
 
 AVRO_DECL bool compileJsonSchema(std::istream &is, ValidSchema &schema,
-    std::string &error);
+                                 std::string &error);
 
-AVRO_DECL ValidSchema compileJsonSchemaFromStream(InputStream& is);
+AVRO_DECL ValidSchema compileJsonSchemaFromStream(InputStream &is);
 
-AVRO_DECL ValidSchema compileJsonSchemaFromMemory(const uint8_t* input, size_t len);
+AVRO_DECL ValidSchema compileJsonSchemaFromMemory(const uint8_t *input, size_t len);
 
-AVRO_DECL ValidSchema compileJsonSchemaFromString(const char* input);
+AVRO_DECL ValidSchema compileJsonSchemaFromString(const char *input);
 
-AVRO_DECL ValidSchema compileJsonSchemaFromString(const std::string& input);
+AVRO_DECL ValidSchema compileJsonSchemaFromString(const std::string &input);
 
-AVRO_DECL ValidSchema compileJsonSchemaFromFile(const char* filename);
+AVRO_DECL ValidSchema compileJsonSchemaFromFile(const char *filename);
 
 } // namespace avro
 

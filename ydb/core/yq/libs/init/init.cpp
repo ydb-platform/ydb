@@ -11,6 +11,7 @@
 #include <ydb/core/yq/libs/private_client/internal_service.h>
 #include <ydb/core/yq/libs/private_client/loopback_service.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
+#include <ydb/core/yq/libs/quota_manager/quota_proxy.h>
 #include <ydb/core/yq/libs/rate_limiter/control_plane_service/rate_limiter_control_plane_service.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
@@ -291,6 +292,11 @@ void Init(
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_TIME_LIMIT, 0)
             });
         actorRegistrator(NYq::MakeQuotaServiceActorId(), quotaService);
+
+        auto quotaProxy = NYq::CreateQuotaProxyActor(
+            protoConfig.GetQuotasManager(),
+            serviceCounters.Counters);
+        actorRegistrator(NYq::MakeQuotaProxyActorId(), quotaProxy);
     }
 }
 

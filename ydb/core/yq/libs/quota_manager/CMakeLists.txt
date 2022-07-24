@@ -25,4 +25,5 @@ target_link_libraries(yq-libs-quota_manager PUBLIC
 )
 target_sources(yq-libs-quota_manager PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/quota_manager/quota_manager.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/quota_manager/quota_proxy.cpp
 )

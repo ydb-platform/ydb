@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
-
 #include <ydb/core/yq/libs/config/protos/quotas_manager.pb.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 

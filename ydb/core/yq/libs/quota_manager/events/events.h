@@ -2,6 +2,8 @@
 
 #include <memory>
 
+#include <grpc++/support/status.h>
+
 #include <util/generic/maybe.h>
 #include <util/generic/string.h>
 
@@ -57,7 +59,12 @@ using TQuotaMap = THashMap<TString, TQuotaUsage>;
 struct TEvQuotaService {
     // Event ids.
     enum EEv : ui32 {
-        EvQuotaGetRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::QuotaService),
+        EvQuotaProxyGetRequest = YqEventSubspaceBegin(NYq::TYqEventSubspace::QuotaService),
+        EvQuotaProxyGetResponse,
+        EvQuotaProxySetRequest,
+        EvQuotaProxySetResponse,
+        EvQuotaProxyErrorResponse,
+        EvQuotaGetRequest,
         EvQuotaGetResponse,
         EvQuotaChangeNotification,
         EvQuotaUsageRequest,
@@ -71,13 +78,66 @@ struct TEvQuotaService {
 
     static_assert(EvEnd <= YqEventSubspaceEnd(NYq::TYqEventSubspace::QuotaService), "All events must be in their subspace");
 
+    struct TQuotaProxyGetRequest : public NActors::TEventLocal<TQuotaProxyGetRequest, EvQuotaProxyGetRequest> {
+        TString User;
+        bool PermissionExists;
+        TString SubjectType;
+        TString SubjectId;
+
+        TQuotaProxyGetRequest(const TString& user, bool permissionExists, const TString& subjectType, const TString& subjectId)
+            : User(user), PermissionExists(permissionExists), SubjectType(subjectType), SubjectId(subjectId) {
+        }
+    };
+
+    struct TQuotaProxyGetResponse : public NActors::TEventLocal<TQuotaProxyGetResponse, EvQuotaProxyGetResponse> {
+        TString SubjectType;
+        TString SubjectId;
+        TQuotaMap Quotas;
+
+        TQuotaProxyGetResponse(const TString& subjectType, const TString& subjectId, const TQuotaMap& quotas)
+            : SubjectType(subjectType), SubjectId(subjectId), Quotas(quotas) {
+        }
+    };
+
+    struct TQuotaProxySetRequest : public NActors::TEventLocal<TQuotaProxySetRequest, EvQuotaProxySetRequest> {
+        TString User;
+        bool PermissionExists;
+        TString SubjectType;
+        TString SubjectId;
+        THashMap<TString, ui64> Limits;
+
+        TQuotaProxySetRequest(const TString& user, bool permissionExists, const TString& subjectType, const TString& subjectId, THashMap<TString, ui64>& limits)
+            : User(user), PermissionExists(permissionExists), SubjectType(subjectType), SubjectId(subjectId), Limits(limits) {
+        }
+    };
+
+    struct TQuotaProxySetResponse : public NActors::TEventLocal<TQuotaProxySetResponse, EvQuotaProxySetResponse> {
+        TString SubjectType;
+        TString SubjectId;
+        THashMap<TString, ui64> Limits;
+
+        TQuotaProxySetResponse(const TString& subjectType, const TString& subjectId, THashMap<TString, ui64>& limits)
+            : SubjectType(subjectType), SubjectId(subjectId), Limits(limits) {
+        }
+    };
+
+    struct TQuotaProxyErrorResponse : public NActors::TEventLocal<TQuotaProxyErrorResponse, EvQuotaProxyErrorResponse> {
+        grpc::StatusCode Code;
+        const TString Message;
+        const TString Details;
+
+        TQuotaProxyErrorResponse(grpc::StatusCode code, const TString& message, const TString& details = "")
+            : Code(code), Message(message), Details(details) {
+        }
+    };
+
     struct TQuotaGetRequest : public NActors::TEventLocal<TQuotaGetRequest, EvQuotaGetRequest> {
         TString SubjectType;
         TString SubjectId;
         bool AllowStaleUsage;
         TQuotaGetRequest(const TString& subjectType, const TString& subjectId, bool allowStaleUsage = false)
-            : SubjectType(subjectType), SubjectId(subjectId), AllowStaleUsage(allowStaleUsage)
-        {}
+            : SubjectType(subjectType), SubjectId(subjectId), AllowStaleUsage(allowStaleUsage) {
+        }
     };
 
     // Quota request never fails, if no quota exist (i.e. SubjectType is incorrect) empty list will be returned
@@ -121,6 +181,9 @@ struct TEvQuotaService {
         THashMap<TString, ui64> Limits;
         TQuotaSetRequest(const TString& subjectType, const TString& subjectId)
             : SubjectType(subjectType), SubjectId(subjectId)
+        {}
+        TQuotaSetRequest(const TString& subjectType, const TString& subjectId, THashMap<TString, ui64> limits)
+            : SubjectType(subjectType), SubjectId(subjectId), Limits(limits)
         {}
     };
 

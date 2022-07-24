@@ -24,6 +24,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-preprocessor
   restricted-boost-static_assert
   restricted-boost-throw_exception
+  restricted-boost-type_traits
   restricted-boost-vmd
   restricted-boost-winapi
   restricted-boost-logic

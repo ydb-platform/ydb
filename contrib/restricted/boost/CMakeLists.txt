@@ -26,4 +26,5 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-throw_exception
   restricted-boost-vmd
   restricted-boost-winapi
+  restricted-boost-logic
 )

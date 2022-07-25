@@ -16,6 +16,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-align
   restricted-boost-array
   restricted-boost-assert
+  restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
   restricted-boost-io

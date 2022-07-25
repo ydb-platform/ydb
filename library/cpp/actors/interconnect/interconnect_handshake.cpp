@@ -875,7 +875,8 @@ namespace NActors {
                 addresses.emplace_back(r.GetAddress(), static_cast<ui16>(r.GetPort()));
             } else {
                 Y_VERIFY(ev->GetTypeRewrite() == ui32(ENetwork::ResolveError));
-                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain, true);
+                Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "DNS resolve error: " + ev->Get<TEvResolveError>()->Explain 
+                    + ", Unresolved host# " + ev->Get<TEvResolveError>()->Host, true);
             }
 
             for (const NInterconnect::TAddress& address : addresses) {

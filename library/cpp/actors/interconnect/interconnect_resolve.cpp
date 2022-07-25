@@ -128,6 +128,7 @@ namespace NActors {
         void SendErrorAndDie(const TString& errorText) {
             auto *event = new TEvResolveError;
             event->Explain = errorText;
+            event->Host = Host;
             TActivationContext::Send(new IEventHandle(ReplyTo, ReplyFrom, event));
             PassAway();
         }

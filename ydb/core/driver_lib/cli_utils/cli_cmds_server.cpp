@@ -1,14 +1,10 @@
 #include "cli.h"
 #include "cli_cmds.h"
-
 #include <ydb/core/base/location.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/driver_lib/run/run.h>
 #include <ydb/library/yaml_config/yaml_config_parser.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-
-#include <library/cpp/grpc/common/default_root_certs.h>
-
 #include <util/digest/city.h>
 #include <util/random/random.h>
 #include <util/string/cast.h>
@@ -1123,8 +1119,6 @@ private:
             grpcConfig.EnableSsl = endpoint.EnableSsl.GetRef();
             if (PathToCA) {
                 grpcConfig.SslCaCert = ReadFromFile(PathToCA, "CA certificates");
-            } else if (grpcConfig.EnableSsl) {
-                grpcConfig.SslCaCert = NGrpc::GetDefaultPemRootCerts();
             }
         }
         return NClient::TKikimr(grpcConfig);

@@ -16,7 +16,6 @@ target_link_libraries(cli_utils PUBLIC
   yutil
   cpp-deprecated-enum_codegen
   cpp-grpc-client
-  cpp-grpc-common
   cpp-protobuf-json
   library-cpp-yson
   ydb-core-actorlib_impl

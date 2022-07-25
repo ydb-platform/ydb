@@ -1,15 +1,10 @@
 #include "interconnect_stream.h"
 #include "logging.h"
-
-#include <library/cpp/grpc/common/default_root_certs.h>
 #include <library/cpp/openssl/init/init.h>
-
 #include <util/network/socket.h>
-
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/pem.h>
-#include <openssl/x509_vfy.h>
 
 #if defined(_win_)
 #include <util/system/file.h>
@@ -324,20 +319,6 @@ namespace NInterconnect {
             if (caFilePath) {
                 ret = SSL_CTX_load_verify_locations(Ctx.get(), caFilePath.data(), nullptr);
                 Y_VERIFY(ret == 1);
-            } else {
-                auto defaultPemRootCerts = NGrpc::GetDefaultPemRootCerts();
-                if (defaultPemRootCerts != nullptr) {
-                    std::unique_ptr<BIO, TDeleter> bio(BIO_new_mem_buf(defaultPemRootCerts, -1));
-                    Y_VERIFY(bio);
-
-                    auto store = SSL_CTX_get_cert_store(Ctx.get());
-                    Y_VERIFY(store != nullptr);
-
-                    while (auto cert = PEM_read_bio_X509(bio.get(), nullptr, 0, nullptr)) {
-                        ret = X509_STORE_add_cert(store, cert);
-                        Y_VERIFY(ret == 1, "X509_STORE_add_cert failed, reason: %s", ERR_reason_error_string(ERR_peek_last_error()));
-                    }
-                }
             }
 
             int success = SSL_CTX_set_cipher_list(Ctx.get(), ciphers ? ciphers.data() : "AES128-GCM-SHA256");

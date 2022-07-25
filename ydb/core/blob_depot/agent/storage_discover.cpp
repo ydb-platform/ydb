@@ -49,9 +49,9 @@ namespace NKikimr::NBlobDepot {
 
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
-                item->SetBeginningKey(from.GetRaw(), 3 * sizeof(ui64));
+                item->SetBeginningKey(from.AsBinaryString());
                 item->SetIncludeBeginning(true);
-                item->SetEndingKey(to.GetRaw(), 3 * sizeof(ui64));
+                item->SetEndingKey(to.AsBinaryString());
                 item->SetIncludeEnding(true);
                 item->SetMaxKeys(1);
                 item->SetReverse(true);
@@ -103,10 +103,7 @@ namespace NKikimr::NBlobDepot {
 
                 if (status == NKikimrProto::OK) {
                     for (const auto& item : msg.Record.GetResolvedKeys()) {
-                        const TString& id = item.GetKey();
-                        Y_VERIFY(id.size() == 3 * sizeof(ui64));
-                        Y_VERIFY(!Id);
-                        Id = TLogoBlobID(reinterpret_cast<const ui64*>(id.data()));
+                        Id = TLogoBlobID::FromBinary(item.GetKey());
                         Y_VERIFY(item.ValueChainSize() == 1);
                         if (ReadBody) {
                             TString error;

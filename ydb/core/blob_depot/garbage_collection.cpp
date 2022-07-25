@@ -30,6 +30,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            Y_VERIFY(Self->Data->IsLoaded());
             Validate();
             if (!Error) {
                 auto& record = Request->Get()->Record;
@@ -124,7 +125,7 @@ namespace NKikimr::NBlobDepot {
                         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT14, "DeleteKey", (TabletId, Self->TabletID()), (BlobId, id));
                         db.Table<Schema::Data>().Key(key.MakeBinaryKey()).Delete();
                         auto updateTrash = [&](TLogoBlobID id) {
-                            db.Table<Schema::Trash>().Key(TString(id.AsBinaryString())).Update();
+                            db.Table<Schema::Trash>().Key(id.AsBinaryString()).Update();
                         };
                         Self->Data->DeleteKey(key, updateTrash, this);
                         ++NumKeysProcessed;
@@ -185,7 +186,7 @@ namespace NKikimr::NBlobDepot {
         const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
         auto& barrier = Barriers[key];
         barrier.ProcessingQ.emplace_back(ev.Release());
-        if (barrier.ProcessingQ.size() == 1) {
+        if (Self->Data->IsLoaded() && barrier.ProcessingQ.size() == 1) {
             Self->Execute(std::make_unique<TTxCollectGarbage>(Self, record.GetTabletId(), record.GetChannel()));
         }
     }
@@ -200,6 +201,14 @@ namespace NKikimr::NBlobDepot {
         const TGenStep genStep(id);
         *underSoft = it == Barriers.end() ? false : genStep <= it->second.Soft;
         *underHard = it == Barriers.end() ? false : genStep <= it->second.Hard;
+    }
+
+    void TBlobDepot::TBarrierServer::OnDataLoaded() {
+        for (auto& [key, barrier] : Barriers) {
+            if (!barrier.ProcessingQ.empty()) {
+                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, key.first, key.second));
+            }
+        }
     }
 
 } // NKikimr::NBlobDepot

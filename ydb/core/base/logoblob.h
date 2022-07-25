@@ -14,6 +14,8 @@ namespace NKikimr {
         static const ui32 MaxPartId = 15ul;
         static const ui32 MaxCrcMode = 3ul;
 
+        static constexpr size_t BinarySize = 3 * sizeof(ui64);
+
         TLogoBlobID()
         {
             Set(0, 0, 0, 0, 0, 0, 0, 0);
@@ -100,8 +102,28 @@ namespace NKikimr {
 
         const ui64* GetRaw() const { return Raw.X; }
 
-        TStringBuf AsBinaryString() const {
-            return {reinterpret_cast<const char*>(GetRaw()), 3 * sizeof(ui64)};
+        void ToBinary(void *data) const {
+            ui64 *x = static_cast<ui64*>(data);
+            x[0] = HostToInet(Raw.X[0]);
+            x[1] = HostToInet(Raw.X[1]);
+            x[2] = HostToInet(Raw.X[2]);
+        }
+
+        TString AsBinaryString() const {
+            std::array<char, BinarySize> data;
+            ToBinary(data.data());
+            return TString(data.data(), data.size());
+        }
+
+        static TLogoBlobID FromBinary(const void *data) {
+            const ui64 *x = static_cast<const ui64*>(data);
+            ui64 arr[3] = {InetToHost(x[0]), InetToHost(x[1]), InetToHost(x[2])};
+            return TLogoBlobID(arr);
+        }
+
+        static TLogoBlobID FromBinary(const TString& data) {
+            Y_VERIFY(data.size() == BinarySize);
+            return FromBinary(data.data());
         }
 
         TString ToString() const;

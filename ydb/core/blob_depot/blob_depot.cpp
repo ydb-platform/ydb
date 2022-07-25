@@ -26,7 +26,7 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvBlobDepot::TEvRegisterAgent, Handle);
                 hFunc(TEvBlobDepot::TEvAllocateIds, Handle);
                 hFunc(TEvBlobDepot::TEvCommitBlobSeq, Handle);
-                hFunc(TEvBlobDepot::TEvResolve, Handle);
+                hFunc(TEvBlobDepot::TEvResolve, Data->Handle);
 
                 hFunc(TEvBlobDepot::TEvBlock, BlocksManager->Handle);
                 hFunc(TEvBlobDepot::TEvQueryBlocks, BlocksManager->Handle);

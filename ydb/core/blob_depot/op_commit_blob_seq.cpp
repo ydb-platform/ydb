@@ -58,10 +58,16 @@ namespace NKikimr::NBlobDepot {
 
                     if (!CheckKeyAgainstBarrier(key)) {
                         responseItem->SetStatus(NKikimrProto::ERROR);
-                        responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString(Self->Config)
+                        responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString()
                             << " is being put beyond the barrier");
                         continue;
                     }
+
+                    TString valueData;
+                    const bool success = value.SerializeToString(&valueData);
+                    Y_VERIFY(success);
+
+                    db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
 
                     Self->Data->PutKey(std::move(key), {
                         .Meta = value.GetMeta(),
@@ -69,12 +75,6 @@ namespace NKikimr::NBlobDepot {
                         .KeepState = value.GetKeepState(),
                         .Public = value.GetPublic(),
                     });
-
-                    TString valueData;
-                    const bool success = value.SerializeToString(&valueData);
-                    Y_VERIFY(success);
-
-                    db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
                 }
 
                 return true;

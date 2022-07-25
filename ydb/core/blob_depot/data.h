@@ -116,29 +116,28 @@ namespace NKikimr::NBlobDepot {
 
             TString MakeBinaryKey() const {
                 if (Data.Type == BlobIdType) {
-                    return TString(GetBlobId().AsBinaryString());
+                    return GetBlobId().AsBinaryString();
                 } else {
                     return TString(GetStringBuf());
                 }
             }
 
-            static TKey FromBinaryKey(const TStringBuf& key, const NKikimrBlobDepot::TBlobDepotConfig& config) {
+            static TKey FromBinaryKey(const TString& key, const NKikimrBlobDepot::TBlobDepotConfig& config) {
                 if (config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup) {
-                    Y_VERIFY(key.size() == 3 * sizeof(ui64));
-                    return TKey(TLogoBlobID(reinterpret_cast<const ui64*>(key.data())));
+                    return TKey(TLogoBlobID::FromBinary(key));
                 } else {
                     return TKey(key);
                 }
             }
 
-            TString ToString(const NKikimrBlobDepot::TBlobDepotConfig& config) const {
+            TString ToString() const {
                 TStringStream s;
-                Output(s, config);
+                Output(s);
                 return s.Str();
             }
 
-            void Output(IOutputStream& s, const NKikimrBlobDepot::TBlobDepotConfig& config) const {
-                if (config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup) {
+            void Output(IOutputStream& s) const {
+                if (Data.Type == BlobIdType) {
                     s << GetBlobId();
                 } else {
                     s << EscapeC(GetStringBuf());
@@ -255,15 +254,22 @@ namespace NKikimr::NBlobDepot {
             void EnqueueForCollectionIfPossible(TData *self);
         };
 
+        bool Loaded = false;
         std::map<TKey, TValue> Data;
         THashMap<TLogoBlobID, ui32> RefCount;
         THashMap<std::tuple<ui64, ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         TIntrusiveList<TRecordsPerChannelGroup, TRecordWithTrash> RecordsWithTrash;
+        std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
 
         class TTxIssueGC;
         class TTxConfirmGC;
+
+        class TTxLoad;
+
+        class TTxLoadSpecificKeys;
+        class TTxResolve;
 
     public:
         TData(TBlobDepot *self)
@@ -342,6 +348,18 @@ namespace NKikimr::NBlobDepot {
                 }
             }
         }
+
+        void StartLoad();
+        void OnLoadComplete();
+        bool IsLoaded() const { return Loaded; }
+
+        void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
+
+    private:
+        void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,
+            std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage);
+
+        void ExecuteConfirmGC(ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep);
     };
 
     Y_DECLARE_OPERATORS_FOR_FLAGS(TBlobDepot::TData::TScanFlags)

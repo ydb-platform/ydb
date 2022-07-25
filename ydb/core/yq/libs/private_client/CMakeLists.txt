@@ -16,9 +16,9 @@ target_link_libraries(yq-libs-private_client PUBLIC
   yutil
   cpp-monlib-dynamic_counters
   cpp-protobuf-json
-  api-grpc-draft
   cpp-client-ydb_table
   libs-control_plane_storage-proto
+  yq-libs-grpc
   yq-libs-shared_resources
   ydb-core-protos
 )

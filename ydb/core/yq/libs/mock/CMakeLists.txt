@@ -23,6 +23,7 @@ target_link_libraries(yq-libs-mock PUBLIC
   cpp-yson-node
   ydb-core-base
   ydb-core-protos
+  yq-libs-actors
   yq-libs-common
   yq-libs-db_schema
   libs-shared_resources-interface

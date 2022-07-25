@@ -15,8 +15,8 @@ target_link_libraries(ydb-services-fq PUBLIC
   library-cpp-retry
   ydb-core-grpc_services
   core-grpc_services-base
+  yq-libs-grpc
   ydb-library-protobuf_printer
-  api-grpc
 )
 target_sources(ydb-services-fq PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/fq/grpc_service.cpp

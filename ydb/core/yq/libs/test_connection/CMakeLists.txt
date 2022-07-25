@@ -16,6 +16,7 @@ target_link_libraries(yq-libs-test_connection PUBLIC
   yutil
   library-cpp-lwtrace
   cpp-xml-document
+  yq-libs-actors
   libs-actors-logging
   libs-config-protos
   yq-libs-control_plane_storage

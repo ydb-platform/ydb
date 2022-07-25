@@ -20,7 +20,7 @@ For BlobStorage, blobs are an opaque entity. A tablet can store several types of
 
 The tablet writes blobs of different types to different *channels*. A channel specifies the branch of storage to store blobs in and performs various functions, such as:
 
-1. Selecting a storage type (different channels may be linked to different types of storage devices: SSD, HDD, or NVME).
+1. Selecting a storage type (different channels may be linked to different types of storage devices: SSD, HDD, or NVMe).
 1. Load balancing, because each channel has a limit on IOPS, available space and bandwidth.
 1. Specifying the data type. When restoring the log, only the blobs from the null channel are read, which lets you distinguish them from other blobs.
 

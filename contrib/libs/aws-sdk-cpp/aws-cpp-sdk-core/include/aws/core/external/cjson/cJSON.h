@@ -28,10 +28,71 @@ extern "C"
 {
 #endif
 
+#if !defined(__WINDOWS__) && (defined(WIN32) || defined(WIN64) || defined(_MSC_VER) || defined(_WIN32))
+#define __WINDOWS__
+#endif
+
+#ifdef __WINDOWS__
+
+/* When compiling for windows, we specify a specific calling convention to avoid issues where we are being called from a project with a different default calling convention.  For windows you have 3 define options:
+
+CJSON_AS4CPP_HIDE_SYMBOLS - Define this in the case where you don't want to ever dllexport symbols
+CJSON_AS4CPP_EXPORT_SYMBOLS - Define this on library build when you want to dllexport symbols (default)
+CJSON_AS4CPP_IMPORT_SYMBOLS - Define this if you want to dllimport symbol
+
+For *nix builds that support visibility attribute, you can define similar behavior by
+
+setting default visibility to hidden by adding
+-fvisibility=hidden (for gcc)
+or
+-xldscope=hidden (for sun cc)
+to CFLAGS
+
+then using the CJSON_AS4CPP_API_VISIBILITY flag to "export" the same symbols the way CJSON_AS4CPP_EXPORT_SYMBOLS does
+
+*/
+
+#define CJSON_AS4CPP_CDECL __cdecl
+#define CJSON_AS4CPP_STDCALL __stdcall
+
+/* Decide calling convention based on the cmake parameters defined in C++ SDK. */
+#ifdef USE_IMPORT_EXPORT
+#ifdef AWS_CORE_EXPORTS
+#define CJSON_AS4CPP_EXPORT_SYMBOLS
+#else
+#define CJSON_AS4CPP_IMPORT_SYMBOLS
+#endif // AWS_CORE_EXPORTS
+#else
+#define CJSON_AS4CPP_HIDE_SYMBOLS
+#endif // USE_IMPORT_EXPORT
+
+/* export symbols by default, this is necessary for copy pasting the C and header file */
+#if !defined(CJSON_AS4CPP_HIDE_SYMBOLS) && !defined(CJSON_AS4CPP_IMPORT_SYMBOLS) && !defined(CJSON_AS4CPP_EXPORT_SYMBOLS)
+#define CJSON_AS4CPP_EXPORT_SYMBOLS
+#endif
+
+#if defined(CJSON_AS4CPP_HIDE_SYMBOLS)
+#define CJSON_AS4CPP_PUBLIC(type)   type CJSON_AS4CPP_STDCALL
+#elif defined(CJSON_AS4CPP_EXPORT_SYMBOLS)
+#define CJSON_AS4CPP_PUBLIC(type)   __declspec(dllexport) type CJSON_AS4CPP_STDCALL
+#elif defined(CJSON_AS4CPP_IMPORT_SYMBOLS)
+#define CJSON_AS4CPP_PUBLIC(type)   __declspec(dllimport) type CJSON_AS4CPP_STDCALL
+#endif
+#else /* !__WINDOWS__ */
+#define CJSON_AS4CPP_CDECL
+#define CJSON_AS4CPP_STDCALL
+
+#if (defined(__GNUC__) || defined(__SUNPRO_CC) || defined (__SUNPRO_C)) && defined(CJSON_AS4CPP_API_VISIBILITY)
+#define CJSON_AS4CPP_PUBLIC(type)   __attribute__((visibility("default"))) type
+#else
+#define CJSON_AS4CPP_PUBLIC(type) type
+#endif
+#endif
+
 /* project version */
 #define CJSON_AS4CPP_VERSION_MAJOR 1
 #define CJSON_AS4CPP_VERSION_MINOR 7
-#define CJSON_AS4CPP_VERSION_PATCH 7
+#define CJSON_AS4CPP_VERSION_PATCH 14
 
 #include <stddef.h>
 
@@ -74,65 +135,12 @@ typedef struct cJSON
 
 typedef struct cJSON_AS4CPP_Hooks
 {
-      void *(*malloc_fn)(size_t sz);
-      void (*free_fn)(void *ptr);
+      /* malloc/free are CDECL on Windows regardless of the default calling convention of the compiler, so ensure the hooks allow passing those functions directly. */
+      void *(CJSON_AS4CPP_CDECL *malloc_fn)(size_t sz);
+      void (CJSON_AS4CPP_CDECL *free_fn)(void *ptr);
 } cJSON_AS4CPP_Hooks;
 
 typedef int cJSON_AS4CPP_bool;
-
-#if !defined(__WINDOWS__) && (defined(WIN32) || defined(WIN64) || defined(_MSC_VER) || defined(_WIN32))
-#define __WINDOWS__
-#endif
-#ifdef __WINDOWS__
-
-/* When compiling for windows, we specify a specific calling convention to avoid issues where we are being called from a project with a different default calling convention.  For windows you have 2 define options:
-
-CJSON_AS4CPP_HIDE_SYMBOLS - Define this in the case where you don't want to ever dllexport symbols
-CJSON_AS4CPP_EXPORT_SYMBOLS - Define this on library build when you want to dllexport symbols (default)
-CJSON_AS4CPP_IMPORT_SYMBOLS - Define this if you want to dllimport symbol
-
-For *nix builds that support visibility attribute, you can define similar behavior by
-
-setting default visibility to hidden by adding
--fvisibility=hidden (for gcc)
-or
--xldscope=hidden (for sun cc)
-to CFLAGS
-
-then using the CJSON_AS4CPP_API_VISIBILITY flag to "export" the same symbols the way CJSON_AS4CPP_EXPORT_SYMBOLS does
-
-*/
-
-/* Decide calling convention based on the cmake parameters defined in C++ SDK. */
-#ifdef USE_IMPORT_EXPORT
-#ifdef AWS_CORE_EXPORTS
-#define CJSON_AS4CPP_EXPORT_SYMBOLS
-#else
-#define CJSON_AS4CPP_IMPORT_SYMBOLS
-#endif // AWS_CORE_EXPORTS
-#else
-#define CJSON_AS4CPP_HIDE_SYMBOLS
-#endif // USE_IMPORT_EXPORT
-
-/* export symbols by default, this is necessary for copy pasting the C and header file */
-#if !defined(CJSON_AS4CPP_HIDE_SYMBOLS) && !defined(CJSON_AS4CPP_IMPORT_SYMBOLS) && !defined(CJSON_AS4CPP_EXPORT_SYMBOLS)
-#define CJSON_AS4CPP_EXPORT_SYMBOLS
-#endif
-
-#if defined(CJSON_AS4CPP_HIDE_SYMBOLS)
-#define CJSON_AS4CPP_PUBLIC(type)   type __stdcall
-#elif defined(CJSON_AS4CPP_EXPORT_SYMBOLS)
-#define CJSON_AS4CPP_PUBLIC(type)   __declspec(dllexport) type __stdcall
-#elif defined(CJSON_AS4CPP_IMPORT_SYMBOLS)
-#define CJSON_AS4CPP_PUBLIC(type)   __declspec(dllimport) type __stdcall
-#endif
-#else /* !WIN32 */
-#if (defined(__GNUC__) || defined(__SUNPRO_CC) || defined (__SUNPRO_C)) && defined(CJSON_AS4CPP_API_VISIBILITY)
-#define CJSON_AS4CPP_PUBLIC(type)   __attribute__((visibility("default"))) type
-#else
-#define CJSON_AS4CPP_PUBLIC(type) type
-#endif
-#endif
 
 /* Limits how deeply nested arrays/objects can be before cJSON rejects to parse them.
  * This is to prevent stack overflows. */
@@ -149,9 +157,11 @@ CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_InitHooks(cJSON_AS4CPP_Hooks* hooks);
 /* Memory Management: the caller is always responsible to free the results from all variants of cJSON_AS4CPP_Parse (with cJSON_AS4CPP_Delete) and cJSON_AS4CPP_Print (with stdlib free, cJSON_AS4CPP_Hooks.free_fn, or cJSON_AS4CPP_free as appropriate). The exception is cJSON_AS4CPP_PrintPreallocated, where the caller has full responsibility of the buffer. */
 /* Supply a block of JSON, and this returns a cJSON object you can interrogate. */
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_Parse(const char *value);
+CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_ParseWithLength(const char *value, size_t buffer_length);
 /* ParseWithOpts allows you to require (and check) that the JSON is null terminated, and to retrieve the pointer to the final byte parsed. */
 /* If you supply a ptr in return_parse_end and parsing fails, then return_parse_end will contain a pointer to the error so will match cJSON_AS4CPP_GetErrorPtr(). */
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_ParseWithOpts(const char *value, const char **return_parse_end, cJSON_AS4CPP_bool require_null_terminated);
+CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_ParseWithLengthOpts(const char *value, size_t buffer_length, const char **return_parse_end, cJSON_AS4CPP_bool require_null_terminated);
 
 /* Render a cJSON entity to text for transfer/storage. */
 CJSON_AS4CPP_PUBLIC(char *) cJSON_AS4CPP_Print(const cJSON *item);
@@ -163,7 +173,7 @@ CJSON_AS4CPP_PUBLIC(char *) cJSON_AS4CPP_PrintBuffered(const cJSON *item, int pr
 /* NOTE: cJSON is not always 100% accurate in estimating how much memory it will use, so to be safe allocate 5 bytes more than you actually need */
 CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_PrintPreallocated(cJSON *item, char *buffer, const int length, const cJSON_AS4CPP_bool format);
 /* Delete a cJSON entity and all subentities. */
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_Delete(cJSON *c);
+CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_Delete(cJSON *item);
 
 /* Returns the number of items in an array (or object). */
 CJSON_AS4CPP_PUBLIC(int) cJSON_AS4CPP_GetArraySize(const cJSON *array);
@@ -176,8 +186,9 @@ CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_HasObjectItem(const cJSON *o
 /* For analysing failed parses. This returns a pointer to the parse error. You'll probably need to look a few chars back to make sense of it. Defined when cJSON_AS4CPP_Parse() returns 0. 0 when cJSON_AS4CPP_Parse() succeeds. */
 CJSON_AS4CPP_PUBLIC(const char *) cJSON_AS4CPP_GetErrorPtr(void);
 
-/* Check if the item is a string and return its valuestring */
-CJSON_AS4CPP_PUBLIC(char *) cJSON_AS4CPP_GetStringValue(cJSON *item);
+/* Check item type and return its value */
+CJSON_AS4CPP_PUBLIC(char *) cJSON_AS4CPP_GetStringValue(const cJSON * const item);
+CJSON_AS4CPP_PUBLIC(double) cJSON_AS4CPP_GetNumberValue(const cJSON * const item);
 
 /* These functions check the type of an item */
 CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_IsInvalid(const cJSON * const item);
@@ -207,27 +218,28 @@ CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateObject(void);
 /* Create a string where valuestring references a string so
  * it will not be freed by cJSON_AS4CPP_Delete */
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateStringReference(const char *string);
-/* Create an object/arrray that only references it's elements so
+/* Create an object/array that only references it's elements so
  * they will not be freed by cJSON_AS4CPP_Delete */
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateObjectReference(const cJSON *child);
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateArrayReference(const cJSON *child);
 
-/* These utilities create an Array of count items. */
+/* These utilities create an Array of count items.
+ * The parameter count cannot be greater than the number of elements in the number array, otherwise array access will be out of bounds.*/
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateIntArray(const int *numbers, int count);
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateFloatArray(const float *numbers, int count);
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateDoubleArray(const double *numbers, int count);
-CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateStringArray(const char **strings, int count);
+CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_CreateStringArray(const char *const *strings, int count);
 
 /* Append item to the specified array/object. */
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_AddItemToArray(cJSON *array, cJSON *item);
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_AddItemToObject(cJSON *object, const char *string, cJSON *item);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_AddItemToArray(cJSON *array, cJSON *item);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_AddItemToObject(cJSON *object, const char *string, cJSON *item);
 /* Use this when string is definitely const (i.e. a literal, or as good as), and will definitely survive the cJSON object.
  * WARNING: When this function was used, make sure to always check that (item->type & cJSON_AS4CPP_StringIsConst) is zero before
  * writing to `item->string` */
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_AddItemToObjectCS(cJSON *object, const char *string, cJSON *item);
 /* Append reference to item to the specified array/object. Use this when you want to add an existing cJSON to a new cJSON, but don't want to corrupt your existing cJSON. */
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_AddItemReferenceToArray(cJSON *array, cJSON *item);
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_AddItemReferenceToArray(cJSON *array, cJSON *item);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_AddItemReferenceToObject(cJSON *object, const char *string, cJSON *item);
 
 /* Remove/Detach items from Arrays/Objects. */
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_DetachItemViaPointer(cJSON *parent, cJSON * const item);
@@ -239,22 +251,24 @@ CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_DeleteItemFromObject(cJSON *object, const
 CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_DeleteItemFromObjectCaseSensitive(cJSON *object, const char *string);
 
 /* Update array items. */
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_InsertItemInArray(cJSON *array, int which, cJSON *newitem); /* Shifts pre-existing items to the right. */
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_InsertItemInArray(cJSON *array, int which, cJSON *newitem); /* Shifts pre-existing items to the right. */
 CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_ReplaceItemViaPointer(cJSON * const parent, cJSON * const item, cJSON * replacement);
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem);
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_ReplaceItemInObject(cJSON *object,const char *string,cJSON *newitem);
-CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_ReplaceItemInObjectCaseSensitive(cJSON *object,const char *string,cJSON *newitem);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_ReplaceItemInArray(cJSON *array, int which, cJSON *newitem);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_ReplaceItemInObject(cJSON *object,const char *string,cJSON *newitem);
+CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_ReplaceItemInObjectCaseSensitive(cJSON *object,const char *string,cJSON *newitem);
 
 /* Duplicate a cJSON item */
 CJSON_AS4CPP_PUBLIC(cJSON *) cJSON_AS4CPP_Duplicate(const cJSON *item, cJSON_AS4CPP_bool recurse);
 /* Duplicate will create a new, identical cJSON item to the one you pass, in new memory that will
-need to be released. With recurse!=0, it will duplicate any children connected to the item.
-The item->next and ->prev pointers are always zero on return from Duplicate. */
+ * need to be released. With recurse!=0, it will duplicate any children connected to the item.
+ * The item->next and ->prev pointers are always zero on return from Duplicate. */
 /* Recursively compare two cJSON items for equality. If either a or b is NULL or invalid, they will be considered unequal.
  * case_sensitive determines if object keys are treated case sensitive (1) or case insensitive (0) */
 CJSON_AS4CPP_PUBLIC(cJSON_AS4CPP_bool) cJSON_AS4CPP_Compare(const cJSON * const a, const cJSON * const b, const cJSON_AS4CPP_bool case_sensitive);
 
-
+/* Minify a strings, remove blank characters(such as ' ', '\t', '\r', '\n') from strings.
+ * The input pointer json cannot point to a read-only address area, such as a string constant,
+ * but should point to a readable and writable address area. */
 CJSON_AS4CPP_PUBLIC(void) cJSON_AS4CPP_Minify(char *json);
 
 /* Helper functions for creating and adding items to an object at the same time.
@@ -274,6 +288,8 @@ CJSON_AS4CPP_PUBLIC(cJSON*) cJSON_AS4CPP_AddArrayToObject(cJSON * const object, 
 /* helper for the cJSON_AS4CPP_SetNumberValue macro */
 CJSON_AS4CPP_PUBLIC(double) cJSON_AS4CPP_SetNumberHelper(cJSON *object, double number);
 #define cJSON_AS4CPP_SetNumberValue(object, number) ((object != NULL) ? cJSON_AS4CPP_SetNumberHelper(object, (double)number) : (number))
+/* Change the valuestring of a cJSON_AS4CPP_String object, only takes effect when type of object is cJSON_AS4CPP_String */
+CJSON_AS4CPP_PUBLIC(char*) cJSON_AS4CPP_SetValuestring(cJSON *object, const char *valuestring);
 
 /* Macro for iterating over an array or object */
 #define cJSON_AS4CPP_ArrayForEach(element, array) for(element = (array != NULL) ? (array)->child : NULL; element != NULL; element = element->next)

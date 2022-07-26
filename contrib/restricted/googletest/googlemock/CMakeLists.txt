@@ -12,8 +12,10 @@ target_compile_options(restricted-googletest-googlemock PRIVATE
   -Wno-everything
 )
 target_include_directories(restricted-googletest-googlemock PUBLIC
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock/include
+)
+target_include_directories(restricted-googletest-googlemock PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googlemock
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest
   ${CMAKE_SOURCE_DIR}/contrib/restricted/googletest/googletest/include
 )

@@ -145,8 +145,13 @@ message QueryMeta {
     }
 
     CommonMeta common = 1;
-    google.protobuf.Timestamp started_at = 2;
-    google.protobuf.Timestamp finished_at = 3;
+    // Timeline (submitted_at <= started_at <= finished_at)
+    //  sumbitted_at
+    //             \ -> started_at
+    //                              \ -> finished_at
+    google.protobuf.Timestamp submitted_at = 14; // Time when the query was queued for execution
+    google.protobuf.Timestamp started_at = 2; // Start time of query execution
+    google.protobuf.Timestamp finished_at = 3; // Query completition time
     ExecuteMode execute_mode = 4;
     ComputeStatus status = 5;
     int64 last_job_query_revision = 6;

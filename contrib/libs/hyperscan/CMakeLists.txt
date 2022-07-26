@@ -20,6 +20,7 @@ target_include_directories(contrib-libs-hyperscan PRIVATE
 target_link_libraries(contrib-libs-hyperscan PUBLIC
   contrib-libs-cxxsupp
   contrib-restricted-boost
+  boost-libs-graph
 )
 target_sources(contrib-libs-hyperscan PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/hyperscan/src/alloc.c

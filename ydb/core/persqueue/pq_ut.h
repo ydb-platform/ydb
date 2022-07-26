@@ -221,24 +221,24 @@ struct TFinalizer {
 // SINGLE COMMAND TEST FUNCTIONS
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void PQTabletPrepare(
-    ui32 mcip,
-    ui64 msip,
-    ui32 deleteTime,
-    const TVector<std::pair<TString, bool>>& users,
-    TTestContext& tc,
-    int partitions = 2,
-    ui32 lw = 6_MB,
-    bool localDC = true,
-    ui64 ts = 0,
-    ui64 sidMaxCount = 0,
-    ui32 specVersion = 0,
-    i32 storageLimitBytes = 0
- ) {
+struct TTabletPreparationParameters {
+    ui32 maxCountInPartition{20'000'000};
+    ui64 maxSizeInPartition{100_MB};
+    ui32 deleteTime{0}; // Delete instantly
+    ui32 partitions{2};
+    ui32 lowWatermark{6_MB};
+    bool localDC{true};
+    ui64 readFromTimestampsMs{0};
+    ui64 sidMaxCount{0};
+    ui32 specVersion{0};
+    i32 storageLimitBytes{0};
+};
+void PQTabletPrepare(const TTabletPreparationParameters& parameters,
+                     const TVector<std::pair<TString, bool>>& users, TTestContext& tc) {
     TAutoPtr<IEventHandle> handle;
     static int version = 0;
-    if (specVersion) {
-        version = specVersion;
+    if (parameters.specVersion) {
+        version = parameters.specVersion;
     } else {
         ++version;
     }
@@ -247,7 +247,7 @@ void PQTabletPrepare(
             tc.Runtime->ResetScheduledCount();
 
             THolder<TEvPersQueue::TEvUpdateConfig> request(new TEvPersQueue::TEvUpdateConfig());
-            for (i32 i = 0; i < partitions; ++i) {
+            for (ui32 i = 0; i < parameters.partitions; ++i) {
                 request->Record.MutableTabletConfig()->AddPartitionIds(i);
             }
             request->Record.MutableTabletConfig()->SetCacheSize(10_MB);
@@ -262,22 +262,22 @@ void PQTabletPrepare(
             }
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);
-            tabletConfig->SetLocalDC(localDC);
+            tabletConfig->SetLocalDC(parameters.localDC);
             tabletConfig->AddReadRules("user");
-            tabletConfig->AddReadFromTimestampsMs(ts);
+            tabletConfig->AddReadFromTimestampsMs(parameters.readFromTimestampsMs);
             auto config = tabletConfig->MutablePartitionConfig();
-            config->SetMaxCountInPartition(mcip);
-            config->SetMaxSizeInPartition(msip);
-            if (storageLimitBytes > 0) {
-                config->SetStorageLimitBytes(storageLimitBytes);
+            config->SetMaxCountInPartition(parameters.maxCountInPartition);
+            config->SetMaxSizeInPartition(parameters.maxSizeInPartition);
+            if (parameters.storageLimitBytes > 0) {
+                config->SetStorageLimitBytes(parameters.storageLimitBytes);
             } else {
-                config->SetLifetimeSeconds(deleteTime);
+                config->SetLifetimeSeconds(parameters.deleteTime);
             }
-            config->SetSourceIdLifetimeSeconds(1*60*60);
-            if (sidMaxCount > 0)
-                config->SetSourceIdMaxCounts(sidMaxCount);
-            config->SetMaxWriteInflightSize(90000000);
-            config->SetLowWatermark(lw);
+            config->SetSourceIdLifetimeSeconds(TDuration::Hours(1).Seconds());
+            if (parameters.sidMaxCount > 0)
+                config->SetSourceIdMaxCounts(parameters.sidMaxCount);
+            config->SetMaxWriteInflightSize(90'000'000);
+            config->SetLowWatermark(parameters.lowWatermark);
 
             for (auto& u : users) {
                 if (u.second)

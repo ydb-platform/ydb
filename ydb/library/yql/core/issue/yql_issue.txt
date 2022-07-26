@@ -620,3 +620,7 @@ ids {
   code: YQL_DUPLICATE_DECLARE
   severity: S_WARNING
 }
+ids {
+  code: YT_FOLDER_INPUT_IS_NOT_A_FOLDER
+  severity: S_ERROR
+}

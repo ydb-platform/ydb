@@ -99,6 +99,7 @@ message TIssuesIds {
         YT_ROWSPEC_DIFF_SORT = 3015;
         YT_NATIVE_DESC_SORT_IGNORED = 3016;
         YT_MISSING_PROTO_FIELD = 3017;
+        YT_FOLDER_INPUT_IS_NOT_A_FOLDER = 3018;
 
 // yql parser warnings
         YQL_PRAGMA_WARNING_MSG = 4500;

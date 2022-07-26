@@ -232,13 +232,13 @@ bool TTxWriteIndex::Execute(TTransactionContext& txc, const TActorContext& ctx) 
     }
 
     if (changes->IsInsert()) {
-        Self->ActiveIndexing = false;
+        Self->ActiveIndexingOrCompaction = false;
 
         Self->IncCounter(ok ? COUNTER_INDEXING_SUCCESS : COUNTER_INDEXING_FAIL);
         Self->IncCounter(COUNTER_INDEXING_BLOBS_WRITTEN, blobsWritten);
         Self->IncCounter(COUNTER_INDEXING_BYTES_WRITTEN, bytesWritten);
     } else if (changes->IsCompaction()) {
-        Self->ActiveCompaction = false;
+        Self->ActiveIndexingOrCompaction = false;
 
         Y_VERIFY(changes->CompactionInfo);
         bool inGranule = changes->CompactionInfo->InGranule;

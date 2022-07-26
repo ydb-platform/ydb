@@ -128,12 +128,15 @@ public:
     TColumnEngineForLogs(TIndexInfo&& info, ui64 tabletId, const TCompactionLimits& limits = {});
 
     const TIndexInfo& GetIndexInfo() const override { return IndexInfo; }
+
     const THashSet<ui64>* GetOverloadedGranules(ui64 pathId) const override {
         if (PathsGranulesOverloaded.count(pathId)) {
             return &PathsGranulesOverloaded.find(pathId)->second;
         }
         return nullptr;
     }
+
+    bool HasOverloadedGranules() const override { return !PathsGranulesOverloaded.empty(); }
 
     bool Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop = {}) override;
     std::shared_ptr<TColumnEngineChanges> StartInsert(TVector<TInsertedData>&& dataToIndex) override;

@@ -9,7 +9,6 @@
 
 add_executable(ydb-services-persqueue_v1-ut)
 target_compile_options(ydb-services-persqueue_v1-ut PRIVATE
-  -DACTORLIB_HUGE_PB_SIZE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-services-persqueue_v1-ut PRIVATE

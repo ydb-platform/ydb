@@ -6,7 +6,6 @@
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/retry/retry_policy.h>
-#include <library/cpp/threading/task_scheduler/task_scheduler.h>
 
 #include <atomic>
 #include <variant>

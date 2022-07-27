@@ -18,8 +18,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     ui64 inputIndex,
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const std::shared_ptr<NYql::NS3::TRetryConfig>& retryConfig);
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq
 

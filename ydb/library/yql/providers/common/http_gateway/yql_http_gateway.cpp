@@ -113,15 +113,15 @@ public:
     using TPtr = std::shared_ptr<TEasyCurlBuffer>;
     using TWeakPtr = std::weak_ptr<TEasyCurlBuffer>;
 
-    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback)
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, method, offset, !data.empty()), ExpectedSize(expectedSize), Data(std::move(data)), Input(Data), Output(Buffer)
+    TEasyCurlBuffer(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState)
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, method, offset, !data.empty()), ExpectedSize(expectedSize), Data(std::move(data)), Input(Data), Output(Buffer), RetryState(std::move(retryState))
     {
         Output.Reserve(ExpectedSize);
         Callbacks.emplace(std::move(callback));
     }
 
-    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback) {
-        return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data), std::move(headers), offset, expectedSize, std::move(callback));
+    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, EMethod method, TString data, IHTTPGateway::THeaders headers, size_t offset, size_t expectedSize, IHTTPGateway::TOnResult callback, IRetryPolicy<long>::IRetryState::TPtr retryState) {
+        return std::make_shared<TEasyCurlBuffer>(counter, downloadedBytes, uploadededBytes, std::move(url), method, std::move(data), std::move(headers), offset, expectedSize, std::move(callback), std::move(retryState));
     }
 
     size_t GetExpectedSize() const {
@@ -135,6 +135,13 @@ public:
             return false;
         Callbacks.emplace(std::move(callback));
         return true;
+    }
+
+    TMaybe<TDuration> GetNextRetryDelay(long httpResponseCode) const {
+        if (RetryState)
+            return RetryState->GetNextRetryDelay(httpResponseCode);
+
+        return {};
     }
 private:
     void Fail(const TIssue& error) final  {
@@ -181,6 +188,7 @@ private:
 
     std::mutex SyncCallbacks;
     std::stack<IHTTPGateway::TOnResult> Callbacks;
+    const IRetryPolicy<long>::IRetryState::TPtr RetryState;
 };
 
 class TEasyCurlStream : public TEasyCurl {
@@ -298,8 +306,6 @@ public:
             }
         }
 
-        TaskScheduler.Start();
-
         InitCurl();
     }
 
@@ -369,7 +375,7 @@ private:
                     }
                 }
             } else {
-                if (const auto c = curl_multi_poll(handle, nullptr, 0, 1024, nullptr); CURLM_OK != c) {
+                if (const auto c = curl_multi_poll(handle, nullptr, 0, 256, nullptr); CURLM_OK != c) {
                     if (const auto& self = weak.lock()) {
                         self->Fail(c);
                     }
@@ -399,6 +405,11 @@ private:
                 it = Streams.erase(it);
         }
 
+        while (!Delayed.empty() && Delayed.top().first <= TInstant::Now()) {
+            Await.emplace(std::move(Delayed.top().second));
+            Delayed.pop();
+        }
+
         const ui64 topExpectedSize = Await.empty() ? 0 : Await.front()->GetExpectedSize();
         AwaitQueueTopExpectedSize->Set(topExpectedSize);
         while (!Await.empty() && Allocated.size() < MaxHandlers && AllocatedSize + Await.front()->GetExpectedSize() <= MaxSimulatenousDownloadsSize) {
@@ -415,7 +426,6 @@ private:
 
     void Done(CURL* handle, CURLcode result) {
         TEasyCurl::TPtr easy;
-        bool isRetry = false;
         {
             const std::unique_lock lock(Sync);
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
@@ -423,13 +433,10 @@ private:
                 easy = std::move(it->second);
                 curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
 
-                if (const auto& buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
-                    if (const auto stateIt = Easy2RetryState.find(buffer); stateIt != Easy2RetryState.cend()) {
-                        if (const auto& nextRetryDelay = stateIt->second->GetNextRetryDelay(httpResponseCode)) {
-                            Y_VERIFY(isRetry = TaskScheduler.Add(new THttpGatewayTask(buffer, Singleton), *nextRetryDelay));
-                        } else {
-                            Easy2RetryState.erase(stateIt);
-                        }
+                if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
+                    if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(httpResponseCode)) {
+                        Delayed.emplace(nextRetryDelay->ToDeadLine(), std::move(buffer));
+                        easy.reset();
                     }
                     AllocatedSize -= buffer->GetExpectedSize();
                 }
@@ -439,7 +446,7 @@ private:
             if (Await.empty() && Allocated.empty())
                 Requests.clear();
         }
-        if (!isRetry && easy) {
+        if (easy) {
             easy->Done(result);
         }
     }
@@ -470,8 +477,7 @@ private:
         Rps->Inc();
 
         const std::unique_lock lock(Sync);
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback));
-        Easy2RetryState.emplace(easy, std::move(retryPolicy->CreateRetryState()));
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url), put ? TEasyCurl::EMethod::PUT : TEasyCurl::EMethod::POST, std::move(body), std::move(headers), 0U, 0U, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr);
         Await.emplace(std::move(easy));
         Wakeup(0U);
     }
@@ -497,9 +503,8 @@ private:
             if (easy->AddCallback(callback))
                 return;
 
-        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), 0U, expectedSize, std::move(callback));
+        auto easy = TEasyCurlBuffer::Make(InFlight, DownloadedBytes, UploadedBytes, std::move(url),  TEasyCurl::EMethod::GET, std::move(data), std::move(headers), 0U, expectedSize, std::move(callback), retryPolicy ? retryPolicy->CreateRetryState() : nullptr);
         entry = easy;
-        Easy2RetryState.emplace(easy, std::move(retryPolicy->CreateRetryState()));
         Await.emplace(std::move(easy));
         Wakeup(expectedSize);
     }
@@ -533,27 +538,6 @@ private:
         }
     }
 
-    class THttpGatewayTask: public TTaskScheduler::IRepeatedTask {
-    public:
-        THttpGatewayTask(
-            TEasyCurlBuffer::TPtr easy,
-            THTTPMultiGateway::TWeakPtr gateway)
-            : Easy(easy)
-            , Gateway(gateway)
-        {}
-
-        bool Process() override {
-            if (const auto g = Gateway.lock()) {
-                Y_VERIFY(Easy);
-                g->OnRetry(std::move(Easy));
-            }
-            return false;
-        }
-    private:
-        TEasyCurlBuffer::TPtr Easy;
-        THTTPMultiGateway::TWeakPtr Gateway;
-    };
-
     CURLM* GetHandle() const {
         return Handle;
     }
@@ -566,7 +550,7 @@ private:
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
     std::unordered_map<TKeyType, TEasyCurlBuffer::TWeakPtr, TKeyHash> Requests;
-    std::unordered_map<TEasyCurlBuffer::TPtr, IRetryPolicy<long>::IRetryState::TPtr> Easy2RetryState;
+    std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;
 
     std::mutex Sync;
     std::thread Thread;
@@ -590,8 +574,6 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueueTopExpectedSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
-
-    TTaskScheduler TaskScheduler;
 };
 
 std::atomic_size_t THTTPMultiGateway::OutputSize = 0ULL;

@@ -26,6 +26,10 @@ using namespace NActors;
 
 namespace {
 
+ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
+    return httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
+}
+
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
@@ -112,20 +116,17 @@ public:
     TS3FileWriteActor(
         IHTTPGateway::TPtr gateway,
         NYdb::TCredentialsProviderPtr credProvider,
-        const TString& key,
-        const TString& url,
-        const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
+        const TString& key, const TString& url)
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
         , ActorSystem(TActivationContext::ActorSystem())
         , Key(key), Url(url)
-        , RetryConfig(retryConfig)
     {}
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
         Become(&TS3FileWriteActor::InitialStateFunc);
-        Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false);
+        Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown));
     }
 
     static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
@@ -255,7 +256,7 @@ private:
             const auto index = Tags.size();
             Tags.emplace_back();
             InFlight += size;
-            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true);
+            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown));
         }
     }
 
@@ -268,7 +269,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, ParentId, Key, std::placeholders::_1), false);
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, ParentId, Key, std::placeholders::_1), false, IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown));
     }
 
     IHTTPGateway::THeaders MakeHeader() const {
@@ -295,7 +296,6 @@ private:
     std::vector<TString> Tags;
 
     std::vector<TRetryParams> RetriesPerPath;
-    const std::shared_ptr<NS3::TRetryConfig> RetryConfig;
 
     TString UploadId;
 };
@@ -309,8 +309,7 @@ public:
         const TString& url,
         const TString& path,
         const std::vector<TString>& keys,
-        IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-        const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
+        IDqComputeActorAsyncOutput::ICallbacks* callbacks)
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
         , RandomProvider(randomProvider)
@@ -319,7 +318,6 @@ public:
         , Url(url)
         , Path(path)
         , Keys(keys)
-        , RetryConfig(retryConfig)
     {}
 
     void Bootstrap() {
@@ -364,7 +362,7 @@ private:
             const auto& key = MakeKey(v);
             const auto ins = FileWriteActors.emplace(key, nullptr);
             if (ins.second) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(Gateway, CredProvider, key, Url + Path + key + MakeSuffix(),  RetryConfig);
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(Gateway, CredProvider, key, Url + Path + key + MakeSuffix());
                 ins.first->second = fileWrite.get();
                 RegisterWithSameMailbox(fileWrite.release());
             }
@@ -404,7 +402,6 @@ private:
     const std::vector<TString> Keys;
 
     std::vector<TRetryParams> RetriesPerPath;
-    const std::shared_ptr<NS3::TRetryConfig> RetryConfig;
 
     std::unordered_map<TString, TS3FileWriteActor*> FileWriteActors;
 };
@@ -420,13 +417,12 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     ui64 outputIndex,
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
-    const std::shared_ptr<NYql::NS3::TRetryConfig>& retryConfig)
+    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
     const auto authToken = credentialsProviderFactory->CreateProvider();
-    const auto actor = new TS3WriteActor(outputIndex, std::move(gateway), credentialsProviderFactory->CreateProvider(), randomProvider, params.GetUrl(), params.GetPath(), std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()), callbacks, retryConfig);
+    const auto actor = new TS3WriteActor(outputIndex, std::move(gateway), credentialsProviderFactory->CreateProvider(), randomProvider, params.GetUrl(), params.GetPath(), std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()), callbacks);
     return {actor, actor};
 }
 

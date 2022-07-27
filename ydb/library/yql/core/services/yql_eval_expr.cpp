@@ -137,7 +137,10 @@ private:
         static THashSet<TStringBuf> FILE_CALLABLES = {"FilePath", "FileContent", "FolderPath"};
         if (node.IsCallable(FILE_CALLABLES)) {
             const auto alias = node.Head().Content();
-            if (PendingFileAliases.contains(alias) || AnyOf(PendingFolderPrefixes, [alias](const TStringBuf prefix) { return alias.StartsWith(prefix); })) {
+            if (PendingFileAliases.contains(alias) || AnyOf(PendingFolderPrefixes, [alias](const TStringBuf prefix) {
+                auto withSlash = TString(prefix) + "/";
+                return alias.StartsWith(withSlash);
+                })) {
                 for (auto& curr: CurrentEvalNodes) {
                     Reachable.erase(curr);
                 }

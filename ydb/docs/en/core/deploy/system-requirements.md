@@ -6,7 +6,7 @@ This section provides recommendations for deploying {{ ydb-short-name }}.
 
 * **CPU**
 
-  {{ ydb-short-name }} server can be run only on x86-64 CPU with AVX2 instructions support (Intel Haswell (4th generation) and later, AMD EPYC and later). 
+  {{ ydb-short-name }} server can be run only on x86-64 CPU with AVX2 instructions support (Intel Haswell (4th generation) and later, AMD EPYC and later).
   ARM processors are not supported now.
 
 * **Memory**
@@ -17,9 +17,9 @@ This section provides recommendations for deploying {{ ydb-short-name }}.
 
   {{ ydb-short-name }} server can be run on servers with any storage types (HDD/SSD/NVMe/RAM). It is recommended to use SSD/NVMe drives for better performance.
 
-  Minimal disk capacity must be at least 80GB. It is recommended to use such disks only for testing, proper functioning is not guaranteed. It is recommended to use disks as block devices with more than 800GB capacity for efficiency.
+  {% include [_includes/storage-device-requirements.md](../_includes/storage-device-requirements.md) %}
 
-  {{ ydb-short-name }} does not use any filesystems to store data and works  directly with disk. Don't create or mount filesystems on disks which are used in {{ ydb-short-name }} . Also it is not recommended to share block devices with other processes as this can lead to a significant performance degradation. 
+  {{ ydb-short-name }} does not use any filesystems to store data and works  directly with disk. Don't create or mount filesystems on disks which are used in {{ ydb-short-name }} . Also it is not recommended to share block devices with other processes as this can lead to a significant performance degradation.
 
 
 ## Software configuration {#software}

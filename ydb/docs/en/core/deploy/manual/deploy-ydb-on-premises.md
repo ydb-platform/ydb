@@ -45,6 +45,9 @@ We don't recommend using disks that are used by other processes (including the O
 
 {% endnote %}
 
+{% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
+
+
 1. Create a partition on the selected disk
 
 {% note alert %}

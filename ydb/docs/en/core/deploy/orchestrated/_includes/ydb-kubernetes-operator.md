@@ -64,6 +64,8 @@ The cluster configuration is static. The controller won't process any changes wh
 
 The standard configuration includes the minimum required 9 storage nodes, 80 GB each. We recommend using disks of at least 80 GB to ensure the stable operation of {{ ydb-short-name }} clusters.
 
+{% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
+
 ## Create a database {#create-database}
 
 Apply the manifest for creating a database:
@@ -90,7 +92,7 @@ Apply the manifest for creating a database:
 
   ```bash
   kubectl describe database.ydb.tech
-  
+
   Name:         database-sample
   Namespace:    default
   Labels:       <none>
@@ -124,7 +126,7 @@ Test how {{ ydb-short-name }} works:
 
       ```bash
       kubectl get pods
-      
+
       NAME                READY   STATUS    RESTARTS   AGE
       database-sample-0   1/1     Running   0          1m
       database-sample-1   1/1     Running   0          1m
@@ -146,7 +148,7 @@ Test how {{ ydb-short-name }} works:
   1. Start a new pod using the {{ ydb-short-name }} CLI:
 
       ```bash
-      kubectl run -it --image=cr.yandex/yc/ydb:21.4.30 --rm ydb-cli bash 
+      kubectl run -it --image=cr.yandex/yc/ydb:21.4.30 --rm ydb-cli bash
       ```
 
   1. Query the {{ ydb-short-name }} database:
@@ -204,4 +206,3 @@ If you no longer need the created resources, delete them:
       * `ydb-operator`: The name of the release that the controller was installed under.
 
 {% endlist %}
-

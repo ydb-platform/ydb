@@ -7,8 +7,8 @@ fi
 need_init=0
 if [[ $1 = "disk" ]]; then
   if [ ! -f ydb.data ]; then
-    echo Data file ydb.data not found, creating ...  
-    fallocate -l 64G ydb.data
+    echo Data file ydb.data not found, creating ...
+    fallocate -l 80G ydb.data
     if [[ $? -ge 1 ]]; then
       if [ -f ydb.data ]; then
         rm ydb.data

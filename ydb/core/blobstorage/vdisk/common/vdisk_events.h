@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_histogram_latency.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
+#include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 
 #include <ydb/core/base/compile_time_flags.h>
@@ -2846,6 +2847,41 @@ namespace NKikimr {
         };
 
         std::vector<TLayoutRecord> Layout;
+    };
+
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    // FOR JSON
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    struct TEvVDiskStatRequest
+        : public TEventPB<TEvVDiskStatRequest,
+                    NKikimrVDisk::VDiskStatRequest,
+                    TEvBlobStorage::EvVDiskStatRequest>
+    {
+        TEvVDiskStatRequest() = default;
+    };
+
+    struct TEvVDiskStatResponse
+        : public TEvVResultBasePB<TEvVDiskStatResponse,
+                    NKikimrVDisk::VDiskStatResponse,
+                    TEvBlobStorage::EvVDiskStatResponse>
+    {
+        TEvVDiskStatResponse() = default;
+    };
+
+    struct TEvGetLogoBlobRequest
+        : public TEventPB<TEvGetLogoBlobRequest,
+                    NKikimrVDisk::GetLogoBlobRequest,
+                    TEvBlobStorage::EvGetLogoBlobRequest>
+    {
+        TEvGetLogoBlobRequest() = default;
+    };
+
+    struct TEvGetLogoBlobResponse
+        : public TEvVResultBasePB<TEvGetLogoBlobResponse,
+                    NKikimrVDisk::GetLogoBlobResponse,
+                    TEvBlobStorage::EvGetLogoBlobResponse>
+    {
+        TEvGetLogoBlobResponse() = default;
     };
 
 } // NKikimr

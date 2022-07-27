@@ -15,6 +15,7 @@ target_link_libraries(blobstorage-vdisk-common PUBLIC
   monlib-service-pages
   ydb-core-base
   vdisk-hulldb-base
+  blobstorage-vdisk-protos
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-common PRIVATE

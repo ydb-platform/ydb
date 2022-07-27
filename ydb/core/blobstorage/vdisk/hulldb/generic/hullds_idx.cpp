@@ -216,6 +216,16 @@ namespace NKikimr {
             }
         }
     }
+    template <class TKey, class TMemRec>
+    void TLevelIndex<TKey, TMemRec>::OutputProto(NKikimrVDisk::LevelIndexStat *stat) const {
+        NKikimrVDisk::FreshStat *fresh = stat->mutable_fresh();
+        fresh->set_compaction_writes_in_flight(FreshCompWritesInFlight);
+        Fresh.OutputProto(fresh);
+        NKikimrVDisk::SliceStat *slice = stat->mutable_slice();
+        slice->set_compaction_writes_in_flight(HullCompWritesInFlight);
+        slice->set_compaction_reads_in_flight(HullCompReadsInFlight);
+        CurSlice->OutputProto(slice->mutable_levels());
+    }
 
     template class TLevelIndex<TKeyLogoBlob, TMemRecLogoBlob>;
     template class TLevelIndex<TKeyBarrier, TMemRecBarrier>;

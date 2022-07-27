@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_block.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullstorageratio.h>
+#include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <util/generic/set.h>
 
 namespace NKikimr {
@@ -202,6 +203,8 @@ namespace NKikimr {
                 vec.push_back(idx);
         }
         void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const;
+
+        void OutputProto(ui32 level, google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const;
         // dump all accessible data
         void DumpAll(IOutputStream &str) const {
             str << "=== SST ===\n";

@@ -166,6 +166,10 @@ namespace NKikimr {
         void OutputHtml(ui32 &index, ui32 level, IOutputStream &str, TIdxDiskPlaceHolder::TInfo &sum) const {
             Segs->OutputHtml(index, level, str, sum);
         }
+
+        void OutputProto(ui32 level, google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+            Segs->OutputProto(level, rows);
+        }
     };
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -328,6 +332,7 @@ namespace NKikimr {
         }
 
         void OutputHtml(IOutputStream &str) const;
+        void OutputProto(google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const;
 
         ui32 GetLevelXNumber() const {
             return SortedLevels.size();

@@ -299,20 +299,100 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TSkeletonFrontMonLogoBlobsQueryActor
     ////////////////////////////////////////////////////////////////////////////
-    class TSkeletonFrontMonLogoBlobsQueryActor : public TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>, public TMonQueryBaseActor {
+
+    struct TSkeletonFrontMonLogoBlobsQueryParams {
+        TString DbName;
+        TString Form;
+        TMaybe<TLogoBlobID> From;
+        TMaybe<TLogoBlobID> To;
+        bool IndexOnly;
+        bool ShowInternals;
+        bool SubmitButton;
+        bool AllButton;
+
+        TString ErrorMsg;
+
+        static TSkeletonFrontMonLogoBlobsQueryParams PullOut(NMon::TEvHttpInfo::TPtr &ev) {
+            const TCgiParameters& cgi = ev->Get()->Request.GetParams();
+
+            TSkeletonFrontMonLogoBlobsQueryParams params{
+                .DbName = cgi.Get("dbname"),
+                .Form = cgi.Get("form"),
+                .IndexOnly = static_cast<bool>(cgi.Get("IndexOnly")),
+                .ShowInternals = static_cast<bool>(cgi.Get("Internals")),
+                .SubmitButton = static_cast<bool>(cgi.Get("submit")),
+                .AllButton = static_cast<bool>(cgi.Get("all")),
+            };
+
+            if (!params.AllButton) {
+                TString fromParam = cgi.Get("from");
+                if (!fromParam) {
+                    params.ErrorMsg = "Expected 'all' or 'from' fields: ";
+                    return params;
+                }
+
+                TString errorExplanation;
+                params.From = TLogoBlobID();
+                bool good = TLogoBlobID::Parse(*params.From, fromParam, errorExplanation);
+                if (!good) {
+                    params.ErrorMsg = "Failed to parse 'from' field: " + errorExplanation;
+                    return params;
+                }
+
+                TString toParam = cgi.Get("to");
+                if (toParam) {
+                    params.To = TLogoBlobID();
+                    good = TLogoBlobID::Parse(*params.To, toParam, errorExplanation);
+                    if (!good) {
+                        params.ErrorMsg = "Failed to parse 'to' field: " + errorExplanation;
+                        return params;
+                    }
+                }
+            }
+
+            return params;
+        }
+
+        static TSkeletonFrontMonLogoBlobsQueryParams PullOut(TEvGetLogoBlobRequest::TPtr &ev) {
+            NKikimrVDisk::GetLogoBlobRequest &record = ev->Get()->Record;
+            TSkeletonFrontMonLogoBlobsQueryParams params{
+                .DbName = "",
+                .Form = "",
+                .IndexOnly = true,
+                .ShowInternals = record.show_internals(),
+                .SubmitButton = true,
+                .AllButton = false,
+            };
+
+            auto convert = [] (auto &proto_id) {
+                return TLogoBlobID(proto_id.raw_x1(), proto_id.raw_x2(), proto_id.raw_x3());
+            };
+
+            auto &range = record.range();
+            params.From = convert(range.from());
+            params.To = convert(range.to());
+
+            return params;
+        }
+    };
+
+    template <typename TEvent>
+    class TSkeletonFrontMonLogoBlobsQueryActor : public TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor<TEvent>>, public TMonQueryBaseActor {
         const TVDiskID SelfVDiskId;
         TIntrusivePtr<TVDiskConfig> Cfg;
         std::shared_ptr<TBlobStorageGroupInfo::TTopology> Top;
         const TActorId NotifyId;
         const TActorId SkeletonFrontID;
-        NMon::TEvHttpInfo::TPtr Ev;
+        typename TEvent::TPtr Ev;
         TLogoBlobID From;
         TLogoBlobID To;
         bool IsRangeQuery;
         bool IndexOnly;
         bool ShowInternals;
 
-        friend class TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>;
+        static constexpr bool IsHttpInfo = std::is_same_v<TEvent, NMon::TEvHttpInfo>;
+
+        friend class TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor<TEvent>>;
 
         void OutputForm(const TActorContext &ctx, const TString &dbnameParam) {
             TString html = BuildForm(dbnameParam, "LogoBlob", "[tablet:gen:step:channel:cookie:blobsize:partid]", true);
@@ -320,19 +400,23 @@ namespace NKikimr {
         }
 
         void Bootstrap(const TActorContext &ctx) {
-            const TCgiParameters& cgi = Ev->Get()->Request.GetParams();
+            auto params = TSkeletonFrontMonLogoBlobsQueryParams::PullOut(Ev);
 
-            TString dbnameParam = cgi.Get("dbname");
-            TString formParam = cgi.Get("form");
-            TString fromParam = cgi.Get("from");
-            TString toParam = cgi.Get("to");
-            IndexOnly = cgi.Has("IndexOnly");
-            ShowInternals = cgi.Has("Internals");
-            bool submitButton = cgi.Has("submit");
-            bool allButton = cgi.Has("all");
+            if constexpr (IsHttpInfo) {
+                if (params.Form != TString()) {
+                    OutputForm(ctx, params.DbName);
+                    return;
+                }
+            }
 
-            if (formParam != TString()) {
-                OutputForm(ctx, dbnameParam);
+            if (params.ErrorMsg) {
+                if constexpr (IsHttpInfo) {
+                    Finish(ctx, NMonUtil::PrepareError(params.ErrorMsg));
+                } else {
+                    auto res = std::make_unique<TEvGetLogoBlobResponse>();
+                    res->Record.set_error_msg(params.ErrorMsg);
+                    Finish(ctx, res.release());
+                }
                 return;
             }
 
@@ -341,54 +425,35 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvVGet> req;
             const auto flags = ShowInternals ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals : TEvBlobStorage::TEvVGet::EFlags::None;
 
-            if (submitButton) {
+            if (params.SubmitButton) {
                 // check that 'from' field is not empty
-                if (fromParam.empty()) {
-                    Finish(ctx, NMonUtil::PrepareError("'From' field is empty"));
-                    return;
-                }
 
-                // parse 'from' field
-                TString errorExplanation;
-                bool good = TLogoBlobID::Parse(From, fromParam, errorExplanation);
-                if (!good) {
-                    Finish(ctx, NMonUtil::PrepareError("Failed to parse 'from' field: " + errorExplanation));
-                    return;
-                }
-
-                if (toParam.empty()) {
+                if (params.To.Empty()) {
                     // exact query
                     IsRangeQuery = false;
                     if (IndexOnly) {
                         req = TEvBlobStorage::TEvVGet::CreateExtremeIndexQuery(SelfVDiskId, TInstant::Max(),
-                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {From});
+                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {*params.From});
                     } else {
                         req = TEvBlobStorage::TEvVGet::CreateExtremeDataQuery(SelfVDiskId, TInstant::Max(),
-                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {From});
+                                NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {*params.From});
                     }
                 } else {
                     // range query
                     IsRangeQuery = true;
-
-                    // parse 'to' field
-                    good = TLogoBlobID::Parse(To, toParam, errorExplanation);
-                    if (!good) {
-                        Finish(ctx, NMonUtil::PrepareError("Failed to parse 'to' field: " + errorExplanation));
-                        return;
-                    }
-
                     req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
-                            NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 1000);
+                            NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, *params.From, *params.To, 1000);
                 }
-            } else if (allButton) {
+            } else if (params.AllButton) {
                 // browse database
                 IsRangeQuery = true;
                 From = Min<TLogoBlobID>();
                 To = Max<TLogoBlobID>();
                 req = TEvBlobStorage::TEvVGet::CreateRangeIndexQuery(SelfVDiskId, TInstant::Max(),
                         NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, From, To, 1000);
-            } else
+            } else {
                 Y_FAIL("Unknown button");
+            }
 
             if (req) {
                 req->SetIsLocalMon();
@@ -399,10 +464,10 @@ namespace NKikimr {
             ctx.Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
 
             // switch state
-            Become(&TThis::StateFunc);
+            this->Become(&TSkeletonFrontMonLogoBlobsQueryActor::StateFunc);
         }
 
-        void OutputOneQueryResult(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q) {
+        void OutputOneQueryResultToHtml(IOutputStream &str, const NKikimrBlobStorage::TQueryResult &q) {
             HTML(str) {
                 DIV_CLASS("well well-small") {
                     const TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
@@ -420,52 +485,75 @@ namespace NKikimr {
             }
         }
 
+        void OutputOneQueryResultToProto(NKikimrVDisk::GetLogoBlobResponse::LogoBlob *blob, const NKikimrBlobStorage::TQueryResult &q) {
+            TLogoBlobID id = LogoBlobIDFromLogoBlobID(q.GetBlobID());
+            blob->set_id(id.ToString());
+            blob->set_status(NKikimrProto::EReplyStatus_Name(q.GetStatus()));
+            if (ShowInternals) {
+                blob->set_ingress(q.GetIngress());
+            }
+        }
+
+
         void Handle(TEvBlobStorage::TEvVGetResult::TPtr &ev, const TActorContext &ctx) {
             const NKikimrBlobStorage::TEvVGetResult &rec = ev->Get()->Record;
             const TVDiskID vdisk(VDiskIDFromVDiskID(rec.GetVDiskID()));
             ui32 size = rec.ResultSize();
-            TStringStream str;
 
-            HTML(str) {
-                DIV_CLASS("row") {
-                    STRONG() {
-                        str << "From: " << From.ToString() << "<br>";
-                        if (IsRangeQuery)
-                            str << "To: " << To.ToString() << "<br>";
-                        str << "IndexOnly: " << (IndexOnly ? "true" : "false") << "<br>";
-                        str << "ShowInternals: " << (ShowInternals ? "true" : "false") << "<br>";
-                        str << "Status: " << NKikimrProto::EReplyStatus_Name(rec.GetStatus()) << "<br>";
-                        str << "VDisk: " << vdisk.ToString() << "<br>";
-                        str << "Result size: " << size << "<br>";
+            if constexpr (IsHttpInfo) {
+                TStringStream str;
+                HTML(str) {
+                    DIV_CLASS("row") {
+                        STRONG() {
+                            str << "From: " << From.ToString() << "<br>";
+                            if (IsRangeQuery)
+                                str << "To: " << To.ToString() << "<br>";
+                            str << "IndexOnly: " << (IndexOnly ? "true" : "false") << "<br>";
+                            str << "ShowInternals: " << (ShowInternals ? "true" : "false") << "<br>";
+                            str << "Status: " << NKikimrProto::EReplyStatus_Name(rec.GetStatus()) << "<br>";
+                            str << "VDisk: " << vdisk.ToString() << "<br>";
+                            str << "Result size: " << size << "<br>";
+                        }
+                    }
+                    DIV_CLASS("row") {
+                        for (ui32 i = 0; i < size; i++) {
+                            const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
+                            OutputOneQueryResultToHtml(str, q);
+                        }
                     }
                 }
-                DIV_CLASS("row") {
-                    for (ui32 i = 0; i < size; i++) {
-                        const NKikimrBlobStorage::TQueryResult &q = rec.GetResult(i);
-                        OutputOneQueryResult(str, q);
-                    }
+                Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
+            } else {
+                auto res = std::make_unique<TEvGetLogoBlobResponse>();
+                for (ui32 i = 0; i < size; i++) {
+                    OutputOneQueryResultToProto(res->Record.add_logoblobs(), rec.GetResult(i));
                 }
+                Finish(ctx, res.release());
             }
-
-            Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
         }
 
 
         void HandleWakeup(const TActorContext &ctx) {
-            TStringStream str;
-            str << "<strong><strong>Timeout</strong></strong>";
-            Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
+            if constexpr (IsHttpInfo) {
+                TStringStream str;
+                str << "<strong><strong>Timeout</strong></strong>";
+                Finish(ctx, new NMon::TEvHttpInfoRes(str.Str()));
+            } else {
+                auto res = std::make_unique<TEvGetLogoBlobResponse>();
+                res->Record.set_error_msg("Timeout");
+                Finish(ctx, res.release());
+            }
         }
 
         void Finish(const TActorContext &ctx, IEventBase *ev) {
             ctx.Send(NotifyId, new TEvents::TEvActorDied);
             ctx.Send(Ev->Sender, ev);
-            Die(ctx);
+            this->Die(ctx);
         }
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            Die(ctx);
+            this->Die(ctx);
         }
 
         STRICT_STFUNC(StateFunc,
@@ -484,7 +572,7 @@ namespace NKikimr {
                                              TIntrusivePtr<TVDiskConfig> cfg,
                                              const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
                                              const TActorId &skeletonFrontID,
-                                             NMon::TEvHttpInfo::TPtr &ev)
+                                             typename TEvent::TPtr &ev)
             : TActorBootstrapped<TSkeletonFrontMonLogoBlobsQueryActor>()
             , SelfVDiskId(selfVDiskId)
             , Cfg(cfg)
@@ -994,7 +1082,7 @@ namespace NKikimr {
             return new TSkeletonFrontMonMainPageActor(notifyId, skeletonID, ev, frontHtml);
         } else if (type == "query") {
             if (dbname == "LogoBlobs") {
-                return new TSkeletonFrontMonLogoBlobsQueryActor(selfVDiskId, notifyId, cfg, top, skeletonID, ev);
+                return new TSkeletonFrontMonLogoBlobsQueryActor<NMon::TEvHttpInfo>(selfVDiskId, notifyId, cfg, top, skeletonID, ev);
             } else if(dbname == "Barriers") {
                 return new TSkeletonFrontMonBarriersQueryActor(selfVDiskId, notifyId, cfg, top, skeletonID, ev);
             } else {
@@ -1019,6 +1107,16 @@ namespace NKikimr {
             auto s = Sprintf("Unknown value '%s' for CGI parameter 'type'", type.data());
             return new TMonErrorActor(notifyId, ev, s);
         }
+    }
+
+    IActor* CreateFrontSkeletonGetLogoBlobRequestHandler(const TVDiskID &selfVDiskId,
+                                                         const TActorId &notifyId,
+                                                         const TActorId &skeletonID,
+                                                         TIntrusivePtr<TVDiskConfig> cfg,
+                                                         const std::shared_ptr<TBlobStorageGroupInfo::TTopology> &top,
+                                                         TEvGetLogoBlobRequest::TPtr &ev) {
+
+        return new TSkeletonFrontMonLogoBlobsQueryActor<TEvGetLogoBlobRequest>(selfVDiskId, notifyId, cfg, top, skeletonID, ev);
     }
 
 } // NKikimr

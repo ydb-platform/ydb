@@ -11,6 +11,7 @@ add_library(core-blob_depot-agent)
 target_link_libraries(core-blob_depot-agent PUBLIC
   contrib-libs-cxxsupp
   yutil
+  blobstorage-vdisk-common
   ydb-core-blob_depot
   ydb-core-protos
 )

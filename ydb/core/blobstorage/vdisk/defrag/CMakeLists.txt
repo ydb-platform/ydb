@@ -13,6 +13,7 @@ target_link_libraries(blobstorage-vdisk-defrag PUBLIC
   yutil
   ydb-core-base
   blobstorage-vdisk-common
+  blobstorage-vdisk-hulldb
 )
 target_sources(blobstorage-vdisk-defrag PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/defrag/defrag_actor.cpp

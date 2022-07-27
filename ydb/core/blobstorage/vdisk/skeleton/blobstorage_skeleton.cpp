@@ -1948,6 +1948,14 @@ namespace NKikimr {
             }
         }
 
+        void Handle(TEvVDiskStatRequest::TPtr &ev, const TActorContext &ctx) {
+            auto res = std::make_unique<TEvVDiskStatResponse>();
+            if (Hull) {
+                Hull->OutputProtoForDb(res->Record.mutable_statistic());
+            }
+            ctx.Send(ev->Sender, res.release());
+        }
+
         void RenderState(IOutputStream &str, const TActorContext &ctx) {
             constexpr ui32 threshold = 10000u;
             std::pair<ui32, ui32> actorQueues = ctx.CountMailboxEvents(threshold);
@@ -2294,6 +2302,7 @@ namespace NKikimr {
             // TEvBlobStorage::TEvVBaldSyncLog
             HFunc(TEvBlobStorage::TEvLocalRecoveryDone, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvVDiskStatRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             HFunc(NPDisk::TEvCutLog, Handle)
             HFunc(TEvVGenerationChange, Handle)
@@ -2337,6 +2346,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvVDiskStatRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -2395,6 +2405,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVBaldSyncLog, Handle)
             HFunc(TEvTakeHullSnapshot, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvVDiskStatRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             HFunc(TEvLocalStatus, Handle)
             HFunc(NPDisk::TEvCutLog, Handle)
@@ -2419,6 +2430,7 @@ namespace NKikimr {
             CFunc(TEvBlobStorage::EvCompactionFinished, LevelIndexCompactionFinished)
             CFunc(TEvBlobStorage::EvWakeupEmergencyPutQueue, WakeupEmergencyPutQueue)
             HFunc(NMon::TEvHttpInfo, Handle)
+            HFunc(TEvVDiskStatRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
             HFunc(TEvents::TEvActorDied, Handle)

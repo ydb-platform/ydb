@@ -20,6 +20,7 @@ target_link_libraries(core-blobstorage-vdisk PUBLIC
   blobstorage-vdisk-hullop
   blobstorage-vdisk-ingress
   blobstorage-vdisk-localrecovery
+  blobstorage-vdisk-protos
   blobstorage-vdisk-query
   blobstorage-vdisk-repl
   blobstorage-vdisk-scrub

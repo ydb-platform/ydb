@@ -191,7 +191,7 @@ namespace boost { namespace python {
 
         template <class Class>
         static void
-        extension_def(Class& cl)
+        extension_def(Class&/* cl*/)
         {
             // default.
             // no more extensions

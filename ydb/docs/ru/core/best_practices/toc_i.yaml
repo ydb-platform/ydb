@@ -11,10 +11,12 @@ items:
   hidden: true
 - name: Вторичные индексы
   href: secondary_indexes.md
+- name: Change Data Capture
+  href: cdc.md
+  when: feature_changefeed
 - name: Постраничный вывод
   href: paging.md
 - name: Загрузка больших объемов данных
   href: batch_upload.md
 - name: Использование таймаутов
   href: timeouts.md
-  

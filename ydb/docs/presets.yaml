@@ -5,14 +5,13 @@ default:
   ydb: true
   example_cluster: ydbtest
   feature_secondary_index: true 
-  # feature_changefeed: true 
+  feature_changefeed: false # temporarily disabled
   feature_replace: true
   feature_upsert: true
   feature_join: true
   feature_map_tables: true
   feature_group_by_rollup_cube: true
   feature_window_functions: true
-#  feature_changefeed: true
 #  feature_logbroker: true
   ydb-full-name: YDB
   ydb-short-name: YDB

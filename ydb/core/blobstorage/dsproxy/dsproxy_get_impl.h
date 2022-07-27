@@ -248,7 +248,7 @@ public:
             TDeque<std::unique_ptr<TEvBlobStorage::TEvVMultiPut>> &outVMultiPuts,
             TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult);
 
-    void PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx,
+    void PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
             TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult);
 
     template <typename TVPutEvent>
@@ -301,12 +301,11 @@ protected:
             }
 
             case EStrategyOutcome::ERROR:
-                PrepareReply(NKikimrProto::ERROR, logCtx, outGetResult);
-                outGetResult->ErrorReason = outcome.ErrorReason;
+                PrepareReply(NKikimrProto::ERROR, outcome.ErrorReason, logCtx, outGetResult);
                 return false;
 
             case EStrategyOutcome::DONE:
-                PrepareReply(NKikimrProto::OK, logCtx, outGetResult);
+                PrepareReply(NKikimrProto::OK, "", logCtx, outGetResult);
                 return false;
         }
     }

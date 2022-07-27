@@ -16,11 +16,12 @@
 
 namespace NKikimr {
 
-void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logCtx,
+void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
     outGetResult.Reset(new TEvBlobStorage::TEvGetResult(status, QuerySize, Info->GroupID));
     ReplyBytes = 0;
     outGetResult->BlockedGeneration = BlockedGeneration;
+    outGetResult->ErrorReason = errorReason;
 
     if (status != NKikimrProto::OK) {
         for (ui32 i = 0, e = QuerySize; i != e; ++i) {

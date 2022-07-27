@@ -22,7 +22,6 @@ target_proto_messages(api-grpc-draft PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/dummy.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_clickhouse_internal_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_persqueue_v1.proto
-  ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_topic_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_datastreams_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_experimental_v1.proto
   ${CMAKE_SOURCE_DIR}/ydb/public/api/grpc/draft/ydb_s3_internal_v1.proto

@@ -8,7 +8,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
 
-#include <ydb/public/api/grpc/draft/ydb_topic_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 namespace NYdb::NTopic {

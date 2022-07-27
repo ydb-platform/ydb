@@ -1551,6 +1551,74 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
+    Y_UNIT_TEST(RenameTable) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+
+        THashSet<ui64> enqueued;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvChangeExchange::EvEnqueueRecords) {
+                for (const auto& record : ev->Get<TEvChangeExchange::TEvEnqueueRecords>()->Records) {
+                    enqueued.insert(record.Order);
+                }
+
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable());
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            Updates(NKikimrSchemeOp::ECdcStreamFormatJson)));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key, value) VALUES
+            (1, 10),
+            (2, 20),
+            (3, 30);
+        )");
+
+        if (!enqueued) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&enqueued](IEventHandle&) {
+                return bool(enqueued);
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        THashSet<ui64> removed;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvChangeExchange::EvRemoveRecords) {
+                for (const auto& record : ev->Get<TEvChangeExchange::TEvRemoveRecords>()->Records) {
+                    removed.insert(record);
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        WaitTxNotification(server, edgeActor, AsyncAlterDropStream(server, "/Root", "Table", "Stream"));
+        WaitTxNotification(server, edgeActor, AsyncMoveTable(server, "/Root/Table", "/Root/MovedTable"));
+
+        if (enqueued != removed) {
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&enqueued, &removed](IEventHandle&) {
+                return enqueued == removed;
+            });
+            runtime.DispatchEvents(opts);
+        }
+    }
+
 } // Cdc
 
 } // NKikimr

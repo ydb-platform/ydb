@@ -1529,6 +1529,18 @@ ui64 AsyncMergeTable(
     return RunSchemeTx(*server->GetRuntime(), std::move(request), sender);
 }
 
+ui64 AsyncMoveTable(Tests::TServer::TPtr server,
+        const TString& srcTable,
+        const TString& dstTable)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpMoveTable);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableMoveTable();
+    desc.SetSrcPath(srcTable);
+    desc.SetDstPath(dstTable);
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request));
+}
+
 ui64 AsyncAlterAddExtraColumn(
         Tests::TServer::TPtr server,
         const TString& workingDir,

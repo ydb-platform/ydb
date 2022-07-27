@@ -10,7 +10,6 @@ find_package(OpenSSL REQUIRED)
 
 add_library(restricted-aws-s2n)
 target_compile_options(restricted-aws-s2n PRIVATE
-  -DS2N_ADX
   -DS2N_CLONE_SUPPORTED
   -DS2N_FALL_THROUGH_SUPPORTED
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_MD5_SHA1_HASH
@@ -18,13 +17,9 @@ target_compile_options(restricted-aws-s2n PRIVATE
   -DS2N_LIBCRYPTO_SUPPORTS_EVP_RC4
   -DS2N_MADVISE_SUPPORTED
   -DS2N___RESTRICT__SUPPORTED
-  -DS2N_SIKE_P434_R3_ASM
   -DS2N_FEATURES_AVAILABLE
   -DS2N_STACKTRACE
   -DS2N_CPUID_AVAILABLE
-  -DS2N_BIKE_R3_AVX2
-  -DS2N_BIKE_R3_AVX512
-  -DS2N_BIKE_R3_PCLMUL
   -DS2N_KYBER512R3_AVX2_BMI2
   -Wno-everything
 )
@@ -36,11 +31,6 @@ target_link_libraries(restricted-aws-s2n PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(restricted-aws-s2n PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_pclmul.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/decode_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_ksqr_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c
@@ -49,12 +39,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/decode_avx512.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_ksqr_avx512.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_avx512.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_avx512.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_vpclmul.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_fp_x64_asm.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
@@ -89,64 +73,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_stream_cipher_rc4.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_tls13_keys.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/error/s2n_errno.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/aes_ctr_prf.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/bike_r1_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/converts_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/decode.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/error.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/gf2x_mul.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/gf2x_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/openssl_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/parallel_hash.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/sampling.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/sampling_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/secure_decode_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r1/utilities.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/aes_ctr_prf.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/bike_r2_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/decode.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/error.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/gf2x_mul.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/gf2x_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/openssl_utils.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/sampling.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/sampling_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/secure_decode_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r2/utilities.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/aes_ctr_prf.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/bike_r3_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/decode.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/decode_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/error.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_inv.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_ksqr_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_portable.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/utilities.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/aes256ctr.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/aes_c.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/cbd.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/indcpa.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/kyber_90s_r2_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/ntt.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/poly.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/polyvec.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/reduce.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/sha2_c.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_90s_r2/verify.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/cbd.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/fips202_kyber_r2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/indcpa.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/kyber_r2_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/ntt.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/poly.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/polyvec.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/reduce.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/symmetric-fips202.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r2/verify.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa.c
@@ -158,17 +84,6 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_symmetric-shake.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/s2n_pq_random.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r1/P503_r1.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r1/fips202_r1.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r1/fp_generic_r1.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r1/sike_r1_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_ec_isogeny.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_fips202.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_fp.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_fpx.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_kem.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/sike_r3/sikep434r3_sidh.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_base64.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/stuffer/s2n_stuffer_file.c
@@ -300,58 +215,6 @@ target_sources(restricted-aws-s2n PRIVATE
 )
 set_property(
   SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_pclmul.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mpclmul
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/decode_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_ksqr_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
   APPEND
   PROPERTY
@@ -437,65 +300,4 @@ set_property(
   -mfma
   -mbmi
   -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/decode_avx512.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx512f
-  -mavx512cd
-  -mavx512bw
-  -mavx512dq
-  -mavx512vl
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_ksqr_avx512.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx512f
-  -mavx512cd
-  -mavx512bw
-  -mavx512dq
-  -mavx512vl
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_avx512.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx512f
-  -mavx512cd
-  -mavx512bw
-  -mavx512dq
-  -mavx512vl
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/sampling_avx512.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx512f
-  -mavx512cd
-  -mavx512bw
-  -mavx512dq
-  -mavx512vl
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/bike_r3/gf2x_mul_base_vpclmul.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx512f
-  -mavx512cd
-  -mavx512bw
-  -mavx512dq
-  -mavx512vl
-  -mvpclmulqdq
 )

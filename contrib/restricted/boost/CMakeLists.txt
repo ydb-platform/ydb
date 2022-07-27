@@ -19,6 +19,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
+  restricted-boost-crc
   restricted-boost-integer
   restricted-boost-io
   restricted-boost-logic

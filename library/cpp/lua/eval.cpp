@@ -109,6 +109,15 @@ TLuaEval::TExpression TLuaEval::CompileRaw(TStringBuf body, const TString& name)
     return { name };
 }
 
+TString TLuaEval::DumpStack() {
+    TString result;
+    {
+        TStringOutput so(result);
+        LuaState_.DumpStack(&so);
+    }
+    return result;
+}
+
 TString TLuaEval::GenerateName() {
     TGuard<TMutex> guard(LuaMutex_);
     return "dummy_" + ToString(FunctionNameCounter_++);
@@ -165,6 +174,15 @@ TString TLuaEval::PreprocessOne(TStringBuf line) {
     }
 
     return ToString(before) + res + ToString(after);
+}
+
+bool TLuaEval::CheckEmptyStack() {
+    for (int i = 1; i <= LuaState_.on_stack(); ++i) {
+        if (!LuaState_.is_nil(-1 * i)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 TString TLuaEval::Preprocess(TStringBuf line) {

@@ -36,6 +36,7 @@ public:
     void ParseChunk(TStringBuf code);
     TString Preprocess(TStringBuf line);
     TString PreprocessOne(TStringBuf line);
+    bool CheckEmptyStack();
 
     struct TExpression {
         TString Name;
@@ -44,6 +45,7 @@ public:
     TExpression Compile(TStringBuf expression);
     TExpression CompileFunction(TStringBuf expression);
     TExpression CompileRaw(TStringBuf body, const TString& name);
+    TString DumpStack();
     TString EvalCompiled(const TExpression& compiled);
     void EvalCompiledRaw(const TExpression& compiled);
     bool EvalCompiledCondition(const TExpression& compiled);

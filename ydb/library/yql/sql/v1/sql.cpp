@@ -6701,7 +6701,7 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         Ctx.IncrementMonCounter("sql_features", "DistinctInSelect");
     }
 
-    TSourcePtr source(BuildFakeSource(selectPos, /* missingFrom = */ true));
+    TSourcePtr source(BuildFakeSource(selectPos, /* missingFrom = */ true, Mode == NSQLTranslation::ESqlMode::SUBQUERY));
     if (node.HasBlock1() && node.HasBlock9()) {
         Token(node.GetBlock9().GetToken1());
         Ctx.IncrementMonCounter("sql_errors", "DoubleFrom");

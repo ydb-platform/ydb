@@ -4208,6 +4208,15 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return node;
     };
 
+    map["WithWorld"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+        if (node->Child(1)->IsWorld()) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over pure world";
+            return node->HeadPtr();
+        }
+
+        return node;
+    };
+
     map[IfName] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& /*optCtx*/) {
         if (node->Child(1)->IsCallable("Bool")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " with literal predicate";

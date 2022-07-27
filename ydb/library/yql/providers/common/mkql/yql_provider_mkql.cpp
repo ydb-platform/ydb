@@ -2063,7 +2063,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.NewNull();
     });
 
-    AddCallable({"AsTagged","Untag"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
+    AddCallable({"AsTagged","Untag","WithWorld"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
         return MkqlBuildExpr(node.Head(), ctx);
     });
 

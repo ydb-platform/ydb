@@ -161,9 +161,10 @@ TNodePtr BuildSourceNode(TPosition pos, TSourcePtr source, bool checkExist) {
 
 class TFakeSource: public ISource {
 public:
-    TFakeSource(TPosition pos, bool missingFrom)
+    TFakeSource(TPosition pos, bool missingFrom, bool inSubquery)
         : ISource(pos)
         , MissingFrom(missingFrom)
+        , InSubquery(inSubquery)
     {}
 
     bool IsFake() const override {
@@ -190,7 +191,12 @@ public:
 
     TNodePtr Build(TContext& ctx) override  {
         Y_UNUSED(ctx);
-        return Y("AsList", Y("AsStruct"));
+        auto ret = Y("AsList", Y("AsStruct"));
+        if (InSubquery) {
+            return Y("WithWorld", ret, "world");
+        } else {
+            return ret;
+        }
     }
 
     bool AddGroupKey(TContext& ctx, const TString& column) override {
@@ -242,14 +248,15 @@ public:
     }
 
     TPtr DoClone() const final {
-        return new TFakeSource(Pos, MissingFrom);
+        return new TFakeSource(Pos, MissingFrom, InSubquery);
     }
 private:
     const bool MissingFrom;
+    const bool InSubquery;
 };
 
-TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom) {
-    return new TFakeSource(pos, missingFrom);
+TSourcePtr BuildFakeSource(TPosition pos, bool missingFrom, bool inSubquery) {
+    return new TFakeSource(pos, missingFrom, inSubquery);
 }
 
 class TNodeSource: public ISource {

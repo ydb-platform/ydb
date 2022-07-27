@@ -5,6 +5,8 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/client/ydb_common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
 
 #include <ydb/public/api/grpc/draft/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
@@ -192,8 +194,22 @@ public:
         return promise.GetFuture();
     }
 
+    // Runtime API.
+    std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
+
+    using IReadSessionConnectionProcessorFactory =
+        NYdb::NPersQueue::ISessionConnectionProcessorFactory<Ydb::Topic::StreamReadMessage::FromClient,
+                                                             Ydb::Topic::StreamReadMessage::FromServer>;
+
+    std::shared_ptr<IReadSessionConnectionProcessorFactory> CreateReadSessionConnectionProcessorFactory();
+
+    NGrpc::IQueueClientContextPtr CreateContext() {
+        return Connections_->CreateContext();
+    }
+
 private:
     const TTopicClientSettings Settings;
+    TAdaptiveLock Lock;
 };
 
 } // namespace NYdb::NTopic

@@ -1002,6 +1002,9 @@ TFuture<IGraphTransformer::TStatus> TProgram::AsyncTransformWithFallback(bool ap
             BeforeFallback();
             return AsyncTransformWithFallback(false);
         }
+        if (status == IGraphTransformer::TStatus::Error && (TypeCtx_->DqFallbackPolicy == "never" || TypeCtx_->ForceDq)) {
+            YQL_LOG(DEBUG) << "Fallback skipped due to per query policy";
+        }
         return res;
     });
 }

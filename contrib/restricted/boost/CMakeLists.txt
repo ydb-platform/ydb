@@ -30,6 +30,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-throw_exception
+  restricted-boost-tuple
   restricted-boost-type_traits
   restricted-boost-utility
   restricted-boost-vmd

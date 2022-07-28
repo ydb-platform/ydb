@@ -58,6 +58,13 @@ private:
     TString ProfileName;
 };
 
+class TCommandDeactivateProfile : public TClientCommand {
+public:
+    TCommandDeactivateProfile();
+    virtual void Config(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+};
+
 class TCommandListProfiles : public TClientCommand {
 public:
     TCommandListProfiles();

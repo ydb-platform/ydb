@@ -34,6 +34,7 @@ TCommandProfile::TCommandProfile()
     AddCommand(std::make_unique<TCommandCreateProfile>());
     AddCommand(std::make_unique<TCommandDeleteProfile>());
     AddCommand(std::make_unique<TCommandActivateProfile>());
+    AddCommand(std::make_unique<TCommandDeactivateProfile>());
     AddCommand(std::make_unique<TCommandListProfiles>());
     AddCommand(std::make_unique<TCommandGetProfile>());
 }
@@ -506,7 +507,6 @@ void TCommandActivateProfile::Parse(TConfig& config) {
 }
 
 int TCommandActivateProfile::Run(TConfig& config) {
-    Y_UNUSED(config);
     auto profileManager = CreateYdbProfileManager(config.YdbDir);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
@@ -568,6 +568,28 @@ int TCommandActivateProfile::Run(TConfig& config) {
         Cout << "Profile \"" << ProfileName << "\" was activated." << Endl;
     } else {
         Cout << "Profile \"" << ProfileName << "\" is already active." << Endl;
+    }
+    return EXIT_SUCCESS;
+}
+
+TCommandDeactivateProfile::TCommandDeactivateProfile()
+    : TClientCommand("deactivate", {"unset"}, "Deactivate current active configuration profile")
+{}
+
+void TCommandDeactivateProfile::Config(TConfig& config) {
+    TClientCommand::Config(config);
+
+    config.SetFreeArgsMax(0);
+}
+
+int TCommandDeactivateProfile::Run(TConfig& config) {
+    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    TString currentActiveProfileName = profileManager->GetActiveProfileName();
+    if (currentActiveProfileName) {
+        profileManager->DeactivateProfile();
+        Cout << "Profile \"" << currentActiveProfileName << "\" was deactivated." << Endl;
+    } else {
+        Cout << "There is no profile active. Nothing is done." << Endl;
     }
     return EXIT_SUCCESS;
 }

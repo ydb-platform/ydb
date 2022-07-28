@@ -487,11 +487,11 @@ private:
     void SendDescribeAllTopicsResponse(const TActorId& recipient, TVector<NPersQueue::TDiscoveryConverterPtr> topics,
                                        const TActorContext& ctx, bool empty = false
     ) {
-        TSchemeCacheNavigate* scResponse;
+        std::shared_ptr<TSchemeCacheNavigate> scResponse;
         if (empty) {
-            scResponse = new TSchemeCacheNavigate();
+            scResponse.reset(new TSchemeCacheNavigate());
         } else {
-            scResponse = new TSchemeCacheNavigate(*FullTopicsCache);
+            scResponse = FullTopicsCache;
         }
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Send describe all topics response with " << scResponse->ResultSet.size() << " topics");
         auto* response = new TEvPqNewMetaCache::TEvDescribeAllTopicsResponse(

@@ -143,6 +143,13 @@ public:
 
         return {};
     }
+
+    void Reset() {
+        Buffer.clear();
+        TStringOutput(Buffer).Swap(Output);
+        Output.Reserve(ExpectedSize);
+        TStringInput(Data).Swap(Input);
+    }
 private:
     void Fail(const TIssue& error) final  {
         TIssues issues{error};
@@ -167,7 +174,7 @@ private:
         }
     }
 
-    size_t  Write(void* contents, size_t size, size_t nmemb) final {
+    size_t Write(void* contents, size_t size, size_t nmemb) final {
         const auto realsize = size * nmemb;
         Output.Write(contents, realsize);
         return realsize;
@@ -433,6 +440,7 @@ private:
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(httpResponseCode)) {
+                        buffer->Reset();
                         Delayed.emplace(nextRetryDelay->ToDeadLine(), std::move(buffer));
                         easy.reset();
                     }

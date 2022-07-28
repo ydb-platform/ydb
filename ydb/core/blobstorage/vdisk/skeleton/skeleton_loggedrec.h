@@ -6,6 +6,7 @@
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter.h>
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_anubis_osiris.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_repl.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 
@@ -49,7 +50,7 @@ namespace NKikimr {
     public:
         TLoggedRecVPut(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvBlobStorage::TEvVPutResult> result, const TActorId &recipient,
-                ui64 recipientCookie);
+                ui64 recipientCookie, NWilson::TTraceId traceId);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
@@ -59,6 +60,7 @@ namespace NKikimr {
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;
+        NWilson::TSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -68,7 +70,7 @@ namespace NKikimr {
     public:
         TLoggedRecVMultiPutItem(TLsnSeg seg, bool confirmSyncLogAlso, const TLogoBlobID &id, const TIngress &ingress,
                 TRope &&buffer, std::unique_ptr<TEvVMultiPutItemResult> result, const TActorId &recipient,
-                ui64 recipientCookie);
+                ui64 recipientCookie, NWilson::TTraceId traceId);
         void Replay(THull &hull, const TActorContext &ctx) override;
 
     private:
@@ -78,6 +80,7 @@ namespace NKikimr {
         std::unique_ptr<TEvVMultiPutItemResult> Result;
         TActorId Recipient;
         ui64 RecipientCookie;
+        NWilson::TSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -92,6 +95,7 @@ namespace NKikimr {
     private:
         const TActorId HugeKeeperId;
         TEvHullLogHugeBlob::TPtr Ev;
+        NWilson::TSpan Span;
     };
 
     ///////////////////////////////////////////////////////////////////////////////////////////////////////

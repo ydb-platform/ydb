@@ -172,7 +172,7 @@ public:
         std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
                 NKikimrBlobStorage::AsyncBlob, TEvBlobStorage::TEvPut::TacticDefault);
         put->Orbit = std::move(Orbit);
-        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), Span);
+        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), Span.GetTraceId());
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev) {
@@ -528,9 +528,9 @@ public:
             NKikimrBlobStorage::AsyncRead);
         get->Orbit = std::move(Orbit);
         if (OriginalGroupId == Info->GroupID) {
-            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), Span);
+            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), Span.GetTraceId());
         } else {
-            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span);
+            SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
     }
 

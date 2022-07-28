@@ -151,8 +151,7 @@ namespace NKikimr::NPrivate {
             Y_VERIFY(record.HasCookie());
             FoundPartsEvent = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(
                     NKikimrProto::OK, OriginalBlobId, PatchedBlobId, VDiskId, record.GetCookie(), now, ErrorReason, &record,
-                    SkeletonFrontIDPtr, VPatchFoundPartsMsgsPtr, nullptr,
-                    std::move(ev->TraceId), IncarnationGuid);
+                    SkeletonFrontIDPtr, VPatchFoundPartsMsgsPtr, nullptr, IncarnationGuid);
         }
 
         void Bootstrap() {
@@ -425,8 +424,7 @@ namespace NKikimr::NPrivate {
             ResultEvent = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
                     NKikimrProto::OK, TLogoBlobID(OriginalBlobId, OriginalPartId),
                     TLogoBlobID(PatchedBlobId, PatchedPartId), VDiskId, record.GetCookie(), now,
-                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr,
-                    std::move(ev->TraceId), IncarnationGuid);
+                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr, IncarnationGuid);
             Sender = ev->Sender;
             Cookie = ev->Cookie;
             SendVPatchResult(NKikimrProto::ERROR);
@@ -467,8 +465,7 @@ namespace NKikimr::NPrivate {
 
             ResultEvent = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
                     NKikimrProto::OK, originalPartBlobId, patchedPartBlobId, VDiskId, record.GetCookie(), now,
-                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr,
-                    std::move(ev->TraceId), IncarnationGuid);
+                    &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr, IncarnationGuid);
             Sender = ev->Sender;
             Cookie = ev->Cookie;
 
@@ -526,8 +523,7 @@ namespace NKikimr::NPrivate {
             NKikimrBlobStorage::TEvVPatchXorDiff &record = ev->Get()->Record;
             TInstant now = TActivationContext::Now();
             auto resultEvent = std::make_unique<TEvBlobStorage::TEvVPatchXorDiffResult>(
-                    NKikimrProto::ERROR, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr,
-                    std::move(ev->TraceId));
+                    NKikimrProto::ERROR, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr);
             SendVDiskResponse(TActivationContext::AsActorContext(), ev->Sender, resultEvent.release(), ev->Cookie);
         }
 
@@ -550,7 +546,7 @@ namespace NKikimr::NPrivate {
 
             TInstant now = TActivationContext::Now();
             std::unique_ptr<TEvBlobStorage::TEvVPatchXorDiffResult> resultEvent = std::make_unique<TEvBlobStorage::TEvVPatchXorDiffResult>(
-                    NKikimrProto::OK, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr, std::move(ev->TraceId));
+                    NKikimrProto::OK, now, &record, SkeletonFrontIDPtr, VPatchResMsgsPtr, nullptr);
 
             if (!CheckDiff(xorDiffs, "XorDiff from datapart")) {
                 for (auto &[diffs, partId, result, sender, cookie] : ReceivedXorDiffs) {

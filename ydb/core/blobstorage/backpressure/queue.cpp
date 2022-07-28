@@ -202,7 +202,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
             {"VDiskOrderNumber", vdiskOrderNumber}
         }});
         item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings,
-            item.Span, ClientId, item.ProcessingTimer);
+            item.Span.GetTraceId(), ClientId, item.ProcessingTimer);
 
         // update counters as far as item got sent
         ++NextMsgId;
@@ -219,6 +219,8 @@ void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus s
         << " processingTime# " << processingTime);
 
     item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+    item.Span = {};
+
     ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
             QueueDeserializedBytes), 0, item.Event.GetCookie());
 
@@ -249,7 +251,8 @@ bool TBlobStorageQueue::OnResponse(ui64 msgId, ui64 sequenceId, ui64 cookie, TAc
             it->Event.GetByteSize(), !relevant);
 
     InFlightLookup.erase(lookupIt);
-    it->Span.EndOk();
+    auto span = std::exchange(it->Span, {});
+    span.EndOk();
     EraseItem(Queues.InFlight, it);
 
     // unpause execution when InFlight queue gets empty

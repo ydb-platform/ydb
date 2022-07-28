@@ -18,7 +18,7 @@ namespace NActors {
             return false;
         }
 
-        const NWilson::TTraceId traceId(event.Span);
+        auto traceId = event.Span.GetTraceId();
         event.Span.EndOk();
 
         LWTRACK(SerializeToPacketEnd, event.Orbit, PeerNodeId, ChannelId, OutputQueueSize, task.GetDataSize());

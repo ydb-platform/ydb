@@ -218,7 +218,7 @@ namespace NKikimr {
     }
 
     IActor *TReadBatcher::CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId,
-            bool isRepl, TInstant now) {
+            bool isRepl) {
         if (Result->DiskDataItemPtrs.empty())
             return nullptr;
         else {
@@ -239,7 +239,7 @@ namespace NKikimr {
                 PDiskReadBytes += size;
             }
             // start reader
-            return CreateReadBatcherActor(Ctx, notifyID, Result, priority, std::move(traceId), isRepl, now);
+            return CreateReadBatcherActor(Ctx, notifyID, Result, priority, std::move(traceId), isRepl);
         }
     }
 

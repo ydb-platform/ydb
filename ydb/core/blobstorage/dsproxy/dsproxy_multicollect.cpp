@@ -155,7 +155,7 @@ public:
         R_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
             << " isLast# " << isLast
             << " ev# " << ev->ToString());
-        SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, Span);
+        SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, Span.GetTraceId());
 
         if (isLast) {
             CollectRequestsInFlight++;

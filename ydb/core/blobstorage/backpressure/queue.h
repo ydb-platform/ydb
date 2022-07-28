@@ -59,11 +59,10 @@ class TBlobStorageQueue {
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serItems,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr& serBytes,
                 const TBSProxyContextPtr& bspctx, ui32 interconnectChannel,
-                bool local, TInstant now)
+                bool local)
             : Queue(EItemQueue::NotSet)
             , CostEssence(*event->Get())
-            , Span(9 /*verbosity*/, NWilson::ERelation::ChildOf, std::move(event->TraceId), now, TStringBuilder()
-                << "Backpressure(" << TypeName<TEvent>() << ")")
+            , Span(TWilson::VDiskTopLevel, std::move(event->TraceId), "Backpressure.InFlight")
             , Event(event, serItems, serBytes, bspctx, interconnectChannel, local)
             , MsgId(Max<ui64>())
             , SequenceId(0)
@@ -71,7 +70,11 @@ class TBlobStorageQueue {
             , QueueCookie(RandomNumber<ui64>())
             , Cost(0)
             , DirtyCost(true)
-        {}
+        {
+            Span
+                .Attribute("event", TypeName<TEvent>())
+                .Attribute("local", local);
+        }
 
         ~TItem() {
             Y_VERIFY(Queue == EItemQueue::NotSet, "Queue# %" PRIu32, ui32(Queue));
@@ -197,13 +200,13 @@ public:
     void OnConnect();
 
     template<typename TPtr>
-    void Enqueue(const TActorContext &ctx, TPtr& event, TInstant deadline, bool local, TInstant now) {
+    void Enqueue(const TActorContext &ctx, TPtr& event, TInstant deadline, bool local) {
         Y_UNUSED(ctx);
 
         TItemList::iterator newIt;
         if (Queues.Unused.empty()) {
             newIt = Queues.Waiting.emplace(Queues.Waiting.end(), event, deadline,
-                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local, now);
+                QueueSerializedItems, QueueSerializedBytes, BSProxyCtx, InterconnectChannel, local);
             ++*QueueSize;
         } else {
             newIt = Queues.Unused.begin();
@@ -212,7 +215,7 @@ public:
             TItem& item = *newIt;
             item.~TItem();
             new(&item) TItem(event, deadline, QueueSerializedItems, QueueSerializedBytes, BSProxyCtx,
-                InterconnectChannel, local, now);
+                InterconnectChannel, local);
         }
 
         newIt->Iterator = newIt;

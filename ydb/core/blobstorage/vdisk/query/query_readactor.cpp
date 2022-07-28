@@ -1,5 +1,6 @@
 #include "query_readbatch.h"
 #include <ydb/core/blobstorage/base/vdisk_priorities.h>
+#include <ydb/core/base/wilson.h>
 #include <library/cpp/actors/wilson/wilson_span.h>
 #include <util/generic/algorithm.h>
 
@@ -47,7 +48,7 @@ namespace NKikimr {
 
                 // send request
                 TReplQuoter::QuoteMessage(quoter, std::make_unique<IEventHandle>(Ctx->PDiskCtx->PDiskId, SelfId(),
-                    msg.release(), 0, 0, nullptr, Span), it->Part.Size);
+                    msg.release(), 0, 0, nullptr, Span.GetTraceId()), it->Part.Size);
 
                 Counter++;
             }
@@ -116,14 +117,13 @@ namespace NKikimr {
                 std::shared_ptr<TReadBatcherResult> result,
                 ui8 priority,
                 NWilson::TTraceId traceId,
-                bool isRepl,
-                TInstant now)
+                bool isRepl)
             : TActorBootstrapped<TTReadBatcherActor>()
             , Ctx(ctx)
             , NotifyID(notifyID)
             , Result(std::move(result))
             , Priority(priority)
-            , Span(12, NWilson::ERelation::ChildOf, std::move(traceId), now, "VDisk.TReadBatcherActor")
+            , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Query.ReadBatcher")
             , IsRepl(isRepl)
         {}
     };
@@ -134,10 +134,9 @@ namespace NKikimr {
         std::shared_ptr<TReadBatcherResult> result,
         ui8 priority,
         NWilson::TTraceId traceId,
-        bool isRepl,
-        TInstant now)
+        bool isRepl)
     {
-        return new TTReadBatcherActor(ctx, notifyID, result, priority, std::move(traceId), isRepl, now);
+        return new TTReadBatcherActor(ctx, notifyID, result, priority, std::move(traceId), isRepl);
     }
 
 } // NKikimr

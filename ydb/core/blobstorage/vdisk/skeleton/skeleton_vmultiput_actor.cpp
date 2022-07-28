@@ -80,7 +80,7 @@ namespace NKikimr {
                 const ui64 bufferSizeBytes = Event->Get()->GetBufferBytes();
                 auto vMultiPutResult = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK, vdisk, cookie,
                     now, Event->Get()->GetCachedByteSize(), &vMultiPutRecord, SkeletonFrontIDPtr, MultiPutResMsgsPtr,
-                    nullptr, bufferSizeBytes, std::move(Event->TraceId), IncarnationGuid, TString());
+                    nullptr, bufferSizeBytes, IncarnationGuid, TString());
 
                 for (ui64 idx = 0; idx < Items.size(); ++idx) {
                     TItem &result = Items[idx];

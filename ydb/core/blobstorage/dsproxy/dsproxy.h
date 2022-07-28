@@ -18,6 +18,7 @@
 #include <library/cpp/actors/wilson/wilson_span.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/group_stat.h>
+#include <ydb/core/base/wilson.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/generic/hash_set.h>
 
@@ -146,7 +147,7 @@ public:
         , Mon(std::move(mon))
         , PoolCounters(storagePoolCounters)
         , LogCtx(logComponent, logAccEnabled)
-        , Span(8 /*verbosity*/, NWilson::ERelation::ChildOf, std::move(traceId), now, std::move(name))
+        , Span(TWilson::BlobStorage, std::move(traceId), std::move(name))
         , RestartCounter(restartCounter)
         , Source(source)
         , Cookie(cookie)
@@ -261,7 +262,7 @@ public:
         Y_VERIFY_DEBUG(RestartCounter < 100);
         auto q = self.RestartQuery(RestartCounter + 1);
         ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
-        TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span));
+        TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         PassAway();
         return true;
     }
@@ -321,7 +322,7 @@ public:
         if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus>) {
             event->MessageRelevanceTracker = MessageRelevanceTracker;
         }
-        const TActorId queueId = GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span,
+        const TActorId queueId = GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(),
             timeStatsEnabled);
         ++RequestsInFlight;
     }
@@ -407,7 +408,8 @@ public:
         TActorBootstrapped<TDerived>::PassAway();
     }
 
-    void SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats, TActorId source, ui64 cookie) {
+    void SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats, TActorId source, ui64 cookie,
+            bool term = true) {
         const TInstant now = TActivationContext::Now();
 
         NKikimrProto::EReplyStatus status;
@@ -457,14 +459,16 @@ public:
             static_cast<TEvBlobStorage::TEvGetResult&>(*ev).Sent = now;
         }
 
-        if (status == NKikimrProto::OK) {
-            Span.EndOk();
-        } else {
-            Span.EndError(std::move(errorReason));
+        if (term) {
+            if (status == NKikimrProto::OK) {
+                Span.EndOk();
+            } else {
+                Span.EndError(std::move(errorReason));
+            }
         }
 
         // send the reply to original request sender
-        Derived().Send(source, ev.release(), 0, cookie, Span);
+        Derived().Send(source, ev.release(), 0, cookie);
     };
 
     void SendResponse(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats = nullptr) {

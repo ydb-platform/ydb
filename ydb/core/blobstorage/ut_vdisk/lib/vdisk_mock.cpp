@@ -102,7 +102,7 @@ public:
             auto response = std::make_unique<TEvBlobStorage::TEvVPutResult>(status, id,
                     VDiskIDFromVDiskID(record.GetVDiskID()), record.HasCookie() ? &cookie : nullptr,
                     TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
-                    &record, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, errorReason);
+                    &record, nullptr, nullptr, nullptr, 0, 0, errorReason);
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
         };
 
@@ -141,7 +141,7 @@ public:
         auto response = std::make_unique<TEvBlobStorage::TEvVMultiPutResult>(NKikimrProto::OK,
                 VDiskIDFromVDiskID(record.GetVDiskID()), record.HasCookie() ? &cookie : nullptr,
                 TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
-                &record, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString());
+                &record, nullptr, nullptr, nullptr, 0, 0, TString());
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
             LOG_DEBUG(ctx, NActorsServices::TEST, "TEvVMultiPut %s -> %s", ev->Get()->ToString().data(),
@@ -179,7 +179,7 @@ public:
 
         auto response = std::make_unique<TEvBlobStorage::TEvVGetResult>(NKikimrProto::OK,
             VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
-            &record, nullptr, nullptr, nullptr, NWilson::TTraceId(), cookie, 0U, 0U);
+            &record, nullptr, nullptr, nullptr, cookie, 0U, 0U);
 
         if (ErrorMode) {
             response->MakeError(NKikimrProto::ERROR, "error mode", record);
@@ -336,7 +336,7 @@ public:
         TEvBlobStorage::TEvVBlockResult::TTabletActGen actual(record.GetTabletId(), record.GetGeneration());
         auto response = std::make_unique<TEvBlobStorage::TEvVBlockResult>(NKikimrProto::OK, &actual,
                 VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
-                (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, NWilson::TTraceId(), 0);
+                (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, 0);
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 
@@ -349,11 +349,11 @@ public:
         if (it != Blocks.end()) {
             response.reset(new TEvBlobStorage::TEvVGetBlockResult(NKikimrProto::OK, it->first, it->second,
                     VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
-                    ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, NWilson::TTraceId()));
+                    ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr));
         } else {
             response.reset(new TEvBlobStorage::TEvVGetBlockResult(NKikimrProto::NODATA, record.GetTabletId(),
                     VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
-                    ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, NWilson::TTraceId()));
+                    ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr));
         }
 
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
@@ -367,7 +367,7 @@ public:
             auto response = std::make_unique<TEvBlobStorage::TEvVCollectGarbageResult>(NKikimrProto::BLOCKED,
                     record.GetTabletId(), record.GetRecordGeneration(), record.GetChannel(),
                     VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(),
-                    (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, NWilson::TTraceId(), 0);
+                    (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, 0);
             FinalizeAndSend(std::move(response), ctx, ev->Sender);
             return;
         }
@@ -387,8 +387,7 @@ public:
 
         auto response = std::make_unique<TEvBlobStorage::TEvVCollectGarbageResult>(NKikimrProto::OK, record.GetTabletId(),
                 record.GetRecordGeneration(), record.GetChannel(), VDiskIDFromVDiskID(record.GetVDiskID()),
-                TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr,
-                NWilson::TTraceId(), 0);
+                TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(), &record, nullptr, nullptr, nullptr, 0);
         FinalizeAndSend(std::move(response), ctx, ev->Sender);
     }
 
@@ -406,7 +405,7 @@ public:
 
         auto response = std::make_unique<TEvBlobStorage::TEvVGetBarrierResult>(NKikimrProto::OK,
             VDiskIDFromVDiskID(record.GetVDiskID()), TAppData::TimeProvider->Now(), (ui32)ev->Get()->GetCachedByteSize(),
-            &record, nullptr, nullptr, nullptr, NWilson::TTraceId());
+            &record, nullptr, nullptr, nullptr);
 
         auto it = Barriers.lower_bound(first);
         while (it != Barriers.end() && it->first <= last) {

@@ -2,6 +2,7 @@
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_response.h>
 #include <ydb/core/blobstorage/vdisk/common/circlebufresize.h>
+#include <ydb/core/base/wilson.h>
 
 namespace NKikimr {
 
@@ -25,7 +26,8 @@ namespace NKikimr {
             TRope &&buffer,
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> result,
             const TActorId &recipient,
-            ui64 recipientCookie)
+            ui64 recipientCookie,
+            NWilson::TTraceId traceId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -33,6 +35,7 @@ namespace NKikimr {
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
+        , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put")
     {}
 
     void TLoggedRecVPut::Replay(THull &hull, const TActorContext &ctx) {
@@ -44,6 +47,7 @@ namespace NKikimr {
                 << " msg# " << Result->ToString()
                 << " Marker# BSVSLR01");
 
+        Span.EndOk();
         SendVDiskResponse(ctx, Recipient, Result.release(), RecipientCookie);
     }
 
@@ -58,7 +62,8 @@ namespace NKikimr {
             TRope &&buffer,
             std::unique_ptr<TEvVMultiPutItemResult> result,
             const TActorId &recipient,
-            ui64 recipientCookie)
+            ui64 recipientCookie,
+            NWilson::TTraceId traceId)
         : ILoggedRec(seg, confirmSyncLogAlso)
         , Id(id)
         , Ingress(ingress)
@@ -66,6 +71,7 @@ namespace NKikimr {
         , Result(std::move(result))
         , Recipient(recipient)
         , RecipientCookie(recipientCookie)
+        , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem")
     {}
 
     void TLoggedRecVMultiPutItem::Replay(THull &hull, const TActorContext &ctx) {
@@ -78,6 +84,7 @@ namespace NKikimr {
                 << " msg# " << Result->ToString()
                 << " Marker# BSVSLR02");
 
+        Span.EndOk();
         ctx.Send(Recipient, Result.release(), RecipientCookie);
     }
 
@@ -92,6 +99,7 @@ namespace NKikimr {
         : ILoggedRec(seg, confirmSyncLogAlso)
         , HugeKeeperId(hugeKeeperId)
         , Ev(ev)
+        , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Log.PutHuge")
     {}
 
     void TLoggedRecVPutHuge::Replay(THull &hull, const TActorContext &ctx) {
@@ -107,6 +115,7 @@ namespace NKikimr {
         LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_PUT, hull.GetHullCtx()->VCtx->VDiskLogPrefix
                 << "TEvVPut: realtime# false result# " << msg->Result->ToString()
                 << " Marker# BSVSLR03");
+        Span.EndOk();
         SendVDiskResponse(ctx, msg->OrigClient, msg->Result.release(), msg->OrigCookie);
     }
 
@@ -132,7 +141,7 @@ namespace NKikimr {
     {}
 
     void TLoggedRecVBlock::Replay(THull &hull, const TActorContext &ctx) {
-        auto replySender = [&ctx] (const TActorId &id, ui64 cookie, IEventBase *msg) {
+        auto replySender = [&ctx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
             SendVDiskResponse(ctx, id, msg, cookie);
         };
 
@@ -183,7 +192,7 @@ namespace NKikimr {
     {}
 
     void TLoggedRecLocalSyncData::Replay(THull &hull, const TActorContext &ctx) {
-        auto replySender = [&ctx] (const TActorId &id, ui64 cookie, IEventBase *msg) {
+        auto replySender = [&ctx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
             SendVDiskResponse(ctx, id, msg, cookie);
         };
 

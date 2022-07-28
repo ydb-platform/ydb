@@ -52,6 +52,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
         }
     };
 
+    static std::atomic<TMonotonic> ThrottlingTimestamp;
+
     const ui32 GroupId;
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     std::shared_ptr<TBlobStorageGroupInfo::TTopology> Topology;
@@ -219,7 +221,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
             if (rate) {
                 const ui64 num = RandomNumber<ui64>(1000000); // in range [0, 1000000)
                 if (num < rate) {
-                    ev->TraceId = NWilson::TTraceId::NewTraceId(15, 4095);
+                    ev->TraceId = NWilson::TTraceId::NewTraceIdThrottled(15, Max<ui32>(), ThrottlingTimestamp,
+                        TMonotonic::Now(), TDuration::Seconds(1));
                 }
             }
         }

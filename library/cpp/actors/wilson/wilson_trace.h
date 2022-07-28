@@ -1,5 +1,8 @@
 #pragma once
 
+#include <library/cpp/actors/core/monotonic.h>
+#include <library/cpp/actors/protos/actors.pb.h>
+
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <util/stream/output.h>
@@ -28,6 +31,11 @@ namespace NWilson {
         TTraceId(TTrace traceId, ui64 spanId, ui8 verbosity, ui32 timeToLive)
             : TraceId(traceId)
         {
+            if (timeToLive == Max<ui32>()) {
+                timeToLive = 4095;
+            }
+            Y_VERIFY(verbosity <= 15);
+            Y_VERIFY(timeToLive <= 4095);
             SpanId = spanId;
             Verbosity = verbosity;
             TimeToLive = timeToLive;
@@ -86,7 +94,7 @@ namespace NWilson {
             , Raw(other.Raw)
         {
             other.TraceId.fill(0);
-            other.SpanId = 0;
+            other.SpanId = 1; // make it explicitly invalid
             other.Raw = 0;
         }
 
@@ -95,7 +103,10 @@ namespace NWilson {
             : TraceId(other.TraceId)
             , SpanId(other.SpanId)
             , Raw(other.Raw)
-        {}
+        {
+            // validate trace id only when we are making a copy
+            other.Validate();
+        }
 
         TTraceId(const TSerializedTraceId& in) {
             const char *p = in;
@@ -106,6 +117,17 @@ namespace NWilson {
             memcpy(&Raw, p, sizeof(Raw));
             p += sizeof(Raw);
             Y_VERIFY_DEBUG(p - in == sizeof(TSerializedTraceId));
+        }
+
+        TTraceId(const NActorsProto::TTraceId& pb)
+            : TTraceId()
+        {
+            if (pb.HasData()) {
+                const auto& data = pb.GetData();
+                if (data.size() == sizeof(TSerializedTraceId)) {
+                    *this = *reinterpret_cast<const TSerializedTraceId*>(data.data());
+                }
+            }
         }
 
         void Serialize(TSerializedTraceId *out) const {
@@ -119,13 +141,21 @@ namespace NWilson {
             Y_VERIFY_DEBUG(p - *out == sizeof(TSerializedTraceId));
         }
 
+        void Serialize(NActorsProto::TTraceId *pb) const {
+            if (*this) {
+                TSerializedTraceId data;
+                Serialize(&data);
+                pb->SetData(reinterpret_cast<const char*>(&data), sizeof(data));
+            }
+        }
+
         TTraceId& operator=(TTraceId&& other) {
             if (this != &other) {
                 TraceId = other.TraceId;
                 SpanId = other.SpanId;
                 Raw = other.Raw;
                 other.TraceId.fill(0);
-                other.SpanId = 0;
+                other.SpanId = 1; // make it explicitly invalid
                 other.Raw = 0;
             }
             return *this;
@@ -138,11 +168,25 @@ namespace NWilson {
             return TTraceId(GenerateTraceId(), 0, verbosity, timeToLive);
         }
 
+        static TTraceId NewTraceIdThrottled(ui8 verbosity, ui32 timeToLive, std::atomic<NActors::TMonotonic>& counter,
+                NActors::TMonotonic now, TDuration periodBetweenSamples) {
+            static_assert(std::atomic<NActors::TMonotonic>::is_always_lock_free);
+            for (;;) {
+                NActors::TMonotonic ts = counter.load();
+                if (now < ts) {
+                    return {};
+                } else if (counter.compare_exchange_strong(ts, now + periodBetweenSamples)) {
+                    return NewTraceId(verbosity, timeToLive);
+                }
+            }
+        }
+
         static TTraceId NewTraceId() { // NBS stub
             return TTraceId();
         }
 
         TTraceId Span(ui8 verbosity) const {
+            Validate();
             return *this && TimeToLive && verbosity <= Verbosity
                 ? TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1)
                 : TTraceId();
@@ -174,10 +218,13 @@ namespace NWilson {
         const void *GetSpanIdPtr() const { return &SpanId; }
         static constexpr size_t GetSpanIdSize() { return sizeof(ui64); }
 
+        void Validate() const {
+            Y_VERIFY_DEBUG(*this || !SpanId);
+        }
+
         // for compatibility with NBS
         TTraceId Clone() const { return NWilson::TTraceId(*this); }
         ui64 GetTraceId() const { return 0; }
         void OutputSpanId(IOutputStream&) const {}
     };
-
 }

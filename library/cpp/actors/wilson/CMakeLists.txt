@@ -12,6 +12,7 @@ target_link_libraries(cpp-actors-wilson PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-actors-core
+  cpp-actors-protos
   actors-wilson-protos
 )
 target_sources(cpp-actors-wilson PRIVATE

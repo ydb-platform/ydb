@@ -403,6 +403,8 @@ message TVMultiPutItem {
     optional uint64 Cookie = 4;
 
     repeated TEvVPut.TExtraBlockCheck ExtraBlockChecks = 5;
+
+    optional NActorsProto.TTraceId TraceId = 6;
 }
 
 message TEvVMultiPut {

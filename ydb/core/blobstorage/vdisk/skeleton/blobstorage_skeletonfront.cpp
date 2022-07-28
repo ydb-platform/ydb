@@ -19,9 +19,11 @@
 
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 #include <util/generic/set.h>
 #include <util/generic/maybe.h>
@@ -114,9 +116,10 @@ namespace NKikimr {
                 , ExtQueueId(extQueueId)
                 , ClientId(clientId)
                 , ActorId(Ev->Sender)
-                , Span(9 /*verbosity*/, NWilson::ERelation::FollowsFrom, std::move(Ev->TraceId), now, "VDisk.PutInQueue")
+                , Span(TWilson::VDiskTopLevel, std::move(Ev->TraceId), "VDisk.SkeletonFront.Queue")
             {
                 Span.Attribute("QueueName", std::move(name));
+                Ev->TraceId = Span.GetTraceId();
             }
         };
 

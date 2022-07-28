@@ -329,8 +329,7 @@ namespace NKikimr {
 
         // creates an actor for efficient async data reads, returns nullptr
         // if no read required
-        IActor *CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId, bool isRepl,
-            TInstant now);
+        IActor *CreateAsyncDataReader(const TActorId &notifyID, ui8 priority, NWilson::TTraceId traceId, bool isRepl);
 
         const TReadBatcherResult &GetResult() const { return *Result; }
         ui64 GetPDiskReadBytes() const { return PDiskReadBytes; }

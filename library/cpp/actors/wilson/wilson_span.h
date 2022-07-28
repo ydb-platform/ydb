@@ -1,5 +1,7 @@
 #pragma once
 
+#include <library/cpp/actors/core/actor.h>
+#include <library/cpp/actors/core/actorsystem.h>
 #include <library/cpp/actors/wilson/protos/trace.pb.h>
 #include <util/generic/hash.h>
 #include <util/datetime/cputimer.h>
@@ -42,12 +44,17 @@ namespace NWilson {
             const ui64 StartCycles;
             const TTraceId TraceId;
             NTraceProto::Span Span;
+            bool Sent = false;
 
             TData(TInstant startTime, ui64 startCycles, TTraceId traceId)
                 : StartTime(startTime)
                 , StartCycles(startCycles)
                 , TraceId(std::move(traceId))
             {}
+
+            ~TData() {
+                Y_VERIFY_DEBUG(Sent);
+            }
         };
 
         std::unique_ptr<TData> Data;
@@ -57,94 +64,134 @@ namespace NWilson {
         TSpan(const TSpan&) = delete;
         TSpan(TSpan&&) = default;
 
-        TSpan(ui8 verbosity, ERelation /*relation*/, TTraceId parentId, TInstant now, std::optional<TString> name)
-            : Data(parentId ? std::make_unique<TData>(now, GetCycleCount(), parentId.Span(verbosity)) : nullptr)
+        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name)
+            : Data(parentId ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity)) : nullptr)
         {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 if (!parentId.IsRoot()) {
                     Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
                 }
-                Data->Span.set_start_time_unix_nano(now.NanoSeconds());
+                Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
+                Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
 
                 if (name) {
                     Name(std::move(*name));
                 }
+
+                Attribute("node_id", NActors::TActivationContext::ActorSystem()->NodeId);
+            }
+        }
+
+        ~TSpan() {
+            if (Y_UNLIKELY(*this)) {
+                EndError("unterminated span");
             }
         }
 
         TSpan& operator =(const TSpan&) = delete;
-        TSpan& operator =(TSpan&&) = default;
 
-        operator bool() const {
-            return static_cast<bool>(Data);
+        TSpan& operator =(TSpan&& other) {
+            if (this != &other) {
+                if (Y_UNLIKELY(*this)) {
+                    EndError("TSpan instance incorrectly overwritten");
+                }
+                Data = std::exchange(other.Data, nullptr);
+            }
+            return *this;
+        }
+
+        explicit operator bool() const {
+            return Data && !Data->Sent;
+        }
+
+        TSpan& Relation(ERelation /*relation*/) {
+            if (Y_UNLIKELY(*this)) {
+                // update relation in data somehow
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
+            }
+            return *this;
         }
 
         TSpan& Name(TString name) {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 Data->Span.set_name(std::move(name));
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
             return *this;
         }
 
         TSpan& Attribute(TString name, TAttributeValue value) {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 SerializeKeyValue(std::move(name), std::move(value), Data->Span.add_attributes());
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
             return *this;
         }
 
         TSpan& Event(TString name, TKeyValueList attributes) {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 auto *event = Data->Span.add_events();
                 event->set_time_unix_nano(TimeUnixNano());
                 event->set_name(std::move(name));
                 for (auto&& [key, value] : attributes) {
                     SerializeKeyValue(std::move(key), std::move(value), event->add_attributes());
                 }
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
             return *this;
         }
 
         TSpan& Link(const TTraceId& traceId, TKeyValueList attributes) {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 auto *link = Data->Span.add_links();
                 link->set_trace_id(traceId.GetTraceIdPtr(), traceId.GetTraceIdSize());
                 link->set_span_id(traceId.GetSpanIdPtr(), traceId.GetSpanIdSize());
                 for (auto&& [key, value] : attributes) {
                     SerializeKeyValue(std::move(key), std::move(value), link->add_attributes());
                 }
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
             return *this;
         }
 
         void EndOk() {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 auto *status = Data->Span.mutable_status();
                 status->set_code(NTraceProto::Status::STATUS_CODE_OK);
+                End();
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
-            End();
         }
 
         void EndError(TString error) {
-            if (*this) {
+            if (Y_UNLIKELY(*this)) {
                 auto *status = Data->Span.mutable_status();
                 status->set_code(NTraceProto::Status::STATUS_CODE_ERROR);
                 status->set_message(std::move(error));
+                End();
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
-            End();
         }
 
         void End() {
-            if (*this) {
-                Data->Span.set_end_time_unix_nano(TimeUnixNano());
+            if (Y_UNLIKELY(*this)) {
                 Data->Span.set_trace_id(Data->TraceId.GetTraceIdPtr(), Data->TraceId.GetTraceIdSize());
                 Data->Span.set_span_id(Data->TraceId.GetSpanIdPtr(), Data->TraceId.GetSpanIdSize());
+                Data->Span.set_end_time_unix_nano(TimeUnixNano());
                 Send();
-                Data.reset(); // tracing finished
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
             }
         }
 
-        operator TTraceId() const {
+        TTraceId GetTraceId() const {
             return Data ? TTraceId(Data->TraceId) : TTraceId();
         }
 

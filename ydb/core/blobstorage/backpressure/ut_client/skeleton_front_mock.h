@@ -79,7 +79,7 @@ public:
             Reply(*ev, new TEvBlobStorage::TEvVPutResult(NKikimrProto::NOTREADY,
                 blobId, vdiskId, record.HasCookie() ? &cookie : nullptr,
                 TOutOfSpaceStatus(0, 0), TActivationContext::Now(), ev->Get()->GetCachedByteSize(),
-                &record, nullptr, nullptr, nullptr, record.GetBuffer().size(), {}, 0, TString()));
+                &record, nullptr, nullptr, nullptr, record.GetBuffer().size(), 0, TString()));
             if (record.GetNotifyIfNotReady()) {
                 Notify.insert(ev->Sender);
             }
@@ -91,7 +91,7 @@ public:
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> reply(new TEvBlobStorage::TEvVPutResult(NKikimrProto::OK,
             blobId, vdiskId, record.HasCookie() ? &cookie : nullptr,
             TOutOfSpaceStatus(0, 0), TActivationContext::Now(), ev->Get()->GetCachedByteSize(),
-            &record, nullptr, nullptr, nullptr, record.GetBuffer().size(), {}, 0, TString()));
+            &record, nullptr, nullptr, nullptr, record.GetBuffer().size(), 0, TString()));
 
         auto *qos = reply->Record.MutableMsgQoS();
         LOG_DEBUG_S(*TlsActivationContext, NActorsServices::TEST, "Received " << SingleLineProto(*qos));

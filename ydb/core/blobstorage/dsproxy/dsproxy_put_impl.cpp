@@ -66,7 +66,7 @@ void TPutImpl::PrepareReply(NKikimrProto::EReplyStatus status, TLogContext &logC
             continue;
         }
 
-        outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(status, Blobs[idx].Id, StatusFlags,
+        outPutResults.emplace_back(idx, new TEvBlobStorage::TEvPutResult(status, Blobs[idx].BlobId, StatusFlags,
             Info->GroupID, ApproximateFreeSpaceShare));
         outPutResults.back().second->ErrorReason = errorReason;
 
@@ -87,7 +87,7 @@ void TPutImpl::PrepareReply(TLogContext &logCtx, TString errorReason,
     for (auto item : finished) {
         auto &[blobId, state] = *item;
         const ui64 idx = state.BlobIdx;
-        Y_VERIFY(blobId == Blobs[idx].Id, "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
+        Y_VERIFY(blobId == Blobs[idx].BlobId, "BlobIdx# %" PRIu64 " BlobState# %s Blackboard# %s",
             idx, state.ToString().c_str(), Blackboard.ToString().c_str());
         Y_VERIFY(!IsDone[idx]);
         Y_VERIFY(state.Status != NKikimrProto::UNKNOWN);
@@ -149,7 +149,7 @@ TString TPutImpl::DumpFullState() const {
 bool TPutImpl::MarkBlobAsSent(ui64 idx) {
     Y_VERIFY(idx < Blobs.size());
     Y_VERIFY(!IsDone[idx]);
-    Blackboard.MoveBlobStateToDone(Blobs[idx].Id);
+    Blackboard.MoveBlobStateToDone(Blobs[idx].BlobId);
     IsDone[idx] = true;
     DoneBlobs++;
     return true;

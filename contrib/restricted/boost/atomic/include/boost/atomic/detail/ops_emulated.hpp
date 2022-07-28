@@ -26,10 +26,6 @@
 #pragma once
 #endif
 
-#ifdef __GNUC__
-#pragma GCC system_header
-#endif
-
 namespace boost {
 namespace atomics {
 namespace detail {

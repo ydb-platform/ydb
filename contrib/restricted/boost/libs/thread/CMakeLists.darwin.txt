@@ -33,6 +33,7 @@ target_compile_options(boost-libs-thread PRIVATE
 target_link_libraries(boost-libs-thread PUBLIC
   contrib-libs-cxxsupp
   contrib-restricted-boost
+  restricted-boost-atomic
   boost-libs-chrono
   restricted-boost-system
 )

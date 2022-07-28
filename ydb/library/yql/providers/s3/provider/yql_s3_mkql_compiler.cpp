@@ -18,6 +18,7 @@ TRuntimeNode BuildSerializeCall(
     const std::vector<std::string_view>& keys,
     const std::string_view& format,
     TType* inputType,
+    const TS3Configuration::TPtr& config,
     NCommon::TMkqlBuildContext& ctx)
 {
     const auto inputItemType = AS_TYPE(TFlowType, inputType)->GetItemType();
@@ -41,6 +42,9 @@ TRuntimeNode BuildSerializeCall(
     }
 
     TString settings;
+    TStringOutput stream(settings);
+    NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
+    writer.OpenMap();
     if (!keys.empty()) {
         const std::unordered_set<std::string_view> set(keys.cbegin(), keys.cend());
         const auto structType = AS_TYPE(TStructType, inputItemType);
@@ -73,34 +77,42 @@ TRuntimeNode BuildSerializeCall(
             );
         }
 
-        TStringOutput stream(settings);
-        NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
-        writer.OpenMap();
-            writer.WriteKey("keys");
-            writer.OpenArray();
-                std::for_each(keys.cbegin(), keys.cend(), [&writer](const std::string_view& key){ writer.Write(key); });
-            writer.CloseArray();
-        writer.CloseMap();
-        writer.Flush();
+        writer.WriteKey("keys");
+        writer.OpenArray();
+            std::for_each(keys.cbegin(), keys.cend(), [&writer](const std::string_view& key){ writer.Write(key); });
+        writer.CloseArray();
+
+        if (const auto keysCount = config->UniqueKeysCountLimit.Get())
+            writer.Write("keys_count_limit", *keysCount);
     }
+
+    if (const auto totalSize = config->SerializeMemoryLimit.Get())
+        writer.Write("total_size_limit", *totalSize);
+    if (const auto blockSize = config->BlockSizeMemoryLimit.Get())
+        writer.Write("block_size_limit", *blockSize);
+
+    writer.CloseMap();
+    writer.Flush();
+    if (settings == "{}")
+        settings.clear();
 
     input = ctx.ProgramBuilder.FromFlow(input);
     const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({input.GetStaticType()})});
     return ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.SerializeFormat", {}, userType, format + settings), {input}));
 }
 
-TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, NCommon::TMkqlBuildContext& ctx) {
+TRuntimeNode SerializeForS3(const TS3SinkOutput& wrapper, const TS3Configuration::TPtr& config, NCommon::TMkqlBuildContext& ctx) {
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
     const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
     std::vector<std::string_view> keys;
     keys.reserve(wrapper.KeyColumns().Size());
     wrapper.KeyColumns().Ref().ForEachChild([&](const TExprNode& key){ keys.emplace_back(key.Content()); });
-    return BuildSerializeCall(input, keys, wrapper.Format().Value(), inputItemType,  ctx);
+    return BuildSerializeCall(input, keys, wrapper.Format().Value(), inputItemType, config, ctx);
 }
 
 }
 
-void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TS3State::TPtr&) {
+void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, const TS3State::TPtr& state) {
     compiler.ChainCallable(TDqSourceWideWrap::CallableName(),
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             if (const auto wrapper = TDqSourceWideWrap(&node); wrapper.DataSource().Category().Value() == S3ProviderName) {
@@ -115,8 +127,8 @@ void RegisterDqS3MkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler, con
 
     if (!compiler.HasCallable(TS3SinkOutput::CallableName()))
         compiler.AddCallable(TS3SinkOutput::CallableName(),
-            [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
-                return SerializeForS3(TS3SinkOutput(&node), ctx);
+            [state](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+                return SerializeForS3(TS3SinkOutput(&node), state->Configuration, ctx);
             });
 }
 

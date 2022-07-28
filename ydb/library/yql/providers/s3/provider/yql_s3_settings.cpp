@@ -9,6 +9,10 @@ using namespace NCommon;
 TS3Configuration::TS3Configuration()
 {
     REGISTER_SETTING(*this, SourceCoroActor);
+    REGISTER_SETTING(*this, MaxOutputObjectSize);
+    REGISTER_SETTING(*this, UniqueKeysCountLimit);
+    REGISTER_SETTING(*this, BlockSizeMemoryLimit);
+    REGISTER_SETTING(*this, SerializeMemoryLimit);
 }
 
 TS3Settings::TConstPtr TS3Configuration::Snapshot() const {

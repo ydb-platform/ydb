@@ -11,6 +11,10 @@ struct TS3Settings {
     using TConstPtr = std::shared_ptr<const TS3Settings>;
 
     NCommon::TConfSetting<bool, false> SourceCoroActor;
+    NCommon::TConfSetting<ui64, false> MaxOutputObjectSize;
+    NCommon::TConfSetting<ui64, false> UniqueKeysCountLimit;
+    NCommon::TConfSetting<ui64, false> BlockSizeMemoryLimit;
+    NCommon::TConfSetting<ui64, false> SerializeMemoryLimit; // Total serialization memory limit for all current blocks for all patition keys. Reachable in case of many but small partitions.
 };
 
 struct TS3ClusterSettings {

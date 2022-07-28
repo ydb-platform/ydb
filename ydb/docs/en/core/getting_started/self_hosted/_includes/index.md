@@ -1,8 +1,9 @@
-# Deployment of a single-node {{ ydb-short-name }} cluster 
+# Deploying a single-node {{ ydb-short-name }} cluster
 
-This section contains articles describing simple scenarios to deploy a local single-node YDB cluster running a single database. Such database can be used for development and functional testing purposes.
+This section contains articles describing simple scenarios for deploying a single-node YDB cluster that serves a single database on a local machine. This database can be used for development or functional testing.
 
 {% include [simple_options](simple_options.md) %}
 
-Single-node deployments of YDB are not recommended for performance testing, as YDB architecture is designed for horizontal scalability, with relevant impact to applied algorithms and computing overhead. Deployment of a mutli-node cluster is described in the [Cluster management](../../../deploy/index.md) section.
+We do not recommend using single-node configurations for performance benchmarking because the YDB architecture is designed to run in clusters with a relevant impact on applied algorithms and overhead costs. Deployment of multi-node clusters is described in the [Cluster management](../../../deploy/index.md) section.
 
+Before starting, see the [system requirements and recommendations](../../../cluster/system-requirements.md).

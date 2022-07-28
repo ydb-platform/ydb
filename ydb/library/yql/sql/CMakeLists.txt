@@ -16,6 +16,7 @@ target_link_libraries(library-yql-sql PUBLIC
   yql-sql-v0
   sql-v0-lexer
   yql-sql-v1
+  sql-v1-format
   sql-v1-lexer
   sql-v1-proto_parser
   library-yql-utils

@@ -82,8 +82,13 @@ public:
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
-        Become(&TS3FileWriteActor::InitialStateFunc);
-        Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
+        if (InputFinished && 1U == Parts.size()) {
+            Gateway->Upload(Url, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, std::placeholders::_1), true, GetS3RetryPolicy());
+            Parts.pop();
+        } else {
+            Become(&TS3FileWriteActor::InitialStateFunc);
+            Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
+        }
     }
 
     static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
@@ -113,7 +118,6 @@ private:
         hFunc(TEvPrivate::TEvUploadPartFinished, Handle);
     )
 
-
     static void OnUploadsCreated(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U: try {
@@ -121,23 +125,23 @@ private:
             if (const auto& root = xml.Root(); root.Name() == "Error") {
                 const auto& code = root.Node("Code", true).Value<TString>();
                 const auto& message = root.Node("Message", true).Value<TString>();
-                actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
             } else if (root.Name() != "InitiateMultipartUploadResult")
-                actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on create upload.")})));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on create upload.")})));
             else {
                 const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
             }
             break;
         } catch (const std::exception& ex) {
-            actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse create upload response.")})));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse create upload response.")})));
             break;
         }
         case 1U:
-            actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(result)))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(result)))));
             break;
         default:
-            actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected variant index " << result.index() << " on create upload response.")})));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected variant index " << result.index() << " on create upload response.")})));
             break;
         }
     }
@@ -149,41 +153,55 @@ private:
 
             if (const auto p = str.find("etag: \""); p != TString::npos) {
                 if (const auto p1 = p + 7, p2 = str.find("\"", p1); p2 != TString::npos) {
-                    actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadPartFinished(size, index, str.substr(p1, p2 - p1))));
+                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, str.substr(p1, p2 - p1))));
                     break;
                 }
             }
-            actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response:" << Endl << str)})));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response:" << Endl << str)})));
             break;
         }
         case 1U:
-            actorSystem->Send(new IEventHandle(parentId, TActorId(), new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(response)))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(response)))));
             break;
         }
     }
 
-    static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, const TString& key, IHTTPGateway::TResult&& result) {
+    static void OnMultipartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U: try {
             const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
             if (const auto& root = xml.Root(); root.Name() == "Error") {
                 const auto& code = root.Node("Code", true).Value<TString>();
                 const auto& message = root.Node("Message", true).Value<TString>();
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
             } else if (root.Name() != "CompleteMultipartUploadResult")
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on finish upload.")})));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on finish upload.")})));
             else
-                actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadFinished(key)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key)));
             break;
         } catch (const std::exception& ex) {
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse finish upload response.")})));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse finish upload response.")})));
             break;
         }
         case 1U:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(result)))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(result)))));
             break;
         default:
-            actorSystem->Send(new IEventHandle(selfId, TActorId(), new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response.")})));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response.")})));
+            break;
+        }
+    }
+
+    static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, IHTTPGateway::TResult&& result) {
+        switch (result.index()) {
+        case 0U:
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key)));
+            break;
+        case 1U:
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(result)))));
+            break;
+        default:
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected variant index " << result.index() << " on finish upload response.")})));
             break;
         }
     }
@@ -226,7 +244,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, ParentId, Key, std::placeholders::_1), false, GetS3RetryPolicy());
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnMultipartUploadFinish, ActorSystem, SelfId(), ParentId, Key, std::placeholders::_1), false, GetS3RetryPolicy());
     }
 
     IHTTPGateway::THeaders MakeHeader() const {

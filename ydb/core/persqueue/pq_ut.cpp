@@ -21,13 +21,10 @@
 
 
 namespace NKikimr {
+
 const static TString TOPIC_NAME = "rt3.dc1--topic";
+
 Y_UNIT_TEST_SUITE(TPQTest) {
-
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// SINGLE COMMAND TEST FUNCTIONS
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 Y_UNIT_TEST(TestGroupsBalancer) {
     TTestContext tc;
@@ -1190,7 +1187,8 @@ Y_UNIT_TEST(TestWritePQ) {
         tc.Prepare(dispatchName, setup, activeZone);
         tc.Runtime->SetScheduledLimit(100);
 
-        PQTabletPrepare({}, {{"user", true}}, tc); //important client, lifetimeseconds=0 - never delete
+        // Important client, lifetimeseconds=0 - never delete
+        PQTabletPrepare({}, {{"user", true}}, tc);
 
         TVector<std::pair<ui64, TString>> data, data1, data2;
         activeZone = PlainOrSoSlow(true, false);
@@ -1482,7 +1480,6 @@ Y_UNIT_TEST(TestWriteToFullPartition) {
 }
 
 
-
 Y_UNIT_TEST(TestTimeRetention) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -1560,7 +1557,6 @@ Y_UNIT_TEST(TestPQPartialRead) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         tc.Prepare(dispatchName, setup, activeZone);
-
         tc.Runtime->SetScheduledLimit(200);
 
         PQTabletPrepare({}, {{"aaa", true}}, tc); //important client - never delete

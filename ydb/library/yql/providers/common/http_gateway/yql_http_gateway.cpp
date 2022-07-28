@@ -75,7 +75,7 @@ public:
     }
 
     virtual void Fail(const TIssue& error) = 0;
-    virtual void Done(CURLcode result) = 0;
+    virtual void Done(CURLcode result, long httpResponseCode) = 0;
 
     virtual size_t Write(void* contents, size_t size, size_t nmemb) = 0;
     virtual size_t Read(char *buffer, size_t size, size_t nmemb) = 0;
@@ -153,12 +153,9 @@ private:
         }
     }
 
-    void Done(CURLcode result) final {
+    void Done(CURLcode result, long httpResponseCode) final {
         if (CURLE_OK != result)
             return Fail(TIssue(curl_easy_strerror(result)));
-
-        long httpResponseCode = 0;
-        curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
 
         const std::unique_lock lock(SyncCallbacks);
         while (!Callbacks.empty()) {
@@ -225,7 +222,7 @@ private:
         return OnFinish(TIssues{error});
     }
 
-    void Done(CURLcode result) final {
+    void Done(CURLcode result, long) final {
         if (CURLE_OK != result)
             return Fail(TIssue(curl_easy_strerror(result)));
 
@@ -426,12 +423,13 @@ private:
 
     void Done(CURL* handle, CURLcode result) {
         TEasyCurl::TPtr easy;
+        long httpResponseCode = 0L;
         {
             const std::unique_lock lock(Sync);
             if (const auto it = Allocated.find(handle); Allocated.cend() != it) {
-                long httpResponseCode = 0;
                 easy = std::move(it->second);
-                curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
+                if (CURLE_OK == result)
+                    curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
                     if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(httpResponseCode)) {
@@ -447,7 +445,7 @@ private:
                 Requests.clear();
         }
         if (easy) {
-            easy->Done(result);
+            easy->Done(result, httpResponseCode);
         }
     }
 

@@ -1,4 +1,5 @@
 #include "yql_s3_write_actor.h"
+#include "yql_s3_retry_policy.h"
 
 #include <ydb/library/yql/utils/yql_panic.h>
 
@@ -25,10 +26,6 @@ namespace NYql::NDq {
 using namespace NActors;
 
 namespace {
-
-ERetryErrorClass RetryS3SlowDown(long httpResponseCode) {
-    return httpResponseCode == 503 ? ERetryErrorClass::LongRetry : ERetryErrorClass::NoRetry; // S3 Slow Down == 503
-}
 
 struct TEvPrivate {
     // Event ids
@@ -68,46 +65,6 @@ struct TEvPrivate {
     };
 };
 
-using TPath = std::tuple<TString, size_t>;
-using TPathList = std::vector<TPath>;
-
-class TRetryParams {
-public:
-    TRetryParams(const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
-        : MaxRetries(retryConfig && retryConfig->GetMaxRetriesPerPath() ? retryConfig->GetMaxRetriesPerPath() : 3U)
-        , InitDelayMs(retryConfig && retryConfig->GetInitialDelayMs() ? TDuration::MilliSeconds(retryConfig->GetInitialDelayMs()) : TDuration::MilliSeconds(100))
-        , InitEpsilon(retryConfig && retryConfig->GetEpsilon() ? retryConfig->GetEpsilon() : 0.1)
-    {
-        Y_VERIFY(0. < InitEpsilon && InitEpsilon < 1.);
-        Reset();
-    }
-
-    void Reset() {
-        Retries = 0U;
-        DelayMs = InitDelayMs;
-        Epsilon = InitEpsilon;
-    }
-
-    TDuration GetNextDelay() {
-        if (++Retries > MaxRetries)
-            return TDuration::Zero();
-        return DelayMs = GenerateNextDelay();
-    }
-private:
-    TDuration GenerateNextDelay() {
-        const auto low = 1. - Epsilon;
-        const auto jitter = low + std::rand() / (RAND_MAX / (2. * Epsilon));
-        return DelayMs * jitter;
-    }
-
-    const ui32 MaxRetries;
-    const TDuration InitDelayMs;
-    const double InitEpsilon;
-
-    ui32 Retries;
-    TDuration DelayMs;
-    double Epsilon;
-};
 
 using namespace NKikimr::NMiniKQL;
 
@@ -126,7 +83,7 @@ public:
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
         Become(&TS3FileWriteActor::InitialStateFunc);
-        Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown));
+        Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
     }
 
     static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
@@ -256,7 +213,7 @@ private:
             const auto index = Tags.size();
             Tags.emplace_back();
             InFlight += size;
-            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown));
+            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, GetS3RetryPolicy());
         }
     }
 
@@ -269,7 +226,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, ParentId, Key, std::placeholders::_1), false, IRetryPolicy<long>::GetExponentialBackoffPolicy(RetryS3SlowDown));
+        Gateway->Upload(Url + "?uploadId=" + UploadId, MakeHeader(), xml, std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, ParentId, Key, std::placeholders::_1), false, GetS3RetryPolicy());
     }
 
     IHTTPGateway::THeaders MakeHeader() const {
@@ -294,8 +251,6 @@ private:
 
     std::queue<TString> Parts;
     std::vector<TString> Tags;
-
-    std::vector<TRetryParams> RetriesPerPath;
 
     TString UploadId;
 };
@@ -400,8 +355,6 @@ private:
     const TString Url;
     const TString Path;
     const std::vector<TString> Keys;
-
-    std::vector<TRetryParams> RetriesPerPath;
 
     std::unordered_map<TString, TS3FileWriteActor*> FileWriteActors;
 };

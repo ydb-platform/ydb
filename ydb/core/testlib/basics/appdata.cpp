@@ -186,4 +186,11 @@ namespace NKikimr {
         }
     }
 
+    void TAppPrepare::SetEnablePqBilling(std::optional<bool> value)
+    {
+        if (value) {
+            PQConfig.MutableBillingMeteringConfig()->SetEnabled(*value);
+        }
+    }
+
 }

@@ -1,3 +1,4 @@
+#include <ydb/core/metering/metering.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
@@ -623,6 +624,49 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             StreamName: "Stream"
         )");
         env.TestWaitNotification(runtime, txId);
+    }
+
+    Y_UNIT_TEST(Metering) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions()
+            .EnableProtoSourceIdInfo(true)
+            .EnablePqBilling(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
+        TVector<TString> meteringRecords;
+        runtime.SetObserverFunc([&meteringRecords](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() != NMetering::TEvMetering::EvWriteMeteringJson) {
+                return TTestActorRuntime::EEventAction::PROCESS;
+            }
+
+            meteringRecords.push_back(ev->Get<NMetering::TEvMetering::TEvWriteMeteringJson>()->MeteringJson);
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        for (int i = 0; i < 10; ++i) {
+            UNIT_ASSERT(meteringRecords.empty());
+            env.SimulateSleep(runtime, TDuration::Seconds(10));
+        }
     }
 
 } // TCdcStreamTests

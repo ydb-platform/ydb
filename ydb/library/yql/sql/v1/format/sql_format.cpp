@@ -1746,6 +1746,25 @@ TStaticData::TStaticData()
         {TRule_drop_role_stmt::GetDescriptor(), MakeFunctor(&TVisitor::VisitDropRole)},
     })
 {
+    // ensure that all statements has a visitor
+    auto coreDescr = TRule_sql_stmt_core::GetDescriptor();
+    for (int i = 0; i < coreDescr->field_count(); ++i) {
+        const NProtoBuf::FieldDescriptor* fd = coreDescr->field(i);
+        if (fd->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+            continue;
+        }
+
+        auto altDescr = fd->message_type();
+        for (int j = 0; j < altDescr->field_count(); ++j) {
+            auto fd2 = altDescr->field(j);
+            if (fd2->cpp_type() != NProtoBuf::FieldDescriptor::CPPTYPE_MESSAGE) {
+                continue;
+            }
+
+            auto stmtMessage = fd2->message_type();
+            Y_ENSURE(VisitDispatch.contains(stmtMessage), TStringBuilder() << "Missing visitor for " << stmtMessage->name());
+        }
+    }
 }
 
 class TSqlFormatter : public NSQLFormat::ISqlFormatter {

@@ -13,11 +13,6 @@ class ISqlFormatter {
 public:
     using TPtr = THolder<ISqlFormatter>;
 
-    struct TSettings {
-        bool TabToSpacesOnly = false;
-        size_t TabSize = OneIndent;
-    };
-
     virtual bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues) = 0;
     virtual ~ISqlFormatter() = default;
 };

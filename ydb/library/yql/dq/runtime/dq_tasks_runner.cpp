@@ -1,5 +1,7 @@
 #include "dq_tasks_runner.h"
 
+#include <ydb/library/yql/minikql/comp_nodes/mkql_multihopping.h>
+
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/runtime/dq_columns_resolve.h>
 #include <ydb/library/yql/dq/runtime/dq_input_channel.h>
@@ -19,6 +21,7 @@
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
 
 #include <util/generic/scope.h>
+
 
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
@@ -348,7 +351,18 @@ public:
         auto& compPatternAlloc = compPattern ? compPattern->Alloc.Ref() : Alloc().Ref();
         auto& compPatternEnv = compPattern ? compPattern->Env : typeEnv;
 
-        TComputationPatternOpts opts(compPatternAlloc, compPatternEnv, Context.ComputationFactory,
+        auto taskRunnerFactory = [this](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+            auto& computationFactory = Context.ComputationFactory;
+            if (auto res = computationFactory(callable, ctx)) {
+                return res;
+            }
+            if (callable.GetType()->GetName() == "MultiHoppingCore") {
+                return WrapMultiHoppingCore(callable, ctx, Watermark);
+            }
+            return nullptr;
+        };
+
+        TComputationPatternOpts opts(compPatternAlloc, compPatternEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, Settings.OptLLVM, EGraphPerProcess::Multi,
             ProgramParsed.StatsRegistry.Get());
 
@@ -651,6 +665,10 @@ public:
         return TaskHasEffects;
     }
 
+    void SetWatermark(TInstant time) {
+        Watermark.WatermarkIn = std::move(time);
+    }
+
     IDqInputChannel::TPtr GetInputChannel(ui64 channelId) override {
         auto ptr = InputChannels.FindPtr(channelId);
         YQL_ENSURE(ptr, "task: " << TaskId << " does not have input channelId: " << channelId);
@@ -837,6 +855,7 @@ private:
     THashMap<ui64, TOutputTransformInfo> OutputTransforms; // Output index -> Transform
     IDqOutputConsumer::TPtr Output;
     NUdf::TUnboxedValue ResultStream;
+    NKikimr::NMiniKQL::TWatermark Watermark;
 
     bool TaskHasEffects = false;
 

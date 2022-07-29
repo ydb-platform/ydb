@@ -1,3 +1,4 @@
+#include "mkql_multihopping.h"
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -38,11 +39,10 @@ namespace {
     };
 
     std::vector<TOutputItem> Ordered(std::vector<TOutputItem> vec) {
-        auto res = vec;
-        std::sort(res.begin(), res.end(), [](auto l, auto r) {
+        std::sort(vec.begin(), vec.end(), [](auto l, auto r) {
             return std::make_tuple(l.Key, l.Val, l.Time) < std::make_tuple(r.Key, r.Val, r.Time);
         });
-        return res;
+        return vec;
     }
 
     IOutputStream &operator<<(IOutputStream &output, std::vector<TOutputItem> items) {
@@ -64,10 +64,12 @@ namespace {
         return CreateDeterministicTimeProvider(10000000);
     }
 
-    TComputationNodeFactory GetAuxCallableFactory() {
-        return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+    TComputationNodeFactory GetAuxCallableFactory(TWatermark& watermark, bool watermarkMode = false) {
+        return [&watermark, watermarkMode](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (callable.GetType()->GetName() == "MyStream") {
                 return new TExternalComputationNode(ctx.Mutables);
+            } else if (callable.GetType()->GetName() == "MultiHoppingCore") {
+                return WrapMultiHoppingCore(callable, ctx, watermark, watermarkMode);
             }
 
             return GetBuiltinFactory()(callable, ctx);
@@ -75,12 +77,14 @@ namespace {
     }
 
     struct TSetup {
-        TSetup(TScopedAlloc& alloc)
+        TSetup(TScopedAlloc& alloc, TWatermark& watermark, bool watermarkMode = false)
             : FunctionRegistry(CreateFunctionRegistry(CreateBuiltinRegistry()))
             , RandomProvider(CreateRandomProvider())
             , TimeProvider(CreateTimeProvider())
             , StatsResgistry(CreateDefaultStatsRegistry())
             , Alloc(alloc)
+            , Watermark(watermark)
+            , WatermarkMode(watermarkMode)
         {
             Env.Reset(new TTypeEnvironment(Alloc));
             PgmBuilder.Reset(new TProgramBuilder(*Env, *FunctionRegistry));
@@ -88,7 +92,7 @@ namespace {
 
         THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
             Explorer.Walk(pgm.GetNode(), *Env);
-            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(),
+            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(Watermark, WatermarkMode),
                 FunctionRegistry.Get(),
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi,
                 StatsResgistry.Get());
@@ -108,20 +112,28 @@ namespace {
 
         TExploringNodeVisitor Explorer;
         IComputationPattern::TPtr Pattern;
+
+        TWatermark& Watermark;
+        bool WatermarkMode;
     };
 
     struct TStream : public NUdf::TBoxedValue {
-        TStream(const TUnboxedValueVector& items, std::function<void()> fetchCallback)
+        TStream(const TUnboxedValueVector& items, std::function<void()> fetchCallback, bool* yield)
             : Items(items)
-            , FetchCallback(fetchCallback) {}
+            , FetchCallback(fetchCallback)
+            , yield(yield) {}
 
     private:
         TUnboxedValueVector Items;
         ui32 Index = 0;
         std::function<void()> FetchCallback;
+        bool* yield;
 
         NUdf::EFetchStatus Fetch(NUdf::TUnboxedValue& result) final {
             FetchCallback();
+            if (*yield) {
+                return NUdf::EFetchStatus::Yield;
+            }
             if (Index >= Items.size()) {
                 return NUdf::EFetchStatus::Finish;
             }
@@ -135,6 +147,7 @@ namespace {
         const std::vector<TInputItem> items,
         std::function<void()> fetchCallback,
         bool dataWatermarks,
+        bool* yield,
         ui64 hop = 10,
         ui64 interval = 30,
         ui64 delay = 20)
@@ -219,7 +232,7 @@ namespace {
             streamItems.push_back(std::move(structValues));
         }
 
-        auto streamValue = NUdf::TUnboxedValuePod(new TStream(streamItems, fetchCallback));
+        auto streamValue = NUdf::TUnboxedValuePod(new TStream(streamItems, fetchCallback, yield));
         graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
         return graph;
     }
@@ -227,22 +240,38 @@ namespace {
 
 Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
     void TestImpl(
-        const std::vector<TInputItem> input,
-        const std::vector<TOutputGroup> expected,
+        const std::vector<TInputItem>& input,
+        const std::vector<TOutputGroup>& expected,
         bool dataWatermarks,
         ui64 hop = 10,
         ui64 interval = 30,
         ui64 delay = 20,
-        std::function<void(ui32, TSetup&)> customCheck = [](ui32, TSetup&){})
+        std::function<void(ui32, TSetup&)> customCheck = [](ui32, TSetup&){},
+        TWatermark* watermark = nullptr,
+        bool* yield = nullptr,
+        std::function<void()> fetch_callback= [](){},
+        bool watermarkMode = false)
     {
+        bool yield_clone = false;
+        if (!yield) {
+            yield = &yield_clone;
+        }
+        if (watermarkMode) {
+            dataWatermarks = false;
+        }
+        TWatermark watermark_clone{TInstant::Zero()};
+        if (watermark == nullptr) {
+            watermark = &watermark_clone;
+        }
         TScopedAlloc alloc;
-        TSetup setup1(alloc);
+        TSetup setup1(alloc, *watermark, watermarkMode);
 
         ui32 curGroupId = 0;
         std::vector<TOutputItem> curResult;
 
-        auto check = [&curResult, &curGroupId, &expected, customCheck, &setup1]() {
-            auto expectedItems = Ordered(expected.at(curGroupId).Items);
+        auto check = [&curResult, &curGroupId, &expected, customCheck, &setup1, &fetch_callback]() {
+            fetch_callback();
+            auto expectedItems = Ordered(expected.at(curGroupId).Items); // Add more empty lists at yield in expected
             curResult = Ordered(curResult);
             UNIT_ASSERT_EQUAL_C(curResult, expectedItems, "curGroup: " << curGroupId << " actual: " << curResult << " expected: " << expectedItems);
             customCheck(curGroupId, setup1);
@@ -250,12 +279,12 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
             curResult.clear();
         };
 
-        auto graph1 = BuildGraph(setup1, input, check, dataWatermarks, hop, interval, delay);
+        auto graph1 = BuildGraph(setup1, input, check, dataWatermarks, yield, hop, interval, delay);
 
         auto root1 = graph1->GetValue();
 
         NUdf::EFetchStatus status = NUdf::EFetchStatus::Ok;
-        while (status == NUdf::EFetchStatus::Ok) {
+        while (status == NUdf::EFetchStatus::Ok || status == NUdf::EFetchStatus::Yield) {
             NUdf::TUnboxedValue val;
             status = root1.Fetch(val);
             if (status == NUdf::EFetchStatus::Ok) {
@@ -265,6 +294,167 @@ Y_UNIT_TEST_SUITE(TMiniKQLMultiHoppingTest) {
 
         check();
         UNIT_ASSERT_EQUAL_C(curGroupId, expected.size(), "1: " << curGroupId << " 2: "  << expected.size());
+    }
+
+    void TestWatermarksImpl(
+        const std::vector<TInputItem>& input,
+        const std::vector<TOutputGroup>& expected,
+        const std::vector<std::pair<ui64, TInstant>>& watermarks)
+    {
+        bool yield = false;
+        TWatermark watermark;
+        ui64 inp_index = 0;
+        ui64 pattern_index = 0;
+        auto avant_fetch = [&yield, &watermark, &watermarks, &inp_index, &pattern_index](){
+            yield = false;
+            if (pattern_index >= watermarks.size()) {
+                return;
+            }
+            if (inp_index == watermarks[pattern_index].first) {
+                yield = true;
+                watermark.WatermarkIn = watermarks[pattern_index].second;
+                ++pattern_index;
+            } else {
+                ++inp_index;
+            }
+        };
+        TestImpl(input, expected, false, 10, 30, 20, [](ui32, TSetup&){}, &watermark, &yield, avant_fetch, true);
+    }
+
+    Y_UNIT_TEST(TestThrowWatermarkFromPast) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 101, 2},
+            {1, 131, 3},
+            {1, 200, 4},
+            {1, 300, 5},
+            {1, 400, 6}
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({})
+        };
+        std::vector<std::pair<ui64, TInstant>> yield_pattern = {
+            {2, TInstant::MicroSeconds(20)},
+            {3, TInstant::MicroSeconds(40)}
+        };
+        TestWatermarksImpl(input, expected, yield_pattern);
+    }
+
+    Y_UNIT_TEST(TestThrowWatermarkFromFuture) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 101, 2},
+            {1, 131, 3},
+            {1, 200, 4},
+            {1, 300, 5},
+            {1, 400, 6}
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({})
+        };
+        std::vector<std::pair<ui64, TInstant>> yield_pattern = {
+            {2, TInstant::MicroSeconds(1000)},
+            {3, TInstant::MicroSeconds(2000)}
+        };
+        TestWatermarksImpl(input, expected, yield_pattern);
+    }
+
+    Y_UNIT_TEST(TestWatermarkFlow1) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 101, 2},
+            {1, 131, 3},
+            {1, 200, 4},
+            {1, 300, 5},
+            {1, 400, 6}
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 2, 110},{1, 2, 120},{1, 2, 130}}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({})
+        };
+        std::vector<std::pair<ui64, TInstant>> yield_pattern = {
+            {0, TInstant::MicroSeconds(100)},
+            {3, TInstant::MicroSeconds(200)}
+        };
+        TestWatermarksImpl(input, expected, yield_pattern);
+    }
+
+    Y_UNIT_TEST(TestWatermarkFlow2) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 100, 2},
+            {1, 105, 3},
+            {1, 80, 4},
+            {1, 107, 5},
+            {1, 106, 6}
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 4, 90}, {1, 4, 100}, {1, 4, 110}})
+        };
+        std::vector<std::pair<ui64, TInstant>> yield_pattern = {
+            {0, TInstant::MicroSeconds(76)},
+        };
+        TestWatermarksImpl(input, expected, yield_pattern);
+    }
+
+    Y_UNIT_TEST(TestWatermarkFlow3) {
+        const std::vector<TInputItem> input = {
+            // Group; Time; Value
+            {1, 90, 2},
+            {1, 99, 3},
+            {1, 80, 4},
+            {1, 107, 5},
+            {1, 106, 6}
+        };
+
+        const std::vector<TOutputGroup> expected = {
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({}),
+            TOutputGroup({{1, 4, 90}, {1, 9, 100}, {1, 9, 110}, {1, 5, 120}})
+        };
+        std::vector<std::pair<ui64, TInstant>> yield_pattern = {
+            {0, TInstant::MicroSeconds(76)},
+        };
+        TestWatermarksImpl(input, expected, yield_pattern);
     }
 
     Y_UNIT_TEST(TestDataWatermarks) {

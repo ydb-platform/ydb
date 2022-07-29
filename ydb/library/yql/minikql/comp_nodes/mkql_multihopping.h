@@ -5,7 +5,12 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx);
+
+struct TWatermark {
+    TInstant WatermarkIn;
+};
+
+IComputationNode* WrapMultiHoppingCore(TCallable& callable, const TComputationNodeFactoryContext& ctx, TWatermark& watermark, bool watermarkMode = false);
 
 }
 }

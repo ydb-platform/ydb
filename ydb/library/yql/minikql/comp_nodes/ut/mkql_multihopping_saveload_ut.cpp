@@ -1,3 +1,4 @@
+#include "mkql_multihopping.h"
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
@@ -22,10 +23,12 @@ namespace {
         return CreateDeterministicTimeProvider(10000000);
     }
 
-    TComputationNodeFactory GetAuxCallableFactory() {
-        return [](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
+    TComputationNodeFactory GetAuxCallableFactory(TWatermark& watermark) {
+        return [&watermark](TCallable& callable, const TComputationNodeFactoryContext& ctx) -> IComputationNode* {
             if (callable.GetType()->GetName() == "OneYieldStream") {
                 return new TExternalComputationNode(ctx.Mutables);
+            } else if (callable.GetType()->GetName() == "MultiHoppingCore") {
+                return WrapMultiHoppingCore(callable, ctx, watermark);
             }
 
             return GetBuiltinFactory()(callable, ctx);
@@ -46,7 +49,7 @@ namespace {
 
         THolder<IComputationGraph> BuildGraph(TRuntimeNode pgm, const std::vector<TNode*>& entryPoints = std::vector<TNode*>()) {
             Explorer.Walk(pgm.GetNode(), *Env);
-            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(),
+            TComputationPatternOpts opts(Alloc.Ref(), *Env, GetAuxCallableFactory(Watermark),
                 FunctionRegistry.Get(),
                 NUdf::EValidateMode::None, NUdf::EValidatePolicy::Fail, "OFF", EGraphPerProcess::Multi);
             Pattern = MakeComputationPattern(Explorer, pgm, entryPoints, opts);
@@ -64,6 +67,7 @@ namespace {
 
         TExploringNodeVisitor Explorer;
         IComputationPattern::TPtr Pattern;
+        TWatermark Watermark;
     };
 
     struct TStreamWithYield : public NUdf::TBoxedValue {

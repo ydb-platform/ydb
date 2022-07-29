@@ -45,6 +45,7 @@ public:
 
 private:
     TString ProfileName;
+    bool Force = false;
 };
 
 class TCommandActivateProfile : public TClientCommand {
@@ -72,7 +73,7 @@ public:
     virtual int Run(TConfig& config) override;
 
 private:
-    bool WithContent;
+    bool WithContent = false;
 };
 
 class TCommandGetProfile : public TClientCommand {

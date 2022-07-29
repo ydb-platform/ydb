@@ -153,27 +153,17 @@ public:
         }
 
         bool IsInitCommand() const {
-            TString lastArg = InitialArgV[InitialArgC - 1];
-            if (lastArg == "init" && InitialArgC > 1) {
-                TString penultimateArg = InitialArgV[InitialArgC - 2];
-                if (penultimateArg.EndsWith("ydb") || penultimateArg.EndsWith("ydb.exe")) {
-                    return true;
+            for (int i = 0; i < InitialArgC; ++i) {
+                TString arg = InitialArgV[i];
+                if (arg.EndsWith("ydb") || arg.EndsWith("ydb.exe")) {
+                    return HasArgs({ "init" }) && !HasArgs({ "workload" });
                 }
             }
             return false;
         }
 
         bool IsProfileCommand() const {
-            for (int i = 1; i < 3; ++i) {
-                if (ArgC <= i) {
-                    return false;
-                }
-                TString currentArg = ArgV[ArgC - i - 1];
-                if (currentArg == "profile") {
-                    return true;
-                }
-            }
-            return false;
+            return HasArgs({ "profile" });
         }
 
         bool IsLicenseCommand() const {

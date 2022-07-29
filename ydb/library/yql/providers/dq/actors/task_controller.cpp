@@ -254,7 +254,12 @@ private:
                     }
 
                     if (publicCounterName) {
-                        *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv) = v.Count;
+                        auto& counter = *ServiceCounters.PublicCounters->GetNamedCounter("name", publicCounterName, isDeriv);
+                        if (isDeriv) {
+                            counter += v.Count;
+                        } else {
+                            counter = v.Count;
+                        }
                     }
                 }
             }

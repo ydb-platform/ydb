@@ -75,7 +75,7 @@ public:
         RequestInProgressTimestamp = TInstant::Now();
         const auto& requestVariant = Requests.front();
 
-        LOG_D(ctx, "TDbPoolActor: ProcessQueue " << SelfId() << " Queue size = " << Requests.size());
+        LOG_T(ctx, "TDbPoolActor: ProcessQueue " << SelfId() << " Queue size = " << Requests.size());
 
         if (auto pRequest = std::get_if<TRequest>(&requestVariant)) {
             auto& request = *pRequest;
@@ -98,7 +98,7 @@ public:
                 if (state.lock()) {
                     actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbResponse(statusFuture.GetValue(), *sharedResult), 0, cookie));
                 } else {
-                    LOG_D(*actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
+                    LOG_T(*actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
                 }
             });
         } else if (auto pRequest = std::get_if<TFunctionRequest>(&requestVariant)) {
@@ -113,7 +113,7 @@ public:
                 if (state.lock()) {
                     actorSystem->Send(new IEventHandle(selfId, selfId, new TEvents::TEvDbFunctionResponse(statusFuture.GetValue()), 0, cookie));
                 } else {
-                    LOG_D(*actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
+                    LOG_T(*actorSystem, "TDbPoolActor: ProcessQueue " << selfId << " State destroyed");
                 }
             });
         }
@@ -135,21 +135,21 @@ public:
     }
 
     void HandleResponse(TEvents::TEvDbResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_D(ctx, "TDbPoolActor: TEvDbResponse " << SelfId() << " Queue size = " << Requests.size());
+        LOG_T(ctx, "TDbPoolActor: TEvDbResponse " << SelfId() << " Queue size = " << Requests.size());
         const auto& request = Requests.front();
         ctx.Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
         PopFromQueueAndProcess(ctx);
     }
 
     void HandleRequest(TEvents::TEvDbFunctionRequest::TPtr& ev, const TActorContext& ctx) {
-        LOG_D(ctx, "TDbPoolActor: TEvDbFunctionRequest " << SelfId() << " Queue size = " << Requests.size());
+        LOG_T(ctx, "TDbPoolActor: TEvDbFunctionRequest " << SelfId() << " Queue size = " << Requests.size());
         auto request = ev->Get();
         Requests.emplace_back(TFunctionRequest{ev->Sender, ev->Cookie, std::move(request->Handler)});
         ProcessQueue(ctx);
     }
 
     void HandleResponse(TEvents::TEvDbFunctionResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_D(ctx, "TDbPoolActor: TEvDbFunctionResponse " << SelfId() << " Queue size = " << Requests.size());
+        LOG_T(ctx, "TDbPoolActor: TEvDbFunctionResponse " << SelfId() << " Queue size = " << Requests.size());
         const auto& request = Requests.front();
         ctx.Send(ev->Forward(std::visit([](const auto& arg) { return arg.Sender; }, request)));
         PopFromQueueAndProcess(ctx);
@@ -200,7 +200,7 @@ private:
 TDbPool::TDbPool(
     ui32 sessionsCount,
     const NYdb::NTable::TTableClient& tableClient,
-    const ::NMonitoring::TDynamicCounterPtr& counters, 
+    const ::NMonitoring::TDynamicCounterPtr& counters,
     const TString& tablePathPrefix)
 {
     TablePathPrefix = tablePathPrefix;

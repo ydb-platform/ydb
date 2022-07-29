@@ -34,18 +34,18 @@ namespace NActors {
                 TString str = TStringBuilder() << "\n > Node " << nodeId << " `" << node.Address << "`:" << node.Port << ", host: " << node.Host << ", resolveHost: " << node.ResolveHost;
                 logMsg += str;
             }
-            LOG_DEBUG_IC("ICN01", "%s", logMsg.c_str());
+            LOG_TRACE_IC("ICN01", "%s", logMsg.c_str());
         }
 
         bool IsNodeUpdated(const ui32 nodeId, const TString& address, const ui32 port) {
             bool printInfo = false;
             auto it = NodeTable.find(nodeId);
             if (it == NodeTable.end()) {
-                LOG_DEBUG_IC("ICN02", "New node %u `%s`: %u",
+                LOG_TRACE_IC("ICN02", "New node %u `%s`: %u",
                     nodeId, address.c_str(), port);
                 printInfo = true;
             } else if (it->second.Address != address || it->second.Port != port) {
-                LOG_DEBUG_IC("ICN03", "Updated node %u `%s`: %u (from `%s`: %u)",
+                LOG_TRACE_IC("ICN03", "Updated node %u `%s`: %u (from `%s`: %u)",
                     nodeId, address.c_str(), port, it->second.Address.c_str(), it->second.Port);
                 printInfo = true;
                 Send(TActivationContext::InterconnectProxy(nodeId), new TEvInterconnect::TEvDisconnect);
@@ -132,7 +132,7 @@ namespace NActors {
                     const TActorContext& ctx) {
 
             auto request = ev->Get();
-            LOG_DEBUG_IC("ICN04", "Update TEvNodesInfo with sz: %lu ", request->Nodes.size());
+            LOG_TRACE_IC("ICN04", "Update TEvNodesInfo with sz: %lu ", request->Nodes.size());
 
             bool printInfo = false;
             ui32 compactionCount = 0;
@@ -145,7 +145,7 @@ namespace NActors {
 
                 for (auto& pending : PendingRequests) {
                     if (pending.Request && pending.Request->Get()->Record.GetNodeId() == node.NodeId) {
-                        LOG_DEBUG_IC("ICN05", "Pending nodeId: %u discovered", node.NodeId);
+                        LOG_TRACE_IC("ICN05", "Pending nodeId: %u discovered", node.NodeId);
                         RegisterWithSameMailbox(
                             CreateResolveActor(node.NodeId, NodeTable[node.NodeId], pending.Request->Sender, SelfId(), pending.Deadline));
                         pending.Request.Reset();
@@ -169,7 +169,7 @@ namespace NActors {
         }
     };
 
-    IActor* CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup>& setup, 
+    IActor* CreateDynamicNameserver(const TIntrusivePtr<TTableNameserverSetup>& setup,
                                     const TDuration& pendingPeriod,
                                     ui32 poolId) {
         return new TInterconnectDynamicNameserver(setup, pendingPeriod, poolId);

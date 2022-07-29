@@ -79,6 +79,9 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
 
+#define LOG_T(stream) \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
+
 namespace NYq {
 
 using namespace NActors;
@@ -614,7 +617,7 @@ private:
     }
 
     void Handle(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
+        LOG_T("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
             ResignQuery(NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
@@ -640,7 +643,7 @@ private:
     }
 
     void HandleFinish(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
+        LOG_T("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
             Fail("Failed to write finalizing status");
             return;

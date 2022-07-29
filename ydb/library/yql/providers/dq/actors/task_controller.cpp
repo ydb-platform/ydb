@@ -122,7 +122,7 @@ private:
         auto& state = ev->Get()->Record;
         ui64 taskId = state.GetTaskId();
         YQL_LOG_CTX_ROOT_SCOPE(TraceId);
-        YQL_CLOG(DEBUG, ProviderDq)
+        YQL_CLOG(TRACE, ProviderDq)
             << SelfId()
             << " EvState TaskId: " << taskId
             << " State: " << state.GetState()
@@ -130,7 +130,7 @@ private:
             << " StatusCode: " << NYql::NDqProto::StatusIds_StatusCode_Name(state.GetStatusCode());
 
         if (state.HasStats() && state.GetStats().GetTasks().size()) {
-            YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
+            YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " AddStats " << taskId;
             AddStats(state.GetStats());
             if (ServiceCounters.Counters && !AggrPeriod) {
                 ExportStats(TaskStat, taskId);
@@ -155,7 +155,7 @@ private:
             }
             case NDqProto::COMPUTE_STATE_EXECUTING: {
                 Issues.AddIssues(localIssues);
-                YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " Executing TaskId: " << taskId;
+                YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " Executing TaskId: " << taskId;
                 if (!FinishedTasks.contains(taskId)) {
                     // may get late/reordered? message
                     Executing[taskId] = Now();
@@ -183,7 +183,7 @@ private:
                 for (auto& taskActors: Executing) {
                     if (now > taskActors.second + PingPeriod) {
                         PingCookie++;
-                        YQL_CLOG(DEBUG, ProviderDq) << " Ping TaskId: " << taskActors.first << ", Compute ActorId: " << ActorIds[taskActors.first] << ", PingCookie: " << PingCookie;
+                        YQL_CLOG(TRACE, ProviderDq) << " Ping TaskId: " << taskActors.first << ", Compute ActorId: " << ActorIds[taskActors.first] << ", PingCookie: " << PingCookie;
                         Send(ActorIds[taskActors.first], new NDq::TEvDqCompute::TEvStateRequest(), IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered, PingCookie);
                         taskActors.second = now;
                     }
@@ -223,7 +223,7 @@ private:
     }
 
     void ExportStats(const TCounters& stat, ui64 taskId) {
-        YQL_CLOG(DEBUG, ProviderDq) << " " << SelfId() << " ExportStats " << (taskId ? ToString(taskId) : "Summary");
+        YQL_CLOG(TRACE, ProviderDq) << " " << SelfId() << " ExportStats " << (taskId ? ToString(taskId) : "Summary");
         TString name;
         std::map<TString, TString> labels;
         static const TString SourceLabel = "Source";

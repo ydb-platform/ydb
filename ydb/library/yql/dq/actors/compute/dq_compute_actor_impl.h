@@ -337,7 +337,7 @@ protected:
         PollAsyncInput();
         ERunStatus status = TaskRunner->Run();
 
-        CA_LOG_D("Resume execution, run status: " << status);
+        CA_LOG_T("Resume execution, run status: " << status);
 
         if (status != ERunStatus::Finished) {
             PollSources(std::move(sourcesState));
@@ -1070,7 +1070,7 @@ protected:
     }
 
     void HandleExecuteBase(TEvDqCompute::TEvStateRequest::TPtr& ev) {
-        CA_LOG_D("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
+        CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
         auto evState = MakeHolder<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetStatusCode(NYql::NDqProto::StatusIds::SUCCESS);
@@ -1291,7 +1291,7 @@ private:
         }
 
         outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);
-        CA_LOG_D("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
+        CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
         return dataSize + checkpointSize;
     }
@@ -1478,7 +1478,7 @@ protected:
             Y_VERIFY(info.AsyncInput);
             bool finished = false;
             const i64 space = info.AsyncInput->GetAsyncInputData(batch, finished, freeSpace);
-            CA_LOG_D("Poll async input " << inputIndex
+            CA_LOG_T("Poll async input " << inputIndex
                 << ". Buffer free space: " << freeSpace
                 << ", read from async input: " << space << " bytes, "
                 << batch.size() << " rows, finished: " << finished);
@@ -1496,7 +1496,7 @@ protected:
     void PollAsyncInput() {
         // Don't produce any input from sources if we're about to save checkpoint.
         if (!Running || (Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
-            CA_LOG_D("Skip polling sources because of pending checkpoint");
+            CA_LOG_T("Skip polling sources because of pending checkpoint");
             return;
         }
 

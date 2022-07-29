@@ -99,7 +99,7 @@ private:
     };
 
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
-        CA_LOG_D("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
+        CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
         if (!SentStatsRequest) {
             Send(TaskRunnerActorId, new NTaskRunnerActor::TEvStatistics(GetIds(SinksMap)));
             SentStatsRequest = true;
@@ -178,7 +178,7 @@ private:
 
         const i64 toSend = peerState.PeerFreeSpace + allowedOvercommit - peerState.InFlightBytes;
 
-        CA_LOG_D("About to drain channelId: " << channelId
+        CA_LOG_T("About to drain channelId: " << channelId
             << ", hasPeer: " << outputChannel.HasPeer
             << ", peerFreeSpace: " << peerState.PeerFreeSpace
             << ", inFlightBytes: " << peerState.InFlightBytes
@@ -221,7 +221,7 @@ private:
         const i64 sinkFreeSpaceBeforeSend = sinkInfo.AsyncOutput->GetFreeSpace();
 
         i64 toSend = sinkFreeSpaceBeforeSend + allowedOvercommit;
-        CA_LOG_D("About to drain sink " << outputIndex
+        CA_LOG_T("About to drain sink " << outputIndex
             << ". FreeSpace: " << sinkFreeSpaceBeforeSend
             << ", allowedOvercommit: " << allowedOvercommit
             << ", toSend: " << toSend
@@ -314,7 +314,7 @@ private:
         PollAsyncInput();
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
-            CA_LOG_D("DoExecuteImpl: " << (bool) req);
+            CA_LOG_T("DoExecuteImpl: " << (bool) req);
             Send(TaskRunnerActorId, new NTaskRunnerActor::TEvContinueRun(std::move(req), /* checkpointOnly = */ false));
         }
     }
@@ -386,7 +386,7 @@ private:
         auto sourcesState = GetSourcesState();
         auto status = ev->Get()->RunStatus;
 
-        CA_LOG_D("Resume execution, run status: " << status << " checkpoint: " << (bool) ev->Get()->ProgramState);
+        CA_LOG_T("Resume execution, run status: " << status << " checkpoint: " << (bool) ev->Get()->ProgramState);
 
         for (const auto& [channelId, freeSpace] : ev->Get()->InputChannelFreeSpace) {
             auto it = InputChannelsMap.find(channelId);
@@ -437,7 +437,7 @@ private:
         // source.FreeSpace = ev->Get()->FreeSpace; TODO:XXX get freespace on run
         ProcessSourcesState.Inflight--;
         if (ProcessSourcesState.Inflight == 0) {
-            CA_LOG_D("send TEvContinueRun on OnAsyncInputPushFinished");
+            CA_LOG_T("send TEvContinueRun on OnAsyncInputPushFinished");
             Send(TaskRunnerActorId, new NTaskRunnerActor::TEvContinueRun());
         }
     }
@@ -446,7 +446,7 @@ private:
         if (ev->Get()->Stats) {
             TaskRunnerStats = std::move(ev->Get()->Stats);
         }
-        CA_LOG_D("OnPopFinished, stats: " << *TaskRunnerStats.Get());
+        CA_LOG_T("OnPopFinished, stats: " << *TaskRunnerStats.Get());
         auto it = OutputChannelsMap.find(ev->Get()->ChannelId);
         Y_VERIFY(it != OutputChannelsMap.end());
         TOutputChannelInfo& outputChannel = it->second;
@@ -578,9 +578,9 @@ private:
         }
 
         Y_VERIFY(batch.empty());
-        CA_LOG_D("Sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
+        CA_LOG_T("Sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
-        CA_LOG_D("Drain sink " << outputIndex
+        CA_LOG_T("Drain sink " << outputIndex
             << ". Free space decreased: " << (sinkInfo.FreeSpaceBeforeSend - sinkInfo.AsyncOutput->GetFreeSpace())
             << ", sent data from buffer: " << dataSize);
 

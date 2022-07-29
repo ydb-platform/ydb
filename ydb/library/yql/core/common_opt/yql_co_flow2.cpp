@@ -50,6 +50,10 @@ TExprNode::TPtr AggregateSubsetFieldsAnalyzer(const TCoAggregate& node, TExprCon
         }
         else {
             auto traits = x.Ref().Child(1);
+            if (!traits->IsCallable("AggregationTraits")) {
+                return node.Ptr();
+            }
+
             auto structType = traits->Child(0)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
             for (const auto& item : structType->GetItems()) {
                 usedFields.insert(item->GetName());

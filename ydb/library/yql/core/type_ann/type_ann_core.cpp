@@ -11244,6 +11244,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["MultiAggregate"] = &MultiAggregateWrapper;
         Functions["Aggregate"] = &AggregateWrapper;
         Functions["SqlAggregateAll"] = &SqlAggregateAllWrapper;
+        Functions["AggApply"] = &AggApplyWrapper;
         Functions["WinOnRows"] = &WinOnWrapper;
         Functions["WinOnGroups"] = &WinOnWrapper;
         Functions["WinOnRange"] = &WinOnWrapper;

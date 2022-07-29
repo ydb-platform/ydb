@@ -272,6 +272,7 @@ namespace NSQLTranslationV1 {
         NYql::TWarningPolicy WarningPolicy;
         TString PqReadByRtmrCluster;
         bool EmitStartsWith = true;
+        bool EmitAggApply = false;
     };
 
     class TColumnRefScope {

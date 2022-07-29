@@ -9826,6 +9826,9 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
         } else if (normalizedPragma == "disableansicurrentrow") {
             Ctx.AnsiCurrentRow = false;
             Ctx.IncrementMonCounter("sql_pragma", "DisableAnsiCurrentRow");
+        } else if (normalizedPragma == "emitaggapply") {
+            Ctx.EmitAggApply = true;
+            Ctx.IncrementMonCounter("sql_pragma", "EmitAggApply");
         } else {
             Error() << "Unknown pragma: " << pragma;
             Ctx.IncrementMonCounter("sql_errors", "UnknownPragma");

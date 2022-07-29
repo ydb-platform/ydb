@@ -1,15 +1,60 @@
 #include "yql_opt_aggregate.h"
 #include "yql_opt_utils.h"
 #include "yql_opt_window.h"
+#include "yql_expr_optimize.h"
 #include "yql_expr_type_annotation.h"
 
 namespace NYql {
 
-TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, bool forceCompact) {
+TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    auto name = node->Head().Content();
+    auto exportsPtr = typesCtx.Modules->GetModule("/lib/yql/aggregate.yql");
+    YQL_ENSURE(exportsPtr);
+    const auto& exports = exportsPtr->Symbols();
+    const auto ex = exports.find(TString(name) + "_traits_factory");
+    YQL_ENSURE(exports.cend() != ex);
+    TNodeOnNodeOwnedMap deepClones;
+    auto lambda = ctx.DeepCopy(*ex->second, exportsPtr->ExprCtx(), deepClones, true, false);
+
+    auto listTypeNode = ctx.NewCallable(node->Pos(), "ListType", { node->ChildPtr(1) });
+    auto extractor = node->ChildPtr(2);
+
+    auto traits = ctx.ReplaceNodes(lambda->TailPtr(), {
+        {lambda->Head().Child(0), listTypeNode},
+        {lambda->Head().Child(1), extractor}
+        });
+
+    ctx.Step.Repeat(TExprStep::ExpandApplyForLambdas);
+    auto status = ExpandApply(traits, traits, ctx);
+    YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+    return traits;
+}
+
+TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool forceCompact) {
     auto list = node->HeadPtr();
     auto keyColumns = node->ChildPtr(1);
     auto aggregatedColumns = node->Child(2);
     auto settings = node->Child(3);
+    TExprNode::TListType traits;
+    bool needRebuild = false;
+    for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
+        auto trait = aggregatedColumns->Child(index)->ChildPtr(1);
+        if (trait->IsCallable("AggApply")) {
+            trait = ExpandAggApply(trait, ctx, typesCtx);
+            needRebuild = true;
+        }
+
+        traits.push_back(trait);
+    }
+
+    if (needRebuild) {
+        TExprNode::TListType newAggregatedColumnsItems = aggregatedColumns->ChildrenList();
+        for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
+            newAggregatedColumnsItems[index] = ctx.ChangeChild(*(newAggregatedColumnsItems[index]), 1, std::move(traits[index]));
+        }
+
+        return ctx.ChangeChild(*node, 2, ctx.NewList(node->Pos(), std::move(newAggregatedColumnsItems)));
+    }
 
     YQL_ENSURE(!HasSetting(*settings, "hopping"), "Aggregate with hopping unsupported here.");
 
@@ -26,8 +71,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
     TExprNode::TPtr sortOrder = voidNode;
 
     bool effectiveCompact = forceCompact || HasSetting(*settings, "compact");
-    for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
-        auto trait = aggregatedColumns->Child(index)->Child(1);
+    for (const auto& trait : traits) {
         auto mergeLambda = trait->Child(5);
         if (mergeLambda->Tail().IsCallable("Void")) {
             effectiveCompact = true;
@@ -206,7 +250,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
 
     TExprNode::TListType nothingStates;
     for (ui32 index = 0; index < aggregatedColumns->ChildrenSize(); ++index) {
-        auto trait = aggregatedColumns->Child(index)->Child(1);
+        auto trait = traits[index];
 
         auto saveLambda = trait->Child(3);
         auto saveLambdaType = saveLambda->GetTypeAnn();
@@ -232,7 +276,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 ndx = 0;
                         for (ui32 i: nondistinctColumns) {
-                            auto trait = aggregatedColumns->Child(i)->Child(1);
+                            auto trait = traits[i];
                             auto initLambda = trait->Child(1);
                             if (initLambda->Head().ChildrenSize() == 1) {
                                 parent.List(ndx++)
@@ -280,7 +324,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 ndx = 0;
                         for (ui32 i: nondistinctColumns) {
-                            auto trait = aggregatedColumns->Child(i)->Child(1);
+                            auto trait = traits[i];
                             auto updateLambda = trait->Child(2);
                             if (updateLambda->Head().ChildrenSize() == 2) {
                                 parent.List(ndx++)
@@ -345,7 +389,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                                         .Add(1, nothingStates[i])
                                     .Seal();
                                 } else {
-                                    auto trait = aggregatedColumns->Child(i)->Child(1);
+                                    auto trait = traits[i];
                                     auto saveLambda = trait->Child(3);
                                     if (!distinctFields.empty()) {
                                         parent.List(i)
@@ -579,7 +623,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         ui32 ndx = 0;
                         for (ui32 i: indicies) {
-                            auto trait = aggregatedColumns->Child(i)->Child(1);
+                            auto trait = traits[i];
                             auto initLambda = trait->Child(1);
                             if (initLambda->Head().ChildrenSize() == 1) {
                                 parent.List(ndx++)
@@ -636,7 +680,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                     .Callable(0, "AsStruct")
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                             for (ui32 i: indicies) {
-                                auto trait = aggregatedColumns->Child(i)->Child(1);
+                                auto trait = traits[i];
                                 auto saveLambda = trait->Child(3);
                                 parent.List(ndx++)
                                     .Add(0, initialColumnNames[i])
@@ -934,7 +978,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < initialColumnNames.size(); ++i) {
                         auto child = aggregatedColumns->Child(i);
-                        auto trait = child->Child(1);
+                        auto trait = traits[i];
                         if (!compact) {
                             auto loadLambda = trait->Child(4);
 
@@ -1093,7 +1137,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < initialColumnNames.size(); ++i) {
                         auto child = aggregatedColumns->Child(i);
-                        auto trait = child->Child(1);
+                        auto trait = traits[i];
                         if (!compact) {
                             auto loadLambda = trait->Child(4);
                             auto mergeLambda = trait->Child(5);
@@ -1345,7 +1389,7 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     for (ui32 i = 0; i < initialColumnNames.size(); ++i) {
                         auto child = aggregatedColumns->Child(i);
-                        auto trait = child->Child(1);
+                        auto trait = traits[i];
                         auto finishLambda = trait->Child(6);
 
                         if (!compact && !distinctFields.empty()) {

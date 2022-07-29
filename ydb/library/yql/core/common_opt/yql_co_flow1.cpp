@@ -1269,6 +1269,10 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
     const bool isDistinct = (aggregatedColumn.Ref().ChildrenSize() == 3);
 
     auto traits = aggregatedColumn.Ref().Child(1);
+    if (!traits->IsCallable("AggregationTraits")) {
+        return node.Ptr();
+    }
+
     auto outputColumn = aggregatedColumn.Ref().HeadPtr();
     // validation of traits
     auto inputItemType = traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();

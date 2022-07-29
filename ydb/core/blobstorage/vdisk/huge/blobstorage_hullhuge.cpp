@@ -746,9 +746,7 @@ namespace NKikimr {
             LOG_DEBUG(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
                 "THullHugeKeeper: TEvHullWriteHugeBlob: %s", std::data(ev->Get()->ToString())));
             std::unique_ptr<TEvHullWriteHugeBlob::THandle> item(ev.Release());
-            if (ProcessWrite(*item, ctx, false)) {
-                (void)item.release();
-            } else {
+            if (!ProcessWrite(*item, ctx, false)) {
                 PutToWaitQueue(std::move(item));
             }
         }

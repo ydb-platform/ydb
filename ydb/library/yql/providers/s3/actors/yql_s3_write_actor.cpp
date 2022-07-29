@@ -321,8 +321,11 @@ private:
     }
 
     TString MakeSuffix() const {
-        const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
-        return Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
+        if (RandomProvider) {
+            const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
+            return Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
+        }
+        return "";
     }
 
     STRICT_STFUNC(StateFunc,

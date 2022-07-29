@@ -191,7 +191,9 @@ namespace NActors {
                     SendToProxy(MakeHolder<TEvHandshakeDone>(std::move(Socket), PeerVirtualId, SelfVirtualId,
                         *NextPacketFromPeer, ProgramInfo->Release(), std::move(Params)));
                 }
-            } catch(...) {
+            } catch (const TDtorException&) {
+                throw; // we can't use actor system when handling this exception
+            } catch (...) {
                 if (isBrokerActive) {
                     Send(HandshakeBroker, new TEvHandshakeBrokerFree());
                 }

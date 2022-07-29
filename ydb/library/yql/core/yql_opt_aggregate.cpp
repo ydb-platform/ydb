@@ -6,6 +6,8 @@
 
 namespace NYql {
 
+namespace {
+
 TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     auto name = node->Head().Content();
     auto exportsPtr = typesCtx.Modules->GetModule("/lib/yql/aggregate.yql");
@@ -28,6 +30,8 @@ TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node, TExprContext& ctx, T
     auto status = ExpandApply(traits, traits, ctx);
     YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
     return traits;
+}
+
 }
 
 TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool forceCompact) {

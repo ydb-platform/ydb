@@ -4874,12 +4874,6 @@ namespace {
         }
 
         auto itemType = input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (itemType->GetKind() != ETypeAnnotationKind::Struct) {
-            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
-                TStringBuilder() << "Expected struct type, but got: " << *itemType));
-            return IGraphTransformer::TStatus::Error;
-        }
-
         auto& lambda = input->ChildRef(2);
         const auto status = ConvertToLambda(lambda, ctx.Expr, 1);
         if (status.Level != IGraphTransformer::TStatus::Ok) {

@@ -1269,80 +1269,112 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
     const bool isDistinct = (aggregatedColumn.Ref().ChildrenSize() == 3);
 
     auto traits = aggregatedColumn.Ref().Child(1);
-    if (!traits->IsCallable("AggregationTraits")) {
-        return node.Ptr();
-    }
-
     auto outputColumn = aggregatedColumn.Ref().HeadPtr();
-    // validation of traits
-    auto inputItemType = traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-    const bool isOptionalColumn = inputItemType->GetKind() == ETypeAnnotationKind::Optional;
 
-    auto init = TCoLambda(traits->Child(1));
+    // validation of traits
+    const TTypeAnnotationNode* inputItemType;
     bool onlyColumn = true;
     bool onlyZero = true;
     TExprNode::TPtr initVal;
-    TExprNode::TPtr updateVal;
-    if (init.Body().Ref().IsCallable("Uint64") &&
-        init.Body().Ref().Head().Content() == "1") {
+    if (traits->IsCallable("AggregationTraits")) {
+        inputItemType = traits->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+
+        auto init = TCoLambda(traits->Child(1));
+        TExprNode::TPtr updateVal;
+        if (init.Body().Ref().IsCallable("Uint64") &&
+            init.Body().Ref().Head().Content() == "1") {
+            onlyZero = false;
+        } else if (init.Body().Ref().IsCallable("Uint64") &&
+            init.Body().Ref().Head().Content() == "0") {
+            onlyColumn = false;
+        } else if (init.Body().Ref().IsCallable("AggrCountInit")) {
+            initVal = init.Body().Ref().HeadPtr();
+            onlyColumn = onlyColumn && init.Body().Ref().Child(0) == init.Args().Arg(0).Raw();
+            onlyZero = false;
+        } else {
+            return node.Ptr();
+        }
+
+        auto update = TCoLambda(traits->Child(2));
+        auto inc = update.Body().Ptr();
+        if (inc->IsCallable("Inc") && inc->Child(0) == update.Args().Arg(1).Raw()) {
+            onlyZero = false;
+        } else if (inc->IsCallable("AggrCountUpdate") && inc->Child(1) == update.Args().Arg(1).Raw()) {
+            updateVal = inc->HeadPtr();
+            onlyColumn = onlyColumn && inc->Child(0) == update.Args().Arg(0).Raw();
+            onlyZero = false;
+        } else if (inc == update.Args().Arg(1).Raw()) {
+            onlyColumn = false;
+        } else {
+            return node.Ptr();
+        }
+
+        auto save = TCoLambda(traits->Child(3));
+        if (save.Body().Raw() != save.Args().Arg(0).Raw()) {
+            return node.Ptr();
+        }
+
+        auto load = TCoLambda(traits->Child(4));
+        if (load.Body().Raw() != load.Args().Arg(0).Raw()) {
+            return node.Ptr();
+        }
+
+        auto merge = TCoLambda(traits->Child(5));
+        {
+            auto& plus = merge.Body().Ref();
+            if (!plus.IsCallable("+")) {
+                return node.Ptr();
+            }
+
+            if (!(plus.Child(0) == merge.Args().Arg(0).Raw() &&
+                plus.Child(1) == merge.Args().Arg(1).Raw())) {
+                return node.Ptr();
+            }
+        }
+
+        auto finish = TCoLambda(traits->Child(6));
+        if (finish.Body().Raw() != finish.Args().Arg(0).Raw()) {
+            return node.Ptr();
+        }
+
+        auto defVal = traits->Child(7);
+        if (!defVal->IsCallable("Uint64") || defVal->Head().Content() != "0") {
+            return node.Ptr();
+        }
+
+        if (!isDistinct) {
+            if (!onlyZero && !onlyColumn) {
+                if (!initVal || !updateVal || initVal != updateVal) {
+                    return node.Ptr();
+                }
+            }
+        }
+    } else if (traits->IsCallable("AggApply")) {
+        if (traits->Head().Content() != "count_all" && traits->Head().Content() != "count") {
+            return node.Ptr();
+        }
+
+        inputItemType = traits->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
         onlyZero = false;
-    } else if (init.Body().Ref().IsCallable("Uint64") &&
-        init.Body().Ref().Head().Content() == "0") {
         onlyColumn = false;
-    } else if (init.Body().Ref().IsCallable("AggrCountInit")) {
-        initVal = init.Body().Ref().HeadPtr();
-        onlyColumn = onlyColumn && init.Body().Ref().Child(0) == init.Args().Arg(0).Raw();
-        onlyZero = false;
+        if (&traits->Child(2)->Head().Head() == &traits->Child(2)->Tail()) {
+            onlyColumn = true;
+        }
+
+        if (!isDistinct) {
+            if (IsDepended(traits->Child(2)->Tail(), traits->Child(2)->Head().Head())) {
+                return node.Ptr();
+            }
+
+            if (traits->Head().Content() == "count") {
+                initVal = traits->Child(2)->TailPtr();
+            }
+        }
     } else {
         return node.Ptr();
     }
 
-    auto update = TCoLambda(traits->Child(2));
-    auto inc = update.Body().Ptr();
-    if (inc->IsCallable("Inc") && inc->Child(0) == update.Args().Arg(1).Raw()) {
-        onlyZero = false;
-    } else if (inc->IsCallable("AggrCountUpdate") && inc->Child(1) == update.Args().Arg(1).Raw()) {
-        updateVal = inc->HeadPtr();
-        onlyColumn = onlyColumn && inc->Child(0) == update.Args().Arg(0).Raw();
-        onlyZero = false;
-    } else if (inc == update.Args().Arg(1).Raw()) {
-        onlyColumn = false;
-    } else {
-        return node.Ptr();
-    }
-
-    auto save = TCoLambda(traits->Child(3));
-    if (save.Body().Raw() != save.Args().Arg(0).Raw()) {
-        return node.Ptr();
-    }
-
-    auto load = TCoLambda(traits->Child(4));
-    if (load.Body().Raw() != load.Args().Arg(0).Raw()) {
-        return node.Ptr();
-    }
-
-    auto merge = TCoLambda(traits->Child(5));
-    {
-        auto& plus = merge.Body().Ref();
-        if (!plus.IsCallable("+")) {
-            return node.Ptr();
-        }
-
-        if (!(plus.Child(0) == merge.Args().Arg(0).Raw() &&
-            plus.Child(1) == merge.Args().Arg(1).Raw())) {
-            return node.Ptr();
-        }
-    }
-
-    auto finish = TCoLambda(traits->Child(6));
-    if (finish.Body().Raw() != finish.Args().Arg(0).Raw()) {
-        return node.Ptr();
-    }
-
-    auto defVal = traits->Child(7);
-    if (!defVal->IsCallable("Uint64") || defVal->Head().Content() != "0") {
-        return node.Ptr();
-    }
+    const bool isOptionalColumn = inputItemType->GetKind() == ETypeAnnotationKind::Optional;
 
     if (!isDistinct) {
         auto length = ctx.Builder(node.Pos())
@@ -1357,11 +1389,7 @@ TExprNode::TPtr CountAggregateRewrite(const TCoAggregate& node, TExprContext& ct
                     .Atom(0, "0", TNodeFlags::Default)
                 .Seal()
                 .Build();
-        } else if (!onlyColumn) {
-            if (!initVal || !updateVal || initVal != updateVal) {
-                return node.Ptr();
-            }
-
+        } else if (!onlyColumn && initVal) {
             length = ctx.Builder(node.Pos())
                 .Callable("If")
                     .Callable(0, "Exists")

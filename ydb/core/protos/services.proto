@@ -901,5 +901,6 @@ message TActivity {
         KQP_STREAM_LOOKUP_ACTOR = 572;
         BS_STORAGE_STATS_ACTOR = 573;
         DS_LOAD_ACTOR = 574;
+        PQ_META_CACHE = 575;
     };
 };

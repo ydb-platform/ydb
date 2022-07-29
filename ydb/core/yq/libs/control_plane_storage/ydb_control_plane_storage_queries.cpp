@@ -147,7 +147,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         meta.set_last_job_query_revision(InitialRevision);
         meta.set_last_job_id(jobId);
         meta.set_started_by(user);
-
+        *meta.mutable_submitted_at() = NProtoInterop::CastToProto(startTime);
         *job.mutable_meta() = common;
         job.mutable_meta()->set_id(jobId);
         job.set_text(content.text());
@@ -926,6 +926,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             query.mutable_meta()->clear_expire_at();
             query.mutable_meta()->clear_result_expire_at();
             query.mutable_meta()->set_started_by(user);
+            *query.mutable_meta()->mutable_submitted_at() = NProtoInterop::CastToProto(now);
             query.mutable_meta()->clear_action();
 
             internal.clear_plan_compressed();

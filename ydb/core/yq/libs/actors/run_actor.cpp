@@ -303,6 +303,14 @@ public:
                 QueryCounters,
                 CreatedAt
                 ));
+
+        if (!Params.RequestStartedAt) {
+            Params.RequestStartedAt = TInstant::Now();
+            Fq::Private::PingTaskRequest request;
+            *request.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(Params.RequestStartedAt.MilliSeconds());
+            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateQueryInfoCookie);
+        }
+
         Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);
 
         try {
@@ -400,11 +408,8 @@ private:
     bool TimeLimitExceeded() {
         if (Params.ExecutionTtl != TDuration::Zero()) {
             auto currentTime = TInstant::Now();
-            auto started_at = Params.RequestStartedAt;
-            if (started_at == TInstant::Zero()) {
-                started_at = currentTime;
-            }
-            auto deadline = started_at  + Params.ExecutionTtl;
+            auto startedAt = Params.RequestStartedAt ? Params.RequestStartedAt : currentTime;
+            auto deadline = startedAt  + Params.ExecutionTtl;
 
             if (currentTime >= deadline) {
                 Abort("Execution time limit exceeded", YandexQuery::QueryMeta::ABORTED_BY_SYSTEM);
@@ -1084,7 +1089,6 @@ private:
 
     void RunDqGraphs() {
         if (DqGraphParams.empty()) {
-            *QueryStateUpdateRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(CreatedAt.MilliSeconds());
             QueryStateUpdateRequest.set_resign_query(false);
             const bool isOk = Issues.Size() == 0;
             Finish(GetFinishStatus(isOk));
@@ -1095,7 +1099,6 @@ private:
             Params.Status = YandexQuery::QueryMeta::RUNNING;
             Fq::Private::PingTaskRequest request;
             request.set_status(YandexQuery::QueryMeta::RUNNING);
-            *request.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(Now().MilliSeconds());
             Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateQueryInfoCookie);
         }
 

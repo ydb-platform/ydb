@@ -338,6 +338,8 @@ private:
             Send(SourceActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
 
         Send(SourceActorId, new TEvPrivate::TEvReadFinished);
+    } catch (const TDtorException&) {
+       throw;
     } catch (const std::exception& err) {
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(err.what())}, true));
         return;

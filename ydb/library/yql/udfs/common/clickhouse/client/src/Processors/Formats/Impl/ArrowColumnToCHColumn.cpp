@@ -561,7 +561,7 @@ void ArrowColumnToCHColumn::arrowTableToCHChunk(Chunk & res, std::shared_ptr<arr
 
             // TODO: What if some columns were not presented? Insert NULLs? What if a column is not nullable?
             if (!read_from_nested)
-                throw Exception{ErrorCodes::THERE_IS_NO_COLUMN, "Column '{}' is not presented in input data. Available columns: '{}'", header_column.name, table->ColumnNames()};
+                throw Exception{ErrorCodes::THERE_IS_NO_COLUMN, "Column \"{}\" is not presented in input data. Available columns: {}", header_column.name, table->ColumnNames()};
         }
 
         std::shared_ptr<arrow::ChunkedArray> arrow_column = name_to_column_ptr[header_column.name];

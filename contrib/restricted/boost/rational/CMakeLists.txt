@@ -7,33 +7,19 @@
 
 
 
-add_library(contrib-restricted-boost INTERFACE)
-target_include_directories(contrib-restricted-boost INTERFACE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost
+add_library(restricted-boost-rational INTERFACE)
+target_include_directories(restricted-boost-rational INTERFACE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/rational/include
 )
-target_link_libraries(contrib-restricted-boost INTERFACE
+target_link_libraries(restricted-boost-rational INTERFACE
   contrib-libs-cxxsupp
-  restricted-boost-align
-  restricted-boost-array
+  yutil
   restricted-boost-assert
-  restricted-boost-bind
   restricted-boost-config
   restricted-boost-core
   restricted-boost-integer
-  restricted-boost-io
-  restricted-boost-logic
-  restricted-boost-move
-  restricted-boost-mp11
-  restricted-boost-mpl
-  restricted-boost-predef
-  restricted-boost-preprocessor
-  restricted-boost-rational
-  restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-throw_exception
-  restricted-boost-tuple
   restricted-boost-type_traits
   restricted-boost-utility
-  restricted-boost-vmd
-  restricted-boost-winapi
 )

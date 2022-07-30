@@ -27,6 +27,7 @@ target_link_libraries(libs-apache-avro PUBLIC
   contrib-libs-cxxsupp
   contrib-libs-snappy
   contrib-restricted-boost
+  restricted-boost-crc
   boost-libs-iostreams
 )
 target_sources(libs-apache-avro PRIVATE

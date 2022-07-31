@@ -336,7 +336,7 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable *list = n
 
 Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
     template<class T>
-    void ParallelProgTest(T f, ui64 testResult) {
+    void ParallelProgTest(T f, bool useLLVM, ui64 testResult) {
         const ui32 cacheSize = 10;
         const ui32 inFlight = 3;
         TComputationPatternLRUCache cache(cacheSize);
@@ -357,7 +357,7 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
         explorer.Walk(progReturn.GetNode(), typeEnv);
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, GetListTestFactory(), functionRegistry.Get(),
-            NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception, "OFF", EGraphPerProcess::Multi);
+            NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception, useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
 
         {
             auto guard = patternEnv->Env.BindAllocator();
@@ -390,7 +390,7 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 
                 TComputationPatternOpts opts(patternEnv->Alloc.Ref(), patternEnv->Env, GetListTestFactory(),
                     functionRegistry.Get(), NUdf::EValidateMode::Lazy, NUdf::EValidatePolicy::Exception,
-                    "OFF", EGraphPerProcess::Multi);
+                    useLLVM ? "" : "OFF", EGraphPerProcess::Multi);
 
                 auto graph = patternEnv->Pattern->Clone(opts.ToComputationOptions(*randomProvider, *timeProvider, &graphAlloc.Ref()));
                 TUnboxedValue* items = nullptr;
@@ -418,36 +418,36 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(Filter, Wide) {
-        ParallelProgTest(CreateFilter<Wide>, 136480896);
+    Y_UNIT_TEST_QUAD(Filter, Wide, UseLLVM) {
+        ParallelProgTest(CreateFilter<Wide>, UseLLVM, 136480896);
     }
 
-    Y_UNIT_TEST_TWIN(Map, Wide) {
-        ParallelProgTest(CreateMap<Wide>, 782);
+    Y_UNIT_TEST_QUAD(Map, Wide, UseLLVM) {
+        ParallelProgTest(CreateMap<Wide>, UseLLVM, 782);
     }
 
-    Y_UNIT_TEST_TWIN(Condense, Wide) {
-        ParallelProgTest(CreateCondense<Wide>, 17451450000);
+    Y_UNIT_TEST_QUAD(Condense, Wide, UseLLVM) {
+        ParallelProgTest(CreateCondense<Wide>, UseLLVM, 17451450000);
     }
 
-    Y_UNIT_TEST_TWIN(Chopper, Wide) {
-        ParallelProgTest(CreateChopper<Wide>, 17451450000);
+    Y_UNIT_TEST_QUAD(Chopper, Wide, UseLLVM) {
+        ParallelProgTest(CreateChopper<Wide>, UseLLVM, 17451450000);
     }
 
-    Y_UNIT_TEST_TWIN(Combine, Wide) {
-        ParallelProgTest(CreateCombine<Wide>, 17451450000);
+    Y_UNIT_TEST_QUAD(Combine, Wide, UseLLVM) {
+        ParallelProgTest(CreateCombine<Wide>, UseLLVM, 17451450000);
     }
 
-    Y_UNIT_TEST_TWIN(Chain1Map, Wide) {
-        ParallelProgTest(CreateChain1Map<Wide>, 789247892400000);
+    Y_UNIT_TEST_QUAD(Chain1Map, Wide, UseLLVM) {
+        ParallelProgTest(CreateChain1Map<Wide>, UseLLVM, 789247892400000);
     }
 
-    Y_UNIT_TEST_TWIN(Discard, Wide) {
-        ParallelProgTest(CreateDiscard<Wide>, 0);
+    Y_UNIT_TEST_QUAD(Discard, Wide, UseLLVM) {
+        ParallelProgTest(CreateDiscard<Wide>, UseLLVM, 0);
     }
 
-    Y_UNIT_TEST_TWIN(Skip, Wide) {
-        ParallelProgTest(CreateSkip<Wide>, 17389067750);
+    Y_UNIT_TEST_QUAD(Skip, Wide, UseLLVM) {
+        ParallelProgTest(CreateSkip<Wide>, UseLLVM, 17389067750);
     }
 }
 

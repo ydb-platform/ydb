@@ -66,7 +66,6 @@ Any command can be run from the command line with the `--help` option to get hel
 | [tools dump](../export_import/tools_dump.md) | Dumping a directory or table to the file system |
 | [tools rename](../commands/tools/rename.md) | Renaming tables |
 | [tools restore](../export_import/tools_restore.md) | Restoring data from the file system |
-
 {% if ydb-cli == "ydb" %}
 [update](../commands/service.md) | Updating the {{ ydb-short-name }} CLI
 [version](../commands/service.md) | Displaying the version of the {{ ydb-short-name }} CLI

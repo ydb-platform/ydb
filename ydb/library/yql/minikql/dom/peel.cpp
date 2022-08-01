@@ -255,7 +255,8 @@ TUnboxedValuePod PeelTuple(const ITypeInfoHelper::TPtr typeHelper, const TType* 
 
 template<bool Strict, bool AutoConvert>
 TUnboxedValuePod PeelStruct(const ITypeInfoHelper::TPtr typeHelper, const TType* shape, const TUnboxedValuePod x, const IValueBuilder* valueBuilder, const TSourcePosition& pos) {
-    if (const auto structTypeInspector = TStructTypeInspector(*typeHelper, shape); const auto size = structTypeInspector.GetMembersCount()) {
+    if (const auto structTypeInspector = TStructTypeInspector(*typeHelper, shape)) {
+        const auto size = structTypeInspector.GetMembersCount();
         switch (GetNodeType(x)) {
             case ENodeType::Dict: {
                 TUnboxedValue* items = nullptr;

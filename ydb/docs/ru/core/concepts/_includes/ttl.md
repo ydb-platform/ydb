@@ -64,7 +64,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 * [YQL](../../yql/reference/index.md).
 * [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/index.md).
-* {{ ydb-short-name }} {% if oss %}C++ и{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md).
+* {{ ydb-short-name }} {% if oss %}C++ и{% endif %} Python [SDK](../../reference/ydb-sdk/index.md).
 
 ### Включение TTL для существующей таблицы {#enable-on-existent-table}
 

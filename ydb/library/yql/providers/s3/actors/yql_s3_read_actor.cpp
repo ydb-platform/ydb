@@ -104,7 +104,7 @@ struct TEvPrivate {
 
 class TRetryParams {
 public:
-    TRetryParams(const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
+    explicit TRetryParams(const std::shared_ptr<NS3::TRetryConfig>& retryConfig)
         : MaxRetries(retryConfig && retryConfig->GetMaxRetriesPerPath() ? retryConfig->GetMaxRetriesPerPath() : 3U)
         , InitDelayMs(retryConfig && retryConfig->GetInitialDelayMs() ? TDuration::MilliSeconds(retryConfig->GetInitialDelayMs()) : TDuration::MilliSeconds(100))
         , InitEpsilon(retryConfig && retryConfig->GetEpsilon() ? retryConfig->GetEpsilon() : 0.1)
@@ -303,8 +303,8 @@ private:
         TString Value;
     };
 public:
-    TS3ReadCoroImpl(ui64 inputIndex, const NActors::TActorId& sourceActorId, const NActors::TActorId& computeActorId, const TReadSpec::TPtr& readSpec, size_t pathIndex)
-        : TActorCoroImpl(256_KB), InputIndex(inputIndex), ReadSpec(readSpec), SourceActorId(sourceActorId), ComputeActorId(computeActorId), PathIndex(pathIndex)
+    TS3ReadCoroImpl(ui64 inputIndex, const NActors::TActorId& sourceActorId, const NActors::TActorId& computeActorId, const TReadSpec::TPtr& readSpec, size_t pathIndex, const TString& path)
+        : TActorCoroImpl(256_KB), InputIndex(inputIndex), ReadSpec(readSpec), SourceActorId(sourceActorId), ComputeActorId(computeActorId), PathIndex(pathIndex), Path(path)
     {}
 
     bool Next(TString& value) {
@@ -331,7 +331,7 @@ private:
     void Run() final try {
         TReadBufferFromStream buffer(this);
         const auto decompress(MakeDecompressor(buffer, ReadSpec->Compression));
-        YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " <<ReadSpec->Compression << " compression.");
+        YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
         NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
 
         while (auto block = stream.read())
@@ -341,7 +341,7 @@ private:
     } catch (const TDtorException&) {
        throw;
     } catch (const std::exception& err) {
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(err.what())}, true));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, true));
         return;
     }
 
@@ -355,6 +355,7 @@ private:
     const NActors::TActorId SourceActorId;
     const NActors::TActorId ComputeActorId;
     const size_t PathIndex;
+    const TString Path;
     bool Finished = false;
 };
 
@@ -458,7 +459,7 @@ public:
         Become(&TS3StreamReadActor::StateFunc);
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
-            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, SelfId(), ComputeActorId, ReadSpec, pathInd + StartPathIndex);
+            auto impl = MakeHolder<TS3ReadCoroImpl>(InputIndex, SelfId(), ComputeActorId, ReadSpec, pathInd + StartPathIndex, std::get<TString>(path));
             RegisterWithSameMailbox(MakeHolder<TS3ReadCoroActor>(std::move(impl), Gateway, Url, Headers, std::get<TString>(path), std::get<std::size_t>(path), RetryConfig).Release());
         }
     }

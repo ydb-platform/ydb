@@ -344,12 +344,19 @@ void TReadSession::RestartClusterDiscoveryImpl(TDuration delay, TDeferredActions
 
 bool TReadSession::Close(TDuration timeout) {
     Log.Write(TLOG_INFO, GetLogPrefix() << "Closing read session. Close timeout: " << timeout);
-    with_lock (Lock) {
-        Cancel(ClusterDiscoveryDelayContext);
-        Cancel(DumpCountersContext);
-    }
     // Log final counters.
     DumpCountersToLog();
+
+    with_lock (Lock) {
+        if (ClusterDiscoveryDelayContext) {
+            ClusterDiscoveryDelayContext->Cancel();
+            ClusterDiscoveryDelayContext.reset();
+        }
+        if (DumpCountersContext) {
+            DumpCountersContext->Cancel();
+            DumpCountersContext.reset();
+        }
+    }
 
     std::vector<TSingleClusterReadSessionImpl::TPtr> sessions;
     NThreading::TPromise<bool> promise = NThreading::NewPromise<bool>();
@@ -429,8 +436,14 @@ void TReadSession::AbortImpl(TSessionClosedEvent&& closeEvent, TDeferredActions&
     if (!Aborting) {
         Aborting = true;
         Log.Write(TLOG_NOTICE, GetLogPrefix() << "Aborting read session. Description: " << closeEvent.DebugString());
-        Cancel(ClusterDiscoveryDelayContext);
-        Cancel(DumpCountersContext);
+        if (ClusterDiscoveryDelayContext) {
+            ClusterDiscoveryDelayContext->Cancel();
+            ClusterDiscoveryDelayContext.reset();
+        }
+        if (DumpCountersContext) {
+            DumpCountersContext->Cancel();
+            DumpCountersContext.reset();
+        }
         for (auto& [cluster, sessionInfo] : ClusterSessions) {
             if (sessionInfo.Session) {
                 sessionInfo.Session->Abort();
@@ -1423,6 +1436,11 @@ void TSingleClusterReadSessionImpl::Abort() {
             Cancel(ConnectTimeoutContext);
             Cancel(ConnectDelayContext);
 
+            if (ClientContext) {
+                ClientContext->Cancel();
+                ClientContext.reset();
+            }
+
             if (Processor) {
                 Processor->Cancel();
             }
@@ -1463,6 +1481,10 @@ void TSingleClusterReadSessionImpl::CallCloseCallbackImpl() {
         CloseCallback = {};
     }
     Aborting = true; // So abort call will have no effect.
+    if (ClientContext) {
+        ClientContext->Cancel();
+        ClientContext.reset();
+    }
 }
 
 void TSingleClusterReadSessionImpl::StopReadingData() {

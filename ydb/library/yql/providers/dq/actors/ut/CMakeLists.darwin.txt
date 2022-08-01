@@ -19,6 +19,7 @@ target_link_libraries(ydb-library-yql-providers-dq-actors-ut PUBLIC
   providers-dq-actors
   cpp-testing-unittest
   library-cpp-time_provider
+  yql-dq-actors
   udf-service-stub
 )
 target_link_options(ydb-library-yql-providers-dq-actors-ut PRIVATE

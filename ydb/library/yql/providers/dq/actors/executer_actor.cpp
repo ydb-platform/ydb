@@ -272,7 +272,7 @@ private:
             AddCounters(ev->Get()->Record);
             bool retriable = ev->Get()->Record.GetDeprecatedRetriable();
             // while we're investigating YQL-15117, we want to be sure that any failure leads to the fallback (except explicitly retriable ones)
-            bool fallback = (!retriable || ev->Get()->Record.GetDeprecatedNeedFallback());
+            bool fallback = true;
             auto status = ev->Get()->Record.GetStatusCode();
             if (status == NYql::NDqProto::StatusIds::UNSPECIFIED) {
                 status = NYql::NDqProto::StatusIds::INTERNAL_ERROR;

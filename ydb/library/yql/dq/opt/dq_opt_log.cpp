@@ -271,4 +271,18 @@ NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx)
     return TExprBase(res);
 }
 
+NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx) {
+    auto maybeSqlIn = node.Maybe<TCoSqlIn>();
+    if (!maybeSqlIn || !maybeSqlIn.Collection().Maybe<TDqConnection>().IsValid() || !maybeSqlIn.Options().IsValid()) {
+        return node;
+    }
+    if (HasSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact")) {
+        return TExprBase(ctx.ChangeChild(
+            maybeSqlIn.Cast().Ref(), 
+            TCoSqlIn::idx_Options, 
+            RemoveSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact", ctx)));
+    }
+    return node;
+}
+
 }

@@ -1407,4 +1407,60 @@ TStringBuf GetEmptyCollectionName(ETypeAnnotationKind kind) {
     return {};
 }
 
+namespace {
+
+ui8 GetTypeWeight(const TTypeAnnotationNode& type) {
+    switch (type.GetKind()) {
+        case ETypeAnnotationKind::Data:
+            switch (type.Cast<TDataExprType>()->GetSlot()) {
+                case NUdf::EDataSlot::Bool:
+                case NUdf::EDataSlot::Int8:
+                case NUdf::EDataSlot::Uint8: return 1;
+
+                case NUdf::EDataSlot::Int16:
+                case NUdf::EDataSlot::Uint16:
+                case NUdf::EDataSlot::Date: return 2;
+
+                case NUdf::EDataSlot::TzDate: return 3;
+
+                case NUdf::EDataSlot::Int32:
+                case NUdf::EDataSlot::Uint32:
+                case NUdf::EDataSlot::Float:
+                case NUdf::EDataSlot::Datetime: return 4;
+
+                case NUdf::EDataSlot::TzDatetime: return 5;
+
+                case NUdf::EDataSlot::Int64:
+                case NUdf::EDataSlot::Uint64:
+                case NUdf::EDataSlot::Double:
+                case NUdf::EDataSlot::Timestamp:
+                case NUdf::EDataSlot::Interval:  return 8;
+
+                case NUdf::EDataSlot::TzTimestamp: return 9;
+
+                case NUdf::EDataSlot::Decimal: return 15;
+                case NUdf::EDataSlot::Uuid: return 16;
+
+                default: return 32;
+            }
+            case ETypeAnnotationKind::Optional: return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
+            default: return 255;
+    }
+}
+
+} // namespace
+
+const TItemExprType* GetLightColumn(const TStructExprType& type) {
+    ui8 weight = 255;
+    const TItemExprType* field = nullptr;
+    for (const auto& item : type.GetItems()) {
+
+        if (const auto w = GetTypeWeight(*item->GetItemType()); w < weight) {
+            weight = w;
+            field = item;
+        }
+    }
+    return field;
+}
+
 }

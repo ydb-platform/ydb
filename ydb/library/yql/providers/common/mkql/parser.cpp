@@ -122,10 +122,15 @@ TRuntimeNode BuildParseCall(
 
     const auto structType = static_cast<const TStructType*>(outputItemType);
     if (format == "raw") {
-        MKQL_ENSURE(1U == structType->GetMembersCount(), "Expected single column.");
-        bool isOptional;
-        const auto schemeType = UnpackOptionalData(structType->GetMemberType(0U), isOptional)->GetSchemeType();
+        MKQL_ENSURE(1U >= structType->GetMembersCount(), "Expected at most one column.");
         auto parseLambda = [&](TRuntimeNode item) {
+            if (structType->GetMembersCount() == 0) {
+                return ctx.ProgramBuilder.NewStruct(outputItemType, {});
+            }
+
+            bool isOptional;
+            const auto schemeType = UnpackOptionalData(structType->GetMemberType(0U), isOptional)->GetSchemeType();
+
             TRuntimeNode converted;
             if (NUdf::TDataType<const char*>::Id == schemeType) {
                 converted = isOptional ? ctx.ProgramBuilder.NewOptional(item) : item;

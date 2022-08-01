@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/transform/yql_optimize.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
+#include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 
@@ -16,58 +17,6 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
-
-ui8 GetTypeWeight(const TTypeAnnotationNode& type) {
-    switch (type.GetKind()) {
-        case ETypeAnnotationKind::Data:
-            switch (type.Cast<TDataExprType>()->GetSlot()) {
-                case NUdf::EDataSlot::Bool:
-                case NUdf::EDataSlot::Int8:
-                case NUdf::EDataSlot::Uint8: return 1;
-
-                case NUdf::EDataSlot::Int16:
-                case NUdf::EDataSlot::Uint16:
-                case NUdf::EDataSlot::Date: return 2;
-
-                case NUdf::EDataSlot::TzDate: return 3;
-
-                case NUdf::EDataSlot::Int32:
-                case NUdf::EDataSlot::Uint32:
-                case NUdf::EDataSlot::Float:
-                case NUdf::EDataSlot::Datetime: return 4;
-
-                case NUdf::EDataSlot::TzDatetime: return 5;
-
-                case NUdf::EDataSlot::Int64:
-                case NUdf::EDataSlot::Uint64:
-                case NUdf::EDataSlot::Double:
-                case NUdf::EDataSlot::Timestamp:
-                case NUdf::EDataSlot::Interval:  return 8;
-
-                case NUdf::EDataSlot::TzTimestamp: return 9;
-
-                case NUdf::EDataSlot::Decimal: return 15;
-                case NUdf::EDataSlot::Uuid: return 16;
-
-                default: return 32;
-            }
-        case ETypeAnnotationKind::Optional: return 1 + GetTypeWeight(*type.Cast<TOptionalExprType>()->GetItemType());
-        default: return 255;
-    }
-}
-
-const TItemExprType* GetLightColumn(const TStructExprType& type) {
-    ui8 weight = 255;
-    const TItemExprType* field = nullptr;
-    for (const auto& item : type.GetItems()) {
-
-        if (const auto w = GetTypeWeight(*item->GetItemType()); w < weight) {
-            weight = w;
-            field = item;
-        }
-    }
-    return field;
-}
 
 class TYdbPhysicalOptProposalTransformer : public TOptimizeTransformerBase {
 public:
@@ -119,6 +68,7 @@ public:
                 if (!wide.Cast().Ref().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetSize()) {
                     const auto& read = maybe.Cast();
                     const auto structType = State_->Tables[std::make_pair(read.DataSource().Cluster().StringValue(), read.Table().StringValue())].ItemType;
+                    YQL_ENSURE(structType->GetSize());
                     auto columns = ctx.NewList(read.Pos(), {ctx.NewAtom(read.Pos(), GetLightColumn(*structType)->GetName())});
                     return Build<TCoNarrowMap>(ctx, narrow.Cast().Pos())
                         .Input<TDqReadWideWrap>()

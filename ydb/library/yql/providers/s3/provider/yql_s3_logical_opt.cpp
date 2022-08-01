@@ -182,6 +182,7 @@ public:
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(TryPrunePaths));
         AddHandler(0, &TDqSourceWrap::Match, HNDL(ApplyPrunedPath));
+        AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSource));
 #undef HNDL
     }
 
@@ -292,6 +293,114 @@ public:
         }
 
         return node;
+    }
+
+    TMaybeNode<TExprBase> ExtractMembersOverDqSource(TExprBase node, TExprContext& ctx) const {
+        const auto& extract = node.Cast<TCoExtractMembers>();
+        const auto& maybeDqSource = extract.Input().Maybe<TDqSourceWrap>();
+        if (!maybeDqSource) {
+            return node;
+        }
+
+        const auto& dqSource = maybeDqSource.Cast();
+        if (dqSource.DataSource().Category() != S3ProviderName) {
+            return node;
+        }
+
+        const auto& maybeS3SourceSettings = dqSource.Input().Maybe<TS3SourceSettingsBase>();
+        if (!maybeS3SourceSettings) {
+            return node;
+        }
+
+        TSet<TStringBuf> extractMembers;
+        for (auto member : extract.Members()) {
+            extractMembers.insert(member.Value());
+        }
+
+        TMaybeNode<TExprBase> settings = dqSource.Settings();
+
+        TMaybeNode<TExprBase> newSettings = settings;
+        TExprNode::TPtr newPaths = maybeS3SourceSettings.Cast().Paths().Ptr();
+
+        if (settings) {
+            if (auto prunedPaths = GetSetting(settings.Cast().Ref(), "prunedPaths")) {
+                if (prunedPaths->ChildrenSize() > 1) {
+                    // pruning in progress
+                    return node;
+                }
+            }
+
+            if (auto extraColumnsSetting = GetSetting(settings.Cast().Ref(), "extraColumns")) {
+                const TStructExprType* extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+                auto extraTypeItems = extraType->GetItems();
+                EraseIf(extraTypeItems, [&](const TItemExprType* item) { return !extractMembers.contains(item->GetName()); });
+                if (extraTypeItems.size() < extraType->GetSize()) {
+                    auto originalPaths = maybeS3SourceSettings.Cast().Paths().Ptr();
+                    auto originalExtra = extraColumnsSetting->TailPtr();
+                    YQL_ENSURE(originalExtra->IsCallable("AsList"));
+                    YQL_ENSURE(originalPaths->IsList());
+                    YQL_ENSURE(originalPaths->ChildrenSize() == originalExtra->ChildrenSize());
+
+                    TExprNodeList newPathItems;
+                    TExprNodeList newExtraColumnsItems;
+
+                    for (const auto& path : maybeS3SourceSettings.Cast().Paths()) {
+                        auto extra = path.ExtraColumns();
+                        YQL_ENSURE(TCoAsStruct::Match(extra.Raw()));
+                        TExprNodeList children = extra.Ref().ChildrenList();
+                        EraseIf(children, [&](const TExprNode::TPtr& child) { return !extractMembers.contains(child->Head().Content()); });
+                        auto newStruct = ctx.ChangeChildren(extra.Ref(), std::move(children));
+                        newExtraColumnsItems.push_back(newStruct);
+                        newPathItems.push_back(ctx.ChangeChild(path.Ref(), TS3Path::idx_ExtraColumns, std::move(newStruct)));
+                    }
+
+                    newPaths = ctx.ChangeChildren(maybeS3SourceSettings.Cast().Paths().Ref(), std::move(newPathItems));
+                    TExprNode::TPtr newExtra = ctx.ChangeChildren(*originalExtra, std::move(newExtraColumnsItems));
+                    newSettings = TExprBase(extraTypeItems.empty() ? RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx) :
+                        ReplaceSetting(settings.Cast().Ref(), extraColumnsSetting->Pos(), "extraColumns", newExtra, ctx));
+                }
+            }
+
+        }
+
+        const TStructExprType* outputRowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        const TExprNode::TPtr outputRowTypeNode = ExpandType(dqSource.RowType().Pos(), *outputRowType, ctx);
+
+        YQL_CLOG(INFO, ProviderS3) << "ExtractMembers over DqSource with " << maybeS3SourceSettings.Cast().CallableName();
+
+        if (maybeS3SourceSettings.Cast().CallableName() == TS3SourceSettings::CallableName()) {
+            return Build<TDqSourceWrap>(ctx, dqSource.Pos())
+                .InitFrom(dqSource)
+                .Input<TS3SourceSettings>()
+                    .InitFrom(dqSource.Input().Maybe<TS3SourceSettings>().Cast())
+                    .Paths(newPaths)
+                .Build()
+                .RowType(outputRowTypeNode)
+                .Settings(newSettings)
+                .Done();
+        }
+
+        const TStructExprType* readRowType =
+            dqSource.Input().Maybe<TS3ParseSettings>().Cast().RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+
+        if (outputRowType->GetSize() == 0 && readRowType->GetSize() != 0) {
+            auto item = GetLightColumn(*readRowType);
+            YQL_ENSURE(item);
+            readRowType = ctx.MakeType<TStructExprType>(TVector<const TItemExprType*>{item});
+        } else {
+            readRowType = outputRowType;
+        }
+
+        return Build<TDqSourceWrap>(ctx, dqSource.Pos())
+            .InitFrom(dqSource)
+            .Input<TS3ParseSettings>()
+                .InitFrom(dqSource.Input().Maybe<TS3ParseSettings>().Cast())
+                .Paths(newPaths)
+                .RowType(ExpandType(dqSource.Input().Pos(), *readRowType, ctx))
+            .Build()
+            .RowType(outputRowTypeNode)
+            .Settings(newSettings)
+            .Done();
     }
 
 private:

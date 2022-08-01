@@ -107,4 +107,6 @@ inline TStringBuf GetEmptyCollectionName(const TTypeAnnotationNode* type) {
     return GetEmptyCollectionName(type->GetKind());
 }
 
+const TItemExprType* GetLightColumn(const TStructExprType& type);
+
 }

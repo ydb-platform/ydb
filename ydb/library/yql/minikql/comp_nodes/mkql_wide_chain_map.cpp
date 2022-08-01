@@ -16,16 +16,24 @@ class TWideChain1MapWrapper : public TStatefulWideFlowCodegeneratorNode<TWideCha
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideChain1MapWrapper>;
 public:
      TWideChain1MapWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow,
-        TComputationExternalNodePtrVector&& inputs,
-        TComputationNodePtrVector&& initItems,
-        TComputationExternalNodePtrVector&& outputs,
-        TComputationNodePtrVector&& updateItems):
-        TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow),
-        Inputs(std::move(inputs)), InitItems(std::move(initItems)), Outputs(std::move(outputs)), UpdateItems(std::move(updateItems)),
-        InputsOnInit(GetPasstroughtMap(Inputs, InitItems)), InputsOnUpdate(GetPasstroughtMap(Inputs, UpdateItems)),
-        InitOnInputs(GetPasstroughtMap(InitItems, Inputs)), UpdateOnInputs(GetPasstroughtMap(UpdateItems, Inputs)),
-        OutputsOnUpdate(GetPasstroughtMap(Outputs, UpdateItems)), UpdateOnOutputs(GetPasstroughtMap(UpdateItems, Outputs)),
-        Fields(Inputs.size(), nullptr), TempState(Outputs.size())
+            TComputationExternalNodePtrVector&& inputs,
+            TComputationNodePtrVector&& initItems,
+            TComputationExternalNodePtrVector&& outputs,
+            TComputationNodePtrVector&& updateItems)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Inputs(std::move(inputs))
+        , InitItems(std::move(initItems))
+        , Outputs(std::move(outputs))
+        , UpdateItems(std::move(updateItems))
+        , InputsOnInit(GetPasstroughtMap(Inputs, InitItems))
+        , InputsOnUpdate(GetPasstroughtMap(Inputs, UpdateItems))
+        , InitOnInputs(GetPasstroughtMap(InitItems, Inputs))
+        , UpdateOnInputs(GetPasstroughtMap(UpdateItems, Inputs))
+        , OutputsOnUpdate(GetPasstroughtMap(Outputs, UpdateItems))
+        , UpdateOnOutputs(GetPasstroughtMap(UpdateItems, Outputs))
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Inputs.size()))
+        , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + Outputs.size()))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -135,24 +143,27 @@ public:
 #endif
 private:
     EFetchResult CalculateFirst(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        for (auto i = 0U; i < Fields.size(); ++i) {
+        Y_VERIFY_DEBUG(WideFieldsIndex + Inputs.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+
+        for (auto i = 0U; i < Inputs.size(); ++i) {
             if (Inputs[i]->GetDependencesCount() > 0U) {
-                Fields[i] = &Inputs[i]->RefValue(ctx);
+                fields[i] = &Inputs[i]->RefValue(ctx);
                 continue;
             } else if (const auto& map = InputsOnInit[i]) {
                 if (const auto& to = UpdateOnOutputs[*map]) {
-                    Fields[i] = &Outputs[*to]->RefValue(ctx);
+                    fields[i] = &Outputs[*to]->RefValue(ctx);
                     continue;
                 } else if (const auto out = output[*map]) {
-                    Fields[i] = out;
+                    fields[i] = out;
                     continue;
                 }
             }
 
-            Fields[i] = nullptr;
+            fields[i] = nullptr;
         }
 
-        if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
             return result;
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
@@ -185,27 +196,30 @@ private:
     }
 
     EFetchResult CalculateOther(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        for (auto i = 0U; i < Fields.size(); ++i) {
+        Y_VERIFY_DEBUG(WideFieldsIndex + Inputs.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+
+        for (auto i = 0U; i < Inputs.size(); ++i) {
             if (Inputs[i]->GetDependencesCount() > 0U) {
-                Fields[i] = &Inputs[i]->RefValue(ctx);
+                fields[i] = &Inputs[i]->RefValue(ctx);
                 continue;
             } else if (const auto& map = InputsOnUpdate[i]) {
                 if (const auto out = output[*map]) {
-                    Fields[i] = out;
+                    fields[i] = out;
                     continue;
                 }
             }
 
-            Fields[i] = nullptr;
+            fields[i] = nullptr;
         }
 
-        if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
             return result;
 
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
                 if (const auto& map = UpdateOnInputs[i]; !map || Inputs[*map]->GetDependencesCount() > 0U) {
-                    TempState[i] = UpdateItems[i]->GetValue(ctx);
+                    ctx.MutableValues[TempStateIndex + i] = UpdateItems[i]->GetValue(ctx);
                 }
             }
         }
@@ -213,7 +227,7 @@ private:
         for (auto i = 0U; i < Outputs.size(); ++i) {
             if (Outputs[i]->GetDependencesCount() > 0U || OutputsOnUpdate[i]) {
                 if (const auto& map = UpdateOnInputs[i]; !map || Inputs[*map]->GetDependencesCount() > 0U) {
-                    Outputs[i]->SetValue(ctx, std::move(TempState[i]));
+                    Outputs[i]->SetValue(ctx, std::move(ctx.MutableValues[TempStateIndex + i]));
                 }
             }
         }
@@ -257,8 +271,8 @@ private:
 
     const TPasstroughtMap InputsOnInit, InputsOnUpdate, InitOnInputs, UpdateOnInputs, OutputsOnUpdate, UpdateOnOutputs;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
-    mutable std::vector<NUdf::TUnboxedValue> TempState;
+    const ui32 WideFieldsIndex;
+    const ui32 TempStateIndex;
 };
 
 }

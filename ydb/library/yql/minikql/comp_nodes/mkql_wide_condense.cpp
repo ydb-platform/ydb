@@ -21,10 +21,16 @@ public:
         TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& initState,
         TComputationExternalNodePtrVector&& state, IComputationNode* outSwitch, TComputationNodePtrVector&& updateState)
             : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow)
-            , Items(std::move(items)), InitState(std::move(initState))
-            , State(std::move(state)), Switch(outSwitch), UpdateState(std::move(updateState))
-            , Fields(Items.size(), nullptr), TempState(State.size()), SwitchItem(IsPasstrought(Switch, Items))
-            , ItemsOnInit(GetPasstroughtMap(Items, InitState)), ItemsOnUpdate(GetPasstroughtMap(Items, UpdateState))
+            , Items(std::move(items))
+            , InitState(std::move(initState))
+            , State(std::move(state))
+            , Switch(outSwitch)
+            , UpdateState(std::move(updateState))
+            , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
+            , TempStateIndex(std::exchange(mutables.CurValueIndex, mutables.CurValueIndex + State.size()))
+            , SwitchItem(IsPasstrought(Switch, Items))
+            , ItemsOnInit(GetPasstroughtMap(Items, InitState))
+            , ItemsOnUpdate(GetPasstroughtMap(Items, UpdateState))
             , UpdateOnItems(GetPasstroughtMap(UpdateState, Items))
     {}
 
@@ -41,12 +47,15 @@ public:
                 State[i]->SetValue(ctx, InitState[i]->GetValue(ctx));
         }
 
-        while (true) {
-            for (auto i = 0U; i < Fields.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i] || ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem)
-                    Fields[i] = &Items[i]->RefValue(ctx);
+        Y_VERIFY_DEBUG(WideFieldsIndex + Items.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-            switch (Flow->FetchValues(ctx, Fields.data())) {
+        while (true) {
+            for (auto i = 0U; i < Items.size(); ++i)
+                if (Items[i]->GetDependencesCount() > 0U || ItemsOnInit[i] || ItemsOnUpdate[i] || SwitchItem && i == *SwitchItem)
+                    fields[i] = &Items[i]->RefValue(ctx);
+
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Yield:
                     return EFetchResult::Yield;
                 case EFetchResult::Finish:
@@ -74,9 +83,9 @@ public:
                         }
 
                         for (ui32 i = 0U; i < State.size(); ++i)
-                            TempState[i] = UpdateState[i]->GetValue(ctx);
+                            ctx.MutableValues[TempStateIndex + i] = UpdateState[i]->GetValue(ctx);
                         for (ui32 i = 0U; i < State.size(); ++i)
-                            State[i]->SetValue(ctx, std::move(TempState[i]));
+                            State[i]->SetValue(ctx, std::move(ctx.MutableValues[TempStateIndex + i]));
                     }
                     continue;
             }
@@ -236,8 +245,8 @@ private:
 
     const TPasstroughtMap ItemsOnInit, ItemsOnUpdate, UpdateOnItems;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
-    mutable std::vector<NUdf::TUnboxedValue> TempState;
+    ui32 WideFieldsIndex;
+    ui32 TempStateIndex;
 };
 
 }

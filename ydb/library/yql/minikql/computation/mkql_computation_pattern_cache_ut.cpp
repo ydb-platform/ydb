@@ -337,6 +337,7 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable *list = n
 Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
     template<class T>
     void ParallelProgTest(T f, bool useLLVM, ui64 testResult) {
+        TTimer t("total: ");
         const ui32 cacheSize = 10;
         const ui32 inFlight = 3;
         TComputationPatternLRUCache cache(cacheSize);

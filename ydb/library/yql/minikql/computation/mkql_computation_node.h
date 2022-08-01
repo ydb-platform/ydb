@@ -64,6 +64,13 @@ struct TComputationOptsFull: public TComputationOpts {
 struct TComputationMutables {
     ui32 CurValueIndex = 0U;
     std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
+    ui32 CurWideFieldsIndex = 0U;
+
+    ui32 IncrementWideFieldsIndex(ui32 addend) {
+        auto cur = CurWideFieldsIndex;
+        CurWideFieldsIndex += addend;
+        return cur;
+    }
 };
 
 class THolderFactory;
@@ -84,6 +91,7 @@ struct TComputationContext : public TComputationContextLLVM {
     ITimeProvider& TimeProvider;
     bool ExecuteLLVM = true;
     arrow::MemoryPool& ArrowMemoryPool;
+    std::vector<NUdf::TUnboxedValue*> WideFields;
 
     TComputationContext(const THolderFactory& holderFactory,
         const NUdf::IValueBuilder* builder,

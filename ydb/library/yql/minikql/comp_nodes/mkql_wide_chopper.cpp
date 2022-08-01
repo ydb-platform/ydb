@@ -35,16 +35,19 @@ public:
         , ItemsOnKeys(GetPasstroughtMap(ItemArgs, Keys))
         , KeysOnItems(GetPasstroughtMap(Keys, ItemArgs))
         , SwitchItem(IsPasstrought(Chop, ItemArgs))
-        , Fields(ItemArgs.size(), nullptr)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(ItemArgs.size()))
     {
         Input->SetFetcher(std::bind(&TWideChopperWrapper::DoCalculateInput, this, std::bind(&TWideChopperWrapper::RefState, this, _1), _1, _2));
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        Y_VERIFY_DEBUG(WideFieldsIndex + ItemArgs.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+
         if (state.IsInvalid()) {
-            for (auto i = 0U; i < Fields.size(); ++i)
-                Fields[i] = &ItemArgs[i]->RefValue(ctx);
-            if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+            for (auto i = 0U; i < ItemArgs.size(); ++i)
+                fields[i] = &ItemArgs[i]->RefValue(ctx);
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
                 return result;
 
             for (ui32 i = 0U; i < Keys.size(); ++i)
@@ -53,9 +56,9 @@ public:
             state = NUdf::TUnboxedValuePod(ui64(EState::Next));
         } else if (EState::Skip == EState(state.Get<ui64>())) {
             do {
-                for (auto i = 0U; i < Fields.size(); ++i)
-                    Fields[i] = &ItemArgs[i]->RefValue(ctx);
-                if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+                for (auto i = 0U; i < ItemArgs.size(); ++i)
+                    fields[i] = &ItemArgs[i]->RefValue(ctx);
+                if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
                     return result;
 
             } while (!Chop->GetValue(ctx).Get<bool>());
@@ -73,9 +76,9 @@ public:
                     case EState::Work:
                     case EState::Next:
                         do {
-                            for (auto i = 0U; i < Fields.size(); ++i)
-                                Fields[i] = &ItemArgs[i]->RefValue(ctx);
-                            switch (const auto next = Flow->FetchValues(ctx, Fields.data())) {
+                            for (auto i = 0U; i < ItemArgs.size(); ++i)
+                                fields[i] = &ItemArgs[i]->RefValue(ctx);
+                            switch (const auto next = Flow->FetchValues(ctx, fields)) {
                                 case EFetchResult::Yield:
                                     state = NUdf::TUnboxedValuePod(ui64(EState::Skip));
                                 case EFetchResult::Finish:
@@ -100,21 +103,24 @@ private:
     EFetchResult DoCalculateInput(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
         if (EState::Next == EState(state.Get<ui64>())) {
             state = NUdf::TUnboxedValuePod(ui64(EState::Work));
-            for (auto i = 0U; i < Fields.size(); ++i)
+            for (auto i = 0U; i < ItemArgs.size(); ++i)
                 if (const auto out = output[i])
                     *out = ItemArgs[i]->GetValue(ctx);
             return EFetchResult::One;
         }
 
-        for (auto i = 0U; i < Fields.size(); ++i)
-            Fields[i] = &ItemArgs[i]->RefValue(ctx);
+        Y_VERIFY_DEBUG(WideFieldsIndex + ItemArgs.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-        if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+        for (auto i = 0U; i < ItemArgs.size(); ++i)
+            fields[i] = &ItemArgs[i]->RefValue(ctx);
+
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
             return result;
 
-        for (auto i = 0U; i < Fields.size(); ++i)
+        for (auto i = 0U; i < ItemArgs.size(); ++i)
             if (const auto out = output[i])
-                *out = *Fields[i];
+                *out = *fields[i];
 
         if (Chop->GetValue(ctx).Get<bool>()) {
             state = NUdf::TUnboxedValuePod(ui64(EState::Chop));
@@ -329,7 +335,7 @@ private:
 
     const std::optional<size_t> SwitchItem;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 }

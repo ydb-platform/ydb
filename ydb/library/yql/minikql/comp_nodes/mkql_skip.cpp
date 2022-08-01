@@ -121,7 +121,10 @@ class TWideSkipWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSkipWrap
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWrapper>;
 public:
      TWideSkipWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* count, ui32 size)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), Flow(flow), Count(count), Stubs(size, nullptr)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Count(count)
+        , StubsIndex(mutables.IncrementWideFieldsIndex(size))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -130,7 +133,7 @@ public:
         }
 
         if (auto count = state.Get<ui64>()) {
-            do if (const auto result = Flow->FetchValues(ctx, Stubs.data()); EFetchResult::One != result) {
+            do if (const auto result = Flow->FetchValues(ctx, ctx.WideFields.data() + StubsIndex); EFetchResult::One != result) {
                 state = NUdf::TUnboxedValuePod(count);
                 return result;
             } while (--count);
@@ -221,7 +224,7 @@ private:
 
     IComputationWideFlowNode* const Flow;
     IComputationNode* const Count;
-    mutable std::vector<NUdf::TUnboxedValue*> Stubs;
+    const ui32 StubsIndex;
 };
 
 class TSkipStreamWrapper : public TMutableComputationNode<TSkipStreamWrapper> {

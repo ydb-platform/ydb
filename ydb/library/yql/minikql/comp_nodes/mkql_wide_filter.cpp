@@ -14,23 +14,37 @@ namespace {
 
 class TBaseWideFilterWrapper {
 protected:
-    TBaseWideFilterWrapper(IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : Flow(flow), Items(std::move(items)), Predicate(predicate), FilterByField(GetPasstroughtMap({Predicate}, Items).front()), Fields(Items.size(), nullptr)
+    TBaseWideFilterWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
+        : Flow(flow)
+        , Items(std::move(items))
+        , Predicate(predicate)
+        , FilterByField(GetPasstroughtMap({Predicate}, Items).front())
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
+    NYql::NUdf::TUnboxedValue** GetFields(TComputationContext& ctx) const {
+        Y_VERIFY_DEBUG(WideFieldsIndex + Items.size() <= ctx.WideFields.size());
+        return ctx.WideFields.data() + WideFieldsIndex;
+    }
+
     void PrepareArguments(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        for (auto i = 0U; i < Fields.size(); ++i)
+        auto** fields = GetFields(ctx);
+
+        for (auto i = 0U; i < Items.size(); ++i) {
             if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                Fields[i] = &Items[i]->RefValue(ctx);
+                fields[i] = &Items[i]->RefValue(ctx);
             else
-                Fields[i] = output[i];
+                fields[i] = output[i];
+        }
     }
 
     void FillOutputs(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        for (auto i = 0U; i < Fields.size(); ++i)
+        auto** fields = GetFields(ctx);
+
+        for (auto i = 0U; i < Items.size(); ++i)
             if (const auto out = output[i])
                 if (Predicate == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                    *out = *Fields[i];
+                    *out = *fields[i];
     }
 #ifndef MKQL_DISABLE_CODEGEN
     template<bool ReplaceOriginalGetter = true>
@@ -57,21 +71,24 @@ protected:
 
     std::optional<size_t> FilterByField;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 class TWideFilterWrapper : public TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>,  public TBaseWideFilterWrapper {
 using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideFilterWrapper>;
 public:
-    TWideFilterWrapper(IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(flow), TBaseWideFilterWrapper(flow, std::move(items), predicate)
+    TWideFilterWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
+        : TBaseComputation(flow)
+        , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        auto** fields = GetFields(ctx);
+
         while (true) {
             PrepareArguments(ctx, output);
 
-            if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
                 return result;
 
             if (Predicate->GetValue(ctx).Get<bool>()) {
@@ -121,8 +138,11 @@ private:
 class TWideFilterWithLimitWrapper : public TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>,  public TBaseWideFilterWrapper {
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideFilterWithLimitWrapper>;
 public:
-    TWideFilterWithLimitWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* limit, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), TBaseWideFilterWrapper(flow, std::move(items), predicate), Limit(limit)
+    TWideFilterWithLimitWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, IComputationNode* limit,
+            TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
+        , Limit(limit)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -132,10 +152,11 @@ public:
             return EFetchResult::Finish;
         }
 
+        auto **fields = GetFields(ctx);
         while (true) {
             PrepareArguments(ctx, output);
 
-            if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
                 return result;
 
             if (Predicate->GetValue(ctx).Get<bool>()) {
@@ -221,8 +242,10 @@ template<bool Inclusive>
 class TWideTakeWhileWrapper : public TStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>,  public TBaseWideFilterWrapper {
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideTakeWhileWrapper<Inclusive>>;
 public:
-     TWideTakeWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), TBaseWideFilterWrapper(flow, std::move(items), predicate)
+     TWideTakeWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items,
+            IComputationNode* predicate)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -232,7 +255,9 @@ public:
 
         PrepareArguments(ctx, output);
 
-        if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+        auto **fields = GetFields(ctx);
+
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
             return result;
 
         const bool predicate = Predicate->GetValue(ctx).Get<bool>();
@@ -302,7 +327,8 @@ class TWideSkipWhileWrapper : public TStatefulWideFlowCodegeneratorNode<TWideSki
 using TBaseComputation = TStatefulWideFlowCodegeneratorNode<TWideSkipWhileWrapper<Inclusive>>;
 public:
      TWideSkipWhileWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* predicate)
-        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded), TBaseWideFilterWrapper(flow, std::move(items), predicate)
+        : TBaseComputation(mutables, flow, EValueRepresentation::Embedded)
+        , TBaseWideFilterWrapper(mutables, flow, std::move(items), predicate)
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -310,9 +336,11 @@ public:
             return Flow->FetchValues(ctx, output);
         }
 
+        auto **fields = GetFields(ctx);
+
         do {
             PrepareArguments(ctx, output);
-            if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+            if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
                 return result;
         } while (Predicate->GetValue(ctx).Get<bool>());
 
@@ -409,7 +437,7 @@ IComputationNode* WrapWideFilter(TCallable& callable, const TComputationNodeFact
 
     if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
         if (const auto last = callable.GetInputsCount() - 1U; last == width + 1U) {
-            return new TWideFilterWrapper(wide, std::move(args), predicate);
+            return new TWideFilterWrapper(ctx.Mutables, wide, std::move(args), predicate);
         } else {
             const auto limit = LocateNode(ctx.NodeLocator, callable, last);
             return new TWideFilterWithLimitWrapper(ctx.Mutables, wide, limit, std::move(args), predicate);

@@ -216,7 +216,7 @@ public:
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
         , MemLimit(memLimit)
-        , Fields(Nodes.ItemNodes.size(), nullptr)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -237,17 +237,20 @@ public:
 
                 const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
 
-                do {
-                    for (auto i = 0U; i < Fields.size(); ++i)
-                        if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i])
-                            Fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
+                Y_VERIFY_DEBUG(WideFieldsIndex + Nodes.ItemNodes.size() <= ctx.WideFields.size());
+                auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
-                    ptr->InputStatus = Flow->FetchValues(ctx, Fields.data());
+                do {
+                    for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                        if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i])
+                            fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
+
+                    ptr->InputStatus = Flow->FetchValues(ctx, fields);
                     if (EFetchResult::One != ptr->InputStatus) {
                         break;
                     }
 
-                    Nodes.ExtractKey(ctx, Fields.data(), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                    Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                     Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                 } while (!ctx.template CheckAdjustedMemLimit<TrackRss>(MemLimit, initUsage));
 
@@ -567,7 +570,7 @@ private:
     const TKeyTypes KeyTypes;
     const ui64 MemLimit;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TEqualsPtr Equals = nullptr;
@@ -611,7 +614,7 @@ public:
         , Flow(flow)
         , Nodes(std::move(nodes))
         , KeyTypes(std::move(keyTypes))
-        , Fields(Nodes.ItemNodes.size(), nullptr)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Nodes.ItemNodes.size()))
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
@@ -620,14 +623,17 @@ public:
         }
 
         if (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
-            while (EFetchResult::Finish != ptr->InputStatus) {
-                for (auto i = 0U; i < Fields.size(); ++i)
-                    if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i])
-                        Fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
+            Y_VERIFY_DEBUG(WideFieldsIndex + Nodes.ItemNodes.size() <= ctx.WideFields.size());
+            auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
-                switch (ptr->InputStatus = Flow->FetchValues(ctx, Fields.data())) {
+            while (EFetchResult::Finish != ptr->InputStatus) {
+                for (auto i = 0U; i < Nodes.ItemNodes.size(); ++i)
+                    if (Nodes.ItemNodes[i]->GetDependencesCount() > 0U || Nodes.PasstroughtItems[i])
+                        fields[i] = &Nodes.ItemNodes[i]->RefValue(ctx);
+
+                switch (ptr->InputStatus = Flow->FetchValues(ctx, fields)) {
                     case EFetchResult::One:
-                        Nodes.ExtractKey(ctx, Fields.data(), static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
+                        Nodes.ExtractKey(ctx, fields, static_cast<NUdf::TUnboxedValue*>(ptr->Tongue));
                         Nodes.ProcessItem(ctx, ptr->TasteIt() ? nullptr : static_cast<NUdf::TUnboxedValue*>(ptr->Tongue), static_cast<NUdf::TUnboxedValue*>(ptr->Throat));
                         continue;
                     case EFetchResult::Yield:
@@ -912,7 +918,7 @@ private:
     const TCombinerNodes Nodes;
     const TKeyTypes KeyTypes;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 
 #ifndef MKQL_DISABLE_CODEGEN
     TEqualsPtr Equals = nullptr;

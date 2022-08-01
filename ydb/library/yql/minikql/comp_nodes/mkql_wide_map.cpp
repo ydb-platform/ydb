@@ -83,20 +83,28 @@ private:
 class TWideMapWrapper : public TStatelessWideFlowCodegeneratorNode<TWideMapWrapper> {
 using TBaseComputation = TStatelessWideFlowCodegeneratorNode<TWideMapWrapper>;
 public:
-    TWideMapWrapper(IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& newItems)
-        : TBaseComputation(flow), Flow(flow), Items(std::move(items)), NewItems(std::move(newItems)), Fields(Items.size(), nullptr)
-        , PasstroughtMap(GetPasstroughtMap(Items, NewItems)), ReversePasstroughtMap(GetPasstroughtMap(NewItems, Items))
+    TWideMapWrapper(TComputationMutables& mutables, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& newItems)
+        : TBaseComputation(flow)
+        , Flow(flow)
+        , Items(std::move(items))
+        , NewItems(std::move(newItems))
+        , PasstroughtMap(GetPasstroughtMap(Items, NewItems))
+        , ReversePasstroughtMap(GetPasstroughtMap(NewItems, Items))
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
     EFetchResult DoCalculate(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        for (auto i = 0U; i < Fields.size(); ++i)
+        Y_VERIFY_DEBUG(WideFieldsIndex + Items.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
+
+        for (auto i = 0U; i < Items.size(); ++i)
             if (Items[i]->GetDependencesCount() > 0U)
-                Fields[i] = &Items[i]->RefValue(ctx);
+                fields[i] = &Items[i]->RefValue(ctx);
             else if (const auto& map = PasstroughtMap[i])
                 if (const auto out = output[*map])
-                    Fields[i] = out;
+                    fields[i] = out;
 
-        if (const auto result = Flow->FetchValues(ctx, Fields.data()); EFetchResult::One != result)
+        if (const auto result = Flow->FetchValues(ctx, fields); EFetchResult::One != result)
             return result;
 
         for (auto i = 0U; i < NewItems.size(); ++i) {
@@ -164,27 +172,31 @@ private:
     const TComputationNodePtrVector NewItems;
     const TPasstroughtMap PasstroughtMap, ReversePasstroughtMap;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 class TNarrowMapWrapper : public TStatelessFlowCodegeneratorNode<TNarrowMapWrapper> {
 using TBaseComputation = TStatelessFlowCodegeneratorNode<TNarrowMapWrapper>;
 public:
-    TNarrowMapWrapper(EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
+    TNarrowMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
         : TBaseComputation(flow, kind)
         , Flow(flow)
         , Items(std::move(items))
         , NewItem(newItem)
         , PasstroughItem(GetPasstroughtMap({NewItem}, Items).front())
-        , Fields(Items.size(), nullptr)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        for (auto i = 0U; i < Fields.size(); ++i)
-            if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                Fields[i] = &Items[i]->RefValue(ctx);
+        Y_VERIFY_DEBUG(WideFieldsIndex + Items.size() <= ctx.WideFields.size());
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-        switch (const auto result = Flow->FetchValues(ctx, Fields.data())) {
+        for (auto i = 0U; i < Items.size(); ++i) {
+            if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
+                fields[i] = &Items[i]->RefValue(ctx);
+        }
+
+        switch (const auto result = Flow->FetchValues(ctx, fields)) {
             case EFetchResult::Finish:
                 return NUdf::TUnboxedValuePod::MakeFinish();
             case EFetchResult::Yield:
@@ -243,8 +255,7 @@ private:
     IComputationNode* const NewItem;
 
     const std::optional<size_t> PasstroughItem;
-
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 }
@@ -278,7 +289,7 @@ IComputationNode* WrapWideMap(TCallable& callable, const TComputationNodeFactory
         index = 0U;
         std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
 
-        return new TWideMapWrapper(wide, std::move(args), std::move(newItems));
+        return new TWideMapWrapper(ctx.Mutables, wide, std::move(args), std::move(newItems));
     }
 
     THROW yexception() << "Expected wide flow.";
@@ -295,8 +306,7 @@ IComputationNode* WrapNarrowMap(TCallable& callable, const TComputationNodeFacto
         TComputationExternalNodePtrVector args(width, nullptr);
         ui32 index = 0U;
         std::generate(args.begin(), args.end(), [&](){ return LocateExternalNode(ctx.NodeLocator, callable, ++index); });
-
-        return new TNarrowMapWrapper(GetValueRepresentation(callable.GetType()->GetReturnType()), wide, std::move(args), newItem);
+        return new TNarrowMapWrapper(ctx.Mutables, GetValueRepresentation(callable.GetType()->GetReturnType()), wide, std::move(args), newItem);
     }
 
     THROW yexception() << "Expected wide flow.";

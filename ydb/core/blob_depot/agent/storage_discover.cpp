@@ -115,9 +115,9 @@ namespace NKikimr::NBlobDepot {
                         }
                     }
 
-                    if (!ReadBody) {
+                    if (!ReadBody || !Id) {
                         DoneWithData = true;
-                        CheckIfDone();
+                        return CheckIfDone();
                     }
                 } else {
                     Y_FAIL(); // do not expect to return single key in few messages

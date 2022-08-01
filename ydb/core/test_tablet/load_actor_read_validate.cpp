@@ -72,6 +72,7 @@ namespace NKikimr::NTestShard {
             if (ev->Get()->Connected) {
                 IssueNextStateServerQuery();
             } else {
+                STLOG(PRI_ERROR, TEST_SHARD, TS05, "state server disconnected", (TabletId, TabletId));
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
             }
@@ -211,7 +212,7 @@ namespace NKikimr::NTestShard {
             Y_VERIFY(inserted);
             Y_VERIFY_S(MD5::Calc(value) == key, "TabletId# " << TabletId << " Key# " << key << " digest mismatch"
                 " actual# " << MD5::Calc(value) << " len# " << value.size());
-            STLOG(PRI_DEBUG, TEST_SHARD, TS16, "read key", (TabletId, TabletId), (Key, key));
+            STLOG(PRI_DEBUG, TEST_SHARD, TS25, "read key", (TabletId, TabletId), (Key, key));
             FinishIfPossible();
         }
 

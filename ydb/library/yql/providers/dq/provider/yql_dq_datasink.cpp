@@ -27,8 +27,8 @@ class TDqDataProviderSink: public TDataProviderBase {
 public:
     TDqDataProviderSink(const TDqStatePtr& state)
         : State(state)
-        , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(/*TODO: State->TypeCtx);*/nullptr, state->Settings); })
-        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO: State->TypeCtx*/nullptr, state->Settings); })
+        , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(state->TypeCtx, state->Settings); })
+        , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO*/nullptr, state->Settings); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
         , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })

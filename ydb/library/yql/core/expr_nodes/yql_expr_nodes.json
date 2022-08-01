@@ -615,7 +615,7 @@
             "Match": {"Type": "Tuple"},
             "Children": [
                 {"Index": 0, "Name": "ColumnName",   "Type": "TExprBase"},
-                {"Index": 1, "Name": "Trait",        "Type": "TCoAggregationTraits"},
+                {"Index": 1, "Name": "Trait",        "Type": "TExprBase"},
                 {"Index": 2, "Name": "DistinctName", "Type": "TCoAtom", "Optional": true}
             ]
         },

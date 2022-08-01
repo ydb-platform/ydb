@@ -719,7 +719,17 @@ TExprNode::TPtr ApplyExtractMembersToAggregate(const TExprNode::TPtr& node, cons
         if (handler.DistinctName()) {
             usedFields.insert(handler.DistinctName().Cast().Value());
         } else {
-            auto structType = handler.Trait().ItemType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            const auto& trait = handler.Trait().Ref();
+            ui32 index;
+            if (trait.IsCallable("AggregationTraits")) {
+                index = 0;
+            } else if (trait.IsCallable("AggApply")) {
+                index = 1;
+            } else {
+                return {};
+            }
+
+            auto structType = trait.Child(index)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
             for (const auto& item : structType->GetItems()) {
                 usedFields.insert(item->GetName());
             }

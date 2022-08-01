@@ -679,6 +679,10 @@ struct TPDiskMon {
             Results->Inc();
             *Bytes += size;
         }
+
+        void CountMultipleResponses(ui32 num) {
+            Results->Add(num);
+        }
     };
 
     struct TReqCounters {

@@ -655,6 +655,7 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
         auto& pqConfig = *desc.MutablePQTabletConfig();
         pqConfig.SetTopicName(streamName);
         pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
+        pqConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS);
         auto& partitionConfig = *pqConfig.MutablePartitionConfig();
         partitionConfig.SetLifetimeSeconds(retentionPeriod.Seconds());
 

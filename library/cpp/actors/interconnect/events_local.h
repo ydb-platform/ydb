@@ -282,6 +282,7 @@ namespace NActors {
         DEFINE_SIMPLE_LOCAL_EVENT(TEvResolveError, "Network: TEvResolveError")
 
         TString Explain;
+        TString Host;
     };
 
     struct TEvHTTPStreamStatus

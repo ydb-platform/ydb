@@ -19,15 +19,15 @@
 #ifndef avro_json_JsonDom_hh__
 #define avro_json_JsonDom_hh__
 
+#include <cstdint>
 #include <iostream>
-#include <stdint.h>
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
-#include "boost/any.hpp"
 #include "Config.hh"
+#include "boost/any.hpp"
 
 namespace avro {
 
@@ -49,17 +49,21 @@ class JsonNullFormatter;
 template<typename F = JsonNullFormatter>
 class AVRO_DECL JsonGenerator;
 
-enum EntityType {
-    etNull,
-    etBool,
-    etLong,
-    etDouble,
-    etString,
-    etArray,
-    etObject
+enum class EntityType {
+    Null,
+    Bool,
+    Long,
+    Double,
+    String,
+    Arr,
+    Obj
 };
 
-const char* typeToString(EntityType t);
+const char *typeToString(EntityType t);
+
+inline std::ostream &operator<<(std::ostream &os, EntityType et) {
+    return os << typeToString(et);
+}
 
 class AVRO_DECL Entity {
     EntityType type_;
@@ -67,31 +71,44 @@ class AVRO_DECL Entity {
     size_t line_; // can't be const else noncopyable...
 
     void ensureType(EntityType) const;
+
 public:
-    Entity(size_t line = 0) : type_(etNull), line_(line) { }
-    Entity(Bool v, size_t line = 0) : type_(etBool), value_(v), line_(line) { }
-    Entity(Long v, size_t line = 0) : type_(etLong), value_(v), line_(line) { }
-    Entity(Double v, size_t line = 0) : type_(etDouble), value_(v), line_(line) { }
-    Entity(const std::shared_ptr<String>& v, size_t line = 0) : type_(etString), value_(v), line_(line) { }
-    Entity(const std::shared_ptr<Array>& v, size_t line = 0) : type_(etArray), value_(v), line_(line) { }
-    Entity(const std::shared_ptr<Object>& v, size_t line = 0) : type_(etObject), value_(v), line_(line) { }
+    explicit Entity(size_t line = 0) : type_(EntityType::Null), line_(line) {}
+    // Not explicit because do want implicit conversion
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    Entity(Bool v, size_t line = 0) : type_(EntityType::Bool), value_(v), line_(line) {}
+    // Not explicit because do want implicit conversion
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    Entity(Long v, size_t line = 0) : type_(EntityType::Long), value_(v), line_(line) {}
+    // Not explicit because do want implicit conversion
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    Entity(Double v, size_t line = 0) : type_(EntityType::Double), value_(v), line_(line) {}
+    // Not explicit because do want implicit conversion
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    Entity(const std::shared_ptr<String> &v, size_t line = 0) : type_(EntityType::String), value_(v), line_(line) {}
+    // Not explicit because do want implicit conversion
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    Entity(const std::shared_ptr<Array> &v, size_t line = 0) : type_(EntityType::Arr), value_(v), line_(line) {}
+    // Not explicit because do want implicit conversion
+    // NOLINTNEXTLINE(google-explicit-constructor)
+    Entity(const std::shared_ptr<Object> &v, size_t line = 0) : type_(EntityType::Obj), value_(v), line_(line) {}
 
     EntityType type() const { return type_; }
 
     size_t line() const { return line_; }
 
     Bool boolValue() const {
-        ensureType(etBool);
+        ensureType(EntityType::Bool);
         return boost::any_cast<Bool>(value_);
     }
 
     Long longValue() const {
-        ensureType(etLong);
+        ensureType(EntityType::Long);
         return boost::any_cast<Long>(value_);
     }
 
     Double doubleValue() const {
-        ensureType(etDouble);
+        ensureType(EntityType::Double);
         return boost::any_cast<Double>(value_);
     }
 
@@ -99,64 +116,68 @@ public:
 
     String bytesValue() const;
 
-    const Array& arrayValue() const {
-        ensureType(etArray);
-        return **boost::any_cast<std::shared_ptr<Array> >(&value_);
+    const Array &arrayValue() const {
+        ensureType(EntityType::Arr);
+        return **boost::any_cast<std::shared_ptr<Array>>(&value_);
     }
 
-    const Object& objectValue() const {
-        ensureType(etObject);
-        return **boost::any_cast<std::shared_ptr<Object> >(&value_);
+    const Object &objectValue() const {
+        ensureType(EntityType::Obj);
+        return **boost::any_cast<std::shared_ptr<Object>>(&value_);
     }
 
     std::string toString() const;
 };
 
-template <typename T>
+template<typename T>
 struct type_traits {
 };
 
-template <> struct type_traits<bool> {
-    static EntityType type() { return etBool; }
-    static const char* name() { return "bool"; }
+template<>
+struct type_traits<bool> {
+    static EntityType type() { return EntityType::Bool; }
+    static const char *name() { return "bool"; }
 };
 
-template <> struct type_traits<int64_t> {
-    static EntityType type() { return etLong; }
-    static const char* name() { return "long"; }
+template<>
+struct type_traits<int64_t> {
+    static EntityType type() { return EntityType::Long; }
+    static const char *name() { return "long"; }
 };
 
-template <> struct type_traits<double> {
-    static EntityType type() { return etDouble; }
-    static const char* name() { return "double"; }
+template<>
+struct type_traits<double> {
+    static EntityType type() { return EntityType::Double; }
+    static const char *name() { return "double"; }
 };
 
-template <> struct type_traits<std::string> {
-    static EntityType type() { return etString; }
-    static const char* name() { return "string"; }
+template<>
+struct type_traits<std::string> {
+    static EntityType type() { return EntityType::String; }
+    static const char *name() { return "string"; }
 };
 
-template <> struct type_traits<std::vector<Entity> > {
-    static EntityType type() { return etArray; }
-    static const char* name() { return "array"; }
+template<>
+struct type_traits<std::vector<Entity>> {
+    static EntityType type() { return EntityType::Arr; }
+    static const char *name() { return "array"; }
 };
 
-template <> struct type_traits<std::map<std::string, Entity> > {
-    static EntityType type() { return etObject; }
-    static const char* name() { return "object"; }
+template<>
+struct type_traits<std::map<std::string, Entity>> {
+    static EntityType type() { return EntityType::Obj; }
+    static const char *name() { return "object"; }
 };
 
-AVRO_DECL Entity readEntity(JsonParser& p);
+AVRO_DECL Entity readEntity(JsonParser &p);
 
-AVRO_DECL Entity loadEntity(InputStream& in);
-AVRO_DECL Entity loadEntity(const char* text);
-AVRO_DECL Entity loadEntity(const uint8_t* text, size_t len);
+AVRO_DECL Entity loadEntity(InputStream &in);
+AVRO_DECL Entity loadEntity(const char *text);
+AVRO_DECL Entity loadEntity(const uint8_t *text, size_t len);
 
-void writeEntity(JsonGenerator<JsonNullFormatter>& g, const Entity& n);
+void writeEntity(JsonGenerator<JsonNullFormatter> &g, const Entity &n);
 
-}
-}
+} // namespace json
+} // namespace avro
 
 #endif
-
-

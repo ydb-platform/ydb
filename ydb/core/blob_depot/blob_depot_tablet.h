@@ -167,7 +167,6 @@ namespace NKikimr::NBlobDepot {
         std::unique_ptr<TData> Data;
 
         void Handle(TEvBlobDepot::TEvCommitBlobSeq::TPtr ev);
-        void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Monitoring

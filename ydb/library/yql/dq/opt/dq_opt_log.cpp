@@ -13,12 +13,12 @@ using namespace NYql::NNodes;
 
 namespace NYql::NDq {
 
-TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx) {
+TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     if (!node.Maybe<TCoAggregate>()) {
         return node;
     }
 
-    auto result = ExpandAggregate(true, node.Ptr(), ctx);
+    auto result = ExpandAggregate(true, node.Ptr(), ctx, typesCtx);
     YQL_ENSURE(result);
 
     return TExprBase(result);
@@ -269,6 +269,20 @@ NNodes::TExprBase DqFlatMapOverExtend(NNodes::TExprBase node, TExprContext& ctx)
 
     auto res = ctx.NewCallable(node.Pos(), extendName, std::move(extendChildren));
     return TExprBase(res);
+}
+
+NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx) {
+    auto maybeSqlIn = node.Maybe<TCoSqlIn>();
+    if (!maybeSqlIn || !maybeSqlIn.Collection().Maybe<TDqConnection>().IsValid() || !maybeSqlIn.Options().IsValid()) {
+        return node;
+    }
+    if (HasSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact")) {
+        return TExprBase(ctx.ChangeChild(
+            maybeSqlIn.Cast().Ref(), 
+            TCoSqlIn::idx_Options, 
+            RemoveSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact", ctx)));
+    }
+    return node;
 }
 
 }

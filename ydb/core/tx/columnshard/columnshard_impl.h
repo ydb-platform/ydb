@@ -337,6 +337,7 @@ private:
     ui64 WritesInFly = 0;
     ui64 StorePathId = 0;
     ui64 StatsReportRound = 0;
+    ui64 BackgroundActivation = 0;
 
     TIntrusivePtr<TMediatorTimecastEntry> MediatorTimeCastEntry;
     bool MediatorTimeCastRegistered = false;
@@ -378,8 +379,7 @@ private:
     TMultiMap<TRowVersion, TEvColumnShard::TEvRead::TPtr> WaitingReads;
     TMultiMap<TRowVersion, TEvColumnShard::TEvScan::TPtr> WaitingScans;
     THashSet<ui64> PathsToDrop;
-    bool ActiveIndexing = false;
-    bool ActiveCompaction = false;
+    bool ActiveIndexingOrCompaction = false;
     bool ActiveCleanup = false;
     bool ActiveTtl = false;
     std::unique_ptr<TBlobManager> BlobManager;
@@ -405,6 +405,14 @@ private:
         ui64 writesLimit = Settings.OverloadWritesInFly;
         return (txLimit && Executor()->GetStats().TxInFly > txLimit) ||
            (writesLimit && WritesInFly > writesLimit);
+    }
+
+    bool InsertTableOverloaded() const {
+        return InsertTable && InsertTable->HasOverloaded();
+    }
+
+    bool IndexOverloaded() const {
+        return PrimaryIndex && PrimaryIndex->HasOverloadedGranules();
     }
 
     TWriteId GetLongTxWrite(NIceDb::TNiceDb& db, const NLongTxService::TLongTxId& longTxId);

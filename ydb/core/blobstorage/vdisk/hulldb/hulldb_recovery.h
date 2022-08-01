@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include <ydb/core/blobstorage/vdisk/hulldb/barriers/hullds_cache_barrier.h>
+#include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include "hullds_cache_block.h"
 #include "hulldb_bulksst_add.h"
 
@@ -123,6 +124,8 @@ namespace NKikimr {
         TSatisfactionRank GetSatisfactionRank(EHullDbType t, ESatisfactionRankType s) const;
         void OutputHtmlForDb(IOutputStream &str) const;
         void OutputHtmlForHugeBlobDeleter(IOutputStream &str) const;
+
+        void OutputProtoForDb(NKikimrVDisk::VDiskStat *proto) const;
 
         // FIXME: remove it when ready
         TIntrusivePtr<THullDs> GetHullDs() const {

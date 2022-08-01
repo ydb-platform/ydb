@@ -13,6 +13,7 @@ target_link_libraries(blobstorage-vdisk-scrub PUBLIC
   yutil
   core-blobstorage-base
   blobstorage-vdisk-common
+  blobstorage-vdisk-skeleton
 )
 target_sources(blobstorage-vdisk-scrub PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/scrub/blob_recovery.cpp

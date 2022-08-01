@@ -511,16 +511,34 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
     const TActorContext& ctx = TActivationContext::ActorContextFor(SelfId());
     SendPeriodicStats();
 
-    if (auto event = SetupIndexation()) {
-        ctx.Send(IndexingActor, event.release());
-    }
-
     if (insertOnly) {
+        if (auto event = SetupIndexation()) {
+            ctx.Send(IndexingActor, event.release());
+        }
         return;
     }
 
-    if (auto event = SetupCompaction()) {
-        ctx.Send(CompactionActor, event.release());
+    // Preventing conflicts between indexing and compaction leads to election between them.
+    // Indexing vs compaction probability depends on index and insert table overload status.
+    // Prefer compaction: 25% by default; 50% if IndexOverloaded(); 6.25% if InsertTableOverloaded().
+    ui32 mask = IndexOverloaded() ? 0x1 : 0x3;
+    if (InsertTableOverloaded()) {
+        mask = 0x0F;
+    }
+    bool preferIndexing = (++BackgroundActivation) & mask;
+
+    if (preferIndexing) {
+        if (auto evIdx = SetupIndexation()) {
+            ctx.Send(IndexingActor, evIdx.release());
+        } else if (auto event = SetupCompaction()) {
+            ctx.Send(CompactionActor, event.release());
+        }
+    } else {
+        if (auto event = SetupCompaction()) {
+            ctx.Send(CompactionActor, event.release());
+        } else if (auto evIdx = SetupIndexation()) {
+            ctx.Send(IndexingActor, evIdx.release());
+        }
     }
 
     if (auto event = SetupCleanup()) {
@@ -539,8 +557,8 @@ void TColumnShard::EnqueueBackgroundActivities(bool periodic, bool insertOnly) {
 }
 
 std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
-    if (ActiveIndexing) {
-        LOG_S_DEBUG("Indexing already in progress at tablet " << TabletID());
+    if (ActiveIndexingOrCompaction) {
+        LOG_S_DEBUG("Indexing/compaction already in progress at tablet " << TabletID());
         return {};
     }
     if (!PrimaryIndex) {
@@ -607,15 +625,15 @@ std::unique_ptr<TEvPrivate::TEvIndexing> TColumnShard::SetupIndexation() {
         return {};
     }
 
-    ActiveIndexing = true;
+    ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
         Settings.CacheDataAfterIndexing);
     return std::make_unique<TEvPrivate::TEvIndexing>(std::move(ev));
 }
 
 std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
-    if (ActiveCompaction) {
-        LOG_S_DEBUG("Compaction already in progress at tablet " << TabletID());
+    if (ActiveIndexingOrCompaction) {
+        LOG_S_DEBUG("Compaction/indexing already in progress at tablet " << TabletID());
         return {};
     }
     if (!PrimaryIndex) {
@@ -645,7 +663,7 @@ std::unique_ptr<TEvPrivate::TEvCompaction> TColumnShard::SetupCompaction() {
         return {};
     }
 
-    ActiveCompaction = true;
+    ActiveIndexingOrCompaction = true;
     auto ev = std::make_unique<TEvPrivate::TEvWriteIndex>(PrimaryIndex->GetIndexInfo(), indexChanges,
         Settings.CacheDataAfterCompaction);
     return std::make_unique<TEvPrivate::TEvCompaction>(std::move(ev), *BlobManager);

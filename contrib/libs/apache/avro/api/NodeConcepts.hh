@@ -21,12 +21,11 @@
 
 #include "Config.hh"
 
-#include <vector>
-#include <map>
 #include "Exception.hh"
+#include <map>
+#include <vector>
 
 namespace avro {
-
 
 ///
 /// The concept classes are used to simplify NodeImpl.  Since different types
@@ -47,59 +46,48 @@ namespace avro {
 
 namespace concepts {
 
-template <typename Attribute>
-struct NoAttribute
-{
+template<typename Attribute>
+struct NoAttribute {
     static const bool hasAttribute = false;
 
     size_t size() const {
         return 0;
     }
 
-    void add( const Attribute &) {
+    void add(const Attribute & /* attr */) {
         // There must be an add function for the generic NodeImpl, but the
         // Node APIs ensure that it is never called, the throw here is
         // just in case
         throw Exception("This type does not have attribute");
     }
 
-    const Attribute &get(size_t = 0) const {
-        // There must be an get function for the generic NodeImpl, but the
-        // Node APIs ensure that it is never called, the throw here is
-        // just in case
-        throw Exception("This type does not have attribute");
-        // even though this code is unreachable the compiler requires it
-        static const Attribute empty = Attribute();
-        return empty;
-    }
-
-    Attribute &get(size_t = 0) {
+    const Attribute &get(size_t /* index */ = 0) const {
         // There must be an get function for the generic NodeImpl, but the
         // Node APIs ensure that it is never called, the throw here is
         // just in case
         throw Exception("This type does not have attribute");
     }
 
+    Attribute &get(size_t /* index */ = 0) {
+        // There must be an get function for the generic NodeImpl, but the
+        // Node APIs ensure that it is never called, the throw here is
+        // just in case
+        throw Exception("This type does not have attribute");
+    }
 };
 
 template<typename Attribute>
-struct SingleAttribute
-{
+struct SingleAttribute {
     static const bool hasAttribute = true;
 
-    SingleAttribute() : attr_()
-    { }
+    SingleAttribute() : attr_() {}
 
-    SingleAttribute(const Attribute& a) : attr_(a) { }
+    explicit SingleAttribute(const Attribute &a) : attr_(a) {}
     // copy constructing from another single attribute is allowed
-    SingleAttribute(const SingleAttribute<Attribute> &rhs) :
-        attr_(rhs.attr_)
-    { }
+    SingleAttribute(const SingleAttribute<Attribute> &rhs) : attr_(rhs.attr_) {}
 
     // copy constructing from a no attribute is allowed
-    SingleAttribute(const NoAttribute<Attribute> &) :
-        attr_()
-    { }
+    explicit SingleAttribute(const NoAttribute<Attribute> &rhs) : attr_() {}
 
     size_t size() const {
         return 1;
@@ -124,34 +112,29 @@ struct SingleAttribute
     }
 
 private:
-    template<typename T> friend struct MultiAttribute;
+    template<typename T>
+    friend struct MultiAttribute;
     Attribute attr_;
 };
 
 template<typename Attribute>
-struct MultiAttribute
-{
+struct MultiAttribute {
     static const bool hasAttribute = true;
 
-    MultiAttribute()
-    { }
+    MultiAttribute() = default;
 
     // copy constructing from another single attribute is allowed, it
     // pushes the attribute
-    MultiAttribute(const SingleAttribute<Attribute> &rhs)
-    {
+    explicit MultiAttribute(const SingleAttribute<Attribute> &rhs) {
         // since map is the only type that does this we know it's
         // final size will be two, so reserve
         attrs_.reserve(2);
         attrs_.push_back(rhs.attr_);
     }
 
-    MultiAttribute(const MultiAttribute<Attribute> &rhs)  :
-        attrs_(rhs.attrs_)
-    { }
+    MultiAttribute(const MultiAttribute<Attribute> &rhs) : attrs_(rhs.attrs_) {}
 
-    MultiAttribute(const NoAttribute<Attribute> &)
-    {}
+    explicit MultiAttribute(const NoAttribute<Attribute> &rhs) {}
 
     size_t size() const {
         return attrs_.size();
@@ -169,52 +152,46 @@ struct MultiAttribute
         return attrs_.at(index);
     }
 
-  private:
-
+private:
     std::vector<Attribute> attrs_;
 };
-
 
 template<typename T>
 struct NameIndexConcept {
 
-    bool lookup(const std::string &, size_t &) const {
+    bool lookup(const std::string &name, size_t &index) const {
         throw Exception("Name index does not exist");
-        return 0;
     }
 
-    bool add(const::std::string &, size_t) {
+    bool add(const ::std::string &name, size_t) {
         throw Exception("Name index does not exist");
-        return false;
     }
 };
 
 template<>
-struct NameIndexConcept < MultiAttribute<std::string> >
-{
-    typedef std::map<std::string, size_t> IndexMap;
+struct NameIndexConcept<MultiAttribute<std::string>> {
+    using IndexMap = std::map<std::string, size_t>;
 
     bool lookup(const std::string &name, size_t &index) const {
-        IndexMap::const_iterator iter = map_.find(name);
-        if(iter == map_.end()) {
+        auto iter = map_.find(name);
+        if (iter == map_.end()) {
             return false;
         }
         index = iter->second;
         return true;
     }
 
-    bool add(const::std::string &name, size_t index) {
+    bool add(const ::std::string &name, size_t index) {
         bool added = false;
-        IndexMap::iterator lb = map_.lower_bound(name);
-        if(lb == map_.end() || map_.key_comp()(name, lb->first)) {
+        auto lb = map_.lower_bound(name);
+        if (lb == map_.end() || map_.key_comp()(name, lb->first)) {
             map_.insert(lb, IndexMap::value_type(name, index));
             added = true;
         }
         return added;
     }
 
-  private:
-
+private:
     IndexMap map_;
 };
 

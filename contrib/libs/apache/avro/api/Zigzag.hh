@@ -19,9 +19,9 @@
 #ifndef avro_Encoding_hh__
 #define avro_Encoding_hh__
 
-#include <stdint.h>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
 #include "Config.hh"
 /// \file
@@ -29,14 +29,24 @@
 
 namespace avro {
 
-AVRO_DECL uint64_t encodeZigzag64(int64_t input);
-AVRO_DECL int64_t decodeZigzag64(uint64_t input);
+AVRO_DECL constexpr uint64_t encodeZigzag64(int64_t input) noexcept {
+    // cppcheck-suppress shiftTooManyBitsSigned
+    return ((input << 1) ^ (input >> 63));
+}
+AVRO_DECL constexpr int64_t decodeZigzag64(uint64_t input) noexcept {
+    return static_cast<int64_t>(((input >> 1) ^ -(static_cast<int64_t>(input) & 1)));
+}
 
-AVRO_DECL uint32_t encodeZigzag32(int32_t input);
-AVRO_DECL int32_t decodeZigzag32(uint32_t input);
+AVRO_DECL constexpr uint32_t encodeZigzag32(int32_t input) noexcept {
+    // cppcheck-suppress shiftTooManyBitsSigned
+    return ((input << 1) ^ (input >> 31));
+}
+AVRO_DECL constexpr int32_t decodeZigzag32(uint32_t input) noexcept {
+    return static_cast<int32_t>(((input >> 1) ^ -(static_cast<int64_t>(input) & 1)));
+}
 
-AVRO_DECL size_t encodeInt32(int32_t input, std::array<uint8_t, 5> &output);
-AVRO_DECL size_t encodeInt64(int64_t input, std::array<uint8_t, 10> &output);
+AVRO_DECL size_t encodeInt32(int32_t input, std::array<uint8_t, 5> &output) noexcept;
+AVRO_DECL size_t encodeInt64(int64_t input, std::array<uint8_t, 10> &output) noexcept;
 
 } // namespace avro
 

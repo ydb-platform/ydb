@@ -442,4 +442,18 @@ namespace NKikimr {
         }
     }
 
+    void THullDbRecovery::OutputProtoForDb(NKikimrVDisk::VDiskStat *proto) const {
+        if (HullDs) {
+            if (HullDs->LogoBlobs) {
+                HullDs->LogoBlobs->OutputProto(proto->mutable_logoblobs());
+            }
+            if (HullDs->Blocks) {
+                HullDs->Blocks->OutputProto(proto->mutable_blocks());
+            }
+            if (HullDs->Barriers) {
+                HullDs->Barriers->OutputProto(proto->mutable_barriers());
+            }
+        }
+    }
+
 } // NKikimr

@@ -19,6 +19,7 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <util/system/sanitizers.h>
 
+#include <fmt/format.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -1367,7 +1368,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(CountAllPushdown) {
+    Y_UNIT_TEST_TWIN(CountAllPushdown, UseLlvm) {
         // remove this return when COUNT(*) will be implemented on columnshard
         return;
 
@@ -1391,13 +1392,14 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
 
         {
-            TString query = R"(
+            TString query = fmt::format(R"(
                 --!syntax_v1
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                PRAGMA ydb.EnableLlvm = "{}";
                 SELECT
                     COUNT(*)
                 FROM `/Root/olapStore/olapTable`
-            )";
+            )", UseLlvm ? "true" : "false");
             auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());

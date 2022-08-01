@@ -292,6 +292,12 @@ message TPQTabletConfig {
         optional TPartitionKeyRange KeyRange = 2;
     }
     repeated TPartition Partitions = 31; // filled by schemeshard
+
+    enum EMeteringMode {
+        METERING_MODE_YDS = 0;
+        METERING_MODE_SERVERLESS = 1;
+    }
+    optional EMeteringMode MeteringMode = 34;
 }
 
 message TMessageGroupInfo {

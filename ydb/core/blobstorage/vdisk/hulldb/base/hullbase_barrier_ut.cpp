@@ -15,15 +15,15 @@ namespace NKikimr {
             expected = TKeyBarrier(0, 0, 34, 15, false);
             UNIT_ASSERT(res && id == expected);
 
-            res = TKeyBarrier::Parse(id, "[ABC:0:34:15  ]", explanation);
-            expected = TKeyBarrier(0xABC, 0, 34, 15, false);
+            res = TKeyBarrier::Parse(id, "[1000:0:34:15  ]", explanation);
+            expected = TKeyBarrier(1000, 0, 34, 15, false);
             UNIT_ASSERT(res && id == expected);
 
-            res = TKeyBarrier::Parse(id, "[ABC:0:34:15 ", explanation);
+            res = TKeyBarrier::Parse(id, "[1000:0:34:15 ", explanation);
             UNIT_ASSERT(!res && explanation == "Can't find trailing ']' after generation counter");
 
 
-            res = TKeyBarrier::Parse(id, "[ABC:0: x34:15 ", explanation);
+            res = TKeyBarrier::Parse(id, "[1000:0: x34:15 ", explanation);
             UNIT_ASSERT(!res && explanation == "Can't find trailing ':' after generation");
         }
     }

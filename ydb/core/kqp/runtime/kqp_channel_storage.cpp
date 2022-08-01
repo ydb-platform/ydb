@@ -32,6 +32,8 @@ using namespace NYql::NDq;
     LOG_CRIT_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s)
 #define LOG_W(s) \
     LOG_WARN_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s)
+#define LOG_T(s) \
+    LOG_TRACE_S(*TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", channelId: " << ChannelId << ". " << s)
 
 namespace {
 
@@ -78,7 +80,7 @@ private:
 
     void HandleWork(TEvKqpSpilling::TEvWriteResult::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[TEvWriteResult] blobId: " << msg.BlobId);
+        LOG_T("[TEvWriteResult] blobId: " << msg.BlobId);
 
         auto it = WritingBlobs.find(msg.BlobId);
         if (it == WritingBlobs.end()) {
@@ -100,7 +102,7 @@ private:
 
     void HandleWork(TEvKqpSpilling::TEvReadResult::TPtr& ev) {
         auto& msg = *ev->Get();
-        LOG_D("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
+        LOG_T("[TEvReadResult] blobId: " << msg.BlobId << ", size: " << msg.Blob.size());
 
         if (LoadingBlobs.erase(msg.BlobId) != 1) {
             LOG_E("[TEvReadResult] unexpected, blobId: " << msg.BlobId << ", size: " << msg.Blob.size());

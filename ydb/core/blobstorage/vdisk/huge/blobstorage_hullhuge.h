@@ -5,13 +5,14 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_pdiskctx.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_defrag.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
     // TEvHullWriteHugeBlob
     ////////////////////////////////////////////////////////////////////////////
-    class TEvHullWriteHugeBlob : public TEventLocal<TEvHullWriteHugeBlob, TEvBlobStorage::EvHullWriteHugeBlob>, public TIntrusiveListItem<TEvHullWriteHugeBlob> {
+    class TEvHullWriteHugeBlob : public TEventLocal<TEvHullWriteHugeBlob, TEvBlobStorage::EvHullWriteHugeBlob> {
     public:
         const TActorId SenderId;
         const ui64 Cookie;

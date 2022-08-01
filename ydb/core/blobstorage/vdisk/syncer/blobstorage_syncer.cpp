@@ -364,7 +364,7 @@ namespace NKikimr {
                 data.Info = info;
                 // create reply
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
-                    TAppData::TimeProvider->Now(), nullptr, nullptr, std::move(ev->TraceId), ev->GetChannel());
+                    TAppData::TimeProvider->Now(), nullptr, nullptr, ev->GetChannel());
                 // put reply into the queue and wait until it would be committed
                 ui64 seqNum = DelayedQueue.WriteRequest(ev->Sender, std::move(result));
                 // commit
@@ -378,8 +378,7 @@ namespace NKikimr {
                 auto guid = data.GetGuid();
                 // create reply
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(NKikimrProto::OK, selfVDisk,
-                    TAppData::TimeProvider->Now(), guid, state, nullptr, nullptr, std::move(ev->TraceId),
-                    ev->GetChannel());
+                    TAppData::TimeProvider->Now(), guid, state, nullptr, nullptr, ev->GetChannel());
                 // put reply into the queue and wait until all required writes are committed
                 DelayedQueue.ReadRequest(ctx, ev->Sender, std::move(result));
             }

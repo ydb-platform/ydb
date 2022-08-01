@@ -1214,9 +1214,11 @@ void TWriteSession::AbortImpl() {
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
-        ///Cancel(ClientContext);
         if (Processor)
             Processor->Cancel();
+
+        Cancel(ClientContext);
+        ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }
 }
 

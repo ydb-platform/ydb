@@ -24,7 +24,7 @@ Y_UNIT_TEST_SUITE(LargeMessage) {
         void Bootstrap(const TActorContext& ctx) {
             Become(&TThis::StateFunc);
             ctx.Send(RecipientActorId, new TEvTest(1, "hello"), IEventHandle::FlagTrackDelivery, 1);
-            ctx.Send(RecipientActorId, new TEvTest(2, TString(128 * 1024 * 1024, 'X')), IEventHandle::FlagTrackDelivery, 2);
+            ctx.Send(RecipientActorId, new TEvTest(2, TString(150 * 1024 * 1024, 'X')), IEventHandle::FlagTrackDelivery, 2);
         }
 
         void Handle(TEvents::TEvUndelivered::TPtr ev, const TActorContext& ctx) {

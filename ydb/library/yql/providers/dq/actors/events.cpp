@@ -22,12 +22,12 @@ namespace NYql::NDqs {
     {
     }
 
-/*
-            TIssue(error).SetCode(
-                needFallback ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR : TIssuesIds::DQ_GATEWAY_ERROR, TSeverityIds::S_ERROR), 
-*/
-    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString&) 
-        : TEvDqFailure(statusCode) {
+    TEvDqFailure::TEvDqFailure(NYql::NDqProto::StatusIds::StatusCode statusCode, const TString& error)
+        : TEvDqFailure(statusCode, TIssue{error}) {
+    }
+
+    TEvDqStats::TEvDqStats(const TIssues& issues) {
+        IssuesToMessage(issues, Record.mutable_issues());
     }
 
     TEvQueryResponse::TEvQueryResponse(NDqProto::TQueryResponse&& queryResult) {

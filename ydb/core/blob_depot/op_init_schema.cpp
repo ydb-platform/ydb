@@ -1,4 +1,5 @@
 #include "blob_depot_tablet.h"
+#include "data.h"
 #include "schema.h"
 
 namespace NKikimr::NBlobDepot {

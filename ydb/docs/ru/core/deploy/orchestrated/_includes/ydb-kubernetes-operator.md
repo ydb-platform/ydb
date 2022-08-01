@@ -63,7 +63,9 @@
 
 {% endnote %}
 
-Стандартная конфигурация включает минимально необходимые 9 нод хранения, каждая с диском размером 80 ГБ. Мы рекомендуем использовать диски не менее 80 ГБ для стабильной работы кластера {{ ydb-short-name }}.
+Стандартная конфигурация включает минимально необходимые 9 нод хранения, каждая с диском размером 80 ГБ.
+
+{% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
 
 ## Создайте базу данных {#create-database}
 
@@ -126,7 +128,7 @@
 
       ```bash
       kubectl get pods
-      
+
       NAME                READY   STATUS    RESTARTS   AGE
       database-sample-0   1/1     Running   0          1m
       database-sample-1   1/1     Running   0          1m
@@ -148,7 +150,7 @@
   1. Запустите новый под с {{ ydb-short-name }} CLI:
 
       ```bash
-      kubectl run -it --image=cr.yandex/yc/ydb:21.4.30 --rm ydb-cli bash 
+      kubectl run -it --image=cr.yandex/yc/ydb:21.4.30 --rm ydb-cli bash
       ```
 
   1. Выполните запрос к базе данных {{ ydb-short-name }}:

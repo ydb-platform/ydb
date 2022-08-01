@@ -13,6 +13,7 @@ target_link_libraries(vdisk-hulldb-barriers PUBLIC
   yutil
   core-blobstorage-base
   vdisk-hulldb-base
+  vdisk-hulldb-generic
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-barriers PRIVATE

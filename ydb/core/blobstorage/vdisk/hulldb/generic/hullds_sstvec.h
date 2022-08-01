@@ -155,6 +155,12 @@ namespace NKikimr {
             }
         }
 
+        void OutputProto(ui32 level, google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+            for (typename TSegments::const_iterator it = Segments.begin(), e = Segments.end(); it != e; ++it) {
+                (*it)->OutputProto(level, rows);
+            }
+        }
+
         // dump all accessible data
         void DumpAll(IOutputStream &str) const {
             for (const auto &x : Segments)

@@ -55,6 +55,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(FlatMapOverExtend));
         AddHandler(0, &TDqQuery::Match, HNDL(MergeQueriesWithSinks));
         AddHandler(0, &TDqStageBase::Match, HNDL(UnorderedInStage));
+        AddHandler(0, &TCoSqlIn::Match, HNDL(SqlInDropCompact));
 #undef HNDL
     }
 
@@ -81,7 +82,7 @@ protected:
             if (hopSetting) {
                 return RewriteAsHoppingWindow(node, ctx, input.Cast()).Cast();
             } else {
-                return DqRewriteAggregate(node, ctx);
+                return DqRewriteAggregate(node, ctx, *Types);
             }
         }
         return node;
@@ -124,6 +125,10 @@ protected:
 
     TMaybeNode<TExprBase> UnorderedInStage(TExprBase node, TExprContext& ctx) const {
         return DqUnorderedInStage(node, TDqReadWrapBase::Match, ctx, Types);
+    }
+
+    TMaybeNode<TExprBase> SqlInDropCompact(TExprBase node, TExprContext& ctx) const {
+        return DqSqlInDropCompact(node, ctx);
     }
 
 private:

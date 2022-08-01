@@ -84,7 +84,8 @@ namespace NKikimr {
         // Request from PDisk to cut the recovery log
         void CutRecoveryLog(const TActorContext &ctx, std::unique_ptr<NPDisk::TEvCutLog> msg);
 
-        void PostponeReplyUntilCommitted(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, ui64 lsn);
+        void PostponeReplyUntilCommitted(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie,
+            NWilson::TTraceId traceId, ui64 lsn);
 
         ////////////////////////////////////////////////////////////////////////
         // LogoBlobs
@@ -135,7 +136,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
         // Blocks
         ////////////////////////////////////////////////////////////////////////
-        using TReplySender = std::function<void (const TActorId &, ui64, IEventBase *)>;
+        using TReplySender = std::function<void (const TActorId &, ui64, NWilson::TTraceId, IEventBase *)>;
 
         THullCheckStatus CheckBlockCmdAndAllocLsn(
                 ui64 tabletID,

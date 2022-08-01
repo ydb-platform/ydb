@@ -602,7 +602,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         getRequest->IsInternal = true;
                         getRequest->TabletId = TabletId;
                         getRequest->AcquireBlockedGeneration = true;
-                        bool isSent = SendToBSProxy(SelfId(), Info->GroupID, getRequest.release(), 0, Span);
+                        bool isSent = SendToBSProxy(SelfId(), Info->GroupID, getRequest.release(), 0, Span.GetTraceId());
                         Y_VERIFY(isSent);
                         TotalSent++;
 

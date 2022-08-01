@@ -369,6 +369,7 @@ public:
     virtual const std::shared_ptr<arrow::Schema>& GetSortingKey() const { return GetIndexInfo().GetSortingKey(); }
     virtual const std::shared_ptr<arrow::Schema>& GetIndexKey() const { return GetIndexInfo().GetIndexKey(); }
     virtual const THashSet<ui64>* GetOverloadedGranules(ui64 /*pathId*/) const { return nullptr; }
+    virtual bool HasOverloadedGranules() const { return false; }
 
     virtual bool Load(IDbWrapper& db, const THashSet<ui64>& pathsToDrop = {}) = 0;
 

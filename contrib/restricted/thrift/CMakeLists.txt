@@ -27,7 +27,7 @@ target_link_libraries(contrib-restricted-thrift PUBLIC
   OpenSSL::OpenSSL
   ZLIB::ZLIB
   contrib-restricted-boost
-  boost-libs-system
+  restricted-boost-system
   boost-libs-thread
 )
 target_sources(contrib-restricted-thrift PRIVATE

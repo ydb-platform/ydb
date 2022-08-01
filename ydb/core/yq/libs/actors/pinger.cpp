@@ -171,7 +171,7 @@ public:
     static constexpr char ActorName[] = "YQ_PINGER";
 
     void Bootstrap() {
-        LOG_D("Start Pinger");
+        LOG_T("Start Pinger");
         StartLeaseTime = TActivationContext::Now(); // Not accurate value, but it allows us to retry the first unsuccessful ping request.
         ScheduleNextPing();
         Become(&TPingerActor::StateFunc);
@@ -187,7 +187,7 @@ private:
     )
 
     void PassAway() override {
-        LOG_D("Stop Pinger");
+        LOG_T("Stop Pinger");
         NActors::TActorBootstrapped<TPingerActor>::PassAway();
     }
 
@@ -245,7 +245,7 @@ private:
             SchedulerCookieHolder.Reset(nullptr);
         }
 
-        LOG_D("Forward ping request: " << ev->Get()->Request);
+        LOG_T("Forward ping request: " << ev->Get()->Request);
         if (FatalError) {
             if (Finishing) {
                 LOG_D("Got final ping request after fatal error");
@@ -333,7 +333,7 @@ private:
         }
 
         if (success) {
-            LOG_D("Ping response success: " << ev->Get()->Result);
+            LOG_T("Ping response success: " << ev->Get()->Result);
             StartLeaseTime = now;
             auto action = ev->Get()->Result.action();
             if (action != YandexQuery::QUERY_ACTION_UNSPECIFIED && !Finishing) {
@@ -382,14 +382,14 @@ private:
             if (!retry && !reqInfo.RetryState) {
                 reqInfo.RetryState.Init(TActivationContext::Now(), StartLeaseTime, Config.PingPeriod);
             }
-            LOG_D((retry ? "Retry forward" : "Forward") << " request Private::PingTask");
+            LOG_T((retry ? "Retry forward" : "Forward") << " request Private::PingTask");
 
             Ping(reqInfo.Request->Get()->Request, reqInfo.Request->Cookie);
         }
     }
 
     void Ping(bool retry = false) {
-        LOG_D((retry ? "Retry request" : "Request") << " Private::PingTask");
+        LOG_T((retry ? "Retry request" : "Request") << " Private::PingTask");
 
         Y_VERIFY(!Requested);
         Requested = true;

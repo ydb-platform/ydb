@@ -27,6 +27,7 @@ target_link_libraries(yq-libs-control_plane_storage PUBLIC
   libs-control_plane_storage-proto
   yq-libs-db_schema
   libs-graph_params-proto
+  libs-quota_manager-events
   yq-libs-shared_resources
   yq-libs-ydb
   ydb-library-security

@@ -253,8 +253,7 @@ namespace NKikimr {
             UNIT_ASSERT(evVGetRange->Record.HasIndexOnly() && evVGetRange->Record.GetIndexOnly());
             std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetRangeResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
                     vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGetRange->GetCachedByteSize(), &evVGetRange->Record,
-                    nullptr, nullptr, nullptr, std::move(handle->TraceId), evVGetRange->Record.GetCookie(),
-                    handle->GetChannel(), 0);
+                    nullptr, nullptr, nullptr, evVGetRange->Record.GetCookie(), handle->GetChannel(), 0);
 
             evVGetRangeResult->AddResult(NKikimrProto::OK, TLogoBlobID(testData.OriginalBlobId, 0));
             for (ui8 partId : foundParts) {
@@ -407,8 +406,7 @@ namespace NKikimr {
 
             std::unique_ptr<TEvBlobStorage::TEvVGetResult> evVGetResult = std::make_unique<TEvBlobStorage::TEvVGetResult>(
                     vGetStatus, testData.VDiskIds[nodeId], testData.Now, evVGet->GetCachedByteSize(), &evVGet->Record,
-                    nullptr, nullptr, nullptr, std::move(vGetHandle->TraceId), evVGet->Record.GetCookie(),
-                    vGetHandle->GetChannel(), 0);
+                    nullptr, nullptr, nullptr, evVGet->Record.GetCookie(), vGetHandle->GetChannel(), 0);
             evVGetResult->AddResult(NKikimrProto::OK, blob.BlobId, 0, blob.Buffer.data(), blob.Buffer.size());
 
             std::unique_ptr<IEventHandle> handle = std::make_unique<IEventHandle>(vPatchActorId, edgeActor, evVGetResult.release());
@@ -437,8 +435,7 @@ namespace NKikimr {
             TOutOfSpaceStatus oos = TOutOfSpaceStatus(testData.StatusFlags, testData.ApproximateFreeSpaceShare);
             std::unique_ptr<TEvBlobStorage::TEvVPutResult> vPutResult = std::make_unique<TEvBlobStorage::TEvVPutResult>(
                     vPutStatus, blobId, testData.VDiskIds[nodeId], &cookie, oos, testData.Now,
-                    0, &record, nullptr, nullptr, nullptr, vPut->GetBufferBytes(), std::move(handle->TraceId),
-                    0, "");
+                    0, &record, nullptr, nullptr, nullptr, vPut->GetBufferBytes(), 0, "");
 
             handle = MakeHolder<IEventHandle>(vPatchActorId, edgeActor, vPutResult.release());
             runtime.Send(handle.Release());
@@ -773,7 +770,7 @@ namespace NKikimr {
 
                     TActorId patchActor = testData.VPatchActorIds[patchedPartId - 1];
                     auto handle2 = std::make_unique<IEventHandle>(patchActor, edgeActor, handle->Release().Release(), handle->Flags,
-                            handle->Cookie, nullptr, std::move(handle->TraceId));
+                            handle->Cookie, nullptr);
                     testData.Runtime.Send(handle2.release());
                 }
             }

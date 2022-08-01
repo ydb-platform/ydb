@@ -13,6 +13,7 @@ target_link_libraries(blobstorage-vdisk-localrecovery PUBLIC
   yutil
   ydb-core-base
   core-blobstorage-pdisk
+  blobstorage-vdisk-hulldb
   ydb-core-protos
 )
 target_sources(blobstorage-vdisk-localrecovery PRIVATE

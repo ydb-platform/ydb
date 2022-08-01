@@ -67,8 +67,8 @@ namespace NKikimr {
         {}
 
         TString ToString() const {
-            return Sprintf("[%16" PRIu64 " %" PRIu32 " %" PRIu32 " %" PRIu32 " %s]",
-                           TabletId, Channel, Gen, GenCounter, Hard ? "hard" : "soft");
+            return Sprintf("[%" PRIu64 " %" PRIu32 " %" PRIu32 " %" PRIu32 " %s]",
+                TabletId, Channel, Gen, GenCounter, Hard ? "hard" : "soft");
         }
 
         TLogoBlobID LogoBlobID() const {

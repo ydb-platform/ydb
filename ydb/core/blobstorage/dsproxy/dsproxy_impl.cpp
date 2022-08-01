@@ -2,6 +2,8 @@
 
 namespace NKikimr {
 
+    std::atomic<TMonotonic> TBlobStorageGroupProxy::ThrottlingTimestamp;
+
     TBlobStorageGroupProxy::TBlobStorageGroupProxy(TIntrusivePtr<TBlobStorageGroupInfo>&& info, bool forceWaitAllDrives,
             TIntrusivePtr<TDsProxyNodeMon> &nodeMon, TIntrusivePtr<TStoragePoolCounters>&& storagePoolCounters,
             const TControlWrapper &enablePutBatching, const TControlWrapper &enableVPatch)

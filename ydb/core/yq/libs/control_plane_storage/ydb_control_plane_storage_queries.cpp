@@ -80,9 +80,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
     auto it = event.Quotas.find(QUOTA_RESULT_LIMIT);
-    ui64 resultLimit = (it != event.Quotas.end()) ? it->second.Limit : 0;
+    ui64 resultLimit = (it != event.Quotas.end()) ? it->second.Limit.Value : 0;
     auto exec_ttl_it = event.Quotas.find(QUOTA_TIME_LIMIT);
-    ui64 executionLimitMills = (exec_ttl_it != event.Quotas.end()) ? exec_ttl_it->second.Limit : 0;
+    ui64 executionLimitMills = (exec_ttl_it != event.Quotas.end()) ? exec_ttl_it->second.Limit.Value : 0;
     const TString scope = event.Scope;
     TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_QUERY);
     requestCounters->InFly->Inc();
@@ -118,8 +118,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
             auto& quota = it->second;
             if (!quota.Usage) {
                 issues.AddIssue(MakeErrorIssue(TIssuesIds::NOT_READY, "Control Plane is not ready yet. Please retry later."));
-            } else if (*quota.Usage >= quota.Limit) {
-                issues.AddIssue(MakeErrorIssue(TIssuesIds::QUOTA_EXCEEDED, Sprintf("Too many queries (%lu of %lu). Please delete other queries or increase limits.", *quota.Usage, quota.Limit)));
+            } else if (quota.Usage->Value >= quota.Limit.Value) {
+                issues.AddIssue(MakeErrorIssue(TIssuesIds::QUOTA_EXCEEDED, Sprintf("Too many queries (%lu of %lu). Please delete other queries or increase limits.", quota.Usage->Value, quota.Limit.Value)));
             }
         }
     }
@@ -147,7 +147,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         meta.set_last_job_query_revision(InitialRevision);
         meta.set_last_job_id(jobId);
         meta.set_started_by(user);
-
+        *meta.mutable_submitted_at() = NProtoInterop::CastToProto(startTime);
         *job.mutable_meta() = common;
         job.mutable_meta()->set_id(jobId);
         job.set_text(content.text());
@@ -926,6 +926,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
             query.mutable_meta()->clear_expire_at();
             query.mutable_meta()->clear_result_expire_at();
             query.mutable_meta()->set_started_by(user);
+            *query.mutable_meta()->mutable_submitted_at() = NProtoInterop::CastToProto(now);
             query.mutable_meta()->clear_action();
 
             internal.clear_plan_compressed();

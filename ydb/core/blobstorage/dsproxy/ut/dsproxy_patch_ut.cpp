@@ -371,7 +371,7 @@ void ConductVPatchStart(TTestBasicRuntime &runtime, const TDSProxyEnv &env, cons
     UNIT_ASSERT(startRecord.HasCookie());
     std::unique_ptr<TEvBlobStorage::TEvVPatchFoundParts> foundParts = std::make_unique<TEvBlobStorage::TEvVPatchFoundParts>(
             status, args.OriginalId, args.PatchedId, vdisk, startRecord.GetCookie(), now, "", &startRecord,
-            nullptr, nullptr, nullptr, NWilson::TTraceId(), 0);
+            nullptr, nullptr, nullptr, 0);
     for (auto partId : parts) {
         foundParts->AddPart(partId);
     }
@@ -406,7 +406,7 @@ void ConductVPatchDiff(TTestBasicRuntime &runtime, const TDSProxyEnv &env, const
     UNIT_ASSERT(diffRecord.HasCookie());
     std::unique_ptr<TEvBlobStorage::TEvVPatchResult> result = std::make_unique<TEvBlobStorage::TEvVPatchResult>(
             resultStatus, args.OriginalId, args.PatchedId, vdisk, diffRecord.GetCookie(), now,
-            &diffRecord, nullptr, nullptr, nullptr,NWilson::TTraceId(), 0);
+            &diffRecord, nullptr, nullptr, nullptr, 0);
     result->SetStatusFlagsAndFreeSpace(args.StatusFlags, args.ApproximateFreeSpaceShare);
 
     SendByHandle(runtime, diffEv, std::move(result));
@@ -449,7 +449,7 @@ void ConductVMovedPatch(TTestBasicRuntime &runtime, const TTestArgs &args, EMove
     TOutOfSpaceStatus oos(args.StatusFlags, args.ApproximateFreeSpaceShare);
     std::unique_ptr<TEvBlobStorage::TEvVMovedPatchResult> vPatchResult = std::make_unique<TEvBlobStorage::TEvVMovedPatchResult>(
             resultStatus, args.OriginalId, args.PatchedId, vDiskId, expectedCookie, oos,
-            TAppData::TimeProvider->Now(), 0, &vPatchRecord, nullptr, nullptr, nullptr, NWilson::TTraceId(), 0, TString());
+            TAppData::TimeProvider->Now(), 0, &vPatchRecord, nullptr, nullptr, nullptr, 0, TString());
 
     SendByHandle(runtime, handle, std::move(vPatchResult));
     CTEST << "ConductVMovedPatch: Finish\n";

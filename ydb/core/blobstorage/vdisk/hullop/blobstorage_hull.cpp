@@ -150,9 +150,10 @@ namespace NKikimr {
             IEventBase *msg,
             const TActorId &recipient,
             ui64 recipientCookie,
+            NWilson::TTraceId traceId,
             ui64 lsn)
     {
-        Fields->DelayedResponses.Put(msg, recipient, recipientCookie, lsn);
+        Fields->DelayedResponses.Put(msg, recipient, recipientCookie, std::move(traceId), lsn);
     }
 
     ////////////////////////////////////////////////////////////////////////////

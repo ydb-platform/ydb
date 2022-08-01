@@ -235,6 +235,12 @@ public:
             for (const auto& key : GetKeys(maySettings.Settings().Ref()))
                 sinkDesc.MutableKeys()->Add(TString(key->Content()));
 
+            if (const auto& maxObjectSize = State_->Configuration->MaxOutputObjectSize.Get())
+                sinkDesc.SetMaxFileSize(*maxObjectSize);
+
+            if (const auto& memoryLimit = State_->Configuration->InFlightMemoryLimit.Get())
+                sinkDesc.SetMemoryLimit(*memoryLimit);
+
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";
         }

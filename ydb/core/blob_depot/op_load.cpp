@@ -76,68 +76,13 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
 
-                // Data
-                {
-                    auto table = db.Table<Schema::Data>().Select();
-                    if (!table.IsReady()) {
-                        return false;
-                    }
-                    while (table.IsValid()) {
-                        Self->Data->AddDataOnLoad(
-                            TData::TKey::FromBinaryKey(table.GetValue<Schema::Data::Key>(), Self->Config),
-                            table.GetValue<Schema::Data::Value>()
-                        );
-                        if (!table.Next()) {
-                            return false;
-                        }
-                    }
-                }
-
-                // Trash
-                {
-                    auto table = db.Table<Schema::Trash>().Select();
-                    if (!table.IsReady()) {
-                        return false;
-                    }
-                    while (table.IsValid()) {
-                        const TString& blobId = table.GetValue<Schema::Trash::BlobId>();
-                        Self->Data->AddTrashOnLoad(TLogoBlobID(reinterpret_cast<const ui64*>(blobId.data())));
-                        if (!table.Next()) {
-                            return false;
-                        }
-                    }
-                }
-
-                // GC
-                {
-                    using T = Schema::GC;
-                    auto table = db.Table<T>().Select();
-                    if (!table.IsReady()) {
-                        return false;
-                    }
-                    while (table.IsValid()) {
-                        Self->Data->AddGenStepOnLoad(table.GetValue<T::Channel>(),
-                            table.GetValue<T::GroupId>(),
-                            TGenStep(table.GetValueOrDefault<T::IssuedGenStep>()),
-                            TGenStep(table.GetValueOrDefault<T::ConfirmedGenStep>()));
-                        if (!table.Next()) {
-                            return false;
-                        }
-                    }
-                }
-
                 return true;
             }
 
             bool Precharge(NIceDb::TNiceDb& db) {
-                auto config = db.Table<Schema::Config>().Select();
-                auto blocks = db.Table<Schema::Blocks>().Select();
-                auto barriers = db.Table<Schema::Barriers>().Select();
-                auto data = db.Table<Schema::Data>().Select();
-                auto trash = db.Table<Schema::Trash>().Select();
-                auto confirmedGC = db.Table<Schema::GC>().Select();
-                return config.IsReady() && blocks.IsReady() && barriers.IsReady() && data.IsReady() && trash.IsReady() &&
-                    confirmedGC.IsReady();
+                return db.Table<Schema::Config>().Precharge()
+                    & db.Table<Schema::Blocks>().Precharge()
+                    & db.Table<Schema::Barriers>().Precharge();
             }
 
             void Complete(const TActorContext&) override {
@@ -146,10 +91,10 @@ namespace NKikimr::NBlobDepot {
 
                 if (Configured) {
                     Self->InitChannelKinds();
-                    Self->Data->HandleTrash();
                 }
 
                 Self->OnLoadFinished();
+                Self->Data->StartLoad(); // we need at least Config to start correct loading of data
             }
         };
 

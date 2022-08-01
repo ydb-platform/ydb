@@ -9,7 +9,7 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // TLevelIndexStatActor
     ////////////////////////////////////////////////////////////////////////////
-    template <class TKey, class TMemRec>
+    template <class TKey, class TMemRec, class TRequest = TEvBlobStorage::TEvVDbStat, class TResponse = TEvBlobStorage::TEvVDbStatResult>
     class TLevelIndexStatActor : public TActorBootstrapped<TLevelIndexStatActor<TKey, TMemRec>> {
 
         using TThis = ::NKikimr::TLevelIndexStatActor<TKey, TMemRec>;
@@ -26,14 +26,21 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             TStringStream str;
             const bool prettyPrint = Ev->Get()->Record.GetPrettyPrint();
-            CalculateStat(str, prettyPrint);
-            Result->SetResult(str.Str());
-            SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
+            if constexpr (std::is_same_v<TResponse, TEvBlobStorage::TEvVDbStatResult>) {
+                CalculateStat(str, prettyPrint);
+                Result->SetResult(str.Str());
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
+            } else {
+                CalculateStat(Result);
+                SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie);
+            }
             ctx.Send(ParentId, new TEvents::TEvActorDied);
             TThis::Die(ctx);
         }
 
         void CalculateStat(IOutputStream &str, bool pretty);
+
+        void CalculateStat(std::unique_ptr<TResponse> &result);
 
     public:
         static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -44,8 +51,8 @@ namespace NKikimr {
                 const TIntrusivePtr<THullCtx> &hullCtx,
                 const TActorId &parentId,
                 TLevelIndexSnapshot &&snapshot,
-                TEvBlobStorage::TEvVDbStat::TPtr &ev,
-                std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
+                typename TRequest::TPtr &ev,
+                std::unique_ptr<TResponse> result)
             : TActorBootstrapped<TThis>()
             , HullCtx(hullCtx)
             , ParentId(parentId)
@@ -58,8 +65,8 @@ namespace NKikimr {
         TIntrusivePtr<THullCtx> HullCtx;
         const TActorId ParentId;
         TLevelIndexSnapshot Snapshot;
-        TEvBlobStorage::TEvVDbStat::TPtr Ev;
-        std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> Result;
+        typename TRequest::TPtr Ev;
+        std::unique_ptr<TResponse> Result;
     };
 
 } // NKikimr

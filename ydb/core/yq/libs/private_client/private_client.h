@@ -3,8 +3,8 @@
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/api/grpc/draft/yql_db_v1.grpc.pb.h>
 #include <ydb/core/yq/libs/protos/fq_private.pb.h>
+#include <ydb/core/yq/libs/grpc/fq_private_v1.grpc.pb.h>
 
 namespace NFq {
 

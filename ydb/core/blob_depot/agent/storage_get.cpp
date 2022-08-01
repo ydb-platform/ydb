@@ -35,7 +35,7 @@ namespace NKikimr::NBlobDepot {
                     response.Shift = query.Shift;
                     response.RequestedSize = query.Size;
 
-                    TString blobId(reinterpret_cast<const char*>(query.Id.GetRaw()), 3 * sizeof(ui64));
+                    TString blobId = query.Id.AsBinaryString();
                     if (const TValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
                             std::make_shared<TResolveKeyContext>(i))) {
                         if (!ProcessSingleResult(i, value)) {

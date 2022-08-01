@@ -17,6 +17,7 @@ target_link_libraries(core-blobstorage-backpressure PUBLIC
   ydb-core-base
   core-blobstorage-groupinfo
   core-blobstorage-lwtrace_probes
+  blobstorage-vdisk-common
   ydb-core-protos
 )
 target_sources(core-blobstorage-backpressure PRIVATE

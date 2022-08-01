@@ -34,6 +34,7 @@ TCommandProfile::TCommandProfile()
     AddCommand(std::make_unique<TCommandCreateProfile>());
     AddCommand(std::make_unique<TCommandDeleteProfile>());
     AddCommand(std::make_unique<TCommandActivateProfile>());
+    AddCommand(std::make_unique<TCommandDeactivateProfile>());
     AddCommand(std::make_unique<TCommandListProfiles>());
     AddCommand(std::make_unique<TCommandGetProfile>());
 }
@@ -420,12 +421,18 @@ void TCommandDeleteProfile::Config(TConfig& config) {
 
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<name>", "Profile name (case sensitive)");
+
+    config.Opts->AddLongOption('f', "force", "Ignore nonexistent profiles, never prompt")
+        .StoreTrue(&Force);
 }
 
 void TCommandDeleteProfile::Parse(TConfig& config) {
     TClientCommand::Parse(config);
     if (config.ParseResult->GetFreeArgCount()) {
         ProfileName = config.ParseResult->GetFreeArgs()[0];
+    }
+    if (Force && !ProfileName) {
+        throw TMisuseException() << "Profile name was not specified while using --force option.";
     }
 }
 
@@ -435,6 +442,9 @@ int TCommandDeleteProfile::Run(TConfig& config) {
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
         if (find(profileNames.begin(), profileNames.end(), ProfileName) == profileNames.end()) {
+            if (Force) {
+                return EXIT_SUCCESS;
+            }
             Cerr << "No existing profile \"" << ProfileName << "\". "
                 << "Run \"ydb config profile list\" without arguments to see existing profiles" << Endl;
             return EXIT_FAILURE;
@@ -470,18 +480,21 @@ int TCommandDeleteProfile::Run(TConfig& config) {
             return EXIT_FAILURE;
         }
     }
-
-    Cout << "Profile \"" << ProfileName << "\" will be permanently removed. Continue? (y/n): ";
-    if (AskYesOrNo()) {
-        if (profileManager->RemoveProfile(ProfileName)) {
-            Cout << "Profile \"" << ProfileName << "\" was removed." << Endl;
-        } else {
-            Cerr << "Profile \"" << ProfileName << "\" was not removed." << Endl;
-            return EXIT_FAILURE;
-        }
+    if (Force) {
+        profileManager->RemoveProfile(ProfileName);
     } else {
-        Cout << "Nothing is done." << Endl;
-        return EXIT_SUCCESS;
+        Cout << "Profile \"" << ProfileName << "\" will be permanently removed. Continue? (y/n): ";
+        if (AskYesOrNo()) {
+            if (profileManager->RemoveProfile(ProfileName)) {
+                Cout << "Profile \"" << ProfileName << "\" was removed." << Endl;
+            } else {
+                Cerr << "Profile \"" << ProfileName << "\" was not removed." << Endl;
+                return EXIT_FAILURE;
+            }
+        } else {
+            Cout << "Nothing is done." << Endl;
+            return EXIT_SUCCESS;
+        }
     }
 
     return EXIT_SUCCESS;
@@ -506,7 +519,6 @@ void TCommandActivateProfile::Parse(TConfig& config) {
 }
 
 int TCommandActivateProfile::Run(TConfig& config) {
-    Y_UNUSED(config);
     auto profileManager = CreateYdbProfileManager(config.YdbDir);
     const auto profileNames = profileManager->ListProfiles();
     if (ProfileName) {
@@ -568,6 +580,28 @@ int TCommandActivateProfile::Run(TConfig& config) {
         Cout << "Profile \"" << ProfileName << "\" was activated." << Endl;
     } else {
         Cout << "Profile \"" << ProfileName << "\" is already active." << Endl;
+    }
+    return EXIT_SUCCESS;
+}
+
+TCommandDeactivateProfile::TCommandDeactivateProfile()
+    : TClientCommand("deactivate", {"unset"}, "Deactivate current active configuration profile")
+{}
+
+void TCommandDeactivateProfile::Config(TConfig& config) {
+    TClientCommand::Config(config);
+
+    config.SetFreeArgsMax(0);
+}
+
+int TCommandDeactivateProfile::Run(TConfig& config) {
+    auto profileManager = CreateYdbProfileManager(config.YdbDir);
+    TString currentActiveProfileName = profileManager->GetActiveProfileName();
+    if (currentActiveProfileName) {
+        profileManager->DeactivateProfile();
+        Cout << "Profile \"" << currentActiveProfileName << "\" was deactivated." << Endl;
+    } else {
+        Cout << "There is no profile active. Nothing is done." << Endl;
     }
     return EXIT_SUCCESS;
 }

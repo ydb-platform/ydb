@@ -172,7 +172,7 @@ struct TTestState {
         ui64 *cookie = record.HasCookie() ? &cookieValue : nullptr;
         std::unique_ptr<TEvBlobStorage::TEvVPutResult> result(new TEvBlobStorage::TEvVPutResult(status, blobId, vDiskId,
                 cookie, TOutOfSpaceStatus(0u, 0.0), TAppData::TimeProvider->Now(),
-                0, nullptr, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString()));
+                0, nullptr, nullptr, nullptr, nullptr, 0, 0, TString()));
         return result;
     }
 
@@ -184,7 +184,7 @@ struct TTestState {
         ui64 *cookie = record.HasCookie() ? &cookieValue : nullptr;
         std::unique_ptr<TEvBlobStorage::TEvVMultiPutResult> result(
                 new TEvBlobStorage::TEvVMultiPutResult(status, vDiskId, cookie, TAppData::TimeProvider->Now(), 0,
-                        nullptr, nullptr, nullptr, nullptr, 0, NWilson::TTraceId(), 0, TString()));
+                        nullptr, nullptr, nullptr, nullptr, 0, 0, TString()));
         result->Record.SetStatusFlags(TOutOfSpaceStatus(0u, 0.0).Flags);
         return result;
     }
@@ -224,7 +224,7 @@ struct TTestState {
         TVDiskID vDiskId = VDiskIDFromVDiskID(ev->Record.GetVDiskID());
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> result(new TEvBlobStorage::TEvVGetResult(
                 status, vDiskId, TAppData::TimeProvider->Now(), 0, nullptr,
-                nullptr, nullptr, nullptr, NWilson::TTraceId(), {}, 0U, 0U));
+                nullptr, nullptr, nullptr, {}, 0U, 0U));
         return result;
     }
 

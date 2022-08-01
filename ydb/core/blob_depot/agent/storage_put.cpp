@@ -142,10 +142,9 @@ namespace NKikimr::NBlobDepot {
                     NKikimrBlobDepot::TEvCommitBlobSeq request;
 
                     auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
-                    const TStringBuf key = msg.Id.AsBinaryString();
 
                     auto *item = request.AddItems();
-                    item->SetKey(key.data(), key.size());
+                    item->SetKey(msg.Id.AsBinaryString());
                     auto *locator = item->MutableBlobLocator();
                     locator->SetGroupId(GroupId);
                     BlobSeqId.ToProto(locator->MutableBlobSeqId());

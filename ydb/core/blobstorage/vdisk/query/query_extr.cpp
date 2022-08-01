@@ -345,8 +345,8 @@ namespace NKikimr {
                 SendResponseAndDie(ctx, this);
             } else {
                 ui8 priority = PDiskPriority();
-                std::unique_ptr<IActor> a(Batcher.CreateAsyncDataReader(ctx.SelfID, priority, std::move(Result->TraceId),
-                    IsRepl(), TActivationContext::Now()));
+                std::unique_ptr<IActor> a(Batcher.CreateAsyncDataReader(ctx.SelfID, priority, /*std::move(Result->TraceId)*/ NWilson::TTraceId(), // FIXME: trace
+                    IsRepl()));
                 if (a) {
                     auto aid = ctx.Register(a.release());
                     ActiveActors.Insert(aid);

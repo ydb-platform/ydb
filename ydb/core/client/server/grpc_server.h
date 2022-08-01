@@ -32,6 +32,7 @@ public:
 
     //! Send reply.
     virtual void Reply(const NKikimrClient::TResponse& resp) = 0;
+    virtual void Reply(const NKikimrClient::TDsTestLoadResponse& resp) = 0;
     virtual void Reply(const NKikimrClient::TBsTestLoadResponse& resp) = 0;
     virtual void Reply(const NKikimrClient::TJSON& resp) = 0;
     virtual void Reply(const NKikimrClient::TNodeRegistrationResponse& resp) = 0;

@@ -31,6 +31,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
         bool CheckBlobForBarrier(TLogoBlobID id) const;
         void GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const;
+        void OnDataLoaded();
 
         template<typename TCallback>
         void Enumerate(TCallback&& callback) {

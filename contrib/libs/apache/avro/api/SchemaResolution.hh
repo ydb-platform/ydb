@@ -23,7 +23,6 @@
 
 namespace avro {
 
-
 enum SchemaResolution {
 
     /// The schemas definitely do not match

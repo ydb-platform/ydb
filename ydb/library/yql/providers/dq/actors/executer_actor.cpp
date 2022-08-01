@@ -76,6 +76,7 @@ private:
         HFunc(TEvAllocateWorkersResponse, OnAllocateWorkersResponse);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         hFunc(NActors::TEvents::TEvPoisonTaken, Handle);
+        hFunc(TEvDqStats, OnTransientIssues);
         HFunc(TEvDqFailure, OnFailure);
         HFunc(TEvGraphFinished, OnGraphFinished);
         HFunc(TEvQueryResponse, OnQueryResponse);
@@ -132,6 +133,12 @@ private:
         Y_VERIFY(!ControlId);
         Y_VERIFY(!ResultId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::OnGraph";
+        TFailureInjector::Reach("dq_fail_on_graph", [&] {
+            auto ev = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS);
+            ev->Record.SetDeprecatedNeedFallback(false);
+            ev->Record.SetDeprecatedRetriable(false);
+            Send(SelfId(), std::move(ev));
+        });
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
         ResultId = NActors::ActorIdFromProto(ev->Get()->Record.GetResultId());
         CheckPointCoordinatorId = NActors::ActorIdFromProto(ev->Get()->Record.GetCheckPointCoordinatorId());
@@ -257,18 +264,25 @@ private:
     void OnFailure(TEvDqFailure::TPtr& ev, const NActors::TActorContext&) {
         if (!Finished) {
             YQL_LOG_CTX_ROOT_SCOPE(TraceId);
-            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+            YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ 
+                            << " with Retriable=" << ev->Get()->Record.GetDeprecatedRetriable() 
+                            << ", NeedFallback=" << ev->Get()->Record.GetDeprecatedNeedFallback() 
+                            << ", status=" << (int) ev->Get()->Record.GetStatusCode()
+                            << ", sender=" << ev->Sender;
             AddCounters(ev->Get()->Record);
             bool retriable = ev->Get()->Record.GetDeprecatedRetriable();
-            bool fallback = ev->Get()->Record.GetDeprecatedNeedFallback();
+            // while we're investigating YQL-15117, we want to be sure that any failure leads to the fallback (except explicitly retriable ones)
+            bool fallback = true;
+            auto status = ev->Get()->Record.GetStatusCode();
+            if (status == NYql::NDqProto::StatusIds::UNSPECIFIED) {
+                status = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+            }
             if (ev->Get()->Record.IssuesSize()) {
                 TIssues issues;
                 IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                 Issues.AddIssues(issues);
-            } else if (ev->Get()->Record.GetStatusCode() == 0) {
-                Issues.AddIssue(TIssue("Unknown Error"));
             }
-            Finish(ev->Get()->Record.GetStatusCode(), retriable, fallback);
+            Finish(status, retriable, fallback);
         }
     }
 
@@ -294,6 +308,12 @@ private:
         YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
         Send(PrinterId, ev->Release().Release());
         PassAway();
+    }
+
+    void OnTransientIssues(TEvDqStats::TPtr& ev) {
+        YQL_LOG_CTX_ROOT_SCOPE(TraceId);
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+        Send(PrinterId, ev->Release().Release());
     }
 
     void Handle(NActors::TEvents::TEvPoisonTaken::TPtr&) {

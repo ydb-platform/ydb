@@ -5,6 +5,7 @@ import "ydb/core/protos/console_config.proto";
 import "ydb/core/protos/console_tenant.proto";
 import "ydb/core/protos/tablet_counters.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
+import "ydb/core/protos/tx_datashard.proto";
 import "ydb/core/protos/tx_proxy.proto";
 import "ydb/core/protos/tx_scheme.proto";
 import "ydb/core/protos/node_whiteboard.proto";
@@ -459,6 +460,20 @@ message TFlatDescribeResponse {
 message TSchemeOperationStatus {
     optional TFlatTxId FlatTxId = 1;
     optional TFlatTxPollOptions PollOptions = 10;
+};
+
+message TDsTestLoadRequest {
+    optional uint32 NodeId = 1;
+    optional NKikimrTxDataShard.TEvTestLoadRequest Event = 2;
+};
+
+message TDsTestLoadResponse {
+    message TItem {
+        optional uint32 NodeId = 1;
+        optional uint32 Status = 2;
+        optional string ErrorReason = 3;
+    };
+    repeated TItem Items = 1;
 };
 
 message TBsTestLoadRequest {

@@ -20,13 +20,13 @@
 #define avro_Decoder_hh__
 
 #include "Config.hh"
-#include <stdint.h>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
 
-#include "ValidSchema.hh"
 #include "Stream.hh"
+#include "ValidSchema.hh"
 
 /// \file
 ///
@@ -47,11 +47,11 @@ namespace avro {
  */
 class AVRO_DECL Decoder {
 public:
-    virtual ~Decoder() { };
+    virtual ~Decoder() = default;
     /// All future decoding will come from is, which should be valid
     /// until replaced by another call to init() or this Decoder is
     /// destructed.
-    virtual void init(InputStream& is) = 0;
+    virtual void init(InputStream &is) = 0;
 
     /// Decodes a null from the current stream.
     virtual void decodeNull() = 0;
@@ -81,12 +81,12 @@ public:
     /**
      * Decodes a UTF-8 string from the stream and assigns it to value.
      */
-    virtual void decodeString(std::string& value) = 0;
+    virtual void decodeString(std::string &value) = 0;
 
     /// Skips a string on the current stream.
     virtual void skipString() = 0;
 
-    /// Decodes arbitray binary data from the current stream.
+    /// Decodes arbitrary binary data from the current stream.
     std::vector<uint8_t> decodeBytes() {
         std::vector<uint8_t> result;
         decodeBytes(result);
@@ -95,7 +95,7 @@ public:
 
     /// Decodes arbitrary binary data from the current stream and puts it
     /// in value.
-    virtual void decodeBytes(std::vector<uint8_t>& value) = 0;
+    virtual void decodeBytes(std::vector<uint8_t> &value) = 0;
 
     /// Skips bytes on the current stream.
     virtual void skipBytes() = 0;
@@ -116,9 +116,9 @@ public:
      * Decodes a fixed from the current stream.
      * \param[in] n The size (byte count) of the fixed being read.
      * \param[out] value The value that receives the fixed. The vector will
-     * be size-adjusted based on the fixed's size.
+     * be size-adjusted based on the fixed schema's size.
      */
-    virtual void decodeFixed(size_t n, std::vector<uint8_t>& value) = 0;
+    virtual void decodeFixed(size_t n, std::vector<uint8_t> &value) = 0;
 
     /// Skips fixed length binary on the current stream.
     virtual void skipFixed(size_t n) = 0;
@@ -174,7 +174,7 @@ public:
 /**
  * Shared pointer to Decoder.
  */
-typedef std::shared_ptr<Decoder> DecoderPtr;
+using DecoderPtr = std::shared_ptr<Decoder>;
 
 /**
  * ResolvingDecoder is derived from \ref Decoder, with an additional
@@ -187,13 +187,13 @@ public:
     /// order in the schema because the writer's field order could
     /// be different. In order to avoid buffering and later use,
     /// we return the values in the writer's field order.
-    virtual const std::vector<size_t>& fieldOrder() = 0;
+    virtual const std::vector<size_t> &fieldOrder() = 0;
 };
 
 /**
  * Shared pointer to ResolvingDecoder.
  */
-typedef std::shared_ptr<ResolvingDecoder> ResolvingDecoderPtr;
+using ResolvingDecoderPtr = std::shared_ptr<ResolvingDecoder>;
 /**
  *  Returns an decoder that can decode binary Avro standard.
  */
@@ -203,13 +203,13 @@ AVRO_DECL DecoderPtr binaryDecoder();
  *  Returns an decoder that validates sequence of calls to an underlying
  *  Decoder against the given schema.
  */
-AVRO_DECL DecoderPtr validatingDecoder(const ValidSchema& schema,
-    const DecoderPtr& base);
+AVRO_DECL DecoderPtr validatingDecoder(const ValidSchema &schema,
+                                       const DecoderPtr &base);
 
 /**
  *  Returns an decoder that can decode Avro standard for JSON.
  */
-AVRO_DECL DecoderPtr jsonDecoder(const ValidSchema& schema);
+AVRO_DECL DecoderPtr jsonDecoder(const ValidSchema &schema);
 
 /**
  *  Returns a decoder that decodes avro data from base written according to
@@ -217,10 +217,9 @@ AVRO_DECL DecoderPtr jsonDecoder(const ValidSchema& schema);
  *  The client uses the decoder as if the data were written using readerSchema.
  *  // FIXME: Handle out of order fields.
  */
-AVRO_DECL ResolvingDecoderPtr resolvingDecoder(const ValidSchema& writer,
-    const ValidSchema& reader, const DecoderPtr& base);
+AVRO_DECL ResolvingDecoderPtr resolvingDecoder(const ValidSchema &writer,
+                                               const ValidSchema &reader, const DecoderPtr &base);
 
-
-}   // namespace avro
+} // namespace avro
 
 #endif

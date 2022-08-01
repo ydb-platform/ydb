@@ -66,6 +66,8 @@
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
+#define LOG_T(stream) \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Fetcher: " << stream)
 
 namespace NYq {
 
@@ -203,7 +205,7 @@ private:
 
     void Handle(TEvInternalService::TEvGetTaskResponse::TPtr& ev) {
         HasRunningRequest = false;
-        LOG_D("Got GetTask response from PrivateApi");
+        LOG_T("Got GetTask response from PrivateApi");
         if (!ev->Get()->Status.IsSuccess()) {
             LOG_E("Error with GetTask: "<< ev->Get()->Status.GetIssues().ToString());
             return;
@@ -211,7 +213,7 @@ private:
 
         const auto& res = ev->Get()->Result;
 
-        LOG_D("Tasks count: " << res.tasks().size());
+        LOG_T("Tasks count: " << res.tasks().size());
         if (!res.tasks().empty()) {
             ProcessTask(res);
             HasRunningRequest = true;
@@ -241,7 +243,7 @@ private:
 
     void GetPendingTask() {
         FetcherGeneration++;
-        LOG_D("Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
+        LOG_T("Request Private::GetTask" << ", Owner: " << GetOwnerId() << ", Host: " << HostName() << ", Tenant: " << TenantName);
         Fq::Private::GetTaskRequest request;
         request.set_owner_id(GetOwnerId());
         request.set_host(HostName());

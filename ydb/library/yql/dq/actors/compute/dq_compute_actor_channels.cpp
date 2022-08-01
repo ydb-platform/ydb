@@ -13,6 +13,9 @@
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define LOG_C(s) \
     LOG_CRIT_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
+#define LOG_T(s) \
+    LOG_TRACE_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
+
 
 namespace NYql::NDq {
 
@@ -161,7 +164,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
 
     TOutputChannelState& outputChannel = OutCh(record.GetChannelId());
 
-    LOG_D("Received channel data ack for channelId: " << record.GetChannelId()
+    LOG_T("Received channel data ack for channelId: " << record.GetChannelId()
         << ", seqNo: " << record.GetSeqNo()
         << ", lastSentSeqNo: " << outputChannel.LastSentSeqNo
         << ", freeSpace: " << record.GetFreeSpace()
@@ -192,7 +195,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
 
     outputChannel.PeerState.PeerFreeSpace = record.GetFreeSpace();
 
-    LOG_D("PeerState, freeSpace: " << outputChannel.PeerState.PeerFreeSpace
+    LOG_T("PeerState, freeSpace: " << outputChannel.PeerState.PeerFreeSpace
         << ", inflight bytes: " << outputChannel.PeerState.InFlightBytes
         << ", inflight count: " << outputChannel.PeerState.InFlightCount
         << ", sentSeqNo: " << outputChannel.LastSentSeqNo
@@ -209,13 +212,13 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
         return;
     }
 
-    LOG_D("Resume compute actor");
+    LOG_T("Resume compute actor");
     Cbs->ResumeExecution();
 }
 
 void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvRetryChannelData::TPtr& ev) {
     auto* msg = ev->Get();
-    LOG_D("Resend channel data events for output channelId: " << msg->ChannelId
+    LOG_T("Resend channel data events for output channelId: " << msg->ChannelId
         << ", seqNo: [" << msg->FromSeqNo << ".." << msg->ToSeqNo << ']');
 
     TOutputChannelState& outputChannel = OutCh(msg->ChannelId);
@@ -691,7 +694,7 @@ void TDqComputeActorChannels::SendChannelDataAck(i64 channelId, i64 freeSpace) {
 }
 
 void TDqComputeActorChannels::SendChannelDataAck(TInputChannelState& inputChannel, i64 freeSpace) {
-    LOG_D("Sending channel data ack to"
+    LOG_T("Sending channel data ack to"
         << " channelId: " << inputChannel.ChannelId
         << ", peer: " << *inputChannel.Peer
         << ", from: " << Owner

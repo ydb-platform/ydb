@@ -219,9 +219,10 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
 
         TMap<TMetricsScope, TScopeCountersPtr> ScopeCounters;
         TMap<TMetricsScope, TFinalStatusCountersPtr> FinalStatusCounters;
-        ::NMonitoring::TDynamicCounterPtr Counters;
 
     public:
+        ::NMonitoring::TDynamicCounterPtr Counters;
+
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& counters)
             : Counters(counters)
         {

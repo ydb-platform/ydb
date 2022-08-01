@@ -270,7 +270,18 @@ TExprBase KqpPushOlapLength(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         .Process(newProcessLambda)
         .Done();
 
-    return newRead;
+    auto member = Build<TCoMap>(ctx, node.Pos())
+        .Input(newRead)
+        .Lambda()
+            .Args({"row"})
+            .Body<TCoMember>()
+                .Struct("row")
+                .Name(dqPhyLength.Name())
+                .Build()
+            .Build()
+        .Done();
+
+    return member;
 }
 
 } // namespace NKikimr::NKqp::NOpt

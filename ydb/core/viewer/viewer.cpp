@@ -16,82 +16,22 @@
 #include "viewer.h"
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/util/wildcard.h>
-#include "json_nodelist.h"
+#include "browse_pq.h"
+#include "browse_db.h"
+#include "counters_hosts.h"
+
+#include "json_handlers.h"
+
+#include "json_bsgroupinfo.h"
 #include "json_nodeinfo.h"
 #include "json_vdiskinfo.h"
-#include "json_pdiskinfo.h"
-#include "json_describe.h"
-#include "json_hotkeys.h"
-#include "json_sysinfo.h"
-#include "json_tabletinfo.h"
-#include "json_hiveinfo.h"
-#include "json_bsgroupinfo.h"
-#include "json_bscontrollerinfo.h"
-#include "json_config.h"
-#include "json_counters.h"
-#include "json_topicinfo.h"
-#include "json_pqconsumerinfo.h"
-#include "json_tabletcounters.h"
-#include "json_storage.h"
-#include "json_metainfo.h"
-#include "json_browse.h"
-#include "json_cluster.h"
-#include "json_content.h"
-#include "json_labeledcounters.h"
-#include "json_tenants.h"
-#include "json_hivestats.h"
-#include "json_tenantinfo.h"
-#include "json_whoami.h"
-#include "json_query.h"
-#include "json_netinfo.h"
-#include "json_compute.h"
-#include "counters_hosts.h"
-#include "json_healthcheck.h"
-#include "json_nodes.h"
-#include "json_acl.h"
+
 
 namespace NKikimr {
 namespace NViewer {
 
 using namespace NNodeWhiteboard;
 
-class TJsonHandlerBase {
-public:
-    virtual ~TJsonHandlerBase() = default;
-    virtual IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) = 0;
-    virtual TString GetResponseJsonSchema() = 0;
-    virtual TString GetRequestSummary() { return TString(); }
-    virtual TString GetRequestDescription() { return TString(); }
-    virtual TString GetRequestParameters() { return TString(); }
-};
-
-template <typename ActorRequestType>
-class TJsonHandler : public TJsonHandlerBase {
-public:
-    IActor* CreateRequestActor(IViewer* viewer, NMon::TEvHttpInfo::TPtr& event) override {
-        return new ActorRequestType(viewer, event);
-    }
-
-    TString GetResponseJsonSchema() override {
-        static TString jsonSchema = TJsonRequestSchema<ActorRequestType>::GetSchema();
-        return jsonSchema;
-    }
-
-    TString GetRequestSummary() override {
-        static TString jsonSummary = TJsonRequestSummary<ActorRequestType>::GetSummary();
-        return jsonSummary;
-    }
-
-    TString GetRequestDescription() override {
-        static TString jsonDescription = TJsonRequestDescription<ActorRequestType>::GetDescription();
-        return jsonDescription;
-    }
-
-    TString GetRequestParameters() override {
-        static TString jsonParameters = TJsonRequestParameters<ActorRequestType>::GetParameters();
-        return jsonParameters;
-    }
-};
 
 void SetupPQVirtualHandlers(IViewer* viewer) {
     viewer->RegisterVirtualHandler(
@@ -170,47 +110,25 @@ public:
                 .ActorId = ctx.SelfID,
                 .UseAuth = false,
             });
+            mon->RegisterActorPage({
+                .Title = "VDisk",
+                .RelPath = "vdisk",
+                .ActorSystem = ctx.ExecutorThread.ActorSystem,
+                .ActorId = ctx.SelfID,
+                .UseAuth = true,
+                .AllowedSIDs = allowedSIDs,
+            });
             auto whiteboardServiceId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(ctx.SelfID.NodeId());
             ctx.Send(whiteboardServiceId, new NNodeWhiteboard::TEvWhiteboard::TEvSystemStateAddEndpoint(
                 "http-mon", Sprintf(":%d", KikimrRunConfig.AppConfig.GetMonitoringConfig().GetMonitoringPort())));
 
             AllowOrigin = KikimrRunConfig.AppConfig.GetMonitoringConfig().GetAllowOrigin();
 
+            ViewerJsonHandlers.Init();
+            VDiskJsonHandlers.Init();
+
             TWhiteboardInfo<TEvWhiteboard::TEvNodeStateResponse>::InitMerger();
             TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::InitMerger();
-
-            JsonHandlers["/json/nodelist"] = new TJsonHandler<TJsonNodeList>;
-            JsonHandlers["/json/nodeinfo"] = new TJsonHandler<TJsonNodeInfo>;
-            JsonHandlers["/json/vdiskinfo"] = new TJsonHandler<TJsonVDiskInfo>;
-            JsonHandlers["/json/pdiskinfo"] = new TJsonHandler<TJsonPDiskInfo>;
-            JsonHandlers["/json/describe"] = new TJsonHandler<TJsonDescribe>;
-            JsonHandlers["/json/hotkeys"] = new TJsonHandler<TJsonHotkeys>;
-            JsonHandlers["/json/sysinfo"] = new TJsonHandler<TJsonSysInfo>;
-            JsonHandlers["/json/tabletinfo"] = new TJsonHandler<TJsonTabletInfo>;
-            JsonHandlers["/json/hiveinfo"] = new TJsonHandler<TJsonHiveInfo>;
-            JsonHandlers["/json/bsgroupinfo"] = new TJsonHandler<TJsonBSGroupInfo>;
-            JsonHandlers["/json/bscontrollerinfo"] = new TJsonHandler<TJsonBSControllerInfo>;
-            JsonHandlers["/json/config"] = new TJsonHandler<TJsonConfig>;
-            JsonHandlers["/json/counters"] = new TJsonHandler<TJsonCounters>;
-            JsonHandlers["/json/topicinfo"] = new TJsonHandler<TJsonTopicInfo>;
-            JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>();
-            JsonHandlers["/json/tabletcounters"] = new TJsonHandler<TJsonTabletCounters>;
-            JsonHandlers["/json/storage"] = new TJsonHandler<TJsonStorage>;
-            JsonHandlers["/json/metainfo"] = new TJsonHandler<TJsonMetaInfo>;
-            JsonHandlers["/json/browse"] = new TJsonHandler<TJsonBrowse>;
-            JsonHandlers["/json/cluster"] = new TJsonHandler<TJsonCluster>;
-            JsonHandlers["/json/content"] = new TJsonHandler<TJsonContent>;
-            JsonHandlers["/json/labeledcounters"] = new TJsonHandler<TJsonLabeledCounters>;
-            JsonHandlers["/json/tenants"] = new TJsonHandler<TJsonTenants>;
-            JsonHandlers["/json/hivestats"] = new TJsonHandler<TJsonHiveStats>;
-            JsonHandlers["/json/tenantinfo"] = new TJsonHandler<TJsonTenantInfo>;
-            JsonHandlers["/json/whoami"] = new TJsonHandler<TJsonWhoAmI>;
-            JsonHandlers["/json/query"] = new TJsonHandler<TJsonQuery>;
-            JsonHandlers["/json/netinfo"] = new TJsonHandler<TJsonNetInfo>;
-            JsonHandlers["/json/compute"] = new TJsonHandler<TJsonCompute>;
-            JsonHandlers["/json/healthcheck"] = new TJsonHandler<TJsonHealthCheck>;
-            JsonHandlers["/json/nodes"] = new TJsonHandler<TJsonNodes>;
-            JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
         }
     }
 
@@ -250,6 +168,8 @@ public:
     }
 
 private:
+    TViewerJsonHadlers ViewerJsonHandlers;
+    TVDiskJsonHadlers VDiskJsonHandlers;
     THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;
@@ -266,7 +186,7 @@ private:
         TStringStream json;
         TString basepath = ev->Get()->Request.GetParams().Get("basepath");
         if (basepath.empty()) {
-            basepath = "/viewer";
+            basepath = ev->Get()->Request.GetPage()->Path;
         } else {
             if (basepath.EndsWith("/api/")) {
                 basepath = basepath.substr(0, basepath.size() - 5);
@@ -277,53 +197,24 @@ private:
             protocol = "http";
         }
 
-        json << R"___({"swagger":"2.0",
-                  "info": {
-                    "version": "1.0.0",
-                    "title": "YDB Viewer",
-                    "description": "YDB API for external introspection"
-                  },)___";
-        json << "\"basePath\": \"" << basepath << "\",";
+        json << '{';
+        json << "\"swagger\":\"2.0\",";
+        json << "\"info\": {";
+            json << "\"version\": \"1.0.0\",";
+            json << "\"title\": \"YDB Viewer\",";
+            json << "\"description\": \"YDB API for external introspection\"";
+        json << "},";
+        json << "\"basePath\": \"/\",";
         json << "\"schemes\": [\"" << protocol << "\"],";
         json << R"___("consumes": ["application/json"],
                   "produces": ["application/json"],
                   "paths": {)___";
 
-        for (auto itJson = JsonHandlers.begin(); itJson != JsonHandlers.end(); ++itJson) {
-            if (itJson != JsonHandlers.begin()) {
-                json << ',';
-            }
-            TString name = itJson->first;
-            json << '"' << name << '"' << ":{";
-                json << "\"get\":{";
-                    json << "\"tags\":[\"viewer\"],";
-                    json << "\"produces\":[\"application/json\"],";
-                    TString summary = itJson->second->GetRequestSummary();
-                    if (!summary.empty()) {
-                        json << "\"summary\":" << summary << ',';
-                    }
-                    TString description = itJson->second->GetRequestDescription();
-                    if (!description.empty()) {
-                        json << "\"description\":" << description << ',';
-                    }
-                    TString parameters = itJson->second->GetRequestParameters();
-                    if (!parameters.empty()) {
-                        json << "\"parameters\":" << parameters << ',';
-                    }
-                    json << "\"responses\":{";
-                        json << "\"200\":{";
-                            TString schema = itJson->second->GetResponseJsonSchema();
-                            if (!schema.empty()) {
-                                json << "\"schema\":" << schema;
-                            }
-                        json << "}";
-                    json << "}";
-                json << "}";
-            json << "}";
-        }
+        ViewerJsonHandlers.PrintForSwagger(json);
+        json << ',';
+        VDiskJsonHandlers.PrintForSwagger(json);
 
         json << R"___(},"definitions":{)___";
-
         json << R"___(}})___";
 
         return json.Str();
@@ -423,22 +314,16 @@ private:
             }
             return;
         }
+        TString filename(msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
         if (msg->Request.GetPathInfo().StartsWith("/json/")) {
-            auto itJson = JsonHandlers.find(msg->Request.GetPathInfo());
-            if (itJson != JsonHandlers.end()) {
-                try {
-                    ctx.ExecutorThread.RegisterActor(itJson->second->CreateRequestActor(this, ev));
-                }
-                catch (const std::exception& e) {
-                    ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(TString("HTTP/1.1 400 Bad Request\r\n\r\n") + e.what(), 0, NMon::IEvHttpInfoRes::EContentType::Custom));
-                    return;
-                }
-            } else {
-                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(NMonitoring::HTTPNOTFOUND));
+            if (filename.StartsWith("viewer")) {
+                ViewerJsonHandlers.Handle(this, ev, ctx);
+            }
+            if (filename.StartsWith("vdisk")) {
+                VDiskJsonHandlers.Handle(this, ev, ctx);
             }
             return;
         }
-        TString filename(msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
         if (filename.StartsWith("counters/hosts")) {
             ctx.ExecutorThread.RegisterActor(new TCountersHostsList(this, ev));
             return;
@@ -448,6 +333,8 @@ private:
         if (msg->Request.GetPathInfo().StartsWith('/')) {
             if (filename.StartsWith("viewer")) {
                 filename.erase(0, 6);
+            } else if (filename.StartsWith("vdisk")) {
+                filename.erase(0, 5);
             }
             if (IsMatchesWildcard(filename, "monitoring*/resources/js/*")
             || IsMatchesWildcard(filename, "monitoring*/resources/css/*")

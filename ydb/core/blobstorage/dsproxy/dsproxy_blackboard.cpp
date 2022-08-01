@@ -347,10 +347,10 @@ void TGroupDiskRequests::AddGet(const ui32 diskOrderNumber, const TLogoBlobID &i
 
 void TGroupDiskRequests::AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
-        ui8 blobIdx) {
+        NWilson::TSpan *span, ui8 blobIdx) {
     Y_VERIFY(diskOrderNumber < DiskRequestsForOrderNumber.size());
     DiskRequestsForOrderNumber[diskOrderNumber].PutsToSend.emplace_back(id, buffer, putReason, isHandoff,
-        extraBlockChecks, blobIdx);
+        extraBlockChecks, span, blobIdx);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -367,11 +367,7 @@ void TBlackboard::AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize) {
     ui64 size = (inSize ? Min(ui64(inSize), maxSize) : maxSize);
     //Cerr << "size " << size << " shift " << shift << Endl;
     if (size > 0) {
-        TBlobState &state = BlobStates[id];;
-        if (!bool(state.Id)) {
-            state.Init(id, *Info);
-        }
-        state.AddNeeded(shift, size);
+        (*this)[id].AddNeeded(shift, size);
     } else {
         TStringStream str;
         str << "It is impossible to read 0 bytes! Do not send such requests.";
@@ -380,30 +376,18 @@ void TBlackboard::AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize) {
     }
 }
 
-void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData,
-        std::vector<std::pair<ui64, ui32>> *extraBlockChecks) {
+void TBlackboard::AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData) {
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() == 0);
     Y_VERIFY(id.BlobSize() != 0);
-    TBlobState &state = BlobStates[id];
-    if (!state.Id) {
-        state.Init(id, *Info);
-        state.ExtraBlockChecks = extraBlockChecks;
-    } else {
-        Y_VERIFY(state.ExtraBlockChecks == extraBlockChecks);
-    }
-    state.AddPartToPut(partIdx, partData);
+    (*this)[id].AddPartToPut(partIdx, partData);
 }
 
 void TBlackboard::MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx) {
     Y_VERIFY(bool(id));
     Y_VERIFY(id.PartId() == 0);
     Y_VERIFY(id.BlobSize() != 0);
-    TBlobState &state = BlobStates[id];;
-    if (!bool(state.Id)) {
-        state.Init(id, *Info);
-    }
-    state.MarkBlobReadyToPut(blobIdx);
+    (*this)[id].MarkBlobReadyToPut(blobIdx);
 }
 
 void TBlackboard::MoveBlobStateToDone(const TLogoBlobID &id) {
@@ -579,6 +563,30 @@ void TBlackboard::GetWorstPredictedDelaysNs(const TBlobStorageGroupInfo &info, T
             *outNextToWorstNs = predictedNs;
         }
     }
+}
+
+void TBlackboard::RegisterBlobForPut(const TLogoBlobID& id, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
+        NWilson::TSpan *span) {
+    TBlobState& state = (*this)[id];
+    if (!state.ExtraBlockChecks) {
+        state.ExtraBlockChecks = extraBlockChecks;
+    } else {
+        Y_VERIFY(state.ExtraBlockChecks == extraBlockChecks);
+    }
+    if (!state.Span) {
+        state.Span = span;
+    } else {
+        Y_VERIFY(state.Span == span);
+    }
+}
+
+TBlobState& TBlackboard::operator [](const TLogoBlobID& id) {
+    const auto [it, inserted] = BlobStates.try_emplace(id);
+    TBlobState& state = it->second;
+    if (inserted) {
+        state.Init(id, *Info);
+    }
+    return state;
 }
 
 TString TBlackboard::ToString() const {

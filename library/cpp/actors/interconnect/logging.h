@@ -35,6 +35,7 @@
 #define LOG_NOTICE_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_NOTICE, __VA_ARGS__)
 #define LOG_INFO_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_INFO, __VA_ARGS__)
 #define LOG_DEBUG_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_DEBUG, __VA_ARGS__)
+#define LOG_TRACE_IC(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT, marker, ::NActors::NLog::PRI_TRACE, __VA_ARGS__)
 
 #define LOG_EMER_IC_SESSION(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, marker, ::NActors::NLog::PRI_EMER, __VA_ARGS__)
 #define LOG_ALERT_IC_SESSION(marker, ...) LOG_LOG_IC(::NActorsServices::INTERCONNECT_SESSION, marker, ::NActors::NLog::PRI_ALERT, __VA_ARGS__)

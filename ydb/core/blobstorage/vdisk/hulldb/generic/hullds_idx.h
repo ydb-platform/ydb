@@ -361,6 +361,7 @@ namespace NKikimr {
         }
 
         void OutputHtml(const TString &name, IOutputStream &str) const;
+        void OutputProto(NKikimrVDisk::LevelIndexStat *stat) const;
         void OutputHugeStatButton(const TString &name, IOutputStream &str) const;
         void OutputQueryDbButton(const TString &name, IOutputStream &str) const;
 

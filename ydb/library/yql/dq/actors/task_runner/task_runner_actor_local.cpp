@@ -22,7 +22,7 @@
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
-
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream);
 using namespace NActors;
 
 namespace NYql::NDq {
@@ -145,7 +145,7 @@ private:
         THashMap<ui32, ui64> sourcesFreeSpace;
         if (!ev->Get()->CheckpointOnly) {
             res = TaskRunner->Run();
-            LOG_D("Resume execution, run status: " << res);
+            LOG_T("Resume execution, run status: " << res);
         }
         if (res == ERunStatus::PendingInput) {
             for (auto& channelId : inputMap) {

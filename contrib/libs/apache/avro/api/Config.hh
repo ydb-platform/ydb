@@ -19,27 +19,25 @@
 #ifndef avro_Config_hh
 #define avro_Config_hh
 
-// Windows DLL suport
+// Windows DLL support
 
 #ifdef _WIN32
-#pragma warning (disable: 4275 4251)
+#pragma warning(disable : 4275 4251)
 
 #if defined(AVRO_DYN_LINK)
 #ifdef AVRO_SOURCE
-# define AVRO_DECL __declspec(dllexport)
+#define AVRO_DECL __declspec(dllexport)
 #else
-# define AVRO_DECL __declspec(dllimport)
-#endif  // AVRO_SOURCE
-#endif  // AVRO_DYN_LINK
+#define AVRO_DECL __declspec(dllimport)
+#endif // AVRO_SOURCE
+#endif // AVRO_DYN_LINK
 
 #include <intsafe.h>
-typedef SSIZE_T ssize_t;
-
-#endif  // _WIN32
+using ssize_t = SSIZE_T;
+#endif // _WIN32
 
 #ifndef AVRO_DECL
 #define AVRO_DECL
 #endif
 
 #endif
-

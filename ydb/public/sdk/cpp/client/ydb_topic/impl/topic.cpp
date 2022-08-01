@@ -1,6 +1,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
 
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
 
@@ -167,6 +169,36 @@ TAsyncStatus TTopicClient::DropTopic(const TString& path, const TDropTopicSettin
 
 TAsyncDescribeTopicResult TTopicClient::DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
     return Impl_->DescribeTopic(path, settings);
+}
+
+IRetryPolicy::TPtr IRetryPolicy::GetDefaultPolicy() {
+    static IRetryPolicy::TPtr policy = GetExponentialBackoffPolicy();
+    return policy;
+}
+
+IRetryPolicy::TPtr IRetryPolicy::GetNoRetryPolicy() {
+    return ::IRetryPolicy<EStatus>::GetNoRetryPolicy();
+}
+
+IRetryPolicy::TPtr
+IRetryPolicy::GetExponentialBackoffPolicy(TDuration minDelay, TDuration minLongRetryDelay, TDuration maxDelay,
+                                          size_t maxRetries, TDuration maxTime, double scaleFactor,
+                                          std::function<ERetryErrorClass(EStatus)> customRetryClassFunction) {
+    return ::IRetryPolicy<EStatus>::GetExponentialBackoffPolicy(
+        customRetryClassFunction ? customRetryClassFunction : NYdb::NPersQueue::GetRetryErrorClass, minDelay,
+        minLongRetryDelay, maxDelay, maxRetries, maxTime, scaleFactor);
+}
+
+IRetryPolicy::TPtr
+IRetryPolicy::GetFixedIntervalPolicy(TDuration delay, TDuration longRetryDelay, size_t maxRetries, TDuration maxTime,
+                                     std::function<ERetryErrorClass(EStatus)> customRetryClassFunction) {
+    return ::IRetryPolicy<EStatus>::GetFixedIntervalPolicy(
+        customRetryClassFunction ? customRetryClassFunction : NYdb::NPersQueue::GetRetryErrorClass, delay,
+        longRetryDelay, maxRetries, maxTime);
+}
+
+std::shared_ptr<IReadSession> TTopicClient::CreateReadSession(const TReadSessionSettings& settings) {
+    return Impl_->CreateReadSession(settings);
 }
 
 } // namespace NYdb::NTopic

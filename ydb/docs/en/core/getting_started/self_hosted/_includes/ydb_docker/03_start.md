@@ -36,8 +36,10 @@ If started successfully, you'll see the ID of the created container.
 - `GRPC_PORT`: The port for unencrypted connections. Defaults to 2136.
 - `GRPC_TLS_PORT`: The port for TLS connections. Defaults to 2135.
 - `MON_PORT`: The port for the built-in web UI with [monitoring and introspection tools](../../../../maintenance/embedded_monitoring/ydb_monitoring.md). Defaults to 8765.
-- `YDB_PDISK_SIZE`: The size of the disk for storing data in `<NUM>GB` format (for example, `YDB_PDISK_SIZE=128GB`). Acceptable values: `64GB` and higher. Defaults to 64GB.
+- `YDB_PDISK_SIZE`: The size of the disk for storing data in `<NUM>GB` format (for example, `YDB_PDISK_SIZE=128GB`). Acceptable values: `80GB` and higher. Defaults to 80GB.
 - `YDB_USE_IN_MEMORY_PDISKS`: Using disks in memory. Acceptable values are `true` and `false`, defaults to `false`. If enabled, the container's file system is not used for working with data, all data is only stored in the memory of a process and is lost when it's stopped. Currently, you can start the container on Apple M1 in this mode only.
+
+{% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}
 
 `-p` means publishing container ports on the host system. All applicable ports must be explicitly listed even if default values are used.
 
@@ -46,4 +48,3 @@ If started successfully, you'll see the ID of the created container.
 It may take several minutes to initialize the Docker container, depending on the allocated resources. The database will not be available until the container is initialized.
 
 {% endnote %}
-

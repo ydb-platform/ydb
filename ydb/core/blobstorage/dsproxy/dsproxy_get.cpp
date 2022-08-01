@@ -331,7 +331,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor<TBlobSt
                 TStringStream errorReason;
                 errorReason << "Got VMultiPutResult itemStatus# " << itemStatus << " from VDiskId# " << vDiskId;
                 ErrorReason = errorReason.Str();
-                GetImpl.PrepareReply(itemStatus, LogCtx, outGetResult);
+                GetImpl.PrepareReply(itemStatus, ErrorReason, LogCtx, outGetResult);
                 return true;
             } else {
                 R_LOG_DEBUG_S("BPG27", "Handle TEvVMultiPutResultItem"
@@ -543,8 +543,7 @@ public:
     friend class TBlobStorageGroupRequestActor<TBlobStorageGroupGetRequest>;
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         TAutoPtr<TEvBlobStorage::TEvGetResult> getResult;
-        GetImpl.PrepareReply(status, LogCtx, getResult);
-        getResult->ErrorReason = ErrorReason;
+        GetImpl.PrepareReply(status, ErrorReason, LogCtx, getResult);
         SendReplyAndDie(getResult);
         return;
     }

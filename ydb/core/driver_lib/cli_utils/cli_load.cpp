@@ -59,5 +59,45 @@ int LoadRequest(TCommandConfig& /*cmdConf*/, int argc, char **argv) {
     return EXIT_SUCCESS;
 }
 
+int DsLoadRequest(TCommandConfig& /*cmdConf*/, int argc, char** argv) {
+    TCmdLoadConfig config;
+    config.Parse(argc, argv);
+
+    TAutoPtr<NMsgBusProxy::TBusDsTestLoadRequest> request(new NMsgBusProxy::TBusDsTestLoadRequest);
+    const bool isOk = ::google::protobuf::TextFormat::ParseFromString(config.Proto, &request->Record);
+    if (!isOk) {
+        ythrow TWithBackTrace<yexception>() << "Error parsing protobuf: '" << config.Proto << "'";
+    }
+
+    TAutoPtr<NBus::TBusMessage> reply;
+    NBus::EMessageStatus status = config.SyncCall(request, reply);
+
+    switch (status) {
+        case NBus::MESSAGE_OK: {
+            const NKikimrClient::TDsTestLoadResponse& response =
+                static_cast<NMsgBusProxy::TBusDsTestLoadResponse *>(reply.Get())->Record;
+            bool status = true;
+            for (const NKikimrClient::TDsTestLoadResponse::TItem& item : response.GetItems()) {
+                if (item.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
+                    Cerr << "NodeId# " << item.GetNodeId() << " ErrorReason# " << item.GetErrorReason() << Endl;
+                    status = false;
+                }
+            }
+            if (!status) {
+                return EXIT_FAILURE;
+            }
+            break;
+        }
+
+        default: {
+            const char *description = NBus::MessageStatusDescription(status);
+            Cerr << description << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
 } // NKikimr
 } // NDriverClient

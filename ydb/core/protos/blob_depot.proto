@@ -174,10 +174,11 @@ message TEvResolve {
         optional bool IncludeBeginning = 2 [default = true];
         optional bytes EndingKey = 3; // end with the key beyond the last one (if not set)
         optional bool IncludeEnding = 4 [default = false];
-        optional uint32 MaxKeys = 5 [default = 0];
+        optional uint32 MaxKeys = 5 [default = 0]; // zero or unset value means infinite amount
         optional bool ReturnMeta = 6 [default = false];
         optional bool ReturnOwners = 7 [default = false];
         optional bool Reverse = 8 [default = false]; // reverse output
+        optional uint64 Cookie = 9; // request cookie to match response item
     }
 
     repeated TItem Items = 1;
@@ -185,7 +186,7 @@ message TEvResolve {
 
 message TEvResolveResult {
     message TResolvedKey {
-        optional uint32 ItemIndex = 1;
+        optional uint64 Cookie = 1;
         optional bytes Key = 2;
         repeated TValueChain ValueChain = 3;
         optional bytes Meta = 4;

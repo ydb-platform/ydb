@@ -19,9 +19,11 @@
 
 #include <ydb/core/util/queue_inplace.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <library/cpp/monlib/service/pages/templates.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 #include <util/generic/set.h>
 #include <util/generic/maybe.h>
@@ -114,9 +116,10 @@ namespace NKikimr {
                 , ExtQueueId(extQueueId)
                 , ClientId(clientId)
                 , ActorId(Ev->Sender)
-                , Span(9 /*verbosity*/, NWilson::ERelation::FollowsFrom, std::move(Ev->TraceId), now, "VDisk.PutInQueue")
+                , Span(TWilson::VDiskTopLevel, std::move(Ev->TraceId), "VDisk.SkeletonFront.Queue")
             {
                 Span.Attribute("QueueName", std::move(name));
+                Ev->TraceId = Span.GetTraceId();
             }
         };
 
@@ -1350,10 +1353,23 @@ namespace NKikimr {
             const TCgiParameters& cgi = ev->Get()->Request.GetParams();
             const TString& type = cgi.Get("type");
             TString html = (type == TString()) ? GenerateHtmlState(ctx) : TString();
+
             auto aid = ctx.Register(CreateFrontSkeletonMonRequestHandler(SelfVDiskId, ctx.SelfID, SkeletonId,
                 ctx.SelfID, Config, Top, ev, html));
             ActiveActors.Insert(aid);
         }
+
+        void Handle(TEvVDiskStatRequest::TPtr &ev) {
+            ev->Rewrite(ev->GetTypeRewrite(), SkeletonId);
+            TActivationContext::Send(ev.Release());
+        }
+
+        void Handle(TEvGetLogoBlobRequest::TPtr &ev) {
+            auto aid = Register(CreateFrontSkeletonGetLogoBlobRequestHandler(SelfVDiskId, SelfId(), SkeletonId,
+                Config, Top, ev));
+            ActiveActors.Insert(aid);
+        }
+
 
         void Handle(TEvVDiskRequestCompleted::TPtr &ev, const TActorContext &ctx) {
             const TVMsgContext &msgCtx = ev->Get()->Ctx;
@@ -1559,6 +1575,8 @@ namespace NKikimr {
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            hFunc(TEvVDiskStatRequest, Handle)
+            hFunc(TEvGetLogoBlobRequest, Handle)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
@@ -1600,6 +1618,8 @@ namespace NKikimr {
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            hFunc(TEvVDiskStatRequest, Handle)
+            hFunc(TEvGetLogoBlobRequest, Handle)
             HFunc(TEvFrontRecoveryStatus, Handle)
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
@@ -1640,6 +1660,8 @@ namespace NKikimr {
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            hFunc(TEvVDiskStatRequest, Handle)
+            hFunc(TEvGetLogoBlobRequest, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)
             CFunc(NActors::TEvents::TSystem::PoisonPill, Die)
             HFunc(TEvents::TEvActorDied, Handle)
@@ -1753,6 +1775,8 @@ namespace NKikimr {
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
+            hFunc(TEvVDiskStatRequest, Handle)
+            hFunc(TEvGetLogoBlobRequest, Handle)
             // TEvFrontRecoveryStatus
             HFunc(TEvVDiskRequestCompleted, Handle)
             CFunc(TEvBlobStorage::EvTimeToUpdateWhiteboard, UpdateWhiteboard)

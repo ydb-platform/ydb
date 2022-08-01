@@ -95,6 +95,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
             case NKikimrProto::OUT_OF_SPACE:
                 FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
                 if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
+                    ErrorReason = "Failed disks check fails on non-OK event status";
                     return ReplyAndDie(NKikimrProto::ERROR);
                 }
                 break;
@@ -106,6 +107,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
                             " TEvVGetResult# " << ev->Get()->ToString());
                     FailedDisks |= TBlobStorageGroupInfo::TGroupVDisks(&Info->GetTopology(), vdisk);
                     if (!Info->GetQuorumChecker().CheckFailModelForGroup(FailedDisks)) {
+                        ErrorReason = "Failed disks check fails on OK event status";
                         return ReplyAndDie(NKikimrProto::ERROR);
                     }
                 }
@@ -193,6 +195,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
                 switch (tracker.GetBlobState(Info.Get(), &lostByIngress)) {
                     case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
                         R_LOG_ERROR_S("DSR02", "disintegrated");
+                        ErrorReason = "BS disintegrated";
                         return ReplyAndDie(NKikimrProto::ERROR);
 
                     case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
@@ -247,7 +250,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
 
         A_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
 
-        SendToBSProxy(SelfId(), Info->GroupID, get.release(), 0, Span);
+        SendToBSProxy(SelfId(), Info->GroupID, get.release(), 0, Span.GetTraceId());
 
         // switch state
         Become(&TThis::StateGet);
@@ -269,6 +272,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         NKikimrProto::EReplyStatus status = getResult.Status;
         if (status != NKikimrProto::OK) {
             R_LOG_ERROR_S("DSR03", "Handle TEvGetResult status# " << NKikimrProto::EReplyStatus_Name(status).data());
+            ErrorReason = getResult.ErrorReason;
             ReplyAndDie(status);
             return;
         }
@@ -289,6 +293,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
                     << " Response[" << i << "]# " << NKikimrProto::EReplyStatus_Name(response.Status)
                     << " BlobsToGet# " << DumpBlobsToGet()
                     << " TEvGetResult# " << ev->Get()->ToString());
+                ErrorReason = getResult.ErrorReason;
                 ReplyAndDie(NKikimrProto::ERROR);
                 return;
             }

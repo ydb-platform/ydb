@@ -301,6 +301,10 @@ struct TEvDataShard {
 
         EvCompactBorrowedResult,
 
+        EvTestLoadRequest,
+        EvTestLoadResponse,
+        EvTestLoadFinished,
+
         EvEnd
     };
 
@@ -1567,6 +1571,22 @@ struct TEvDataShard {
         explicit TEvReplicationSourceOffsetsCancel(ui64 readId) {
             Record.SetReadId(readId);
         }
+    };
+
+    struct TEvTestLoadRequest
+        : public TEventPB<TEvTestLoadRequest,
+                          NKikimrTxDataShard::TEvTestLoadRequest,
+                          EvTestLoadRequest>
+    {
+        TEvTestLoadRequest() = default;
+    };
+
+    struct TEvTestLoadResponse
+        : public TEventPB<TEvTestLoadResponse,
+                          NKikimrTxDataShard::TEvTestLoadResponse,
+                          EvTestLoadResponse>
+    {
+        TEvTestLoadResponse() = default;
     };
 
 };

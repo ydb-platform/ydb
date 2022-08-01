@@ -82,6 +82,7 @@ struct TBlobState {
     bool IsChanged = false;
     bool IsDone = false;
     std::vector<std::pair<ui64, ui32>> *ExtraBlockChecks = nullptr;
+    NWilson::TSpan *Span = nullptr;
 
     void Init(const TLogoBlobID &id, const TBlobStorageGroupInfo &Info);
     void AddNeeded(ui64 begin, ui64 size);
@@ -129,15 +130,17 @@ struct TDiskPutRequest {
     bool IsHandoff;
     ui8 BlobIdx;
     std::vector<std::pair<ui64, ui32>> *ExtraBlockChecks;
+    NWilson::TSpan *Span;
 
     TDiskPutRequest(const TLogoBlobID &id, TString buffer, EPutReason reason, bool isHandoff,
-            std::vector<std::pair<ui64, ui32>> *extraBlockChecks, ui8 blobIdx = 0)
+            std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TSpan *span, ui8 blobIdx)
         : Id(id)
         , Buffer(std::move(buffer))
         , Reason(reason)
         , IsHandoff(isHandoff)
         , BlobIdx(blobIdx)
         , ExtraBlockChecks(extraBlockChecks)
+        , Span(span)
     {}
 };
 
@@ -156,7 +159,7 @@ struct TGroupDiskRequests {
     void AddGet(const ui32 diskOrderNumber, const TLogoBlobID &id, const ui32 shift, const ui32 size);
     void AddPut(const ui32 diskOrderNumber, const TLogoBlobID &id, TString buffer,
         TDiskPutRequest::EPutReason putReason, bool isHandoff, std::vector<std::pair<ui64, ui32>> *extraBlockChecks,
-        ui8 blobIdx = 0);
+        NWilson::TSpan *span, ui8 blobIdx);
 };
 
 struct TBlackboard;
@@ -199,7 +202,7 @@ struct TBlackboard {
     {}
 
     void AddNeeded(const TLogoBlobID &id, ui32 inShift, ui32 inSize);
-    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData, std::vector<std::pair<ui64, ui32>> *extraBlockChecks);
+    void AddPartToPut(const TLogoBlobID &id, ui32 partIdx, TString &partData);
     void MarkBlobReadyToPut(const TLogoBlobID &id, ui8 blobIdx = 0);
     void MoveBlobStateToDone(const TLogoBlobID &id);
     void AddResponseData(const TLogoBlobID &id, ui32 orderNumber, ui32 shift, TString &data);
@@ -220,6 +223,10 @@ struct TBlackboard {
             blob.IsChanged = true;
         }
     }
+
+    void RegisterBlobForPut(const TLogoBlobID& id, std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TSpan *span);
+
+    TBlobState& operator [](const TLogoBlobID& id);
 };
 
 }//NKikimr

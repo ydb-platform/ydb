@@ -79,6 +79,9 @@
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
 
+#define LOG_T(stream) \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, Params.QueryId << " RunActor : " << stream)
+
 namespace NYq {
 
 using namespace NActors;
@@ -300,6 +303,14 @@ public:
                 QueryCounters,
                 CreatedAt
                 ));
+
+        if (!Params.RequestStartedAt) {
+            Params.RequestStartedAt = TInstant::Now();
+            Fq::Private::PingTaskRequest request;
+            *request.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(Params.RequestStartedAt.MilliSeconds());
+            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateQueryInfoCookie);
+        }
+
         Become(&TRunActor::StateFuncWrapper<&TRunActor::StateFunc>);
 
         try {
@@ -336,6 +347,7 @@ private:
         hFunc(TEvents::TEvForwardPingResponse, Handle);
         hFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
         hFunc(TEvents::TEvRaiseTransientIssues, Handle);
+        hFunc(TEvDqStats, Handle);
     )
 
     STRICT_STFUNC(FinishStateFunc,
@@ -351,6 +363,7 @@ private:
         IgnoreFunc(TEvents::TEvQueryActionResult);
         IgnoreFunc(TEvCheckpointCoordinator::TEvZeroCheckpointDone);
         IgnoreFunc(TEvents::TEvRaiseTransientIssues);
+        IgnoreFunc(TEvDqStats);
     )
 
     void KillExecuter() {
@@ -395,11 +408,8 @@ private:
     bool TimeLimitExceeded() {
         if (Params.ExecutionTtl != TDuration::Zero()) {
             auto currentTime = TInstant::Now();
-            auto started_at = Params.RequestStartedAt;
-            if (started_at == TInstant::Zero()) {
-                started_at = currentTime;
-            }
-            auto deadline = started_at  + Params.ExecutionTtl;
+            auto startedAt = Params.RequestStartedAt ? Params.RequestStartedAt : currentTime;
+            auto deadline = startedAt  + Params.ExecutionTtl;
 
             if (currentTime >= deadline) {
                 Abort("Execution time limit exceeded", YandexQuery::QueryMeta::ABORTED_BY_SYSTEM);
@@ -612,7 +622,7 @@ private:
     }
 
     void Handle(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
+        LOG_T("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
             ResignQuery(NYql::NDqProto::StatusIds::UNAVAILABLE);
             return;
@@ -638,7 +648,7 @@ private:
     }
 
     void HandleFinish(TEvents::TEvForwardPingResponse::TPtr& ev) {
-        LOG_D("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
+        LOG_T("Forward ping response. Success: " << ev->Get()->Success << ". Cookie: " << ev->Cookie);
         if (!ev->Get()->Success) { // Failed setting new status or lease was lost
             Fail("Failed to write finalizing status");
             return;
@@ -712,6 +722,12 @@ private:
         NYql::IssuesToMessage(ev->Get()->TransientIssues, request.mutable_transient_issues());
 
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
+    }
+
+    void Handle(TEvDqStats::TPtr& ev) {
+        Fq::Private::PingTaskRequest request;
+        *request.mutable_transient_issues() = ev->Get()->Record.issues();
+        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
     }
 
     i32 UpdateResultIndices() {
@@ -1073,7 +1089,6 @@ private:
 
     void RunDqGraphs() {
         if (DqGraphParams.empty()) {
-            *QueryStateUpdateRequest.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(CreatedAt.MilliSeconds());
             QueryStateUpdateRequest.set_resign_query(false);
             const bool isOk = Issues.Size() == 0;
             Finish(GetFinishStatus(isOk));
@@ -1084,7 +1099,6 @@ private:
             Params.Status = YandexQuery::QueryMeta::RUNNING;
             Fq::Private::PingTaskRequest request;
             request.set_status(YandexQuery::QueryMeta::RUNNING);
-            *request.mutable_started_at() = google::protobuf::util::TimeUtil::MillisecondsToTimestamp(Now().MilliSeconds());
             Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, UpdateQueryInfoCookie);
         }
 

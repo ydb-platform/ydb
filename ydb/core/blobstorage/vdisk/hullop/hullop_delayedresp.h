@@ -1,5 +1,9 @@
 #pragma once
+
 #include "defs.h"
+
+#include <ydb/core/base/wilson.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 
@@ -11,17 +15,23 @@ namespace NKikimr {
     ///////////////////////////////////////////////////////////////////////////////////////////////////////
     class TDelayedResponses {
     public:
-        using TAction = std::function<void (const TActorId &id, ui64 cookie, IEventBase *msg)>;
+        using TAction = std::function<void (const TActorId &id, ui64 cookie, NWilson::TTraceId traceId, IEventBase *msg)>;
 
-        void Put(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, ui64 lsn) {
-            Map.emplace(lsn, TValue {recipient, recipientCookie, std::unique_ptr<IEventBase>(msg)});
+        void Put(IEventBase *msg, const TActorId &recipient, ui64 recipientCookie, NWilson::TTraceId traceId, ui64 lsn) {
+            Map.emplace(lsn, TValue{
+                recipient,
+                recipientCookie,
+                NWilson::TSpan(TWilson::VDiskInternals, std::move(traceId), "VDisk.DelayedResponses.Queue"),
+                std::unique_ptr<IEventBase>(msg)
+            });
         }
 
         void ConfirmLsn(ui64 lsn, const TAction &action) {
             TMap::iterator it = Map.begin();
             while (it != Map.end() && it->first <= lsn) {
                 TValue &v = it->second;
-                action(v.Recipient, v.RecipientCookie, v.Msg.release());
+                v.Span.EndOk();
+                action(v.Recipient, v.RecipientCookie, v.Span.GetTraceId(), v.Msg.release());
                 ++it;
             }
             // remove all traversed elements
@@ -32,6 +42,7 @@ namespace NKikimr {
         struct TValue {
             TActorId Recipient;
             ui64 RecipientCookie;
+            NWilson::TSpan Span;
             std::unique_ptr<IEventBase> Msg;
         };
 

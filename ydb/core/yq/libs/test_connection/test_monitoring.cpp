@@ -63,12 +63,16 @@ public:
         TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Starting test monitoring connection actor. Actor id: " << SelfId());
         Become(&TTestMonitoringConnectionActor::StateFunc);
 
-        HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
-        const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest();
-        auto retryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy();
-        const TActorId httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, retryPolicy));
-        Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
-        TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " send request " << httpRequest->Method << " " << httpRequest->Protocol << " " << httpRequest->Host << " " << httpRequest->URL << " " << httpRequest->Body);
+        try {
+            HttpProxyId = Register(NHttp::CreateHttpProxy(NMonitoring::TMetricRegistry::SharedInstance()));
+            const NHttp::THttpOutgoingRequestPtr httpRequest = BuildSolomonRequest();
+            auto retryPolicy = NYql::NDq::THttpSenderRetryPolicy::GetNoRetryPolicy();
+            const TActorId httpSenderId = Register(NYql::NDq::CreateHttpSenderActor(SelfId(), HttpProxyId, retryPolicy));
+            Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
+            TC_LOG_T(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " send request " << httpRequest->Method << " " << httpRequest->Protocol << " " << httpRequest->Host << " " << httpRequest->URL << " " << httpRequest->Body);
+        } catch (...) {
+            ReplyError(CurrentExceptionMessage());
+        }
     }
 
     void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {

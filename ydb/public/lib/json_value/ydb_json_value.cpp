@@ -802,6 +802,10 @@ namespace {
                     || value.GetType() == NJson::EJsonValueType::JSON_UINTEGER && type == NJson::EJsonValueType::JSON_INTEGER) {
                     return;
                 }
+                if ((value.GetType() == NJson::EJsonValueType::JSON_INTEGER || value.GetType() == NJson::EJsonValueType::JSON_UINTEGER)
+                    && type == NJson::EJsonValueType::JSON_DOUBLE) {
+                    return;
+                }
                 TStringStream str;
                 NJsonWriter::TBuf writer(NJsonWriter::HEM_UNSAFE, &str);
                 writer.WriteJsonValue(&value);

@@ -31,8 +31,8 @@ namespace NKikimr::NBlobDepot {
             void IssueResolve() {
                 auto& msg = *Event->Get<TEvBlobStorage::TEvRange>();
 
-                TStringBuf from = msg.From.AsBinaryString();
-                TStringBuf to = msg.To.AsBinaryString();
+                TString from = msg.From.AsBinaryString();
+                TString to = msg.To.AsBinaryString();
                 const bool reverse = msg.To < msg.From;
                 if (reverse) {
                     std::swap(from, to);
@@ -40,9 +40,9 @@ namespace NKikimr::NBlobDepot {
 
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
-                item->SetBeginningKey(from.data(), from.size());
+                item->SetBeginningKey(from);
                 item->SetIncludeBeginning(true);
-                item->SetEndingKey(to.data(), to.size());
+                item->SetEndingKey(to);
                 item->SetIncludeEnding(true);
                 item->SetReverse(reverse);
 
@@ -53,9 +53,9 @@ namespace NKikimr::NBlobDepot {
             void IssueResolve(TLogoBlobID id, size_t index) {
                 NKikimrBlobDepot::TEvResolve resolve;
                 auto *item = resolve.AddItems();
-                item->SetBeginningKey(id.GetRaw(), 3 * sizeof(ui64));
+                item->SetBeginningKey(id.AsBinaryString());
                 item->SetIncludeBeginning(true);
-                item->SetEndingKey(id.GetRaw(), 3 * sizeof(ui64));
+                item->SetEndingKey(id.AsBinaryString());
                 item->SetIncludeEnding(true);
 
                 Agent.Issue(std::move(resolve), this, std::make_shared<TExtraResolveContext>(index));
@@ -85,8 +85,7 @@ namespace NKikimr::NBlobDepot {
 
                 for (const auto& key : msg.GetResolvedKeys()) {
                     const TString& blobId = key.GetKey();
-                    Y_VERIFY(blobId.size() == 3 * sizeof(ui64));
-                    TLogoBlobID id(reinterpret_cast<const ui64*>(blobId.data()));
+                    auto id = TLogoBlobID::FromBinary(blobId);
 
                     const size_t index = context
                         ? context->Obtain<TExtraResolveContext>().Index

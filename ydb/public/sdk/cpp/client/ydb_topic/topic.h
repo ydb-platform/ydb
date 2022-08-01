@@ -1,6 +1,7 @@
 #pragma once
-#include <ydb/public/api/grpc/draft/ydb_topic_v1.grpc.pb.h>
+#include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 #include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/logger/log.h>
@@ -405,10 +406,739 @@ struct TDropTopicSettings : public TOperationRequestSettings<TDropTopicSettings>
 // Settings for describe resource request.
 struct TDescribeTopicSettings : public TOperationRequestSettings<TDescribeTopicSettings> {};
 
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+//! Session metainformation.
+struct TWriteSessionMeta: public TThrRefBase {
+    using TPtr = TIntrusivePtr<TWriteSessionMeta>;
+
+    //! User defined fields.
+    THashMap<TString, TString> Fields;
+};
+
+//! Event that is sent to client during session destruction.
+struct TSessionClosedEvent: public TStatus {
+    using TStatus::TStatus;
+
+    TString DebugString() const;
+};
+
+struct TReaderCounters: public TThrRefBase {
+    using TSelf = TReaderCounters;
+    using TPtr = TIntrusivePtr<TSelf>;
+
+    TReaderCounters() = default;
+    explicit TReaderCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr Errors;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CurrentSessionLifetimeMs;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesRead;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesRead;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesReadCompressed;
+
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightUncompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightCompressed;
+    ::NMonitoring::TDynamicCounters::TCounterPtr BytesInflightTotal;
+    ::NMonitoring::TDynamicCounters::TCounterPtr MessagesInflight;
+
+    //! Histograms reporting % usage of memory limit in time.
+    //! Provides a histogram looking like: 10% : 100ms, 20%: 300ms, ... 50%: 200ms, ... 100%: 50ms
+    //! Which means < 10% memory usage was observed for 100ms during the period and 50% usage was observed for 200ms.
+    //! Used to monitor if the read session successfully deals with data flow provided. Larger values in higher buckets
+    //! mean that read session is close to overflow (or being overflown) for major periods of time.
+    //!
+    //! Total memory usage.
+    ::NMonitoring::THistogramPtr TotalBytesInflightUsageByTime;
+    //! Memory usage by messages waiting that are ready to be received by user.
+    ::NMonitoring::THistogramPtr UncompressedBytesInflightUsageByTime;
+    //! Memory usage by compressed messages pending for decompression.
+    ::NMonitoring::THistogramPtr CompressedBytesInflightUsageByTime;
+};
+
+//! Partition session.
+struct TPartitionSession: public TThrRefBase {
+    using TPtr = TIntrusivePtr<TPartitionSession>;
+
+public:
+    //! Request partition session status.
+    //! Result will come to TPartitionSessionStatusEvent.
+    virtual void RequestStatus() = 0;
+
+    //!
+    //! Properties.
+    //!
+
+    //! Unique identifier of partition session.
+    //! It is unique within one read session.
+    ui64 GetPartitionSessionId() const {
+        return PartitionSessionId;
+    }
+
+    //! Topic path.
+    const TString& GetTopicPath() const {
+        return TopicPath;
+    }
+
+    //! Partition id.
+    ui64 GetPartitionId() const {
+        return PartitionId;
+    }
+
+protected:
+    ui64 PartitionSessionId;
+    TString TopicPath;
+    ui64 PartitionId;
+};
+
+//! Events for read session.
+struct TReadSessionEvent {
+    //! Event with new data.
+    //! Contains batch of messages from single partition session.
+    struct TDataReceivedEvent {
+        struct TMessageInformation {
+            TMessageInformation(ui64 offset, TString producerId, ui64 seqNo, TInstant createTime, TInstant writeTime,
+                                TWriteSessionMeta::TPtr meta, ui64 uncompressedSize, TString messageGroupId);
+            ui64 Offset;
+            TString ProducerId;
+            ui64 SeqNo;
+            TInstant CreateTime;
+            TInstant WriteTime;
+            TWriteSessionMeta::TPtr Meta;
+            ui64 UncompressedSize;
+            TString MessageGroupId;
+        };
+
+        class IMessage {
+        public:
+            IMessage(const TString& data, TPartitionSession::TPtr partitionSession);
+
+            virtual ~IMessage() = default;
+
+            virtual const TString& GetData() const;
+
+            //! Partition session. Same as in batch.
+            const TPartitionSession::TPtr& GetPartitionSession() const;
+
+            virtual void Commit() = 0;
+
+            TString DebugString(bool printData = false) const;
+            virtual void DebugString(TStringBuilder& ret, bool printData = false) const = 0;
+
+        protected:
+            TString Data;
+
+            TPartitionSession::TPtr PartitionSession;
+        };
+
+        //! Single message.
+        struct TMessage: public IMessage {
+            TMessage(const TString& data, std::exception_ptr decompressionException,
+                     const TMessageInformation& information, TPartitionSession::TPtr partitionSession);
+
+            //! User data.
+            //! Throws decompressor exception if decompression failed.
+            const TString& GetData() const override;
+
+            bool HasException() const;
+
+            //! Message offset.
+            ui64 GetOffset() const;
+
+            //! Producer id.
+            const TString& GetProducerId() const;
+
+            //! Message group id.
+            const TString& GetMessageGroupId() const;
+
+            //! Sequence number.
+            ui64 GetSeqNo() const;
+
+            //! Message creation timestamp.
+            TInstant GetCreateTime() const;
+
+            //! Message write timestamp.
+            TInstant GetWriteTime() const;
+
+            //! Metainfo.
+            const TWriteSessionMeta::TPtr& GetMeta() const;
+
+            //! Commits single message.
+            void Commit() override;
+
+            using IMessage::DebugString;
+            void DebugString(TStringBuilder& ret, bool printData = false) const override;
+
+        private:
+            std::exception_ptr DecompressionException;
+            TMessageInformation Information;
+        };
+
+        struct TCompressedMessage: public IMessage {
+            //! Message codec
+            ECodec GetCodec() const;
+
+            //! Message offset.
+            ui64 GetOffset(ui64 index) const;
+
+            //! Producer id
+            const TString& GetProducerId(ui64 index) const;
+
+            //! Message group id.
+            const TString& GetMessageGroupId(ui64 index) const;
+
+            //! Sequence number.
+            ui64 GetSeqNo(ui64 index) const;
+
+            //! Message creation timestamp.
+            TInstant GetCreateTime(ui64 index) const;
+
+            //! Message write timestamp.
+            TInstant GetWriteTime(ui64 index) const;
+
+            //! Metainfo.
+            const TWriteSessionMeta::TPtr& GetMeta(ui64 index) const;
+
+            //! Uncompressed size.
+            ui64 GetUncompressedSize(ui64 index) const;
+
+            virtual ~TCompressedMessage() {
+            }
+            TCompressedMessage(ECodec codec, const TString& data, const TVector<TMessageInformation>& information,
+                               TPartitionSession::TPtr partitionSession);
+
+            //! Commits all offsets in compressed message.
+            void Commit() override;
+
+            using IMessage::DebugString;
+            void DebugString(TStringBuilder& ret, bool printData = false) const override;
+
+        private:
+            ECodec Codec;
+            TVector<TMessageInformation> Information;
+        };
+
+        //! Partition session.
+        const TPartitionSession::TPtr& GetPartitionSession() const {
+            return PartitionSession;
+        }
+
+        bool HasCompressedMessages() const {
+            return !CompressedMessages.empty();
+        }
+
+        size_t GetMessagesCount() const {
+            return Messages.size() + CompressedMessages.size();
+        }
+
+        //! Get messages.
+        TVector<TMessage>& GetMessages() {
+            CheckMessagesFilled(false);
+            return Messages;
+        }
+
+        const TVector<TMessage>& GetMessages() const {
+            CheckMessagesFilled(false);
+            return Messages;
+        }
+
+        //! Get compressed messages.
+        TVector<TCompressedMessage>& GetCompressedMessages() {
+            CheckMessagesFilled(true);
+            return CompressedMessages;
+        }
+
+        const TVector<TCompressedMessage>& GetCompressedMessages() const {
+            CheckMessagesFilled(true);
+            return CompressedMessages;
+        }
+
+        //! Commits all messages in batch.
+        void Commit();
+
+        TString DebugString(bool printData = false) const;
+
+        TDataReceivedEvent(TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
+                           TPartitionSession::TPtr partitionSession);
+
+    private:
+        void CheckMessagesFilled(bool compressed) const {
+            Y_VERIFY(!Messages.empty() || !CompressedMessages.empty());
+            if (compressed && CompressedMessages.empty()) {
+                ythrow yexception() << "cannot get compressed messages, parameter decompress=true for read session";
+            }
+            if (!compressed && Messages.empty()) {
+                ythrow yexception() << "cannot get decompressed messages, parameter decompress=false for read session";
+            }
+        }
+
+    private:
+        TVector<TMessage> Messages;
+        TVector<TCompressedMessage> CompressedMessages;
+        TPartitionSession::TPtr PartitionSession;
+        std::vector<std::pair<ui64, ui64>> OffsetRanges;
+    };
+
+    //! Acknowledgement for commit request.
+    struct TCommitOffsetAcknowledgementEvent {
+        TCommitOffsetAcknowledgementEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset);
+
+        //! Partition session.
+        const TPartitionSession::TPtr& GetPartitionSession() const {
+            return PartitionSession;
+        }
+
+        //! Committed offset.
+        //! This means that from now the first available
+        //! message offset in current partition
+        //! for current consumer is this offset.
+        //! All messages before are committed and futher never be available.
+        ui64 GetCommittedOffset() const {
+            return CommittedOffset;
+        }
+
+        TString DebugString() const;
+
+    private:
+        TPartitionSession::TPtr PartitionSession;
+        ui64 CommittedOffset;
+    };
+
+    //! Server command for creating and starting partition session.
+    struct TStartPartitionSessionEvent {
+        explicit TStartPartitionSessionEvent(TPartitionSession::TPtr, ui64 committedOffset, ui64 endOffset);
+
+        const TPartitionSession::TPtr& GetPartitionSession() const {
+            return PartitionSession;
+        }
+
+        //! Current committed offset in partition session.
+        ui64 GetCommittedOffset() const {
+            return CommittedOffset;
+        }
+
+        //! Offset of first not existing message in partition session.
+        ui64 GetEndOffset() const {
+            return EndOffset;
+        }
+
+        //! Confirm partition session creation.
+        //! This signals that user is ready to receive data from this partition session.
+        //! If maybe is empty then no rewinding
+        void Confirm(TMaybe<ui64> readOffset = Nothing(), TMaybe<ui64> commitOffset = Nothing());
+
+        TString DebugString() const;
+
+    private:
+        TPartitionSession::TPtr PartitionSession;
+        ui64 CommittedOffset;
+        ui64 EndOffset;
+    };
+
+    //! Server command for stopping and destroying partition session.
+    //! Server can destroy partition session gracefully
+    //! for rebalancing among all topic clients.
+    struct TStopPartitionSessionEvent {
+        const TPartitionSession::TPtr& GetPartitionSession() const {
+            return PartitionSession;
+        }
+
+        //! Last offset of the partition session that was committed.
+        ui64 GetCommittedOffset() const {
+            return CommittedOffset;
+        }
+
+        //! Confirm partition session destruction.
+        //! Confirm has no effect if TPartitionSessionClosedEvent for same partition session with is received.
+        void Confirm();
+
+        TString DebugString() const;
+
+        TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset);
+
+    private:
+        TPartitionSession::TPtr PartitionSession;
+        ui64 CommittedOffset;
+    };
+
+    //! Status for partition session requested via TPartitionSession::RequestStatus()
+    struct TPartitionSessionStatusEvent {
+        TPartitionSessionStatusEvent(TPartitionSession::TPtr partitionSession, ui64 committedOffset, ui64 readOffset,
+                                     ui64 endOffset, TInstant writeTimeHighWatermark);
+
+        const TPartitionSession::TPtr& GetPartitionSession() const {
+            return PartitionSession;
+        }
+
+        //! Committed offset.
+        ui64 GetCommittedOffset() const {
+            return CommittedOffset;
+        }
+
+        //! Offset of next message (that is not yet read by session).
+        ui64 GetReadOffset() const {
+            return ReadOffset;
+        }
+
+        //! Offset of first not existing message in partition.
+        ui64 GetEndOffset() const {
+            return EndOffset;
+        }
+
+        //! Write time high watermark.
+        //! Write timestamp of next message written to this partition will be no less than this.
+        TInstant GetWriteTimeHighWatermark() const {
+            return WriteTimeHighWatermark;
+        }
+
+        TString DebugString() const;
+
+    private:
+        TPartitionSession::TPtr PartitionSession;
+        ui64 CommittedOffset = 0;
+        ui64 ReadOffset = 0;
+        ui64 EndOffset = 0;
+        TInstant WriteTimeHighWatermark;
+    };
+
+    //! Event that signals user about
+    //! partition session death.
+    //! This could be after graceful stop of partition session
+    //! or when connection with partition was lost.
+    struct TPartitionSessionClosedEvent {
+        enum class EReason {
+            StopConfirmedByUser,
+            Lost,
+            ConnectionLost,
+        };
+
+        const TPartitionSession::TPtr& GetPartitionSession() const {
+            return PartitionSession;
+        }
+
+        EReason GetReason() const {
+            return Reason;
+        }
+
+        TString DebugString() const;
+
+        TPartitionSessionClosedEvent(TPartitionSession::TPtr partitionSession, EReason reason);
+
+    private:
+        TPartitionSession::TPtr PartitionSession;
+        EReason Reason;
+    };
+
+    using TEvent = std::variant<TDataReceivedEvent, TCommitOffsetAcknowledgementEvent, TStartPartitionSessionEvent,
+                                TStopPartitionSessionEvent, TPartitionSessionStatusEvent, TPartitionSessionClosedEvent,
+                                TSessionClosedEvent>;
+};
+
+//! Set of offsets to commit.
+//! Class that could store offsets in order to commit them later.
+//! This class is not thread safe.
+class TDeferredCommit {
+public:
+    //! Add message to set.
+    void Add(const TReadSessionEvent::TDataReceivedEvent::TMessage& message);
+
+    //! Add all messages from dataReceivedEvent to set.
+    void Add(const TReadSessionEvent::TDataReceivedEvent& dataReceivedEvent);
+
+    //! Add offsets range to set.
+    void Add(const TPartitionSession::TPtr& partitionSession, ui64 startOffset, ui64 endOffset);
+
+    //! Add offset to set.
+    void Add(const TPartitionSession::TPtr& partitionSession, ui64 offset);
+
+    //! Commit all added offsets.
+    void Commit();
+
+    TDeferredCommit();
+    TDeferredCommit(const TDeferredCommit&) = delete;
+    TDeferredCommit(TDeferredCommit&&);
+    TDeferredCommit& operator=(const TDeferredCommit&) = delete;
+    TDeferredCommit& operator=(TDeferredCommit&&);
+
+    ~TDeferredCommit();
+
+private:
+    class TImpl;
+    THolder<TImpl> Impl;
+};
+
+//! Event debug string.
+TString DebugString(const TReadSessionEvent::TEvent& event);
+
+//! Retry policy.
+//! Calculates delay before next retry.
+//! Has several default implementations:
+//! - exponential backoff policy;
+//! - retries with fixed interval;
+//! - no retries.
+
+struct IRetryPolicy: ::IRetryPolicy<EStatus> {
+    //!
+    //! Default implementations.
+    //!
+
+    static TPtr GetDefaultPolicy(); // Exponential backoff with infinite retry attempts.
+    static TPtr GetNoRetryPolicy(); // Denies all kind of retries.
+
+    //! Randomized exponential backoff policy.
+    static TPtr GetExponentialBackoffPolicy(
+        TDuration minDelay = TDuration::MilliSeconds(10),
+        // Delay for statuses that require waiting before retry (such as OVERLOADED).
+        TDuration minLongRetryDelay = TDuration::MilliSeconds(200), TDuration maxDelay = TDuration::Seconds(30),
+        size_t maxRetries = std::numeric_limits<size_t>::max(), TDuration maxTime = TDuration::Max(),
+        double scaleFactor = 2.0, std::function<ERetryErrorClass(EStatus)> customRetryClassFunction = {});
+
+    //! Randomized fixed interval policy.
+    static TPtr GetFixedIntervalPolicy(TDuration delay = TDuration::MilliSeconds(100),
+                                       // Delay for statuses that require waiting before retry (such as OVERLOADED).
+                                       TDuration longRetryDelay = TDuration::MilliSeconds(300),
+                                       size_t maxRetries = std::numeric_limits<size_t>::max(),
+                                       TDuration maxTime = TDuration::Max(),
+                                       std::function<ERetryErrorClass(EStatus)> customRetryClassFunction = {});
+};
+
+class IExecutor: public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IExecutor>;
+    using TFunction = std::function<void()>;
+
+    // Is executor asynchronous.
+    virtual bool IsAsync() const = 0;
+
+    // Post function to execute.
+    virtual void Post(TFunction&& f) = 0;
+
+    // Start method.
+    // This method is idempotent.
+    // It can be called many times. Only the first one has effect.
+    void Start() {
+        with_lock(StartLock) {
+            if (!Started) {
+                DoStart();
+                Started = true;
+            }
+        }
+    }
+
+private:
+    virtual void DoStart() = 0;
+
+private:
+    bool Started = false;
+    TAdaptiveLock StartLock;
+};
+IExecutor::TPtr CreateThreadPoolExecutorAdapter(
+    std::shared_ptr<IThreadPool> threadPool); // Thread pool is expected to have been started.
+IExecutor::TPtr CreateThreadPoolExecutor(size_t threads);
+
+using TSessionClosedHandler = std::function<void(const TSessionClosedEvent&)>;
+
+//! Read settings for single topic.
+struct TTopicReadSettings {
+    using TSelf = TTopicReadSettings;
+
+    TTopicReadSettings() = default;
+    TTopicReadSettings(const TTopicReadSettings&) = default;
+    TTopicReadSettings(TTopicReadSettings&&) = default;
+    TTopicReadSettings(const TString& path) {
+        Path(path);
+    }
+
+    TTopicReadSettings& operator=(const TTopicReadSettings&) = default;
+    TTopicReadSettings& operator=(TTopicReadSettings&&) = default;
+
+    //! Path of topic to read.
+    FLUENT_SETTING(TString, Path);
+
+    //! Start reading from this timestamp.
+    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
+
+    //! Partition ids to read.
+    //! 0-based.
+    FLUENT_SETTING_VECTOR(ui64, PartitionIds);
+
+    //! Max message time lag. All messages older that now - MaxLag will be ignored.
+    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
+};
+
+//! Settings for read session.
+struct TReadSessionSettings: public TRequestSettings<TReadSessionSettings> {
+    using TSelf = TReadSessionSettings;
+
+    struct TEventHandlers {
+        using TSelf = TEventHandlers;
+
+        //! Set simple handler with data processing and also
+        //! set other handlers with default behaviour.
+        //! They automatically commit data after processing
+        //! and confirm partition session events.
+        //!
+        //! Sets the following handlers:
+        //! DataReceivedHandler: sets DataReceivedHandler to handler that calls dataHandler and (if
+        //! commitDataAfterProcessing is set) then calls Commit(). CommitAcknowledgementHandler to handler that does
+        //! nothing. CreatePartitionSessionHandler to handler that confirms event. StopPartitionSessionHandler to
+        //! handler that confirms event. PartitionSessionStatusHandler to handler that does nothing.
+        //! PartitionSessionClosedHandler to handler that does nothing.
+        //!
+        //! dataHandler: handler of data event.
+        //! commitDataAfterProcessing: automatically commit data after calling of dataHandler.
+        //! gracefulReleaseAfterCommit: wait for commit acknowledgements for all inflight data before confirming
+        //! partition session destroy.
+        TSelf& SimpleDataHandlers(std::function<void(TReadSessionEvent::TDataReceivedEvent&)> dataHandler,
+                                  bool commitDataAfterProcessing = false, bool gracefulStopAfterCommit = true);
+
+        //! Function to handle data events.
+        //! If this handler is set, data events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TDataReceivedEvent&)>, DataReceivedHandler);
+
+        //! Function to handle commit ack events.
+        //! If this handler is set, commit ack events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TCommitOffsetAcknowledgementEvent&)>,
+                       CommitOffsetAcknowledgementHandler);
+
+        //! Function to handle start partition session events.
+        //! If this handler is set, create partition session events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TStartPartitionSessionEvent&)>,
+                       StartPartitionSessionHandler);
+
+        //! Function to handle stop partition session events.
+        //! If this handler is set, destroy partition session events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TStopPartitionSessionEvent&)>,
+                       StopPartitionSessionHandler);
+
+        //! Function to handle partition session status events.
+        //! If this handler is set, partition session status events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionSessionStatusEvent&)>,
+                       PartitionSessionStatusHandler);
+
+        //! Function to handle partition session closed events.
+        //! If this handler is set, partition session closed events will be handled by handler,
+        //! otherwise sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TPartitionSessionClosedEvent&)>,
+                       PartitionSessionClosedHandler);
+
+        //! Function to handle session closed events.
+        //! If this handler is set, close session events will be handled by handler
+        //! and then sent to TReadSession::GetEvent().
+        //! Default value is empty function (not set).
+        FLUENT_SETTING(TSessionClosedHandler, SessionClosedHandler);
+
+        //! Function to handle all event types.
+        //! If event with current type has no handler for this type of event,
+        //! this handler (if specified) will be used.
+        //! If this handler is not specified, event can be received with TReadSession::GetEvent() method.
+        FLUENT_SETTING(std::function<void(TReadSessionEvent::TEvent&)>, CommonHandler);
+
+        //! Executor for handlers.
+        //! If not set, default single threaded executor will be used.
+        FLUENT_SETTING(IExecutor::TPtr, HandlersExecutor);
+    };
+
+    //! Consumer.
+    FLUENT_SETTING(TString, ConsumerName);
+
+    //! Topics.
+    FLUENT_SETTING_VECTOR(TTopicReadSettings, Topics);
+
+    //! Maximum memory usage for read session.
+    FLUENT_SETTING_DEFAULT(size_t, MaxMemoryUsageBytes, 100_MB);
+
+    //! Max message time lag. All messages older that now - MaxLag will be ignored.
+    FLUENT_SETTING_OPTIONAL(TDuration, MaxLag);
+
+    //! Start reading from this timestamp.
+    FLUENT_SETTING_OPTIONAL(TInstant, ReadFromTimestamp);
+
+    //! Policy for reconnections.
+    //! IRetryPolicy::GetDefaultPolicy() if null (not set).
+    FLUENT_SETTING(IRetryPolicy::TPtr, RetryPolicy);
+
+    //! Event handlers.
+    //! See description in TEventHandlers class.
+    FLUENT_SETTING(TEventHandlers, EventHandlers);
+
+    //! Decompress messages
+    FLUENT_SETTING_DEFAULT(bool, Decompress, true);
+
+    //! Executor for decompression tasks.
+    //! If not set, default executor will be used.
+    FLUENT_SETTING(IExecutor::TPtr, DecompressionExecutor);
+
+    //! Counters.
+    //! If counters are not provided explicitly,
+    //! they will be created inside session (without link with parent counters).
+    FLUENT_SETTING(TReaderCounters::TPtr, Counters);
+
+    FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
+
+    //! Log.
+    FLUENT_SETTING_OPTIONAL(TLog, Log);
+};
+
+class IReadSession {
+public:
+    //! Main reader loop.
+    //! Wait for next reader event.
+    virtual NThreading::TFuture<void> WaitEvent() = 0;
+
+    //! Main reader loop.
+    //! Get read session events.
+    //! Blocks until event occurs if "block" is set.
+    //!
+    //! maxEventsCount: maximum events count in batch.
+    //! maxByteSize: total size limit of data messages in batch.
+    //! block: block until event occurs.
+    //!
+    //! If maxEventsCount is not specified,
+    //! read session chooses event batch size automatically.
+    virtual TVector<TReadSessionEvent::TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(),
+                                                         size_t maxByteSize = std::numeric_limits<size_t>::max()) = 0;
+
+    //! Get single event.
+    virtual TMaybe<TReadSessionEvent::TEvent> GetEvent(bool block = false,
+                                                       size_t maxByteSize = std::numeric_limits<size_t>::max()) = 0;
+
+    //! Close read session.
+    //! Waits for all commit acknowledgments to arrive.
+    //! Force close after timeout.
+    //! This method is blocking.
+    //! When session is closed,
+    //! TSessionClosedEvent arrives.
+    virtual bool Close(TDuration timeout = TDuration::Max()) = 0;
+
+    //! Reader counters with different stats (see TReaderConuters).
+    virtual TReaderCounters::TPtr GetCounters() const = 0;
+
+    //! Get unique identifier of read session.
+    virtual TString GetSessionId() const = 0;
+
+    virtual ~IReadSession() = default;
+};
 
 struct TTopicClientSettings : public TCommonClientSettingsBase<TTopicClientSettings> {
     using TSelf = TTopicClientSettings;
 
+    //! Default executor for compression tasks.
+    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultCompressionExecutor, CreateThreadPoolExecutor(2));
+
+    //! Default executor for callbacks.
+    FLUENT_SETTING_DEFAULT(IExecutor::TPtr, DefaultHandlersExecutor, CreateThreadPoolExecutor(1));
 };
 
 // Topic client.
@@ -429,6 +1159,9 @@ public:
 
     // Describe settings of topic.
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& = {});
+
+    //! Create read session.
+    std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
 
 private:
     std::shared_ptr<TImpl> Impl_;

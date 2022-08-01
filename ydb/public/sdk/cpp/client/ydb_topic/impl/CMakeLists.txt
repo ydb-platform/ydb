@@ -19,7 +19,10 @@ target_link_libraries(client-ydb_topic-impl PUBLIC
   impl-ydb_internal-make_request
   client-ydb_common_client-impl
   cpp-client-ydb_driver
+  client-ydb_persqueue_core-impl
 )
 target_sources(client-ydb_topic-impl PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/executor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/impl/topic.cpp
 )

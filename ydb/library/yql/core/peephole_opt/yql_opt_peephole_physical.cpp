@@ -31,8 +31,8 @@ using namespace NNodes;
 using TPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&);
 using TPeepHoleOptimizerMap = std::unordered_map<std::string_view, TPeepHoleOptimizerPtr>;
 
-using TNonDeterministicOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
-using TNonDeterministicOptimizerMap = std::unordered_map<std::string_view, TNonDeterministicOptimizerPtr>;
+using TExtPeepHoleOptimizerPtr = TExprNode::TPtr (*const)(const TExprNode::TPtr&, TExprContext&, TTypeAnnotationContext& types);
+using TExtPeepHoleOptimizerMap = std::unordered_map<std::string_view, TExtPeepHoleOptimizerPtr>;
 
 TExprNode::TPtr MakeNothing(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx) {
     return ctx.NewCallable(pos, "Nothing", {ExpandType(pos, *ctx.MakeType<TOptionalExprType>(&type), ctx)});
@@ -1884,14 +1884,18 @@ TExprNode::TPtr ExpandFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
-                                               TExprContext& ctx, TTypeAnnotationContext& types, const TPeepHoleOptimizerMap& optimizers)
+                                               TExprContext& ctx, TTypeAnnotationContext& types,
+                                               const TPeepHoleOptimizerMap& optimizers, const TExtPeepHoleOptimizerMap& extOptimizers)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
 
-    return OptimizeExpr(input, output, [&optimizers](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    return OptimizeExpr(input, output, [&optimizers, &extOptimizers, &types](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (const auto rule = optimizers.find(node->Content()); optimizers.cend() != rule)
             return (rule->second)(node, ctx);
+
+        if (const auto rule = extOptimizers.find(node->Content()); extOptimizers.cend() != rule)
+            return (rule->second)(node, ctx, types);
 
         return node;
     }, ctx, settings);
@@ -1899,7 +1903,7 @@ IGraphTransformer::TStatus PeepHoleCommonStage(const TExprNode::TPtr& input, TEx
 
 IGraphTransformer::TStatus PeepHoleFinalStage(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TExprContext& ctx, TTypeAnnotationContext& types, bool* hasNonDeterministicFunctions,
-    const TPeepHoleOptimizerMap& optimizers, const TNonDeterministicOptimizerMap& nonDetOptimizers)
+    const TPeepHoleOptimizerMap& optimizers, const TExtPeepHoleOptimizerMap& nonDetOptimizers)
 {
     TOptimizeExprSettings settings(&types);
     settings.CustomInstantTypeTransformer = types.CustomInstantTypeTransformer.Get();
@@ -5823,7 +5827,6 @@ struct TPeepHoleRules {
         {"OptionalReduce", &ExpandOptionalReduce},
         {"AggrMin", &ExpandAggrMinMax<true>},
         {"AggrMax", &ExpandAggrMinMax<false>},
-        {"Aggregate", &ExpandAggregatePeephole},
         {"And", &OptimizeLogicalDups<true>},
         {"Or", &OptimizeLogicalDups<false>},
         {"CombineByKey", &ExpandCombineByKey},
@@ -5848,6 +5851,10 @@ struct TPeepHoleRules {
         {"AsRange", &ExpandAsRange},
         {"RangeFor", &ExpandRangeFor},
         {"ToFlow", &DropToFlowDeps},
+    };
+
+    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> CommonStageExtRulesInit = {
+        {"Aggregate", &ExpandAggregatePeephole},
     };
 
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> SimplifyStageRulesInit = {
@@ -5909,7 +5916,7 @@ struct TPeepHoleRules {
         {"SqueezeToDict", &OptimizeSqueezeToDict}
     };
 
-    static constexpr std::initializer_list<TNonDeterministicOptimizerMap::value_type> FinalStageNonDetRulesInit = {
+    static constexpr std::initializer_list<TExtPeepHoleOptimizerMap::value_type> FinalStageNonDetRulesInit = {
         {"Random", &Random0Arg<double>},
         {"RandomNumber", &Random0Arg<ui64>},
         {"RandomUuid", &Random0Arg<TGUID>},
@@ -5921,6 +5928,7 @@ struct TPeepHoleRules {
 
     TPeepHoleRules()
         : CommonStageRules(CommonStageRulesInit)
+        , CommonStageExtRules(CommonStageExtRulesInit)
         , FinalStageRules(FinalStageRulesInit)
         , SimplifyStageRules(SimplifyStageRulesInit)
         , FinalStageNonDetRules(FinalStageNonDetRulesInit)
@@ -5931,9 +5939,10 @@ struct TPeepHoleRules {
     }
 
     const TPeepHoleOptimizerMap CommonStageRules;
+    const TExtPeepHoleOptimizerMap CommonStageExtRules;
     const TPeepHoleOptimizerMap FinalStageRules;
     const TPeepHoleOptimizerMap SimplifyStageRules;
-    const TNonDeterministicOptimizerMap FinalStageNonDetRules;
+    const TExtPeepHoleOptimizerMap FinalStageNonDetRules;
 };
 
 template <bool EnableNewOptimizers>
@@ -5955,7 +5964,9 @@ THolder<IGraphTransformer> CreatePeepHoleCommonStageTransformer(TTypeAnnotationC
     pipeline.AddCommonOptimization(issueCode);
     pipeline.Add(CreateFunctorTransformer(
             [&types](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-                return PeepHoleCommonStage(input, output, ctx, types, TPeepHoleRules<EnableNewOptimizers>::Instance().CommonStageRules);
+                return PeepHoleCommonStage(input, output, ctx, types,
+                    TPeepHoleRules<EnableNewOptimizers>::Instance().CommonStageRules,
+                    TPeepHoleRules<EnableNewOptimizers>::Instance().CommonStageExtRules);
             }
         ),
         "PeepHoleCommon",
@@ -5997,7 +6008,7 @@ THolder<IGraphTransformer> CreatePeepHoleFinalStageTransformer(TTypeAnnotationCo
                 }
 
                 const auto& nonDetStageRules = withNonDeterministicRules ?
-                    TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TNonDeterministicOptimizerMap{};
+                    TPeepHoleRules<EnableNewOptimizers>::Instance().FinalStageNonDetRules : TExtPeepHoleOptimizerMap{};
 
                 return PeepHoleFinalStage(input, output, ctx, types, hasNonDeterministicFunctions, stageRules, nonDetStageRules);
             }

@@ -7,6 +7,10 @@ message TActorId {
     required fixed64 RawX2 = 2;
 }
 
+message TTraceId {
+    optional bytes Data = 1;
+}
+
 message TCallbackException {
     required TActorId ActorId = 1;
     required string ExceptionMessage = 2;

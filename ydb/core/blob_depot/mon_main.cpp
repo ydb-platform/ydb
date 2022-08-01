@@ -114,7 +114,7 @@ namespace NKikimr::NBlobDepot {
                     Self->Data->ScanRange(nullptr, nullptr, 0, [&](const TData::TKey& key, const TData::TValue& value) {
                         TABLER() {
                             TABLED() {
-                                key.Output(Stream, Self->Config);
+                                key.Output(Stream);
                             }
                             TABLED() {
                                 bool first = true;

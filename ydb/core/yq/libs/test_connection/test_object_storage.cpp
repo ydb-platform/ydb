@@ -94,7 +94,11 @@ public:
     void Bootstrap() {
         Become(&TTestObjectStorageConnectionActor::StateFunc);
         TC_LOG_D(Scope << " " << User << " " << NKikimr::MaskTicket(Token) << " Starting test object storage connection actor. Actor id: " << SelfId());
-        SendDiscover();
+        try {
+            SendDiscover();
+        } catch (...) {
+            ReplyError(CurrentExceptionMessage());
+        }
     }
 
     STRICT_STFUNC(StateFunc,

@@ -3,8 +3,6 @@ items:
   href: system_views_db.md
 - name: Monitoring
   href: monitoring.md
-- name: Grafana dashboards
-  href: grafana_dashboards.md
 - name: System views (deprecated)
   href: system_views.md
   hidden: true

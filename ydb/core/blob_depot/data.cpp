@@ -1,80 +1,8 @@
 #include "data.h"
-#include "schema.h"
 
 namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
-
-    class TData::TTxIssueGC : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        const ui8 Channel;
-        const ui32 GroupId;
-        const TGenStep IssuedGenStep;
-        std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> CollectGarbage;
-
-    public:
-        TTxIssueGC(TBlobDepot *self, ui8 channel, ui32 groupId, TGenStep issuedGenStep,
-                std::unique_ptr<TEvBlobStorage::TEvCollectGarbage> collectGarbage)
-            : TTransactionBase(self)
-            , Channel(channel)
-            , GroupId(groupId)
-            , IssuedGenStep(issuedGenStep)
-            , CollectGarbage(std::move(collectGarbage))
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            NIceDb::TNiceDb db(txc.DB);
-            db.Table<Schema::GC>().Key(Channel, GroupId).Update<Schema::GC::IssuedGenStep>(ui64(IssuedGenStep));
-            return true;
-        }
-
-        void Complete(const TActorContext&) override {
-            SendToBSProxy(Self->SelfId(), GroupId, CollectGarbage.release(), GroupId);
-        }
-    };
-
-    class TData::TTxConfirmGC : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-        const ui8 Channel;
-        const ui32 GroupId;
-        std::vector<TLogoBlobID> TrashDeleted;
-        const TGenStep ConfirmedGenStep;
-
-        static constexpr ui32 MaxKeysToProcessAtOnce = 10'000;
-
-    public:
-        TTxConfirmGC(TBlobDepot *self, ui8 channel, ui32 groupId, std::vector<TLogoBlobID> trashDeleted, TGenStep confirmedGenStep)
-            : TTransactionBase(self)
-            , Channel(channel)
-            , GroupId(groupId)
-            , TrashDeleted(std::move(trashDeleted))
-            , ConfirmedGenStep(confirmedGenStep)
-        {}
-
-        bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            NIceDb::TNiceDb db(txc.DB);
-
-            for (ui32 i = 0; i < TrashDeleted.size() && i < MaxKeysToProcessAtOnce; ++i) {
-                db.Table<Schema::Trash>().Key(TKey(TrashDeleted[i]).MakeBinaryKey()).Delete();
-            }
-            if (TrashDeleted.size() <= MaxKeysToProcessAtOnce) {
-                TrashDeleted.clear();
-                db.Table<Schema::GC>().Key(Channel, GroupId).Update<Schema::GC::ConfirmedGenStep>(ui64(ConfirmedGenStep));
-            } else {
-                std::vector<TLogoBlobID> temp;
-                temp.insert(temp.end(), TrashDeleted.begin() + MaxKeysToProcessAtOnce, TrashDeleted.end());
-                temp.swap(TrashDeleted);
-            }
-
-            return true;
-        }
-
-        void Complete(const TActorContext&) override {
-            if (TrashDeleted.empty()) {
-                Self->Data->OnCommitConfirmedGC(Channel, GroupId);
-            } else { // resume transaction
-                Self->Execute(std::make_unique<TTxConfirmGC>(Self, Channel, GroupId, std::move(TrashDeleted), ConfirmedGenStep));
-            }
-        }
-    };
 
     std::optional<TData::TValue> TData::FindKey(const TKey& key) {
         const auto it = Data.find(key);
@@ -91,6 +19,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::AddDataOnLoad(TKey key, TString value) {
+        if (Data.contains(key)) {
+            return; // we are racing with the offline load procedure -- skip this key, it is already new in memory
+        }
+
         NKikimrBlobDepot::TValue proto;
         const bool success = proto.ParseFromString(value);
         Y_VERIFY(success);
@@ -118,8 +50,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::PutKey(TKey key, TValue&& data) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (TabletId, Self->TabletID()), (Key, key.ToString(Self->Config)),
-            (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
+        ui64 referencedBytes = 0;
 
         EnumerateBlobsForValueChain(data.ValueChain, Self->TabletID(), [&](TLogoBlobID id) {
             if (!RefCount[id]++) {
@@ -129,7 +60,12 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY(inserted);
                 AccountBlob(id, 1);
             }
+            referencedBytes += id.BlobSize();
         });
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (TabletId, Self->TabletID()), (Key, key),
+            (ValueChain.size, data.ValueChain.size()), (ReferencedBytes, referencedBytes),
+            (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
 
         Data[std::move(key)] = std::move(data);
     }
@@ -292,8 +228,7 @@ namespace NKikimr::NBlobDepot {
                 (TrashInFlight.size, record.TrashInFlight.size()));
 
             if (collect) {
-                Self->Execute(std::make_unique<TTxIssueGC>(Self, record.Channel, record.GroupId, record.IssuedGenStep,
-                    std::move(ev)));
+                ExecuteIssueGC(record.Channel, record.GroupId, record.IssuedGenStep, std::move(ev));
             } else {
                 SendToBSProxy(Self->SelfId(), record.GroupId, ev.release(), record.GroupId);
             }
@@ -323,8 +258,8 @@ namespace NKikimr::NBlobDepot {
         if (ev->Get()->Status == NKikimrProto::OK) {
             Y_VERIFY(record.CollectGarbageRequestInFlight);
             record.OnSuccessfulCollect(this);
-            Self->Execute(std::make_unique<TTxConfirmGC>(Self, record.Channel, record.GroupId,
-                std::exchange(record.TrashInFlight, {}), record.LastConfirmedGenStep));
+            ExecuteConfirmGC(record.Channel, record.GroupId, std::exchange(record.TrashInFlight, {}),
+                record.LastConfirmedGenStep);
         } else {
             record.ClearInFlight(this);
             HandleTrash();

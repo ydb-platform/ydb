@@ -11,6 +11,7 @@ add_library(cpp-client-ydb_proto)
 target_link_libraries(cpp-client-ydb_proto PUBLIC
   contrib-libs-cxxsupp
   yutil
+  api-grpc
   api-grpc-draft
   api-protos
   lib-operation_id-protos

@@ -17,6 +17,7 @@ target_link_libraries(yq-libs-events PUBLIC
   tools-enum_parser-enum_serialization_runtime
   cpp-actors-core
   libs-graph_params-proto
+  yq-libs-protos
   yql-core-facade
   yql-public-issue
   api-protos

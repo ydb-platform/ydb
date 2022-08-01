@@ -8,5 +8,7 @@ message TSink {
     string Token = 2;
     string Path = 3;
     repeated string Keys = 4;
+    optional string Compression = 5;
+    optional uint64 MemoryLimit = 6;
+    optional uint64 MaxFileSize = 7;
 }
-

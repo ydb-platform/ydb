@@ -779,7 +779,7 @@ class TSerializeFormat : public TBoxedValue {
         using TPartitionByPayload = std::pair<NDB::Block, bool>; //+ flag of first block on key.
         using TPartitionsMap = std::unordered_map<TPartitionByKey, TPartitionByPayload, TPartitionMapStuff, TPartitionMapStuff, TStdAllocatorForUdf<std::pair<const TPartitionByKey, TPartitionByPayload>>>;
     public:
-        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::string& type, const NDB::FormatSettings& settings, const std::vector<ui32>& keysIndexes, const std::vector<ui32>& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, const std::vector<TColumnMeta>& inMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos)
+        TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::string& type, const NDB::FormatSettings& settings, const std::vector<ui32>& keysIndexes, const std::vector<ui32>& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, const std::vector<TColumnMeta>& inMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos)
             : ValueBuilder(valueBuilder)
             , Stream(stream)
             , InMeta(inMeta)
@@ -787,6 +787,7 @@ class TSerializeFormat : public TBoxedValue {
             , PayloadsIndexes(payloadsIndexes)
             , BlockSizeLimit(blockSizeLimit)
             , KeysCountLimit(keysCountLimit)
+            , TotalSizeLimit(totalSizeLimit)
             , Pos(pos)
             , HeaderBlock(columns)
             , Buffer(std::make_unique<NDB::WriteBufferFromOwnString>())
@@ -796,6 +797,7 @@ class TSerializeFormat : public TBoxedValue {
         {}
     private:
         void FlushKey(const TPartitionsMap::const_iterator it, TUnboxedValue& result) {
+            TotalSize -= it->second.first.bytes();
             if (it->second.second)
                 BlockStream->writePrefix();
             BlockStream->write(it->second.first);
@@ -824,6 +826,13 @@ class TSerializeFormat : public TBoxedValue {
                     case EFetchStatus::Yield:
                         return EFetchStatus::Yield;
                     case EFetchStatus::Ok: {
+                        if (TotalSizeLimit && TotalSizeLimit < TotalSize) {
+                            const auto top = std::max_element(PartitionsMap.begin(), PartitionsMap.end(),
+                                [](const TPartitionsMap::value_type& l, const TPartitionsMap::value_type& r){ return l.second.first.bytes(), r.second.first.bytes(); });
+                            FlushKey(top, result);
+                            top->second = std::make_pair(HeaderBlock.cloneEmpty(), false);
+                        }
+
                         TPartitionByKey keys(KeysIndexes.size());
                         for (auto i = 0U; i < keys.size(); ++i)
                             keys[i] = row.GetElement(KeysIndexes[i]);
@@ -840,12 +849,14 @@ class TSerializeFormat : public TBoxedValue {
                             ins.first->second = std::make_pair(HeaderBlock.cloneEmpty(), false);
                         }
 
+                        TotalSize -= ins.first->second.first.bytes();
                         auto columns = ins.first->second.first.mutateColumns();
                         for (auto i = 0U; i < columns.size(); ++i) {
                             const auto index = PayloadsIndexes[i];
                             ConvertInputValue(row.GetElement(index), columns[i], InMeta[index]);
                         }
                         ins.first->second.first.setColumns(std::move(columns));
+                        TotalSize += ins.first->second.first.bytes();
 
                         if (flush)
                             return EFetchStatus::Ok;
@@ -879,6 +890,7 @@ class TSerializeFormat : public TBoxedValue {
         const std::vector<ui32> PayloadsIndexes;
         const size_t BlockSizeLimit;
         const size_t KeysCountLimit;
+        const size_t TotalSizeLimit;
         const TSourcePosition Pos;
 
         const NDB::Block HeaderBlock;
@@ -890,14 +902,15 @@ class TSerializeFormat : public TBoxedValue {
         TPlainArrayCache Cache;
 
         bool IsFinished = false;
+        size_t TotalSize = 0ULL;
     };
 public:
-    TSerializeFormat(const std::string_view& type, const std::string_view& settings, std::vector<ui32>&& keysIndexes, std::vector<ui32>&& payloadsIndexes, size_t blockSizzeLimit, size_t keysCountLimit, const TSourcePosition& pos, std::vector<TColumnMeta>&& inMeta, NDB::ColumnsWithTypeAndName&& columns)
-        : Type(type), Settings(GetFormatSettings(settings)), KeysIndexes(std::move(keysIndexes)), PayloadsIndexes(std::move(payloadsIndexes)), BlockSizeLimit(blockSizzeLimit), KeysCountLimit(keysCountLimit), Pos(pos), InMeta(std::move(inMeta)), Columns(std::move(columns))
+    TSerializeFormat(const std::string_view& type, const std::string_view& settings, std::vector<ui32>&& keysIndexes, std::vector<ui32>&& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, const TSourcePosition& pos, std::vector<TColumnMeta>&& inMeta, NDB::ColumnsWithTypeAndName&& columns)
+        : Type(type), Settings(GetFormatSettings(settings)), KeysIndexes(std::move(keysIndexes)), PayloadsIndexes(std::move(payloadsIndexes)), BlockSizeLimit(blockSizeLimit), KeysCountLimit(keysCountLimit), TotalSizeLimit(totalSizeLimit), Pos(pos), InMeta(std::move(inMeta)), Columns(std::move(columns))
     {}
 
     TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final try {
-        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, Type, Settings, KeysIndexes, PayloadsIndexes, BlockSizeLimit, KeysCountLimit, InMeta, Columns, Pos));
+        return TUnboxedValuePod(new TStreamValue(valueBuilder, *args, Type, Settings, KeysIndexes, PayloadsIndexes, BlockSizeLimit, KeysCountLimit, TotalSizeLimit, InMeta, Columns, Pos));
     }
     catch (const Poco::Exception& e) {
         UdfTerminate((TStringBuilder() << valueBuilder->WithCalleePosition(Pos) << " " << e.displayText()).data());
@@ -912,6 +925,7 @@ private:
     const std::vector<ui32> PayloadsIndexes;
     const size_t BlockSizeLimit;
     const size_t KeysCountLimit;
+    const size_t TotalSizeLimit;
     const TSourcePosition Pos;
 
     const std::vector<TColumnMeta> InMeta;
@@ -1257,6 +1271,7 @@ public:
             const auto& tail = std::string_view::npos == jsonFrom ? "" : typeCfg.substr(jsonFrom);
             size_t blockSizeLimit = 256_MB;
             size_t keysCountLimit = 4096;
+            size_t totalSizeLimit = 1_GB;
             if (!tail.empty()) {
                 const std::string str(tail);
                 const JSON json(str);
@@ -1270,6 +1285,9 @@ public:
                 }
                 if (json.has("keys_count_limit")) {
                     keysCountLimit = json["keys_count_limit"].getUInt();
+                }
+                if (json.has("total_size_limit")) {
+                    totalSizeLimit = json["total_size_limit"].getUInt();
                 }
             }
 
@@ -1314,7 +1332,7 @@ public:
                 }
 
                 if (!(flags & TFlags::TypesOnly)) {
-                    builder.Implementation(new TSerializeFormat(typeCfg.substr(0U, jsonFrom), tail, std::move(keyIndexes), std::move(payloadIndexes), blockSizeLimit, keysCountLimit, builder.GetSourcePosition(), std::move(inMeta), std::move(columns)));
+                    builder.Implementation(new TSerializeFormat(typeCfg.substr(0U, jsonFrom), tail, std::move(keyIndexes), std::move(payloadIndexes), blockSizeLimit, keysCountLimit, totalSizeLimit, builder.GetSourcePosition(), std::move(inMeta), std::move(columns)));
                 }
                 return;
             } else {

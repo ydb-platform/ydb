@@ -20,6 +20,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   cpp-mime-types
   ydb-core-base
   core-blobstorage-base
+  blobstorage-vdisk-common
   core-client-server
   ydb-core-health_check
   ydb-core-node_whiteboard
@@ -34,6 +35,8 @@ target_link_libraries(ydb-core-viewer PUBLIC
   lib-deprecated-kicli
 )
 target_sources(ydb-core-viewer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_vdisk.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_viewer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_aggregate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/wb_filter.cpp
@@ -53,6 +56,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   cpp-mime-types
   ydb-core-base
   core-blobstorage-base
+  blobstorage-vdisk-common
   core-client-server
   ydb-core-health_check
   ydb-core-node_whiteboard

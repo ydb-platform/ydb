@@ -272,6 +272,7 @@ private:
 
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
+
             Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal);
             return;
         }

@@ -6,7 +6,7 @@ namespace NYql::NPathGenerator {
 
 Y_UNIT_TEST_SUITE(TGenerateTests) {
     Y_UNIT_TEST(SuccessGenerate) {
-        auto result = ParsePartitioningRules(R"(
+        auto generator = CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"city", "code"});
 
-        auto rules = ExpandPartitioningRules(result, 100);
+        auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "/MSK/0/");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 2);
@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
     }
 
     Y_UNIT_TEST(SuccessGenerateInteger) {
-        auto result = ParsePartitioningRules(R"(
+        auto generator = CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"city", "code"});
 
-        auto rules = ExpandPartitioningRules(result, 100);
+        auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "/MSK/0/");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 2);
@@ -56,7 +56,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
     }
 
     Y_UNIT_TEST(SuccessGenerateIntegerWithDigits) {
-        auto result = ParsePartitioningRules(R"(
+        auto generator = CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -70,7 +70,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"city", "code"});
 
-        auto rules = ExpandPartitioningRules(result, 100);
+        auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "/MSK/00000/");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 2);
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
     }
 
     Y_UNIT_TEST(SuccessGenerateIntegerWithDigitsOverflow) {
-        auto result = ParsePartitioningRules(R"(
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -95,13 +95,11 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.digits" : 10000,
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"});
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(ExpandPartitioningRules(result, 100), yexception, "Digits cannot exceed 64, but received 10000");
+        )", {"city", "code"}), yexception, "Digits cannot exceed 64, but received 10000");
     }
 
     Y_UNIT_TEST(CheckLimit) {
-        auto result = ParsePartitioningRules(R"(
+        UNIT_ASSERT_EXCEPTION_CONTAINS(CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -110,21 +108,19 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
                 "projection.code.values" : "0,1",
                 "storage.location.template" : "/${city}/${code}/"
             }
-        )", {"city", "code"});
-
-        UNIT_ASSERT_EXCEPTION_CONTAINS(ExpandPartitioningRules(result, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
+        )", {"city", "code"}, 2), yexception, "The limit on the number of paths has been reached: 2 of 2");
     }
 
     Y_UNIT_TEST(CheckHiveFormat) {
-        auto result = ParsePartitioningRules({}, {"city", "code", "device_id"});
-        auto rules = ExpandPartitioningRules(result, 1);
+        auto generator = CreatePathGenerator({}, {"city", "code", "device_id"}, 1);
+        auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 0);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "/city=${city}/code=${code}/device_id=${device_id}");
     }
 
     Y_UNIT_TEST(SuccessGenerateDateWith) {
-        auto result = ParsePartitioningRules(R"(
+        auto generator = CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -139,7 +135,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"city", "code"});
 
-        auto rules = ExpandPartitioningRules(result, 100);
+        auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 4);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "/MSK/2010-01-01/");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 2);
@@ -152,7 +148,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
     }
 
     Y_UNIT_TEST(SuccessGenerateDateWithUnixtime) {
-        auto result = ParsePartitioningRules(R"(
+        auto generator = CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -167,7 +163,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"city", "code"});
 
-        auto rules = ExpandPartitioningRules(result, 100);
+        auto rules = generator->GetRules();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "/MSK/1970-01-03/");
         UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 2);
@@ -176,7 +172,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
     }
 
     Y_UNIT_TEST(SuccessGenerateDateWithNow) {
-        auto result = ParsePartitioningRules(R"(
+        auto generator = CreatePathGenerator(R"(
             {
                 "projection.enabled" : true,
                 "projection.city.type" : "enum",
@@ -191,7 +187,7 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
             }
         )", {"city", "code"});
         auto nowBefore = TInstant::Now();
-        auto rules = ExpandPartitioningRules(result, 100);
+        auto rules = generator->GetRules();
         auto nowAfter = TInstant::Now();
         UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
         UNIT_ASSERT_GE(rules[0].Path, "/MSK/" + (nowBefore + TDuration::Days(1)).FormatLocalTime("%F") + "/");

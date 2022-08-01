@@ -794,4 +794,18 @@ namespace NKikimr {
         }
     }
 
+    template <class TKey, class TMemRec>
+    void TFreshSegment<TKey, TMemRec>::OutputProto(NKikimrVDisk::FreshSegmentStat *stat) const {
+        NKikimrVDisk::FreshIndexAndDataStat *indexAndData = stat->mutable_index_and_data();
+        indexAndData->set_first_lsn(IndexAndData->GetFirstLsn());
+        indexAndData->set_last_lsn(IndexAndData->GetLastLsn());
+        indexAndData->set_inserted_elements(IndexAndData->ElementsInserted());
+        indexAndData->set_mem_data_size(IndexAndData->GetMemDataSize());
+        indexAndData->set_huge_data_size(IndexAndData->GetHugeDataSize());
+        NKikimrVDisk::FreshAppendixTreeStat *appendixTree = stat->mutable_appendix_tree();
+        appendixTree->set_first_lsn(AppendixTree.GetFirstLsn());
+        appendixTree->set_last_lsn(AppendixTree.GetLastLsn());
+        appendixTree->set_inserted_elements(AppendixTree.ElementsInserted());
+    }
+
 } // NKikimr

@@ -1,0 +1,111 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package NKikimrVDisk;
+option java_package = "ru.yandex.kikimr.proto";
+option java_outer_classname = "VDiskProtos";
+option java_multiple_files = true;
+
+
+message LevelStat {
+    uint32 level = 1;
+    uint32 first_lsn = 2;
+    uint32 last_lsn = 3;
+    uint32 idx_total_size = 4;
+    uint32 inplace_data_total_size = 5;
+    uint32 huge_data_total_size = 6;
+    uint32 chunks = 7;
+    uint32 total_chunks = 8;
+    uint32 items = 9;
+    uint32 items_with_inplaced_data = 10;
+    uint32 items_with_huge_data = 11;
+    bytes first_key = 12;
+    bytes last_key = 13;
+    uint32 storage_ratio_summary = 14;
+    bool is_created_by_repl = 15;
+    uint64 time = 16;
+
+};
+
+message FreshIndexAndDataStat {
+    uint32 first_lsn = 1;
+    uint32 last_lsn = 2;
+    uint32 inserted_elements = 3;
+    uint64 mem_data_size = 4;
+    uint64 huge_data_size = 5;
+};
+
+message FreshAppendixTreeStat {
+    uint32 first_lsn = 1;
+    uint32 last_lsn = 2;
+    uint32 inserted_elements = 3;
+};
+
+message FreshSegmentStat {
+    FreshIndexAndDataStat index_and_data = 1;
+    FreshAppendixTreeStat appendix_tree = 2;
+};
+
+
+message FreshStat {
+    uint32 compaction_writes_in_flight = 1;
+    FreshSegmentStat current = 2;
+    FreshSegmentStat dreg = 3;
+    FreshSegmentStat old = 4;
+};
+
+
+message SliceStat {
+    uint32 compaction_writes_in_flight = 1;
+    uint32 compaction_reads_in_flight = 2;
+    repeated LevelStat levels = 3;
+};
+
+
+message LevelIndexStat {
+    FreshStat fresh = 1;
+    SliceStat slice = 2;
+
+};
+
+message VDiskStat {
+    LevelIndexStat barriers = 1;
+    LevelIndexStat blocks = 2;
+    LevelIndexStat logoblobs = 3;
+};
+
+message VDiskStatRequest {
+
+}
+
+message VDiskStatResponse {
+    optional VDiskStat statistic = 1;
+}
+
+
+message LogoBlobId {
+    uint64 raw_x1 = 1;
+    uint64 raw_x2 = 2;
+    uint64 raw_x3 = 3;
+};
+
+message LogoBlobIdRange {
+    LogoBlobId from = 1;
+    LogoBlobId to = 2;
+};
+
+message GetLogoBlobRequest {
+    LogoBlobIdRange range = 1;
+    bool show_internals = 5;
+};
+
+message GetLogoBlobResponse {
+    message LogoBlob {
+        string status = 1;
+        optional uint64 ingress = 2;
+        string id = 3;
+    };
+
+    repeated LogoBlob logoblobs = 1;
+    string error_msg = 2;
+};

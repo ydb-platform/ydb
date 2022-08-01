@@ -144,7 +144,7 @@ bool DoesPingTaskUpdateQueriesTable(const Fq::Private::PingTaskRequest& request)
     return request.status() != YandexQuery::QueryMeta::COMPUTE_STATUS_UNSPECIFIED
         || !request.issues().empty()
         || !request.transient_issues().empty()
-        || !request.statistics()
+        || request.statistics()
         || !request.result_set_meta().empty()
         || request.ast()
         || request.plan()

@@ -1,9 +1,11 @@
 #include "wilson_uploader.h"
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/actors/wilson/protos/service.pb.h>
 #include <library/cpp/actors/wilson/protos/service.grpc.pb.h>
 #include <util/stream/file.h>
+#include <util/string/hex.h>
 #include <grpc++/grpc++.h>
 #include <chrono>
 
@@ -12,6 +14,7 @@ namespace NWilson {
     using namespace NActors;
 
     namespace NServiceProto = opentelemetry::proto::collector::trace::v1;
+    namespace NTraceProto = opentelemetry::proto::trace::v1;
 
     namespace {
 
@@ -28,9 +31,16 @@ namespace NWilson {
 
             std::unique_ptr<grpc::ClientContext> Context;
             std::unique_ptr<grpc::ClientAsyncResponseReader<NServiceProto::ExportTraceServiceResponse>> Reader;
-            NServiceProto::ExportTraceServiceRequest Request;
             NServiceProto::ExportTraceServiceResponse Response;
             grpc::Status Status;
+
+            std::deque<NTraceProto::Span> Spans;
+            ui64 SpansSize = 0;
+            TMonotonic NextSendTimestamp;
+            ui32 MaxSpansAtOnce = 25;
+            ui32 MaxSpansPerSecond = 10;
+
+            bool WakeupScheduled = false;
 
         public:
             TWilsonUploader(TString host, ui16 port, TString rootCA)
@@ -50,24 +60,52 @@ namespace NWilson {
                     .pem_root_certs = TFileInput(RootCA).ReadAll(),
                 }));
                 Stub = NServiceProto::TraceService::NewStub(Channel);
+
+                LOG_INFO_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "TWilsonUploader::Bootstrap");
             }
 
             void Handle(TEvWilson::TPtr ev) {
-                CheckIfDone();
-
-                auto *rspan = Request.resource_spans_size() ? Request.mutable_resource_spans(0) : Request.add_resource_spans();
-                auto *sspan = rspan->scope_spans_size() ? rspan->mutable_scope_spans(0) : rspan->add_scope_spans();
-                ev->Get()->Span.Swap(sspan->add_spans());
-
-                if (!Context) {
-                    SendRequest();
+                if (SpansSize >= 100'000'000) {
+                    LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "dropped span due to overflow");
+                } else {
+                    Spans.push_back(std::move(ev->Get()->Span));
+                    SpansSize += Spans.back().ByteSizeLong();
+                    CheckIfDone();
+                    TryToSend();
                 }
             }
 
-            void SendRequest() {
-                Y_VERIFY(!Reader && !Context);
+            void TryToSend() {
+                const TMonotonic now = TActivationContext::Monotonic();
+
+                if (Context || Spans.empty()) {
+                    return;
+                } else if (now < NextSendTimestamp) {
+                    ScheduleWakeup(NextSendTimestamp);
+                    return;
+                }
+
+                NServiceProto::ExportTraceServiceRequest request;
+                auto *rspan = request.add_resource_spans();
+                auto *sspan = rspan->add_scope_spans();
+
+                NextSendTimestamp = now;
+                for (ui32 i = 0; i < MaxSpansAtOnce && !Spans.empty(); ++i, Spans.pop_front()) {
+                    auto& s = Spans.front();
+
+                    LOG_DEBUG_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, "exporting span"
+                        << " TraceId# " << HexEncode(s.trace_id())
+                        << " SpanId# " << HexEncode(s.span_id())
+                        << " ParentSpanId# " << HexEncode(s.parent_span_id())
+                        << " Name# " << s.name());
+
+                    SpansSize -= s.ByteSizeLong();
+                    s.Swap(sspan->add_spans());
+                    NextSendTimestamp += TDuration::MicroSeconds(1'000'000 / MaxSpansPerSecond);
+                }
+
                 Context = std::make_unique<grpc::ClientContext>();
-                Reader = Stub->AsyncExport(Context.get(), std::exchange(Request, {}), &CQ);
+                Reader = Stub->AsyncExport(Context.get(), std::move(request), &CQ);
                 Reader->Finish(&Response, &Status, nullptr);
             }
 
@@ -76,18 +114,38 @@ namespace NWilson {
                     void *tag;
                     bool ok;
                     if (CQ.AsyncNext(&tag, &ok, std::chrono::system_clock::now()) == grpc::CompletionQueue::GOT_EVENT) {
+                        if (!Status.ok()) {
+                            LOG_ERROR_S(*TlsActivationContext, 430 /* NKikimrServices::WILSON */, 
+                                "failed to commit traces: " << Status.error_message());
+                        }
+
                         Reader.reset();
                         Context.reset();
-
-                        if (Request.resource_spans_size()) {
-                            SendRequest();
-                        }
+                    } else {
+                        ScheduleWakeup(TDuration::MilliSeconds(100));
                     }
                 }
             }
 
+            template<typename T>
+            void ScheduleWakeup(T&& deadline) {
+                if (!WakeupScheduled) {
+                    TActivationContext::Schedule(deadline, new IEventHandle(TEvents::TSystem::Wakeup, 0, SelfId(), {},
+                        nullptr, 0));
+                    WakeupScheduled = true;
+                }
+            }
+
+            void HandleWakeup() {
+                Y_VERIFY(WakeupScheduled);
+                WakeupScheduled = false;
+                CheckIfDone();
+                TryToSend();
+            }
+
             STRICT_STFUNC(StateFunc,
                 hFunc(TEvWilson, Handle);
+                cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             );
         };
 

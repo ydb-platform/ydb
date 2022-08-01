@@ -55,6 +55,18 @@ namespace NKikimr {
         }
     }
 
+
+    template <class TKey, class TMemRec>
+    void TLevelSlice<TKey, TMemRec>::OutputProto(google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+        ui32 level = 1;
+        for (const auto &x : SortedLevels) {
+            if (!x.Empty()) {
+                x.OutputProto(level, rows);
+            }
+            ++level;
+        }
+    }
+
     template struct TLevelSlice<TKeyLogoBlob, TMemRecLogoBlob>;
     template struct TLevelSlice<TKeyBarrier, TMemRecBarrier>;
     template struct TLevelSlice<TKeyBlock, TMemRecBlock>;

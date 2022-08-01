@@ -93,6 +93,36 @@ void TSchemaSnapshotManager::RemoveShapshot(NIceDb::TNiceDb& db, const TSchemaSn
     PersistRemoveSnapshot(db, key);
 }
 
+void TSchemaSnapshotManager::RenameSnapshots(NTable::TDatabase& db,
+        const TPathId& prevTableId, const TPathId& newTableId)
+{
+    Y_VERIFY_S(prevTableId < newTableId, "New table id should be greater than previous"
+        << ": prev# " << prevTableId
+        << ", new# " << newTableId);
+
+    NIceDb::TNiceDb nicedb(db);
+    for (auto it = Snapshots.lower_bound(TSchemaSnapshotKey(prevTableId, 1)); it != Snapshots.end();) {
+        const auto& prevKey = it->first;
+        const auto& snapshot = it->second;
+
+        if (TPathId(prevKey.OwnerId, prevKey.PathId) != prevTableId) {
+            break;
+        }
+
+        const TSchemaSnapshotKey newKey(newTableId, prevKey.Version);
+        AddSnapshot(db, newKey, snapshot);
+        PersistRemoveSnapshot(nicedb, prevKey);
+
+        auto refIt = References.find(prevKey);
+        if (refIt != References.end()) {
+            References[newKey] = refIt->second;
+            References.erase(refIt);
+        }
+
+        it = Snapshots.erase(it);
+    }
+}
+
 bool TSchemaSnapshotManager::AcquireReference(const TSchemaSnapshotKey& key) {
     auto it = Snapshots.find(key);
     if (it == Snapshots.end()) {

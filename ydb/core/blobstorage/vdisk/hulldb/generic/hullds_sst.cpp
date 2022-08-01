@@ -30,6 +30,19 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
+    void TLevelSegment<TKey, TMemRec>::OutputProto(ui32 level, google::protobuf::RepeatedPtrField<NKikimrVDisk::LevelStat> *rows) const {
+        if (IsLoaded()) {
+            NKikimrVDisk::LevelStat *row = rows->Add();
+            row->set_level(level);
+            row->set_first_lsn(Info.FirstLsn);
+            row->set_last_lsn(Info.LastLsn);
+            row->set_idx_total_size(Info.IdxTotalSize);
+            row->set_inplace_data_total_size(Info.InplaceDataTotalSize);
+            row->set_huge_data_total_size(Info.HugeDataTotalSize);
+        }
+    }
+
+    template <class TKey, class TMemRec>
     void TLevelSegment<TKey, TMemRec>::Output(IOutputStream &str) const {
         str << "[" << FirstKey().ToString() << " " << LastKey().ToString() << " Info# ";
         Info.Output(str);

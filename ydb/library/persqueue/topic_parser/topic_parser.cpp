@@ -458,7 +458,7 @@ void TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
     if (res) {
         if (!Account_.Defined()) {
             Account_ = fst;
-        } else if (*Account_ != fst){
+        } else {
             modernName << fst << "/";
             fullModernName << fst << "/";
         }

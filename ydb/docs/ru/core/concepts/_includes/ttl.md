@@ -49,11 +49,12 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
   * `Uint32`;
   * `Uint64`;
   * `DyNumber`.
-* Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %} заданная в:
-  * секундах;
-  * миллисекундах;
-  * микросекундах;
-  * наносекундах.
+* Значение TTL-колонки с числовым типом (`Uint32`, `Uint64`, `DyNumber`) интерпретируется как величина от [Unix-эпохи]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %}. Поддерживаемые единицы измерения (задаются в настройках TTL):
+  * секунды;
+  * миллисекунды;
+  * микросекунды;
+  * наносекунды.
+* Настройка TTL с использованием [YQL](../../yql/reference/index.md) возможна только для колонок типа `Date`, `Datetime`, и `Timestamp`.
 * Нельзя указать несколько TTL-колонок.
 * Нельзя удалить TTL-колонку. Если это все же требуется, сначала нужно [выключить TTL](#disable) на таблице.
 
@@ -63,13 +64,7 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 
 * [YQL](../../yql/reference/index.md).
 * [Консольного клиента {{ ydb-short-name }}](../../reference/ydb-cli/index.md).
-* {{ ydb-short-name }} {% if oss %}C++ и{% endif %}  Python [SDK](../../reference/ydb-sdk/index.md).
-
-{% note info %}
-
-Настройка TTL с использованием YQL возможна для колонок типа `Date`, `Datetime`, и `Timestamp`.
-
-{% endnote %}
+* {{ ydb-short-name }} {% if oss %}C++ и{% endif %} Python [SDK](../../reference/ydb-sdk/index.md).
 
 ### Включение TTL для существующей таблицы {#enable-on-existent-table}
 
@@ -118,6 +113,40 @@ expiration_time = valueof(ttl_column) + expire_after_seconds
 При настройке TTL с использованием YQL, `Interval` создается из строкового литерала в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601).
 
 {% endnote %}
+
+Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
+
+{% list tabs %}
+
+- CLI
+
+  ```bash
+  $ {{ ydb-cli }} -e <endpoint> -d <database> table ttl set --column modified_at --expire-after 3600 --unit seconds mytable
+  ```
+
+{% if oss == true %}
+
+- C++
+
+  ```c++
+  session.AlterTable(
+      "mytable",
+      TAlterTableSettings()
+          .BeginAlterTtlSettings()
+              .Set("modified_at", TTtlSettings::EUnit::Seconds, TDuration::Hours(1))
+          .EndAlterTtlSettings()
+  );
+  ```
+
+{% endif %}
+
+- Python
+
+  ```python
+  session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
+  ```
+
+{% endlist %}
 
 ### Включение TTL для вновь создаваемой таблицы {#enable-for-new-table}
 

@@ -34,6 +34,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   libs-control_plane_storage-events
   yq-libs-db_schema
   yq-libs-events
+  yq-libs-grpc
   yq-libs-private_client
   yq-libs-result_formatter
   yq-libs-shared_resources

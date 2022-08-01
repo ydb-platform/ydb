@@ -6,6 +6,8 @@ namespace NKikimr {
 namespace NDataShard {
 
 class TMoveTableUnit : public TExecutionUnit {
+    TVector<NMiniKQL::IChangeCollector::TChange> ChangeRecords;
+
 public:
     TMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline)
         : TExecutionUnit(EExecutionUnitKind::MoveTable, false, dataShard, pipeline)
@@ -42,42 +44,37 @@ public:
         }
 
         NIceDb::TNiceDb db(txc.DB);
-        TVector<NMiniKQL::IChangeCollector::TChange> changeRecords;
-        if (!DataShard.LoadChangeRecords(db, changeRecords)) {
+
+        ChangeRecords.clear();
+        if (!DataShard.LoadChangeRecords(db, ChangeRecords)) {
             return EExecutionStatus::Restart;
         }
 
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "TMoveTableUnit Execute"
             << ": schemeTx# " << schemeTx.DebugString()
-            << ": changeRecords size# " << changeRecords.size()
+            << ": changeRecords size# " << ChangeRecords.size()
             << ", at tablet# " << DataShard.TabletID());
 
+        DataShard.SuspendChangeSender(ctx);
+
         const auto& params = schemeTx.GetMoveTable();
-
-        DataShard.KillChangeSender(ctx);
-
         DataShard.MoveUserTable(op, params, ctx, txc);
-
-        DataShard.CreateChangeSender(ctx);
-        MoveChangeRecords(db, params, changeRecords);
-        DataShard.EnqueueChangeRecords(std::move(changeRecords));
-        DataShard.MaybeActivateChangeSender(ctx);
+        MoveChangeRecords(db, params, ChangeRecords);
 
         BuildResult(op, NKikimrTxDataShard::TEvProposeTransactionResult::COMPLETE);
         op->Result()->SetStepOrderId(op->GetStepOrder().ToPair());
 
-        return EExecutionStatus::ExecutedNoMoreRestarts;
+        return EExecutionStatus::DelayCompleteNoMoreRestarts;
     }
 
-    void Complete(TOperation::TPtr, const TActorContext&) override {
-        // nothing
+    void Complete(TOperation::TPtr, const TActorContext& ctx) override {
+        DataShard.CreateChangeSender(ctx);
+        DataShard.MaybeActivateChangeSender(ctx);
+        DataShard.EnqueueChangeRecords(std::move(ChangeRecords));
     }
 };
 
-THolder<TExecutionUnit> CreateMoveTableUnit(
-    TDataShard& dataShard,
-    TPipeline& pipeline)
-{
+THolder<TExecutionUnit> CreateMoveTableUnit(TDataShard& dataShard, TPipeline& pipeline) {
     return THolder(new TMoveTableUnit(dataShard, pipeline));
 }
 

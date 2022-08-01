@@ -301,9 +301,10 @@ enum EServiceKikimr {
     YQ_AUDIT = 1150;
     YQ_AUDIT_EVENT_SENDER = 1151;
     YQ_HEALTH = 1152;
-    YQ_RATE_LIMITER = 1155;
     FQ_INTERNAL_SERVICE = 1153;
     FQ_QUOTA_SERVICE = 1154;
+    YQ_RATE_LIMITER = 1155;
+    FQ_QUOTA_PROXY = 1156;
 
     // 1024 - 1099 is reserved for nbs
 
@@ -318,6 +319,9 @@ enum EServiceKikimr {
     // Blob depot
     BLOB_DEPOT = 1300;
     BLOB_DEPOT_AGENT = 1301;
+
+    // DATASHARD section again
+    DS_LOAD_TEST = 1400;
 };
 
 message TActivity {
@@ -897,5 +901,7 @@ message TActivity {
         BLOB_DEPOT_AGENT = 571;
         KQP_STREAM_LOOKUP_ACTOR = 572;
         BS_STORAGE_STATS_ACTOR = 573;
+        DS_LOAD_ACTOR = 574;
+        PQ_META_CACHE = 575;
     };
 };

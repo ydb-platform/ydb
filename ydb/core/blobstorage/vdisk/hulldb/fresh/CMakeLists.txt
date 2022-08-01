@@ -13,6 +13,7 @@ target_link_libraries(vdisk-hulldb-fresh PUBLIC
   yutil
   ydb-core-base
   vdisk-hulldb-base
+  blobstorage-vdisk-protos
   ydb-core-protos
 )
 target_sources(vdisk-hulldb-fresh PRIVATE

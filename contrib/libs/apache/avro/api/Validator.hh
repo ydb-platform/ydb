@@ -20,8 +20,9 @@
 #define avro_Validating_hh__
 
 #include <boost/noncopyable.hpp>
+#include <cstdint>
+#include <utility>
 #include <vector>
-#include <stdint.h>
 
 #include "Config.hh"
 #include "Types.hh"
@@ -29,39 +30,35 @@
 
 namespace avro {
 
-class AVRO_DECL NullValidator : private boost::noncopyable
-{
-  public:
-
-    explicit NullValidator(const ValidSchema &) {}
-    NullValidator() {}
+class AVRO_DECL NullValidator : private boost::noncopyable {
+public:
+    explicit NullValidator(const ValidSchema &schema) {}
+    NullValidator() = default;
 
     void setCount(int64_t) {}
 
-    bool typeIsExpected(Type) const {
+    static bool typeIsExpected(Type) {
         return true;
     }
 
-    Type nextTypeExpected() const {
+    static Type nextTypeExpected() {
         return AVRO_UNKNOWN;
     }
 
-    int nextSizeExpected() const {
+    static int nextSizeExpected() {
         return 0;
     }
 
-    bool getCurrentRecordName(std::string &) const {
+    static bool getCurrentRecordName(std::string &name) {
         return true;
     }
 
-    bool getNextFieldName(std::string &) const {
+    static bool getNextFieldName(std::string &name) {
         return true;
     }
 
-    void checkTypeExpected(Type) { }
-    void checkFixedSizeExpected(int) { }
-
-
+    void checkTypeExpected(Type) {}
+    void checkFixedSizeExpected(int) {}
 };
 
 /// This class is used by both the ValidatingSerializer and ValidationParser
@@ -70,11 +67,9 @@ class AVRO_DECL NullValidator : private boost::noncopyable
 /// through all leaf nodes but a union only skips to one), and reports which
 /// type is next.
 
-class AVRO_DECL Validator : private boost::noncopyable
-{
-  public:
-
-    explicit Validator(const ValidSchema &schema);
+class AVRO_DECL Validator : private boost::noncopyable {
+public:
+    explicit Validator(ValidSchema schema);
 
     void setCount(int64_t val);
 
@@ -92,30 +87,27 @@ class AVRO_DECL Validator : private boost::noncopyable
     bool getNextFieldName(std::string &name) const;
 
     void checkTypeExpected(Type type) {
-        if(! typeIsExpected(type)) {
+        if (!typeIsExpected(type)) {
             throw Exception(
                 boost::format("Type %1% does not match schema %2%")
-                    % type % nextType_
-            );
+                % type % nextType_);
         }
         advance();
     }
 
     void checkFixedSizeExpected(int size) {
-        if( nextSizeExpected() != size) {
+        if (nextSizeExpected() != size) {
             throw Exception(
                 boost::format("Wrong size for fixed, got %1%, expected %2%")
-                    % size % nextSizeExpected()
-            );
+                % size % nextSizeExpected());
         }
         checkTypeExpected(AVRO_FIXED);
     }
 
-  private:
+private:
+    using flag_t = uint32_t;
 
-    typedef uint32_t flag_t;
-
-    flag_t typeToFlag(Type type) const {
+    static flag_t typeToFlag(Type type) {
         flag_t flag = (1L << type);
         return flag;
     }
@@ -144,16 +136,13 @@ class AVRO_DECL Validator : private boost::noncopyable
     int64_t count_;
 
     struct CompoundType {
-        explicit CompoundType(const NodePtr &n) :
-            node(n), pos(0)
-        {}
-        NodePtr node;  ///< save the node
-        size_t  pos;   ///< track the leaf position to visit
+        explicit CompoundType(NodePtr n) : node(std::move(n)), pos(0) {}
+        NodePtr node; ///< save the node
+        size_t pos;   ///< track the leaf position to visit
     };
 
     std::vector<CompoundType> compoundStack_;
     std::vector<size_t> counters_;
-
 };
 
 } // namespace avro

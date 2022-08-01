@@ -20,5 +20,7 @@ message TQuotaList {
 message TQuotasManagerConfig {
     bool Enabled = 1;
     repeated TQuotaList Quotas = 2;
-    string UsageRefreshPeriod = 3;
+    string LimitRefreshPeriod = 3;
+    string UsageRefreshPeriod = 4;
+    bool EnablePermissions = 5;
 }

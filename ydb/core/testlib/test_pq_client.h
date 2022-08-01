@@ -42,6 +42,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     pqConfig.SetTopicsAreFirstClassCitizen(false);
     pqConfig.SetRoot("/Root/PQ");
     pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+    pqConfig.MutableQuotingConfig()->SetQuotersDirectoryPath("/Root/PersQueue/System/Quoters");
 
     for (int i = 0; i < 12; ++i) {
         auto profile = pqConfig.AddChannelProfiles();

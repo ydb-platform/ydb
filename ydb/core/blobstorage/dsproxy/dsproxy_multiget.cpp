@@ -122,7 +122,7 @@ public:
     void SendRequests() {
         for (; RequestsInFlight < MaxRequestsInFlight && !PendingGets.empty(); ++RequestsInFlight, PendingGets.pop_front()) {
             auto& [ev, cookie] = PendingGets.front();
-            SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, Span);
+            SendToBSProxy(SelfId(), Info->GroupID, ev.release(), cookie, Span.GetTraceId());
         }
         if (!RequestsInFlight && PendingGets.empty()) {
             auto ev = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, 0, Info->GroupID);

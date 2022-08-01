@@ -96,13 +96,13 @@ namespace NKikimr::NTestShard {
         Y_VERIFY(!ValidationActorId); // no requests during validation
         auto& record = ev->Get()->Record;
         if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            STLOG(PRI_ERROR, TEST_SHARD, TS18, "TEvKeyValue::TEvRequest failed", (TabletId, TabletId),
+            STLOG(PRI_ERROR, TEST_SHARD, TS26, "TEvKeyValue::TEvRequest failed", (TabletId, TabletId),
                 (Status, record.GetStatus()), (ErrorReason, record.GetErrorReason()));
             if (const auto it = WritesInFlight.find(record.GetCookie()); it != WritesInFlight.end()) {
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    STLOG(PRI_WARN, TEST_SHARD, TS19, "write failed", (TabletId, TabletId), (Key, key));
+                    STLOG(PRI_WARN, TEST_SHARD, TS27, "write failed", (TabletId, TabletId), (Key, key));
                     RegisterTransition(*it, ::NTestShard::TStateServer::WRITE_PENDING, ::NTestShard::TStateServer::DELETED);
                 }
                 WritesInFlight.erase(it);
@@ -111,7 +111,7 @@ namespace NKikimr::NTestShard {
                 for (const TString& key : it->second.KeysInQuery) {
                     const auto it = Keys.find(key);
                     Y_VERIFY_S(it != Keys.end(), "Key# " << key << " not found in Keys dict");
-                    STLOG(PRI_WARN, TEST_SHARD, TS20, "delete failed", (TabletId, TabletId), (Key, key));
+                    STLOG(PRI_WARN, TEST_SHARD, TS28, "delete failed", (TabletId, TabletId), (Key, key));
                     RegisterTransition(*it, ::NTestShard::TStateServer::DELETE_PENDING, ::NTestShard::TStateServer::CONFIRMED);
                     BytesOfData += it->second.Len;
                 }

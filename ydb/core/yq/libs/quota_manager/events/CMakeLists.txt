@@ -12,6 +12,7 @@ target_link_libraries(libs-quota_manager-events PUBLIC
   contrib-libs-cxxsupp
   yutil
   yq-libs-events
+  libs-quota_manager-proto
 )
 target_sources(libs-quota_manager-events PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/quota_manager/events/events.cpp

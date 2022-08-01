@@ -8,6 +8,7 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_histogram_latency.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_mon.h>
+#include <ydb/core/blobstorage/vdisk/protos/events.pb.h>
 #include <ydb/core/blobstorage/storagepoolmon/storagepool_counters.h>
 
 #include <ydb/core/base/compile_time_flags.h>
@@ -354,13 +355,12 @@ namespace NKikimr {
         TEvVResultBase() = default;
 
         TEvVResultBase(const TInstant &now, ui32 channel, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
+                const NVDiskMon::TLtcHistoPtr &histoPtr)
             : TVDiskNonlocalResultBase(channel)
             , Start(now)
             , Size(0)
             , CounterPtr(counterPtr)
             , HistoPtr(histoPtr)
-            , TraceId(std::move(traceId))
         {}
 
         virtual ~TEvVResultBase() {
@@ -393,9 +393,6 @@ namespace NKikimr {
         ::NMonitoring::TDynamicCounters::TCounterPtr CounterPtr;
         NVDiskMon::TLtcHistoPtr HistoPtr;
         bool Finalized = false;
-
-    public:
-        NWilson::TTraceId TraceId;
     };
 
     template<typename TEv, typename TRecord /*protobuf record*/, ui32 TEventType>
@@ -409,8 +406,8 @@ namespace NKikimr {
         TEvVResultBasePB() = default;
 
         TEvVResultBasePB(const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBase(now, channel, counterPtr, histoPtr, std::move(traceId))
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBase(now, channel, counterPtr, histoPtr)
         {}
     };
 
@@ -432,10 +429,9 @@ namespace NKikimr {
 
         template<typename TQueryRecord>
         TEvVResultBaseWithQoSPB(TInstant now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel,
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel,
                 ui32 recByteSize, TQueryRecord *queryRecord, const TActorIDPtr &skeletonFrontIDPtr)
-            : TBase(queryRecord ? GetReceivedTimestamp(queryRecord) : now,
-                counterPtr, histoPtr, std::move(traceId), channel)
+            : TBase(queryRecord ? GetReceivedTimestamp(queryRecord) : now, counterPtr, histoPtr, channel)
             , MsgCtx(queryRecord ? TVMsgContext(recByteSize, queryRecord->GetMsgQoS()) : TVMsgContext())
             , SkeletonFrontIDPtr(skeletonFrontIDPtr)
         {
@@ -716,8 +712,7 @@ namespace NKikimr {
                 const ui64 *cookie, TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
                 NKikimrBlobStorage::TEvVPut *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                const ui64 bufferSizeBytes, NWilson::TTraceId traceId, ui64 incarnationGuid,
-                const TString& errorReason);
+                const ui64 bufferSizeBytes, ui64 incarnationGuid, const TString& errorReason);
 
         TString ToString() const override {
             return ToString(Record);
@@ -837,7 +832,7 @@ namespace NKikimr {
         TRope GetItemBuffer(ui64 itemIdx) const;
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TString &buffer, ui64 *cookie,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks) {
+                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
@@ -852,6 +847,9 @@ namespace NKikimr {
                     p->SetTabletId(tabletId);
                     p->SetGeneration(generation);
                 }
+            }
+            if (traceId) {
+                traceId.Serialize(item->MutableTraceId());
             }
         }
 
@@ -928,10 +926,10 @@ namespace NKikimr {
         TEvVMultiPutResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const ui64 *cookie,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVMultiPut *record,
                 const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, NWilson::TTraceId traceId,
-                ui64 incarnationGuid, const TString& errorReason)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, const ui64 bufferSizeBytes, ui64 incarnationGuid,
+                const TString& errorReason)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
+                    recByteSize, record, skeletonFrontIDPtr)
         {
             IncrementSize(bufferSizeBytes);
             Record.SetStatus(status);
@@ -1264,9 +1262,8 @@ namespace NKikimr {
         TEvVGetResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
                 ui32 recByteSize, NKikimrBlobStorage::TEvVGet *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId), channel,
-                    recByteSize, queryRecord, skeletonFrontIDPtr)
+                TMaybe<ui64> cookie, ui32 channel, ui64 incarnationGuid)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, channel, recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -1516,9 +1513,8 @@ namespace NKikimr {
                 TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
                 TReqRecord *record, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason)
-            : TBase(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
+                ui64 incarnationGuid, const TString& errorReason)
+            : TBase(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, record, skeletonFrontIDPtr)
         {
             this->Record.SetStatus(status);
             LogoBlobIDFromLogoBlobID(originalBlobId, this->Record.MutableOriginalBlobId());
@@ -1639,9 +1635,9 @@ namespace NKikimr {
                 TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
                 NKikimrBlobStorage::TEvVMovedPatch *record, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason)
+                ui64 incarnationGuid, const TString& errorReason)
             : TBase(status, originalBlobId, patchedBlobId, vdisk, cookie, oosStatus, now, recByteSize,
-                    record, skeletonFrontIDPtr, counterPtr, histoPtr, std::move(traceId), incarnationGuid, errorReason)
+                    record, skeletonFrontIDPtr, counterPtr, histoPtr, incarnationGuid, errorReason)
         {}
     };
 
@@ -1687,9 +1683,9 @@ namespace NKikimr {
                 TOutOfSpaceStatus oosStatus, const TInstant &now, ui32 recByteSize,
                 NKikimrBlobStorage::TEvVInplacePatch *record, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid, const TString& errorReason)
+                ui64 incarnationGuid, const TString& errorReason)
             : TBase(status, originalBlobId, patchedBlobId, vdisk, cookie, oosStatus, now, recByteSize,
-                    record, skeletonFrontIDPtr, counterPtr, histoPtr, std::move(traceId), incarnationGuid, errorReason)
+                    record, skeletonFrontIDPtr, counterPtr, histoPtr, incarnationGuid, errorReason)
         {}
     };
 
@@ -1737,9 +1733,9 @@ namespace NKikimr {
         TEvVBlockResult(NKikimrProto::EReplyStatus status, const TTabletActGen *actual, const TVDiskID &vdisk,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVBlock *queryRecord,
                 const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, queryRecord, skeletonFrontIDPtr)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui64 incarnationGuid)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
+                    recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             if (actual) {
@@ -1831,8 +1827,8 @@ namespace NKikimr {
                 const TLogoBlobID &patchedBlobId, const TVDiskID &vDiskId, TMaybe<ui64> cookie, const TInstant &now,
                 const TString &errorReason, NKikimrBlobStorage::TEvVPatchStart *record,
                 const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui64 incarnationGuid)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr,
                     TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(),
                     record, skeletonFrontIDPtr)
         {
@@ -1995,8 +1991,8 @@ namespace NKikimr {
         TEvVPatchXorDiffResult(NKikimrProto::EReplyStatus status, TInstant now,
                 NKikimrBlobStorage::TEvVPatchXorDiff *record, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
+                const NVDiskMon::TLtcHistoPtr &histoPtr)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr,
                     TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(),
                     record, skeletonFrontIDPtr)
         {
@@ -2029,8 +2025,8 @@ namespace NKikimr {
                 const TLogoBlobID &patchedPartBlobId, const TVDiskID &vDiskId, TMaybe<ui64> cookie, TInstant now,
                 NKikimrBlobStorage::TEvVPatchDiff *record, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
+                ui64 incarnationGuid)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr,
                     TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, record->GetCachedSize(),
                     record, skeletonFrontIDPtr)
         {
@@ -2108,9 +2104,9 @@ namespace NKikimr {
         TEvVGetBlockResult(NKikimrProto::EReplyStatus status, ui64 tabletId, const TVDiskID &vdisk,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVGetBlock *queryRecord,
                 const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, queryRecord, skeletonFrontIDPtr)
+                const NVDiskMon::TLtcHistoPtr &histoPtr)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
+                    recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             Record.SetTabletId(tabletId);
@@ -2120,9 +2116,9 @@ namespace NKikimr {
         TEvVGetBlockResult(NKikimrProto::EReplyStatus status, ui64 tabletId, ui32 generation, const TVDiskID &vdisk,
                 const TInstant &now, ui32 recByteSize, NKikimrBlobStorage::TEvVGetBlock *queryRecord,
                 const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, queryRecord, skeletonFrontIDPtr)
+                const NVDiskMon::TLtcHistoPtr &histoPtr)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
+                    recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             Record.SetTabletId(tabletId);
@@ -2233,9 +2229,9 @@ namespace NKikimr {
                 const TVDiskID &vdisk, const TInstant &now, ui32 recByteSize,
                 NKikimrBlobStorage::TEvVCollectGarbage *queryRecord, const TActorIDPtr &skeletonFrontIDPtr,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId, ui64 incarnationGuid)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, queryRecord, skeletonFrontIDPtr)
+                ui64 incarnationGuid)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
+                    recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             Record.SetTabletId(tabletId);
@@ -2328,9 +2324,9 @@ namespace NKikimr {
         TEvVGetBarrierResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
                 ui32 recByteSize, NKikimrBlobStorage::TEvVGetBarrier *queryRecord,
                 const TActorIDPtr &skeletonFrontIDPtr, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId)
-            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG, recByteSize, queryRecord, skeletonFrontIDPtr)
+                const NVDiskMon::TLtcHistoPtr &histoPtr)
+            : TEvVResultBaseWithQoSPB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG,
+                    recByteSize, queryRecord, skeletonFrontIDPtr)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2497,10 +2493,8 @@ namespace NKikimr {
         TEvVDbStatResult() = default;
 
         TEvVDbStatResult(NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
-                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr,
-                NWilson::TTraceId traceId)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId),
-                    TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG)
+                const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr, const NVDiskMon::TLtcHistoPtr &histoPtr)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, TInterconnectChannels::IC_BLOBSTORAGE_SMALL_MSG)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2565,8 +2559,8 @@ namespace NKikimr {
         // read response
         TEvVSyncGuidResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
                 ui64 guid, EState state, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId), channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             auto guidInfo = Record.MutableReadInfo();
@@ -2578,8 +2572,8 @@ namespace NKikimr {
         // write or error response
         TEvVSyncGuidResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TInstant &now,
                 const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId), channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2624,8 +2618,8 @@ namespace NKikimr {
         TEvVSyncResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk,
                        const TSyncState &newSyncState, bool finished, NPDisk::TStatusFlags flags, const TInstant &now,
                        const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                       const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId), channel)
+                       const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             SyncStateFromSyncState(newSyncState, Record.MutableNewSyncState());
@@ -2636,8 +2630,8 @@ namespace NKikimr {
 
         TEvVSyncResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, NPDisk::TStatusFlags flags,
                 const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId), channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2690,8 +2684,8 @@ namespace NKikimr {
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, const TSyncState &syncState,
                 ui64 cookie, const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId), channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2701,8 +2695,8 @@ namespace NKikimr {
 
         TEvVSyncFullResult(const NKikimrProto::EReplyStatus status, const TVDiskID &vdisk, ui64 cookie,
                 const TInstant &now, const ::NMonitoring::TDynamicCounters::TCounterPtr &counterPtr,
-                const NVDiskMon::TLtcHistoPtr &histoPtr, NWilson::TTraceId traceId, ui32 channel)
-            : TEvVResultBasePB(now, counterPtr, histoPtr, std::move(traceId), channel)
+                const NVDiskMon::TLtcHistoPtr &histoPtr, ui32 channel)
+            : TEvVResultBasePB(now, counterPtr, histoPtr, channel)
         {
             Record.SetStatus(status);
             VDiskIDFromVDiskID(vdisk, Record.MutableVDiskID());
@@ -2846,6 +2840,41 @@ namespace NKikimr {
         };
 
         std::vector<TLayoutRecord> Layout;
+    };
+
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    // FOR JSON
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    struct TEvVDiskStatRequest
+        : public TEventPB<TEvVDiskStatRequest,
+                    NKikimrVDisk::VDiskStatRequest,
+                    TEvBlobStorage::EvVDiskStatRequest>
+    {
+        TEvVDiskStatRequest() = default;
+    };
+
+    struct TEvVDiskStatResponse
+        : public TEvVResultBasePB<TEvVDiskStatResponse,
+                    NKikimrVDisk::VDiskStatResponse,
+                    TEvBlobStorage::EvVDiskStatResponse>
+    {
+        TEvVDiskStatResponse() = default;
+    };
+
+    struct TEvGetLogoBlobRequest
+        : public TEventPB<TEvGetLogoBlobRequest,
+                    NKikimrVDisk::GetLogoBlobRequest,
+                    TEvBlobStorage::EvGetLogoBlobRequest>
+    {
+        TEvGetLogoBlobRequest() = default;
+    };
+
+    struct TEvGetLogoBlobResponse
+        : public TEvVResultBasePB<TEvGetLogoBlobResponse,
+                    NKikimrVDisk::GetLogoBlobResponse,
+                    TEvBlobStorage::EvGetLogoBlobResponse>
+    {
+        TEvGetLogoBlobResponse() = default;
     };
 
 } // NKikimr

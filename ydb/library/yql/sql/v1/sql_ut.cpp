@@ -1662,6 +1662,12 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("$ true = false; SELECT $ true or false;").IsOk());
         UNIT_ASSERT(SqlToYql("$False = 0; SELECT $False;").IsOk());
     }
+
+    Y_UNIT_TEST(WithSchemaEquals) {
+        UNIT_ASSERT(SqlToYql("select * from plato.T with schema Struct<a:Int32, b:String>;").IsOk());
+        UNIT_ASSERT(SqlToYql("select * from plato.T with columns = Struct<a:Int32, b:String>;").IsOk());
+        UNIT_ASSERT(SqlToYql("select * from plato.T with (format=csv_with_names, schema=(year Int32, month String, day String, a Utf8, b Uint16));").IsOk());
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {

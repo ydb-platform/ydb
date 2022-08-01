@@ -3,6 +3,8 @@
 #include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_hullsatisfactionrank.h>
 #include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.h>
 #include <ydb/core/util/queue_inplace.h>
+#include <ydb/core/base/wilson.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 namespace NKikimr {
 
@@ -12,13 +14,17 @@ namespace NKikimr {
     class TEmergencyQueue {
         struct TItem {
             std::unique_ptr<IEventHandle> Ev;
+            NWilson::TSpan Span;
 
             TItem() = default;
 
             template<typename T>
             TItem(TAutoPtr<TEventHandle<T>> ev)
                 : Ev(ev.Release())
-            {}
+                , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Skeleton.EmergencyQueue")
+            {
+                Ev->TraceId = Span.GetTraceId();
+            }
         };
 
         // emergency queue of 'put' events
@@ -95,6 +101,7 @@ namespace NKikimr {
             auto item = Queue.Head();
             Y_VERIFY(item);
             TAutoPtr<IEventHandle> ev = item->Ev.release();
+            item->Span.EndOk();
             Queue.Pop();
             switch (ev->GetTypeRewrite()) {
                 case TEvBlobStorage::EvVMovedPatch: {

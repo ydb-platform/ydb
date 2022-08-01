@@ -68,6 +68,9 @@ namespace NKikimr::NBlobDepot {
                 Key,
                 Value
             >;
+
+            static constexpr ui64 PrechargeRows = 10'000;
+            static constexpr ui64 PrechargeBytes = 1'000'000;
         };
 
         struct Trash : Table<5> {
@@ -75,6 +78,9 @@ namespace NKikimr::NBlobDepot {
 
             using TKey = TableKey<BlobId>;
             using TColumns = TableColumns<BlobId>;
+
+            static constexpr ui64 PrechargeRows = 10'000;
+            static constexpr ui64 PrechargeBytes = 1'000'000;
         };
 
         struct GC : Table<6> {
@@ -85,6 +91,9 @@ namespace NKikimr::NBlobDepot {
 
             using TKey = TableKey<Channel, GroupId>;
             using TColumns = TableColumns<Channel, GroupId, IssuedGenStep, ConfirmedGenStep>;
+
+            static constexpr ui64 PrechargeRows = 10'000;
+            static constexpr ui64 PrechargeBytes = 1'000'000;
         };
 
         using TTables = SchemaTables<

@@ -95,7 +95,7 @@ public:
     };
 
     using TOnNewDataPart = std::function<void(TCountedContent&&)>;
-    using TOnDownloadFinish = std::function<void(std::optional<TIssues>)>;
+    using TOnDownloadFinish = std::function<void(std::variant<long, TIssues>)>; // http code or issues.
 
     virtual void Download(
         TString url,

@@ -229,12 +229,12 @@ private:
         return OnFinish(TIssues{error});
     }
 
-    void Done(CURLcode result, long) final {
+    void Done(CURLcode result, long httpResponseCode) final {
         if (CURLE_OK != result)
             return Fail(TIssue(curl_easy_strerror(result)));
 
         Working = false;
-        return OnFinish(std::nullopt);
+        return OnFinish(httpResponseCode);
     }
 
     size_t Write(void* contents, size_t size, size_t nmemb) final {

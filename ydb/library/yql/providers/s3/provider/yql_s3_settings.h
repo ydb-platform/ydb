@@ -15,6 +15,7 @@ struct TS3Settings {
     NCommon::TConfSetting<ui64, false> UniqueKeysCountLimit;
     NCommon::TConfSetting<ui64, false> BlockSizeMemoryLimit;
     NCommon::TConfSetting<ui64, false> SerializeMemoryLimit; // Total serialization memory limit for all current blocks for all patition keys. Reachable in case of many but small partitions.
+    NCommon::TConfSetting<ui64, false> InFlightMemoryLimit; // Maximum memory used by one sink.
 };
 
 struct TS3ClusterSettings {

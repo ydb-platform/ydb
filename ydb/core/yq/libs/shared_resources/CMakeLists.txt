@@ -19,6 +19,7 @@ target_link_libraries(yq-libs-shared_resources PUBLIC
   ydb-core-protos
   libs-control_plane_storage-proto
   yq-libs-events
+  libs-quota_manager-events
   libs-shared_resources-interface
   ydb-library-logger
   ydb-library-security

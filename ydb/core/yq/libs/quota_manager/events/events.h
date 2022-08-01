@@ -12,6 +12,8 @@
 #include <library/cpp/actors/core/actor.h>
 #include <library/cpp/actors/core/event_local.h>
 
+#include <ydb/core/yq/libs/quota_manager/proto/quota_internal.pb.h>
+
 namespace NYq {
 
 constexpr auto SUBJECT_TYPE_CLOUD = "cloud"; 
@@ -43,15 +45,39 @@ struct TQuotaDescription {
     }
 };
 
-struct TQuotaUsage {
-    ui64 Limit;
-    TMaybe<ui64> Usage;
+template <typename T>
+struct TTimedValue {
+    T Value;
     TInstant UpdatedAt;
+    TTimedValue() = default;
+    TTimedValue(const TTimedValue&) = default;
+    TTimedValue(T value, const TInstant& updatedAt = TInstant::Zero()) : Value(value), UpdatedAt(updatedAt) {}
+};
+
+using TTimedUint64 = TTimedValue<ui64>;
+
+struct TQuotaUsage {
+    TTimedUint64 Limit;
+    TMaybe<TTimedUint64> Usage;
     TQuotaUsage() = default;
     TQuotaUsage(const TQuotaUsage&) = default;
-    TQuotaUsage(ui64 limit) : Limit(limit), UpdatedAt(TInstant::Zero()) {}
-    TQuotaUsage(ui64 limit, ui64 usage, const TInstant& updatedAt = Now())
-      : Limit(limit), Usage(usage), UpdatedAt(updatedAt) {}
+    TQuotaUsage(ui64 limit, const TInstant& limitUpdatedAt = Now()) : Limit(limit, limitUpdatedAt) {}
+    TQuotaUsage(ui64 limit, const TInstant& limitUpdatedAt, ui64 usage, const TInstant& usageUpdatedAt = Now())
+      : Limit(limit, limitUpdatedAt), Usage(NMaybe::TInPlace{}, usage, usageUpdatedAt) {}
+    void Merge(const TQuotaUsage& other);
+    TString ToString() {
+        return (Usage ? std::to_string(Usage->Value) : "*") + "/" + std::to_string(Limit.Value);
+    }
+    TString ToString(const TString& subjectType, const TString& subjectId, const TString& metricName) {
+        TStringBuilder builder;
+        builder << subjectType << "." << subjectId << "." << metricName << "=" << ToString();
+        return builder;
+    }
+    TString ToString(const TString& metricName) {
+        TStringBuilder builder;
+        builder << metricName << "=" << ToString();
+        return builder;
+    }
 };
 
 using TQuotaMap = THashMap<TString, TQuotaUsage>;
@@ -73,6 +99,7 @@ struct TEvQuotaService {
         EvQuotaSetResponse,
         EvQuotaLimitChangeRequest,
         EvQuotaLimitChangeResponse,
+        EvQuotaUpdateNotification,
         EvEnd,
     };
 
@@ -216,6 +243,15 @@ struct TEvQuotaService {
         {}
     };
 
+    struct TEvQuotaUpdateNotification : public NActors::TEventPB<TEvQuotaUpdateNotification,
+        Fq::Quota::EvQuotaUpdateNotification, EvQuotaUpdateNotification> {
+
+        TEvQuotaUpdateNotification() = default;
+        TEvQuotaUpdateNotification(const Fq::Quota::EvQuotaUpdateNotification& protoMessage)
+            : NActors::TEventPB<TEvQuotaUpdateNotification, Fq::Quota::EvQuotaUpdateNotification, EvQuotaUpdateNotification>(protoMessage) {
+
+        }
+    };
 };
 
 } /* NYq */

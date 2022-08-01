@@ -284,14 +284,16 @@ void Init(
     if (protoConfig.GetQuotasManager().GetEnabled()) {
         auto quotaService = NYq::CreateQuotaServiceActor(
             protoConfig.GetQuotasManager(),
-            /* yqSharedResources, */
+            protoConfig.GetControlPlaneStorage().GetStorage(),
+            yqSharedResources,
+            credentialsProviderFactory,
             serviceCounters.Counters,
             {
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_RESULT_LIMIT, 20_MB, 2_GB),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_COUNT_LIMIT, 100, 200, NYq::ControlPlaneStorageServiceActorId()),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_TIME_LIMIT, 0)
             });
-        actorRegistrator(NYq::MakeQuotaServiceActorId(), quotaService);
+        actorRegistrator(NYq::MakeQuotaServiceActorId(nodeId), quotaService);
 
         auto quotaProxy = NYq::CreateQuotaProxyActor(
             protoConfig.GetQuotasManager(),

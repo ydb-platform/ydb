@@ -32,11 +32,13 @@
 
 namespace NYq {
 
-NActors::TActorId MakeQuotaServiceActorId();
+NActors::TActorId MakeQuotaServiceActorId(ui32 nodeId);
 
 NActors::IActor* CreateQuotaServiceActor(
     const NConfig::TQuotasManagerConfig& config,
-    /* const NYq::TYqSharedResources::TPtr& yqSharedResources, */
+    const NConfig::TYdbStorageConfig& storageConfig,
+    const TYqSharedResources::TPtr& yqSharedResources,
+    NKikimr::TYdbCredentialsProviderFactory credProviderFactory,
     const ::NMonitoring::TDynamicCounterPtr& counters,
     std::vector<TQuotaDescription> quotaDesc);
 

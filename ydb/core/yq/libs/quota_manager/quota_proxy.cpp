@@ -12,13 +12,15 @@
 #include <ydb/core/protos/services.pb.h>
 
 #define LOG_E(stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
+    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
 #define LOG_W(stream) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
+    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
 #define LOG_I(stream) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
+    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
 #define LOG_D(stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_SERVICE, stream)
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
+#define LOG_T(stream) \
+    LOG_TRACE_S(*NActors::TlsActivationContext, NKikimrServices::FQ_QUOTA_PROXY, stream)
 
 namespace NYq {
 
@@ -36,7 +38,7 @@ public:
 
     void Bootstrap() {
         Become(&TQuotaProxyGetRequestActor::StateFunc);
-        Send(NYq::MakeQuotaServiceActorId(), new TEvQuotaService::TQuotaGetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId));
+        Send(NYq::MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaGetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -58,7 +60,7 @@ public:
 
     void Bootstrap() {
         Become(&TQuotaProxySetRequestActor::StateFunc);
-        Send(NYq::MakeQuotaServiceActorId(), new TEvQuotaService::TQuotaSetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId, Ev->Get()->Limits));
+        Send(NYq::MakeQuotaServiceActorId(SelfId().NodeId()), new TEvQuotaService::TQuotaSetRequest(Ev->Get()->SubjectType, Ev->Get()->SubjectId, Ev->Get()->Limits));
     }
 
     STRICT_STFUNC(StateFunc,

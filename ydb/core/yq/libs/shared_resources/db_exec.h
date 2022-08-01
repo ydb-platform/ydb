@@ -71,10 +71,16 @@ inline TAsyncStatus Exec(TDbPool::TPtr dbPool, TDbExecutable::TPtr executable) {
 template <typename TState>
 class TDbExecuter : public TDbExecutable {
 
+public:
+    using TCallback = std::function<void(TDbExecuter<TState>&)>;
+    using TBuildCallback = std::function<void(TDbExecuter<TState>&, TSqlQueryBuilder&)>;
+    using TResultCallback = std::function<void(TDbExecuter<TState>&, const TVector<NYdb::TResultSet>&)>;
+
+private:
     struct TExecStep {
-        std::function<void(TDbExecuter<TState>&, TSqlQueryBuilder&)> BuilderCallback;
-        std::function<void(TDbExecuter<TState>&, const TVector<NYdb::TResultSet>&)> HandlerCallback;
-        std::function<void(TDbExecuter<TState>&)> ProcessCallback;
+        TBuildCallback BuildCallback;
+        TResultCallback ResultCallback;
+        TCallback ProcessCallback;
         TString Name; 
         bool Commit = false;
     };
@@ -84,13 +90,18 @@ class TDbExecuter : public TDbExecutable {
     NActors::TActorId HandlerActorId;
     TMaybe<TTransaction> Transaction;
     NActors::TActorSystem* ActorSystem = nullptr;
-    std::function<void(TDbExecuter<TState>&)> HandlerCallback;
-    std::function<void(TDbExecuter<TState>&)> StateInitCallback;
+    TCallback HandlerCallback;
+    TCallback StateInitCallback;
     bool skipStep = false;
 
 protected:
-    TDbExecuter(bool collectDebugInfo, std::function<void(TDbExecuter<TState>&)> stateInitCallback = nullptr) 
+    TDbExecuter(bool collectDebugInfo, std::function<void(TDbExecuter<TState>&)> stateInitCallback) 
         : TDbExecutable(collectDebugInfo), StateInitCallback(stateInitCallback) {
+    }
+
+    TDbExecuter(bool collectDebugInfo) 
+        : TDbExecutable(collectDebugInfo) {
+            StateInitCallback = [](TDbExecuter<TState>& executer) { executer.State = TState{}; };
     }
 
     TDbExecuter(const TDbExecuter& other) = delete;
@@ -101,6 +112,12 @@ public:
 
     static TDbExecuter& Create(TDbExecutable::TPtr& holder, bool collectDebugInfo = false) {
         auto executer = new TDbExecuter(collectDebugInfo);
+        holder.reset(executer);
+        return *executer;
+    };
+
+    static TDbExecuter& Create(TDbExecutable::TPtr& holder, bool collectDebugInfo, std::function<void(TDbExecuter<TState>&)> stateInitCallback) {
+        auto executer = new TDbExecuter(collectDebugInfo, stateInitCallback);
         holder.reset(executer);
         return *executer;
     };
@@ -121,7 +138,11 @@ public:
                     TCommitTransactionResult result = future.GetValue();
                     auto status = static_cast<TStatus>(result);
 
-                    return this->NextStep(session);
+                    if (!status.IsSuccess()) {
+                        return MakeFuture(status);
+                    } else {
+                        return this->NextStep(session);
+                    }
                 });
             }
             if (HandlerActorId != NActors::TActorId{}) {
@@ -136,7 +157,7 @@ public:
         } else {
             TSqlQueryBuilder builder(DbPool->TablePathPrefix, Steps[CurrentStepIndex].Name);
             skipStep = false;
-            Steps[CurrentStepIndex].BuilderCallback(*this, builder);
+            Steps[CurrentStepIndex].BuildCallback(*this, builder);
 
             if (skipStep) { // TODO Refactor this
                 this->CurrentStepIndex++;
@@ -170,9 +191,9 @@ public:
                     this->Transaction = result.GetTransaction();
                 }
 
-                if (this->Steps[CurrentStepIndex].HandlerCallback) {
+                if (this->Steps[CurrentStepIndex].ResultCallback) {
                     try {
-                        this->Steps[CurrentStepIndex].HandlerCallback(*this, result.GetResultSets());
+                        this->Steps[CurrentStepIndex].ResultCallback(*this, result.GetResultSets());
                     } catch (const TControlPlaneStorageException& exception) {
                         NYql::TIssue issue = MakeErrorIssue(exception.Code, exception.GetRawMessage());
                         Issues.AddIssue(issue);
@@ -200,34 +221,32 @@ public:
     TAsyncStatus Execute(NYdb::NTable::TSession& session) override {
         if (StateInitCallback) {
             StateInitCallback(*this);
-        } else {
-            State = TState{};
         }
         return NextStep(session);
     }
 
     TDbExecuter& Read(
-        std::function<void(TDbExecuter<TState>&, TSqlQueryBuilder&)> builderCallback
-        , std::function<void(TDbExecuter<TState>&, const TVector<NYdb::TResultSet>&)> handlerCallback
+        TBuildCallback buildCallback
+        , TResultCallback resultCallback
         , const TString& Name = "DefaultReadName"
         , bool commit = false
     ) {
-        Steps.emplace(Steps.begin() + InsertStepIndex, TExecStep{builderCallback, handlerCallback, nullptr, Name, commit});
+        Steps.emplace(Steps.begin() + InsertStepIndex, TExecStep{buildCallback, resultCallback, nullptr, Name, commit});
         InsertStepIndex++;
         return *this;
     }
 
     TDbExecuter& Write(
-        std::function<void(TDbExecuter<TState>&, TSqlQueryBuilder&)> builderCallback
+        TBuildCallback buildCallback
         , const TString& Name = "DefaultWriteName"
         , bool commit = false
     ) {
-        return Read(builderCallback, nullptr, Name, commit);
+        return Read(buildCallback, nullptr, Name, commit);
     }
 
     void Process(
         NActors::TActorId actorId
-        , std::function<void(TDbExecuter<TState>&)> handlerCallback
+        , TCallback handlerCallback
     ) {
         Y_VERIFY(HandlerActorId == NActors::TActorId{}, "Handler must be empty");
         ActorSystem = TActivationContext::ActorSystem();

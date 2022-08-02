@@ -16,10 +16,11 @@
 
 namespace NYq {
 
-constexpr auto SUBJECT_TYPE_CLOUD = "cloud"; 
-constexpr auto QUOTA_RESULT_LIMIT = "fq.queryResultLimit.bytes"; 
+constexpr auto SUBJECT_TYPE_CLOUD = "cloud";
+constexpr auto QUOTA_RESULT_LIMIT = "fq.queryResultLimit.bytes";
 constexpr auto QUOTA_COUNT_LIMIT  = "fq.queryLimit.count";
 constexpr auto QUOTA_TIME_LIMIT = "fq.queryLimit.ttl";
+constexpr auto QUOTA_CPU_LIMIT = "fq.cpu.count";
 
 struct TQuotaInfo {
     ui64 DefaultLimit;

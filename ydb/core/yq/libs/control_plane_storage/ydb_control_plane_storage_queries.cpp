@@ -124,6 +124,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
     }
 
+    if (request.content().limits().vcpu_rate_limit() < 0) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "VCPU rate limit can't be less than zero"));
+    }
+
     if (issues) {
         CPS_LOG_W("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;

@@ -56,6 +56,8 @@ private:
         hFunc(TEvInternalService::TEvGetTaskRequest, Handle)
         hFunc(TEvInternalService::TEvPingTaskRequest, Handle)
         hFunc(TEvInternalService::TEvWriteResultRequest, Handle)
+        hFunc(TEvInternalService::TEvCreateRateLimiterResourceRequest, Handle)
+        hFunc(TEvInternalService::TEvDeleteRateLimiterResourceRequest, Handle)
     );
 
     void Handle(TEvInternalService::TEvHealthCheckRequest::TPtr& ev) {
@@ -106,6 +108,32 @@ private:
                     actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(future.GetValue()), 0, cookie));
                 } catch (...) {
                     actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvWriteResultResponse(CurrentExceptionMessage()), 0, cookie));
+                }
+            });
+    }
+
+    void Handle(TEvInternalService::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
+        EventLatency->Collect((TInstant::Now() - ev->Get()->SentAt).MilliSeconds());
+        PrivateClient
+            .CreateRateLimiterResource(std::move(ev->Get()->Request))
+            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TCreateRateLimiterResourceResult>& future) {
+                try {
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvCreateRateLimiterResourceResponse(future.GetValue()), 0, cookie));
+                } catch (...) {
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvCreateRateLimiterResourceResponse(CurrentExceptionMessage()), 0, cookie));
+                }
+            });
+    }
+
+    void Handle(TEvInternalService::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
+        EventLatency->Collect((TInstant::Now() - ev->Get()->SentAt).MilliSeconds());
+        PrivateClient
+            .DeleteRateLimiterResource(std::move(ev->Get()->Request))
+            .Subscribe([actorSystem = NActors::TActivationContext::ActorSystem(), senderId = ev->Sender, selfId = SelfId(), cookie = ev->Cookie](const NThreading::TFuture<TDeleteRateLimiterResourceResult>& future) {
+                try {
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(future.GetValue()), 0, cookie));
+                } catch (...) {
+                    actorSystem->Send(new NActors::IEventHandle(senderId, selfId, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(CurrentExceptionMessage()), 0, cookie));
                 }
             });
     }

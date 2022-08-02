@@ -719,6 +719,11 @@ namespace Tests {
             NYq::NConfig::TConfig protoConfig;
             protoConfig.SetEnabled(true);
 
+            protoConfig.MutableQuotasManager()->SetEnabled(true);
+            protoConfig.MutableRateLimiter()->SetEnabled(false);
+            protoConfig.MutableRateLimiter()->SetControlPlaneEnabled(true); // Will answer on creation requests and give empty kesus name
+            protoConfig.MutableRateLimiter()->SetDataPlaneEnabled(true);
+
             protoConfig.MutableCommon()->SetIdsPrefix("id");
 
             TString endpoint = TStringBuilder() << "localhost:" << Settings->GrpcPort;

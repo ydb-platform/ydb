@@ -26,6 +26,10 @@ struct TEvInternalService {
         EvPingTaskResponse,
         EvWriteResultRequest,
         EvWriteResultResponse,
+        EvCreateRateLimiterResourceRequest,
+        EvCreateRateLimiterResourceResponse,
+        EvDeleteRateLimiterResourceRequest,
+        EvDeleteRateLimiterResourceResponse,
         EvEnd,
     };
 
@@ -33,6 +37,7 @@ struct TEvInternalService {
 
     template <class TProtoRequest, ui32 TEventType>
     struct TInternalServiceRequestEvent : public NActors::TEventLocal<TInternalServiceRequestEvent<TProtoRequest, TEventType>, TEventType> {
+        using TProto = TProtoRequest;
         TProtoRequest Request;
         TInstant SentAt;
         explicit TInternalServiceRequestEvent(const TProtoRequest& request)
@@ -44,9 +49,12 @@ struct TEvInternalService {
     using TEvGetTaskRequest = TInternalServiceRequestEvent<Fq::Private::GetTaskRequest, EvGetTaskRequest>;
     using TEvPingTaskRequest = TInternalServiceRequestEvent<Fq::Private::PingTaskRequest, EvPingTaskRequest>;
     using TEvWriteResultRequest = TInternalServiceRequestEvent<Fq::Private::WriteTaskResultRequest, EvWriteResultRequest>;
+    using TEvCreateRateLimiterResourceRequest = TInternalServiceRequestEvent<Fq::Private::CreateRateLimiterResourceRequest, EvCreateRateLimiterResourceRequest>;
+    using TEvDeleteRateLimiterResourceRequest = TInternalServiceRequestEvent<Fq::Private::DeleteRateLimiterResourceRequest, EvDeleteRateLimiterResourceRequest>;
 
     template <class TProtoResult, ui32 TEventType>
     struct TInternalServiceResponseEvent : public NActors::TEventLocal<TInternalServiceResponseEvent<TProtoResult, TEventType>, TEventType> {
+        using TProto = TProtoResult;
         NYdb::TStatus Status;
         TProtoResult Result;
         explicit TInternalServiceResponseEvent(const TProtoResultInternalWrapper<TProtoResult>& wrappedResult) : Status(wrappedResult) {
@@ -66,6 +74,8 @@ struct TEvInternalService {
     using TEvGetTaskResponse = TInternalServiceResponseEvent<Fq::Private::GetTaskResult, EvGetTaskResponse>;
     using TEvPingTaskResponse = TInternalServiceResponseEvent<Fq::Private::PingTaskResult, EvPingTaskResponse>;
     using TEvWriteResultResponse = TInternalServiceResponseEvent<Fq::Private::WriteTaskResultResult, EvWriteResultResponse>;
+    using TEvCreateRateLimiterResourceResponse = TInternalServiceResponseEvent<Fq::Private::CreateRateLimiterResourceResult, EvCreateRateLimiterResourceResponse>;
+    using TEvDeleteRateLimiterResourceResponse = TInternalServiceResponseEvent<Fq::Private::DeleteRateLimiterResourceResult, EvDeleteRateLimiterResourceResponse>;
 };
 
 NActors::TActorId MakeInternalServiceActorId();

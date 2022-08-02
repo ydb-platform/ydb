@@ -99,6 +99,14 @@
         GROUPS(), \
         TYPES(TString, ui32, TString, TString, TDuration, bool), \
         NAMES("tenant", "nodeId", "instanceId", "hostName", "latencyMs", "success")) \
+    PROBE(CreateRateLimiterResourceRequest, \
+        GROUPS(), \
+        TYPES(TString, TDuration, bool), \
+        NAMES("queryId", "latencyMs", "success")) \
+    PROBE(DeleteRateLimiterResourceRequest, \
+        GROUPS(), \
+        TYPES(TString, TDuration, bool), \
+        NAMES("queryId", "latencyMs", "success")) \
 
 // YQ_CONTROL_PLANE_STORAGE_PROVIDER
 

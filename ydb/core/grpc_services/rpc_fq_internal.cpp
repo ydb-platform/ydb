@@ -21,6 +21,10 @@ using TEvFqPrivateWriteTaskResultRequest =
     TGrpcRequestOperationCall<Fq::Private::WriteTaskResultRequest, Fq::Private::WriteTaskResultResponse>;
 using TEvFqPrivateNodesHealthCheckRequest =
     TGrpcRequestOperationCall<Fq::Private::NodesHealthCheckRequest, Fq::Private::NodesHealthCheckResponse>;
+using TEvFqPrivateCreateRateLimiterResourceRequest =
+    TGrpcRequestOperationCall<Fq::Private::CreateRateLimiterResourceRequest, Fq::Private::CreateRateLimiterResourceResponse>;
+using TEvFqPrivateDeleteRateLimiterResourceRequest =
+    TGrpcRequestOperationCall<Fq::Private::DeleteRateLimiterResourceRequest, Fq::Private::DeleteRateLimiterResourceResponse>;
 
 template <typename RpcRequestType, typename EvRequestType, typename EvResponseType>
 class TFqPrivateRequestRPC : public TRpcOperationRequestActor<
@@ -94,6 +98,16 @@ using TFqPrivateNodesHealthCheckRPC = TFqPrivateRequestRPC<
     NYq::TEvents::TEvNodesHealthCheckRequest,
     NYq::TEvents::TEvNodesHealthCheckResponse>;
 
+using TFqPrivateCreateRateLimiterResourceRPC = TFqPrivateRequestRPC<
+    TEvFqPrivateCreateRateLimiterResourceRequest,
+    NYq::TEvents::TEvCreateRateLimiterResourceRequest,
+    NYq::TEvents::TEvCreateRateLimiterResourceResponse>;
+
+using TFqPrivateDeleteRateLimiterResourceRPC = TFqPrivateRequestRPC<
+    TEvFqPrivateDeleteRateLimiterResourceRequest,
+    NYq::TEvents::TEvDeleteRateLimiterResourceRequest,
+    NYq::TEvents::TEvDeleteRateLimiterResourceResponse>;
+
 void DoFqPrivatePingTaskRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TFqPrivatePingTaskRPC(p.release()));
 }
@@ -108,6 +122,14 @@ void DoFqPrivateWriteTaskResultRequest(std::unique_ptr<IRequestOpCtx> p, const I
 
 void DoFqPrivateNodesHealthCheckRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
     TActivationContext::AsActorContext().Register(new TFqPrivateNodesHealthCheckRPC(p.release()));
+}
+
+void DoFqPrivateCreateRateLimiterResourceRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TFqPrivateCreateRateLimiterResourceRPC(p.release()));
+}
+
+void DoFqPrivateDeleteRateLimiterResourceRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider&) {
+    TActivationContext::AsActorContext().Register(new TFqPrivateDeleteRateLimiterResourceRPC(p.release()));
 }
 
 } // namespace NGRpcService

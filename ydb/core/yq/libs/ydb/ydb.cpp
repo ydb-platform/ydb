@@ -222,6 +222,7 @@ TYdbConnection::TYdbConnection(const NConfig::TYdbStorageConfig& config,
     , TableClient(Driver, GetClientSettings<NYdb::NTable::TClientSettings>(config, credProviderFactory))
     , SchemeClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
     , CoordinationClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
+    , RateLimiterClient(Driver, GetClientSettings<NYdb::TCommonClientSettings>(config, credProviderFactory))
     , DB(config.GetDatabase())
     , TablePathPrefix(JoinPath(DB, config.GetTablePrefix()))
 {
@@ -279,6 +280,12 @@ TFuture<TStatus> CreateTable(
 bool IsTableCreated(const NYdb::TStatus& status) {
     return status.IsSuccess() ||
         status.GetStatus() == NYdb::EStatus::ALREADY_EXISTS ||
+            status.GetStatus() == NYdb::EStatus::CLIENT_CANCELLED;
+}
+
+bool IsTableDeleted(const NYdb::TStatus& status) {
+    return status.IsSuccess() ||
+        status.GetStatus() == NYdb::EStatus::NOT_FOUND ||
             status.GetStatus() == NYdb::EStatus::CLIENT_CANCELLED;
 }
 

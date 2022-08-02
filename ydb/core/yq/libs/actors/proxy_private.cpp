@@ -138,6 +138,42 @@ private:
             NActors::TMailboxType::HTSwap, ctx.SelfID.PoolID());
     }
 
+    void Handle(TEvents::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
+        Counters->GetCounter("EvCreateRateLimiterResourceRequest", true)->Inc();
+
+        NYql::TIssues issues = ValidatePermissions(ev);
+        if (issues) {
+            auto response = std::make_unique<TEvents::TEvCreateRateLimiterResourceResponse>();
+            response->Issues = issues;
+            response->Status = Ydb::StatusIds::UNAUTHORIZED;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
+
+        auto sender = ev->Sender;
+        Register(
+            CreateCreateRateLimiterResourceRequestActor(sender, TimeProvider, ev->Release(), Counters),
+            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+    }
+
+    void Handle(TEvents::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
+        Counters->GetCounter("EvDeleteRateLimiterResourceRequest", true)->Inc();
+
+        NYql::TIssues issues = ValidatePermissions(ev);
+        if (issues) {
+            auto response = std::make_unique<TEvents::TEvDeleteRateLimiterResourceResponse>();
+            response->Issues = issues;
+            response->Status = Ydb::StatusIds::UNAUTHORIZED;
+            Send(ev->Sender, response.release(), 0, ev->Cookie);
+            return;
+        }
+
+        auto sender = ev->Sender;
+        Register(
+            CreateDeleteRateLimiterResourceRequestActor(sender, TimeProvider, ev->Release(), Counters),
+            NActors::TMailboxType::HTSwap, SelfId().PoolID());
+    }
+
     STRICT_STFUNC(
         StateFunc,
         HFunc(NActors::TEvents::TEvUndelivered, OnUndelivered)
@@ -145,6 +181,8 @@ private:
         HFunc(TEvents::TEvGetTaskRequest, Handle)
         HFunc(TEvents::TEvWriteTaskResultRequest, Handle)
         HFunc(TEvents::TEvNodesHealthCheckRequest, Handle)
+        hFunc(TEvents::TEvCreateRateLimiterResourceRequest, Handle)
+        hFunc(TEvents::TEvDeleteRateLimiterResourceRequest, Handle)
         )
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&, const NActors::TActorContext&) {

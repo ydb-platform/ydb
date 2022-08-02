@@ -2,7 +2,7 @@
 #include "validators.h"
 #include "ydb_control_plane_storage_impl.h"
 
-#include <ydb/core/yq/libs/ydb/create_schema.h>
+#include <ydb/core/yq/libs/ydb/schema.h>
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 

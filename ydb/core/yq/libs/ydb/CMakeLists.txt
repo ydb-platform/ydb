@@ -16,16 +16,18 @@ target_link_libraries(yq-libs-ydb PUBLIC
   yutil
   cpp-actors-core
   library-cpp-retry
+  ydb-core-base
   yq-libs-config
   yq-libs-events
   ydb-library-security
   cpp-client-ydb_coordination
+  cpp-client-ydb_rate_limiter
   cpp-client-ydb_scheme
   cpp-client-ydb_table
   tools-enum_parser-enum_serialization_runtime
 )
 target_sources(yq-libs-ydb PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/create_schema.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/schema.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/util.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/ydb/ydb.cpp
 )

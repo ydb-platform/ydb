@@ -189,3 +189,30 @@ message NodesHealthCheckResult {
 message NodesHealthCheckResponse {
     Ydb.Operations.Operation operation = 1; // NodesHealthCheckResult
 }
+
+message CreateRateLimiterResourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string owner_id = 2;
+    SignedIdentity query_id = 3;
+}
+
+message CreateRateLimiterResourceResult {
+    string rate_limiter = 1;
+}
+
+message CreateRateLimiterResourceResponse {
+    Ydb.Operations.Operation operation = 1; // CreateRateLimiterResourceResult
+}
+
+message DeleteRateLimiterResourceRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    string owner_id = 2;
+    SignedIdentity query_id = 3;
+}
+
+message DeleteRateLimiterResourceResult {
+}
+
+message DeleteRateLimiterResourceResponse {
+    Ydb.Operations.Operation operation = 1; // DeleteRateLimiterResourceResult
+}

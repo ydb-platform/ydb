@@ -19,6 +19,8 @@ public:
         , GetTaskTime(Counters->GetHistogram("GetTaskMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , WriteTaskResultTime(Counters->GetHistogram("WriteTaskResultMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
         , NodesHealthCheckTime(Counters->GetHistogram("NodesHealthCheckMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
+        , CreateRateLimiterResourceTime(Counters->GetHistogram("CreateRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
+        , DeleteRateLimiterResourceTime(Counters->GetHistogram("DeleteRateLimiterResourceMs", NMonitoring::ExponentialHistogram(10, 2, 50)))
     {}
 
     template<class TProtoResult, class TResultWrapper>
@@ -140,12 +142,66 @@ public:
 
         return future;
     }
+
+    TAsyncCreateRateLimiterResourceResult CreateRateLimiterResource(
+        Fq::Private::CreateRateLimiterResourceRequest&& request,
+        const TCreateRateLimiterResourceSettings& settings) {
+        const auto startedAt = TInstant::Now();
+        auto promise = NThreading::NewPromise<TCreateRateLimiterResourceResult>();
+        auto future = promise.GetFuture();
+
+        auto extractor = MakeResultExtractor<
+            Fq::Private::CreateRateLimiterResourceResult,
+            TCreateRateLimiterResourceResult>(std::move(promise), CreateRateLimiterResourceTime, startedAt);
+
+        Connections_->RunDeferred<
+            Fq::Private::V1::FqPrivateTaskService,
+            Fq::Private::CreateRateLimiterResourceRequest,
+            Fq::Private::CreateRateLimiterResourceResponse>(
+                std::move(request),
+                std::move(extractor),
+                &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncCreateRateLimiterResource,
+                DbDriverState_,
+                INITIAL_DEFERRED_CALL_DELAY,
+                TRpcRequestSettings::Make(settings),
+                settings.ClientTimeout_);
+
+        return future;
+    }
+
+    TAsyncDeleteRateLimiterResourceResult DeleteRateLimiterResource(
+        Fq::Private::DeleteRateLimiterResourceRequest&& request,
+        const TDeleteRateLimiterResourceSettings& settings) {
+        const auto startedAt = TInstant::Now();
+        auto promise = NThreading::NewPromise<TDeleteRateLimiterResourceResult>();
+        auto future = promise.GetFuture();
+
+        auto extractor = MakeResultExtractor<
+            Fq::Private::DeleteRateLimiterResourceResult,
+            TDeleteRateLimiterResourceResult>(std::move(promise), DeleteRateLimiterResourceTime, startedAt);
+
+        Connections_->RunDeferred<
+            Fq::Private::V1::FqPrivateTaskService,
+            Fq::Private::DeleteRateLimiterResourceRequest,
+            Fq::Private::DeleteRateLimiterResourceResponse>(
+                std::move(request),
+                std::move(extractor),
+                &Fq::Private::V1::FqPrivateTaskService::Stub::AsyncDeleteRateLimiterResource,
+                DbDriverState_,
+                INITIAL_DEFERRED_CALL_DELAY,
+                TRpcRequestSettings::Make(settings),
+                settings.ClientTimeout_);
+
+        return future;
+    }
 private:
     const NMonitoring::TDynamicCounterPtr Counters;
     const NMonitoring::THistogramPtr PingTaskTime;
     const NMonitoring::THistogramPtr GetTaskTime;
     const NMonitoring::THistogramPtr WriteTaskResultTime;
     const NMonitoring::THistogramPtr NodesHealthCheckTime;
+    const NMonitoring::THistogramPtr CreateRateLimiterResourceTime;
+    const NMonitoring::THistogramPtr DeleteRateLimiterResourceTime;
 };
 
 TPrivateClient::TPrivateClient(
@@ -177,6 +233,18 @@ TAsyncNodesHealthCheckResult TPrivateClient::NodesHealthCheck(
     Fq::Private::NodesHealthCheckRequest&& request,
     const TNodesHealthCheckSettings& settings) {
     return Impl->NodesHealthCheck(std::move(request), settings);
+}
+
+TAsyncCreateRateLimiterResourceResult TPrivateClient::CreateRateLimiterResource(
+    Fq::Private::CreateRateLimiterResourceRequest&& request,
+    const TCreateRateLimiterResourceSettings& settings) {
+    return Impl->CreateRateLimiterResource(std::move(request), settings);
+}
+
+TAsyncDeleteRateLimiterResourceResult TPrivateClient::DeleteRateLimiterResource(
+    Fq::Private::DeleteRateLimiterResourceRequest&& request,
+    const TDeleteRateLimiterResourceSettings& settings) {
+    return Impl->DeleteRateLimiterResource(std::move(request), settings);
 }
 
 } //NFq

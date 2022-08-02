@@ -18,6 +18,8 @@ target_link_libraries(libs-rate_limiter-control_plane_service PUBLIC
   ydb-core-protos
   libs-config-protos
   yq-libs-events
+  libs-rate_limiter-events
+  libs-rate_limiter-utils
   yq-libs-shared_resources
   yq-libs-ydb
   ydb-library-security

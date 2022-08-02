@@ -87,6 +87,16 @@ NActors::IActor* CreatePingerActor(
     const ::NYql::NCommon::TServiceCounters& queryCounters,
     TInstant createdAt);
 
+NActors::IActor* CreateRateLimiterResourceCreator(
+    const NActors::TActorId& parent,
+    const TString& ownerId,
+    const TString& queryId);
+
+NActors::IActor* CreateRateLimiterResourceDeleter(
+    const NActors::TActorId& parent,
+    const TString& ownerId,
+    const TString& queryId);
+
 TString MakeInternalError(const TString& text);
 
 } /* NYq */

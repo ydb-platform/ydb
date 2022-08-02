@@ -41,11 +41,15 @@ private:
         hFunc(TEvInternalService::TEvGetTaskRequest, Handle)
         hFunc(TEvInternalService::TEvPingTaskRequest, Handle)
         hFunc(TEvInternalService::TEvWriteResultRequest, Handle)
+        hFunc(TEvInternalService::TEvCreateRateLimiterResourceRequest, Handle)
+        hFunc(TEvInternalService::TEvDeleteRateLimiterResourceRequest, Handle)
 
         hFunc(NYq::TEvControlPlaneStorage::TEvNodesHealthCheckResponse, Handle)
         hFunc(NYq::TEvControlPlaneStorage::TEvGetTaskResponse, Handle)
         hFunc(NYq::TEvControlPlaneStorage::TEvPingTaskResponse, Handle)
         hFunc(NYq::TEvControlPlaneStorage::TEvWriteResultDataResponse, Handle)
+        hFunc(NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse, Handle)
+        hFunc(NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse, Handle)
     );
 
     void Handle(TEvInternalService::TEvHealthCheckRequest::TPtr& ev) {
@@ -127,6 +131,50 @@ private:
             } else {
                 auto issues = ev->Get()->Issues;
                 Send(it->second, new TEvInternalService::TEvWriteResultResponse(NYdb::EStatus::INTERNAL_ERROR, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+            }
+            Senders.erase(it);
+            OriginalCookies.erase(ev->Cookie);
+        }
+    }
+
+    void Handle(TEvInternalService::TEvCreateRateLimiterResourceRequest::TPtr& ev) {
+        Cookie++;
+        Senders[Cookie] = ev->Sender;
+        OriginalCookies[Cookie] = ev->Cookie;
+        auto request = ev->Get()->Request;
+        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest(std::move(request)), 0, Cookie);
+    }
+
+    void Handle(NYq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
+        auto it = Senders.find(ev->Cookie);
+        if (it != Senders.end()) {
+            if (ev->Get()->Issues.Size() == 0) {
+                Send(it->second, new TEvInternalService::TEvCreateRateLimiterResourceResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
+            } else {
+                auto issues = ev->Get()->Issues;
+                Send(it->second, new TEvInternalService::TEvCreateRateLimiterResourceResponse(NYdb::EStatus::BAD_REQUEST, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
+            }
+            Senders.erase(it);
+            OriginalCookies.erase(ev->Cookie);
+        }
+    }
+
+    void Handle(TEvInternalService::TEvDeleteRateLimiterResourceRequest::TPtr& ev) {
+        Cookie++;
+        Senders[Cookie] = ev->Sender;
+        OriginalCookies[Cookie] = ev->Cookie;
+        auto request = ev->Get()->Request;
+        Send(NYq::ControlPlaneStorageServiceActorId(), new NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest(std::move(request)), 0, Cookie);
+    }
+
+    void Handle(NYq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
+        auto it = Senders.find(ev->Cookie);
+        if (it != Senders.end()) {
+            if (ev->Get()->Issues.Size() == 0) {
+                Send(it->second, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(ev->Get()->Record), 0, OriginalCookies[ev->Cookie]);
+            } else {
+                auto issues = ev->Get()->Issues;
+                Send(it->second, new TEvInternalService::TEvDeleteRateLimiterResourceResponse(NYdb::EStatus::BAD_REQUEST, std::move(issues)), 0, OriginalCookies[ev->Cookie]);
             }
             Senders.erase(it);
             OriginalCookies.erase(ev->Cookie);

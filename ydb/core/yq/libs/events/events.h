@@ -66,7 +66,7 @@ struct TEvents {
         TMaybe<Fq::Private::WriteTaskResultResult> Record;
     };
 
-    struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, TEventIds::EvNodesHealthCheckRequest>{
+    struct TEvNodesHealthCheckRequest : NActors::TEventLocal<TEvNodesHealthCheckRequest, TEventIds::EvNodesHealthCheckRequest> {
         Fq::Private::NodesHealthCheckRequest Record;
         TString User;
     };
@@ -75,6 +75,28 @@ struct TEvents {
         Ydb::StatusIds::StatusCode Status;
         NYql::TIssues Issues;
         TMaybe<Fq::Private::NodesHealthCheckResult> Record;
+    };
+
+    struct TEvCreateRateLimiterResourceRequest : NActors::TEventLocal<TEvCreateRateLimiterResourceRequest, TEventIds::EvCreateRateLimiterResourceRequest>, TEvAnalyticsBase {
+        Fq::Private::CreateRateLimiterResourceRequest Record;
+        TString User;
+    };
+
+    struct TEvCreateRateLimiterResourceResponse : NActors::TEventLocal<TEvCreateRateLimiterResourceResponse, TEventIds::EvCreateRateLimiterResourceResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TMaybe<Fq::Private::CreateRateLimiterResourceResult> Record;
+    };
+
+    struct TEvDeleteRateLimiterResourceRequest : NActors::TEventLocal<TEvDeleteRateLimiterResourceRequest, TEventIds::EvDeleteRateLimiterResourceRequest>, TEvAnalyticsBase {
+        Fq::Private::DeleteRateLimiterResourceRequest Record;
+        TString User;
+    };
+
+    struct TEvDeleteRateLimiterResourceResponse : NActors::TEventLocal<TEvDeleteRateLimiterResourceResponse, TEventIds::EvDeleteRateLimiterResourceResponse> {
+        Ydb::StatusIds::StatusCode Status;
+        NYql::TIssues Issues;
+        TMaybe<Fq::Private::DeleteRateLimiterResourceResult> Record;
     };
 
     struct TEvAsyncContinue : NActors::TEventLocal<TEvAsyncContinue, TEventIds::EvAsyncContinue> {
@@ -226,6 +248,15 @@ struct TEvents {
 
     struct TEvSchemaCreated : public NActors::TEventLocal<TEvSchemaCreated, TEventIds::EvSchemaCreated> {
         explicit TEvSchemaCreated(NYdb::TStatus result)
+            : Result(std::move(result))
+        {
+        }
+
+        NYdb::TStatus Result;
+    };
+
+    struct TEvSchemaDeleted : public NActors::TEventLocal<TEvSchemaDeleted, TEventIds::EvSchemaDeleted> {
+        explicit TEvSchemaDeleted(NYdb::TStatus result)
             : Result(std::move(result))
         {
         }

@@ -196,6 +196,10 @@ struct TEvControlPlaneStorage {
         EvNodesHealthCheckResponse,
         EvGetHealthNodesRequest,
         EvGetHealthNodesResponse,
+        EvCreateRateLimiterResourceRequest,
+        EvCreateRateLimiterResourceResponse,
+        EvDeleteRateLimiterResourceRequest,
+        EvDeleteRateLimiterResourceResponse,
         EvEnd,
     };
 
@@ -543,6 +547,85 @@ struct TEvControlPlaneStorage {
         TDebugInfoPtr DebugInfo;
     };
 
+    struct TEvCreateRateLimiterResourceRequest : NActors::TEventLocal<TEvCreateRateLimiterResourceRequest, EvCreateRateLimiterResourceRequest> {
+        TEvCreateRateLimiterResourceRequest() = default;
+
+        explicit TEvCreateRateLimiterResourceRequest(
+            Fq::Private::CreateRateLimiterResourceRequest&& request)
+            : Request(std::move(request))
+        {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Request.ByteSizeLong();
+        }
+
+        Fq::Private::CreateRateLimiterResourceRequest Request;
+    };
+
+    struct TEvCreateRateLimiterResourceResponse : NActors::TEventLocal<TEvCreateRateLimiterResourceResponse, EvCreateRateLimiterResourceResponse> {
+        explicit TEvCreateRateLimiterResourceResponse(
+            const Fq::Private::CreateRateLimiterResourceResult& record)
+            : Record(record)
+        {}
+
+        explicit TEvCreateRateLimiterResourceResponse(
+            const NYql::TIssues& issues)
+            : Issues(issues)
+        {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Record.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
+        using TProto = Fq::Private::CreateRateLimiterResourceResult;
+        TProto Record;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
+    };
+
+    struct TEvDeleteRateLimiterResourceRequest : NActors::TEventLocal<TEvDeleteRateLimiterResourceRequest, EvDeleteRateLimiterResourceRequest> {
+        TEvDeleteRateLimiterResourceRequest() = default;
+
+        explicit TEvDeleteRateLimiterResourceRequest(
+            Fq::Private::DeleteRateLimiterResourceRequest&& request)
+            : Request(std::move(request))
+        {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Request.ByteSizeLong();
+        }
+
+        Fq::Private::DeleteRateLimiterResourceRequest Request;
+    };
+
+    struct TEvDeleteRateLimiterResourceResponse : NActors::TEventLocal<TEvDeleteRateLimiterResourceResponse, EvDeleteRateLimiterResourceResponse> {
+        explicit TEvDeleteRateLimiterResourceResponse(
+            const Fq::Private::DeleteRateLimiterResourceResult& record)
+            : Record(record)
+        {}
+
+        explicit TEvDeleteRateLimiterResourceResponse(
+            const NYql::TIssues& issues)
+            : Issues(issues)
+        {}
+
+        size_t GetByteSize() const {
+            return sizeof(*this)
+                    + Record.ByteSizeLong()
+                    + GetIssuesByteSize(Issues)
+                    + GetDebugInfoByteSize(DebugInfo);
+        }
+
+        using TProto = Fq::Private::DeleteRateLimiterResourceResult;
+        TProto Record;
+        NYql::TIssues Issues;
+        TDebugInfoPtr DebugInfo;
+    };
 };
 
 }

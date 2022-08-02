@@ -1,0 +1,116 @@
+#include "proxy.h"
+
+#include <ydb/core/yq/libs/private_client/events.h>
+
+#include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/retry/retry_policy.h>
+
+namespace NYq {
+
+namespace {
+
+template <class TRequest, class TResponse>
+class TRetryingActor : public NActors::TActorBootstrapped<TRetryingActor<TRequest, TResponse>> {
+public:
+    using IRetryPolicy = IRetryPolicy<const NYdb::TStatus&>;
+
+    TRetryingActor(const NActors::TActorId& parent, const typename TRequest::TProto& proto)
+        : RetryState(GetRetryPolicy()->CreateRetryState())
+        , Proto(proto)
+        , Parent(parent)
+    {
+    }
+
+    void Bootstrap() {
+        this->Become(&TRetryingActor::StateFunc);
+        SendRequest();
+    }
+
+    void SendRequest() {
+        this->Send(NFq::MakeInternalServiceActorId(), new TRequest(Proto));
+    }
+
+    void Wakeup(NActors::TEvents::TEvWakeup::TPtr&) {
+        SendRequest();
+    }
+
+    void Handle(typename TResponse::TPtr& ev) {
+        const TMaybe<TDuration> delay = RetryState->GetNextRetryDelay(ev->Get()->Status);
+        if (delay) {
+            this->Schedule(*delay, new NActors::TEvents::TEvWakeup());
+        } else {
+            this->Send(Parent, ev->Release().Release());
+            this->PassAway();
+        }
+    }
+
+    STRICT_STFUNC(
+        StateFunc,
+        cFunc(NActors::TEvents::TEvPoison::EventType, this->PassAway)
+        hFunc(NActors::TEvents::TEvWakeup, Wakeup)
+        hFunc(TResponse, Handle)
+    )
+
+    static ERetryErrorClass Retryable(const NYdb::TStatus& status) {
+        if (status.IsSuccess()) {
+            return ERetryErrorClass::NoRetry;
+        }
+
+        if (status.IsTransportError()) {
+            return ERetryErrorClass::ShortRetry;
+        }
+
+        const NYdb::EStatus st = status.GetStatus();
+        if (st == NYdb::EStatus::INTERNAL_ERROR
+            || st == NYdb::EStatus::UNAVAILABLE
+            || st == NYdb::EStatus::TIMEOUT
+            || st == NYdb::EStatus::BAD_SESSION
+            || st == NYdb::EStatus::SESSION_EXPIRED
+            || st == NYdb::EStatus::SESSION_BUSY) {
+            return ERetryErrorClass::ShortRetry;
+        }
+
+        if (st == NYdb::EStatus::OVERLOADED) {
+            return ERetryErrorClass::LongRetry;
+        }
+
+        return ERetryErrorClass::NoRetry;
+    }
+
+    static const IRetryPolicy::TPtr& GetRetryPolicy() {
+        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy(Retryable);
+        return policy;
+    }
+
+private:
+    const IRetryPolicy::IRetryState::TPtr RetryState;
+    const typename TRequest::TProto Proto;
+    const NActors::TActorId Parent;
+};
+
+} // namespace
+
+NActors::IActor* CreateRateLimiterResourceCreator(
+    const NActors::TActorId& parent,
+    const TString& ownerId,
+    const TString& queryId)
+{
+    Fq::Private::CreateRateLimiterResourceRequest req;
+    req.set_owner_id(ownerId);
+    req.mutable_query_id()->set_value(queryId);
+    return new TRetryingActor<NFq::TEvInternalService::TEvCreateRateLimiterResourceRequest, NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse>(parent, req);
+}
+
+NActors::IActor* CreateRateLimiterResourceDeleter(
+    const NActors::TActorId& parent,
+    const TString& ownerId,
+    const TString& queryId)
+{
+    Fq::Private::DeleteRateLimiterResourceRequest req;
+    req.set_owner_id(ownerId);
+    req.mutable_query_id()->set_value(queryId);
+    return new TRetryingActor<NFq::TEvInternalService::TEvDeleteRateLimiterResourceRequest, NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse>(parent, req);
+}
+
+} // namespace NYq

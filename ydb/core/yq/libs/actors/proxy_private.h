@@ -59,4 +59,18 @@ NActors::IActor* CreateNodesHealthCheckActor(
     ::NMonitoring::TDynamicCounterPtr counters
 );
 
+NActors::IActor* CreateCreateRateLimiterResourceRequestActor(
+    const NActors::TActorId& sender,
+    TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvCreateRateLimiterResourceRequest> ev,
+    ::NMonitoring::TDynamicCounterPtr counters
+);
+
+NActors::IActor* CreateDeleteRateLimiterResourceRequestActor(
+    const NActors::TActorId& sender,
+    TIntrusivePtr<ITimeProvider> timeProvider,
+    TAutoPtr<TEvents::TEvDeleteRateLimiterResourceRequest> ev,
+    ::NMonitoring::TDynamicCounterPtr counters
+);
+
 } /* NYq */

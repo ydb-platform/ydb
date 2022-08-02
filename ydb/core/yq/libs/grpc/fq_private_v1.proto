@@ -14,6 +14,10 @@ service FqPrivateTaskService {
     // writes rows
     rpc WriteTaskResult(Fq.Private.WriteTaskResultRequest) returns (Fq.Private.WriteTaskResultResponse);
 
-    //Nodes
+    // nodes
     rpc NodesHealthCheck(Fq.Private.NodesHealthCheckRequest) returns (Fq.Private.NodesHealthCheckResponse);
+
+    // rate limiter
+    rpc CreateRateLimiterResource(Fq.Private.CreateRateLimiterResourceRequest) returns (Fq.Private.CreateRateLimiterResourceResponse);
+    rpc DeleteRateLimiterResource(Fq.Private.DeleteRateLimiterResourceRequest) returns (Fq.Private.DeleteRateLimiterResourceResponse);
 }

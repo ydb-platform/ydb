@@ -86,6 +86,8 @@ target_sources(yq-libs-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/pinger.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/proxy.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/proxy_private.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/rate_limiter_resources.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/rate_limiter.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/result_writer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/run_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/actors/run_actor_params.cpp

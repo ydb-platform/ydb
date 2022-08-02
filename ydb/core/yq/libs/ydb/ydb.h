@@ -4,6 +4,7 @@
 #include <ydb/core/yq/libs/config/protos/storage.pb.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
+#include <ydb/public/sdk/cpp/client/ydb_rate_limiter/rate_limiter.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
 
@@ -16,6 +17,7 @@ struct TYdbConnection : public TThrRefBase {
     NYdb::NTable::TTableClient TableClient;
     NYdb::NScheme::TSchemeClient SchemeClient;
     NYdb::NCoordination::TClient CoordinationClient;
+    NYdb::NRateLimiter::TRateLimiterClient RateLimiterClient;
     const TString DB;
     const TString TablePathPrefix;
 
@@ -115,6 +117,7 @@ NThreading::TFuture<NYdb::TStatus> CreateTable(
     NYdb::NTable::TTableDescription&& description);
 
 bool IsTableCreated(const NYdb::TStatus& status);
+bool IsTableDeleted(const NYdb::TStatus& status);
 
 // Succeeds only if specified generation strictly greater than in DB
 NThreading::TFuture<NYdb::TStatus> RegisterGeneration(const TGenerationContextPtr& context);

@@ -22,6 +22,8 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   yq-libs-common
   yq-libs-config
   libs-control_plane_storage-proto
+  yq-libs-quota_manager
+  libs-quota_manager-events
   yq-libs-ydb
   ydb-library-security
   cpp-client-ydb_scheme
@@ -30,6 +32,7 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
 )
 target_sources(libs-control_plane_storage-internal PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/nodes_health_check.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/rate_limiter_resources.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/response_tasks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/task_get.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/control_plane_storage/internal/task_ping.cpp

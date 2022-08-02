@@ -31,7 +31,6 @@ message Acl {
 }
 
 message Limits {
-    // Used only for streaming queries
     int64 vcpu_rate_limit = 1 [(Ydb.value) = ">= 0"]; // 0.01 vcpu per second
     int64 flow_rate_limit = 2 [(Ydb.value) = ">= 0"]; // Bytes per second
     int64 vcpu_time_limit = 3 [(Ydb.value) = ">= 0"]; // Milliseconds per second

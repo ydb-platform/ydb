@@ -80,4 +80,18 @@ NYql::TIssues ValidateNodesHealthCheck(
     return issues;
 }
 
+NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& owner)
+{
+    NYql::TIssues issues;
+    if (!queryId) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "query id is not specified"));
+    }
+
+    if (!owner) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "owner is not specified"));
+    }
+
+    return issues;
+}
+
 };

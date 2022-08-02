@@ -10,7 +10,7 @@ namespace NYq {
 using TYdbSdkRetryPolicy = IRetryPolicy<const NYdb::TStatus&>;
 
 // Actor that creates table.
-// Send TEvSchemaCreated to parent (if any).
+// Sends TEvSchemaCreated to parent (if any).
 NActors::IActor* MakeCreateTableActor(
     NActors::TActorId parent,
     ui64 logComponent,
@@ -21,7 +21,7 @@ NActors::IActor* MakeCreateTableActor(
     ui64 cookie = 0);
 
 // Actor that creates directory.
-// Send TEvSchemaCreated to parent (if any).
+// Sends TEvSchemaCreated to parent (if any).
 NActors::IActor* MakeCreateDirectoryActor(
     NActors::TActorId parent,
     ui64 logComponent,
@@ -31,12 +31,35 @@ NActors::IActor* MakeCreateDirectoryActor(
     ui64 cookie = 0);
 
 // Actor that creates coordination node.
-// Send TEvSchemaCreated to parent (if any).
+// Sends TEvSchemaCreated to parent (if any).
 NActors::IActor* MakeCreateCoordinationNodeActor(
     NActors::TActorId parent,
     ui64 logComponent,
     TYdbConnectionPtr connection,
     const TString& coordinationNodePath,
+    TYdbSdkRetryPolicy::TPtr retryPolicy,
+    ui64 cookie = 0);
+
+// Actor that creates rate limiter resource.
+// Sends TEvSchemaCreated to parent (if any).
+NActors::IActor* MakeCreateRateLimiterResourceActor(
+    NActors::TActorId parent,
+    ui64 logComponent,
+    TYdbConnectionPtr connection,
+    const TString& coordinationNodePath,
+    const TString& resourcePath,
+    const std::vector<TMaybe<double>>& limits, // limits from the very parent resource to the leaf
+    TYdbSdkRetryPolicy::TPtr retryPolicy,
+    ui64 cookie = 0);
+
+// Actor that deletes rate limiter resource.
+// Sends TEvSchemaDeleted to parent (if any).
+NActors::IActor* MakeDeleteRateLimiterResourceActor(
+    NActors::TActorId parent,
+    ui64 logComponent,
+    TYdbConnectionPtr connection,
+    const TString& coordinationNodePath,
+    const TString& resourcePath,
     TYdbSdkRetryPolicy::TPtr retryPolicy,
     ui64 cookie = 0);
 

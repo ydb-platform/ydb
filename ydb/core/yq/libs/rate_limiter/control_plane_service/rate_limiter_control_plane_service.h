@@ -11,8 +11,8 @@ namespace NYq {
 NActors::TActorId RateLimiterControlPlaneServiceId();
 
 NActors::IActor* CreateRateLimiterControlPlaneService(
-    const NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
-    const NYq::TYqSharedResources::TPtr& yqSharedResources,
+    const NConfig::TRateLimiterConfig& rateLimiterConfig,
+    const TYqSharedResources::TPtr& yqSharedResources,
     const NKikimr::TYdbCredentialsProviderFactory& credentialsProviderFactory);
 
 } // namespace NYq

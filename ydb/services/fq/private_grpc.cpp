@@ -39,17 +39,18 @@ void TGRpcFqPrivateTaskService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) 
 #error ADD_REQUEST macro already defined
 #endif
 #define ADD_REQUEST(NAME, CB)                                                                                  \
-MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Response, TGRpcFqPrivateTaskService, TSecurityTextFormatPrinter<Fq::Private::NAME##Request>, TSecurityTextFormatPrinter<Fq::Private::NAME##Response>>>( \
+MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Response, TGRpcFqPrivateTaskService, TSecurityTextFormatPrinter<Fq::Private::NAME##Request>, TSecurityTextFormatPrinter<Fq::Private::NAME##Response>>>(                                                                  \
     this, &Service_, CQ_,                                                                                      \
     [this](NGrpc::IRequestContextBase *ctx) {                                                                  \
         NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer());                                       \
         ActorSystem_->Send(GRpcRequestProxyId_,                                                                \
-            new TGrpcRequestOperationCall<Fq::Private::NAME##Request, Fq::Private::NAME##Response>                 \
+            new TGrpcRequestOperationCall<Fq::Private::NAME##Request, Fq::Private::NAME##Response>             \
                 (ctx, &CB));                                                                                   \
     },                                                                                                         \
-    &Fq::Private::V1::FqPrivateTaskService::AsyncService::Request##NAME,                                  \
-    #NAME, logger, getCounterBlock("fq_internal", #NAME))                                                     \
+    &Fq::Private::V1::FqPrivateTaskService::AsyncService::Request##NAME,                                       \
+    #NAME, logger, getCounterBlock("fq_internal", #NAME))                                                      \
     ->Run();                                                                                                   \
+    /**/
 
     ADD_REQUEST(PingTask, DoFqPrivatePingTaskRequest)
 
@@ -58,6 +59,9 @@ MakeIntrusive<TGRpcRequest<Fq::Private::NAME##Request, Fq::Private::NAME##Respon
     ADD_REQUEST(WriteTaskResult, DoFqPrivateWriteTaskResultRequest)
 
     ADD_REQUEST(NodesHealthCheck, DoFqPrivateNodesHealthCheckRequest)
+
+    ADD_REQUEST(CreateRateLimiterResource, DoFqPrivateCreateRateLimiterResourceRequest)
+    ADD_REQUEST(DeleteRateLimiterResource, DoFqPrivateDeleteRateLimiterResourceRequest)
 
 #undef ADD_REQUEST
 }

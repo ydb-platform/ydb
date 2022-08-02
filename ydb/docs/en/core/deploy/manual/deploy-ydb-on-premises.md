@@ -71,8 +71,8 @@ If you plan to use more than one disk on each server, specify a label that is un
 Download an archive with the `ydbd` executable file and the libraries necessary for working with YDB:
 
 ```bash
-curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz -o ydbd-stable-linux-amd64.tar.gz
-tar -xz
+mkdir ydbd-stable-linux-amd64
+curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
 ```
 
 Create directories to run:

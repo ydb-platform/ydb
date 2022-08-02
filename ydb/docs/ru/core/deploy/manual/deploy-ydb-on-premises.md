@@ -70,8 +70,8 @@ sudo usermod -aG disk ydb
 1. Скачайте и распакуйте архив с исполняемым файлом `ydbd` и необходимыми для работы {{ ydb-short-name }} библиотеками:
 
     ```bash
-    curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz -o ydbd-stable-linux-amd64.tar.gz
-    tar -xz ydbd-stable-linux-amd64.tar.gz
+    mkdir ydbd-stable-linux-amd64
+    curl -L https://binaries.ydb.tech/ydbd-stable-linux-amd64.tar.gz | tar -xz --strip-component=1 -C ydbd-stable-linux-amd64
     ```
 
 1. Создайте директории для запуска:

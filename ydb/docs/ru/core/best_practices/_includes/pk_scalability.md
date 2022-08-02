@@ -25,7 +25,7 @@
 Рассмотрим таблицу со схемой ```( timestamp, userid, userevent, PRIMARY KEY (userid, timestamp) )```. В качестве всего первичного ключа или его первой компоненты можно использовать хеш от исходного ключа, например так:
 
 ```
-( HASH(timestamp, userid), timestamp, userid, userevent, PRIMARY KEY (HASH(userid), userid, timestamp) )
+( timestamp, userid, userevent, PRIMARY KEY (HASH(userid), userid, timestamp) )
 ```
 
 При правильном выборе функции хеширования строки будут распределены достаточно равномерно по всему пространству ключей, что в приведет к равномерной нагрузке на систему. При этом, наличие полей ```userid, timestamp``` в составе ключа после ```HASH(userid)``` сохраняет локальность и сортировку данных по времени для конкретного пользователя.

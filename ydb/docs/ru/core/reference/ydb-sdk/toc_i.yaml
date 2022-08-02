@@ -5,6 +5,8 @@ items:
     href: install.md
   - name: Аутентификация
     href: auth.md
+#  - name: Работа с топиками
+#    href: topic/topic.md
   - name: Тестовое приложение
     include: { mode: link, path: example/toc_p.yaml }
   - name: Обработка ошибок в API
@@ -17,4 +19,3 @@ items:
       href: health-check-api.md  
   - name: Рецепты кода
     include: { mode: link, path: recipes/toc_p.yaml }
-

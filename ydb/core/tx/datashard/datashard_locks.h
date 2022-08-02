@@ -302,7 +302,7 @@ public:
     TLockInfo::TPtr AddShardLock(ui64 lockTxId, ui32 lockNodeId, const THashSet<TPathId>& affectedTables, const TRowVersion& at);
     TLockInfo::TPtr AddPointLock(ui64 lockTxId, ui32 lockNodeId, const TPointKey& key, const TRowVersion& at);
     TLockInfo::TPtr AddRangeLock(ui64 lockTxId, ui32 lockNodeId, const TRangeKey& key, const TRowVersion& at);
-    TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
+    TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at, bool brokenIsOK = false) const;
 
     ui64 LocksCount() const { return Locks.size(); }
     ui64 BrokenLocksCount() const { return BrokenLocks.size() + BrokenCandidates.size(); }
@@ -529,6 +529,12 @@ public:
     void RemoveSubscribedLock(ui64 lockId) {
         Locker.RemoveSubscribedLock(lockId);
     }
+
+    void UpdateCounters(ui64 counter);
+
+    // to avoid filling intermidiate Update
+    // Note: don't forget to call UpdateCounters() when finish with locker
+    TLockLocker& GetLocker() { return Locker; }
 
 private:
     THolder<TLocksDataShard> Self;

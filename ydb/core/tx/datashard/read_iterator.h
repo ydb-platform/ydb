@@ -131,6 +131,7 @@ public:
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion = TRowVersion::Max();
     ui64 LockTxId = 0;
+    bool ReportedLockBroken = false;
 
     // note that will be always overwritten by values from request
     NKikimrTxDataShard::EScanDataFormat Format = NKikimrTxDataShard::EScanDataFormat::CELLVEC;

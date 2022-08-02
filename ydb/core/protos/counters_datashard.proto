@@ -21,6 +21,7 @@ enum ESimpleCounters {
     COUNTER_MVCC_STATE_CHANGE_WAIT_IMMEDIATE_TX_IN_FLY = 11        [(CounterOpts) = {Name: "MvccStateChangeWaitImmediateTxInFly"}];
     COUNTER_MVCC_ENABLED = 12                                      [(CounterOpts) = {Name: "MvccEnabled"}];
     COUNTER_CHANGE_QUEUE_SIZE  = 13                                [(CounterOpts) = {Name: "ChangeQueueSize"}];
+    COUNTER_READ_ITERATORS_WAITING = 14                            [(CounterOpts) = {Name: "ReadIteratorsWaiting"}];
 }
 
 enum ECumulativeCounters {

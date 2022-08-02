@@ -144,11 +144,11 @@ TLockInfo::TPtr TLockLocker::AddRangeLock(ui64 lockId, ui32 lockNodeId, const TR
     return lock;
 }
 
-TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at, bool brokenIsOK) const {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
         TLockInfo::TPtr lock = it->second;
-        if (!lock->IsBroken(at))
+        if (!lock->IsBroken(at) || brokenIsOK)
             return lock;
     }
     return nullptr;
@@ -461,23 +461,7 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         counter = TLock::ErrorTooMuch;
     }
 
-    if (Self->TabletCounters) {
-        Self->IncCounter(COUNTER_LOCKS_ACTIVE_PER_SHARD, LocksCount());
-        Self->IncCounter(COUNTER_LOCKS_BROKEN_PER_SHARD, BrokenLocksCount());
-        if (Update->ShardLock) {
-            Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
-        }
-
-        if (TLock::IsError(counter)) {
-            if (TLock::IsBroken(counter)) {
-                Self->IncCounter(COUNTER_LOCKS_REJECT_BROKEN);
-            } else {
-                Self->IncCounter(COUNTER_LOCKS_REJECTED);
-            }
-        } else {
-            Self->IncCounter(COUNTER_LOCKS_ACQUIRED);
-        }
-    }
+    UpdateCounters(counter);
 
     // We have to tell client that there were some locks (even if we don't set them)
     TVector<TLock> out;
@@ -486,6 +470,27 @@ TVector<TSysLocks::TLock> TSysLocks::ApplyLocks() {
         out.emplace_back(MakeLock(Update->LockTxId, counter, pathId));
     }
     return out;
+}
+
+void TSysLocks::UpdateCounters(ui64 counter) {
+    if (!Self->TabletCounters)
+        return;
+
+    Self->IncCounter(COUNTER_LOCKS_ACTIVE_PER_SHARD, LocksCount());
+    Self->IncCounter(COUNTER_LOCKS_BROKEN_PER_SHARD, BrokenLocksCount());
+    if (Update && Update->ShardLock) {
+        Self->IncCounter(COUNTER_LOCKS_WHOLE_SHARD);
+    }
+
+    if (TLock::IsError(counter)) {
+        if (TLock::IsBroken(counter)) {
+            Self->IncCounter(COUNTER_LOCKS_REJECT_BROKEN);
+        } else {
+            Self->IncCounter(COUNTER_LOCKS_REJECTED);
+        }
+    } else {
+        Self->IncCounter(COUNTER_LOCKS_ACQUIRED);
+    }
 }
 
 ui64 TSysLocks::ExtractLockTxId(const TArrayRef<const TCell>& key) const {

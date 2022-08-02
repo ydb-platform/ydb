@@ -650,7 +650,19 @@ public:
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " Read: " << Request->Record);
 
-        return Reader->Read(txc, ctx);
+        bool res = Reader->Read(txc, ctx);
+        if (res && state.Request->Record.HasLockTxId()) {
+            // note that we set locks only when finish transaction, i.e. we have read something
+            // without page faults, etc and really finish transaction
+            auto lock = AcquireLock(ctx, state);
+            if (!lock) {
+                // TODO: clarify, when AcquireLock might fail and if we can do anything with it
+                SetStatusError(Result->Record, Ydb::StatusIds::ABORTED, "Failed to set lock");
+                return true;
+            }
+        }
+
+        return res;
     }
 
     void Complete(const TActorContext& ctx) override {
@@ -685,7 +697,7 @@ public:
             record.SetSeqNo(state.SeqNo + 1);
             SendViaSession(state.SessionId, Sender, Self->SelfId(), Result.release());
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
-                << " TTxRead::Execute() finished with error, aborting");
+                << " TTxRead::Execute() finished with error, aborting: " << record.DebugString());
             Self->DeleteReadIterator(it);
             return;
         }
@@ -821,12 +833,7 @@ private:
                 return;
             }
 
-            if (state.ReadVersion.IsMax()) {
-                // TODO: currently not supported
-                SetStatusError(Result->Record, Ydb::StatusIds::UNSUPPORTED, "HEAD version is unsupported");
-                finished = true;
-                return;
-            } else {
+            if (!state.ReadVersion.IsMax()) {
                 ui64 ownerId = state.PathId.OwnerId;
                 TSnapshotKey snapshotKey(
                     ownerId,
@@ -834,12 +841,15 @@ private:
                     state.ReadVersion.Step,
                     state.ReadVersion.TxId);
 
-                if (!Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
+                bool isMvccVersion = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+                bool allowMvcc = isMvccVersion && !Self->IsFollower();
+                if (!Self->GetSnapshotManager().FindAvailable(snapshotKey) && !allowMvcc) {
                     SetStatusError(
                         Result->Record,
                         Ydb::StatusIds::NOT_FOUND,
                         TStringBuilder() << "Table id " << tableId << " has no snapshot at "
                              << state.ReadVersion << " shard " << Self->TabletID()
+                             << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
                              << (Self->IsFollower() ? " RO replica" : ""));
                     finished = true;
                     return;
@@ -879,7 +889,7 @@ private:
                     TStringBuilder() << "Only HEAD read from sys tables is allowed");
                 finished = true;
                 return;
-             }
+            }
 
             if (state.Format != NKikimrTxDataShard::CELLVEC) {
                 SetStatusError(
@@ -988,6 +998,79 @@ private:
 
         finished = false;
     }
+
+    TLockInfo::TPtr AcquireLock(const TActorContext& ctx, TReadIteratorState& state) {
+        auto& sysLocks = Self->SysLocksTable();
+        auto& locker = sysLocks.GetLocker();
+
+        const auto lockTxId = state.Request->Record.GetLockTxId();
+        const auto lockNodeId = state.Request->Record.GetLockNodeId();
+        TTableId tableId(state.PathId.OwnerId, state.PathId.LocalPathId, state.SchemaVersion);
+        TLockInfo::TPtr lock;
+
+        if (!state.Request->Keys.empty()) {
+            for (size_t i = 0; i < state.Request->Keys.size(); ++i) {
+                const auto& key = state.Request->Keys[i];
+                if (key.GetCells().size() != TableInfo.KeyColumnCount) {
+                    // key prefix, treat it as range [prefix, 0, 0] - [prefix, +inf, +inf]
+                    TTableRange lockRange(
+                        key.GetCells(),
+                        true,
+                        key.GetCells(),
+                        true);
+                    TRangeKey rangeKey = locker.MakeRange(tableId, lockRange);
+                    lock = locker.AddRangeLock(lockTxId, lockNodeId, rangeKey, state.ReadVersion);
+                } else {
+                    TPointKey pointKey = locker.MakePoint(tableId, key.GetCells());
+                    lock = locker.AddPointLock(lockTxId, lockNodeId, pointKey, state.ReadVersion);
+                }
+                if (!lock)
+                    return nullptr;
+            }
+        } else {
+            // since no keys, then we must have ranges (has been checked initially)
+            for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
+                const auto& range = state.Request->Ranges[i];
+
+                TTableRange lockRange(
+                    range.From.GetCells(),
+                    range.FromInclusive,
+                    range.To.GetCells(),
+                    range.ToInclusive);
+
+                TRangeKey rangeKey = locker.MakeRange(tableId, lockRange);
+                lock = locker.AddRangeLock(lockTxId, lockNodeId, rangeKey, state.ReadVersion);
+                if (!lock)
+                    return nullptr;
+            }
+        }
+
+        Y_VERIFY(lock);
+
+        auto counter = lock->GetCounter(state.ReadVersion);
+        sysLocks.UpdateCounters(counter);
+
+        NKikimrTxDataShard::TLock *addLock;
+        if (!lock->IsBroken(state.ReadVersion)) {
+            addLock = Result->Record.AddTxLocks();
+        } else {
+            addLock = Result->Record.AddBrokenTxLocks();
+        }
+
+        addLock->SetLockId(lock->GetLockId());
+        addLock->SetDataShard(Self->TabletID());
+        addLock->SetGeneration(Self->Generation());
+        addLock->SetCounter(lock->GetCounter());
+        addLock->SetSchemeShard(state.PathId.OwnerId);
+        addLock->SetPathId(state.PathId.LocalPathId);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
+            << " Acquired lock# " << lock->GetLockId() << ", counter# " << lock->GetCounter()
+            << " for " << state.PathId);
+
+        state.LockTxId = lockTxId;
+        return lock;
+    }
 };
 
 class TDataShard::TTxReadContinue : public NTabletFlatExecutor::TTransactionBase<TDataShard> {
@@ -1024,8 +1107,8 @@ public:
 
         Result.reset(new TEvDataShard::TEvReadResult());
 
+        const auto& tableId = state.PathId.LocalPathId;
         if (state.PathId.OwnerId == Self->GetPathOwnerId()) {
-            const auto& tableId = state.PathId.LocalPathId;
             auto it = Self->TableInfos.find(tableId);
             if (it == Self->TableInfos.end()) {
                 SetStatusError(
@@ -1058,6 +1141,27 @@ public:
                 return true;
             }
             TableInfo = TShortTableInfo(state.PathId.LocalPathId, *schema);
+        }
+
+        ui64 ownerId = state.PathId.OwnerId;
+        TSnapshotKey snapshotKey(
+            ownerId,
+            tableId,
+            state.ReadVersion.Step,
+            state.ReadVersion.TxId);
+
+        bool isMvccVersion = state.ReadVersion >= Self->GetSnapshotManager().GetLowWatermark();
+        bool allowMvcc = isMvccVersion && !Self->IsFollower();
+        if (!Self->GetSnapshotManager().FindAvailable(snapshotKey) && !allowMvcc) {
+            SetStatusError(
+                Result->Record,
+                Ydb::StatusIds::ABORTED,
+                TStringBuilder() << "Table id " << tableId << " lost snapshot at "
+                     << state.ReadVersion << " shard " << Self->TabletID()
+                     << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
+                     << (Self->IsFollower() ? " RO replica" : ""));
+
+            return true;
         }
 
         {
@@ -1116,9 +1220,42 @@ public:
             record.SetReadId(readId.ReadId);
             SendViaSession(state.SessionId, request->Reader, Self->SelfId(), Result.release());
             LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
-                << " TTxReadContinue::Execute() finished with error, aborting");
+                << " TTxReadContinue::Execute() finished with error, aborting: " << record.DebugString());
             Self->DeleteReadIterator(it);
             return;
+        }
+
+        if (state.LockTxId) {
+            auto& sysLocks = Self->SysLocksTable();
+            auto& locker = sysLocks.GetLocker();
+            auto lock = locker.GetLock(state.LockTxId, state.ReadVersion, true);
+            if (!lock) {
+                // just sanity check, should not happen
+                SetStatusError(record, Ydb::StatusIds::INTERNAL_ERROR, "Failed to find lock");
+                record.SetSeqNo(state.SeqNo + 1);
+                record.SetReadId(readId.ReadId);
+                SendViaSession(state.SessionId, request->Reader, Self->SelfId(), Result.release());
+                LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+                    << " TTxReadContinue::Execute() lost lock for lockTxId# " << state.LockTxId
+                    << " in version# " << state.ReadVersion << ", aborting: " << record.DebugString());
+                Self->DeleteReadIterator(it);
+                return;
+            }
+
+            if (lock->IsBroken() && !state.ReportedLockBroken) {
+                state.ReportedLockBroken = true;
+                NKikimrTxDataShard::TLock *addLock = record.AddBrokenTxLocks();
+                addLock->SetLockId(lock->GetLockId());
+                addLock->SetDataShard(Self->TabletID());
+                addLock->SetGeneration(Self->Generation());
+                addLock->SetCounter(lock->GetCounter());
+                addLock->SetSchemeShard(state.PathId.OwnerId);
+                addLock->SetPathId(state.PathId.LocalPathId);
+
+                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " read iterator# " << readId
+                    << " TTxReadContinue::Execute() found broken lock# " << lock->GetLockId()
+                    << " with lockTxId# " << state.LockTxId);
+            }
         }
 
         Y_ASSERT(Reader);
@@ -1157,16 +1294,97 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
     }
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
-    if (Y_UNLIKELY(ReadIterators.contains(readId))) {
+
+    auto replyWithError = [&] (auto code, const auto& msg) {
         std::unique_ptr<TEvDataShard::TEvReadResult> result(new TEvDataShard::TEvReadResult());
         SetStatusError(
             result->Record,
-            Ydb::StatusIds::ALREADY_EXISTS,
-            TStringBuilder() << "Request " << readId.ReadId << " already executing");
+            code,
+            msg);
         result->Record.SetReadId(readId.ReadId);
         ctx.Send(ev->Sender, result.release());
+    };
+
+    if (Y_UNLIKELY(ReadIterators.contains(readId))) {
+        replyWithError(
+            Ydb::StatusIds::ALREADY_EXISTS,
+            TStringBuilder() << "Request " << readId.ReadId << " already executing");
         return;
     }
+
+    TRowVersion readVersion = TRowVersion::Max();
+    if (record.HasSnapshot()) {
+        readVersion.Step = record.GetSnapshot().GetStep();
+        readVersion.TxId = record.GetSnapshot().GetTxId();
+    }
+
+    if (!IsFollower()) {
+        // MVCC is not allowed on followers, thus here we check only
+        // leader case, snapshot for follower is checked withing transaction,
+        // because we need to read from sys table
+        if (record.GetTableId().GetOwnerId() != TabletID()) {
+            // owner is schemeshard, read user table
+            if (readVersion.IsMax()) {
+                // currently not supported
+                replyWithError(
+                    Ydb::StatusIds::UNSUPPORTED,
+                    "HEAD version is unsupported");
+                return;
+            }
+
+            TSnapshotKey snapshotKey(
+                record.GetTableId().GetOwnerId(),
+                record.GetTableId().GetTableId(),
+                readVersion.Step,
+                readVersion.TxId);
+
+            bool snapshotFound = GetSnapshotManager().FindAvailable(snapshotKey);
+            if (!snapshotFound && !IsFollower()) {
+                // check if there is MVCC version and maybe wait
+                if (readVersion < GetSnapshotManager().GetLowWatermark()) {
+                    replyWithError(
+                        Ydb::StatusIds::NOT_FOUND,
+                        TStringBuilder() << "MVCC read " << readVersion
+                            << " bellow low watermark " << GetSnapshotManager().GetLowWatermark());
+                    return;
+                }
+
+                // MVCC read is possible, but nead to check MVCC state and if we need to wait
+
+                if (MvccSwitchState == TSwitchState::SWITCHING) {
+                    Pipeline.AddWaitingReadIterator(readVersion, std::move(ev), ctx);
+                    return;
+                }
+
+                auto prioritizedMvccSnapshotReads = GetEnablePrioritizedMvccSnapshotReads();
+                TRowVersion unreadableEdge = Pipeline.GetUnreadableEdge(prioritizedMvccSnapshotReads);
+                if (readVersion >= unreadableEdge) {
+                    Pipeline.AddWaitingReadIterator(readVersion, std::move(ev), ctx);
+                    return;
+                }
+
+                // we found proper MVCC snapshot
+                snapshotFound = true;
+            }
+
+            if (!snapshotFound) {
+                replyWithError(
+                    Ydb::StatusIds::NOT_FOUND,
+                    TStringBuilder() << "Neither regular nor MVCC snapshot for " << readVersion);
+                return;
+            }
+        } else {
+            // DS is owner, read system table
+            if (!readVersion.IsMax()) {
+                replyWithError(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    TStringBuilder() << "Only HEAD read from sys tables is allowed");
+                return;
+            }
+        }
+    }
+
+    // Note: iterator is correct and ready to execute
 
     TActorId sessionId;
     if (readId.Sender.NodeId() != SelfId().NodeId()) {

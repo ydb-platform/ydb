@@ -365,7 +365,8 @@ struct TTestHelper {
     std::unique_ptr<TEvDataShard::TEvRead> GetBaseReadRequest(
         const TString& tableName,
         ui64 readId,
-        NKikimrTxDataShard::EScanDataFormat format = NKikimrTxDataShard::ARROW)
+        NKikimrTxDataShard::EScanDataFormat format = NKikimrTxDataShard::ARROW,
+        const TRowVersion& snapshot = {})
     {
         const auto& table = Tables[tableName];
 
@@ -387,10 +388,15 @@ struct TTestHelper {
 
         record.MutableTableId()->SetSchemaVersion(description.GetTableSchemaVersion());
 
-        auto readVersion = CreateVolatileSnapshot(
-            Server,
-            {"/Root/movies", "/Root/table-1"},
-            TDuration::Hours(1));
+        TRowVersion readVersion;
+        if (!snapshot) {
+            readVersion = CreateVolatileSnapshot(
+                Server,
+                {"/Root/movies", "/Root/table-1"},
+                TDuration::Hours(1));
+        } else {
+            readVersion = snapshot;
+        }
 
         record.MutableSnapshot()->SetStep(readVersion.Step);
         record.MutableSnapshot()->SetTxId(readVersion.TxId);
@@ -499,6 +505,39 @@ struct TTestHelper {
             0,
             GetTestPipeConfig(),
             table.ClientId);
+    }
+
+    void CheckLockValid(const TString& tableName, ui64 readId, const std::vector<ui32>& key, ui64 lockTxId) {
+        auto request = GetBaseReadRequest(tableName, readId);
+        request->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request, key);
+
+        auto readResult = SendRead(tableName, request.release());
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.TxLocksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.BrokenTxLocksSize(), 0);
+    }
+
+    void CheckLockBroken(
+        const TString& tableName,
+        ui64 readId,
+        const std::vector<ui32>& key,
+        ui64 lockTxId,
+        const TEvDataShard::TEvReadResult& prevResult)
+    {
+        auto request = GetBaseReadRequest(tableName, readId);
+        request->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request, key);
+
+        auto readResult = SendRead(tableName, request.release());
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.TxLocksSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(readResult->Record.BrokenTxLocksSize(), 1);
+
+        const auto& lock = prevResult.Record.GetTxLocks(0);
+        const auto& brokenLock = readResult->Record.GetBrokenTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetLockId(), brokenLock.GetLockId());
+        UNIT_ASSERT(lock.GetCounter() < brokenLock.GetCounter());
     }
 
     NTabletPipe::TClientConfig GetTestPipeConfig() {
@@ -1543,6 +1582,417 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         auto readResult2 = helper.WaitReadResult(TDuration::MilliSeconds(10));
         UNIT_ASSERT(!readResult2);
         UNIT_ASSERT_VALUES_EQUAL(continueCounter, 0);
+    }
+
+    Y_UNIT_TEST(ShouldReturnMvccSnapshot) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetEnableMvcc(true)
+            .SetUseRealThreads(false);
+
+        TTestHelper helper(serverSettings);
+
+        auto waitFor = [&](const auto& condition, const TString& description) {
+            if (!condition()) {
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                helper.Server->GetRuntime()->DispatchEvents(options);
+                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+            }
+        };
+
+        bool captureTimecast = false;
+        bool captureWaitNotify = false;
+
+        TRowVersion snapshot = TRowVersion::Min();
+        ui64 lastStep = 0;
+        ui64 waitPlanStep = 0;
+        ui64 notifyPlanStep = 0;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+            switch (event->GetTypeRewrite()) {
+                case TEvMediatorTimecast::EvUpdate: {
+                    if (captureTimecast) {
+                        auto update = event->Get<TEvMediatorTimecast::TEvUpdate>();
+                        lastStep = update->Record.GetTimeBarrier();
+                        Cerr << "---- dropped EvUpdate ----" << Endl;
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+                case TEvMediatorTimecast::EvWaitPlanStep: {
+                    if (captureWaitNotify) {
+                        auto waitEvent = event->Get<TEvMediatorTimecast::TEvWaitPlanStep>();
+                        waitPlanStep = waitEvent->PlanStep;
+                    }
+                    break;
+                }
+                case TEvMediatorTimecast::EvNotifyPlanStep: {
+                    if (captureWaitNotify) {
+                        auto notifyEvent = event->Get<TEvMediatorTimecast::TEvNotifyPlanStep>();
+                        notifyPlanStep = notifyEvent->PlanStep;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = helper.Server->GetRuntime()->SetObserverFunc(captureEvents);
+
+        // check transaction waits for proper plan step
+        captureTimecast = true;
+
+        // note that we need this to capture snapshot version
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (3, 3, 3, 300);
+        )");
+
+        waitFor([&]{ return lastStep != 0; }, "intercepted TEvUpdate");
+
+        captureTimecast = false;
+        captureWaitNotify = true;
+
+        // future snapshot
+        snapshot = TRowVersion(lastStep + 1000, Max<ui64>());
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, snapshot);
+        AddKeyQuery(*request1, {3, 3, 3});
+        AddKeyQuery(*request1, {1, 1, 1});
+        AddKeyQuery(*request1, {5, 5, 5});
+        request1->Record.SetMaxRowsInResult(1);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        waitFor([&]{ return notifyPlanStep != 0; }, "intercepted TEvNotifyPlanStep");
+        UNIT_ASSERT_VALUES_EQUAL(waitPlanStep, snapshot.Step);
+        UNIT_ASSERT_VALUES_EQUAL(notifyPlanStep, snapshot.Step);
+
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult1, {
+            {3, 3, 3, 300}
+        });
+
+        const auto& record1 = readResult1->Record;
+        UNIT_ASSERT(!record1.GetLimitReached());
+        UNIT_ASSERT(record1.HasSeqNo());
+        UNIT_ASSERT(!record1.HasFinished());
+        UNIT_ASSERT_VALUES_EQUAL(record1.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(record1.GetSeqNo(), 1UL);
+
+        auto readResult2 = helper.WaitReadResult();
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult2, {
+            {1, 1, 1, 100}
+        });
+
+        const auto& record2 = readResult2->Record;
+        UNIT_ASSERT(!record2.GetLimitReached());
+        UNIT_ASSERT(!record2.HasFinished());
+        UNIT_ASSERT_VALUES_EQUAL(record2.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(record2.GetSeqNo(), 2UL);
+
+        auto readResult3 = helper.WaitReadResult();
+        CheckResult(helper.Tables["table-1"].UserTable, *readResult3, {
+            {5, 5, 5, 500}
+        });
+
+        const auto& record3 = readResult3->Record;
+        UNIT_ASSERT(!record3.GetLimitReached());
+        UNIT_ASSERT(record3.HasFinished());
+        UNIT_ASSERT_VALUES_EQUAL(record3.GetReadId(), 1UL);
+        UNIT_ASSERT_VALUES_EQUAL(record3.GetSeqNo(), 3UL);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKey) {
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request1, {1, 1, 1});
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.TxLocksSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(readResult1->Record.BrokenTxLocksSize(), 0);
+
+        // breaks lock obtained above
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (1, 1, 1, 101);
+        )");
+
+        // we use request2 to obtain same lock as in request1 to check it
+        auto request2 = helper.GetBaseReadRequest("table-1", 1);
+        request2->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request2, {1, 1, 1});
+
+        auto readResult2 = helper.SendRead("table-1", request2.release());
+
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.TxLocksSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1);
+
+        const auto& lock = readResult1->Record.GetTxLocks(0);
+        const auto& brokenLock = readResult2->Record.GetBrokenTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetLockId(), brokenLock.GetLockId());
+        UNIT_ASSERT(lock.GetCounter() < brokenLock.GetCounter());
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRange) {
+        // upsert into "left border -1 " and to the "right border + 1" - lock not broken
+        // upsert inside range - broken
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddRangeQuery<ui32>(
+            *request1,
+            {3, 3, 3},
+            true,
+            {8, 0, 1},
+            true
+        );
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        {
+            // upsert to the left and check that lock is not broken
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/table-1`
+                (key1, key2, key3, value)
+                VALUES
+                (1, 1, 1, 101);
+            )");
+
+            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
+        }
+
+        {
+            // upsert to the right and check that lock is not broken
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/table-1`
+                (key1, key2, key3, value)
+                VALUES
+                (8, 1, 0, 802);
+            )");
+
+            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
+        }
+
+        // breaks lock
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (4, 4, 4, 400);
+        )");
+
+        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeLeftBorder) {
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddRangeQuery<ui32>(
+            *request1,
+            {3, 3, 3},
+            true,
+            {8, 0, 1},
+            true
+        );
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        // breaks lock
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (3, 3, 3, 0xdead);
+        )");
+
+        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadRangeRightBorder) {
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddRangeQuery<ui32>(
+            *request1,
+            {3, 3, 3},
+            true,
+            {8, 0, 1},
+            true
+        );
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        // breaks lock
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (8, 0, 1, 0xdead);
+        )");
+
+        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyPrefix) {
+        // upsert into "left border -1 " and to the "right border + 1" - lock not broken
+        // upsert inside range - broken
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request1, {8});
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        {
+            // upsert to the left and check that lock is not broken
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/table-1`
+                (key1, key2, key3, value)
+                VALUES
+                (5, 5, 5, 555);
+            )");
+
+            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
+        }
+
+        {
+            // upsert to the right and check that lock is not broken
+            ExecSQL(helper.Server, helper.Sender, R"(
+                UPSERT INTO `/Root/table-1`
+                (key1, key2, key3, value)
+                VALUES
+                (9, 0, 0, 900);
+            )");
+
+            helper.CheckLockValid("table-1", 2, {11, 11, 11}, lockTxId);
+        }
+
+        // breaks lock obtained above
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (8, 1, 1, 8000);
+        )");
+
+        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyPrefixLeftBorder) {
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request1, {8});
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        // breaks lock obtained above
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (8, 0, 0, 8000);
+        )");
+
+        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyPrefixRightBorder) {
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        request1->Record.SetLockTxId(lockTxId);
+        AddKeyQuery(*request1, {8});
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        // breaks lock obtained above
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (8, 1, 1, 8000);
+        )");
+
+        helper.CheckLockBroken("table-1", 3, {11, 11, 11}, lockTxId, *readResult1);
+    }
+
+    Y_UNIT_TEST(ShouldReturnBrokenLockWhenReadKeyWithContinue) {
+        TTestHelper helper;
+
+        const ui64 lockTxId = 1011121314;
+
+        auto request1 = helper.GetBaseReadRequest("table-1", 1);
+        AddKeyQuery(*request1, {3, 3, 3});
+        AddKeyQuery(*request1, {1, 1, 1});
+        AddKeyQuery(*request1, {5, 5, 5});
+        request1->Record.SetMaxRows(1);
+        request1->Record.SetLockTxId(lockTxId);
+
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+
+        // breaks lock obtained above
+        // also we modify range: insert new key
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-1`
+            (key1, key2, key3, value)
+            VALUES
+            (1, 1, 1, 1000);
+        )");
+
+        helper.SendReadAck("table-1", readResult1->Record, 3, 10000);
+        auto readResult2 = helper.WaitReadResult();
+        UNIT_ASSERT_VALUES_EQUAL(readResult2->Record.BrokenTxLocksSize(), 1UL);
+
+        const auto& lock = readResult1->Record.GetTxLocks(0);
+        const auto& brokenLock = readResult2->Record.GetBrokenTxLocks(0);
+        UNIT_ASSERT_VALUES_EQUAL(lock.GetLockId(), brokenLock.GetLockId());
+        UNIT_ASSERT(lock.GetCounter() < brokenLock.GetCounter());
+    }
+
+    Y_UNIT_TEST(HandlePersistentSnapshotGoneInContinue) {
+        // TODO
+    }
+
+    Y_UNIT_TEST(HandleMvccGoneInContinue) {
+        // TODO
     }
 };
 

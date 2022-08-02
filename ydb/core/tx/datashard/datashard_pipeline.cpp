@@ -1625,7 +1625,13 @@ bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, co
 }
 
 void TPipeline::ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx) {
-    if (WaitingDataTxOps.empty() || Self->MvccSwitchState == TSwitchState::SWITCHING)
+    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " ActivateWaitingTxOps for version# " << edge
+        << ", txOps: " << (WaitingDataTxOps.empty() ? "empty" : ToString(WaitingDataTxOps.begin()->first.Step))
+        << ", readIterators: "
+        << (WaitingDataReadIterators.empty() ? "empty" : ToString(WaitingDataReadIterators.begin()->first.Step)));
+
+    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
+    if (isEmpty || Self->MvccSwitchState == TSwitchState::SWITCHING)
         return;
 
     bool activated = false;
@@ -1639,6 +1645,16 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, co
             }
             ctx.Send(it->second.Release());
             it = WaitingDataTxOps.erase(it);
+            activated = true;
+        }
+
+        for (auto it = WaitingDataReadIterators.begin(); it != WaitingDataReadIterators.end();) {
+            if (it->first > TRowVersion::Min() && it->first >= edge) {
+                minWait = Min(minWait, it->first);
+                break;
+            }
+            ctx.Send(it->second.Release());
+            it = WaitingDataReadIterators.erase(it);
             activated = true;
         }
 
@@ -1658,11 +1674,40 @@ void TPipeline::ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, co
 }
 
 void TPipeline::ActivateWaitingTxOps(const TActorContext& ctx) {
-    if (WaitingDataTxOps.empty() || Self->MvccSwitchState == TSwitchState::SWITCHING)
+    bool isEmpty = WaitingDataTxOps.empty() && WaitingDataReadIterators.empty();
+    if (isEmpty || Self->MvccSwitchState == TSwitchState::SWITCHING)
         return;
 
     bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
     ActivateWaitingTxOps(GetUnreadableEdge(prioritizedReads), prioritizedReads, ctx);
+}
+
+void TPipeline::AddWaitingReadIterator(
+    const TRowVersion& version,
+    TEvDataShard::TEvRead::TPtr ev,
+    const TActorContext& ctx)
+{
+    if (Y_UNLIKELY(Self->MvccSwitchState == TSwitchState::SWITCHING)) {
+        // postpone tx processing till mvcc state switch is finished
+        WaitingDataReadIterators.emplace(TRowVersion::Min(), ev);
+        return;
+    }
+
+    auto readId = ev->Get()->Record.GetReadId();
+    WaitingDataReadIterators.emplace(version, std::move(ev));
+
+    bool prioritizedReads = Self->GetEnablePrioritizedMvccSnapshotReads();
+    const ui64 waitStep = prioritizedReads ? version.Step : version.Step + 1;
+    TRowVersion unreadableEdge = TRowVersion::Min();
+    if (!Self->WaitPlanStep(waitStep) && version < (unreadableEdge = GetUnreadableEdge(prioritizedReads))) {
+        // Async MediatorTimeCastEntry update, need to reschedule transaction
+        ActivateWaitingTxOps(unreadableEdge, prioritizedReads, ctx);
+    }
+
+    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID() << " put read iterator# " << readId
+        << " to wait version# " << version
+        << ", waitStep# " << waitStep
+        << ", current unreliable edge# " << unreadableEdge);
 }
 
 TRowVersion TPipeline::GetReadEdge() const {

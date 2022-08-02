@@ -328,10 +328,16 @@ public:
     void ActivateWaitingSchemeOps(const TActorContext& ctx) const;
     void MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const;
 
-    ui64 WaitingTxs() const { return WaitingDataTxOps.size(); }
+    ui64 WaitingTxs() const { return WaitingDataTxOps.size(); } // note that without iterators
     bool AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx);
     void ActivateWaitingTxOps(TRowVersion edge, bool prioritizedReads, const TActorContext& ctx);
     void ActivateWaitingTxOps(const TActorContext& ctx);
+
+    ui64 WaitingReadIterators() const { return WaitingDataReadIterators.size(); }
+    void AddWaitingReadIterator(
+        const TRowVersion& version,
+        TEvDataShard::TEvRead::TPtr ev,
+        const TActorContext& ctx);
 
     TRowVersion GetReadEdge() const;
     TRowVersion GetUnreadableEdge(bool prioritizedReads) const;
@@ -466,6 +472,8 @@ private:
     TCommittingDataTxOps CommittingOps;
 
     THashMap<ui64, TOperation::TPtr> CompletingOps;
+
+    TMultiMap<TRowVersion, TEvDataShard::TEvRead::TPtr> WaitingDataReadIterators;
 
     bool GetPlannedTx(NIceDb::TNiceDb& db, ui64& step, ui64& txId);
     void SaveLastPlannedTx(NIceDb::TNiceDb& db, TStepOrder stepTxId);

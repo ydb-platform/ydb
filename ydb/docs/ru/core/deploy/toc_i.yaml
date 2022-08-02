@@ -5,4 +5,6 @@ items:
   href: manual/deploy-ydb-on-premises.md
 - name: Конфигурация
   href: configuration/config.md
+- name: Промышленные конфигурации BlobStorage
+  href: ../administration/production-storage-config.md
 

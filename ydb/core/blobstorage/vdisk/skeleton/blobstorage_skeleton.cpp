@@ -23,6 +23,7 @@
 #include <ydb/core/blobstorage/vdisk/anubis_osiris/blobstorage_osiris.h>
 #include <ydb/core/blobstorage/vdisk/query/query_public.h>
 #include <ydb/core/blobstorage/vdisk/query/query_statalgo.h>
+#include <ydb/core/blobstorage/vdisk/query/assimilation.h>
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_dblogcutter.h>
 #include <ydb/core/blobstorage/vdisk/common/blobstorage_status.h>
@@ -97,12 +98,15 @@ namespace NKikimr {
         // because of (fresh) compaction overload
         ////////////////////////////////////////////////////////////////////////
         template<typename TEvent>
-        bool DonorCheck(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
+        bool CheckIfWriteAllowed(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
             if (Config->BaseInfo.DonorMode) {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
-                return false;
+            } else if (GInfo->AssimilatorGroupId) {
+                ReplyError(NKikimrProto::ERROR, "group is being assimilated", ev, ctx, TAppData::TimeProvider->Now());
+            } else {
+                return true;
             }
-            return true;
+            return false;
         }
 
         void ProcessPostponedEvents(const TActorContext &ctx, bool actualizeLevels) {
@@ -155,7 +159,7 @@ namespace NKikimr {
         ////////////////////////////////////////////////////////////////////////
 
         void Handle(TEvBlobStorage::TEvVMovedPatch::TPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             const bool postpone = OverloadHandler->PostponeEvent(ev);
@@ -199,7 +203,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVPatchStart::TPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             const bool postpone = OverloadHandler->PostponeEvent(ev);
@@ -235,7 +239,7 @@ namespace NKikimr {
 
         template <typename TEvDiffPtr>
         void HandleVPatchDiffResending(TEvDiffPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             if constexpr (std::is_same_v<TEvDiffPtr, TEvBlobStorage::TEvVPatchDiff::TPtr>) {
@@ -285,7 +289,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVMultiPut::TPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             const bool postpone = OverloadHandler->PostponeEvent(ev);
@@ -631,7 +635,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             const bool postpone = OverloadHandler->PostponeEvent(ev);
@@ -907,7 +911,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVBlock::TPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             ++IFaceMonGroup->BlockMsgs();
@@ -1025,7 +1029,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvBlobStorage::TEvVCollectGarbage::TPtr &ev, const TActorContext &ctx) {
-            if (!DonorCheck(ev, ctx)) {
+            if (!CheckIfWriteAllowed(ev, ctx)) {
                 return;
             }
             IFaceMonGroup->GCMsgs()++;
@@ -1120,8 +1124,7 @@ namespace NKikimr {
         void Handle(TEvBlobStorage::TEvVStatus::TPtr &ev, const TActorContext &ctx) {
             IFaceMonGroup->StatusMsgs()++;
             TInstant now = TAppData::TimeProvider->Now();
-            LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvVStatus"
-                    << " Marker# BSVS20");
+            LOG_DEBUG_S(ctx, BS_VDISK_OTHER, VCtx->VDiskLogPrefix << "TEvVStatus Marker# BSVS20");
             auto aid = ctx.Register(CreateStatusRequestHandler(VCtx, Db->SkeletonID, Db->SyncerID, Db->SyncLogID,
                 IFaceMonGroup, SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo, ev, ctx.SelfID, now, ReplDone));
             ActiveActors.Insert(aid);
@@ -1192,6 +1195,15 @@ namespace NKikimr {
             Y_VERIFY(it != MonStreamActors.end());
             ActiveActors.erase(it->second);
             MonStreamActors.erase(it);
+        }
+
+        ////////////////////////////////////////////////////////////////////////
+        // ASSIMILATION
+        ////////////////////////////////////////////////////////////////////////
+
+        void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
+            const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev));
+            ActiveActors.insert(actorId);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -2387,6 +2399,7 @@ namespace NKikimr {
             HFunc(TEvRecoveredHugeBlob, Handle)
             HFunc(TEvDetectedPhantomBlob, Handle)
             HFunc(TEvBlobStorage::TEvVStatus, Handle)
+            HFunc(TEvBlobStorage::TEvVAssimilate, Handle)
             HFunc(TEvBlobStorage::TEvVDbStat, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, Handle)
             HFunc(TEvBlobStorage::TEvMonStreamActorDeathNote, Handle)

@@ -559,6 +559,62 @@ message TEvVGetBlockResult {
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
 }
 
+message TEvVAssimilate {
+    message TBarrierKey {
+        optional fixed64 TabletId = 1;
+        optional uint32 Channel = 2;
+    }
+
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
+    optional bool NotifyIfNotReady = 2;
+
+    optional fixed64 SkipBlocksUpTo = 10; // return keys strictly greater than this; if not set, return since the first one
+    optional TBarrierKey SkipBarriersUpTo = 11; // the same behaviour
+    optional NKikimrProto.TLogoBlobID SkipBlobsUpTo = 12; // the same behaviour
+}
+
+message TEvVAssimilateResult {
+    message TBlock {
+        optional fixed64 TabletId = 1;
+        optional uint32 BlockedGeneration = 2;
+    }
+
+    message TBarrier {
+        message TValue {
+            optional uint32 RecordGeneration = 1;
+            optional uint32 PerGenerationCounter = 2;
+            optional uint32 CollectGeneration = 3;
+            optional uint32 CollectStep = 4;
+        }
+
+        optional fixed64 TabletId = 1;
+        optional uint32 Channel = 2;
+        optional TValue Soft = 3;
+        optional TValue Hard = 4;
+    }
+
+    message TBlob {
+        // incremental blob encoding
+        optional fixed64 RawX1 = 1;
+        optional fixed64 RawX2 = 2;
+        optional fixed64 RawX3 = 3;
+        optional uint64 DiffX1 = 4;
+        optional uint64 DiffX2 = 5;
+        optional uint64 DiffX3 = 6;
+
+        optional uint64 Ingress = 7;
+    }
+
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+
+    repeated TBlock Blocks = 10;
+    repeated TBarrier Barriers = 11;
+    repeated TBlob Blobs = 12;
+
+    optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
+}
+
 message TEvVCollectGarbage {
     optional uint64 TabletId = 1;
     optional uint32 RecordGeneration = 2;

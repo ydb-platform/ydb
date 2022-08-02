@@ -1342,6 +1342,12 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(status, ev->Get()->Record.GetVDiskID()),
                 flags, ev->Cookie);
         }
+
+        void Reply(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx,
+                NKikimrProto::EReplyStatus status, const TString& errorReason, TInstant /*now*/) {
+            const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
+            ctx.Send(ev->Sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason), flags, ev->Cookie);
+        }
         // FIXME: don't forget about counters
 
 
@@ -1563,6 +1569,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCollectGarbage, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGetBarrier, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVStatus, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVAssimilate, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDbStat, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
@@ -1604,6 +1611,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCollectGarbage, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVGetBarrier, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVStatus, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVAssimilate, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDbStat, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseNotReadyHandle)
@@ -1648,6 +1656,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCollectGarbage, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVGetBarrier, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVStatus, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVAssimilate, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVDbStat, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSync, DatabaseErrorHandle)
@@ -1691,7 +1700,8 @@ namespace NKikimr {
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDbStat>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVCompact>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDefrag>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>;
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVAssimilate>;
 
         template <typename TEv>
         static constexpr bool IsValidatable = std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut>
@@ -1763,6 +1773,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCollectGarbage, Check)
             HFunc(TEvBlobStorage::TEvVGetBarrier, Check)
             HFunc(TEvBlobStorage::TEvVStatus, Check)
+            HFunc(TEvBlobStorage::TEvVAssimilate, Check)
             HFunc(TEvBlobStorage::TEvVDbStat, Check)
             HFunc(TEvBlobStorage::TEvMonStreamQuery, HandleRequestWithoutQoS)
             HFunc(TEvBlobStorage::TEvVSync, HandleRequestWithoutQoS)

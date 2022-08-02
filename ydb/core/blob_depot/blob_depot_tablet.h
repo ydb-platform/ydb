@@ -176,6 +176,11 @@ namespace NKikimr::NBlobDepot {
         bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
         void RenderMainPage(IOutputStream& s);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Group assimilation
+
+        class TGroupAssimilator;
     };
 
 } // NKikimr::NBlobDepot

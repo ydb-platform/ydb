@@ -33,6 +33,7 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage PRIVATE
   -ldl
 )
 target_sources(ydb-core-blobstorage-ut_blobstorage PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/assimilation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/block_race.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/counting_events.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/decommit_3dc.cpp

@@ -18,6 +18,7 @@ target_link_libraries(blobstorage-vdisk-query PUBLIC
   vdisk-hulldb-base
 )
 target_sources(blobstorage-vdisk-query PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/assimilation.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_barrier.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_extr.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/query/query_public.cpp

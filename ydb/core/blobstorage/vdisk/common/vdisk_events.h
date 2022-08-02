@@ -2509,6 +2509,26 @@ namespace NKikimr {
         }
     };
 
+    struct TEvBlobStorage::TEvVAssimilate : TEventPB<TEvVAssimilate, NKikimrBlobStorage::TEvVAssimilate, EvVAssimilate> {
+        TEvVAssimilate() = default;
+
+        TEvVAssimilate(const TVDiskID& vdiskId) {
+            VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+        }
+    };
+
+    struct TEvBlobStorage::TEvVAssimilateResult : TEventPB<TEvVAssimilateResult, NKikimrBlobStorage::TEvVAssimilateResult, EvVAssimilateResult>
+    {
+        TEvVAssimilateResult() = default;
+
+        TEvVAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason) {
+            Record.SetStatus(status);
+            if (status != NKikimrProto::OK) {
+                Record.SetErrorReason(errorReason);
+            }
+        }
+    };
+
     struct TEvBlobStorage::TEvVReadyNotify
         : public TEventPB<TEvBlobStorage::TEvVReadyNotify,
                 NKikimrBlobStorage::TEvVReadyNotify,

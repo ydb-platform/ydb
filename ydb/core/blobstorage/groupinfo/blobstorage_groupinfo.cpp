@@ -660,6 +660,9 @@ TIntrusivePtr<TBlobStorageGroupInfo> TBlobStorageGroupInfo::Parse(const NKikimrB
     if (group.HasBlobDepotId()) {
         res->BlobDepotId = group.GetBlobDepotId();
     }
+    if (group.HasAssimilatorGroupId()) {
+        res->AssimilatorGroupId = group.GetAssimilatorGroupId();
+    }
 
     // process encryption parameters
     res->EncryptionMode = static_cast<EEncryptionMode>(group.GetEncryptionMode());

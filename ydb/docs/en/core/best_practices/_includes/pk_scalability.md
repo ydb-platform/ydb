@@ -25,7 +25,7 @@ Writing data to a table with the ```( timestamp, userid, userevent, PRIMARY KEY 
 Let's take a table with the ```( timestamp, userid, userevent, PRIMARY KEY (userid, timestamp) )``` schema. As the entire primary key or its first component, you can use a hash of the source key. For example:
 
 ```
-( HASH(timestamp, userid), timestamp, userid, userevent, PRIMARY KEY (HASH(userid), userid, timestamp) )
+( timestamp, userid, userevent, PRIMARY KEY (HASH(userid), userid, timestamp) )
 ```
 
 If you select the hashing function correctly, the rows are distributed evenly enough throughout the key space, which results in an even load on the system. In this case, if the ```userid, timestamp``` fields are present in the key after ```HASH(userid)```, this preserves data locality and sorting by time for a specific user.

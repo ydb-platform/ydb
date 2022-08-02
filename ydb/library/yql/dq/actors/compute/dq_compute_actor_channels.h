@@ -74,6 +74,7 @@ public:
     bool PollChannel(ui64 channelId, i64 freeSpace);
     bool CheckInFlight(const TString& prefix);
     bool FinishInputChannels();
+    bool ShouldSkipData(ui64 channelId);
     const TPeerState& GetOutputChannelInFlightState(ui64 channelId);
     const TInputChannelStats* GetInputChannelStats(ui64 channelId);
     const TOutputChannelStats* GetOutputChannelStats(ui64 channelId);

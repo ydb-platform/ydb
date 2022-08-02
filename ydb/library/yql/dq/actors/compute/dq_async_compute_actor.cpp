@@ -467,14 +467,15 @@ private:
             return false;
         }
 
-        if (!Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
+        // If the channel has finished, then the data received after drain is no longer needed
+        const bool shouldSkipData = Channels->ShouldSkipData(outputChannel.ChannelId);
+        if (!shouldSkipData && !Channels->CanSendChannelData(outputChannel.ChannelId)) { // When channel will be connected, they will call resume execution.
             return false;
         }
 
         auto& asyncData = *outputChannel.AsyncData;
-
-        outputChannel.Finished = asyncData.Finished;
-        if (asyncData.Finished) {
+        outputChannel.Finished = asyncData.Finished || shouldSkipData;
+        if (outputChannel.Finished) {
             FinishedOutputChannels.insert(outputChannel.ChannelId);
         }
 
@@ -483,30 +484,32 @@ private:
         ProcessOutputsState.HasDataToSend |= !outputChannel.Finished;
         ProcessOutputsState.LastPopReturnedNoData = asyncData.Data.empty();
 
-        if (asyncData.Checkpoint.Defined()) {
-            ResumeInputs();
-        }
-        for (ui32 i = 0; i < asyncData.Data.size(); i++) {
-            auto& chunk = asyncData.Data[i];
-            NDqProto::TChannelData channelData;
-            channelData.SetChannelId(outputChannel.ChannelId);
-            // set finished only for last chunk
-            const bool lastChunk = i == asyncData.Data.size() - 1;
-            channelData.SetFinished(asyncData.Finished && lastChunk);
-            if (lastChunk && asyncData.Checkpoint.Defined()) {
-                channelData.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
-            }
-            channelData.MutableData()->Swap(&chunk);
-            Channels->SendChannelData(std::move(channelData));
-        }
-        if (asyncData.Data.empty() && asyncData.Changed) {
-            NDqProto::TChannelData channelData;
-            channelData.SetChannelId(outputChannel.ChannelId);
-            channelData.SetFinished(asyncData.Finished);
+        if (!shouldSkipData) {
             if (asyncData.Checkpoint.Defined()) {
-                channelData.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
+                ResumeInputs();
             }
-            Channels->SendChannelData(std::move(channelData));
+            for (ui32 i = 0; i < asyncData.Data.size(); i++) {
+                auto& chunk = asyncData.Data[i];
+                NDqProto::TChannelData channelData;
+                channelData.SetChannelId(outputChannel.ChannelId);
+                // set finished only for last chunk
+                const bool lastChunk = i == asyncData.Data.size() - 1;
+                channelData.SetFinished(asyncData.Finished && lastChunk);
+                if (lastChunk && asyncData.Checkpoint.Defined()) {
+                    channelData.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
+                }
+                channelData.MutableData()->Swap(&chunk);
+                Channels->SendChannelData(std::move(channelData));
+            }
+            if (asyncData.Data.empty() && asyncData.Changed) {
+                NDqProto::TChannelData channelData;
+                channelData.SetChannelId(outputChannel.ChannelId);
+                channelData.SetFinished(asyncData.Finished);
+                if (asyncData.Checkpoint.Defined()) {
+                    channelData.MutableCheckpoint()->Swap(&*asyncData.Checkpoint);
+                }
+                Channels->SendChannelData(std::move(channelData));
+            }
         }
 
         ProcessOutputsState.DataWasSent |= asyncData.Changed;

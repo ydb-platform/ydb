@@ -518,6 +518,11 @@ bool TDqComputeActorChannels::CanSendChannelData(ui64 channelId) {
     return outputChannel.Peer && (!outputChannel.Finished || SupportCheckpoints) && !outputChannel.RetryState;
 }
 
+bool TDqComputeActorChannels::ShouldSkipData(ui64 channelId) {
+    TOutputChannelState& outputChannel = OutCh(channelId);
+    return outputChannel.Finished && !SupportCheckpoints;
+}
+
 void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelData) {
     TOutputChannelState& outputChannel = OutCh(channelData.GetChannelId());
 

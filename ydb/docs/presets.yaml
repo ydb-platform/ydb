@@ -27,7 +27,6 @@ default:
   managed-k8s-name: Managed Service for Kubernetes
   s3-storage-host: s3.mds.yandex.net
   objstorage-name: Object Storage
-
   ydb-cli: ydb
   k8s: Kubernetes
   oss: true

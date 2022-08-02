@@ -75,6 +75,16 @@ public:
             auto* result = new NSchemeCache::TSchemeCacheNavigate();
             result->ResultSet = resultSet;
             response->Result.reset(result);
+
+            auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+
+            for (const auto & entry : resultSet) {
+                auto converter = entry.PQGroupInfo ? factory.MakeTopicConverter(
+                                   entry.PQGroupInfo->Description.GetPQTabletConfig()
+                            ) : nullptr;
+                response->Topics.push_back(converter);
+            }
+
             ctx.Send(ev->Sender, std::move(response));
         };
 

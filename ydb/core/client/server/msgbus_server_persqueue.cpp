@@ -304,6 +304,8 @@ void TPersQueueBaseRequestProcessor::Handle(
     }
 
     TopicsDescription = std::move(ev->Get()->Result);
+    TopicsConverters = std::move(ev->Get()->Topics);
+    Y_VERIFY(TopicsDescription->ResultSet.size() == TopicsConverters.size());
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -316,12 +318,14 @@ bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
-    auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+    Y_VERIFY(TopicsDescription->ResultSet.size() == TopicsConverters.size());
+    ui32 i = 0;
     for (const auto& entry : TopicsDescription->ResultSet) {
         if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
-            auto converter = factory.MakeTopicConverter(
-                    entry.PQGroupInfo->Description.GetPQTabletConfig()
-            );
+            auto converter = TopicsConverters[i++];
+            if (!converter) {
+                continue;
+            }
             auto name = converter->GetClientsideName();
             if (name.empty() || !TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
                 continue;

@@ -131,6 +131,16 @@ public:
             return lastArg == "--help" || lastArg == "-h" || lastArg == "-?";
         }
 
+        bool IsYdbCommand() const {
+            for (int i = 0; i < InitialArgC; ++i) {
+                TString arg = InitialArgV[i];
+                if (arg.EndsWith("ydb") || arg.EndsWith("ydb.exe")) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         bool IsSvnVersionCommand() const {
             TString lastArg = ArgV[ArgC - 1];
             return lastArg == "--svnrevision" || lastArg == "-V";
@@ -153,13 +163,7 @@ public:
         }
 
         bool IsInitCommand() const {
-            for (int i = 0; i < InitialArgC; ++i) {
-                TString arg = InitialArgV[i];
-                if (arg.EndsWith("ydb") || arg.EndsWith("ydb.exe")) {
-                    return HasArgs({ "init" }) && !HasArgs({ "workload" });
-                }
-            }
-            return false;
+            return HasArgs({ "init" }) && !HasArgs({ "workload" });
         }
 
         bool IsProfileCommand() const {
@@ -181,8 +185,15 @@ public:
             return lastArg == "--help-ex";
         }
 
+        // "System" commands doesn't need endpoint, database and authentication to operate
         bool IsSystemCommand() const {
-            return IsHelpCommand() || IsSvnVersionCommand() || IsUpdateCommand() || IsVersionCommand()
+            if (IsHelpCommand()) {
+                return true;
+            }
+            if (!IsYdbCommand()) {
+                return false;
+            }
+            return IsSvnVersionCommand() || IsUpdateCommand() || IsVersionCommand()
                 || IsInitCommand() || IsProfileCommand() || IsLicenseCommand() || IsCreditsCommand()
                 || IsHelpExCommand();
         }

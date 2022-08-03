@@ -1795,7 +1795,7 @@ message TEvTestLoadRequest {
         optional bool RemoveAllTags = 2;
     }
 
-    message TBulkUpsertStart {
+    message TUpdateStart {
         optional uint64 Tag = 1;
         optional uint64 RowCount = 2;
         optional uint64 TabletId = 3;
@@ -1807,7 +1807,8 @@ message TEvTestLoadRequest {
 
     oneof Command {
         TLoadStop LoadStop = 2;
-        TBulkUpsertStart BulkUpsertStart = 3;
+        TUpdateStart BulkUpsertStart = 3;
+        TUpdateStart UpsertStart = 4;
     }
 }
 

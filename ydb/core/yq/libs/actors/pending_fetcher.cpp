@@ -121,6 +121,7 @@ public:
         const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
         const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
         const ::NYq::NConfig::TPingerConfig& pingerConfig,
+        const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         TIntrusivePtr<ITimeProvider> timeProvider,
         TIntrusivePtr<IRandomProvider> randomProvider,
@@ -139,6 +140,7 @@ public:
         , PrivateApiConfig(privateApiConfig)
         , GatewaysConfig(gatewaysConfig)
         , PingerConfig(pingerConfig)
+        , RateLimiterConfig(rateLimiterConfig)
         , FunctionRegistry(functionRegistry)
         , TimeProvider(timeProvider)
         , RandomProvider(randomProvider)
@@ -321,6 +323,7 @@ private:
             DqCompFactory, PqCmConnections,
             CommonConfig, CheckpointCoordinatorConfig,
             PrivateApiConfig, GatewaysConfig, PingerConfig,
+            RateLimiterConfig,
             task.text(), task.scope(), task.user_token(),
             DatabaseResolver, queryId,
             task.user_id(), GetOwnerId(), task.generation(),
@@ -373,6 +376,7 @@ private:
     NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
     NYq::NConfig::TGatewaysConfig GatewaysConfig;
     NYq::NConfig::TPingerConfig PingerConfig;
+    NYq::NConfig::TRateLimiterConfig RateLimiterConfig;
 
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -419,6 +423,7 @@ NActors::IActor* CreatePendingFetcher(
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
     const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
     const ::NYq::NConfig::TPingerConfig& pingerConfig,
+    const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,
@@ -438,6 +443,7 @@ NActors::IActor* CreatePendingFetcher(
         privateApiConfig,
         gatewaysConfig,
         pingerConfig,
+        rateLimiterConfig,
         functionRegistry,
         timeProvider,
         randomProvider,

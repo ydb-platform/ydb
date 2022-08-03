@@ -34,6 +34,7 @@ struct TRunActorParams { // TODO2 : Change name
         const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
         const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
         const ::NYq::NConfig::TPingerConfig& pingerConfig,
+        const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
         const TString& sql,
         const TScope& scope,
         const TString& authToken,
@@ -86,6 +87,7 @@ struct TRunActorParams { // TODO2 : Change name
     const ::NYq::NConfig::TPrivateApiConfig PrivateApiConfig;
     const ::NYq::NConfig::TGatewaysConfig GatewaysConfig;
     const ::NYq::NConfig::TPingerConfig PingerConfig;
+    const ::NYq::NConfig::TRateLimiterConfig RateLimiterConfig;
     const TString Sql;
     const TScope Scope;
     const TString AuthToken;

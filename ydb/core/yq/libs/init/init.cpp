@@ -88,6 +88,7 @@ void Init(
     }
 
     if (protoConfig.GetRateLimiter().GetControlPlaneEnabled()) {
+        Y_VERIFY(protoConfig.GetQuotasManager().GetEnabled()); // Rate limiter resources want to know CPU quota on creation
         NActors::IActor* rateLimiterService = NYq::CreateRateLimiterControlPlaneService(protoConfig.GetRateLimiter(), yqSharedResources, credentialsProviderFactory);
         actorRegistrator(NYq::RateLimiterControlPlaneServiceId(), rateLimiterService);
     }
@@ -247,6 +248,7 @@ void Init(
             protoConfig.GetPrivateApi(),
             protoConfig.GetGateways(),
             protoConfig.GetPinger(),
+            protoConfig.GetRateLimiter(),
             appData->FunctionRegistry,
             TAppData::TimeProvider,
             TAppData::RandomProvider,

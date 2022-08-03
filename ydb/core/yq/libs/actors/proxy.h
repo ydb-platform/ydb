@@ -41,6 +41,7 @@ NActors::IActor* CreatePendingFetcher(
     const ::NYq::NConfig::TPrivateApiConfig& privateApiConfig,
     const ::NYq::NConfig::TGatewaysConfig& gatewaysConfig,
     const ::NYq::NConfig::TPingerConfig& pingerConfig,
+    const ::NYq::NConfig::TRateLimiterConfig& rateLimiterConfig,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     TIntrusivePtr<ITimeProvider> timeProvider,
     TIntrusivePtr<IRandomProvider> randomProvider,

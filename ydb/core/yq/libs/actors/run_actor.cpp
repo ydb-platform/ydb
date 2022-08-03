@@ -1132,7 +1132,7 @@ private:
     }
 
     bool StartRateLimiterResourceCreatorIfNeeded() {
-        if (!RateLimiterResourceWasCreated && !RateLimiterResourceCreatorId) {
+        if (!RateLimiterResourceWasCreated && !RateLimiterResourceCreatorId && Params.RateLimiterConfig.GetEnabled()) {
             LOG_D("Start rate limiter resource creator");
             RateLimiterResourceCreatorId = Register(CreateRateLimiterResourceCreator(SelfId(), Params.Owner, Params.QueryId));
             return true;
@@ -1141,7 +1141,7 @@ private:
     }
 
     bool StartRateLimiterResourceDeleterIfCan() {
-        if (!RateLimiterResourceDeleterId && !RateLimiterResourceCreatorId && FinalizingStatusIsWritten && QueryResponseArrived) {
+        if (!RateLimiterResourceDeleterId && !RateLimiterResourceCreatorId && FinalizingStatusIsWritten && QueryResponseArrived && Params.RateLimiterConfig.GetEnabled()) {
             LOG_D("Start rate limiter resource deleter");
             RateLimiterResourceDeleterId = Register(CreateRateLimiterResourceDeleter(SelfId(), Params.Owner, Params.QueryId));
             return true;
@@ -1150,8 +1150,10 @@ private:
     }
 
     void RunDqGraphs() {
-        if (StartRateLimiterResourceCreatorIfNeeded() || !RateLimiterResourceWasCreated) {
-            return;
+        if (Params.RateLimiterConfig.GetEnabled()) {
+            if (StartRateLimiterResourceCreatorIfNeeded() || !RateLimiterResourceWasCreated) {
+                return;
+            }
         }
 
         if (DqGraphParams.empty()) {
@@ -1435,7 +1437,7 @@ private:
             notFinished = true;
         }
 
-        if (!RateLimiterResourceWasDeleted) {
+        if (!RateLimiterResourceWasDeleted && Params.RateLimiterConfig.GetEnabled()) {
             StartRateLimiterResourceDeleterIfCan();
             notFinished = true;
         }

@@ -50,7 +50,7 @@ namespace NKikimr::NBlobDepot {
                     (WasConfigured, WasConfigured));
 
                 if (!WasConfigured) {
-                    Self->InitChannelKinds();
+                    Self->StartOperation();
                 }
                 TActivationContext::Send(Response.release());
             }

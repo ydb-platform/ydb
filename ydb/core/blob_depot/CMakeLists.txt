@@ -11,6 +11,7 @@ add_library(ydb-core-blob_depot)
 target_link_libraries(ydb-core-blob_depot PUBLIC
   contrib-libs-cxxsupp
   yutil
+  blobstorage-vdisk-common
   ydb-core-tablet_flat
   ydb-core-protos
 )
@@ -18,6 +19,7 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator_fetch_machine.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blocks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_gc.cpp

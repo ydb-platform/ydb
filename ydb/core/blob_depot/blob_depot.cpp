@@ -40,6 +40,9 @@ namespace NKikimr::NBlobDepot {
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);
 
+                fFunc(TEvents::TSystem::Gone, HandleGone);
+                hFunc(TEvAssimilatedData, Handle);
+
                 default:
                     if (!HandleDefaultEvents(ev, ctx)) {
                         Y_FAIL("unexpected event Type# 0x%08" PRIx32, type);
@@ -49,6 +52,14 @@ namespace NKikimr::NBlobDepot {
         } catch (...) {
             Y_FAIL_S("unexpected exception# " << CurrentExceptionMessage());
         }
+    }
+
+    void TBlobDepot::PassAway() {
+        for (const auto& [_, actorId] : RunningGroupAssimilators) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+        }
+
+        TActor::PassAway();
     }
 
     IActor *CreateBlobDepot(const TActorId& tablet, TTabletStorageInfo *info) {

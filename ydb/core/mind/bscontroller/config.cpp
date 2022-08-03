@@ -636,6 +636,8 @@ namespace NKikimr::NBsController {
                     Y_VERIFY(vslot->GroupId == groupId);
                     Y_VERIFY(vslot->GroupGeneration == group.Generation);
                 }
+                Y_VERIFY_DEBUG((group.DecommitStatus == NKikimrBlobStorage::EGroupDecommitStatus::NONE) ==
+                    group.AssimilatorGroupId.Empty());
             });
 #endif
         }

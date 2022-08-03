@@ -200,6 +200,10 @@ public:
                                                    isVirtualGroup ? 0 : std::get<2>(geomIt->second));
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
+                if (groups.HaveValue<T::AssimilatorGroupId>()) {
+                    group.AssimilatorGroupId = groups.GetValue<T::AssimilatorGroupId>();
+                }
+
 #define OPTIONAL(NAME) \
                 if (groups.HaveValue<T::NAME>()) { \
                     group.NAME = groups.GetValue<T::NAME>(); \

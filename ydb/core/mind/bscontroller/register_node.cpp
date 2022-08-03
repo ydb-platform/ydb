@@ -352,7 +352,7 @@ void TBlobStorageController::ReadGroups(TSet<ui32>& groupIDsToRead, bool discard
                 }
 
                 SerializeGroupInfo(groupProto, *group, info.Name, scopeId);
-            } else {
+            } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);
                 GetNode(nodeId).WaitingForGroups.insert(group->ID);

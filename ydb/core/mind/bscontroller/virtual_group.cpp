@@ -117,7 +117,7 @@ namespace NKikimr::NBsController {
         }
         group->DecommitStatus = NKikimrBlobStorage::EGroupDecommitStatus::PENDING;
         group->AssimilatorGroupId = virtualGroup->ID;
-        ++group->Generation; // advance group generation to push configs forcibly to all concerned nodes
+        group->ContentChanged = true; // advance group generation to push configs forcibly to all concerned nodes
 
         NKikimrBlobDepot::TBlobDepotConfig blobDepotConfig;
         if (!blobDepotConfig.ParseFromString(*virtualGroup->BlobDepotConfig)) {

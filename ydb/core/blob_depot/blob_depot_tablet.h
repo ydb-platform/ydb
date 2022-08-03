@@ -15,7 +15,128 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvCheckExpiredAgents = EventSpaceBegin(TEvents::ES_PRIVATE),
+                EvAssimilatedData,
             };
+        };
+
+        struct TBlock {
+            ui64 TabletId;
+            ui32 BlockedGeneration;
+
+            TBlock() = default;
+
+            TBlock(const NKikimrBlobStorage::TEvVAssimilateResult::TBlock& item)
+                : TabletId(item.GetTabletId())
+                , BlockedGeneration(item.GetBlockedGeneration())
+            {}
+
+            void Merge(TBlock& other) {
+                Y_VERIFY_DEBUG(other.TabletId == TabletId);
+                BlockedGeneration = Max(BlockedGeneration, other.BlockedGeneration);
+            }
+
+            TString ToString() const {
+                return TStringBuilder() << "{" << TabletId << ":" << BlockedGeneration << "}";
+            }
+        };
+
+        struct TBarrier {
+            struct TValue {
+                ui32 RecordGeneration;
+                ui32 PerGenerationCounter;
+                ui32 CollectGeneration;
+                ui32 CollectStep;
+
+                TValue(const NKikimrBlobStorage::TEvVAssimilateResult::TBarrier::TValue& value)
+                    : RecordGeneration(value.GetRecordGeneration())
+                    , PerGenerationCounter(value.GetPerGenerationCounter())
+                    , CollectGeneration(value.GetCollectGeneration())
+                    , CollectStep(value.GetCollectStep())
+                {}
+
+                void Merge(TValue& other) {
+                    if (KeyAsTuple() < other.KeyAsTuple()) {
+                        *this = other;
+                    }
+                }
+
+                TString ToString() const {
+                    return TStringBuilder() << "{" << RecordGeneration << ":" << PerGenerationCounter
+                        << "=>" << CollectGeneration << ":" << CollectStep << "}";
+                }
+
+                std::tuple<ui32, ui32> KeyAsTuple() const {
+                    return {RecordGeneration, PerGenerationCounter};
+                }
+            };
+
+            ui64 TabletId;
+            ui8 Channel;
+            std::optional<TValue> Hard;
+            std::optional<TValue> Soft;
+
+            TBarrier() = default;
+
+            TBarrier(const NKikimrBlobStorage::TEvVAssimilateResult::TBarrier& item)
+                : TabletId(item.GetTabletId())
+                , Channel(item.GetChannel())
+                , Hard(item.HasHard() ? std::make_optional(TValue(item.GetHard())) : std::nullopt)
+                , Soft(item.HasSoft() ? std::make_optional(TValue(item.GetSoft())) : std::nullopt)
+            {}
+
+            void Merge(TBarrier& other) {
+                Y_VERIFY_DEBUG(TabletId == other.TabletId && Channel == other.Channel);
+                if (Hard && other.Hard) {
+                    Hard->Merge(*other.Hard);
+                } else if (other.Hard) {
+                    Hard = std::move(other.Hard);
+                }
+                if (Soft && other.Soft) {
+                    Soft->Merge(*other.Soft);
+                } else if (other.Soft) {
+                    Soft = std::move(other.Soft);
+                }
+            }
+
+            TString ToString() const {
+                return TStringBuilder() << "{" << TabletId << ":" << int(Channel) << "@" << (Hard ? Hard->ToString() : "")
+                    << "/" << (Soft ? Soft->ToString() : "") << "}";
+            }
+        };
+
+        struct TBlob {
+            TLogoBlobID Id;
+            ui64 Ingress;
+
+            TBlob() = default;
+
+            TBlob(const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& item, const TLogoBlobID& id)
+                : Id(id)
+                , Ingress(item.GetIngress())
+            {}
+
+            void Merge(TBlob& other) {
+                Y_VERIFY_DEBUG(Id == other.Id);
+                Ingress |= other.Ingress;
+            }
+
+            TString ToString() const {
+                return TStringBuilder() << "{" << Id.ToString() << "/" << Ingress << "}";
+            }
+        };
+
+        struct TEvAssimilatedData : TEventLocal<TEvAssimilatedData, TEvPrivate::EvAssimilatedData> {
+            const ui32 GroupId;
+            std::deque<TBlock> Blocks;
+            bool BlocksFinished = false;
+            std::deque<TBarrier> Barriers;
+            bool BarriersFinished = false;
+            std::deque<TBlob> Blobs;
+            bool BlobsFinished = false;
+
+            TEvAssimilatedData(ui32 groupId)
+                : GroupId(groupId)
+            {}
         };
 
     public:
@@ -96,6 +217,11 @@ namespace NKikimr::NBlobDepot {
             SignalTabletActive(TActivationContext::AsActorContext());
         }
 
+        void StartOperation() {
+            InitChannelKinds();
+            StartGroupAssimilators();
+        }
+
         void OnDetach(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT26, "OnDetach", (TabletId, TabletID()));
 
@@ -107,6 +233,8 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT27, "OnTabletDead", (TabletId, TabletID()));
             PassAway();
         }
+
+        void PassAway() override;
 
         void InitChannelKinds();
 
@@ -180,7 +308,15 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group assimilation
 
+        THashMap<ui32, TActorId> RunningGroupAssimilators;
+
         class TGroupAssimilator;
+        class TGroupAssimilatorFetchMachine;
+
+        void StartGroupAssimilators();
+        void StartGroupAssimilator(ui32 groupId);
+        void HandleGone(TAutoPtr<IEventHandle> ev);
+        void Handle(TEvAssimilatedData::TPtr ev);
     };
 
 } // NKikimr::NBlobDepot

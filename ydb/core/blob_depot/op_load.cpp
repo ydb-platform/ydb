@@ -90,7 +90,7 @@ namespace NKikimr::NBlobDepot {
                     (Configured, Configured));
 
                 if (Configured) {
-                    Self->InitChannelKinds();
+                    Self->StartOperation();
                 }
 
                 Self->OnLoadFinished();

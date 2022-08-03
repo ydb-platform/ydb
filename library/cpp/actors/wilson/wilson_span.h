@@ -38,18 +38,29 @@ namespace NWilson {
 
     void SerializeKeyValue(TString key, TAttributeValue value, NCommonProto::KeyValue *pb);
 
+    enum class EFlags : ui32 {
+        NONE = 0,
+        AUTO_END = 1,
+    };
+
+    Y_DECLARE_FLAGS(TFlags, EFlags)
+    Y_DECLARE_OPERATORS_FOR_FLAGS(TFlags)
+
     class TSpan {
         struct TData {
             const TInstant StartTime;
             const ui64 StartCycles;
             const TTraceId TraceId;
             NTraceProto::Span Span;
+            TFlags Flags;
+            int UncaughtExceptions = std::uncaught_exceptions();
             bool Sent = false;
 
-            TData(TInstant startTime, ui64 startCycles, TTraceId traceId)
+            TData(TInstant startTime, ui64 startCycles, TTraceId traceId, TFlags flags)
                 : StartTime(startTime)
                 , StartCycles(startCycles)
                 , TraceId(std::move(traceId))
+                , Flags(flags)
             {}
 
             ~TData() {
@@ -64,8 +75,10 @@ namespace NWilson {
         TSpan(const TSpan&) = delete;
         TSpan(TSpan&&) = default;
 
-        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name)
-            : Data(parentId ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity)) : nullptr)
+        TSpan(ui8 verbosity, TTraceId parentId, std::optional<TString> name, TFlags flags = EFlags::NONE)
+            : Data(parentId
+                    ? std::make_unique<TData>(TInstant::Now(), GetCycleCount(), parentId.Span(verbosity), flags)
+                    : nullptr)
         {
             if (Y_UNLIKELY(*this)) {
                 if (!parentId.IsRoot()) {
@@ -84,7 +97,13 @@ namespace NWilson {
 
         ~TSpan() {
             if (Y_UNLIKELY(*this)) {
-                EndError("unterminated span");
+                if (std::uncaught_exceptions() != Data->UncaughtExceptions) {
+                    EndError("span terminated due to stack unwinding");
+                } else if (Data->Flags & EFlags::AUTO_END) {
+                    End();
+                } else {
+                    EndError("unterminated span");
+                }
             }
         }
 
@@ -102,6 +121,15 @@ namespace NWilson {
 
         explicit operator bool() const {
             return Data && !Data->Sent;
+        }
+
+        TSpan& EnableAutoEnd() {
+            if (Y_UNLIKELY(*this)) {
+                Data->Flags |= EFlags::AUTO_END;
+            } else {
+                Y_VERIFY_DEBUG(!Data, "span has been ended");
+            }
+            return *this;
         }
 
         TSpan& Relation(ERelation /*relation*/) {

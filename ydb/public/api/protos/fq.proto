@@ -42,6 +42,10 @@ message Limits {
     // Common limits
     int64 memory_limit = 6 [(Ydb.value) = ">= 0"]; // Bytes
     google.protobuf.Duration result_ttl = 7;
+    oneof timeout {
+        google.protobuf.Duration execution_timeout = 8;
+        google.protobuf.Timestamp execution_deadline = 9;
+    }
 }
 
 enum ExecuteMode {

@@ -164,6 +164,40 @@ std::tuple<TString, NYdb::TParams, std::function<std::pair<TString, NYdb::TParam
     return std::make_tuple(query.Sql, query.Params, prepareParams);
 }
 
+TDuration ExtractLimit(const TTask& task) {
+    const auto& limits = task.Query.content().Getlimits();
+
+    auto userExecutionLimit = TDuration::Zero();
+
+    switch (limits.timeout_case()) {
+        case YandexQuery::Limits::TimeoutCase::kExecutionDeadline: {
+            auto now = TInstant::Now();
+            auto deadline = NProtoInterop::CastFromProto(limits.execution_deadline());
+            if (deadline <= now) {
+                userExecutionLimit = TDuration::MilliSeconds(1);
+            } else {
+                userExecutionLimit = deadline - now;
+            }
+            break;
+        }
+        case YandexQuery::Limits::TimeoutCase::kExecutionTimeout: {
+            userExecutionLimit = NProtoInterop::CastFromProto(limits.execution_timeout());
+            break;
+        }
+        default:
+            break;
+    }
+
+    auto systemExecutionLimit = NProtoInterop::CastFromProto(task.Internal.execution_ttl());
+    auto executionLimit = std::min(userExecutionLimit, systemExecutionLimit);
+    if (systemExecutionLimit == TDuration::Zero()) {
+        executionLimit = userExecutionLimit;
+    } else if (userExecutionLimit == TDuration::Zero()) {
+        executionLimit = systemExecutionLimit;
+    }
+    return executionLimit;
+}
+
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequest::TPtr& ev)
 {
     TInstant startTime = TInstant::Now();
@@ -332,14 +366,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
                     << " unsupported";
             }
 
-            auto userExecutionLimit = TDuration::MilliSeconds(task.Query.content().Getlimits().vcpu_time_limit());
-            auto systemExecutionLimit = NProtoInterop::CastFromProto(task.Internal.execution_ttl());
-            auto executionLimit = std::min(userExecutionLimit, systemExecutionLimit);
-            if (systemExecutionLimit == TDuration::Zero()) {
-                executionLimit = userExecutionLimit;
-            } else if (userExecutionLimit == TDuration::Zero()) {
-                executionLimit = systemExecutionLimit;
-            }
+
 
             auto* newTask = result.add_tasks();
             newTask->set_query_type(queryType);
@@ -363,7 +390,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
             *newTask->mutable_deadline() = NProtoInterop::CastToProto(task.Deadline);
             newTask->mutable_disposition()->CopyFrom(task.Internal.disposition());
             newTask->set_result_limit(task.Internal.result_limit());
-            *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(executionLimit);
+            *newTask->mutable_execution_limit() = NProtoInterop::CastToProto(ExtractLimit(task));
             *newTask->mutable_request_started_at() = task.Query.meta().started_at();
 
             for (const auto& connection: task.Internal.connection()) {

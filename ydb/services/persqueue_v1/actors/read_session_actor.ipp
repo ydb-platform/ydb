@@ -120,38 +120,14 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename IContext::TEvReadF
         ctx.Send(ctx.SelfID, new TEvPQProxy::TEvDone());
         return;
     }
-    auto converterFactory = TopicsHandler.GetConverterFactory();
-    auto MakePartitionId = [&](auto& request) {
-        const ui64 id = [&request](){
-            if constexpr (UseMigrationProtocol) {
-                return request.assign_id();
-            } else {
-                return request.partition_session_id();
-            }
-        }();
-        Y_VERIFY(Partitions.find(id) != Partitions.end());
 
-        const auto& info = Partitions.at(id);
-        auto topic = info.Topic->GetFederationPath();
-        const auto& cluster = info.Topic->GetCluster();
-        ui64 partition = info.Partition.Partition;
-
-        auto converter = converterFactory->MakeDiscoveryConverter(
-                std::move(topic), {}, cluster, Request->GetDatabaseName().GetOrElse(TString())
-        );
-
-        return TPartitionId{converter, partition, id};
+    auto GetAssignId = [](auto& request) {
+        if constexpr (UseMigrationProtocol) {
+            return request.assign_id();
+        } else {
+            return request.partition_session_id();
+        }
     };
-
-
-#define GET_PART_ID_OR_EXIT(request)             \
-auto partId = MakePartitionId(request);      \
-if (!partId.DiscoveryConverter->IsValid()) { \
-    CloseSession(TStringBuilder() << "Invalid topic in request: " << partId.DiscoveryConverter->GetOriginalTopic() \
-                                  << ", reason: " << partId.DiscoveryConverter->GetReason(),                       \
-                 PersQueue::ErrorCode::BAD_REQUEST, ctx);                                                          \
-    return;                                  \
-}
 
     if constexpr (UseMigrationProtocol) {
         switch (request.request_case()) {
@@ -160,9 +136,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 break;
             }
             case TClientMessage::kStatus: {
-                //const auto& req = request.status();
-                GET_PART_ID_OR_EXIT(request.status());
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(partId));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(GetAssignId(request.status())));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                     Die(ctx);
@@ -176,8 +150,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 break;
             }
             case TClientMessage::kReleased: {
-                GET_PART_ID_OR_EXIT(request.released());
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(partId));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(GetAssignId(request.released())));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                     Die(ctx);
@@ -193,8 +166,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 const ui64 commitOffset = req.commit_offset();
                 const bool verifyReadOffset = req.verify_read_offset();
 
-                GET_PART_ID_OR_EXIT(request.start_read());
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(partId, readOffset, commitOffset, verifyReadOffset));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(GetAssignId(request.start_read()), readOffset, commitOffset, verifyReadOffset));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                     Die(ctx);
@@ -257,8 +229,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 break;
             }
             case TClientMessage::kPartitionSessionStatusRequest: {
-                GET_PART_ID_OR_EXIT(request.partition_session_status_request());
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(partId));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvGetStatus(GetAssignId(request.partition_session_status_request())));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                     Die(ctx);
@@ -268,8 +239,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
 
             }
             case TClientMessage::kStopPartitionSessionResponse: {
-                GET_PART_ID_OR_EXIT(request.stop_partition_session_response());
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(partId));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvReleased(GetAssignId(request.stop_partition_session_response())));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                     Die(ctx);
@@ -284,8 +254,7 @@ if (!partId.DiscoveryConverter->IsValid()) { \
                 const ui64 readOffset = req.read_offset();
                 const ui64 commitOffset = req.commit_offset();
 
-                GET_PART_ID_OR_EXIT(req);
-                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(partId, readOffset, commitOffset, req.has_read_offset()));
+                ctx.Send(ctx.SelfID, new TEvPQProxy::TEvStartRead(GetAssignId(req), readOffset, commitOffset, req.has_read_offset()));
                 if (!Request->GetStreamCtx()->Read()) {
                     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " grpc read failed at start");
                     Die(ctx);
@@ -336,8 +305,6 @@ if (!partId.DiscoveryConverter->IsValid()) { \
         }
     }
 }
-
-#undef GET_PART_ID_OR_EXIT
 
 
 template<bool UseMigrationProtocol>
@@ -464,19 +431,15 @@ template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvStartRead::TPtr& ev, const TActorContext& ctx) {
     RequestNotChecked = true;
 
-    auto it = Partitions.find(ev->Get()->Partition.AssignId);
-    if (it == Partitions.end()) {
-        return;
-    }
-
+    auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end() || it->second.Releasing) {
         //do nothing - already released partition
-        LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got NOTACTUAL StartRead from client for " << ev->Get()->Partition
+        LOG_WARN_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got NOTACTUAL StartRead from client for partition with assign id " << ev->Get()->AssignId
                    << " at offset " << ev->Get()->ReadOffset);
         return;
     }
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got StartRead from client for "
-               << ev->Get()->Partition <<
+               << it->second.Partition <<
                " at readOffset " << ev->Get()->ReadOffset <<
                " commitOffset " << ev->Get()->CommitOffset);
 
@@ -489,7 +452,7 @@ template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TPtr& ev, const TActorContext& ctx) {
     RequestNotChecked = true;
 
-    auto it = Partitions.find(ev->Get()->Partition.AssignId);
+    auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end()) {
         return;
     }
@@ -499,19 +462,19 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvReleased::TP
 
     }
     Y_VERIFY(it->second.LockSent);
-    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got Released from client for " << ev->Get()->Partition);
+    LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " got Released from client for partition " << it->second.Partition);
 
     ReleasePartition(it, true, ctx);
 }
 
 template<bool UseMigrationProtocol>
 void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPQProxy::TEvGetStatus::TPtr& ev, const TActorContext& ctx) {
-    auto it = Partitions.find(ev->Get()->Partition.AssignId);
+    auto it = Partitions.find(ev->Get()->AssignId);
     if (it == Partitions.end() || it->second.Releasing) {
         // Ignore request - client asking status after releasing of partition.
         return;
     }
-    ctx.Send(it->second.Actor, new TEvPQProxy::TEvGetStatus(ev->Get()->Partition));
+    ctx.Send(it->second.Actor, new TEvPQProxy::TEvGetStatus(ev->Get()->AssignId));
 }
 
 template<bool UseMigrationProtocol>

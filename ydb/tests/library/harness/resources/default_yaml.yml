@@ -158,6 +158,7 @@ grpc_config:
 feature_flags:
   enable_persistent_query_stats: true
   enable_scheme_transactions_at_scheme_shard: true
+  enable_mvcc_snapshot_reads: true
 kqpconfig:
   settings:
   - name: "_ResultRowsLimit"

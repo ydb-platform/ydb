@@ -321,12 +321,14 @@ bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
     Y_VERIFY(TopicsDescription->ResultSet.size() == TopicsConverters.size());
     ui32 i = 0;
     for (const auto& entry : TopicsDescription->ResultSet) {
+        auto converter = TopicsConverters[i++];
+        if (!converter) {
+            continue;
+        }
         if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
-            auto converter = TopicsConverters[i++];
-            if (!converter) {
-                continue;
-            }
+
             auto name = converter->GetClientsideName();
+
             if (name.empty() || !TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
                 continue;
             }

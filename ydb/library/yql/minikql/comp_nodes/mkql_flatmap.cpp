@@ -407,16 +407,22 @@ class TNarrowFlatMapFlowWrapper : public TStatefulFlowCodegeneratorNode<TNarrowF
 using TBaseComputation = TStatefulFlowCodegeneratorNode<TNarrowFlatMapFlowWrapper>;
 public:
      TNarrowFlatMapFlowWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, IComputationNode* output)
-        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded), Flow(flow), Items(std::move(items)), Output(output), Fields(Items.size(), nullptr)
+        : TBaseComputation(mutables, flow, kind, EValueRepresentation::Embedded)
+        , Flow(flow)
+        , Items(std::move(items))
+        , Output(output)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
-        if (state.IsInvalid()) {
-            for (auto i = 0U; i < Fields.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U)
-                    Fields[i] = &Items[i]->RefValue(ctx);
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-            switch (Flow->FetchValues(ctx, Fields.data())) {
+        if (state.IsInvalid()) {
+            for (auto i = 0U; i < Items.size(); ++i)
+                if (Items[i]->GetDependencesCount() > 0U)
+                    fields[i] = &Items[i]->RefValue(ctx);
+
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 case EFetchResult::Yield:
@@ -428,11 +434,11 @@ public:
 
         while (true) {
             if (auto output = Output->GetValue(ctx); output.IsFinish()) {
-                for (auto i = 0U; i < Fields.size(); ++i)
+                for (auto i = 0U; i < Items.size(); ++i)
                     if (Items[i]->GetDependencesCount() > 0U)
-                        Fields[i] = &Items[i]->RefValue(ctx);
+                        fields[i] = &Items[i]->RefValue(ctx);
 
-                switch (Flow->FetchValues(ctx, Fields.data())) {
+                switch (Flow->FetchValues(ctx, fields)) {
                     case EFetchResult::Finish:
                         return NUdf::TUnboxedValuePod::MakeFinish();
                     case EFetchResult::Yield:
@@ -514,7 +520,7 @@ private:
     const TComputationExternalNodePtrVector Items;
     IComputationNode* const Output;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 template <bool IsMultiRowPerItem, bool ResultContainerOpt>
@@ -699,17 +705,23 @@ using TBaseComputation = std::conditional_t<IsMultiRowPerItem,
     TStatelessFlowCodegeneratorNode<TNarrowFlatMapWrapper<IsMultiRowPerItem, ResultContainerOpt>>>;
 public:
      TNarrowFlatMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, const TComputationExternalNodePtrVector&& items, IComputationNode* newItem)
-        : TBaseComputation(mutables, flow, kind), Flow(flow), Items(std::move(items)), NewItem(newItem)
-        , PasstroughItem(GetPasstroughtMap({NewItem}, Items).front()), Fields(Items.size(), nullptr)
+        : TBaseComputation(mutables, flow, kind)
+        , Flow(flow)
+        , Items(std::move(items))
+        , NewItem(newItem)
+        , PasstroughItem(GetPasstroughtMap({NewItem}, Items).front())
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        while (true) {
-            for (auto i = 0U; i < Fields.size(); ++i)
-                if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                    Fields[i] = &Items[i]->RefValue(ctx);
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) {
+        while (true) {
+            for (auto i = 0U; i < Items.size(); ++i)
+                if (NewItem == Items[i] || Items[i]->GetDependencesCount() > 0U)
+                    fields[i] = &Items[i]->RefValue(ctx);
+
+            switch (const auto result = Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 case EFetchResult::Yield:
@@ -885,7 +897,7 @@ private:
 
     const std::optional<size_t> PasstroughItem;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 template <bool MultiOptional>

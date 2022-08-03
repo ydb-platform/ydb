@@ -23,7 +23,6 @@ protected:
     {}
 
     NYql::NUdf::TUnboxedValue** GetFields(TComputationContext& ctx) const {
-        Y_VERIFY_DEBUG(WideFieldsIndex + Items.size() <= ctx.WideFields.size());
         return ctx.WideFields.data() + WideFieldsIndex;
     }
 

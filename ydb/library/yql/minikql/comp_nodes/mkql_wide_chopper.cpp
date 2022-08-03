@@ -41,7 +41,6 @@ public:
     }
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        Y_VERIFY_DEBUG(WideFieldsIndex + ItemArgs.size() <= ctx.WideFields.size());
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         if (state.IsInvalid()) {
@@ -109,7 +108,6 @@ private:
             return EFetchResult::One;
         }
 
-        Y_VERIFY_DEBUG(WideFieldsIndex + ItemArgs.size() <= ctx.WideFields.size());
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < ItemArgs.size(); ++i)

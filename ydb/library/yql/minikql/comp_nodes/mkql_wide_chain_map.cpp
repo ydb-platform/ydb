@@ -143,7 +143,6 @@ public:
 #endif
 private:
     EFetchResult CalculateFirst(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        Y_VERIFY_DEBUG(WideFieldsIndex + Inputs.size() <= ctx.WideFields.size());
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {
@@ -196,7 +195,6 @@ private:
     }
 
     EFetchResult CalculateOther(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
-        Y_VERIFY_DEBUG(WideFieldsIndex + Inputs.size() <= ctx.WideFields.size());
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         for (auto i = 0U; i < Inputs.size(); ++i) {

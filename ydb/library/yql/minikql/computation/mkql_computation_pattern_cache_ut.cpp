@@ -30,7 +30,7 @@ TComputationNodeFactory GetListTestFactory() {
     };
 }
 
-TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+TRuntimeNode CreateFlow(TProgramBuilder& pb, size_t vecSize, TCallable *list) {
     if (list) {
         return pb.ToFlow(TRuntimeNode(list, false));
     } else {
@@ -334,9 +334,57 @@ TRuntimeNode CreateSkip(TProgramBuilder& pb, size_t vecSize, TCallable *list = n
     }
 }
 
+template<bool Flow>
+TRuntimeNode CreateNarrowFlatMap(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+    TTimer t(TString(__func__) + ": ");
+    auto flow = CreateFlow(pb, vecSize, list);
+
+    return pb.NarrowFlatMap(
+            pb.ExpandMap(flow,
+                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }
+            ),
+        [&] (TRuntimeNode::TList item) -> TRuntimeNode {
+            auto x = pb.NewOptional(item.front());
+            return Flow ? pb.ToFlow(x) : x;
+        }
+    );
+}
+
+TRuntimeNode CreateNarrowMultiMap(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+    TTimer t(TString(__func__) + ": ");
+    auto flow = CreateFlow(pb, vecSize, list);
+
+    return pb.NarrowMultiMap(
+            pb.ExpandMap(flow,
+                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }
+            ),
+        [&] (TRuntimeNode::TList item) -> TRuntimeNode::TList {
+            return {item.front(), item.front()};
+        }
+    );
+}
+
+template<bool WithPayload>
+TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+    TTimer t(TString(__func__) + ": ");
+    auto flow = CreateFlow(pb, vecSize, list);
+
+    return pb.FlatMap(
+        pb.NarrowSqueezeToSortedDict(
+            pb.ExpandMap(flow,
+                [&](TRuntimeNode item) -> TRuntimeNode::TList { return {item}; }
+            ),
+            /*all*/ false,
+            /*keySelector*/ [&](TRuntimeNode::TList item) { return item.front(); },
+            /*payloadSelector*/ [&](TRuntimeNode::TList ) { return WithPayload ? pb.NewDataLiteral<ui64>(0) : pb.NewVoid(); }
+        ),
+        [&] (TRuntimeNode item) { return pb.DictKeys(item); }
+    );
+}
+
 Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
     template<class T>
-    void ParallelProgTest(T f, bool useLLVM, ui64 testResult) {
+    void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 100'000) {
         TTimer t("total: ");
         const ui32 cacheSize = 10;
         const ui32 inFlight = 3;
@@ -351,7 +399,6 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 
         const auto listType = pb.NewListType(pb.NewDataType(NUdf::TDataType<ui64>::Id));
         const auto list = TCallableBuilder(pb.GetTypeEnvironment(), "TestList", listType).Build();
-        const ui32 vecSize = 100'000;
         auto progReturn = f(pb, vecSize, list);
 
         TExploringNodeVisitor explorer;
@@ -450,7 +497,20 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
     Y_UNIT_TEST_QUAD(Skip, Wide, UseLLVM) {
         ParallelProgTest(CreateSkip<Wide>, UseLLVM, 17389067750);
     }
+
+    Y_UNIT_TEST_QUAD(NarrowFlatMap, Flow, UseLLVM) {
+        ParallelProgTest(CreateNarrowFlatMap<Flow>, UseLLVM, 17451450000);
+    }
+
+    Y_UNIT_TEST_TWIN(NarrowMultiMap, UseLLVM) {
+        ParallelProgTest(CreateNarrowMultiMap, UseLLVM, 17451450000ull * 2);
+    }
+
+    Y_UNIT_TEST_QUAD(SqueezeToSortedDict, WithPayload, UseLLVM) {
+        ParallelProgTest(CreateSqueezeToSortedDict<WithPayload>, UseLLVM, 125014500, 1000);
+    }
 }
+
 
 Y_UNIT_TEST_SUITE(ComputationPatternCache) {
     Y_UNIT_TEST(Smoke) {

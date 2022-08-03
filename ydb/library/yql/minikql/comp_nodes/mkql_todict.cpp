@@ -1025,7 +1025,7 @@ public:
         , Key(key)
         , ItemsCountHint(itemsCountHint)
         , PasstroughKey(GetPasstroughtMap({Key}, Items).front())
-        , Fields(Items.size(), nullptr)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
     }
@@ -1036,13 +1036,14 @@ public:
         } else if (!state.HasValue()) {
             MakeState(ctx, state);
         }
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
-            for (auto i = 0U; i < Fields.size(); ++i)
+            for (auto i = 0U; i < Items.size(); ++i)
                 if (Key == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                    Fields[i] = &Items[i]->RefValue(ctx);
+                    fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) {
+            switch (const auto result = Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
                     statePtr->Insert(Key->GetValue(ctx).Release());
                     continue;
@@ -1191,7 +1192,7 @@ private:
 
     const std::optional<size_t> PasstroughKey;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 template <typename TMapAccumulator, bool IsStream>
@@ -1544,7 +1545,7 @@ public:
         , ItemsCountHint(itemsCountHint)
         , PasstroughKey(GetPasstroughtMap({Key, Payload}, Items).front())
         , PasstroughPayload(GetPasstroughtMap({Key, Payload}, Items).back())
-        , Fields(Items.size(), nullptr)
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {
         GetDictionaryKeyTypes(KeyType, KeyTypes, IsTuple, Encoded, UseIHash);
     }
@@ -1555,13 +1556,14 @@ public:
         } else if (!state.HasValue()) {
             MakeState(ctx, state);
         }
+        auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         while (const auto statePtr = static_cast<TState*>(state.AsBoxed().Get())) {
-            for (auto i = 0U; i < Fields.size(); ++i)
+            for (auto i = 0U; i < Items.size(); ++i)
                 if (Key == Items[i] || Payload == Items[i] || Items[i]->GetDependencesCount() > 0U)
-                    Fields[i] = &Items[i]->RefValue(ctx);
+                    fields[i] = &Items[i]->RefValue(ctx);
 
-            switch (const auto result = Flow->FetchValues(ctx, Fields.data())) {
+            switch (const auto result = Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::One:
                     statePtr->Insert(Key->GetValue(ctx).Release(), Payload->GetValue(ctx).Release());
                     continue;
@@ -1717,6 +1719,7 @@ private:
     const std::optional<size_t> PasstroughPayload;
 
     mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 template <typename TAccumulator>

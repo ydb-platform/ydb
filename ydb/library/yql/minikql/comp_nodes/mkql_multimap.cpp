@@ -411,8 +411,12 @@ class TNarrowMultiMapWrapper : public TStatefulFlowCodegeneratorNode<TNarrowMult
 using TBaseComputation = TStatefulFlowCodegeneratorNode<TNarrowMultiMapWrapper>;
 public:
     TNarrowMultiMapWrapper(TComputationMutables& mutables, EValueRepresentation kind, IComputationWideFlowNode* flow, TComputationExternalNodePtrVector&& items, TComputationNodePtrVector&& newItems)
-        : TBaseComputation(mutables, flow, kind), Flow(flow), Items(std::move(items)), NewItems(std::move(newItems))
-        , PasstroughtMap(GetPasstroughtMap(Items, NewItems)), Fields(Items.size(), nullptr)
+        : TBaseComputation(mutables, flow, kind)
+        , Flow(flow)
+        , Items(std::move(items))
+        , NewItems(std::move(newItems))
+        , PasstroughtMap(GetPasstroughtMap(Items, NewItems))
+        , WideFieldsIndex(mutables.IncrementWideFieldsIndex(Items.size()))
     {}
 
     NUdf::TUnboxedValuePod DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx) const {
@@ -421,11 +425,13 @@ public:
 
         const auto pos = state.IsInvalid() ? 0ULL : state.Get<ui64>();
         if (!pos) {
-            for (auto i = 0U; i < Fields.size(); ++i)
-                if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i])
-                    Fields[i] = &Items[i]->RefValue(ctx);
+            auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
-            switch (Flow->FetchValues(ctx, Fields.data())) {
+            for (auto i = 0U; i < Items.size(); ++i)
+                if (Items[i]->GetDependencesCount() > 0U || PasstroughtMap[i])
+                    fields[i] = &Items[i]->RefValue(ctx);
+
+            switch (Flow->FetchValues(ctx, fields)) {
                 case EFetchResult::Finish:
                     return NUdf::TUnboxedValuePod::MakeFinish();
                 case EFetchResult::Yield:
@@ -513,7 +519,7 @@ private:
 
     const TPasstroughtMap PasstroughtMap;
 
-    mutable std::vector<NUdf::TUnboxedValue*> Fields;
+    const ui32 WideFieldsIndex;
 };
 
 }

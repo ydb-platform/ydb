@@ -237,7 +237,6 @@ public:
 
                 const auto initUsage = MemLimit ? ctx.HolderFactory.GetMemoryUsed() : 0ULL;
 
-                Y_VERIFY_DEBUG(WideFieldsIndex + Nodes.ItemNodes.size() <= ctx.WideFields.size());
                 auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
                 do {
@@ -623,7 +622,6 @@ public:
         }
 
         if (const auto ptr = static_cast<TState*>(state.AsBoxed().Get())) {
-            Y_VERIFY_DEBUG(WideFieldsIndex + Nodes.ItemNodes.size() <= ctx.WideFields.size());
             auto **fields = ctx.WideFields.data() + WideFieldsIndex;
 
             while (EFetchResult::Finish != ptr->InputStatus) {

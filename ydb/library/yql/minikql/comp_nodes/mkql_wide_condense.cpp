@@ -47,7 +47,6 @@ public:
                 State[i]->SetValue(ctx, InitState[i]->GetValue(ctx));
         }
 
-        Y_VERIFY_DEBUG(WideFieldsIndex + Items.size() <= ctx.WideFields.size());
         auto** fields = ctx.WideFields.data() + WideFieldsIndex;
 
         while (true) {

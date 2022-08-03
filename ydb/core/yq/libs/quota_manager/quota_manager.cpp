@@ -46,9 +46,12 @@ struct TQuotaCachedUsage {
 };
 
 struct TQuotaCache {
-    THashMap<NActors::TActorId /* Sender */, ui64 /* Cookie */> PendingRequests; 
+    THashMap<NActors::TActorId /* Sender */, ui64 /* Cookie */> PendingUsageRequests; 
     THashMap<TString /* MetricName */, TQuotaCachedUsage> UsageMap;
     THashSet<TString> PendingUsage;
+    THashSet<TString> PendingLimit;
+    NActors::TActorId PendingLimitRequest;
+    ui64 PendingLimitCookie;
     TInstant LoadedAt = TInstant::Zero();
 };
 
@@ -159,6 +162,7 @@ private:
         hFunc(TEvQuotaService::TQuotaGetRequest, Handle)
         hFunc(TEvQuotaService::TQuotaChangeNotification, Handle)
         hFunc(TEvQuotaService::TQuotaUsageResponse, Handle)
+        hFunc(TEvQuotaService::TQuotaLimitChangeResponse, Handle)
         hFunc(TEvQuotaService::TQuotaSetRequest, Handle)
         hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
         hFunc(NActors::TEvInterconnect::TEvNodesInfo, Handle)
@@ -241,15 +245,15 @@ private:
                 if (!cachedUsage.Usage.Usage || cachedUsage.Usage.Usage->UpdatedAt + UsageRefreshPeriod < Now()) {
                     auto it = infoMap.find(metricName);
                     if (it != infoMap.end()) {
-                        if (it->second.UsageUpdater != NActors::TActorId{}) {
+                        if (it->second.QuotaController != NActors::TActorId{}) {
                             if (!cache.PendingUsage.contains(metricName)) {
                                 LOG_T(subjectType << "." << subjectId << "." << metricName << " IS STALE, Refreshing ...");
-                                Send(it->second.UsageUpdater, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName));
+                                Send(it->second.QuotaController, new TEvQuotaService::TQuotaUsageRequest(subjectType, subjectId, metricName));
                                 cache.PendingUsage.insert(metricName);
                                 cachedUsage.RequestedAt = Now();
                             }
                             if (!pended) {
-                                cache.PendingRequests.emplace(ev->Sender, ev->Cookie);
+                                cache.PendingUsageRequests.emplace(ev->Sender, ev->Cookie);
                                 pended = true;
                             }
                         }
@@ -260,12 +264,13 @@ private:
 
         if (!pended) {
             SendQuota(ev->Sender, ev->Cookie, subjectType, subjectId, cache);
-            cache.PendingRequests.erase(ev->Sender);
+            cache.PendingUsageRequests.erase(ev->Sender);
         }
     }
 
     void ChangeLimitsAndReply(const TString& subjectType, const TString& subjectId, TQuotaCache& cache, const TEvQuotaService::TQuotaSetRequest::TPtr& ev) {
 
+        auto pended = false;
         auto& infoMap = QuotaInfoMap[subjectType];
         for (auto metricLimit : ev->Get()->Limits) {
             auto& metricName = metricLimit.first;
@@ -274,16 +279,27 @@ private:
             if (it != cache.UsageMap.end()) {
                 auto& cached = it->second;
                 auto limit = metricLimit.second;
-                if (cached.Usage.Limit.Value == 0 || limit == 0 || limit > cached.Usage.Limit.Value) {
-                    // check hard limit only if quota is increased
-                    auto itI = infoMap.find(metricName);
-                    if (itI != infoMap.end()) {
-                        auto& info = itI->second;
-                        if (info.HardLimit != 0 && (limit == 0 || limit > info.HardLimit)) {
-                            limit = info.HardLimit;
+
+                auto itI = infoMap.find(metricName);
+                if (itI != infoMap.end()) {
+                    auto& info = itI->second;
+                    if (info.QuotaController != NActors::TActorId{}) {
+                        pended = true;
+                        cache.PendingLimitRequest = ev->Sender;
+                        cache.PendingLimitCookie = ev->Cookie;
+                        cache.PendingLimit.insert(metricName);
+                        Send(info.QuotaController, new TEvQuotaService::TQuotaLimitChangeRequest(subjectType, subjectId, metricName, cached.Usage.Limit.Value, limit));
+                        continue;
+                    } else {
+                        if (cached.Usage.Limit.Value == 0 || limit == 0 || limit > cached.Usage.Limit.Value) {
+                            // check hard limit only if quota is increased
+                            if (info.HardLimit != 0 && (limit == 0 || limit > info.HardLimit)) {
+                                limit = info.HardLimit;
+                            }
                         }
                     }
                 }
+
                 if (cached.Usage.Limit.Value != limit) {
                     cached.Usage.Limit.Value = limit;
                     cached.Usage.Limit.UpdatedAt = Now();
@@ -293,13 +309,53 @@ private:
             }
         }
 
-        auto response = MakeHolder<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
-        for (auto it : cache.UsageMap) {
-            response->Limits.emplace(it.first, it.second.Usage.Limit.Value);
+        if (!pended) {
+            auto response = MakeHolder<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
+            for (auto it : cache.UsageMap) {
+                response->Limits.emplace(it.first, it.second.Usage.Limit.Value);
+            }
+            Send(ev->Sender, response.Release());
         }
-        Send(ev->Sender, response.Release());
     }
 
+    void Handle(TEvQuotaService::TQuotaLimitChangeResponse::TPtr& ev) {
+        auto subjectType = ev->Get()->SubjectType;
+        auto subjectId = ev->Get()->SubjectId;
+        auto metricName = ev->Get()->MetricName;
+        auto& subjectMap = QuotaCacheMap[subjectType];
+        auto it = subjectMap.find(subjectId);
+
+        if (it == subjectMap.end()) {
+            // if quotas are not cached - ignore usage update
+            return;
+        }
+
+        auto& cache = it->second;    
+        cache.PendingLimit.erase(metricName);
+
+        auto itQ = cache.UsageMap.find(metricName);
+        if (itQ != cache.UsageMap.end()) {
+            // if metric is not defined - ignore usage update
+            auto& cached = itQ->second;
+            if (cached.Usage.Limit.Value != ev->Get()->Limit) {
+                cached.Usage.Limit.Value = ev->Get()->Limit;
+                cached.Usage.Limit.UpdatedAt = Now();
+                LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " LIMIT Changed");
+                SyncQuota(subjectType, subjectId, metricName, cached);
+            }
+        }
+
+        if (cache.PendingLimit.size() == 0) {
+            if (cache.PendingLimitRequest != NActors::TActorId{}) {
+                auto response = MakeHolder<TEvQuotaService::TQuotaSetResponse>(subjectType, subjectId);
+                for (auto it : cache.UsageMap) {
+                    response->Limits.emplace(it.first, it.second.Usage.Limit.Value);
+                }
+                Send(cache.PendingLimitRequest, response.Release());
+                cache.PendingLimitRequest = NActors::TActorId{};
+            }
+        }
+    }
 
     void ReadQuota(const TString& subjectType, const TString& subjectId, TReadQuotaExecuter::TCallback callback) {
     
@@ -426,9 +482,9 @@ private:
             auto itm = metricMap.find(request.MetricName);
             if (itm != metricMap.end()) {
                 auto& info = itm->second;
-                if (info.UsageUpdater != NActors::TActorId{}) {
+                if (info.QuotaController != NActors::TActorId{}) {
                     LOG_T(request.SubjectType << "." << request.SubjectId << "." << request.MetricName << " FORCE UPDATE, Updating ...");
-                    Send(info.UsageUpdater, new TEvQuotaService::TQuotaUsageRequest(request.SubjectType, request.SubjectId, request.MetricName));
+                    Send(info.QuotaController, new TEvQuotaService::TQuotaUsageRequest(request.SubjectType, request.SubjectId, request.MetricName));
                 }
             }
         }
@@ -566,21 +622,19 @@ private:
         cache.PendingUsage.erase(metricName);
 
         auto itQ = cache.UsageMap.find(metricName);
-        if (itQ == cache.UsageMap.end()) {
+        if (itQ != cache.UsageMap.end()) {
             // if metric is not defined - ignore usage update
-            return;
+            itQ->second.Usage.Usage = ev->Get()->Usage;
+            LOG_T(itQ->second.Usage.ToString(subjectType, subjectId, metricName) << " REFRESHED");
+            SyncQuota(subjectType, subjectId, metricName, itQ->second);
         }
-        itQ->second.Usage.Usage = ev->Get()->Usage;
-        LOG_T(itQ->second.Usage.ToString(subjectType, subjectId, metricName) << " REFRESHED");
 
         if (cache.PendingUsage.size() == 0) {
-            for (auto& itR : cache.PendingRequests) {
+            for (auto& itR : cache.PendingUsageRequests) {
                 SendQuota(itR.first, itR.second, subjectType, subjectId, cache);
             }
-            cache.PendingRequests.clear();
+            cache.PendingUsageRequests.clear();
         }
-
-        SyncQuota(subjectType, subjectId, metricName, itQ->second);
     }
 
     void Handle(TEvQuotaService::TQuotaSetRequest::TPtr& ev) {

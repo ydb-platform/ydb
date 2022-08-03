@@ -367,6 +367,7 @@ public:
         hFunc(TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, Handle);
         hFunc(NMon::TEvHttpInfo, Handle);
         hFunc(TEvQuotaService::TQuotaUsageRequest, Handle);
+        hFunc(TEvQuotaService::TQuotaLimitChangeRequest, Handle);
         hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
     )
 
@@ -402,6 +403,7 @@ public:
     void Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev);
 
     void Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev);
+    void Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev);
 
     template <class TEventPtr, class TRequestActor, ERequestTypeCommon requestType>
     void HandleRateLimiterImpl(TEventPtr& ev);

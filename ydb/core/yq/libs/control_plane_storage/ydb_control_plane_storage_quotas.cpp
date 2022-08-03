@@ -96,4 +96,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
     Exec(DbPool, executable);
 }
 
+void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaLimitChangeRequest::TPtr& ev) {
+    auto& record = *ev->Get();
+    // LimitRequested is always accepted
+    Send(ev->Sender, new TEvQuotaService::TQuotaLimitChangeResponse(record.SubjectType, record.SubjectId, record.MetricName, 
+      record.LimitRequested, record.LimitRequested));
+}
+
 } // NYq

@@ -5,6 +5,7 @@
 #include "bzip2.h"
 #include "xz.h"
 #include "gz.h"
+#include "output_queue_impl.h"
 
 namespace NYql {
 
@@ -23,6 +24,16 @@ std::unique_ptr<NDB::ReadBuffer> MakeDecompressor(NDB::ReadBuffer& input, const 
         return std::make_unique<NGz::TReadBuffer>(input);
 
     return nullptr;
+}
+
+IOutputQueue::TPtr MakeCompressorQueue(const std::string_view& compression) {
+    if ("lz4" == compression)
+        return NLz4::MakeCompressor();
+
+    if (compression.empty())
+        return std::make_unique<TOutputQueue<5_MB>>();
+
+    return {};
 }
 
 }

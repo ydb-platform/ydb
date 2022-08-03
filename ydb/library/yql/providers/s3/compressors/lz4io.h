@@ -4,6 +4,8 @@
 #define LZ4F_STATIC_LINKING_ONLY
 #include <contrib/libs/lz4/lz4frame.h>
 
+#include "output_queue.h"
+
 namespace NYql {
 
 namespace NLz4 {
@@ -32,6 +34,8 @@ private:
     LZ4F_errorCode_t NextToLoad;
     size_t Pos, Remaining;
 };
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel = {});
 
 }
 

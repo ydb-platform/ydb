@@ -1,11 +1,13 @@
 #include "lz4io.h"
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 
 #include <contrib/libs/lz4/lz4.h>
 #include <contrib/libs/lz4/lz4hc.h>
 
 #include <ydb/library/yql/utils/yql_panic.h>
+#include "output_queue_impl.h"
 
 namespace NYql {
 
@@ -161,6 +163,100 @@ size_t TReadBuffer::DecompressLegacy() {
 
     YQL_ENSURE(decodeSize >= 0, "Corrupted input detected.");
     return size_t(decodeSize);
+}
+
+class TCompressor : public TOutputQueue<5_MB> {
+static constexpr size_t BlockSize = 4_MB;
+public:
+    TCompressor(int level)
+        : OutputBufferSize(LZ4F_compressFrameBound(BlockSize, nullptr)), OutputBuffer(std::make_unique<char[]>(OutputBufferSize))
+    {
+        Prefs.autoFlush = 1;
+        Prefs.compressionLevel = level;
+        Prefs.frameInfo.blockMode = LZ4F_blockMode_t(1);
+        Prefs.frameInfo.blockSizeID = LZ4F_blockSizeID_t(7);
+        Prefs.frameInfo.blockChecksumFlag = LZ4F_blockChecksum_t(0);
+        Prefs.frameInfo.contentChecksumFlag = LZ4F_contentChecksum_t(1);
+        Prefs.favorDecSpeed = 0;
+
+        LZ4F_errorCode_t const errorCode = LZ4F_createCompressionContext(&Ctx, LZ4F_VERSION);
+        YQL_ENSURE(!LZ4F_isError(errorCode), "Allocation error: can't create LZ4F context " << LZ4F_getErrorName(errorCode));
+    }
+
+    ~TCompressor() {
+        if (LZ4F_errorCode_t const errorCode = LZ4F_freeCompressionContext(Ctx); LZ4F_isError(errorCode))
+            Cerr << "Error: can't free LZ4F context resource: " << LZ4F_getErrorName(errorCode);
+    }
+
+private:
+    void Push(TString&& item) override {
+        InputQueue.Push(std::move(item));
+        DoCompression();
+    }
+
+    void Seal() override {
+        InputQueue.Seal();
+        DoCompression();
+    }
+
+    size_t Size() const override {
+        return TOutputQueue::Size() + InputQueue.Size();
+    }
+
+    bool Empty() const override {
+        return TOutputQueue::Empty() && InputQueue.Empty();
+    }
+
+    size_t Volume() const override {
+        return TOutputQueue::Volume() + InputQueue.Volume();
+    }
+
+    void DoCompression() {
+        while (true) {
+            const auto& pop = InputQueue.Pop();
+            if (pop.empty())
+                break;
+
+            if (IsFirstBlock && InputQueue.IsSealed() && InputQueue.Empty()) {
+                const auto cSize = LZ4F_compressFrame_usingCDict(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr, &Prefs);
+                YQL_ENSURE(!LZ4F_isError(cSize), "Compression failed: " << LZ4F_getErrorName(cSize));
+                TOutputQueue::Push(TString(OutputBuffer.get(), cSize));
+                TOutputQueue::Seal();
+                IsFirstBlock = false;
+            } else {
+                if (IsFirstBlock) {
+                    const auto headerSize = LZ4F_compressBegin_usingCDict(Ctx, OutputBuffer.get(), OutputBufferSize, nullptr, &Prefs);
+                    YQL_ENSURE(!LZ4F_isError(headerSize), "Comression header generation failed: " << LZ4F_getErrorName(headerSize));
+                    TOutputQueue::Push(TString(OutputBuffer.get(), headerSize));
+                    IsFirstBlock = false;
+                }
+
+                const auto outSize = LZ4F_compressUpdate(Ctx, OutputBuffer.get(), OutputBufferSize, pop.data(), pop.size(), nullptr);
+                YQL_ENSURE(!LZ4F_isError(outSize), "Compression failed: " << LZ4F_getErrorName(outSize));
+                TOutputQueue::Push(TString(OutputBuffer.get(), outSize));
+
+                if (InputQueue.IsSealed() && InputQueue.Empty()) {
+                    const auto endSize = LZ4F_compressEnd(Ctx, OutputBuffer.get(), OutputBufferSize, nullptr);
+                    YQL_ENSURE(!LZ4F_isError(endSize), "End of frame error: " << LZ4F_getErrorName(endSize));
+                    TOutputQueue::Push(TString(OutputBuffer.get(), endSize));
+                    TOutputQueue::Seal();
+                }
+            }
+        }
+    }
+
+    const std::size_t OutputBufferSize;
+    const std::unique_ptr<char[]> OutputBuffer;
+
+    LZ4F_preferences_t Prefs;
+    LZ4F_compressionContext_t Ctx;
+
+    TOutputQueue<BlockSize, BlockSize> InputQueue;
+    bool IsFirstBlock = true;
+};
+
+IOutputQueue::TPtr MakeCompressor(std::optional<int> cLevel) {
+    return std::make_unique<TCompressor>(cLevel.value_or(LZ4HC_CLEVEL_DEFAULT));
 }
 
 }

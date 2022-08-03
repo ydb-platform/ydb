@@ -4,6 +4,7 @@
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/s3/compressors/factory.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
@@ -73,18 +74,22 @@ public:
     TS3FileWriteActor(
         IHTTPGateway::TPtr gateway,
         NYdb::TCredentialsProviderPtr credProvider,
-        const TString& key, const TString& url, size_t sizeLimit)
+        const TString& key, const TString& url, size_t sizeLimit, const std::string_view& compression)
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
         , ActorSystem(TActivationContext::ActorSystem())
-        , Key(key), Url(url), SizeLimit(sizeLimit)
-    {}
+        , Key(key), Url(url), SizeLimit(sizeLimit), Parts(MakeCompressorQueue(compression))
+    {
+        YQL_ENSURE(Parts, "Compression '" << compression << "' is not supported.");
+    }
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
-        if (InputFinished && 1U == Parts.size()) {
-            Gateway->Upload(Url, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, GetS3RetryPolicy());
-            Parts.pop();
+        if (Parts->IsSealed() && 1U == Parts->Size()) {
+            const auto size = Parts->Volume();
+            InFlight += size;
+            SentSize += size;
+            Gateway->Upload(Url, MakeHeader(), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, GetS3RetryPolicy());
         } else {
             Become(&TS3FileWriteActor::InitialStateFunc);
             Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
@@ -94,29 +99,27 @@ public:
     static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
 
     void SendData(TString&& data) {
-        InQueue += data.size();
-        TotalSize += data.size();
-        Parts.emplace(std::move(data));
+        Parts->Push(std::move(data));
 
-        if (1000U == ++PartsCount || TotalSize >= SizeLimit)
-            InputFinished = true;
+        if (10000U == Tags.size() + Parts->Size() || SizeLimit <= SentSize + Parts->Volume())
+            Parts->Seal();
 
         if (!UploadId.empty())
             StartUploadParts();
     }
 
     void Finish() {
-        InputFinished = true;
-        if (!InFlight && Parts.empty())
+        Parts->Seal();
+        if (!InFlight && Parts->Empty())
             CommitUploadedParts();
     }
 
-    bool IsFinishing() const { return InputFinished; }
+    bool IsFinishing() const { return Parts->IsSealed(); }
 
     const TString& GetUrl() const { return Url; }
 
     i64 GetMemoryUsed() const {
-        return InFlight + InQueue;
+        return InFlight + Parts->Volume();
     }
 private:
     STRICT_STFUNC(InitialStateFunc,
@@ -225,7 +228,7 @@ private:
         InFlight -= result->Get()->Size;
         Tags[result->Get()->Index] = std::move(result->Get()->ETag);
 
-        if (!InFlight && InputFinished && Parts.empty())
+        if (!InFlight && Parts->IsSealed() && Parts->Empty())
             CommitUploadedParts();
     }
 
@@ -235,12 +238,13 @@ private:
     }
 
     void StartUploadParts() {
-        for (InQueue = 0ULL; !Parts.empty(); Parts.pop()) {
-            const auto size = Parts.front().size();
+        while (auto part = Parts->Pop()) {
+            const auto size = part.size();
             const auto index = Tags.size();
             Tags.emplace_back();
             InFlight += size;
-            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(Parts.front()), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, GetS3RetryPolicy());
+            SentSize += size;
+            Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId, MakeHeader(), std::move(part), std::bind(&TS3FileWriteActor::OnPartUploadFinish, ActorSystem, SelfId(), ParentId, size, index, std::placeholders::_1), true, GetS3RetryPolicy());
         }
     }
 
@@ -263,11 +267,8 @@ private:
             return IHTTPGateway::THeaders{TString("X-YaCloud-SubjectToken:") += token};
     }
 
-    bool InputFinished = false;
-    size_t InQueue = 0ULL;
     size_t InFlight = 0ULL;
-    size_t TotalSize = 0ULL;
-    ui16 PartsCount = 0U;
+    size_t SentSize = 0ULL;
 
     const IHTTPGateway::TPtr Gateway;
     const NYdb::TCredentialsProviderPtr CredProvider;
@@ -279,7 +280,7 @@ private:
     const TString Url;
     const size_t SizeLimit;
 
-    std::queue<TString> Parts;
+    IOutputQueue::TPtr Parts;
     std::vector<TString> Tags;
 
     TString UploadId;
@@ -296,6 +297,7 @@ public:
         const std::vector<TString>& keys,
         const size_t memoryLimit,
         const size_t maxFileSize,
+        const TString& compression,
         IDqComputeActorAsyncOutput::ICallbacks* callbacks)
         : Gateway(std::move(gateway))
         , CredProvider(std::move(credProvider))
@@ -307,6 +309,7 @@ public:
         , Keys(keys)
         , MemoryLimit(memoryLimit)
         , MaxFileSize(maxFileSize)
+        , Compression(compression)
     {}
 
     void Bootstrap() {
@@ -357,7 +360,7 @@ private:
             const auto& key = MakeKey(v);
             const auto ins = FileWriteActors.emplace(key, std::vector<TS3FileWriteActor*>());
             if (ins.second || ins.first->second.empty() || ins.first->second.back()->IsFinishing()) {
-                auto fileWrite = std::make_unique<TS3FileWriteActor>(Gateway, CredProvider, key, Url + Path + key + MakeSuffix(), MaxFileSize);
+                auto fileWrite = std::make_unique<TS3FileWriteActor>(Gateway, CredProvider, key, Url + Path + key + MakeSuffix(), MaxFileSize, Compression);
                 ins.first->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
@@ -405,6 +408,7 @@ private:
 
     const size_t MemoryLimit;
     const size_t MaxFileSize;
+    const TString Compression;
 
     std::unordered_map<TString, std::vector<TS3FileWriteActor*>> FileWriteActors;
 };
@@ -434,6 +438,7 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
         std::vector<TString>(params.GetKeys().cbegin(), params.GetKeys().cend()),
         params.HasMemoryLimit() ? params.GetMemoryLimit() : 1_GB,
         params.HasMaxFileSize() ? params.GetMaxFileSize() : 50_MB,
+        params.HasCompression() ? params.GetCompression() : "",
         callbacks);
     return {actor, actor};
 }

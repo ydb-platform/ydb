@@ -25,6 +25,16 @@ TExprNode::TPtr GetPartitionBy(const TExprNode& settings) {
     return {};
 }
 
+TExprNode::TPtr GetCompression(const TExprNode& settings) {
+    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
+        if (settings.Child(i)->Head().IsAtom("compression")) {
+            return settings.ChildPtr(i);
+        }
+    }
+
+    return {};
+}
+
 TExprNode::TListType GetPartitionKeys(const TExprNode::TPtr& partBy) {
     if (partBy) {
         auto children = partBy->ChildrenList();
@@ -57,7 +67,8 @@ public:
         auto sinkSettingsBuilder = Build<TExprList>(ctx, targetNode.Pos());
         if (partBy)
             sinkSettingsBuilder.Add(std::move(partBy));
-
+        if (auto compression = GetCompression(write.Target().Settings().Ref()))
+            sinkSettingsBuilder.Add(std::move(compression));
 
         if (!FindNode(write.Input().Ptr(), [] (const TExprNode::TPtr& node) { return node->IsCallable(TCoDataSource::CallableName()); })) {
             YQL_CLOG(INFO, ProviderS3) << "Rewrite pure S3WriteObject `" << cluster << "`.`" << targetNode.Path().StringValue() << "` as stage with sink.";

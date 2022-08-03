@@ -30,6 +30,16 @@ TExprNode::TListType GetKeys(const TExprNode& settings) {
     return {};
 }
 
+std::string_view GetCompression(const TExprNode& settings) {
+    for (auto i = 0U; i < settings.ChildrenSize(); ++i) {
+        if (settings.Child(i)->Head().IsAtom("compression")) {
+            return settings.Child(i)->Tail().Content();
+        }
+    }
+
+    return {};
+}
+
 using namespace NYql::NS3Details;
 
 class TS3DqIntegration: public TDqIntegrationBase {
@@ -232,7 +242,7 @@ public:
             sinkDesc.SetUrl(connect.Url);
             sinkDesc.SetToken(settings.Token().Name().StringValue());
             sinkDesc.SetPath(settings.Path().StringValue());
-            for (const auto& key : GetKeys(maySettings.Settings().Ref()))
+            for (const auto& key : GetKeys(settings.Settings().Ref()))
                 sinkDesc.MutableKeys()->Add(TString(key->Content()));
 
             if (const auto& maxObjectSize = State_->Configuration->MaxOutputObjectSize.Get())
@@ -240,6 +250,9 @@ public:
 
             if (const auto& memoryLimit = State_->Configuration->InFlightMemoryLimit.Get())
                 sinkDesc.SetMemoryLimit(*memoryLimit);
+
+            if (const auto& compression = GetCompression(settings.Settings().Ref()); !compression.empty())
+                sinkDesc.SetCompression(TString(compression));
 
             protoSettings.PackFrom(sinkDesc);
             sinkType = "S3Sink";

@@ -5,6 +5,7 @@
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/generic/scope.h>
 #include <util/generic/stack.h>
 #include <util/generic/hash_set.h>
 
@@ -244,6 +245,17 @@ public:
 
     [[nodiscard]]
     TAstNode* ParseSelectStmt(const SelectStmt* value, bool inner) {
+        CTE.emplace_back();
+        Y_DEFER {
+            CTE.pop_back();
+        };
+
+        if (value->withClause) {
+            if (!ParseWithClause(CAST_NODE(WithClause, value->withClause))) {
+                return nullptr;
+            }
+        }
+
         TTraverseSelectStack traverseSelectStack;
         traverseSelectStack.push({ value, false });
 
@@ -497,11 +509,6 @@ public:
                 return nullptr;
             }
 
-            if (x->withClause) {
-                AddError("SelectStmt: not supported withClause");
-                return nullptr;
-            }
-
             TVector<TAstNode*> res;
             ui32 i = 0;
             for (int targetIndex = 0; targetIndex < ListLength(x->targetList); ++targetIndex) {
@@ -673,11 +680,6 @@ public:
             return nullptr;
         }
 
-        if (value->withClause) {
-            AddError("SelectStmt: not supported withClause");
-            return nullptr;
-        }
-
         TAstNode* limit = nullptr;
         TAstNode* offset = nullptr;
         if (value->limitOption == LIMIT_OPTION_COUNT || value->limitOption == LIMIT_OPTION_DEFAULT) {
@@ -736,6 +738,63 @@ public:
         Statements.push_back(L(A("let"), A("world"), L(A("Commit!"),
             A("world"), A("result_sink"))));
         return Statements.back();
+    }
+
+    [[nodiscard]]
+    bool ParseWithClause(const WithClause* value) {
+        if (value->recursive) {
+            AddError("WithClause: recursion is not supported");
+            return false;
+        }
+
+        for (int i = 0; i < ListLength(value->ctes); ++i) {
+            auto object = ListNodeNth(value->ctes, i);
+            if (NodeTag(object) != T_CommonTableExpr) {
+                NodeNotImplemented(value, object);
+                return false;
+            }
+
+            if (!ParseCTE(CAST_NODE(CommonTableExpr, object))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    [[nodiscard]]
+    bool ParseCTE(const CommonTableExpr* value) {
+        TView view;
+        view.Name = value->ctename;
+
+        for (int i = 0; i < ListLength(value->aliascolnames); ++i) {
+            auto node = ListNodeNth(value->aliascolnames, i);
+            if (NodeTag(node) != T_String) {
+                NodeNotImplemented(value, node);
+                return false;
+            }
+
+            view.ColNames.push_back(StrVal(node));
+        }
+
+        if (NodeTag(value->ctequery) != T_SelectStmt) {
+            AddError("Expected Select statement as CTE query");
+            return false;
+        }
+
+        view.Source = ParseSelectStmt(CAST_NODE(SelectStmt, value->ctequery), true);
+        if (!view.Source) {
+            return false;
+        }
+
+        auto& currentCTEs = CTE.back();
+        if (currentCTEs.find(view.Name) != currentCTEs.end()) {
+            AddError(TStringBuilder() << "CTE already exists: '" << view.Name << "'");
+            return false;
+        }
+
+        currentCTEs[view.Name] = view;
+        return true;
     }
 
     [[nodiscard]]
@@ -1045,13 +1104,23 @@ public:
 
         const TView* view = nullptr;
         if (StrLength(value->schemaname) == 0) {
-            auto it = Views.find(value->relname);
-            if (it == Views.end()) {
-                AddError(TStringBuilder() << "View not found: '" << value->relname << "'");
-                return {};
+            for (auto rit = CTE.rbegin(); rit != CTE.rend(); ++rit) {
+                auto cteIt = rit->find(value->relname);
+                if (cteIt != rit->end()) {
+                    view = &cteIt->second;
+                    break;
+                }
             }
 
-            view = &it->second;
+            if (!view) {
+                auto viewIt = Views.find(value->relname);
+                if (viewIt != Views.end()) {
+                    view = &viewIt->second;
+                } else {
+                    AddError(TStringBuilder() << "View or CTE not found: '" << value->relname << "'");
+                    return {};
+                }
+            }
         }
 
         TString alias;
@@ -2360,6 +2429,7 @@ private:
     ui32 DqEnginePgmPos = 0;
     ui32 ReadIndex = 0;
     TViews Views;
+    TVector<TViews> CTE;
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {

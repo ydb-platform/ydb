@@ -13,6 +13,8 @@
 
 #define AWS_DEFAULT_TLS_TIMEOUT_MS 10000
 
+#include "./pkcs11_private.h"
+
 #include <aws/common/string.h>
 
 void aws_tls_ctx_options_init_default_client(struct aws_tls_ctx_options *options, struct aws_allocator *allocator) {
@@ -40,11 +42,7 @@ void aws_tls_ctx_options_clean_up(struct aws_tls_ctx_options *options) {
 #endif
 
     aws_string_destroy(options->alpn_list);
-
-    aws_pkcs11_lib_release(options->pkcs11.lib);
-    aws_string_destroy_secure(options->pkcs11.user_pin);
-    aws_string_destroy(options->pkcs11.token_label);
-    aws_string_destroy(options->pkcs11.private_key_object_label);
+    aws_custom_key_op_handler_release(options->custom_key_op_handler);
 
     AWS_ZERO_STRUCT(*options);
 }
@@ -134,85 +132,131 @@ error:
 #endif
 }
 
-int aws_tls_ctx_options_init_client_mtls_with_pkcs11(
+int aws_tls_ctx_options_init_client_mtls_with_custom_key_operations(
     struct aws_tls_ctx_options *options,
     struct aws_allocator *allocator,
-    const struct aws_tls_ctx_pkcs11_options *pkcs11_options) {
+    struct aws_custom_key_op_handler *custom,
+    const struct aws_byte_cursor *cert_file_contents) {
 
-#if defined(_WIN32) || defined(__APPLE__)
+#if !USE_S2N
+    (void)options;
     (void)allocator;
-    (void)pkcs11_options;
+    (void)custom;
+    (void)cert_file_contents;
     AWS_ZERO_STRUCT(*options);
-    AWS_LOGF_ERROR(AWS_LS_IO_TLS, "static: This platform does not currently support TLS with PKCS#11.");
-    return aws_raise_error(AWS_ERROR_PLATFORM_NOT_SUPPORTED);
+    AWS_LOGF_ERROR(
+        AWS_LS_IO_TLS, "static: This platform does not currently support TLS with custom private key operations.");
+    return aws_raise_error(AWS_ERROR_UNIMPLEMENTED);
 #else
 
     aws_tls_ctx_options_init_default_client(options, allocator);
 
-    /* pkcs11_lib is required */
-    if (pkcs11_options->pkcs11_lib == NULL) {
-        AWS_LOGF_ERROR(AWS_LS_IO_TLS, "static: A PKCS#11 library must be specified.");
-        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto error;
-    }
-    options->pkcs11.lib = aws_pkcs11_lib_acquire(pkcs11_options->pkcs11_lib); /* cannot fail */
+    /* on_key_operation is required */
+    AWS_ASSERT(custom != NULL);
+    AWS_ASSERT(custom->vtable != NULL);
+    AWS_ASSERT(custom->vtable->on_key_operation != NULL);
 
-    /* user_pin is optional */
-    if (pkcs11_options->user_pin.ptr != NULL) {
-        options->pkcs11.user_pin = aws_string_new_from_cursor(allocator, &pkcs11_options->user_pin);
-    }
+    /* Hold a reference to the custom key operation handler so it cannot be destroyed */
+    options->custom_key_op_handler = aws_custom_key_op_handler_acquire((struct aws_custom_key_op_handler *)custom);
 
-    /* slot_id is optional */
-    if (pkcs11_options->slot_id != NULL) {
-        options->pkcs11.slot_id = *pkcs11_options->slot_id;
-        options->pkcs11.has_slot_id = true;
-    }
+    /* Copy the certificate data from the cursor */
+    AWS_ASSERT(cert_file_contents != NULL);
+    aws_byte_buf_init_copy_from_cursor(&options->certificate, allocator, *cert_file_contents);
 
-    /* token_label is optional */
-    if (pkcs11_options->token_label.ptr != NULL) {
-        options->pkcs11.token_label = aws_string_new_from_cursor(allocator, &pkcs11_options->token_label);
-    }
-
-    /* private_key_object_label is optional */
-    if (pkcs11_options->private_key_object_label.ptr != NULL) {
-        options->pkcs11.private_key_object_label =
-            aws_string_new_from_cursor(allocator, &pkcs11_options->private_key_object_label);
-    }
-
-    /* certificate required, but there are multiple ways to pass it in */
-    if ((pkcs11_options->cert_file_path.ptr != NULL) && (pkcs11_options->cert_file_contents.ptr != NULL)) {
-        AWS_LOGF_ERROR(
-            AWS_LS_IO_TLS, "static: Both certificate filepath and contents are specified. Only one may be set.");
-        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto error;
-    } else if (pkcs11_options->cert_file_path.ptr != NULL) {
-        struct aws_string *tmp_string = aws_string_new_from_cursor(allocator, &pkcs11_options->cert_file_path);
-        int op = aws_byte_buf_init_from_file(&options->certificate, allocator, aws_string_c_str(tmp_string));
-        aws_string_destroy(tmp_string);
-        if (op != AWS_OP_SUCCESS) {
-            goto error;
-        }
-    } else if (pkcs11_options->cert_file_contents.ptr != NULL) {
-        if (aws_byte_buf_init_copy_from_cursor(&options->certificate, allocator, pkcs11_options->cert_file_contents)) {
-            goto error;
-        }
-    } else {
-        AWS_LOGF_ERROR(AWS_LS_IO_TLS, "static: A certificate must be specified.");
-        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
-        goto error;
-    }
-
+    /* Make sure the certificate is set and valid */
     if (aws_sanitize_pem(&options->certificate, allocator)) {
         AWS_LOGF_ERROR(AWS_LS_IO_TLS, "static: Invalid certificate. File must contain PEM encoded data");
         goto error;
     }
 
-    /* Success! */
     return AWS_OP_SUCCESS;
 
 error:
     aws_tls_ctx_options_clean_up(options);
     return AWS_OP_ERR;
+
+#endif /* PLATFORM-SUPPORTS-CUSTOM-KEY-OPERATIONS */
+}
+
+int aws_tls_ctx_options_init_client_mtls_with_pkcs11(
+    struct aws_tls_ctx_options *options,
+    struct aws_allocator *allocator,
+    const struct aws_tls_ctx_pkcs11_options *pkcs11_options) {
+
+#if defined(USE_S2N)
+
+    struct aws_custom_key_op_handler *pkcs11_handler = aws_pkcs11_tls_op_handler_new(
+        allocator,
+        pkcs11_options->pkcs11_lib,
+        &pkcs11_options->user_pin,
+        &pkcs11_options->token_label,
+        &pkcs11_options->private_key_object_label,
+        pkcs11_options->slot_id);
+
+    struct aws_byte_buf tmp_cert_buf;
+    AWS_ZERO_STRUCT(tmp_cert_buf);
+    bool success = false;
+    int custom_key_result = AWS_OP_ERR;
+
+    if (pkcs11_handler == NULL) {
+        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        goto finish;
+    }
+
+    if ((pkcs11_options->cert_file_contents.ptr != NULL) && (pkcs11_options->cert_file_path.ptr != NULL)) {
+        AWS_LOGF_ERROR(AWS_LS_IO_TLS, "static: Cannot use certificate AND certificate file path, only one can be set");
+        aws_raise_error(AWS_ERROR_INVALID_ARGUMENT);
+        goto finish;
+    } else if (pkcs11_options->cert_file_contents.ptr != NULL) {
+        custom_key_result = aws_tls_ctx_options_init_client_mtls_with_custom_key_operations(
+            options, allocator, pkcs11_handler, &pkcs11_options->cert_file_contents);
+        success = true;
+    } else {
+        struct aws_string *tmp_string = aws_string_new_from_cursor(allocator, &pkcs11_options->cert_file_path);
+        int op = aws_byte_buf_init_from_file(&tmp_cert_buf, allocator, aws_string_c_str(tmp_string));
+        aws_string_destroy(tmp_string);
+
+        if (op != AWS_OP_SUCCESS) {
+            goto finish;
+        }
+
+        struct aws_byte_cursor tmp_cursor = aws_byte_cursor_from_buf(&tmp_cert_buf);
+        custom_key_result = aws_tls_ctx_options_init_client_mtls_with_custom_key_operations(
+            options, allocator, pkcs11_handler, &tmp_cursor);
+        success = true;
+    }
+
+finish:
+
+    if (pkcs11_handler != NULL) {
+        /**
+         * Calling aws_tls_ctx_options_init_client_mtls_with_custom_key_operations will have this options
+         * hold a reference to the custom key operations, but creating the TLS operations handler using
+         * aws_pkcs11_tls_op_handler_set_certificate_data adds a reference too, so we need to release
+         * this reference so the only thing (currently) holding a reference is the TLS options itself and
+         * not this function.
+         */
+        aws_custom_key_op_handler_release(pkcs11_handler);
+    }
+    if (success == false) {
+        aws_tls_ctx_options_clean_up(options);
+    }
+    aws_byte_buf_clean_up(&tmp_cert_buf);
+
+    if (success) {
+        return custom_key_result;
+    } else {
+        return AWS_OP_ERR;
+    }
+
+#else /* Platform does not support S2N */
+
+    (void)allocator;
+    (void)pkcs11_options;
+    AWS_ZERO_STRUCT(*options);
+    AWS_LOGF_ERROR(AWS_LS_IO_TLS, "static: This platform does not currently support TLS with PKCS#11.");
+    return aws_raise_error(AWS_ERROR_PLATFORM_NOT_SUPPORTED);
+
 #endif /* PLATFORM-SUPPORTS-PKCS11-TLS */
 }
 
@@ -738,4 +782,91 @@ void aws_tls_ctx_release(struct aws_tls_ctx *ctx) {
     if (ctx != NULL) {
         aws_ref_count_release(&ctx->ref_count);
     }
+}
+
+const char *aws_tls_hash_algorithm_str(enum aws_tls_hash_algorithm hash) {
+    /* clang-format off */
+    switch (hash) {
+        case (AWS_TLS_HASH_SHA1): return "SHA1";
+        case (AWS_TLS_HASH_SHA224): return "SHA224";
+        case (AWS_TLS_HASH_SHA256): return "SHA256";
+        case (AWS_TLS_HASH_SHA384): return "SHA384";
+        case (AWS_TLS_HASH_SHA512): return "SHA512";
+        default: return "<UNKNOWN HASH ALGORITHM>";
+    }
+    /* clang-format on */
+}
+
+const char *aws_tls_signature_algorithm_str(enum aws_tls_signature_algorithm signature) {
+    /* clang-format off */
+    switch (signature) {
+        case (AWS_TLS_SIGNATURE_RSA): return "RSA";
+        case (AWS_TLS_SIGNATURE_ECDSA): return "ECDSA";
+        default: return "<UNKNOWN SIGNATURE ALGORITHM>";
+    }
+    /* clang-format on */
+}
+
+const char *aws_tls_key_operation_type_str(enum aws_tls_key_operation_type operation_type) {
+    /* clang-format off */
+    switch (operation_type) {
+        case (AWS_TLS_KEY_OPERATION_SIGN): return "SIGN";
+        case (AWS_TLS_KEY_OPERATION_DECRYPT): return "DECRYPT";
+        default: return "<UNKNOWN OPERATION TYPE>";
+    }
+    /* clang-format on */
+}
+
+#if !USE_S2N
+void aws_tls_key_operation_complete(struct aws_tls_key_operation *operation, struct aws_byte_cursor output) {
+    (void)operation;
+    (void)output;
+}
+
+void aws_tls_key_operation_complete_with_error(struct aws_tls_key_operation *operation, int error_code) {
+    (void)operation;
+    (void)error_code;
+}
+
+struct aws_byte_cursor aws_tls_key_operation_get_input(const struct aws_tls_key_operation *operation) {
+    (void)operation;
+    return aws_byte_cursor_from_array(NULL, 0);
+}
+
+enum aws_tls_key_operation_type aws_tls_key_operation_get_type(const struct aws_tls_key_operation *operation) {
+    (void)operation;
+    return AWS_TLS_KEY_OPERATION_UNKNOWN;
+}
+
+enum aws_tls_signature_algorithm aws_tls_key_operation_get_signature_algorithm(
+    const struct aws_tls_key_operation *operation) {
+    (void)operation;
+    return AWS_TLS_SIGNATURE_UNKNOWN;
+}
+
+enum aws_tls_hash_algorithm aws_tls_key_operation_get_digest_algorithm(const struct aws_tls_key_operation *operation) {
+    (void)operation;
+    return AWS_TLS_HASH_UNKNOWN;
+}
+
+#endif
+
+struct aws_custom_key_op_handler *aws_custom_key_op_handler_acquire(struct aws_custom_key_op_handler *key_op_handler) {
+    if (key_op_handler != NULL) {
+        aws_ref_count_acquire(&key_op_handler->ref_count);
+    }
+    return key_op_handler;
+}
+
+struct aws_custom_key_op_handler *aws_custom_key_op_handler_release(struct aws_custom_key_op_handler *key_op_handler) {
+    if (key_op_handler != NULL) {
+        aws_ref_count_release(&key_op_handler->ref_count);
+    }
+    return NULL;
+}
+
+void aws_custom_key_op_handler_perform_operation(
+    struct aws_custom_key_op_handler *key_op_handler,
+    struct aws_tls_key_operation *operation) {
+    key_op_handler->vtable->on_key_operation(key_op_handler, operation);
 }

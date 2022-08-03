@@ -5,14 +5,16 @@
 #include <aws/io/retry_strategy.h>
 
 void aws_retry_strategy_acquire(struct aws_retry_strategy *retry_strategy) {
-    aws_atomic_fetch_add_explicit(&retry_strategy->ref_count, 1, aws_memory_order_relaxed);
+    size_t old_value = aws_atomic_fetch_add_explicit(&retry_strategy->ref_count, 1, aws_memory_order_relaxed);
+    AWS_ASSERT(old_value > 0 && "aws_retry_strategy refcount had been zero, it's invalid to use it again.");
+    (void)old_value;
 }
 
 void aws_retry_strategy_release(struct aws_retry_strategy *retry_strategy) {
     if (retry_strategy) {
-        size_t ref_count = aws_atomic_fetch_sub_explicit(&retry_strategy->ref_count, 1, aws_memory_order_seq_cst);
-
-        if (ref_count == 1) {
+        size_t old_value = aws_atomic_fetch_sub_explicit(&retry_strategy->ref_count, 1, aws_memory_order_seq_cst);
+        AWS_ASSERT(old_value > 0 && "aws_retry_strategy refcount has gone negative");
+        if (old_value == 1) {
             retry_strategy->vtable->destroy(retry_strategy);
         }
     }
@@ -50,7 +52,9 @@ int aws_retry_token_record_success(struct aws_retry_token *token) {
 }
 
 void aws_retry_token_acquire(struct aws_retry_token *token) {
-    aws_atomic_fetch_add_explicit(&token->ref_count, 1u, aws_memory_order_relaxed);
+    size_t old_value = aws_atomic_fetch_add_explicit(&token->ref_count, 1u, aws_memory_order_relaxed);
+    AWS_ASSERT(old_value > 0 && "aws_retry_token refcount had been zero, it's invalid to use it again.");
+    (void)old_value;
 }
 
 void aws_retry_token_release(struct aws_retry_token *token) {
@@ -58,9 +62,9 @@ void aws_retry_token_release(struct aws_retry_token *token) {
         AWS_PRECONDITION(token->retry_strategy);
         AWS_PRECONDITION(token->retry_strategy->vtable->release_token);
 
-        size_t prev_count = aws_atomic_fetch_sub_explicit(&token->ref_count, 1u, aws_memory_order_seq_cst);
-
-        if (prev_count == 1u) {
+        size_t old_value = aws_atomic_fetch_sub_explicit(&token->ref_count, 1u, aws_memory_order_seq_cst);
+        AWS_ASSERT(old_value > 0 && "aws_retry_token refcount has gone negative");
+        if (old_value == 1u) {
             token->retry_strategy->vtable->release_token(token);
         }
     }

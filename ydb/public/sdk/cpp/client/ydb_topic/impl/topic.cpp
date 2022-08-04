@@ -53,6 +53,39 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     }
 }
 
+TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
+    : ConsumerName_(consumer.name())
+    , Important_(consumer.important())
+    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
+{
+    for (const auto& codec : consumer.supported_codecs().codecs()) {
+        SupportedCodecs_.push_back((ECodec)codec);
+    }
+    for (const auto& pair : consumer.attributes()) {
+        Attributes_[pair.first] = pair.second;
+    }
+}
+
+const TString& TConsumer::GetConsumerName() const {
+    return ConsumerName_;
+}
+
+bool TConsumer::GetImportant() const {
+    return Important_;
+}
+
+const TInstant& TConsumer::GetReadFrom() const {
+    return ReadFrom_;
+}
+
+const TVector<ECodec>& TConsumer::GetSupportedCodecs() const {
+    return SupportedCodecs_;
+}
+
+const TMap<TString, TString>& TConsumer::GetAttributes() const {
+    return Attributes_;
+}
+
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {
     return PartitioningSettings_;
 }
@@ -125,19 +158,6 @@ ui64 TPartitioningSettings::GetMinActivePartitions() const {
 
 ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
-}
-
-TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
-    : ConsumerName_(consumer.name())
-    , Important_(consumer.important())
-    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
-{
-    for (const auto& codec : consumer.supported_codecs().codecs()) {
-        SupportedCodecs_.push_back((ECodec)codec);
-    }
-    for (const auto& pair : consumer.attributes()) {
-        Attributes_[pair.first] = pair.second;
-    }
 }
 
 TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)

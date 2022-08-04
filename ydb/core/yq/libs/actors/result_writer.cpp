@@ -27,6 +27,8 @@
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
 #define LOG_D(stream)                                                        \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
+#define LOG_T(stream)                                                        \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_PROXY, "Writer: " << TraceId << ": " << stream)
 
 namespace NYq {
 
@@ -85,7 +87,6 @@ private:
                 << " FreeSpace: " << FreeSpace
                 << " Duration: " << duration
                 << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024
-                << " CurChunkInd: " << CurChunkInd
                 << " ResultChunks.size(): " << ResultChunks.size());
         NActors::IActor::PassAway();
     }
@@ -159,7 +160,7 @@ private:
 
                 auto duration = (TInstant::Now()-StartTime);
 
-                LOG_D("ChannelData, Records: " << RowIndex
+                LOG_T("ChannelData, Records: " << RowIndex
                     << " HasError: " << HasError
                     << " Size: " << Size
                     << " Rows: " << Rows
@@ -195,11 +196,11 @@ private:
     }
 
     void SendResult() {
-        if (InflightCounter || CurChunkInd >= ResultChunks.size()) {
+        if (InflightCounter || !ResultChunks) {
             return;
         }
-        while (CurChunkInd < ResultChunks.size()) {
-            const auto& chunk = ResultChunks[CurChunkInd];
+        while (ResultChunks) {
+            const auto& chunk = ResultChunks.front();
             // if owner is not empty, then there is data to send to storage, otherwise just shift seqno
             if (chunk.owner_id()) {
                 break;
@@ -215,22 +216,24 @@ private:
 
             auto duration = (TInstant::Now()-StartTime);
 
-            LOG_D("ChannelData Shift, Records: " << RowIndex
+            LOG_T("ChannelData Shift, Records: " << RowIndex
                 << " HasError: " << HasError
                 << " Size: " << Size
                 << " Rows: " << Rows
                 << " FreeSpace: " << FreeSpace
                 << " Duration: " << duration
                 << " AvgSpeed: " << Size/(duration.Seconds()+1)/1024/1024);
-            CurChunkInd++;
+            ResultChunks.pop_front();
         }
 
-        if (CurChunkInd >= ResultChunks.size()) {
+        if (!ResultChunks) {
             MaybeFinish();
             return;
         }
         ++InflightCounter;
-        Send(InternalServiceId, new NFq::TEvInternalService::TEvWriteResultRequest(std::move(ResultChunks[CurChunkInd++])));
+        auto chunk = std::move(ResultChunks.front());
+        ResultChunks.pop_front();
+        Send(InternalServiceId, new NFq::TEvInternalService::TEvWriteResultRequest(std::move(chunk)));
     }
 
     void ConstructResults(const Ydb::ResultSet& resultSet, ui64 startRowIndex) {
@@ -356,8 +359,7 @@ private:
     ui64 ResultBytesLimit;
     ui64 OccupiedSpace = 0;
 
-    TVector<Fq::Private::WriteTaskResultRequest> ResultChunks;
-    size_t CurChunkInd = 0;
+    TDeque<Fq::Private::WriteTaskResultRequest> ResultChunks;
     ui32 InflightCounter = 0;
     TActorId InternalServiceId;
 };

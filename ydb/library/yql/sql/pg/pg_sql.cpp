@@ -305,9 +305,14 @@ public:
 
         TVector<TAstNode*> setItemNodes;
         for (const auto& x : setItems) {
+            bool hasDistinctAll = false;
             if (x->distinctClause) {
-                AddError("SelectStmt: not supported distinctClause");
-                return nullptr;
+                if (linitial(x->distinctClause) == NULL) {
+                    hasDistinctAll = true;
+                } else {
+                    AddError("SelectStmt: not supported DISTINCT ON");
+                    return nullptr;
+                }
             }
 
             if (x->intoClause) {
@@ -640,13 +645,12 @@ public:
                 setItemOptions.push_back(QL(QA("having"), L(A("PgWhere"), L(A("Void")), lambda)));
             }
 
+            if (hasDistinctAll) {
+                setItemOptions.push_back(QL(QA("distinct_all")));
+            }
+
             auto setItem = L(A("PgSetItem"), QVL(setItemOptions.data(), setItemOptions.size()));
             setItemNodes.push_back(setItem);
-        }
-
-        if (value->distinctClause) {
-            AddError("SelectStmt: not supported distinctClause");
-            return nullptr;
         }
 
         if (value->intoClause) {

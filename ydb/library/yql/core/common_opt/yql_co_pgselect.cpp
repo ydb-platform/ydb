@@ -2252,6 +2252,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto groupBy = GetSetting(setItem->Tail(), "group_by");
         auto having = GetSetting(setItem->Tail(), "having");
         auto window = GetSetting(setItem->Tail(), "window");
+        auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
         bool oneRow = !from;
         TExprNode::TPtr list;
         if (values) {
@@ -2312,6 +2313,10 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                     .Add(1, projectionLambda)
                 .Seal()
                 .Build();
+
+            if (distinctAll) {
+                list = ctx.NewCallable(node->Pos(), "SqlAggregateAll", { list });
+            }
         }
 
         setItemNodes.push_back(list);

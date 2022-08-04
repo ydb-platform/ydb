@@ -2049,7 +2049,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         // pass 3 - where, group_by
         // pass 4 - window
         // pass 5 - result
-        for (ui32 pass = 0; pass < 6; ++pass) {
+        // pass 6 - distinct_all
+        for (ui32 pass = 0; pass < 7; ++pass) {
             if (pass > 1 && !inputs.empty() && !hasJoinOps) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing join_ops"));
                 return IGraphTransformer::TStatus::Error;
@@ -2783,7 +2784,15 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Repeat;
                     }
                 }
-                else {
+                else if (optionName == "distinct_all") {
+                    if (pass != 6) {
+                        continue;
+                    }
+
+                    if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
                         TStringBuilder() << "Unsupported option: " << optionName));
                     return IGraphTransformer::TStatus::Error;

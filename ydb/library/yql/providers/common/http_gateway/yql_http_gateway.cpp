@@ -209,12 +209,20 @@ public:
     }
 
     enum class EAction : i8 {
+        Drop = -2,
         Stop = -1,
         None = 0,
-        Work = 1
+        Work = 1,
+        StopAndDrop = Stop + Drop
     };
 
     EAction GetAction(size_t buffersSize) {
+        if (Cancelled) {
+            const auto ret = Working ? EAction::StopAndDrop : EAction::Drop;
+            Working = false;
+            return ret;
+        }
+
         if (Working != Counter->load() < buffersSize) {
             if (Working = !Working)
                 SkipTo(Position);
@@ -222,6 +230,11 @@ public:
         }
 
         return EAction::None;
+    }
+
+    void Cancel(TIssue issue) {
+        Cancelled = true;
+        OnFinish(TIssues{issue});
     }
 private:
     void Fail(const TIssue& error) final  {
@@ -251,6 +264,7 @@ private:
     const std::shared_ptr<std::atomic_size_t> Counter;
     bool Working = false;
     size_t Position = 0ULL;
+    bool Cancelled = false;
 };
 
 using TKeyType = std::tuple<TString, size_t, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
@@ -395,11 +409,18 @@ private:
         for (auto it = Streams.cbegin(); Streams.cend() != it;) {
             if (const auto& stream = it->lock()) {
                 switch (stream->GetAction(BuffersSizePerStream)) {
+                    case TEasyCurlStream::EAction::Drop:
+                        Allocated.erase(stream->GetHandle());
+                        break;
                     case TEasyCurlStream::EAction::Work:
                         curl_multi_add_handle(Handle, stream->GetHandle());
                         break;
                     case TEasyCurlStream::EAction::Stop:
                         curl_multi_remove_handle(Handle, stream->GetHandle());
+                        break;
+                    case TEasyCurlStream::EAction::StopAndDrop:
+                        curl_multi_remove_handle(Handle, stream->GetHandle());
+                        Allocated.erase(stream->GetHandle());
                         break;
                     case TEasyCurlStream::EAction::None:
                         break;
@@ -515,7 +536,7 @@ private:
         Wakeup(expectedSize);
     }
 
-    void Download(
+    TCancelHook Download(
         TString url,
         THeaders headers,
         size_t offset,
@@ -525,9 +546,14 @@ private:
         auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, std::move(onNewData), std::move(onFinish));
         const std::unique_lock lock(Sync);
         const auto handle = stream->GetHandle();
+        TEasyCurlStream::TWeakPtr weak = stream;
         Streams.emplace_back(stream);
         Allocated.emplace(handle, std::move(stream));
         Wakeup(0ULL);
+        return [weak](TIssue issue) {
+            if (const auto& stream = weak.lock())
+                stream->Cancel(issue);
+        };
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {

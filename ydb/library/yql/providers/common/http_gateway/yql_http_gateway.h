@@ -96,8 +96,9 @@ public:
 
     using TOnNewDataPart = std::function<void(TCountedContent&&)>;
     using TOnDownloadFinish = std::function<void(std::variant<long, TIssues>)>; // http code or issues.
+    using TCancelHook = std::function<void(TIssue)>;
 
-    virtual void Download(
+    virtual TCancelHook Download(
         TString url,
         THeaders headers,
         std::size_t offset,

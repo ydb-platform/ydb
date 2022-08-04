@@ -19,6 +19,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   cpp-json-yson
   cpp-monlib-dynamic_counters
   library-cpp-random_provider
+  library-cpp-scheme
   cpp-string_utils-quote
   library-cpp-time_provider
   library-cpp-yson

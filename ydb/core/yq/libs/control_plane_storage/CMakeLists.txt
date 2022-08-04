@@ -34,6 +34,7 @@ target_link_libraries(yq-libs-control_plane_storage PUBLIC
   api-protos
   cpp-client-ydb_scheme
   cpp-client-ydb_table
+  providers-s3-path_generator
   yql-public-issue
 )
 target_sources(yq-libs-control_plane_storage PRIVATE

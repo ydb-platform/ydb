@@ -3,6 +3,7 @@
 #include "util.h"
 
 #include <ydb/core/yq/libs/config/yq_issue.h>
+#include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
 #include <ydb/library/yql/public/issue/yql_issue.h>
 #include <ydb/public/api/protos/yq.pb.h>
 
@@ -10,6 +11,8 @@
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+
+#include <library/cpp/scheme/scheme.h>
 
 namespace NYq {
 
@@ -118,6 +121,22 @@ NYql::TIssues ValidateBinding(T& ev, size_t maxSize, const TSet<YandexQuery::Bin
             const YandexQuery::ObjectStorageBinding objectStorage = setting.object_storage();
             for (const auto& subset: objectStorage.subset()) {
                 issues.AddIssues(ValidateFormatSetting(subset.format_setting()));
+                if (subset.projection_size() || subset.partitioned_by_size()) {
+                    try {
+                        TVector<TString> partitionedBy{subset.partitioned_by().begin(), subset.partitioned_by().end()};
+                        TString projectionStr;
+                        if (subset.projection_size()) {
+                            NSc::TValue projection;
+                            for (const auto& [key, value]: subset.projection()) {
+                                projection[key] = value;
+                            }
+                            projectionStr = projection.ToJsonPretty();
+                        }
+                        NYql::NPathGenerator::CreatePathGenerator(projectionStr, partitionedBy); // an exception is thrown if an error occurs
+                    } catch (...) {
+                        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST,CurrentExceptionMessage()));
+                    }
+                }
             }
             break;
         }

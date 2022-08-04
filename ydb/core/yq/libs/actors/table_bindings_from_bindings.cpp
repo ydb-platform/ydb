@@ -2,6 +2,9 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/core/yq/libs/result_formatter/result_formatter.h>
+
+#include <library/cpp/scheme/scheme.h>
+
 #include <util/generic/vector.h>
 
 namespace NYq {
@@ -17,6 +20,8 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
     TString compression;
     TString schema;
     THashMap<TString, TString> formatSettings;
+    NSc::TValue projection;
+    NSc::TValue partitionedBy;
     switch (binding.content().setting().binding_case()) {
     case YandexQuery::BindingSetting::kDataStreams: {
         clusterType = PqProviderName;
@@ -41,6 +46,10 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
         compression = s.compression();
         schema = FormatSchema(s.schema());
         formatSettings = {s.format_setting().begin(), s.format_setting().end()};
+        for (const auto& [key, value]: s.projection()) {
+            projection[key] = value;
+        }
+        partitionedBy.AppendAll(s.partitioned_by());
         break;
     }
 
@@ -66,6 +75,14 @@ void FillBinding(NSQLTranslation::TTranslationSettings& sqlSettings, const Yande
         bindSettings.Settings["compression"] = compression;
     }
     bindSettings.Settings["schema"] = schema;
+
+    if (!projection.DictEmpty()) {
+        bindSettings.Settings["projection"] = projection.ToJsonPretty();
+    }
+
+    if (!partitionedBy.ArrayEmpty()) {
+        bindSettings.Settings["partitioned_by"] = partitionedBy.ToJsonPretty();
+    }
 
     // todo: use visibility to fill either PrivateBindings or ScopedBindings
     sqlSettings.PrivateBindings[binding.content().name()] = std::move(bindSettings);

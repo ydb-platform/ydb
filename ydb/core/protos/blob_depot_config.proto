@@ -9,9 +9,10 @@ message TChannelKind {
 }
 
 message TChannelProfile {
-    optional string StoragePoolKind = 1;
-    optional uint32 Count = 2;
-    optional TChannelKind.E ChannelKind = 3;
+    optional string StoragePoolName = 1; // used when creating tablet through BSC -> Hive
+    optional string StoragePoolKind = 2; // used when creating tablet through Schemeshard
+    optional uint32 Count = 3;
+    optional TChannelKind.E ChannelKind = 4;
 }
 
 enum EOperationMode {
@@ -22,5 +23,5 @@ enum EOperationMode {
 message TBlobDepotConfig {
     optional EOperationMode OperationMode = 1; // can't be changed after tablet is created
     repeated TChannelProfile ChannelProfiles = 2;
-    repeated uint32 DecommittingGroups = 3;
+    optional uint32 DecommitGroupId = 3; // group that is being decommitted by this BlobDepot
 }

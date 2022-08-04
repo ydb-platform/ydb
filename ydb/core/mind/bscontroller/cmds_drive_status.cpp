@@ -174,7 +174,7 @@ namespace NKikimr::NBsController {
         Y_VERIFY(success);
         driveInfoNew->PDiskConfig = config;
 
-        STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA06, "AddDriveSerial", (Serial, newSerial), (BoxId, boxId));
+        STLOG(PRI_NOTICE, BS_CONTROLLER_AUDIT, BSCA00, "AddDriveSerial", (Serial, newSerial), (BoxId, boxId));
     }
 
     void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TRemoveDriveSerial& cmd,

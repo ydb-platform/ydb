@@ -70,7 +70,9 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        record->MutableDecommittingGroups()->CopyFrom(Config.GetDecommittingGroups());
+        if (Config.HasDecommitGroupId()) {
+            record->SetDecommitGroupId(Config.GetDecommitGroupId());
+        }
 
         TActivationContext::Send(response.release());
     }

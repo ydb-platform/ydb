@@ -97,12 +97,24 @@ namespace NKikimr {
         // Some stuff to handle a case when we can't accept TEvVPut requests
         // because of (fresh) compaction overload
         ////////////////////////////////////////////////////////////////////////
+        static bool BlockWrites(NKikimrBlobStorage::TGroupDecommitStatus::E status) {
+            switch (status) {
+                case NKikimrBlobStorage::TGroupDecommitStatus::NONE:
+                case NKikimrBlobStorage::TGroupDecommitStatus::PENDING:
+                    return false;
+
+                case NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS:
+                case NKikimrBlobStorage::TGroupDecommitStatus::DONE:
+                    return true;
+            }
+        }
+
         template<typename TEvent>
         bool CheckIfWriteAllowed(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
             if (Config->BaseInfo.DonorMode) {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
-            } else if (GInfo->AssimilatorGroupId) {
-                ReplyError(NKikimrProto::ERROR, "group is being assimilated", ev, ctx, TAppData::TimeProvider->Now());
+            } else if (BlockWrites(GInfo->DecommitStatus)) {
+                ReplyError(NKikimrProto::ERROR, "group is being decommitted", ev, ctx, TAppData::TimeProvider->Now());
             } else {
                 return true;
             }

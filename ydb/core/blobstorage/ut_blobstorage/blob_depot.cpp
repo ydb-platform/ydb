@@ -18,9 +18,9 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
         NKikimrBlobStorage::TConfigRequest request;
         auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
-        cmd->SetVirtualGroupPool("vg");
+        cmd->SetName("vg");
+        cmd->SetHiveId(1);
         cmd->SetStoragePoolName(env.StoragePoolName);
-        cmd->SetParentDir("/Root");
         cmd->SetBlobDepotId(env.Settings.BlobDepotId);
         auto *prof = cmd->AddChannelProfiles();
         prof->SetStoragePoolKind("");

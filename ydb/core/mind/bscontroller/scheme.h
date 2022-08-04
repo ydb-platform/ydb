@@ -61,18 +61,13 @@ struct Schema : NIceDb::Schema {
         struct MainKeyVersion : Column<12, NScheme::NTypeIds::Uint64> { static constexpr Type Default = 0; };
         struct Down : Column<13, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
         struct SeenOperational : Column<14, NScheme::NTypeIds::Bool> { static constexpr Type Default = false; };
-        struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EGroupDecommitStatus; };
-        struct AssimilatorGroupId : Column<16, Group::ID::ColumnType> {}; // for the group being decommitted
+        struct DecommitStatus : Column<15, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::TGroupDecommitStatus::E; };
 
         // VirtualGroup management code
-        struct VirtualGroupPool  : Column<101, NScheme::NTypeIds::Utf8>   {}; // VG pool identifier
+        struct VirtualGroupName  : Column<112, NScheme::NTypeIds::Utf8>   {}; // unique name of the virtual group
         struct VirtualGroupState : Column<102, NScheme::NTypeIds::Uint32> { using Type = NKikimrBlobStorage::EVirtualGroupState; };
-        struct ParentDir         : Column<103, NScheme::NTypeIds::Utf8>   {}; // scheme directory containing blob depot being created
-        struct Name              : Column<104, NScheme::NTypeIds::Utf8>   {}; // name of the blob depot
-        struct SchemeshardId     : Column<105, NScheme::NTypeIds::Uint64> {}; // enclosing Schemeshard tablet id
+        struct HiveId            : Column<113, NScheme::NTypeIds::Uint64> {}; // hive id for this vg
         struct BlobDepotConfig   : Column<106, NScheme::NTypeIds::String> {}; // serialized blob depot config protobuf
-        struct TxId              : Column<107, NScheme::NTypeIds::Uint64> {}; // TxId for pending scheme operation
-        struct PathId            : Column<108, NScheme::NTypeIds::Uint64> {}; // path id for created path
         struct BlobDepotId       : Column<109, NScheme::NTypeIds::Uint64> {}; // created blobdepot tablet id
         struct ErrorReason       : Column<110, NScheme::NTypeIds::Utf8>   {}; // creation error reason
         struct NeedAlter         : Column<111, NScheme::NTypeIds::Bool>   {}; // did the BlobDepotConfig change?
@@ -80,8 +75,8 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<ID>;
         using TColumns = TableColumns<ID, Generation, ErasureSpecies, Owner, DesiredPDiskCategory, DesiredVDiskCategory,
               EncryptionMode, LifeCyclePhase, MainKeyId, EncryptedGroupKey, GroupKeyNonce, MainKeyVersion, Down,
-              SeenOperational, DecommitStatus, AssimilatorGroupId, VirtualGroupPool, VirtualGroupState, ParentDir, Name,
-              SchemeshardId, BlobDepotConfig, TxId, PathId, BlobDepotId, ErrorReason, NeedAlter>;
+              SeenOperational, DecommitStatus, VirtualGroupName, VirtualGroupState, HiveId, BlobDepotConfig,
+              BlobDepotId, ErrorReason, NeedAlter>;
     };
 
     struct State : Table<1> {
@@ -391,14 +386,6 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Serial, BoxId, NodeId, PDiskId, Guid, LifeStage, Kind, PDiskType, PDiskConfig>;
     };
 
-    struct VirtualGroupPool : Table<130> {
-        struct Id : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct Generation : Column<2, NScheme::NTypeIds::Uint64> {};
-
-        using TKey = TableKey<Id>;
-        using TColumns = TableColumns<Id, Generation>;
-    };
-
     using TTables = SchemaTables<
                                 Node,
                                 PDisk,
@@ -421,8 +408,7 @@ struct Schema : NIceDb::Schema {
                                 MigrationPlan,
                                 MigrationEntry,
                                 ScrubState,
-                                DriveSerial,
-                                VirtualGroupPool
+                                DriveSerial
                                 >;
 
     using TSettings = SchemaSettings<

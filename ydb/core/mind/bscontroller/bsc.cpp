@@ -57,42 +57,42 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
 }
 
 void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
+    Status = {};
+
     if (VirtualGroupState) {
         if (VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING) {
-            Status = {NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL};
+            Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::FULL, NKikimrBlobStorage::TGroupStatus::FULL);
         } else {
-            Status = {NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED};
+            Status.MakeWorst(NKikimrBlobStorage::TGroupStatus::DISINTEGRATED, NKikimrBlobStorage::TGroupStatus::DISINTEGRATED);
         }
-        return;
     }
 
-    TBlobStorageGroupInfo::TGroupVDisks failed(Topology.get());
-    TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(Topology.get());
-    for (const TVSlotInfo *slot : VDisksInGroup) {
-        if (!slot->IsReady) {
-            failed |= {Topology.get(), slot->GetShortVDiskId()};
-        } else if (!slot->PDisk->HasGoodExpectedStatus()) {
-            failedByPDisk |= {Topology.get(), slot->GetShortVDiskId()};
+    if (VDisksInGroup) {
+        TBlobStorageGroupInfo::TGroupVDisks failed(Topology.get());
+        TBlobStorageGroupInfo::TGroupVDisks failedByPDisk(Topology.get());
+        for (const TVSlotInfo *slot : VDisksInGroup) {
+            if (!slot->IsReady) {
+                failed |= {Topology.get(), slot->GetShortVDiskId()};
+            } else if (!slot->PDisk->HasGoodExpectedStatus()) {
+                failedByPDisk |= {Topology.get(), slot->GetShortVDiskId()};
+            }
         }
+        auto deriveStatus = [&](const auto& failed) {
+            auto& checker = *Topology->QuorumChecker;
+            if (!failed.GetNumSetItems()) { // all disks of group are operational
+                return NKikimrBlobStorage::TGroupStatus::FULL;
+            } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
+                return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
+            } else if (checker.IsDegraded(failed)) { // group degraded
+                return NKikimrBlobStorage::TGroupStatus::DEGRADED;
+            } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
+                return NKikimrBlobStorage::TGroupStatus::PARTIAL;
+            } else {
+                Y_FAIL("unexpected case");
+            }
+        };
+        Status.MakeWorst(deriveStatus(failed), deriveStatus(failed | failedByPDisk));
     }
-    auto deriveStatus = [&](const auto& failed) {
-        auto& checker = *Topology->QuorumChecker;
-        if (!failed.GetNumSetItems()) { // all disks of group are operational
-            return NKikimrBlobStorage::TGroupStatus::FULL;
-        } else if (!checker.CheckFailModelForGroup(failed)) { // fail model exceeded
-            return NKikimrBlobStorage::TGroupStatus::DISINTEGRATED;
-        } else if (checker.IsDegraded(failed)) { // group degraded
-            return NKikimrBlobStorage::TGroupStatus::DEGRADED;
-        } else if (failed.GetNumSetItems()) { // group partially available, but not degraded
-            return NKikimrBlobStorage::TGroupStatus::PARTIAL;
-        } else {
-            Y_FAIL("unexpected case");
-        }
-    };
-    Status = {
-        deriveStatus(failed),
-        deriveStatus(failed | failedByPDisk),
-    };
 }
 
 void TBlobStorageController::OnActivateExecutor(const TActorContext&) {

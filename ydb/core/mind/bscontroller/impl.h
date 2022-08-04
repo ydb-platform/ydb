@@ -494,17 +494,12 @@ public:
         bool PersistedDown = false; // the value stored in the database
         bool SeenOperational = false;
 
-        Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::EGroupDecommitStatus::NONE;
-        TMaybe<Table::AssimilatorGroupId::Type> AssimilatorGroupId;
+        Table::DecommitStatus::Type DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
 
-        TMaybe<Table::VirtualGroupPool::Type> VirtualGroupPool;
+        TMaybe<Table::VirtualGroupName::Type> VirtualGroupName;
         TMaybe<Table::VirtualGroupState::Type> VirtualGroupState;
-        TMaybe<Table::ParentDir::Type> ParentDir;
-        TMaybe<Table::Name::Type> Name;
-        TMaybe<Table::SchemeshardId::Type> SchemeshardId;
+        TMaybe<Table::HiveId::Type> HiveId;
         TMaybe<Table::BlobDepotConfig::Type> BlobDepotConfig;
-        TMaybe<Table::TxId::Type> TxId;
-        TMaybe<Table::PathId::Type> PathId;
         TMaybe<Table::BlobDepotId::Type> BlobDepotId;
         TMaybe<Table::ErrorReason::Type> ErrorReason;
         TMaybe<Table::NeedAlter::Type> NeedAlter;
@@ -535,6 +530,11 @@ public:
             NKikimrBlobStorage::TGroupStatus::E OperatingStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
             // status derived by adding underlying PDisk status (some of them are assumed to be not working ones)
             NKikimrBlobStorage::TGroupStatus::E ExpectedStatus = NKikimrBlobStorage::TGroupStatus::UNKNOWN;
+
+            void MakeWorst(NKikimrBlobStorage::TGroupStatus::E operating, NKikimrBlobStorage::TGroupStatus::E expected) {
+                OperatingStatus = Max(OperatingStatus, operating);
+                ExpectedStatus = Max(ExpectedStatus, expected);
+            }
         } Status;
 
         // group status depends on the IsReady value for every VDisk; so it has to be updated every time there is possible
@@ -564,15 +564,10 @@ public:
                     Table::MainKeyVersion,
                     Table::SeenOperational,
                     Table::DecommitStatus,
-                    Table::AssimilatorGroupId,
-                    Table::VirtualGroupPool,
+                    Table::VirtualGroupName,
                     Table::VirtualGroupState,
-                    Table::ParentDir,
-                    Table::Name,
-                    Table::SchemeshardId,
+                    Table::HiveId,
                     Table::BlobDepotConfig,
-                    Table::TxId,
-                    Table::PathId,
                     Table::BlobDepotId,
                     Table::ErrorReason,
                     Table::NeedAlter
@@ -590,15 +585,10 @@ public:
                     &TGroupInfo::MainKeyVersion,
                     &TGroupInfo::SeenOperational,
                     &TGroupInfo::DecommitStatus,
-                    &TGroupInfo::AssimilatorGroupId,
-                    &TGroupInfo::VirtualGroupPool,
+                    &TGroupInfo::VirtualGroupName,
                     &TGroupInfo::VirtualGroupState,
-                    &TGroupInfo::ParentDir,
-                    &TGroupInfo::Name,
-                    &TGroupInfo::SchemeshardId,
+                    &TGroupInfo::HiveId,
                     &TGroupInfo::BlobDepotConfig,
-                    &TGroupInfo::TxId,
-                    &TGroupInfo::PathId,
                     &TGroupInfo::BlobDepotId,
                     &TGroupInfo::ErrorReason,
                     &TGroupInfo::NeedAlter
@@ -652,7 +642,8 @@ public:
         }
 
         bool Listable() const {
-            return !VirtualGroupState
+            return VDisksInGroup
+                || !VirtualGroupState
                 || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::WORKING
                 || *VirtualGroupState == NKikimrBlobStorage::EVirtualGroupState::CREATE_FAILED;
         }
@@ -701,7 +692,7 @@ public:
         }
 
         void FillInGroupParameters(NKikimrBlobStorage::TEvControllerSelectGroupsResult::TGroupParameters *params) const {
-            if (VirtualGroupState) {
+            if (!VDisksInGroup) {
                 for (auto *p : {params->MutableAssuredResources(), params->MutableCurrentResources()}) {
                     p->SetSpace(1'000'000'000'000);
                     p->SetIOPS(1'000);
@@ -1325,28 +1316,6 @@ public:
         void OnClone(const THolder<TDriveSerialInfo>&) {}
     };
 
-    struct TVirtualGroupPool {
-        using Table = Schema::VirtualGroupPool;
-
-        TMaybe<Table::Generation::Type> Generation;
-
-        TVirtualGroupPool() = default;
-        TVirtualGroupPool(const TVirtualGroupPool&) = default;
-
-        template<typename T>
-        static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
-            static TTableAdapter<Table, TVirtualGroupPool,
-                    Table::Generation
-                > adapter(
-                    &TVirtualGroupPool::Generation
-                );
-            callback(&adapter);
-        }
-
-        void OnCommit() {}
-        void OnClone(const THolder<TVirtualGroupPool>&) {}
-    };
-
     struct THostRecord {
         TNodeId NodeId;
         TNodeLocation Location;
@@ -1418,7 +1387,6 @@ private:
     TVSlots VSlots; // ordering is important
     TPDisks PDisks; // ordering is important
     TMap<TSerial, THolder<TDriveSerialInfo>> DrivesSerials;
-    TMap<Schema::VirtualGroupPool::TKey::Type, TVirtualGroupPool> VirtualGroupPools;
     TGroups GroupMap;
     THashMap<TGroupId, TGroupInfo*> GroupLookup;
     TMap<TGroupSpecies, TVector<TGroupId>> IndexGroupSpeciesToGroup;
@@ -1945,7 +1913,7 @@ public:
         }
 
         if (const TDuration time = TDuration::Seconds(timer.Passed()); time >= TDuration::MilliSeconds(100)) {
-            STLOG(PRI_ERROR, BS_CONTROLLER, BSC07, "StateWork event processing took too much time", (Type, type),
+            STLOG(PRI_ERROR, BS_CONTROLLER, BSC00, "StateWork event processing took too much time", (Type, type),
                 (Duration, time));
         }
     }

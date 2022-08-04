@@ -54,7 +54,6 @@ namespace NKikimr {
             // system-level configuration
             TOverlayMap<TPDiskId, TPDiskInfo> PDisks;
             TOverlayMap<TSerial, TDriveSerialInfo> DrivesSerials;
-            TCowHolder<TMap<Schema::VirtualGroupPool::TKey::Type, TVirtualGroupPool>> VirtualGroupPools;
             TCowHolder<TMap<TNodeId, TNodeInfo>> Nodes;
             TOverlayMap<TVSlotId, TVSlotInfo> VSlots;
             TOverlayMap<TGroupId, TGroupInfo> Groups;
@@ -115,7 +114,6 @@ namespace NKikimr {
                 , StoragePoolGroups(&controller.StoragePoolGroups)
                 , PDisks(controller.PDisks)
                 , DrivesSerials(controller.DrivesSerials)
-                , VirtualGroupPools(&controller.VirtualGroupPools)
                 , Nodes(&controller.Nodes)
                 , VSlots(controller.VSlots)
                 , Groups(controller.GroupMap)
@@ -144,7 +142,6 @@ namespace NKikimr {
                 StoragePoolGroups.Commit();
                 PDisks.Commit();
                 DrivesSerials.Commit();
-                VirtualGroupPools.Commit();
                 Nodes.Commit();
                 VSlots.Commit();
                 Groups.Commit();
@@ -165,8 +162,7 @@ namespace NKikimr {
                 return HostConfigs.Changed() || Boxes.Changed() || StoragePools.Changed() ||
                     StoragePoolGroups.Changed() || PDisks.Changed() || DrivesSerials.Changed() || Nodes.Changed() ||
                     VSlots.Changed() || Groups.Changed() || IndexGroupSpeciesToGroup.Changed() || NextGroupId.Changed() ||
-                    NextStoragePoolId.Changed() || SerialManagementStage.Changed() || VirtualGroupPools.Changed() ||
-                    NextVirtualGroupId.Changed();
+                    NextStoragePoolId.Changed() || SerialManagementStage.Changed() || NextVirtualGroupId.Changed();
             }
 
             bool NormalizeHostKey(NKikimrBlobStorage::THostKey *host) const {
@@ -220,8 +216,6 @@ namespace NKikimr {
                     StaticPDiskLocationMap.emplace(location, pdiskId);
                 }
             }
-
-            void InitiateGroupDecommission(ui32 virtualGroupId, ui32 groupToDecommit);
 
         private:
             template<typename TCommand, typename TKey, typename TValue>

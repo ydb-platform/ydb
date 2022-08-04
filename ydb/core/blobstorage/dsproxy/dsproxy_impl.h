@@ -260,8 +260,8 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
 
     template<typename TEvent>
     void HandleCheckAssimilator(TAutoPtr<TEventHandle<TEvent>>& ev) {
-        if (Info->AssimilatorGroupId) {
-            TActivationContext::Send(ev->Forward(MakeBlobStorageProxyID(*Info->AssimilatorGroupId)));
+        if (/*Info->AssimilatorGroupId*/ false) {
+            //TActivationContext::Send(ev->Forward(MakeBlobStorageProxyID(*Info->AssimilatorGroupId)));
         } else {
             return HandleNormal(ev);
         }

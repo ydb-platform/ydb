@@ -10,13 +10,15 @@ namespace NKikimr::NBlobDepot {
 
         const ui32 GroupId;
         const NKikimrBlobDepot::TBlobDepotConfig Config;
+        const ui64 TabletId;
         TActorId BlobDepotId;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
 
     public:
-        TGroupAssimilator(ui32 groupId, const NKikimrBlobDepot::TBlobDepotConfig& config)
-            : GroupId(groupId)
+        TGroupAssimilator(const NKikimrBlobDepot::TBlobDepotConfig& config, ui64 tabletId)
+            : GroupId(config.GetDecommitGroupId())
             , Config(config)
+            , TabletId(tabletId)
         {
             Y_VERIFY(Config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup);
         }
@@ -85,13 +87,8 @@ namespace NKikimr::NBlobDepot {
                     if (group.GetGroupID() == GroupId) {
                         if (group.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {
                             return AbortWithError("the group being decommitted was destroyed");
-                        } else if (!group.HasAssimilatorGroupId()) {
-                            return AbortWithError("the group being decommitted is not in assimilation mode");
-                        } else if (group.HasBlobDepotId()) {
-                            const TString msg = "the group being decommitted is a virtual one";
-                            Y_VERIFY_DEBUG(false, "%s", msg.data());
-                            STLOG(PRI_CRIT, BLOB_DEPOT, BDT35, msg, (GroupId, GroupId));
-                            return AbortWithError(msg);
+                        } else if (!group.HasBlobDepotId() || group.GetBlobDepotId() != TabletId) {
+                            return AbortWithError("inconsistent decommission state");
                         } else {
                             Info = TBlobStorageGroupInfo::Parse(group, nullptr, nullptr);
                             StartAssimilation();
@@ -136,35 +133,20 @@ namespace NKikimr::NBlobDepot {
 
         void AbortWithError(TString error) {
             STLOG(PRI_ERROR, BLOB_DEPOT, BDT34, "failed to assimilate group", (GroupId, GroupId), (Error, error));
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0, BlobDepotId, SelfId(), nullptr, GroupId));
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Gone, 0, BlobDepotId, SelfId(), nullptr, 0));
             PassAway();
         }
     };
 
-    void TBlobDepot::StartGroupAssimilators() {
-        for (const ui32 groupId : Config.GetDecommittingGroups()) {
-            if (Config.GetOperationMode() != NKikimrBlobDepot::EOperationMode::VirtualGroup) {
-                STLOG(PRI_CRIT, BLOB_DEPOT, BDT36, "incorrect operating mode of BlobDepot", (TabletId, TabletID()));
-                Y_VERIFY_DEBUG(false, "incorrect operating mode of BlobDepot");
-                return;
-            }
-
-            StartGroupAssimilator(groupId);
+    void TBlobDepot::StartGroupAssimilator() {
+        if (!RunningGroupAssimilator && Config.HasDecommitGroupId()) {
+            RunningGroupAssimilator = Register(new TGroupAssimilator(Config, TabletID()));
         }
-    }
-
-    void TBlobDepot::StartGroupAssimilator(ui32 groupId) {
-        if (RunningGroupAssimilators.contains(groupId)) {
-            return;
-        }
-
-        RunningGroupAssimilators[groupId] = Register(new TGroupAssimilator(groupId, Config));
     }
 
     void TBlobDepot::HandleGone(TAutoPtr<IEventHandle> ev) {
-        if (const auto it = RunningGroupAssimilators.find(ev->Cookie); it != RunningGroupAssimilators.end()) {
-            Y_VERIFY(it->second == ev->Sender);
-            RunningGroupAssimilators.erase(it);
+        if (ev->Sender == RunningGroupAssimilator) {
+            RunningGroupAssimilator = {};
         } else {
             Y_FAIL("unexpected event");
         }

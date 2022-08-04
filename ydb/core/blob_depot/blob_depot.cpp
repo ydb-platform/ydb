@@ -55,8 +55,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        for (const auto& [_, actorId] : RunningGroupAssimilators) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+        if (RunningGroupAssimilator) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, RunningGroupAssimilator, SelfId(),
+                nullptr, 0));
         }
 
         TActor::PassAway();

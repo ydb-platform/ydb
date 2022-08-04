@@ -17,6 +17,7 @@ target_link_libraries(core-mind-bscontroller PUBLIC
   ydb-core-blobstorage
   core-blobstorage-base
   core-blobstorage-groupinfo
+  ydb-core-blob_depot
   core-engine-minikql
   ydb-core-protos
   core-sys_view-common

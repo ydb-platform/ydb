@@ -219,7 +219,7 @@ namespace NKikimr::NBlobDepot {
 
         void StartOperation() {
             InitChannelKinds();
-            StartGroupAssimilators();
+            StartGroupAssimilator();
         }
 
         void OnDetach(const TActorContext&) override {
@@ -308,13 +308,12 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group assimilation
 
-        THashMap<ui32, TActorId> RunningGroupAssimilators;
+        TActorId RunningGroupAssimilator;
 
         class TGroupAssimilator;
         class TGroupAssimilatorFetchMachine;
 
-        void StartGroupAssimilators();
-        void StartGroupAssimilator(ui32 groupId);
+        void StartGroupAssimilator();
         void HandleGone(TAutoPtr<IEventHandle> ev);
         void Handle(TEvAssimilatedData::TPtr ev);
     };

@@ -382,19 +382,9 @@
                 "ColumnType": "Bool"
             },
             {
-                "ColumnId": 101,
-                "ColumnName": "VirtualGroupPool",
-                "ColumnType": "Utf8"
-            },
-            {
                 "ColumnId": 14,
                 "ColumnName": "SeenOperational",
                 "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 102,
-                "ColumnName": "VirtualGroupState",
-                "ColumnType": "Uint32"
             },
             {
                 "ColumnId": 15,
@@ -402,39 +392,14 @@
                 "ColumnType": "Uint32"
             },
             {
-                "ColumnId": 103,
-                "ColumnName": "ParentDir",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 16,
-                "ColumnName": "AssimilatorGroupId",
+                "ColumnId": 102,
+                "ColumnName": "VirtualGroupState",
                 "ColumnType": "Uint32"
-            },
-            {
-                "ColumnId": 104,
-                "ColumnName": "Name",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 105,
-                "ColumnName": "SchemeshardId",
-                "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 106,
                 "ColumnName": "BlobDepotConfig",
                 "ColumnType": "String"
-            },
-            {
-                "ColumnId": 107,
-                "ColumnName": "TxId",
-                "ColumnType": "Uint64"
-            },
-            {
-                "ColumnId": 108,
-                "ColumnName": "PathId",
-                "ColumnType": "Uint64"
             },
             {
                 "ColumnId": 109,
@@ -450,6 +415,16 @@
                 "ColumnId": 111,
                 "ColumnName": "NeedAlter",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 112,
+                "ColumnName": "VirtualGroupName",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 113,
+                "ColumnName": "HiveId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -469,20 +444,15 @@
                     11,
                     12,
                     13,
-                    101,
                     14,
-                    102,
                     15,
-                    103,
-                    16,
-                    104,
-                    105,
+                    102,
                     106,
-                    107,
-                    108,
                     109,
                     110,
-                    111
+                    111,
+                    112,
+                    113
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1501,47 +1471,6 @@
                     1,
                     2,
                     3
-                ],
-                "RoomID": 0,
-                "Codec": 0,
-                "InMemory": false,
-                "Cache": 0,
-                "Small": 4294967295,
-                "Large": 4294967295
-            }
-        },
-        "Rooms": {
-            "0": {
-                "Main": 1,
-                "Outer": 1,
-                "Blobs": 1
-            }
-        }
-    },
-    {
-        "TableId": 130,
-        "TableName": "VirtualGroupPool",
-        "TableKey": [
-            1
-        ],
-        "ColumnsAdded": [
-            {
-                "ColumnId": 1,
-                "ColumnName": "Id",
-                "ColumnType": "Utf8"
-            },
-            {
-                "ColumnId": 2,
-                "ColumnName": "Generation",
-                "ColumnType": "Uint64"
-            }
-        ],
-        "ColumnsDropped": [],
-        "ColumnFamilies": {
-            "0": {
-                "Columns": [
-                    1,
-                    2
                 ],
                 "RoomID": 0,
                 "Codec": 0,

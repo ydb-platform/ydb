@@ -176,9 +176,9 @@ public:
                 const TBoxStoragePoolId storagePoolId = it->second;
                 groupToStoragePool.erase(it);
 
-                const bool isVirtualGroup = TGroupID(groups.GetKey()).ConfigurationType() == EGroupConfigurationType::Virtual;
+                // geometry may be absent for virtual or finally decommitted group
                 const auto geomIt = geometry.find(groups.GetKey());
-                Y_VERIFY(isVirtualGroup || geomIt != geometry.end());
+                const auto geom = geomIt != geometry.end() ? geomIt->second : std::make_tuple(0u, 0u, 0u);
 
                 TGroupInfo& group = Self->AddGroup(groups.GetKey(),
                                                    groups.GetValue<T::Generation>(),
@@ -195,28 +195,21 @@ public:
                                                    groups.GetValueOrDefault<T::Down>(),
                                                    groups.GetValueOrDefault<T::SeenOperational>(),
                                                    storagePoolId,
-                                                   isVirtualGroup ? 0 : std::get<0>(geomIt->second),
-                                                   isVirtualGroup ? 0 : std::get<1>(geomIt->second),
-                                                   isVirtualGroup ? 0 : std::get<2>(geomIt->second));
+                                                   std::get<0>(geom),
+                                                   std::get<1>(geom),
+                                                   std::get<2>(geom));
 
                 group.DecommitStatus = groups.GetValueOrDefault<T::DecommitStatus>();
-                if (groups.HaveValue<T::AssimilatorGroupId>()) {
-                    group.AssimilatorGroupId = groups.GetValue<T::AssimilatorGroupId>();
-                }
 
 #define OPTIONAL(NAME) \
                 if (groups.HaveValue<T::NAME>()) { \
                     group.NAME = groups.GetValue<T::NAME>(); \
                 }
 
-                OPTIONAL(VirtualGroupPool)
+                OPTIONAL(VirtualGroupName)
                 OPTIONAL(VirtualGroupState)
-                OPTIONAL(ParentDir)
-                OPTIONAL(Name)
-                OPTIONAL(SchemeshardId)
+                OPTIONAL(HiveId)
                 OPTIONAL(BlobDepotConfig)
-                OPTIONAL(TxId)
-                OPTIONAL(PathId)
                 OPTIONAL(BlobDepotId)
                 OPTIONAL(ErrorReason)
 
@@ -234,8 +227,7 @@ public:
         if (!NTableAdapter::FetchTable<Schema::HostConfig>(db, Self, Self->HostConfigs)
                 || !NTableAdapter::FetchTable<Schema::Box>(db, Self, Self->Boxes)
                 || !NTableAdapter::FetchTable<Schema::BoxStoragePool>(db, Self, Self->StoragePools)
-                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)
-                || !NTableAdapter::FetchTable<Schema::VirtualGroupPool>(db, Self, Self->VirtualGroupPools)) {
+                || !NTableAdapter::FetchTable<Schema::DriveSerial>(db, Self, Self->DrivesSerials)) {
             return false;
         }
         for (const auto& [storagePoolId, storagePool] : Self->StoragePools) {

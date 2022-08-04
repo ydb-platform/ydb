@@ -416,7 +416,7 @@ public:
     // virtual group BlobDepot tablet id
     std::optional<ui64> BlobDepotId;
     // assimilating group id
-    std::optional<ui32> AssimilatorGroupId;
+    NKikimrBlobStorage::TGroupDecommitStatus::E DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::NONE;
     // origin of the group info content
     std::optional<NKikimrBlobStorage::TGroupInfo> Group;
 

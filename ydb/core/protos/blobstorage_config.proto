@@ -18,18 +18,9 @@ enum EPDiskType {
 
 // Virtual group life cycle state
 enum EVirtualGroupState {
-    CREATED = 0; // just created
-    WAIT_SCHEMESHARD_CREATE = 1; // waiting for path to be created
-    CREATE_FAILED = 2; // error while creating VirtualGroup
-    WORKING = 3; // operational
-    WAIT_SCHEMESHARD_DELETE = 4; // waiting for path to be deleted
-    WAIT_SCHEMESHARD_ALTER = 5; // waiting for path to be altered (in case of configuration update)
-}
-
-enum EGroupDecommitStatus {
-    NONE = 0; // no decomission
-    PENDING = 1; // decomission was asked
-    NO_WRITES_QUORUM_OBTAINED = 2;
+    NEW = 0; // just created
+    CREATE_FAILED = 1; // error while creating VirtualGroup
+    WORKING = 2; // operational
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -461,21 +452,20 @@ message TBoxStoragePoolId {
 }
 
 message TAllocateVirtualGroup {
-    string VirtualGroupPool = 1;
-    uint64 ItemConfigGeneration = 2;
+    string Name = 1;
+    uint64 HiveId = 2;
     oneof StoragePool {
         string StoragePoolName = 3;
         TBoxStoragePoolId StoragePoolId = 4;
     }
-    string ParentDir = 5;
-    repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 6;
-    repeated uint32 DecommitGroups = 7;
-    uint64 BlobDepotId = 8; // when the tablet is already created; for testing purposes only
+    repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 5;
+    uint64 BlobDepotId = 6; // when the tablet is already created; for testing purposes only
 }
 
 message TDecommitGroups {
-    uint32 VirtualGroupId = 1;
-    repeated uint32 DecommitGroups = 2;
+    repeated uint32 GroupIds = 1; // group ids to decommit
+    uint64 HiveId = 2; // hive under which it is required to create blob depot tablets
+    repeated NKikimrBlobDepot.TChannelProfile ChannelProfiles = 3; // where to store decommitted groups' data
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -704,6 +694,7 @@ message TConfigResponse {
         repeated TPDiskStat PDiskStat = 11;
         repeated TReassignedItem ReassignedItem = 14;
         TDeclareIntent Intent = 15;
+        bool Already = 16;
     }
 
     repeated TStatus Status = 1;

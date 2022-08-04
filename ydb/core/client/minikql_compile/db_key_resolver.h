@@ -44,6 +44,7 @@ public:
             i32 KeyPosition;
             ui32 Type;
             ui32 AllowInplaceMode;
+            NKikimr::EColumnTypeConstraint TypeConstraint;
         };
 
         EStatus Status;

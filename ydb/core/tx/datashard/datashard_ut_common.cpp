@@ -198,7 +198,7 @@ void TTester::RegisterTableInResolver(const TString& schemeText)
                 keyIdx = ki;
             }
         }
-        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0}));
+        table.Columns.insert(std::make_pair(c.GetName(), TColumn{c.GetId(), keyIdx, c.GetTypeId(), 0, EColumnTypeConstraint::Nullable}));
     }
     DbSchemeResolver.AddTable(table);
 }

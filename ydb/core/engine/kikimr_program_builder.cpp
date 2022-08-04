@@ -24,7 +24,7 @@ TType* ValidateColumns(
     tagsBuilder.Reserve(columns.size());
     for (auto& col : columns) {
         MKQL_ENSURE(col.SchemeType != 0, "Null type is not allowed");
-        TDataType *dataType;
+        TType* dataType;
         if (col.SchemeType == NYql::NProto::TypeIds::Decimal)
             dataType = TDataDecimalType::Create(
                 NScheme::DECIMAL_PRECISION,
@@ -32,8 +32,12 @@ TType* ValidateColumns(
                 builder->GetTypeEnvironment());
         else
             dataType = TDataType::Create(col.SchemeType, builder->GetTypeEnvironment());
-        auto optType = TOptionalType::Create(dataType, builder->GetTypeEnvironment());
-        rowTypeBuilder.Add(col.Label, optType);
+
+        if (col.TypeConstraint == EColumnTypeConstraint::Nullable) {
+            dataType = TOptionalType::Create(dataType, builder->GetTypeEnvironment());
+        }
+
+        rowTypeBuilder.Add(col.Label, dataType);
         tagsBuilder.Add(col.Label, builder->NewDataLiteral<ui32>(col.ColumnId));
     }
 

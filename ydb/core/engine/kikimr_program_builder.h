@@ -14,14 +14,15 @@ struct TSelectColumn {
     TStringBuf Label;
     ui32 ColumnId = 0;
     NUdf::TDataTypeId SchemeType = 0;
-
+    EColumnTypeConstraint TypeConstraint = EColumnTypeConstraint::Nullable;
     TSelectColumn()
     {}
 
-    TSelectColumn(TStringBuf label, ui32 columnId, NUdf::TDataTypeId schemeType)
+    TSelectColumn(TStringBuf label, ui32 columnId, NUdf::TDataTypeId schemeType, EColumnTypeConstraint typeConstraint)
         : Label(label)
         , ColumnId(columnId)
         , SchemeType(schemeType)
+        , TypeConstraint(typeConstraint)
     {}
 };
 

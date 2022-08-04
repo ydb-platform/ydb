@@ -445,8 +445,8 @@ STFUNC(TTopicInfoBasedActor::StateFunc) {
 
 
 class TMessageBusServerPersQueueImpl : public TActorBootstrapped<TMessageBusServerPersQueueImpl> {
-    using TEvAllTopicsDescribeRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest;
-    using TEvAllTopicsDescribeResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse;
+    using TEvDescribeAllTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest;
+    using TEvDescribeAllTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsResponse;
 
 protected:
     NKikimrClient::TPersQueueRequest RequestProto;
@@ -885,7 +885,7 @@ public:
     }
 
 
-    void Handle(TEvAllTopicsDescribeResponse::TPtr& ev, const TActorContext& ctx) {
+    void Handle(TEvDescribeAllTopicsResponse::TPtr& ev, const TActorContext& ctx) {
         --DescribeRequests;
         auto& res = ev->Get()->Result->ResultSet;
         auto& topics = ev->Get()->Topics;
@@ -902,11 +902,9 @@ public:
         auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
         for (auto i = 0u; i != res.size(); i++) {
             auto& entry = res[i];
-            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
+            auto& converter = ev->Get()->Topics[i];
+            if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo && converter) {
                 auto& description = entry.PQGroupInfo->Description;
-                auto converter = factory.MakeTopicConverter(
-                        entry.PQGroupInfo->Description.GetPQTabletConfig()
-                );
                 if (!hasTopics || TopicInfo.find(converter->GetClientsideName()) != TopicInfo.end()) {
                     auto& topicInfo = TopicInfo[converter->GetClientsideName()];
                     topicInfo.BalancerTabletId = description.GetBalancerTabletID();
@@ -1327,7 +1325,7 @@ public:
             ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
         }
 
-        auto* request = new TEvAllTopicsDescribeRequest();
+        auto* request = new TEvDescribeAllTopicsRequest();
         ctx.Send(SchemeCache, request);
         ++DescribeRequests;
 
@@ -1343,7 +1341,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
             HFunc(TEvInterconnect::TEvNodesInfo, Handle);
-            HFunc(TEvAllTopicsDescribeResponse, Handle);
+            HFunc(TEvDescribeAllTopicsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvPersQueue::TEvResponse, Handle);

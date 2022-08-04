@@ -33,8 +33,8 @@ std::array<TString, 2U> GetSettings(const TExprNode& settings) {
                 NJson::TJsonWriter writer(&stream, NJson::TJsonWriterConfig());
                 writer.OpenMap();
                 child.Tail().ForEachChild([&writer, &compression](const TExprNode& pair) {
-                    if (pair.Head().IsAtom("compression") && pair.Tail().IsCallable({"String", "Utf8"}))
-                        if (const auto& comp = pair.Tail().Head().Content(); !comp.empty())
+                    if (pair.Head().IsAtom("compression"))
+                        if (const auto& comp = pair.Tail().Content(); !comp.empty())
                             compression = comp;
                         else {
                             writer.WriteKey(pair.Head().Content());

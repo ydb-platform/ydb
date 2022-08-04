@@ -74,12 +74,29 @@ public:
 
             const auto rowType = pqReadTopic.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
-            const auto settings = Build<TCoNameValueTupleList>(ctx, pqReadTopic.Topic().Pos())
-                .Add()
-                    .Name().Value("format").Build()
-                    .Value(pqReadTopic.Format())
-                    .Build()
-                .Done();
+
+            TExprNode::TListType settings(1U,
+                ctx.Builder(pqReadTopic.Topic().Pos())
+                    .List()
+                        .Atom(0, "format", TNodeFlags::Default)
+                        .Add(1, pqReadTopic.Format().Ptr())
+                    .Seal().Build()
+            );
+
+            if (pqReadTopic.Compression() != "") {
+                settings.emplace_back(
+                    ctx.Builder(pqReadTopic.Compression().Pos())
+                        .List()
+                            .Atom(0, "settings", TNodeFlags::Default)
+                            .List(1)
+                                .List(0)
+                                    .Atom(0, "compression")
+                                    .Atom(1, pqReadTopic.Compression())
+                                .Seal()
+                            .Seal()
+                        .Seal().Build()
+                );
+            }
 
             const auto token = "cluster:default_" + clusterName;
             auto columns = pqReadTopic.Columns().Ptr();
@@ -103,7 +120,7 @@ public:
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
-                .Settings(settings)
+                .Settings(ctx.NewList(pqReadTopic.Topic().Pos(), std::move(settings)))
                 .Done().Ptr();
         }
         return read;

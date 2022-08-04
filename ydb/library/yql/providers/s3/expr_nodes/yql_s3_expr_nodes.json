@@ -30,8 +30,8 @@
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},
             "Children": [
-                {"Index": 0, "Name": "Path", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Size", "Type": "TCoAtom"},
+                {"Index": 0, "Name": "Data", "Type": "TCoString"},
+                {"Index": 1, "Name": "IsText", "Type": "TCoBool"},
                 {"Index": 2, "Name": "ExtraColumns", "Type": "TExprBase"}
             ]
         },

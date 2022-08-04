@@ -11,6 +11,7 @@
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>
 #include <ydb/library/yql/providers/s3/proto/source.pb.h>
 #include <ydb/library/yql/providers/s3/range_helpers/file_tree_builder.h>
+#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/utils/log/log.h>
 
 namespace NYql {
@@ -55,12 +56,15 @@ public:
         if (const TMaybeNode<TDqSource> source = &node) {
             cluster = source.Cast().DataSource().Cast<TS3DataSource>().Cluster().Value();
             const auto settings = source.Cast().Settings().Cast<TS3SourceSettingsBase>();
-            parts.reserve(settings.Paths().Size());
-            for (auto i = 0u; i < settings.Paths().Size(); ++i)
-                parts.emplace_back(1U,
-                    std::pair(
-                        settings.Paths().Item(i).Path().StringValue(),
-                        FromString<ui64>(settings.Paths().Item(i).Size().Value())));
+            for (auto i = 0u; i < settings.Paths().Size(); ++i) {
+                const auto& path = settings.Paths().Item(i);
+                TPathList paths;
+                UnpackPathsList(path.Data().Literal().Value(), FromString<bool>(path.IsText().Literal().Value()), paths);
+                parts.reserve(parts.size() + paths.size());
+                for (auto& p : paths) {
+                    parts.emplace_back(1U, std::pair(std::get<0>(p), std::get<1>(p)));
+                }
+            }
         }
 
         if (maxPartitions && parts.size() > maxPartitions) {
@@ -127,17 +131,33 @@ public:
                     .Seal().Build()
             );
 
-            TExprNodeList extraColumns;
+            TExprNodeList extraColumnsExtents;
             for (size_t i = 0; i < s3ReadObject.Object().Paths().Size(); ++i) {
-                extraColumns.push_back(s3ReadObject.Object().Paths().Item(i).ExtraColumns().Ptr());
+                auto batch = s3ReadObject.Object().Paths().Item(i);
+                TStringBuf packed = batch.Data().Literal().Value();
+                bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
+
+                TPathList paths;
+                UnpackPathsList(packed, isTextEncoded, paths);
+
+                extraColumnsExtents.push_back(
+                    ctx.Builder(batch.ExtraColumns().Pos())
+                        .Callable("Replicate")
+                            .Add(0, batch.ExtraColumns().Ptr())
+                            .Callable(1, "Uint64")
+                                .Atom(0, ToString(paths.size()), TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Build()
+                );
             }
-            YQL_ENSURE(!extraColumns.empty());
-            if (extraColumns.front()->GetTypeAnn()->Cast<TStructExprType>()->GetSize()) {
+            YQL_ENSURE(!extraColumnsExtents.empty());
+            if (s3ReadObject.Object().Paths().Item(0).ExtraColumns().Ref().GetTypeAnn()->Cast<TStructExprType>()->GetSize()) {
                 settings.push_back(
                     ctx.Builder(s3ReadObject.Object().Pos())
                         .List()
                             .Atom(0, "extraColumns")
-                            .Add(1, ctx.NewCallable(s3ReadObject.Object().Pos(), "AsList", std::move(extraColumns)))
+                            .Add(1, ctx.NewCallable(s3ReadObject.Object().Pos(), "OrderedExtend", std::move(extraColumnsExtents)))
                         .Seal()
                         .Build()
                 );

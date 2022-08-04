@@ -1,6 +1,7 @@
 #include "path_list_reader.h"
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/s3/proto/range.pb.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

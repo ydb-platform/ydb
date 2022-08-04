@@ -17,6 +17,7 @@ target_link_libraries(providers-s3-range_helpers PUBLIC
   providers-common-provider
   providers-s3-proto
   library-yql-utils
+  cpp-protobuf-util
 )
 target_sources(providers-s3-range_helpers PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/range_helpers/file_tree_builder.cpp

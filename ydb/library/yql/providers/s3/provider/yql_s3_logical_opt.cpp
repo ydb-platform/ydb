@@ -1,6 +1,7 @@
 #include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
+#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
@@ -17,6 +18,8 @@ namespace NYql {
 using namespace NNodes;
 
 namespace {
+
+using namespace NYql::NS3Details;
 
 void RebuildPredicateForPruning(const TExprNode::TPtr& pred, const TExprNode& arg, const TStructExprType& extraType,
                                 TExprNode::TPtr& prunedPred, TExprNode::TPtr& extraPred, TExprContext& ctx)
@@ -112,27 +115,10 @@ TCoFlatMapBase CalculatePrunedPaths(TCoFlatMapBase flatMap, TExprContext& ctx, T
     TExprNode::TPtr filteredPathList;
     if (extraPred) {
         auto source = flatMap.Input().Cast<TDqSourceWrap>().Input().Cast<TS3SourceSettingsBase>();
-        TExprNodeList pathList;
-        for (size_t i = 0; i < source.Paths().Size(); ++i) {
-            pathList.push_back(
-                ctx.Builder(source.Paths().Item(i).Pos())
-                    .List()
-                        .Callable(0, "String")
-                            .Add(0, source.Paths().Item(i).Path().Ptr())
-                        .Seal()
-                        .Callable(1, "Uint64")
-                            .Add(0, source.Paths().Item(i).Size().Ptr())
-                        .Seal()
-                        .Add(2, source.Paths().Item(i).ExtraColumns().Ptr())
-                    .Seal()
-                .Build()
-            );
-        }
-
         filteredPathList = ctx.Builder(pred->Pos())
             .Callable("EvaluateExpr")
                 .Callable(0, "OrderedFilter")
-                    .Add(0, ctx.NewCallable(pred->Pos(), "AsList", std::move(pathList)))
+                    .Add(0, ctx.NewCallable(pred->Pos(), "AsList", source.Paths().Ref().ChildrenList()))
                     .Lambda(1)
                         .Param("item")
                         .Apply(ctx.NewLambda(extraPred->Pos(), flatMap.Lambda().Args().Ptr(), std::move(extraPred)))
@@ -183,6 +169,7 @@ public:
         AddHandler(0, &TCoFlatMapBase::Match, HNDL(TryPrunePaths));
         AddHandler(0, &TDqSourceWrap::Match, HNDL(ApplyPrunedPath));
         AddHandler(0, &TCoExtractMembers::Match, HNDL(ExtractMembersOverDqSource));
+        AddHandler(0, &TDqSourceWrap::Match, HNDL(MergeS3Paths));
 #undef HNDL
     }
 
@@ -211,50 +198,54 @@ public:
             return node;
         }
 
-        auto extraColumnsSetting = GetSetting(dqSource.Settings().Ref(), "extraColumns");
-        YQL_ENSURE(extraColumnsSetting);
-        auto extraColumns = extraColumnsSetting->ChildPtr(1);
-        YQL_ENSURE(extraColumns->IsCallable("AsList"), "extraColumns should have literal value");
-
+        const size_t beforeEntries = maybeS3SourceSettings.Cast().Paths().Size();
         auto prunedPaths = prunedPathSetting->ChildPtr(1);
         if (prunedPaths->IsCallable("List")) {
-            YQL_CLOG(INFO, ProviderS3) << "S3 Paths completely pruned: " << extraColumns->ChildrenSize() << " paths";
+            YQL_CLOG(INFO, ProviderS3) << "S3 Paths completely pruned: " << beforeEntries << " entries";
             return ctx.NewCallable(node.Pos(), "List", { ExpandType(node.Pos(), *node.Ref().GetTypeAnn(), ctx) });
         }
 
         YQL_ENSURE(prunedPaths->IsCallable("AsList"), "prunedPaths should have literal value");
-        YQL_ENSURE(prunedPaths->ChildrenSize() <= extraColumns->ChildrenSize());
         YQL_ENSURE(prunedPaths->ChildrenSize() > 0);
+        const size_t afterEntries = prunedPaths->ChildrenSize();
 
         auto newSettings = ReplaceSetting(dqSource.Settings().Ref(), prunedPathSetting->Pos(), "prunedPaths", nullptr, ctx);
-        if (prunedPaths->ChildrenSize() == extraColumns->ChildrenSize()) {
-            YQL_CLOG(INFO, ProviderS3) << "No S3 paths are pruned: " << extraColumns->ChildrenSize() << " paths";
+        if (beforeEntries == afterEntries) {
+            YQL_CLOG(INFO, ProviderS3) << "No S3 paths are pruned: " << afterEntries << " entries";
             return Build<TDqSourceWrap>(ctx, dqSource.Pos())
                 .InitFrom(dqSource)
                 .Settings(newSettings)
                 .Done();
         }
 
-        YQL_CLOG(INFO, ProviderS3) << "Pruning S3 Paths: " << extraColumns->ChildrenSize() << " -> " << prunedPaths->ChildrenSize();
-        TExprNodeList newPaths;
-        TExprNodeList newExtraColumns;
+        YQL_CLOG(INFO, ProviderS3) << "Pruning S3 Paths: " << beforeEntries << " -> " << afterEntries << " entries";
+        TExprNodeList newExtraColumnsExtents;
 
         for (auto& entry : prunedPaths->ChildrenList()) {
-            auto path = entry->ChildPtr(0);
-            auto size = entry->ChildPtr(1);
-            auto extra = entry->ChildPtr(2);
+            TS3Path batch(entry);
+            TStringBuf packed = batch.Data().Literal().Value();
+            bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
 
-            YQL_ENSURE(path->IsCallable("String"));
-            YQL_ENSURE(size->IsCallable("Uint64"));
-            YQL_ENSURE(extra->IsCallable("AsStruct"));
+            TPathList paths;
+            UnpackPathsList(packed, isTextEncoded, paths);
 
-            newPaths.push_back(ctx.NewList(entry->Pos(), { path->HeadPtr(), size->HeadPtr(), extra }));
-            newExtraColumns.push_back(extra);
+            newExtraColumnsExtents.push_back(
+                ctx.Builder(batch.ExtraColumns().Pos())
+                    .Callable("Replicate")
+                        .Add(0, batch.ExtraColumns().Ptr())
+                        .Callable(1, "Uint64")
+                            .Atom(0, ToString(paths.size()), TNodeFlags::Default)
+                        .Seal()
+                    .Seal()
+                    .Build()
+            );
         }
 
-        newSettings = ReplaceSetting(*newSettings, newSettings->Pos(), "extraColumns", ctx.NewCallable(newSettings->Pos(), "AsList", std::move(newExtraColumns)), ctx);
+        newSettings = ReplaceSetting(*newSettings, newSettings->Pos(), "extraColumns",
+                                     ctx.NewCallable(newSettings->Pos(), "OrderedExtend", std::move(newExtraColumnsExtents)), ctx);
         auto oldSrc = dqSource.Input().Cast<TS3SourceSettingsBase>();
-        auto newSrc = ctx.ChangeChild(dqSource.Input().Ref(), TS3SourceSettingsBase::idx_Paths, ctx.NewList(oldSrc.Paths().Pos(), std::move(newPaths)));
+        auto newSrc = ctx.ChangeChild(dqSource.Input().Ref(), TS3SourceSettingsBase::idx_Paths,
+                                      ctx.NewList(oldSrc.Paths().Pos(), prunedPaths->ChildrenList()));
 
         return Build<TDqSourceWrap>(ctx, dqSource.Pos())
             .InitFrom(dqSource)
@@ -337,30 +328,43 @@ public:
                 if (extraTypeItems.size() < extraType->GetSize()) {
                     auto originalPaths = maybeS3SourceSettings.Cast().Paths().Ptr();
                     auto originalExtra = extraColumnsSetting->TailPtr();
-                    YQL_ENSURE(originalExtra->IsCallable("AsList"));
                     YQL_ENSURE(originalPaths->IsList());
-                    YQL_ENSURE(originalPaths->ChildrenSize() == originalExtra->ChildrenSize());
 
                     TExprNodeList newPathItems;
-                    TExprNodeList newExtraColumnsItems;
+                    TExprNodeList newExtraColumnsExtents;
 
-                    for (const auto& path : maybeS3SourceSettings.Cast().Paths()) {
-                        auto extra = path.ExtraColumns();
+                    for (const auto& batch : maybeS3SourceSettings.Cast().Paths()) {
+                        auto extra = batch.ExtraColumns();
                         YQL_ENSURE(TCoAsStruct::Match(extra.Raw()));
                         TExprNodeList children = extra.Ref().ChildrenList();
                         EraseIf(children, [&](const TExprNode::TPtr& child) { return !extractMembers.contains(child->Head().Content()); });
                         auto newStruct = ctx.ChangeChildren(extra.Ref(), std::move(children));
-                        newExtraColumnsItems.push_back(newStruct);
-                        newPathItems.push_back(ctx.ChangeChild(path.Ref(), TS3Path::idx_ExtraColumns, std::move(newStruct)));
+
+                        TStringBuf packed = batch.Data().Literal().Value();
+                        bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
+
+                        TPathList paths;
+                        UnpackPathsList(packed, isTextEncoded, paths);
+
+                        newExtraColumnsExtents.push_back(
+                            ctx.Builder(batch.ExtraColumns().Pos())
+                                .Callable("Replicate")
+                                    .Add(0, newStruct)
+                                    .Callable(1, "Uint64")
+                                        .Atom(0, ToString(paths.size()), TNodeFlags::Default)
+                                    .Seal()
+                                .Seal()
+                                .Build()
+                        );
+                        newPathItems.push_back(ctx.ChangeChild(batch.Ref(), TS3Path::idx_ExtraColumns, std::move(newStruct)));
                     }
 
                     newPaths = ctx.ChangeChildren(maybeS3SourceSettings.Cast().Paths().Ref(), std::move(newPathItems));
-                    TExprNode::TPtr newExtra = ctx.ChangeChildren(*originalExtra, std::move(newExtraColumnsItems));
+                    TExprNode::TPtr newExtra = ctx.ChangeChildren(*originalExtra, std::move(newExtraColumnsExtents));
                     newSettings = TExprBase(extraTypeItems.empty() ? RemoveSetting(settings.Cast().Ref(), "extraColumns", ctx) :
                         ReplaceSetting(settings.Cast().Ref(), extraColumnsSetting->Pos(), "extraColumns", newExtra, ctx));
                 }
             }
-
         }
 
         const TStructExprType* outputRowType = node.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
@@ -399,6 +403,110 @@ public:
                 .RowType(ExpandType(dqSource.Input().Pos(), *readRowType, ctx))
             .Build()
             .RowType(outputRowTypeNode)
+            .Settings(newSettings)
+            .Done();
+    }
+
+    TMaybeNode<TExprBase> MergeS3Paths(TExprBase node, TExprContext& ctx) const {
+        const TDqSourceWrap dqSource = node.Cast<TDqSourceWrap>();
+        if (dqSource.DataSource().Category() != S3ProviderName) {
+            return node;
+        }
+
+        const auto& maybeS3SourceSettings = dqSource.Input().Maybe<TS3SourceSettingsBase>();
+        if (!maybeS3SourceSettings) {
+            return node;
+        }
+
+        TMaybeNode<TExprBase> settings = dqSource.Settings();
+        if (settings) {
+            if (auto prunedPaths = GetSetting(settings.Cast().Ref(), "prunedPaths")) {
+                if (prunedPaths->ChildrenSize() > 1) {
+                    // pruning in progress
+                    return node;
+                }
+            }
+        }
+
+        TNodeMap<TExprNodeList> s3PathsByExtra;
+        bool needMerge = false;
+        for (const auto& batch : maybeS3SourceSettings.Cast().Paths()) {
+            auto extra = batch.ExtraColumns();
+            auto& group = s3PathsByExtra[extra.Raw()];
+            group.emplace_back(batch.Ptr());
+            needMerge = needMerge || group.size() > 1;
+        }
+
+        if (!needMerge) {
+            return node;
+        }
+
+        TExprNodeList newPathItems;
+        TExprNodeList newExtraColumnsExtents;
+
+        for (const auto& origBatch : maybeS3SourceSettings.Cast().Paths()) {
+            auto extra = origBatch.ExtraColumns();
+            auto& group = s3PathsByExtra[extra.Raw()];
+            if (group.empty()) {
+                continue;
+            }
+
+            TPathList paths;
+            for (auto& item : group) {
+                TS3Path batch(item);
+                TStringBuf packed = batch.Data().Literal().Value();
+                bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
+                UnpackPathsList(packed, isTextEncoded, paths);
+            }
+
+            bool isTextEncoded;
+            TString packedPaths;
+            PackPathsList(paths, packedPaths, isTextEncoded);
+
+            newPathItems.emplace_back(
+                Build<TS3Path>(ctx, origBatch.Pos())
+                    .Data<TCoString>()
+                        .Literal()
+                        .Build(packedPaths)
+                    .Build()
+                    .IsText<TCoBool>()
+                        .Literal()
+                        .Build(ToString(isTextEncoded))
+                    .Build()
+                    .ExtraColumns(extra)
+                .Done().Ptr()
+            );
+
+            newExtraColumnsExtents.push_back(
+                ctx.Builder(extra.Pos())
+                    .Callable("Replicate")
+                        .Add(0, extra.Ptr())
+                        .Callable(1, "Uint64")
+                            .Atom(0, ToString(paths.size()), TNodeFlags::Default)
+                        .Seal()
+                    .Seal()
+                    .Build()
+            );
+
+            group.clear();
+        }
+
+        TMaybeNode<TExprBase> newSettings = settings;
+        if (settings) {
+            if (auto extraColumnsSetting = GetSetting(settings.Cast().Ref(), "extraColumns")) {
+                TPositionHandle pos = extraColumnsSetting->Pos();
+                auto newExtra = ctx.NewCallable(pos, "OrderedExtend", std::move(newExtraColumnsExtents));
+                newSettings = TExprBase(ReplaceSetting(settings.Cast().Ref(), pos, "extraColumns", newExtra, ctx));
+            }
+        }
+
+        YQL_CLOG(INFO, ProviderS3) << "Merge S3 paths with same extra columns in DqSource over " << maybeS3SourceSettings.Cast().CallableName();
+        auto sourceSettings = ctx.ChangeChild(maybeS3SourceSettings.Cast().Ref(), TS3SourceSettingsBase::idx_Paths,
+            ctx.NewList(maybeS3SourceSettings.Cast().Paths().Pos(), std::move(newPathItems)));
+
+        return Build<TDqSourceWrap>(ctx, dqSource.Pos())
+            .InitFrom(dqSource)
+            .Input(sourceSettings)
             .Settings(newSettings)
             .Done();
     }

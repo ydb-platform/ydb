@@ -3,6 +3,7 @@
 
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
+#include <ydb/library/yql/providers/s3/range_helpers/path_list_reader.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -97,9 +98,11 @@ public:
 
         TPendingRequests pendingRequests;
         TNodeMap<TVector<TListRequest>> requestsByNode;
+        TNodeMap<TGeneratedColumnsConfig> genColumnsByNode;
 
         pendingRequests.swap(PendingRequests_);
         requestsByNode.swap(RequestsByNode_);
+        genColumnsByNode.swap(GenColumnsByNode_);
 
         TNodeOnNodeOwnedMap replaces;
         size_t count = 0;
@@ -127,6 +130,12 @@ public:
                 }
             }
 
+            TMap<TMaybe<std::vector<TString>>, NS3Details::TPathList> pathsByMatchedGlobs;
+            const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;
+            if (auto it = genColumnsByNode.find(node); it != genColumnsByNode.end()) {
+                generatedColumnsConfig = &it->second;
+            }
+
             for (auto& req : requests) {
                 auto it = pendingRequests.find(req);
                 YQL_ENSURE(it != pendingRequests.end());
@@ -150,48 +159,16 @@ public:
                     }
                     return TStatus::Error;
                 }
-                for (auto& entry : listEntries) {
 
+                for (auto& entry : listEntries) {
                     if (entry.Size > fileSizeLimit) {
                         ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
                             TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
                         return TStatus::Error;
                     }
 
-                    TExprNodeList extraColumnsAsStructArgs;
-                    if (auto confIt = GenColumnsByNode_.find(node); confIt != GenColumnsByNode_.end()) {
-                        const TGeneratedColumnsConfig& config = confIt->second;
-                        YQL_ENSURE(config.Columns.size() <= entry.MatchedGlobs.size());
-                        YQL_ENSURE(config.SchemaTypeNode);
-
-                        for (size_t i = 0; i < config.Columns.size(); ++i) {
-                            auto& col = config.Columns[i];
-                            extraColumnsAsStructArgs.push_back(
-                                ctx.Builder(object.Pos())
-                                    .List()
-                                        .Atom(0, col)
-                                        .Callable(1, "Data")
-                                            .Callable(0, "StructMemberType")
-                                                .Add(0, config.SchemaTypeNode)
-                                                .Atom(1, col)
-                                            .Seal()
-                                            .Atom(1, entry.MatchedGlobs[i])
-                                        .Seal()
-                                    .Seal()
-                                    .Build()
-                            );
-                        }
-                    }
-
-                    pathNodes.emplace_back(
-                        ctx.Builder(object.Pos())
-                            .List()
-                                .Atom(0, entry.Path)
-                                .Atom(1, ToString(entry.Size), TNodeFlags::Default)
-                                .Add(2, ctx.NewCallable(object.Pos(), "AsStruct", std::move(extraColumnsAsStructArgs)))
-                            .Seal()
-                            .Build()
-                    );
+                    auto& pathList = pathsByMatchedGlobs[generatedColumnsConfig ? entry.MatchedGlobs : TMaybe<std::vector<TString>>{}];
+                    pathList.emplace_back(entry.Path, entry.Size);
                     ++count;
                     readSize += entry.Size;
                 }
@@ -200,13 +177,60 @@ public:
                 totalSize += readSize;
             }
 
+            for (const auto& [matchedGlobs, pathList] : pathsByMatchedGlobs) {
+                TExprNodeList extraColumnsAsStructArgs;
+                if (generatedColumnsConfig) {
+                    YQL_ENSURE(matchedGlobs.Defined());
+                    YQL_ENSURE(generatedColumnsConfig->Columns.size() <= matchedGlobs->size());
+                    YQL_ENSURE(generatedColumnsConfig->SchemaTypeNode);
+
+                    for (size_t i = 0; i < generatedColumnsConfig->Columns.size(); ++i) {
+                        auto& col = generatedColumnsConfig->Columns[i];
+                        extraColumnsAsStructArgs.push_back(
+                            ctx.Builder(object.Pos())
+                                .List()
+                                    .Atom(0, col)
+                                    .Callable(1, "Data")
+                                        .Callable(0, "StructMemberType")
+                                            .Add(0, generatedColumnsConfig->SchemaTypeNode)
+                                            .Atom(1, col)
+                                        .Seal()
+                                        .Atom(1, (*matchedGlobs)[i])
+                                    .Seal()
+                                .Seal()
+                                .Build()
+                        );
+                    }
+                }
+
+                auto extraColumns = ctx.NewCallable(object.Pos(), "AsStruct", std::move(extraColumnsAsStructArgs));
+
+                TString packedPaths;
+                bool isTextFormat;
+                NS3Details::PackPathsList(pathList, packedPaths, isTextFormat);
+
+                pathNodes.emplace_back(
+                    Build<TS3Path>(ctx, object.Pos())
+                        .Data<TCoString>()
+                            .Literal()
+                            .Build(packedPaths)
+                        .Build()
+                        .IsText<TCoBool>()
+                            .Literal()
+                            .Build(ToString(isTextFormat))
+                        .Build()
+                        .ExtraColumns(extraColumns)
+                    .Done().Ptr()
+                );
+            }
+
             auto settings = read.Ref().Child(4)->ChildrenList();
             auto userSchema = ExtractSchema(settings);
             TExprNode::TPtr s3Object;
             s3Object = Build<TS3Object>(ctx, object.Pos())
-                .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
-                .Format(ExtractFormat(settings))
-                .Settings(ctx.NewList(object.Pos(), std::move(settings)))
+                    .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
+                    .Format(ExtractFormat(settings))
+                    .Settings(ctx.NewList(object.Pos(), std::move(settings)))
                 .Done().Ptr();
 
             replaces.emplace(node, userSchema.back() ?

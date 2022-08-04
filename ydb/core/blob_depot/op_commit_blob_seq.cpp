@@ -69,12 +69,7 @@ namespace NKikimr::NBlobDepot {
 
                     db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
 
-                    Self->Data->PutKey(std::move(key), {
-                        .Meta = value.GetMeta(),
-                        .ValueChain = std::move(*value.MutableValueChain()),
-                        .KeepState = value.GetKeepState(),
-                        .Public = value.GetPublic(),
-                    });
+                    Self->Data->PutKey(std::move(key), TData::TValue(std::move(value)));
                 }
 
                 return true;

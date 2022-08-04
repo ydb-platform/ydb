@@ -4,11 +4,6 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
-    std::optional<TData::TValue> TData::FindKey(const TKey& key) {
-        const auto it = Data.find(key);
-        return it != Data.end() ? std::make_optional(it->second) : std::nullopt;
-    }
-
     TData::TRecordsPerChannelGroup& TData::GetRecordsPerChannelGroup(TLogoBlobID id) {
         TTabletStorageInfo *info = Self->Info();
         const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
@@ -26,12 +21,7 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobDepot::TValue proto;
         const bool success = proto.ParseFromString(value);
         Y_VERIFY(success);
-        PutKey(std::move(key), {
-            .Meta = proto.GetMeta(),
-            .ValueChain = std::move(*proto.MutableValueChain()),
-            .KeepState = proto.GetKeepState(),
-            .Public = proto.GetPublic(),
-        });
+        PutKey(std::move(key), TValue(std::move(proto)));
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
@@ -67,17 +57,21 @@ namespace NKikimr::NBlobDepot {
             (ValueChain.size, data.ValueChain.size()), (ReferencedBytes, referencedBytes),
             (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
 
-        Data[std::move(key)] = std::move(data);
+        const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(data));
+        if (!inserted) {
+            it->second = std::move(data);
+        }
     }
 
     std::optional<TString> TData::UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState) {
-        const auto it = Data.find(key);
-        if (it != Data.end() && keepState <= it->second.KeepState) {
-            return std::nullopt;
+        const auto [it, inserted] = Data.try_emplace(std::move(key), TValue(keepState));
+        if (!inserted) {
+            if (keepState <= it->second.KeepState) {
+                return std::nullopt;
+            }
+            it->second.KeepState = keepState;
         }
-        auto& value = Data[std::move(key)];
-        value.KeepState = keepState;
-        return ToValueProto(value);
+        return ToValueProto(it->second);
     }
 
     void TData::DeleteKey(const TKey& key, const std::function<void(TLogoBlobID)>& updateTrash, void *cookie) {

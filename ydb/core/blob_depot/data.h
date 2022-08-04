@@ -212,6 +212,28 @@ namespace NKikimr::NBlobDepot {
             TValueChain ValueChain;
             NKikimrBlobDepot::EKeepState KeepState;
             bool Public;
+            bool Unconfirmed;
+
+            TValue() = delete;
+            TValue(const TValue&) = delete;
+            TValue(TValue&&) = default;
+
+            TValue& operator =(const TValue&) = delete;
+            TValue& operator =(TValue&&) = default;
+
+            explicit TValue(NKikimrBlobDepot::TValue&& proto)
+                : Meta(proto.GetMeta())
+                , ValueChain(std::move(*proto.MutableValueChain()))
+                , KeepState(proto.GetKeepState())
+                , Public(proto.GetPublic())
+                , Unconfirmed(proto.GetUnconfirmed())
+            {}
+
+            explicit TValue(NKikimrBlobDepot::EKeepState keepState)
+                : KeepState(keepState)
+                , Public(false)
+                , Unconfirmed(false)
+            {}
         };
 
         enum EScanFlags : ui32 {
@@ -275,8 +297,6 @@ namespace NKikimr::NBlobDepot {
         TData(TBlobDepot *self)
             : Self(self)
         {}
-
-        std::optional<TValue> FindKey(const TKey& key);
 
         template<typename TCallback>
         void ScanRange(const TKey *begin, const TKey *end, TScanFlags flags, TCallback&& callback) {

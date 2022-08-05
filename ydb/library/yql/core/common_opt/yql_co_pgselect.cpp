@@ -2082,6 +2082,105 @@ TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& sort, cons
         .Build();
 }
 
+TExprNode::TPtr BuildDistinctOn(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& distinctOn,
+    const TExprNode::TPtr& sort, TExprContext& ctx) {
+    // filter by RowNumber() == 1
+
+    TExprNode::TListType args;
+    auto begin = ctx.NewCallable(pos, "Void", {});
+    auto end = ctx.NewCallable(pos, "Int32", { ctx.NewAtom(pos, "0") });
+    args.push_back(ctx.Builder(pos)
+        .List()
+            .List(0)
+                .Atom(0, "begin")
+                .Add(1, begin)
+            .Seal()
+            .List(1)
+                .Atom(0, "end")
+                .Add(1, end)
+            .Seal()
+        .Seal()
+        .Build());
+
+    auto value = ctx.Builder(pos)
+        .Callable("RowNumber")
+            .Callable(0, "TypeOf")
+                .Add(0, list)
+            .Seal()
+        .Seal()
+        .Build();
+
+    args.push_back(ctx.Builder(pos)
+        .List()
+            .Atom(0, "_yql_row_number")
+            .Add(1, value)
+        .Seal()
+        .Build());
+
+    auto winOnRows = ctx.NewCallable(pos, "WinOnRows", std::move(args));
+    auto frames = ctx.Builder(pos)
+        .List()
+            .Add(0, winOnRows)
+        .Seal()
+        .Build();
+
+    TExprNode::TListType keys;
+    for (auto p : distinctOn->Children()) {
+        YQL_ENSURE(p->IsCallable("PgGroup"));
+        const auto& member = p->Tail().Tail();
+        YQL_ENSURE(member.IsCallable("Member"));
+        keys.push_back(member.TailPtr());
+    }
+
+    auto keysNode = ctx.NewList(pos, std::move(keys));
+    auto sortNode = ctx.NewCallable(pos, "Void", {});
+    if (sort && sort->Tail().ChildrenSize() > 0) {
+        sortNode = BuildSortTraits(pos, sort->Tail(), list, ctx);
+    }
+
+    auto ret = ctx.Builder(pos)
+        .Callable("CalcOverWindow")
+            .Add(0, list)
+            .Add(1, keysNode)
+            .Add(2, sortNode)
+            .Add(3, frames)
+        .Seal()
+        .Build();
+
+    ret = ctx.Builder(pos)
+        .Callable("Filter")
+            .Add(0, ret)
+            .Lambda(1)
+                .Param("row")
+                .Callable("==")
+                    .Callable(0, "Member")
+                        .Arg(0, "row")
+                        .Atom(1, "_yql_row_number")
+                    .Seal()
+                    .Callable(1, "Uint64")
+                        .Atom(0, "1")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    ret = ctx.Builder(pos)
+        .Callable("Map")
+            .Add(0, ret)
+            .Lambda(1)
+                .Param("row")
+                .Callable("RemoveMember")
+                    .Arg(0, "row")
+                    .Atom(1, "_yql_row_number")
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    return ret;
+}
+
 TExprNode::TPtr BuildOffset(TPositionHandle pos, const TExprNode::TPtr& offset, const TExprNode::TPtr& list, TExprContext& ctx) {
     return ctx.Builder(pos)
         .Callable("Skip")
@@ -2232,7 +2331,10 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         columnsItems.push_back(ctx.NewAtom(node->Pos(), x));
     }
 
+    auto sort = GetSetting(node->Head(), "sort");
     auto setItems = GetSetting(node->Head(), "set_items");
+    const bool onlyOneSetItem = (setItems->Tail().ChildrenSize() == 1);
+
     TExprNode::TListType setItemNodes;
     TVector<TColumnOrder> columnOrders;
     for (auto setItem : setItems->Tail().Children()) {
@@ -2253,6 +2355,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto having = GetSetting(setItem->Tail(), "having");
         auto window = GetSetting(setItem->Tail(), "window");
         auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
+        auto distinctOn = GetSetting(setItem->Tail(), "distinct_on");
         bool oneRow = !from;
         TExprNode::TPtr list;
         if (values) {
@@ -2316,6 +2419,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
 
             if (distinctAll) {
                 list = ctx.NewCallable(node->Pos(), "SqlAggregateAll", { list });
+            } else if (distinctOn) {
+                list = BuildDistinctOn(node->Pos(), list, distinctOn->TailPtr(), onlyOneSetItem ? sort : nullptr, ctx);
             }
         }
 
@@ -2323,13 +2428,12 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     }
 
     TExprNode::TPtr list;
-    if (setItemNodes.size() == 1) {
+    if (onlyOneSetItem == 1) {
         list = setItemNodes.front();
     } else {
         list = ExpandPositionalUnionAll(*node, columnOrders, setItemNodes, ctx, optCtx);
     }
 
-    auto sort = GetSetting(node->Head(), "sort");
     if (sort && sort->Tail().ChildrenSize() > 0) {
         list = BuildSort(node->Pos(), sort, list, ctx);
     }

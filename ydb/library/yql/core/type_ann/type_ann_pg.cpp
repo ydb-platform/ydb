@@ -2042,6 +2042,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         bool hasValues = false;
         bool hasJoinOps = false;
         bool hasExtTypes = false;
+        bool hasDistinctAll = false;
+        bool hasDistinctOn = false;
 
         // pass 0 - from/values
         // pass 1 - join
@@ -2049,7 +2051,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         // pass 3 - where, group_by
         // pass 4 - window
         // pass 5 - result
-        // pass 6 - distinct_all
+        // pass 6 - distinct_all, distinct_on
         for (ui32 pass = 0; pass < 7; ++pass) {
             if (pass > 1 && !inputs.empty() && !hasJoinOps) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing join_ops"));
@@ -2785,12 +2787,45 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     }
                 }
                 else if (optionName == "distinct_all") {
+                    hasDistinctAll = true;
                     if (pass != 6) {
                         continue;
                     }
 
                     if (!EnsureTupleSize(*option, 1, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
+                    }
+                } else if (optionName == "distinct_on") {
+                    hasDistinctOn = true;
+                    if (pass != 6) {
+                        continue;
+                    }
+
+                    if (scanColumnsOnly) {
+                        continue;
+                    }
+
+                    if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    const auto& data = option->Tail();
+                    if (!EnsureTuple(data, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    TExprNode::TListType newGroups;
+                    TInputs projectionInputs;
+                    projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), false, {} });
+                    if (!ValidateGroups(projectionInputs, {}, data, ctx, newGroups)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    if (!newGroups.empty()) {
+                        auto resultValue = ctx.Expr.NewList(options.Pos(), std::move(newGroups));
+                        auto newSettings = ReplaceSetting(options, {}, "distinct_on", resultValue, ctx.Expr);
+                        output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
+                        return IGraphTransformer::TStatus::Repeat;
                     }
                 } else {
                     ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
@@ -2807,6 +2842,11 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
         if (hasResult && hasValues) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Either result or values should be specified"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (hasDistinctAll && hasDistinctOn) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Distinct ON isn't compatible with distinct over all columns"));
             return IGraphTransformer::TStatus::Error;
         }
 

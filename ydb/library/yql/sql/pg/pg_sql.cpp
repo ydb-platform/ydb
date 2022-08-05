@@ -306,12 +306,26 @@ public:
         TVector<TAstNode*> setItemNodes;
         for (const auto& x : setItems) {
             bool hasDistinctAll = false;
+            TVector<TAstNode*> distinctOnItems;
             if (x->distinctClause) {
                 if (linitial(x->distinctClause) == NULL) {
                     hasDistinctAll = true;
                 } else {
-                    AddError("SelectStmt: not supported DISTINCT ON");
-                    return nullptr;
+                    for (int i = 0; i < ListLength(x->distinctClause); ++i) {
+                        auto node = ListNodeNth(x->distinctClause, i);
+                        if (NodeTag(node) != T_ColumnRef) {
+                            NodeNotImplemented(x->distinctClause, node);
+                            return nullptr;
+                        }
+
+                        auto ref = ParseColumnRef(CAST_NODE(ColumnRef, node));
+                        if (!ref) {
+                            return nullptr;
+                        }
+
+                        auto lambda = L(A("lambda"), QL(), ref);
+                        distinctOnItems.push_back(L(A("PgGroup"), L(A("Void")), lambda));
+                    }
                 }
             }
 
@@ -647,6 +661,9 @@ public:
 
             if (hasDistinctAll) {
                 setItemOptions.push_back(QL(QA("distinct_all")));
+            } else if (!distinctOnItems.empty()) {
+                auto distinctOn = QVL(distinctOnItems.data(), distinctOnItems.size());
+                setItemOptions.push_back(QL(QA("distinct_on"), distinctOn));
             }
 
             auto setItem = L(A("PgSetItem"), QVL(setItemOptions.data(), setItemOptions.size()));

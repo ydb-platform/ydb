@@ -2082,7 +2082,7 @@ TExprNode::TPtr BuildSort(TPositionHandle pos, const TExprNode::TPtr& sort, cons
         .Build();
 }
 
-TExprNode::TPtr BuildDistinctOn(TPositionHandle pos, const TExprNode::TPtr& list, const TExprNode::TPtr& distinctOn,
+TExprNode::TPtr BuildDistinctOn(TPositionHandle pos, TExprNode::TPtr list, const TExprNode::TPtr& distinctOn,
     const TExprNode::TPtr& sort, TExprContext& ctx) {
     // filter by RowNumber() == 1
 
@@ -2124,15 +2124,70 @@ TExprNode::TPtr BuildDistinctOn(TPositionHandle pos, const TExprNode::TPtr& list
         .Seal()
         .Build();
 
-    TExprNode::TListType keys;
+    bool rebuildKey = false;
     for (auto p : distinctOn->Children()) {
         YQL_ENSURE(p->IsCallable("PgGroup"));
-        const auto& member = p->Tail().Tail();
-        YQL_ENSURE(member.IsCallable("Member"));
-        keys.push_back(member.TailPtr());
+        NNodes::TCoLambda lambda(&p->Tail());
+        if (!lambda.Body().Ref().IsCallable("Member") ||
+            &lambda.Body().Ref().Head() != &lambda.Args().Arg(0).Ref()) {
+            rebuildKey = true;
+            break;
+        }
     }
 
-    auto keysNode = ctx.NewList(pos, std::move(keys));
+    TExprNode::TPtr keysNode;
+    auto originalList = list;
+    if (!rebuildKey) {
+        TExprNode::TListType keys;
+        for (auto p : distinctOn->Children()) {
+            NNodes::TCoLambda lambda(&p->Tail());
+            const auto& member = lambda.Body().Ref();
+            YQL_ENSURE(member.IsCallable("Member"));
+            keys.push_back(member.TailPtr());
+        }
+
+        keysNode = ctx.NewList(pos, std::move(keys));
+    } else {
+        TExprNode::TListType keys;
+        for (ui32 i = 0; i < distinctOn->ChildrenSize(); ++i) {
+            keys.push_back(ctx.NewAtom(pos, "_yql_distinct_on_" + ToString(i)));
+        }
+
+        keysNode = ctx.NewList(pos, std::move(keys));
+
+        list = ctx.Builder(pos)
+            .Callable("OrderedMap")
+                .Add(0, list)
+                .Lambda(1)
+                    .Param("row")
+                    .Callable("FlattenMembers")
+                        .List(0)
+                            .Atom(0, "")
+                            .Arg(1, "row")
+                        .Seal()
+                        .List(1)
+                            .Atom(0, "")
+                            .Callable(1, "AsStruct")
+                                .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                    for (ui32 i = 0; i < distinctOn->ChildrenSize(); ++i) {
+                                        parent.List(i)
+                                            .Atom(0, "_yql_distinct_on_" + ToString(i))
+                                            .Apply(1, distinctOn->Child(i)->Tail())
+                                                .With(0, "row")
+                                             .Seal()
+                                        .Seal();
+                                    }
+
+                                    return parent;
+                                })
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Build();
+    }
+
     auto sortNode = ctx.NewCallable(pos, "Void", {});
     if (sort && sort->Tail().ChildrenSize() > 0) {
         sortNode = BuildSortTraits(pos, sort->Tail(), list, ctx);
@@ -2148,7 +2203,7 @@ TExprNode::TPtr BuildDistinctOn(TPositionHandle pos, const TExprNode::TPtr& list
         .Build();
 
     ret = ctx.Builder(pos)
-        .Callable("Filter")
+        .Callable("OrderedFilter")
             .Add(0, ret)
             .Lambda(1)
                 .Param("row")
@@ -2166,13 +2221,17 @@ TExprNode::TPtr BuildDistinctOn(TPositionHandle pos, const TExprNode::TPtr& list
         .Build();
 
     ret = ctx.Builder(pos)
-        .Callable("Map")
+        .Callable("OrderedMap")
             .Add(0, ret)
             .Lambda(1)
                 .Param("row")
-                .Callable("RemoveMember")
+                .Callable("CastStruct")
                     .Arg(0, "row")
-                    .Atom(1, "_yql_row_number")
+                    .Callable(1, "ListItemType")
+                        .Callable(0, "TypeOf")
+                            .Add(0, originalList)
+                        .Seal()
+                    .Seal()
                 .Seal()
             .Seal()
         .Seal()

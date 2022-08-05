@@ -313,17 +313,15 @@ public:
                 } else {
                     for (int i = 0; i < ListLength(x->distinctClause); ++i) {
                         auto node = ListNodeNth(x->distinctClause, i);
-                        if (NodeTag(node) != T_ColumnRef) {
-                            NodeNotImplemented(x->distinctClause, node);
+                        TExprSettings settings;
+                        settings.AllowColumns = true;
+                        settings.Scope = "DISTINCT ON";
+                        auto expr = ParseExpr(node, settings);
+                        if (!expr) {
                             return nullptr;
                         }
 
-                        auto ref = ParseColumnRef(CAST_NODE(ColumnRef, node));
-                        if (!ref) {
-                            return nullptr;
-                        }
-
-                        auto lambda = L(A("lambda"), QL(), ref);
+                        auto lambda = L(A("lambda"), QL(), expr);
                         distinctOnItems.push_back(L(A("PgGroup"), L(A("Void")), lambda));
                     }
                 }

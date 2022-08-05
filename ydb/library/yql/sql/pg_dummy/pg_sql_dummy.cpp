@@ -4,6 +4,7 @@
 #include <ydb/library/yql/minikql/computation/presort_impl.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 
 namespace NSQLTranslationPG {
 
@@ -207,6 +208,48 @@ bool ParsePgIntervalModifier(const TString& str, i32& ret) {
     Y_UNUSED(str);
     Y_UNUSED(ret);
     return false;
+}
+
+class TPgDummyBuilder : public NUdf::IPgBuilder {
+public:
+    NUdf::TUnboxedValue ValueFromText(ui32 typeId, const NUdf::TStringRef& value, NUdf::TStringValue& error) const override {
+        Y_UNUSED(typeId);
+        Y_UNUSED(value);
+        error = NUdf::TStringValue(TStringBuf("TPgDummyBuilder::ValueFromText does nothing"));
+        return NUdf::TUnboxedValue();
+    }
+
+    NUdf::TUnboxedValue ValueFromBinary(ui32 typeId, const NUdf::TStringRef& value, NUdf::TStringValue& error) const override {
+        Y_UNUSED(typeId);
+        Y_UNUSED(value);
+        error = NUdf::TStringValue(TStringBuf("TPgDummyBuilder::ValueFromBinary does nothing"));
+        return NUdf::TUnboxedValue();
+    }
+
+    NUdf::TUnboxedValue ConvertFromPg(NUdf::TUnboxedValue source, ui32 sourceTypeId, NUdf::TType* targetType) const override {
+        Y_UNUSED(source);
+        Y_UNUSED(sourceTypeId);
+        Y_UNUSED(targetType);
+        ythrow yexception() << "TPgDummyBuilder::ConvertFromPg does nothing";
+    }
+
+    NUdf::TUnboxedValue ConvertToPg(NUdf::TUnboxedValue source, NUdf::TType* sourceType, ui32 targetTypeId) const override {
+        Y_UNUSED(source);
+        Y_UNUSED(sourceType);
+        Y_UNUSED(targetTypeId);
+        ythrow yexception() << "TPgDummyBuilder::ConvertToPg does nothing";
+    }
+
+    NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
+        Y_UNUSED(typeLen);
+        Y_UNUSED(targetTypeId);
+        Y_UNUSED(data);
+        ythrow yexception() << "TPgDummyBuilder::NewString does nothing";
+    }
+};
+
+std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
+    return std::make_unique<TPgDummyBuilder>();
 }
 
 } // NYql

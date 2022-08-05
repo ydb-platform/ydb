@@ -107,14 +107,15 @@ target_include_directories(yql-parser-pg_wrapper PRIVATE
 target_link_libraries(yql-parser-pg_wrapper PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yql-public-issue
   library-cpp-resource
+  library-cpp-yson
+  library-yql-core
   yql-minikql-computation
   yql-parser-pg_catalog
-  library-yql-core
   providers-common-codec
+  yql-public-issue
+  yql-public-udf
   library-yql-utils
-  library-cpp-yson
   contrib-libs-icu
   contrib-libs-libc_compat
   Iconv::Iconv

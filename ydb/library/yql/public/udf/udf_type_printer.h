@@ -9,7 +9,7 @@ namespace NUdf {
 class TTypePrinter1 : private ITypeVisitor
 {
 public:
-    TTypePrinter1(const ITypeInfoHelper& typeHelper, const TType* type);
+    TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type);
 
     void Out(IOutputStream &o) const;
 
@@ -28,7 +28,7 @@ protected:
     void OnResourceImpl(TStringRef tag);
     void OnTaggedImpl(const TType* baseType, TStringRef tag);
 
-    const ITypeInfoHelper& TypeHelper_;
+    const ITypeInfoHelper1& TypeHelper1_;
     const TType* Type_;
 };
 
@@ -68,7 +68,28 @@ protected:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+class TTypePrinter5 : public TTypePrinter4 {
+public:
+    using TTypePrinter4::TTypePrinter4;
+    TTypePrinter5(const ITypeInfoHelper2& typeHelper, const TType* type);
+
+protected:
+    void OnPg(ui32 typeId) final {
+        OnPgImpl(typeId);
+    }
+
+private:
+    void OnPgImpl(ui32 typeId);
+
+private:
+    const ITypeInfoHelper2& TypeHelper2_;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+using TTypePrinter = TTypePrinter5;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using TTypePrinter = TTypePrinter4;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 using TTypePrinter = TTypePrinter3;

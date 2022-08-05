@@ -4,6 +4,7 @@
 #include "udf_types.h"
 #include "udf_ptr.h"
 #include "udf_string.h"
+#include "udf_type_size_check.h"
 #include "udf_value.h"
 
 #include <functional>

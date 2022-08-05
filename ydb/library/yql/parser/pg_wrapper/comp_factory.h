@@ -7,4 +7,3 @@ namespace NYql {
 NKikimr::NMiniKQL::TComputationNodeFactory GetPgFactory();
 
 }
-

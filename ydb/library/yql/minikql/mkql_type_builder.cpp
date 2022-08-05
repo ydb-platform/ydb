@@ -6,6 +6,8 @@
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_impl.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <array>
 
 // TODO: remove const_casts
 
@@ -14,6 +16,37 @@ namespace NKikimr {
 namespace {
 
 static const TString UdfName("UDF");
+
+class TPgTypeIndex {
+    static constexpr ui32 MaxOid = 15000;
+    using TUdfTypes = std::array<NYql::NUdf::TPgTypeDescription, MaxOid>;
+    TUdfTypes Types;
+
+public:
+    TPgTypeIndex() {
+        NYql::NPg::EnumTypes([&](ui32 typeId, const NYql::NPg::TTypeDesc& t) {
+            Y_VERIFY(typeId < Types.size());
+            auto& e = Types[typeId];
+            e.Name = t.Name;
+            e.TypeId = t.TypeId;
+            e.Typelen = t.TypeLen;
+            e.ArrayTypeId = t.ArrayTypeId;
+            e.ElementTypeId = t.ElementTypeId;
+            e.PassByValue = t.PassByValue;
+        });
+    }
+
+    const NYql::NUdf::TPgTypeDescription* Resolve(ui32 typeId) const {
+        if (typeId >= Types.size()) {
+            return nullptr;
+        }
+        auto& e = Types[typeId];
+        if (!e.TypeId) {
+            return nullptr;
+        }
+        return &e;
+    }
+};
 
 class TCallablePayload : public NUdf::ICallablePayload {
 public:
@@ -1308,6 +1341,10 @@ NUdf::TType* TFunctionTypeInfoBuilder::Tagged(const NUdf::TType* baseType, const
     return TTaggedType::Create(const_cast<TType*>(static_cast<const TType*>(baseType)), tag, Env_);
 }
 
+NUdf::TType* TFunctionTypeInfoBuilder::TFunctionTypeInfoBuilder::Pg(ui32 typeId) const {
+    return TPgType::Create(typeId, Env_);
+}
+
 bool TFunctionTypeInfoBuilder::GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const {
     if (SecureParamsProvider_)
         return SecureParamsProvider_->GetSecureParam(key, value);
@@ -1603,6 +1640,7 @@ case NMiniKQL::TType::EKind::TypeKind: { \
         MKQL_HANDLE_UDF_TYPE(Stream)
         MKQL_HANDLE_UDF_TYPE(Resource)
         MKQL_HANDLE_UDF_TYPE(Tagged)
+        MKQL_HANDLE_UDF_TYPE(Pg)
     default:
         Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
     }
@@ -1618,6 +1656,10 @@ bool TTypeInfoHelper::IsSameType(const NUdf::TType* type1, const NUdf::TType* ty
     auto mkqlType1 = static_cast<const NMiniKQL::TType*>(type1);
     auto mkqlType2 = static_cast<const NMiniKQL::TType*>(type2);
     return mkqlType1->IsSameType(*mkqlType2);
+}
+
+const NYql::NUdf::TPgTypeDescription* TTypeInfoHelper::FindPgTypeDescription(ui32 typeId) const {
+    return HugeSingleton<TPgTypeIndex>()->Resolve(typeId);
 }
 
 void TTypeInfoHelper::DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v) {
@@ -1710,6 +1752,12 @@ void TTypeInfoHelper::DoResource(const NMiniKQL::TResourceType* rt, NUdf::ITypeV
 void TTypeInfoHelper::DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisitor* v) {
     if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 21))) {
         v->OnTagged(tt->GetBaseType(), tt->GetTag());
+    }
+}
+
+void TTypeInfoHelper::DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v) {
+    if (v->IsCompatibleTo(NUdf::MakeAbiCompatibilityVersion(2, 25))) {
+        v->OnPg(tt->GetTypeId());
     }
 }
 

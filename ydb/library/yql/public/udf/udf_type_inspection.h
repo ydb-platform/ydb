@@ -59,7 +59,17 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+class TStubTypeVisitor5: public TStubTypeVisitor4
+{
+public:
+    void OnPg(ui32 typeId) override;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+using TStubTypeVisitor = TStubTypeVisitor5;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using TStubTypeVisitor = TStubTypeVisitor4;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 using TStubTypeVisitor = TStubTypeVisitor3;
@@ -445,6 +455,31 @@ private:
 };
 #endif
 
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+//////////////////////////////////////////////////////////////////////////////
+// TPgTypeInspector
+//////////////////////////////////////////////////////////////////////////////
+class TPgTypeInspector: public TStubTypeVisitor
+{
+public:
+    TPgTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+        if (typeHelper.GetTypeKind(type) == ETypeKind::Pg) {
+            typeHelper.VisitType(type, this);
+        }
+    }
+
+    explicit operator bool() const { return TypeId_ != 0; }
+    ui32 GetTypeId() const { return TypeId_; }
+
+private:
+    void OnPg(ui32 typeId) override {
+        TypeId_ = typeId;
+    }
+
+    ui32 TypeId_ = 0;
+};
+#endif
+
 inline void TStubTypeVisitor1::OnDataType(TDataTypeId typeId)
 {
     Y_UNUSED(typeId);
@@ -517,6 +552,11 @@ inline void TStubTypeVisitor3::OnResource(TStringRef) {
 #endif
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 inline void TStubTypeVisitor4::OnTagged(const TType*, TStringRef) {
+    Y_FAIL("Not implemented");
+}
+#endif
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+inline void TStubTypeVisitor5::OnPg(ui32) {
     Y_FAIL("Not implemented");
 }
 #endif

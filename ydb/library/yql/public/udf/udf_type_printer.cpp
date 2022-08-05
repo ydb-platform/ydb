@@ -7,8 +7,8 @@ namespace {
 static thread_local IOutputStream * Output_ = nullptr;
 }
 
-TTypePrinter1::TTypePrinter1(const ITypeInfoHelper& typeHelper, const TType* type)
-    : TypeHelper_(typeHelper), Type_(type)
+TTypePrinter1::TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type)
+    : TypeHelper1_(typeHelper), Type_(type)
 {}
 
 void TTypePrinter1::Out(IOutputStream &o) const {
@@ -18,13 +18,13 @@ void TTypePrinter1::Out(IOutputStream &o) const {
 }
 
 void TTypePrinter1::OutImpl(const TType* type) const {
-    switch (TypeHelper_.GetTypeKind(type)) {
+    switch (TypeHelper1_.GetTypeKind(type)) {
         case ETypeKind::Null: *Output_ << "Null"; break;
         case ETypeKind::Void: *Output_ << "Void"; break;
         case ETypeKind::EmptyList: *Output_ << "EmptyList"; break;
         case ETypeKind::EmptyDict: *Output_ << "EmptyDict"; break;
         case ETypeKind::Unknown: *Output_ << "Unknown"; break;
-        default: TypeHelper_.VisitType(type, const_cast<TTypePrinter1*>(this));
+        default: TypeHelper1_.VisitType(type, const_cast<TTypePrinter1*>(this));
     }
 }
 
@@ -115,6 +115,17 @@ void TTypePrinter1::OnTaggedImpl(const TType* baseType, TStringRef tag) {
     *Output_ << "Tagged<";
     OutImpl(baseType);
     *Output_ << ",'" << std::string_view(tag) << "'>";
+}
+
+TTypePrinter5::TTypePrinter5(const ITypeInfoHelper2& typeHelper2, const TType* type)
+    : TTypePrinter4(typeHelper2, type)
+    , TypeHelper2_(typeHelper2)
+{}
+
+void TTypePrinter5::OnPgImpl(ui32 typeId) {
+    auto* description = TypeHelper2_.FindPgTypeDescription(typeId);
+    Y_VERIFY(description);
+    *Output_ << std::string_view(description->Name);
 }
 
 }

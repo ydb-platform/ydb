@@ -4,6 +4,7 @@
 #include "udf_types.h"
 #include "udf_type_builder.h"
 #include "udf_string.h"
+#include "udf_type_size_check.h"
 #include "udf_value.h"
 
 #include <array>
@@ -103,6 +104,20 @@ class IDateBuilder: public IDateBuilder1 {};
 UDF_ASSERT_TYPE_SIZE(IDateBuilder, 8);
 
 ///////////////////////////////////////////////////////////////////////////////
+// IPgBuilder
+///////////////////////////////////////////////////////////////////////////////
+class IPgBuilder {
+public:
+    virtual ~IPgBuilder() {}
+    virtual TUnboxedValue ValueFromText(ui32 typeId, const TStringRef& value, TStringValue& error) const = 0;
+    virtual TUnboxedValue ValueFromBinary(ui32 typeId, const TStringRef& value, TStringValue& error) const = 0;
+    virtual TUnboxedValue ConvertFromPg(TUnboxedValue source, ui32 sourceTypeId, TType* targetType) const = 0;
+    virtual TUnboxedValue ConvertToPg(TUnboxedValue source, TType* sourceType, ui32 targetTypeId) const = 0;
+    virtual TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, TStringRef data) const = 0;
+};
+UDF_ASSERT_TYPE_SIZE(IPgBuilder, 8);
+
+///////////////////////////////////////////////////////////////////////////////
 // IValueBuilder
 ///////////////////////////////////////////////////////////////////////////////
 class IValueBuilder1
@@ -178,7 +193,16 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+class IValueBuilder6: public IValueBuilder5 {
+public:
+    virtual const IPgBuilder& GetPgBuilder() const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+class IValueBuilder: public IValueBuilder6 {};
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 19)
 class IValueBuilder: public IValueBuilder5 {};
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 17)
 class IValueBuilder: public IValueBuilder4 {};

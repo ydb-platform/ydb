@@ -11,6 +11,7 @@
 #include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/providers/common/codec/yql_pg_codec.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
+#include <ydb/library/yql/public/udf/udf_value_builder.h>
 #include <ydb/library/yql/core/yql_pg_utils.h>
 #include <ydb/library/yql/utils/fp_bits.h>
 #include <library/cpp/yson/detail.h>
@@ -991,6 +992,129 @@ private:
     bool ArrayCast = false;
 };
 
+
+template <NUdf::EDataSlot Slot>
+NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUdf::EDataSlot> actualSlot = {}) {
+#ifndef NDEBUG
+    // todo: improve checks
+    if (actualSlot && Slot != *actualSlot) {
+        throw yexception() << "Invalid data slot in ConvertToPgValue, expected " << Slot << ", but actual: " << *actualSlot;
+    }
+#else
+    Y_UNUSED(actualSlot);
+#endif
+
+    switch (Slot) {
+    case NUdf::EDataSlot::Bool:
+        return ScalarDatumToPod(BoolGetDatum(value.Get<bool>()));
+    case NUdf::EDataSlot::Int16:
+        return ScalarDatumToPod(Int16GetDatum(value.Get<i16>()));
+    case NUdf::EDataSlot::Int32:
+        return ScalarDatumToPod(Int32GetDatum(value.Get<i32>()));
+    case NUdf::EDataSlot::Int64:
+        return ScalarDatumToPod(Int64GetDatum(value.Get<i64>()));
+    case NUdf::EDataSlot::Float:
+        return ScalarDatumToPod(Float4GetDatum(value.Get<float>()));
+    case NUdf::EDataSlot::Double:
+        return ScalarDatumToPod(Float8GetDatum(value.Get<double>()));
+    case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Utf8: {
+        const auto& ref = value.AsStringRef();
+        return PointerDatumToPod((Datum)MakeVar(ref));
+    }
+    default:
+        ythrow yexception() << "Unexpected data slot in ConvertToPgValue: " << Slot;
+    }
+}
+
+template <NUdf::EDataSlot Slot, bool IsCString>
+NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value) {
+    switch (Slot) {
+    case NUdf::EDataSlot::Bool:
+        return NUdf::TUnboxedValuePod((bool)DatumGetBool(ScalarDatumFromPod(value)));
+    case NUdf::EDataSlot::Int16:
+        return NUdf::TUnboxedValuePod((i16)DatumGetInt16(ScalarDatumFromPod(value)));
+    case NUdf::EDataSlot::Int32:
+        return NUdf::TUnboxedValuePod((i32)DatumGetInt32(ScalarDatumFromPod(value)));
+    case NUdf::EDataSlot::Int64:
+        return NUdf::TUnboxedValuePod((i64)DatumGetInt64(ScalarDatumFromPod(value)));
+    case NUdf::EDataSlot::Float:
+        return NUdf::TUnboxedValuePod((float)DatumGetFloat4(ScalarDatumFromPod(value)));
+    case NUdf::EDataSlot::Double:
+        return NUdf::TUnboxedValuePod((double)DatumGetFloat8(ScalarDatumFromPod(value)));
+    case NUdf::EDataSlot::String:
+    case NUdf::EDataSlot::Utf8:
+        if (IsCString) {
+            auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
+            return MakeString(TStringBuf(x));
+        } else {
+            auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
+            return MakeString(GetVarBuf(x));
+        }
+    default:
+        ythrow yexception() << "Unexpected data slot in ConvertFromPgValue: " << Slot;
+    }
+}
+
+NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod source, ui32 sourceTypeId, NKikimr::NMiniKQL::TType* targetType) {
+#ifndef NDEBUG
+    // todo: vallidate targetType
+    Y_UNUSED(targetType);
+#else
+    Y_UNUSED(targetType);
+#endif
+
+    switch (sourceTypeId) {
+    case BOOLOID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Bool, false>(source);
+    case INT2OID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Int16, false>(source);
+    case INT4OID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Int32, false>(source);
+    case INT8OID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Int64, false>(source);
+    case FLOAT4OID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Float, false>(source);
+    case FLOAT8OID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Double, false>(source);
+    case TEXTOID:
+    case VARCHAROID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Utf8, false>(source);
+    case BYTEAOID:
+        return ConvertFromPgValue<NUdf::EDataSlot::String, false>(source);
+    case CSTRINGOID:
+        return ConvertFromPgValue<NUdf::EDataSlot::Utf8, true>(source);
+    default:
+        ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceTypeId).Name;
+    }
+}
+
+NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod source, NKikimr::NMiniKQL::TType* sourceType, ui32 targetTypeId) {
+    auto sourceDataType = AS_TYPE(TDataType, sourceType);
+    YQL_ENSURE(sourceDataType);
+
+    switch (targetTypeId) {
+    case BOOLOID:
+        return ConvertToPgValue<NUdf::EDataSlot::Bool>(source, sourceDataType->GetDataSlot());
+    case INT2OID:
+        return ConvertToPgValue<NUdf::EDataSlot::Int16>(source, sourceDataType->GetDataSlot());
+    case INT4OID:
+        return ConvertToPgValue<NUdf::EDataSlot::Int32>(source, sourceDataType->GetDataSlot());
+    case INT8OID:
+        return ConvertToPgValue<NUdf::EDataSlot::Int64>(source, sourceDataType->GetDataSlot());
+    case FLOAT4OID:
+        return ConvertToPgValue<NUdf::EDataSlot::Float>(source, sourceDataType->GetDataSlot());
+    case FLOAT8OID:
+        return ConvertToPgValue<NUdf::EDataSlot::Double>(source, sourceDataType->GetDataSlot());
+    case TEXTOID:
+        return ConvertToPgValue<NUdf::EDataSlot::Utf8>(source, sourceDataType->GetDataSlot());
+    case BYTEAOID:
+        return ConvertToPgValue<NUdf::EDataSlot::String>(source, sourceDataType->GetDataSlot());
+    default:
+        ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetTypeId).Name;
+    }
+}
+
 template <NUdf::EDataSlot Slot, bool IsCString>
 class TFromPg : public TMutableComputationNode<TFromPg<Slot, IsCString>> {
     typedef TMutableComputationNode<TFromPg<Slot, IsCString>> TBaseComputation;
@@ -1006,33 +1130,7 @@ public:
         if (!value) {
             return value.Release();
         }
-
-        switch (Slot)
-        {
-        case NUdf::EDataSlot::Bool:
-            return NUdf::TUnboxedValuePod((bool)DatumGetBool(ScalarDatumFromPod(value)));
-        case NUdf::EDataSlot::Int16:
-            return NUdf::TUnboxedValuePod((i16)DatumGetInt16(ScalarDatumFromPod(value)));
-        case NUdf::EDataSlot::Int32:
-            return NUdf::TUnboxedValuePod((i32)DatumGetInt32(ScalarDatumFromPod(value)));
-        case NUdf::EDataSlot::Int64:
-            return NUdf::TUnboxedValuePod((i64)DatumGetInt64(ScalarDatumFromPod(value)));
-        case NUdf::EDataSlot::Float:
-            return NUdf::TUnboxedValuePod((float)DatumGetFloat4(ScalarDatumFromPod(value)));
-        case NUdf::EDataSlot::Double:
-            return NUdf::TUnboxedValuePod((double)DatumGetFloat8(ScalarDatumFromPod(value)));
-        case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Utf8:
-            if (IsCString) {
-                auto x = (const char*)value.AsBoxed().Get() + PallocHdrSize;
-                return MakeString(TStringBuf(x));
-            } else {
-                auto x = (const text*)((const char*)value.AsBoxed().Get() + PallocHdrSize);
-                return MakeString(GetVarBuf(x));
-            }
-        default:
-            Y_UNREACHABLE();
-        }
+        return ConvertFromPgValue<Slot, IsCString>(value);
     }
 
 private:
@@ -1059,28 +1157,7 @@ public:
             return value.Release();
         }
 
-        switch (Slot)
-        {
-        case NUdf::EDataSlot::Bool:
-            return ScalarDatumToPod(BoolGetDatum(value.Get<bool>()));
-        case NUdf::EDataSlot::Int16:
-            return ScalarDatumToPod(Int16GetDatum(value.Get<i16>()));
-        case NUdf::EDataSlot::Int32:
-            return ScalarDatumToPod(Int32GetDatum(value.Get<i32>()));
-        case NUdf::EDataSlot::Int64:
-            return ScalarDatumToPod(Int64GetDatum(value.Get<i64>()));
-        case NUdf::EDataSlot::Float:
-            return ScalarDatumToPod(Float4GetDatum(value.Get<float>()));
-        case NUdf::EDataSlot::Double:
-            return ScalarDatumToPod(Float8GetDatum(value.Get<double>()));
-        case NUdf::EDataSlot::String:
-        case NUdf::EDataSlot::Utf8: {
-            const auto& ref = value.AsStringRef();
-            return PointerDatumToPod((Datum)MakeVar(ref));
-        }
-        default:
-            Y_UNREACHABLE();
-        }
+        return ConvertToPgValue<Slot>(value);
     }
 
 private:
@@ -1513,29 +1590,42 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
         outFuncId = NPg::LookupProc("array_out", { 0 }).ProcId;
     }
 
-    FmgrInfo finfo;
-    Zero(finfo);
-    Y_ENSURE(outFuncId);
-    fmgr_info(outFuncId, &finfo);
-    Y_ENSURE(!finfo.fn_retset);
-    Y_ENSURE(finfo.fn_addr);
-    Y_ENSURE(finfo.fn_nargs == 1);
-    LOCAL_FCINFO(callInfo, 1);
-    Zero(*callInfo);
-    callInfo->flinfo = &finfo;
-    callInfo->nargs = 1;
-    callInfo->fncollation = DEFAULT_COLLATION_OID;
-    callInfo->isnull = false;
-    callInfo->args[0] = { typeInfo.PassByValue ?
-        ScalarDatumFromPod(value) :
-        PointerDatumFromPod(value), false };
-    auto str = (char*)finfo.fn_addr(callInfo);
-    Y_ENSURE(!callInfo->isnull);
-    Y_DEFER{
-        pfree(str);
-    };
+    PG_TRY();
+    {
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(outFuncId);
+        fmgr_info(outFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs == 1);
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { typeInfo.PassByValue ?
+            ScalarDatumFromPod(value) :
+            PointerDatumFromPod(value), false };
+        auto str = (char*)finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_DEFER{
+            pfree(str);
+        };
 
-    return TString(str);
+        return TString(str);
+    }
+    PG_CATCH();
+    {
+        auto error_data = CopyErrorData();
+        TStringBuilder errMsg;
+        errMsg << "Error in 'out' function: " << NPg::LookupProc(outFuncId).Name << ", reason: " << error_data->message;
+        FreeErrorData(error_data);
+        FlushErrorState();
+        UdfTerminate(errMsg.c_str());
+    }
+    PG_END_TRY();
 }
 
 template <typename F>
@@ -1555,32 +1645,45 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
         sendFuncId = NPg::LookupProc("array_send", { 0 }).ProcId;
     }
 
-    FmgrInfo finfo;
-    Zero(finfo);
-    Y_ENSURE(sendFuncId);
-    fmgr_info(sendFuncId, &finfo);
-    Y_ENSURE(!finfo.fn_retset);
-    Y_ENSURE(finfo.fn_addr);
-    Y_ENSURE(finfo.fn_nargs == 1);
-    LOCAL_FCINFO(callInfo, 1);
-    Zero(*callInfo);
-    callInfo->flinfo = &finfo;
-    callInfo->nargs = 1;
-    callInfo->fncollation = DEFAULT_COLLATION_OID;
-    callInfo->isnull = false;
-    callInfo->args[0] = { typeInfo.PassByValue ?
-        ScalarDatumFromPod(value) :
-        PointerDatumFromPod(value), false };
+    PG_TRY();
+    {
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(sendFuncId);
+        fmgr_info(sendFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs == 1);
+        LOCAL_FCINFO(callInfo, 1);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 1;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { typeInfo.PassByValue ?
+            ScalarDatumFromPod(value) :
+            PointerDatumFromPod(value), false };
 
-    auto x = (text*)finfo.fn_addr(callInfo);
-    Y_ENSURE(!callInfo->isnull);
-    Y_DEFER{
-        pfree(x);
-    };
+        auto x = (text*)finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_DEFER{
+            pfree(x);
+        };
 
-    auto s = GetVarBuf(x);
-    ui32 len = s.Size();
-    f(TStringBuf(s.Data(), s.Size()));
+        auto s = GetVarBuf(x);
+        ui32 len = s.Size();
+        f(TStringBuf(s.Data(), s.Size()));
+    }
+    PG_CATCH();
+    {
+        auto error_data = CopyErrorData();
+        TStringBuilder errMsg;
+        errMsg << "Error in 'send' function: " << NPg::LookupProc(sendFuncId).Name << ", reason: " << error_data->message;
+        FreeErrorData(error_data);
+        FlushErrorState();
+        UdfTerminate(errMsg.c_str());
+    }
+    PG_END_TRY();
 }
 
 TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) {
@@ -1768,27 +1871,40 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
         receiveFuncId = NPg::LookupProc("array_recv", { 0,0,0 }).ProcId;
     }
 
-    FmgrInfo finfo;
-    Zero(finfo);
-    Y_ENSURE(receiveFuncId);
-    fmgr_info(receiveFuncId, &finfo);
-    Y_ENSURE(!finfo.fn_retset);
-    Y_ENSURE(finfo.fn_addr);
-    Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
-    LOCAL_FCINFO(callInfo, 3);
-    Zero(*callInfo);
-    callInfo->flinfo = &finfo;
-    callInfo->nargs = 3;
-    callInfo->fncollation = DEFAULT_COLLATION_OID;
-    callInfo->isnull = false;
-    callInfo->args[0] = { (Datum)&stringInfo, false };
-    callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
-    callInfo->args[2] = { Int32GetDatum(-1), false };
+    PG_TRY();
+    {
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(receiveFuncId);
+        fmgr_info(receiveFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)&stringInfo, false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
 
-    auto x = finfo.fn_addr(callInfo);
-    Y_ENSURE(!callInfo->isnull);
-    Y_ENSURE(stringInfo.cursor == stringInfo.len);
-    return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        Y_ENSURE(stringInfo.cursor == stringInfo.len);
+        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+    }
+    PG_CATCH();
+    {
+        auto error_data = CopyErrorData();
+        TStringBuilder errMsg;
+        errMsg << "Error in 'recv' function: " << NPg::LookupProc(receiveFuncId).Name << ", reason: " << error_data->message;
+        FreeErrorData(error_data);
+        FlushErrorState();
+        UdfTerminate(errMsg.c_str());
+    }
+    PG_END_TRY();
 }
 
 NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) {
@@ -1802,26 +1918,39 @@ NUdf::TUnboxedValue PgValueFromNativeText(const TStringBuf text, ui32 pgTypeId) 
         inFuncId = NPg::LookupProc("array_in", { 0,0,0 }).ProcId;
     }
 
-    FmgrInfo finfo;
-    Zero(finfo);
-    Y_ENSURE(inFuncId);
-    fmgr_info(inFuncId, &finfo);
-    Y_ENSURE(!finfo.fn_retset);
-    Y_ENSURE(finfo.fn_addr);
-    Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
-    LOCAL_FCINFO(callInfo, 3);
-    Zero(*callInfo);
-    callInfo->flinfo = &finfo;
-    callInfo->nargs = 3;
-    callInfo->fncollation = DEFAULT_COLLATION_OID;
-    callInfo->isnull = false;
-    callInfo->args[0] = { (Datum)str.c_str(), false };
-    callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
-    callInfo->args[2] = { Int32GetDatum(-1), false };
+    PG_TRY();
+    {
+        FmgrInfo finfo;
+        Zero(finfo);
+        Y_ENSURE(inFuncId);
+        fmgr_info(inFuncId, &finfo);
+        Y_ENSURE(!finfo.fn_retset);
+        Y_ENSURE(finfo.fn_addr);
+        Y_ENSURE(finfo.fn_nargs >= 1 && finfo.fn_nargs <= 3);
+        LOCAL_FCINFO(callInfo, 3);
+        Zero(*callInfo);
+        callInfo->flinfo = &finfo;
+        callInfo->nargs = 3;
+        callInfo->fncollation = DEFAULT_COLLATION_OID;
+        callInfo->isnull = false;
+        callInfo->args[0] = { (Datum)str.c_str(), false };
+        callInfo->args[1] = { ObjectIdGetDatum(typeIOParam), false };
+        callInfo->args[2] = { Int32GetDatum(-1), false };
 
-    auto x = finfo.fn_addr(callInfo);
-    Y_ENSURE(!callInfo->isnull);
-    return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+        auto x = finfo.fn_addr(callInfo);
+        Y_ENSURE(!callInfo->isnull);
+        return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
+    }
+    PG_CATCH();
+    {
+        auto error_data = CopyErrorData();
+        TStringBuilder errMsg;
+        errMsg << "Error in 'in' function: " << NPg::LookupProc(inFuncId).Name << ", reason: " << error_data->message;
+        FreeErrorData(error_data);
+        FlushErrorState();
+        UdfTerminate(errMsg.c_str());
+    }
+    PG_END_TRY();
 }
 
 NUdf::TUnboxedValue PgValueFromString(const TStringBuf s, ui32 pgTypeId) {
@@ -2603,6 +2732,51 @@ void PgReleaseThreadContext(void* ctx) {
 } // namespace NMiniKQL
 } // namespace NKikimr
 
+namespace NYql {
+
+class TPgBuilderImpl : public NUdf::IPgBuilder {
+public:
+     NUdf::TUnboxedValue ValueFromText(ui32 typeId, const NUdf::TStringRef& value, NUdf::TStringValue& error) const override {
+        try {
+            return NCommon::PgValueFromNativeText(static_cast<TStringBuf>(value), typeId);
+        } catch (const std::exception& e) {
+            error = NUdf::TStringValue(TStringBuf(e.what()));
+        }
+        return NUdf::TUnboxedValue();
+    }
+
+    NUdf::TUnboxedValue ValueFromBinary(ui32 typeId, const NUdf::TStringRef& value, NUdf::TStringValue& error) const override {
+        try {
+            return NCommon::PgValueFromNativeBinary(static_cast<TStringBuf>(value), typeId);
+        } catch (const std::exception& e) {
+            error = NUdf::TStringValue(TStringBuf(e.what()));
+        }
+        return NUdf::TUnboxedValue();
+    }
+
+    NUdf::TUnboxedValue ConvertFromPg(NUdf::TUnboxedValue source, ui32 sourceTypeId, NUdf::TType* targetType) const override {
+        return ConvertFromPgValue(source, sourceTypeId, static_cast<NKikimr::NMiniKQL::TType*>(targetType));
+    }
+
+    NUdf::TUnboxedValue ConvertToPg(NUdf::TUnboxedValue source, NUdf::TType* sourceType, ui32 targetTypeId) const override {
+        return ConvertToPgValue(source, static_cast<NKikimr::NMiniKQL::TType*>(sourceType), targetTypeId);
+    }
+
+    NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
+        // todo: implement
+        Y_UNUSED(typeLen);
+        Y_UNUSED(targetTypeId);
+        Y_UNUSED(data);
+        return NUdf::TUnboxedValue();
+    }
+};
+
+std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder() {
+    return std::make_unique<TPgBuilderImpl>();
+}
+
+} // namespace NYql
+
 extern "C" {
 
 void yql_canonize_float4(float4* x) {
@@ -2647,6 +2821,4 @@ void get_type_io_data(Oid typid,
     }
 }
 
-}
-
-
+} // extern "C"

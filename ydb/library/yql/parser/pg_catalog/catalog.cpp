@@ -1224,6 +1224,13 @@ const TTypeDesc& LookupType(ui32 typeId) {
     return *typePtr;
 }
 
+void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f) {
+    const auto& catalog = TCatalog::Instance();
+    for (const auto& [typeId, desc] : catalog.Types) {
+        f(typeId, desc);
+    }
+}
+
 bool HasCast(ui32 sourceId, ui32 targetId) {
     const auto& catalog = TCatalog::Instance();
     return catalog.CastsByDir.contains(std::make_pair(sourceId, targetId));

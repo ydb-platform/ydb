@@ -21,7 +21,7 @@ class TDefaultValueBuilder final: public NUdf::IValueBuilder, private TNonCopyab
     public NUdf::IDateBuilder
 {
 public:
-    TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy = NUdf::EValidatePolicy::Fail);
+    explicit TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy = NUdf::EValidatePolicy::Fail);
 
     void SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider);
     void RethrowAtTerminate();
@@ -56,11 +56,10 @@ public:
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef &value) const final;
     const NUdf::TSourcePosition* CalleePosition() const final;
-    NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const;
-    NUdf::TFlatDataBlockPtr NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const;
-    NUdf::TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const;
-    NUdf::TSingleBlockPtr NewSingleBlock(const NUdf::TUnboxedValue& value) const;
-
+    NUdf::TUnboxedValue Run(const NUdf::TSourcePosition& callee, const NUdf::IBoxedValue& value, const NUdf::TUnboxedValuePod* args) const final;
+    NUdf::TFlatDataBlockPtr NewFlatDataBlock(ui32 initialSize, ui32 initialCapacity) const final;
+    NUdf::TFlatArrayBlockPtr NewFlatArrayBlock(ui32 count) const final;
+    NUdf::TSingleBlockPtr NewSingleBlock(const NUdf::TUnboxedValue& value) const final;
     bool MakeDate(ui32 year, ui32 month, ui32 day, ui16& value) const final;
     bool SplitDate(ui16 value, ui32& year, ui32& month, ui32& day) const final;
 
@@ -86,9 +85,14 @@ public:
     bool FullSplitDatetime2(ui32 value, ui32& year, ui32& month, ui32& day, ui32& hour, ui32& minute, ui32& second,
         ui32& dayOfYear, ui32& weekOfYear, ui32& weekOfYearIso8601, ui32& dayOfWeek, ui16 timezoneId = 0) const final;
 
+    const NUdf::IPgBuilder& GetPgBuilder() const final {
+        return *PgBuilder_;
+    }
+
 private:
     const THolderFactory& HolderFactory_;
     NUdf::EValidatePolicy Policy_;
+    std::unique_ptr<NUdf::IPgBuilder> PgBuilder_;
     const NUdf::ISecureParamsProvider* SecureParamsProvider_ = nullptr;
     const NUdf::TSourcePosition** CalleePositionPtr_ = nullptr;
     mutable bool Rethrow_ = false;

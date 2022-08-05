@@ -4,6 +4,7 @@
 #include "udf_types.h"
 #include "udf_ptr.h"
 #include "udf_string_ref.h"
+#include "udf_type_size_check.h"
 #include "udf_value.h"
 
 #include <type_traits>
@@ -56,6 +57,9 @@ struct TStream { using ItemType = T; };
 
 template <typename T, const char* Tag>
 struct TTagged { using BaseType = T; };
+
+template <ui32 TypeId>
+struct TPg;
 
 //////////////////////////////////////////////////////////////////////////////
 // ITypeBuilder
@@ -583,7 +587,16 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 22)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+class IFunctionTypeInfoBuilder13: public IFunctionTypeInfoBuilder12 {
+public:
+    virtual TType* Pg(ui32 typeId) const = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder13;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 22)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder12;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using IFunctionTypeInfoBuilderImpl = IFunctionTypeInfoBuilder11;
@@ -805,6 +818,15 @@ struct TTypeBuilderHelper<TTagged<T, Tag>> {
     static TType* Build(const IFunctionTypeInfoBuilder& builder) {
         return builder.Tagged(TTypeBuilderHelper<T>::Build(builder),
             TStringRef(Tag, std::strlen(Tag)));
+    }
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+template <ui32 TypeId>
+struct TTypeBuilderHelper<TPg<TypeId>> {
+    static TType* Build(const IFunctionTypeInfoBuilder& builder) {
+        return builder.Pg(TypeId);
     }
 };
 #endif

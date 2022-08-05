@@ -3,6 +3,7 @@
 #include "udf_types.h"
 #include "udf_allocator.h"
 #include "udf_string_ref.h"
+#include "udf_type_size_check.h"
 
 #include <util/generic/strbuf.h>
 #include <util/system/align.h>
@@ -106,6 +107,9 @@ class TStringValue
 public:
     inline explicit TStringValue(ui32 size): Data_(AllocateData(size, size)) {}
     inline explicit TStringValue(TData* data): Data_(data) { Ref(); }
+    inline explicit TStringValue(TStringRef data): Data_(AllocateData(data.Size(), data.Size())) {
+        memcpy(Data_->Data(), data.Data(), data.Size());
+    }
 
     inline TStringValue(const TStringValue& rhs): Data_(rhs.Data_) { Ref(); }
     inline TStringValue(TStringValue&& rhs): Data_(rhs.Data_) { rhs.Data_ = nullptr; }

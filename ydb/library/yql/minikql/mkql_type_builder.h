@@ -117,6 +117,7 @@ public:
     NUdf::ISetTypeBuilder::TPtr Set() const override;
     NUdf::IEnumTypeBuilder::TPtr Enum(ui32 expectedItems = 10) const override;
     NUdf::TType* Tagged(const NUdf::TType* baseType, const NUdf::TStringRef& tag) const override;
+    NUdf::TType* Pg(ui32 typeId) const override;
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
 
 private:
@@ -146,6 +147,7 @@ public:
     NUdf::ETypeKind GetTypeKind(const NUdf::TType* type) const override;
     void VisitType(const NUdf::TType* type, NUdf::ITypeVisitor* visitor) const override;
     bool IsSameType(const NUdf::TType* type1, const NUdf::TType* type2) const override;
+    const NYql::NUdf::TPgTypeDescription* FindPgTypeDescription(ui32 typeId) const override;
 
 private:
     static void DoData(const NMiniKQL::TDataType* dt, NUdf::ITypeVisitor* v);
@@ -159,6 +161,7 @@ private:
     static void DoStream(const NMiniKQL::TStreamType* st, NUdf::ITypeVisitor* v);
     static void DoResource(const NMiniKQL::TResourceType* rt, NUdf::ITypeVisitor* v);
     static void DoTagged(const NMiniKQL::TTaggedType* tt, NUdf::ITypeVisitor* v);
+    static void DoPg(const NMiniKQL::TPgType* tt, NUdf::ITypeVisitor* v);
 };
 
 NUdf::IHash::TPtr MakeHashImpl(const NMiniKQL::TType* type);

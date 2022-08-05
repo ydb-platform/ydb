@@ -7,6 +7,10 @@
 
 #include <util/system/env.h>
 
+namespace NYql {
+    std::unique_ptr<NUdf::IPgBuilder> CreatePgBuilder();
+}
+
 namespace NKikimr {
 namespace NMiniKQL {
 
@@ -16,6 +20,7 @@ namespace NMiniKQL {
 TDefaultValueBuilder::TDefaultValueBuilder(const THolderFactory& holderFactory, NUdf::EValidatePolicy policy)
     : HolderFactory_(holderFactory)
     , Policy_(policy)
+    , PgBuilder_(NYql::CreatePgBuilder())
 {}
 
 void TDefaultValueBuilder::SetSecureParamsProvider(const NUdf::ISecureParamsProvider* provider) {

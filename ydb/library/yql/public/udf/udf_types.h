@@ -2,17 +2,38 @@
 
 #include "udf_ptr.h"
 #include "udf_data_type.h"
+#include "udf_pg_type_description.h"
+#include "udf_type_size_check.h"
 #include "udf_version.h"
 
 namespace NYql {
 namespace NUdf {
 
-class TStringRef;
-
 // opaque type info
 using TType = void;
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+
+#define UDF_TYPE_KIND_MAP(XX) \
+    XX(Unknown)               \
+    XX(Data)                  \
+    XX(Struct)                \
+    XX(List)                  \
+    XX(Optional)              \
+    XX(Tuple)                 \
+    XX(Dict)                  \
+    XX(Callable)              \
+    XX(Resource)              \
+    XX(Void)                  \
+    XX(Variant)               \
+    XX(Stream)                \
+    XX(Null)                  \
+    XX(EmptyList)             \
+    XX(EmptyDict)             \
+    XX(Tagged)                \
+    XX(Pg)
+
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 
 #define UDF_TYPE_KIND_MAP(XX) \
     XX(Unknown)               \
@@ -74,11 +95,6 @@ enum ETypeKind
 };
 
 ENUM_TO_STRING(ETypeKind, UDF_TYPE_KIND_MAP)
-
-#define UDF_ASSERT_TYPE_SIZE(type, expectedSize)         \
-    static_assert(sizeof(type) == (expectedSize),        \
-        "Size of " #type " exceeds expected size. "      \
-        "Expected size is " #expectedSize)
 
 //////////////////////////////////////////////////////////////////////////////
 // ICallablePayload
@@ -160,7 +176,16 @@ public:
 };
 #endif
 
-#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+class ITypeVisitor5: public ITypeVisitor4 {
+public:
+    virtual void OnPg(ui32 typeId) = 0;
+};
+#endif
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+using ITypeVisitor = ITypeVisitor5;
+#elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 21)
 using ITypeVisitor = ITypeVisitor4;
 #elif UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 15)
 using ITypeVisitor = ITypeVisitor3;
@@ -175,13 +200,13 @@ UDF_ASSERT_TYPE_SIZE(ITypeVisitor, 16);
 //////////////////////////////////////////////////////////////////////////////
 // ITypeInfoHelper
 //////////////////////////////////////////////////////////////////////////////
-class ITypeInfoHelper
+class ITypeInfoHelper1
 {
 public:
-    using TPtr = TRefCountedPtr<ITypeInfoHelper>;
+    using TPtr = TRefCountedPtr<ITypeInfoHelper1>;
 
 public:
-    virtual ~ITypeInfoHelper() = default;
+    virtual ~ITypeInfoHelper1() = default;
 
     virtual ETypeKind GetTypeKind(const TType* type) const = 0;
     virtual void VisitType(const TType* type, ITypeVisitor* visitor) const = 0;
@@ -211,6 +236,20 @@ private:
         Y_UNUSED(Reserved_);
     }
 };
+
+class ITypeInfoHelper2 : public ITypeInfoHelper1 {
+public:
+    using TPtr = TRefCountedPtr<ITypeInfoHelper2>;
+
+public:
+    virtual const TPgTypeDescription* FindPgTypeDescription(ui32 typeId) const = 0;
+};
+
+#if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 25)
+using ITypeInfoHelper = ITypeInfoHelper2;
+#else
+using ITypeInfoHelper = ITypeInfoHelper1;
+#endif
 
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper, 16);
 UDF_ASSERT_TYPE_SIZE(ITypeInfoHelper::TPtr, 8);

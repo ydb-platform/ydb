@@ -1,5 +1,6 @@
 #pragma once
 #include "udf_types.h"
+#include "udf_type_size_check.h"
 #include <library/cpp/deprecated/atomic/atomic.h>
 
 namespace NYql {

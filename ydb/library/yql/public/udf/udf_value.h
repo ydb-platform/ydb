@@ -3,6 +3,7 @@
 #include "udf_allocator.h"
 #include "udf_string.h"
 #include "udf_terminator.h"
+#include "udf_type_size_check.h"
 #include "udf_version.h"
 
 #include <ydb/library/yql/public/decimal/yql_decimal.h>

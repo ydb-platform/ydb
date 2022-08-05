@@ -145,6 +145,7 @@ bool HasReturnSetProc(const TStringBuf& name);
 bool HasType(const TStringBuf& name);
 const TTypeDesc& LookupType(const TString& name);
 const TTypeDesc& LookupType(ui32 typeId);
+void EnumTypes(std::function<void(ui32, const TTypeDesc&)> f);
 
 bool HasCast(ui32 sourceId, ui32 targetId);
 const TCastDesc& LookupCast(ui32 sourceId, ui32 targetId);

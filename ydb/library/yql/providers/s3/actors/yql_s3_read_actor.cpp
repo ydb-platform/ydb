@@ -326,7 +326,7 @@ private:
         if (*HttpResponseCode)
             Send(SourceActorId, new TEvPrivate::TEvReadFinished(*HttpResponseCode));
     } catch (const TDtorException&) {
-       throw;
+       return;
     } catch (const std::exception& err) {
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, true));
         return;

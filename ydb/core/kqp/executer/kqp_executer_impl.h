@@ -6,6 +6,7 @@
 #include "kqp_table_resolver.h"
 
 #include <ydb/core/kqp/common/kqp_ru_calc.h>
+#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
@@ -29,6 +30,8 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/generic/size_literals.h>
+
+LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {
 namespace NKqp {
@@ -85,6 +88,7 @@ public:
         , Counters(counters)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
+        ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats());
     }
@@ -123,6 +127,8 @@ protected:
     void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
         TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
+
+        LWTRACK(KqpBaseExecuterHandleReady, ResponseEv->Orbit, TxId);
 
         LOG_D("Report self actorId " << this->SelfId() << " to " << Target);
         auto progressEv = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
@@ -596,6 +602,9 @@ protected:
                 Counters->TxProxyMon->ReportStatusOK->Inc();
             }
         }
+
+        LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
+        ResponseEv->Orbit = std::move(ResponseEv->Orbit);
 
         this->Send(Target, ResponseEv.release());
         this->PassAway();

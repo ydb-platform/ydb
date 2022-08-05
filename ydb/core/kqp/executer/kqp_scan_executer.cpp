@@ -225,6 +225,9 @@ private:
                     Stats->AddComputeActorStats(computeActor.NodeId(), std::move(*state.MutableStats()));
                 }
 
+                LastTaskId = taskId;
+                LastComputeActorId = computeActor.ToString();
+
                 auto it = PendingComputeActors.find(computeActor);
                 if (it == PendingComputeActors.end()) {
                     LOG_W("Got execution state for compute actor: " << computeActor
@@ -870,6 +873,8 @@ private:
             }
         }
 
+        LWTRACK(KqpScanExecutorFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, Results.size());
+
         LOG_D("Sending response to: " << Target);
         Send(Target, ResponseEv.release());
         PassAway();
@@ -1002,6 +1007,9 @@ private:
     THashSet<ui64> PendingComputeTasks; // Not started yet, waiting resources
     TMap<ui64, ui64> ShardIdToNodeId;
     TMap<ui64, TVector<ui64>> ShardsOnNode;
+
+    ui64 LastTaskId = 0;
+    TString LastComputeActorId = "";
 };
 
 } // namespace

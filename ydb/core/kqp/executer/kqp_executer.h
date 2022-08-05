@@ -1,5 +1,6 @@
 #pragma once
 
+#include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_common.h>
 #include <ydb/core/kqp/common/kqp_gateway.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
@@ -18,6 +19,8 @@ struct TEvKqpExecuter {
         TKqpExecuterEvents::EvTxResponse>
     {
         NLongTxService::TLockHandle LockHandle;
+
+        NLWTrace::TOrbit Orbit;
 
         bool IsSerializable() const override {
             // We cannot serialize LockHandle, should always send locally

@@ -603,6 +603,8 @@ private:
     void HandleExecute(TEvDataShard::TEvProposeTransactionResult::TPtr& ev) {
         TEvDataShard::TEvProposeTransactionResult* res = ev->Get();
         const ui64 shardId = res->GetOrigin();
+        LastShard = shardId;
+
         TShardState* shardState = ShardStates.FindPtr(shardId);
         YQL_ENSURE(shardState);
 
@@ -1272,6 +1274,7 @@ private:
     }
 
     void Execute() {
+        LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
 
         ReadOnlyTx = true;
@@ -1644,6 +1647,8 @@ private:
             LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
         }
 
+        LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), datashardTxs.size());
+
         // first, start compute tasks
         TVector<ui64> computeTaskIds{Reserve(computeTasks.size())};
         for (auto&& taskDesc : computeTasks) {
@@ -1767,6 +1772,8 @@ private:
             return;
         }
 
+        LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, response.GetResult().ResultsSize(), response.ByteSize());
+
         LOG_D("Sending response to: " << Target << ", results: " << Results.size());
         Send(Target, ResponseEv.release());
         PassAway();
@@ -1881,6 +1888,7 @@ private:
 
     // Lock handle for a newly acquired lock
     TLockHandle LockHandle;
+    ui64 LastShard = 0;
 };
 
 } // namespace

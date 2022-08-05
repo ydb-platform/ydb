@@ -1,11 +1,13 @@
 #include "kqp_impl.h"
 #include "kqp_query_replay.h"
 
+
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
+#include <ydb/core/kqp/common/kqp_lwtrace_probes.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
@@ -13,6 +15,8 @@
 #include <library/cpp/cache/cache.h>
 
 #include <util/string/escape.h>
+
+LWTRACE_USING(KQP_PROVIDER);
 
 namespace NKikimr {
 namespace NKqp {
@@ -183,14 +187,15 @@ private:
 
 struct TKqpCompileRequest {
     TKqpCompileRequest(const TActorId& sender, const TString& uid, TKqpQueryId query, bool keepInCache,
-        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters)
+        const TString& userToken, const TInstant& deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
         , KeepInCache(keepInCache)
         , UserToken(userToken)
         , Deadline(deadline)
-        , DbCounters(dbCounters) {}
+        , DbCounters(dbCounters)
+        , Orbit(std::move(orbit)) {}
 
     TActorId Sender;
     TKqpQueryId Query;
@@ -200,6 +205,8 @@ struct TKqpCompileRequest {
     TInstant Deadline;
     TKqpDbCountersPtr DbCounters;
     TActorId CompileActor;
+
+    NLWTrace::TOrbit Orbit;
 };
 
 class TKqpRequestsQueue {
@@ -398,12 +405,18 @@ private:
     }
 
     void Handle(TEvKqp::TEvCompileRequest::TPtr& ev, const TActorContext& ctx) {
+        const auto& query = ev->Get()->Query;
+        LWTRACK(KqpCompileServiceHandleRequest, 
+            ev->Get()->Orbit, 
+            query ? query->UserSid : 0, 
+            query ? query->GetHash() : 0);
+
         try {
             PerformRequest(ev, ctx);
         }
         catch (const std::exception& e) {
             LogException("TEvCompileRequest", ev->Sender, e, ctx);
-            ReplyInternalError(ev->Sender, "", e.what(), ctx);
+            ReplyInternalError(ev->Sender, "", e.what(), ctx, std::move(ev->Get()->Orbit));
         }
     }
 
@@ -436,7 +449,7 @@ private:
                         << ", queryUid: " << *request.Uid);
 
 
-                    ReplyFromCache(ev->Sender, compileResult, ctx);
+                    ReplyFromCache(ev->Sender, compileResult, ctx, std::move(ev->Get()->Orbit));
                     return;
                 } else {
                     LOG_NOTICE_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Non-matching user sid for query"
@@ -454,7 +467,7 @@ private:
                 << ", queryUid: " << *request.Uid);
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << *request.Uid);
-            ReplyError(ev->Sender, *request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx);
+            ReplyError(ev->Sender, *request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx, std::move(ev->Get()->Orbit));
             return;
         }
 
@@ -477,14 +490,20 @@ private:
                 << ", sender: " << ev->Sender
                 << ", queryUid: " << compileResult->Uid);
 
-            ReplyFromCache(ev->Sender, compileResult, ctx);
+            ReplyFromCache(ev->Sender, compileResult, ctx, std::move(ev->Get()->Orbit));
             return;
         }
 
         Counters->ReportQueryCacheHit(dbCounters, false);
 
+        LWTRACK(KqpCompileServiceEnqueued, 
+            ev->Get()->Orbit, 
+            ev->Get()->Query ? ev->Get()->Query->UserSid : 0, 
+            ev->Get()->Query ? ev->Get()->Query->GetHash() : 0);
+        
+
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
-            request.KeepInCache, request.UserToken, request.Deadline, dbCounters);
+            request.KeepInCache, request.UserToken, request.Deadline, dbCounters, std::move(ev->Get()->Orbit));
 
         if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
             Counters->ReportCompileRequestRejected(dbCounters);
@@ -495,7 +514,7 @@ private:
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                 "Exceeded maximum number of requests in compile service queue.");
-            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx);
+            ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, std::move(ev->Get()->Orbit));
             return;
         }
 
@@ -512,7 +531,7 @@ private:
         }
         catch (const std::exception& e) {
             LogException("TEvRecompileRequest", ev->Sender, e, ctx);
-            ReplyInternalError(ev->Sender, "", e.what(), ctx);
+            ReplyInternalError(ev->Sender, "", e.what(), ctx, std::move(ev->Get()->Orbit));
         }
     }
 
@@ -541,7 +560,7 @@ private:
 
                 NYql::TIssue issue(NYql::TPosition(), TStringBuilder() <<
                     "Exceeded maximum number of requests in compile service queue.");
-                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx);
+                ReplyError(ev->Sender, "", Ydb::StatusIds::OVERLOADED, {issue}, ctx, std::move(ev->Get()->Orbit));
                 return;
             }
         } else {
@@ -550,7 +569,7 @@ private:
                 << ", queryUid: " << request.Uid);
 
             NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Query not found: " << request.Uid);
-            ReplyError(ev->Sender, request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx);
+            ReplyError(ev->Sender, request.Uid, Ydb::StatusIds::NOT_FOUND, {issue}, ctx, std::move(ev->Get()->Orbit));
             return;
         }
 
@@ -593,7 +612,8 @@ private:
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
-                    Reply(request.Sender, compileResult, compileStats, ctx);
+                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, request.Query.GetHash(), compileActorId.ToString());
+                    Reply(request.Sender, compileResult, compileStats, ctx, std::move(request.Orbit));
                 }
             } else {
                 if (QueryCache.FindByUid(compileResult->Uid, false)) {
@@ -601,11 +621,12 @@ private:
                 }
             }
 
-            Reply(compileRequest.Sender, compileResult, compileStats, ctx);
+            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileRequest.Query.GetHash(), compileActorId.ToString());
+            Reply(compileRequest.Sender, compileResult, compileStats, ctx, std::move(compileRequest.Orbit));
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
-            ReplyInternalError(compileRequest.Sender, compileResult->Uid, e.what(), ctx);
+            ReplyInternalError(compileRequest.Sender, compileResult->Uid, e.what(), ctx, std::move(compileRequest.Orbit));
         }
 
         ProcessQueue(ctx);
@@ -663,7 +684,7 @@ private:
                 Counters->ReportCompileRequestTimeout(request->DbCounters);
 
                 NYql::TIssue issue(NYql::TPosition(), "Compilation timed out.");
-                ReplyError(request->Sender, "", Ydb::StatusIds::TIMEOUT, {issue}, ctx);
+                ReplyError(request->Sender, "", Ydb::StatusIds::TIMEOUT, {issue}, ctx, std::move(request->Orbit));
             } else {
                 StartCompilation(std::move(*request), ctx);
             }
@@ -695,14 +716,21 @@ private:
     }
 
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
-        const NKqpProto::TKqpStatsCompile& compileStats, const TActorContext& ctx)
+        const NKqpProto::TKqpStatsCompile& compileStats, const TActorContext& ctx, NLWTrace::TOrbit orbit)
     {
+        const auto& query = compileResult->Query;
+        LWTRACK(KqpCompileServiceReply, 
+            orbit, 
+            query ? query->UserSid : 0, 
+            query ? query->GetHash() : 0, 
+            compileResult->Issues.ToString());
+
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"
             << ", sender: " << sender
             << ", queryUid: " << compileResult->Uid
             << ", status:" << compileResult->Status);
 
-        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult);
+        auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats.CopyFrom(compileStats);
 
         if (responseEv->CompileResult && responseEv->CompileResult->PreparedQueryNewEngine) {
@@ -714,27 +742,27 @@ private:
     }
 
     void ReplyFromCache(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
-        const TActorContext& ctx)
+        const TActorContext& ctx, NLWTrace::TOrbit orbit)
     {
         NKqpProto::TKqpStatsCompile stats;
         stats.SetFromCache(true);
 
-        Reply(sender, compileResult, stats, ctx);
+        Reply(sender, compileResult, stats, ctx, std::move(orbit));
     }
 
     void ReplyError(const TActorId& sender, const TString& uid, Ydb::StatusIds::StatusCode status,
-        const TIssues& issues, const TActorContext& ctx)
+        const TIssues& issues, const TActorContext& ctx, NLWTrace::TOrbit orbit)
     {
-        Reply(sender, TKqpCompileResult::Make(uid, status, issues), NKqpProto::TKqpStatsCompile(), ctx);
+        Reply(sender, TKqpCompileResult::Make(uid, status, issues), NKqpProto::TKqpStatsCompile(), ctx, std::move(orbit));
     }
 
     void ReplyInternalError(const TActorId& sender, const TString& uid, const TString& message,
-        const TActorContext& ctx)
+        const TActorContext& ctx, NLWTrace::TOrbit orbit)
     {
         NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Internal error during query compilation.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(NYql::TPosition(), message));
 
-        ReplyError(sender, uid, Ydb::StatusIds::INTERNAL_ERROR, {issue}, ctx);
+        ReplyError(sender, uid, Ydb::StatusIds::INTERNAL_ERROR, {issue}, ctx, std::move(orbit));
     }
 
     static void LogException(const TString& scope, const TActorId& sender, const std::exception& e,

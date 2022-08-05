@@ -9,6 +9,7 @@
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 
 #include <library/cpp/actors/core/actorid.h>
+#include <library/cpp/lwtrace/shuttle.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -125,6 +126,8 @@ public:
         NKikimrKqp::EIsolationLevel IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         TMaybe<NKikimrKqp::TRlPath> RlPath;
         bool NeedTxId = true;
+
+        NLWTrace::TOrbit Orbit;
     };
 
     struct TExecPhysicalResult : public TGenericResult {

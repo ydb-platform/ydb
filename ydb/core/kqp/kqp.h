@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_query_replay.h"
+#include <library/cpp/lwtrace/shuttle.h>
 #include <ydb/core/kqp/common/kqp_common.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/provider/yql_kikimr_query_traits.h>
@@ -367,13 +368,14 @@ struct TEvKqp {
 
     struct TEvCompileRequest : public TEventLocal<TEvCompileRequest, TKqpEvents::EvCompileRequest> {
         TEvCompileRequest(const TString& userToken, const TMaybe<TString>& uid, TMaybe<TKqpQueryId>&& query,
-            bool keepInCache, TInstant deadline, TKqpDbCountersPtr dbCounters)
+            bool keepInCache, TInstant deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
             : UserToken(userToken)
             , Uid(uid)
             , Query(std::move(query))
             , KeepInCache(keepInCache)
             , Deadline(deadline)
             , DbCounters(dbCounters)
+            , Orbit(std::move(orbit))
         {
             Y_ENSURE(Uid.Defined() != Query.Defined());
         }
@@ -386,16 +388,19 @@ struct TEvKqp {
         TInstant Deadline;
         TKqpDbCountersPtr DbCounters;
         TMaybe<bool> DocumentApiRestricted;
+
+        NLWTrace::TOrbit Orbit;
     };
 
     struct TEvRecompileRequest : public TEventLocal<TEvRecompileRequest, TKqpEvents::EvRecompileRequest> {
         TEvRecompileRequest(const TString& userToken, const TString& uid, const TMaybe<TKqpQueryId>& query,
-            TInstant deadline, TKqpDbCountersPtr dbCounters)
+            TInstant deadline, TKqpDbCountersPtr dbCounters, NLWTrace::TOrbit orbit = {})
             : UserToken(userToken)
             , Uid(uid)
             , Query(query)
             , Deadline(deadline)
-            , DbCounters(dbCounters) {}
+            , DbCounters(dbCounters)
+            , Orbit(std::move(orbit)) {}
 
         TString UserToken;
         TString Uid;
@@ -403,11 +408,14 @@ struct TEvKqp {
 
         TInstant Deadline;
         TKqpDbCountersPtr DbCounters;
+
+        NLWTrace::TOrbit Orbit;
     };
 
     struct TEvCompileResponse : public TEventLocal<TEvCompileResponse, TKqpEvents::EvCompileResponse> {
-        TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult)
-            : CompileResult(compileResult) {}
+        TEvCompileResponse(const TKqpCompileResult::TConstPtr& compileResult, NLWTrace::TOrbit orbit = {})
+            : CompileResult(compileResult)
+            , Orbit(std::move(orbit)) {}
 
         TKqpCompileResult::TConstPtr CompileResult;
         NKqpProto::TKqpStatsCompile Stats;
@@ -415,6 +423,8 @@ struct TEvKqp {
 
         ui32 ForceNewEnginePercent = 0;
         ui32 ForceNewEngineLevel = 0;
+
+        NLWTrace::TOrbit Orbit;
     };
 
     struct TEvCompileInvalidateRequest : public TEventLocal<TEvCompileInvalidateRequest,

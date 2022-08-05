@@ -312,9 +312,12 @@ public:
         YQL_ENSURE(queryRequest.HasAction());
         auto action = queryRequest.GetAction();
 
-        LWTRACK(KqpQueryRequest, QueryState->Orbit, queryRequest.GetDatabase(),
-                queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED,
-                action, queryRequest.GetQuery());
+        LWTRACK(KqpSessionQueryRequest, 
+            QueryState->Orbit, 
+            queryRequest.GetDatabase(),
+            queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED,
+            action, 
+            queryRequest.GetQuery());
         LOG_D(requestInfo << "Received request,"
             << " selfId : " << SelfId()
             << " proxyRequestId: " << proxyRequestId
@@ -422,8 +425,11 @@ public:
         }
 
         auto compileRequestActor = CreateKqpCompileRequestActor(SelfId(), QueryState->UserToken, uid,
-            std::move(query), keepInCache, compileDeadline, Settings.DbCounters);
+            std::move(query), keepInCache, compileDeadline, Settings.DbCounters, 
+            QueryState ? std::move(QueryState->Orbit) : NLWTrace::TOrbit());
+        
         TlsActivationContext->ExecutorThread.RegisterActor(compileRequestActor);
+
         Become(&TKqpSessionActor::CompileState);
     }
 
@@ -433,11 +439,12 @@ public:
 
     void HandleCompile(TEvKqp::TEvCompileResponse::TPtr& ev) {
         auto compileResult = ev->Get()->CompileResult;
+        QueryState->Orbit = std::move(ev->Get()->Orbit);
 
         YQL_ENSURE(compileResult);
         YQL_ENSURE(QueryState);
 
-        LWTRACK(KqpQueryCompiled, QueryState->Orbit, TStringBuilder() << compileResult->Status);
+        LWTRACK(KqpSessionQueryCompiled, QueryState->Orbit, TStringBuilder() << compileResult->Status);
 
         if (compileResult->Status != Ydb::StatusIds::SUCCESS) {
             ReplyQueryCompileError(compileResult);
@@ -898,7 +905,7 @@ public:
                     << "Failed to mix queries with old- and new- engines";
             }
             if (QueryState->CurrentTx + 1 < phyQuery.TransactionsSize()) {
-                LWTRACK(KqpPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
+                LWTRACK(KqpSessionPhyQueryDefer, QueryState->Orbit, QueryState->CurrentTx);
                 ++QueryState->CurrentTx;
                 tx = std::shared_ptr<const NKqpProto::TKqpPhyTx>(QueryState->PreparedQuery,
                         &phyQuery.GetTransactions(QueryState->CurrentTx));
@@ -980,16 +987,24 @@ public:
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
         }
 
-        LWTRACK(KqpPhyQueryProposeTx, QueryState->Orbit, QueryState->CurrentTx, request.Transactions.size(),
-                request.Locks.size(), request.AcquireLocksTxId.Defined());
+        LWTRACK(KqpSessionPhyQueryProposeTx, 
+            QueryState->Orbit, 
+            QueryState->CurrentTx, 
+            request.Transactions.size(),
+            request.Locks.size(), 
+            request.AcquireLocksTxId.Defined());
         SendToExecuter(std::move(request));
         return false;
     }
 
     void SendToExecuter(IKqpGateway::TExecPhysicalRequest&& request) {
+        if (QueryState) {
+            request.Orbit = std::move(QueryState->Orbit);
+        }
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
                 (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
                 RequestCounters);
+        
         ExecuterId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
         LOG_D("Created new KQP executer: " << ExecuterId);
 
@@ -1038,6 +1053,8 @@ public:
     }
 
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        QueryState->Orbit = std::move(ev->Get()->Orbit);
+
         auto* response = ev->Get()->Record.MutableResponse();
         auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
         LOG_D(SelfId() << " " << requestInfo << " TEvTxResponse, CurrentTx: " << QueryState->CurrentTx
@@ -1067,7 +1084,7 @@ public:
         }
 
         YQL_ENSURE(QueryState);
-        LWTRACK(KqpPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, response->GetResult().ResultsSize());
+        LWTRACK(KqpSessionPhyQueryTxResponse, QueryState->Orbit, QueryState->CurrentTx, response->GetResult().ResultsSize());
 
         auto& txResult = *response->MutableResult();
         QueryState->QueryCtx->TxResults.emplace_back(ExtractTxResults(txResult));
@@ -1471,9 +1488,9 @@ public:
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
-            LWTRACK(KqpQueryReplySuccess, QueryState->Orbit, record.GetArena()->SpaceUsed());
+            LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
         } else {
-            LWTRACK(KqpQueryReplyError, QueryState->Orbit, TStringBuilder() << status);
+            LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         LOG_D(requestInfo << "Sent query response back to proxy, proxyRequestId: " << QueryState->ProxyRequestId

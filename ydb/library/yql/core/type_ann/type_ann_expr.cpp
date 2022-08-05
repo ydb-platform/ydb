@@ -592,6 +592,20 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
         CreateConfigureTransformer(typeAnnotationContext),
         "Configure",
         issueCode));
+
+    // NOTE: add fake EvaluateExpression step to break infinite loop
+    // (created by Repeat on ExprEval step after RewriteIO completion)
+    transformers.push_back(TTransformStage(
+        CreateFunctorTransformer(
+            [](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+                output = input;
+                ctx.Step.Done(TExprStep::ExprEval);
+                return IGraphTransformer::TStatus::Ok;
+            }
+        ),
+        "EvaluateExpression",
+        issueCode));
+
     transformers.push_back(TTransformStage(
         CreateIODiscoveryTransformer(typeAnnotationContext),
         "IODiscovery",

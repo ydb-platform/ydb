@@ -124,9 +124,12 @@ private:
         bool hasRepeats = HasRepeats;
         HasRepeats = false;
         if (NewRoots.empty()) {
-            return hasRepeats
-                ? TStatus::Repeat
-                : TStatus::Ok;
+            if (hasRepeats) {
+                return TStatus::Repeat;
+            }
+
+            Finish(ctx);
+            return TStatus::Ok;
         }
 
         ChooseRoot(std::move(input), output);

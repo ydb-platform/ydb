@@ -36,7 +36,8 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
 
     if (
         !ctx.Step.IsDone(TExprStep::DiscoveryIO) ||
-        !ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas)
+        !ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas) ||
+        !ctx.Step.IsDone(TExprStep::ExprEval)
     ) {
         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true);
     }

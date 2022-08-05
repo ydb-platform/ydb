@@ -11,6 +11,33 @@ namespace NYql::NPathGenerator {
 
 namespace {
 
+TInstant Strptime(const TString& input, const TString& format) {
+    struct tm inputTm;
+    memset(&inputTm, 0, sizeof(tm));
+    inputTm.tm_mday = 1;
+    if (strptime(input.data(), format.data(), &inputTm) != nullptr) {
+        const time_t seconds = TimeGM(&inputTm);
+        if (seconds != static_cast<time_t>(-1)) {
+            return TInstant::Seconds(seconds);
+        }
+    }
+    ythrow yexception() << "Can't parse date " << input << " in format " << format;
+}
+
+TString Strftime(const char* format, TInstant time) {
+    struct tm tm{};
+    time_t clock = time.Seconds();
+    localtime_r(&clock, &tm);
+    size_t size = Max<size_t>(strlen(format) * 2 + 1, 107);
+    TTempBuf buf(size);
+    int r = strftime(buf.Data(), buf.Size(), format, &tm);
+    if (r != 0) {
+        return TString(buf.Data(), r);
+    }
+    ythrow yexception() << "Can't format date " << time << " in format " << format;
+}
+
+
 void ReplaceAll(TString& str, const TString& from, const TString& to) {
     size_t start_pos = 0;
     while((start_pos = str.find(from, start_pos)) != TString::npos) {
@@ -213,8 +240,8 @@ public:
             return fmtInteger(config.Digits, value);
         }
         case IPathGenerator::EType::DATE: {
-            TInstant time = TInstant::Zero() /* ToInstant(dataValue) */;
-            return time.FormatLocalTime(config.Format.c_str());
+            TInstant time = TInstant::ParseIso8601(dataValue);
+            return Strftime(config.Format.c_str(), time);
         }
         break;
         }
@@ -244,8 +271,8 @@ public:
             return std::to_string(value);
         }
         case IPathGenerator::EType::DATE: {
-            TInstant time = TInstant::Zero() /* ToInstant(dataValue) */;
-            return time.FormatLocalTime(config.Format.c_str());
+            TInstant time = Strptime(TString{pathValue}, config.Format);
+            return time.ToStringLocal();
         }
         break;
         }
@@ -500,7 +527,7 @@ private:
         const TDuration interval = FromUnit(rule.Interval, rule.IntervalUnit);
         for (TInstant current = ParseDate(rule.From, now); current <= to; current += interval) {
             TString copyLocationTemplate = locationTemplate;
-            const TString time = current.FormatLocalTime(rule.Format.c_str());
+            const TString time = Strftime(rule.Format.c_str(), current);
             ReplaceAll(copyLocationTemplate, "${" + rule.Name + "}", time);
             columnsWithValue.push_back(TColumnWithValue{.Name=rule.Name, .Type=NUdf::EDataSlot::String, .Value=time});
             DoGenerate(rules, copyLocationTemplate, columnsWithValue, result, pathsLimit, now, p + 1);

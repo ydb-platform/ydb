@@ -6,8 +6,7 @@ provides several configurable diagnostic macros similar in behavior and purpose 
 
 ## Documentation
 
-See the documentation of [BOOST_ASSERT](doc/assert.adoc) and
-[BOOST_CURRENT_FUNCTION](doc/current_function.adoc) for more information.
+See [the documentation](https://boost.org/libs/assert) for more information.
 
 ## License
 

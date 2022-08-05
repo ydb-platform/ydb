@@ -12,5 +12,6 @@ target_link_libraries(boost-libs-graph INTERFACE
   contrib-libs-cxxsupp
   contrib-restricted-boost
   restricted-boost-atomic
+  restricted-boost-exception
   boost-libs-filesystem
 )

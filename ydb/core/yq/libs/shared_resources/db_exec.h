@@ -219,6 +219,7 @@ public:
     }
 
     TAsyncStatus Execute(NYdb::NTable::TSession& session) override {
+        CurrentStepIndex = 0;
         if (StateInitCallback) {
             StateInitCallback(*this);
         }

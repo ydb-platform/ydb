@@ -697,8 +697,8 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
 
     Y_UNIT_TEST(WithSchemaEquals) {
         TCases cases = {
-            {"select * from plato.T with (format= csv_with_names, schema=(year int32, month String, day String, a Utf8, b Uint16));",
-             "SELECT\n\t*\nFROM plato.T\n\tWITH (format = csv_with_names, SCHEMA = (year int32, month String, day String, a Utf8, b Uint16));\n"},
+            {"select * from plato.T with (format= csv_with_names, schema=(year int32 Null, month String, day String not   null, a Utf8, b Uint16));",
+             "SELECT\n\t*\nFROM plato.T\n\tWITH (format = csv_with_names, SCHEMA = (year int32 NULL, month String, day String NOT NULL, a Utf8, b Uint16));\n"},
              };
 
         TSetup setup;

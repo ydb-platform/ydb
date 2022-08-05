@@ -552,11 +552,22 @@ namespace NTypeAnnImpl {
         }
 
         auto type = input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-        if (!EnsureDataType(input->Head().Pos(), *type, ctx.Expr)) {
+        if (input->IsCallable("DataOrOptionalData")) {
+            bool isOptional;
+            const TDataExprType* dataType;
+            if (!EnsureDataOrOptionalOfData(input->Pos(), type, isOptional, dataType, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+            output = ctx.Expr.NewCallable(input->Pos(), dataType->GetName(), { input->ChildPtr(1) });
+            if (isOptional) {
+                output = ctx.Expr.NewCallable(input->Pos(), "Just", { output });
+            }
+        } else if (EnsureDataType(input->Head().Pos(), *type, ctx.Expr)) {
+            output = ctx.Expr.NewCallable(input->Pos(), type->Cast<TDataExprType>()->GetName(), { input->ChildPtr(1) });
+        } else {
             return IGraphTransformer::TStatus::Error;
         }
 
-        output = ctx.Expr.NewCallable(input->Pos(), type->Cast<TDataExprType>()->GetName(), { input->ChildPtr(1) });
         return IGraphTransformer::TStatus::Repeat;
     }
 
@@ -4833,6 +4844,23 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         input->SetTypeAnn(type);
         return IGraphTransformer::TStatus::Ok;
+    }
+
+    IGraphTransformer::TStatus AsOptionalTypeWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (auto status = EnsureTypeRewrite(input->HeadRef(), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (input->Head().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->IsOptionalOrNull()) {
+            output = input->HeadPtr();
+        } else {
+            output = ctx.Expr.NewCallable(input->Pos(), "OptionalType", { input->HeadPtr() });
+        }
+        return IGraphTransformer::TStatus::Repeat;
     }
 
     IGraphTransformer::TStatus OptionalWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
@@ -10932,6 +10960,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
     TSyncFunctionsMap::TSyncFunctionsMap() {
         Functions["Data"] = &DataWrapper;
+        Functions["DataOrOptionalData"] = &DataWrapper;
         Functions["DataSource"] = &DataSourceWrapper;
         Functions["Key"] = &KeyWrapper;
         Functions[LeftName] = &LeftWrapper;
@@ -11152,6 +11181,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["StreamType"] = &TypeWrapper<ETypeAnnotationKind::Stream>;
         Functions["FlowType"] = &TypeWrapper<ETypeAnnotationKind::Flow>;
         Functions["Nothing"] = &NothingWrapper;
+        Functions["AsOptionalType"] = &AsOptionalTypeWrapper;
         Functions["List"] = &ListWrapper;
         Functions["DictType"] = &TypeWrapper<ETypeAnnotationKind::Dict>;
         Functions["Dict"] = &DictWrapper;

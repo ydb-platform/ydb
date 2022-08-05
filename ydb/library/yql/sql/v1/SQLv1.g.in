@@ -254,7 +254,7 @@ type_name_tag: id | STRING_VALUE | bind_parameter;
 
 struct_arg: type_name_tag COLON type_name_or_bind;
 struct_arg_positional:
-    type_name_tag type_name_or_bind
+    type_name_tag type_name_or_bind (NOT? NULL)?
   | type_name_or_bind AS type_name_tag; //deprecated
 variant_arg: (type_name_tag COLON)? type_name_or_bind;
 callable_arg: variant_arg (LBRACE_CURLY AUTOMAP RBRACE_CURLY)?;

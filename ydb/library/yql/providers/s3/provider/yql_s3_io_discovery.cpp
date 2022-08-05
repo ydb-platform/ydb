@@ -190,7 +190,7 @@ public:
                             ctx.Builder(object.Pos())
                                 .List()
                                     .Atom(0, col)
-                                    .Callable(1, "Data")
+                                    .Callable(1, "DataOrOptionalData")
                                         .Callable(0, "StructMemberType")
                                             .Add(0, generatedColumnsConfig->SchemaTypeNode)
                                             .Atom(1, col)

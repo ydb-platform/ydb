@@ -3056,7 +3056,7 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
             bool warn = false;
             auto processItem = [&](const TRule_struct_arg_positional& arg) {
                 // struct_arg_positional:
-                //     type_name_tag type_name_or_bind
+                //     type_name_tag type_name_or_bind (NOT? NULL)?
                 //   | type_name_or_bind AS type_name_tag; //deprecated
                 const bool altCurrent = arg.Alt_case() == TRule_struct_arg_positional::kAltStructArgPositional1;
                 auto& typeNameOrBind = altCurrent ?
@@ -3072,6 +3072,13 @@ bool TSqlTranslation::TableHintImpl(const TRule_table_hint& rule, TTableHints& h
                     Ctx.Warning(pos, TIssuesIds::YQL_DEPRECATED_POSITIONAL_SCHEMA)
                         << "Deprecated syntax for positional schema: please use 'column type' instead of 'type AS column'";
                     warn = true;
+                }
+
+                if (altCurrent) {
+                    bool notNull = arg.GetAlt_struct_arg_positional1().HasBlock3() && arg.GetAlt_struct_arg_positional1().GetBlock3().HasBlock1();
+                    if (!notNull) {
+                        typeNode = new TCallNodeImpl(pos, "AsOptionalType", { typeNode });
+                    }
                 }
 
                 auto& typeNameTag = altCurrent ?

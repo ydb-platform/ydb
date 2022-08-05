@@ -103,8 +103,12 @@ message StreamDescription {
     StreamStatus stream_status = 9;
     // Name of the stream
     string stream_name = 10;
+    // YDS-specific Write quota in KB/S
     int32 write_quota_kb_per_sec = 11;
+    // YDS-specific Owner of the stream
     string owner = 12;
+    // YDS-specific Storage limit in MB of the stream
+    int64 storage_limit_mb = 13;
 }
 
 // Represents range of possible sequence numbers for the shard

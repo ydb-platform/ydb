@@ -609,6 +609,10 @@ namespace NKikimr::NDataStreams::V1 {
         ui32 retentionPeriodHours = TInstant::Seconds(pqConfig.GetPartitionConfig().GetLifetimeSeconds()).Hours();
         description.set_retention_period_hours(retentionPeriodHours);
         description.set_write_quota_kb_per_sec(writeSpeed);
+        if (pqConfig.GetPartitionConfig().HasStorageLimitBytes()) {
+            ui32 storageLimitMb = pqConfig.GetPartitionConfig().GetStorageLimitBytes() / 1_MB;
+            description.set_storage_limit_mb(storageLimitMb);
+        }
         if (SelfInfo.GetCreateFinished()) {
             description.set_stream_status(Ydb::DataStreams::V1::StreamDescription::ACTIVE);
         } else {

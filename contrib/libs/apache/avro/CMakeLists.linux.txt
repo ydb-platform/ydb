@@ -10,6 +10,7 @@
 add_library(libs-apache-avro)
 target_compile_options(libs-apache-avro PRIVATE
   -DAVRO_SOURCE
+  -DAVRO_VERSION="1.11.1"
   -DBOOST_ALL_NO_LIB
   -DBOOST_ATOMIC_DYN_LINK
   -DBOOST_FILESYSTEM_DYN_LINK
@@ -34,6 +35,7 @@ target_sources(libs-apache-avro PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryDecoder.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/BinaryEncoder.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Compiler.cc
+  ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/CustomFields.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/DataFile.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/FileStream.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/apache/avro/impl/Generic.cc

@@ -3,9 +3,9 @@
 //  (C) Copyright Daryle Walker and Stephen Cleary 2001-2002.
 //  Distributed under the Boost Software License, Version 1.0. (See
 //  accompanying file LICENSE_1_0.txt or copy at
-//  http://www.boost.org/LICENSE_1_0.txt)
+//  https://www.boost.org/LICENSE_1_0.txt)
 
-//  See http://www.boost.org for updates, documentation, and revision history. 
+//  See https://www.boost.org for updates, documentation, and revision history. 
 
 #ifndef BOOST_INTEGER_COMMON_FACTOR_CT_HPP
 #define BOOST_INTEGER_COMMON_FACTOR_CT_HPP
@@ -30,7 +30,7 @@ namespace detail
         BOOST_STATIC_CONSTANT( static_gcd_type, new_value1 = Value2 );
         BOOST_STATIC_CONSTANT( static_gcd_type, new_value2 = Value1 % Value2 );
 
-        #ifndef __BORLANDC__
+        #ifndef BOOST_BORLANDC
         #define BOOST_DETAIL_GCD_HELPER_VAL(Value) static_cast<static_gcd_type>(Value)
         #else
         typedef static_gcd_helper_t  self_type;

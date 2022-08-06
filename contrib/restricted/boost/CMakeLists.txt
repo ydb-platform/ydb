@@ -27,6 +27,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-move
   restricted-boost-mp11
   restricted-boost-mpl
+  restricted-boost-polygon
   restricted-boost-predef
   restricted-boost-preprocessor
   restricted-boost-rational

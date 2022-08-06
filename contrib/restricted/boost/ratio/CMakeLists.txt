@@ -7,12 +7,18 @@
 
 
 
-add_library(boost-libs-graph INTERFACE)
-target_link_libraries(boost-libs-graph INTERFACE
+add_library(restricted-boost-ratio INTERFACE)
+target_include_directories(restricted-boost-ratio INTERFACE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/ratio/include
+)
+target_link_libraries(restricted-boost-ratio INTERFACE
   contrib-libs-cxxsupp
-  contrib-restricted-boost
-  restricted-boost-atomic
-  restricted-boost-exception
-  boost-libs-filesystem
-  boost-libs-thread
+  yutil
+  restricted-boost-config
+  restricted-boost-core
+  restricted-boost-integer
+  restricted-boost-mpl
+  restricted-boost-rational
+  restricted-boost-static_assert
+  restricted-boost-type_traits
 )

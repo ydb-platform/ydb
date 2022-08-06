@@ -19,6 +19,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-bind
   restricted-boost-concept_check
   restricted-boost-config
+  restricted-boost-conversion
   restricted-boost-core
   restricted-boost-endian
   restricted-boost-exception

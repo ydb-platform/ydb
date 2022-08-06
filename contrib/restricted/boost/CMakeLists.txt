@@ -34,6 +34,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-throw_exception
   restricted-boost-tuple
   restricted-boost-type_traits
+  restricted-boost-typeof
   restricted-boost-utility
   restricted-boost-vmd
   restricted-boost-winapi

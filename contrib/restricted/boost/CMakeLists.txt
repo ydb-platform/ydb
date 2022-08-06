@@ -21,6 +21,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-config
   restricted-boost-conversion
   restricted-boost-core
+  restricted-boost-detail
   restricted-boost-endian
   restricted-boost-exception
   restricted-boost-integer

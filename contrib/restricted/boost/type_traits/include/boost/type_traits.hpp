@@ -21,9 +21,14 @@
 #include <boost/type_traits/alignment_of.hpp>
 #include <boost/type_traits/common_type.hpp>
 #include <boost/type_traits/conditional.hpp>
+#include <boost/type_traits/conjunction.hpp>
 #include <boost/type_traits/copy_cv.hpp>
+#include <boost/type_traits/copy_cv_ref.hpp>
+#include <boost/type_traits/copy_reference.hpp>
 #include <boost/type_traits/decay.hpp>
 #include <boost/type_traits/declval.hpp>
+#include <boost/type_traits/disjunction.hpp>
+#include <boost/type_traits/enable_if.hpp>
 #include <boost/type_traits/extent.hpp>
 #include <boost/type_traits/floating_point_promotion.hpp>
 #include <boost/type_traits/function_traits.hpp>
@@ -55,7 +60,7 @@
 #include <boost/type_traits/has_multiplies.hpp>
 #include <boost/type_traits/has_multiplies_assign.hpp>
 #include <boost/type_traits/has_negate.hpp>
-#if !defined(__BORLANDC__) && !defined(__CUDACC__)
+#if !defined(BOOST_BORLANDC) && (!(defined(__CUDACC__) && (__CUDACC_VER_MAJOR__ < 11)) || defined(__CUDA__))
 #include <boost/type_traits/has_new_operator.hpp>
 #endif
 #include <boost/type_traits/has_not_equal_to.hpp>
@@ -123,9 +128,12 @@
 #include <boost/type_traits/is_rvalue_reference.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/type_traits/is_scalar.hpp>
+#include <boost/type_traits/is_scoped_enum.hpp>
 #include <boost/type_traits/is_signed.hpp>
 #include <boost/type_traits/is_stateless.hpp>
+#include <boost/type_traits/is_trivially_copyable.hpp>
 #include <boost/type_traits/is_union.hpp>
+#include <boost/type_traits/is_unscoped_enum.hpp>
 #include <boost/type_traits/is_unsigned.hpp>
 #include <boost/type_traits/is_virtual_base_of.hpp>
 #include <boost/type_traits/is_void.hpp>
@@ -133,6 +141,7 @@
 #include <boost/type_traits/make_signed.hpp>
 #include <boost/type_traits/make_unsigned.hpp>
 #include <boost/type_traits/make_void.hpp>
+#include <boost/type_traits/negation.hpp>
 #include <boost/type_traits/rank.hpp>
 #include <boost/type_traits/remove_all_extents.hpp>
 #include <boost/type_traits/remove_bounds.hpp>

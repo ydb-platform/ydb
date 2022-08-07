@@ -27,10 +27,11 @@ struct is_likely_stateless_lambda : public false_type {};
 
 }}
 
-#elif !defined(BOOST_NO_CXX11_LAMBDAS) && !defined(BOOST_NO_CXX11_DECLTYPE) && !defined(BOOST_NO_CXX11_TEMPLATE_ALIASES) && !BOOST_WORKAROUND(BOOST_MSVC, < 1900)
+#elif !defined(BOOST_NO_CXX11_LAMBDAS) && !defined(BOOST_NO_CXX11_DECLTYPE) && !defined(BOOST_NO_CXX11_TEMPLATE_ALIASES) && !BOOST_WORKAROUND(BOOST_MSVC, < 1900)\
+         && !(BOOST_WORKAROUND(BOOST_MSVC, == 1900) && defined(_MANAGED))
 
 #include <boost/type_traits/is_convertible.hpp>
-#include <boost/core/enable_if.hpp>
+#include <boost/type_traits/enable_if.hpp>
 
 namespace boost{
 
@@ -70,7 +71,7 @@ struct is_likely_stateless_lambda : false_type{};
 template<typename T>
 struct is_likely_stateless_lambda<
   T,
-  typename boost::enable_if_c<has_one_operator_call<T>::value>::type> : 
+  typename boost::enable_if_<has_one_operator_call<T>::value>::type> :
      boost::is_convertible<T, typename equivalent_function_pointer<T>::type
 >{};
 

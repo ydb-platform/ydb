@@ -34,6 +34,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-polygon
   restricted-boost-predef
   restricted-boost-preprocessor
+  restricted-boost-qvm
   restricted-boost-rational
   restricted-boost-smart_ptr
   restricted-boost-static_assert

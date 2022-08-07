@@ -17,11 +17,13 @@
 #include <cstddef>
 #include <boost/memory_order.hpp>
 #include <boost/atomic/detail/config.hpp>
-#include <boost/atomic/detail/storage_type.hpp>
+#include <boost/atomic/detail/storage_traits.hpp>
 #include <boost/atomic/detail/extra_operations_fwd.hpp>
 #include <boost/atomic/detail/extra_ops_generic.hpp>
 #include <boost/atomic/detail/ops_gcc_ppc_common.hpp>
-#include <boost/atomic/capabilities.hpp>
+#include <boost/atomic/detail/gcc_ppc_asm_common.hpp>
+#include <boost/atomic/detail/capabilities.hpp>
+#include <boost/atomic/detail/header.hpp>
 
 #ifdef BOOST_HAS_PRAGMA_ONCE
 #pragma once
@@ -32,7 +34,7 @@ namespace atomics {
 namespace detail {
 
 template< typename Base >
-struct gcc_ppc_extra_operations_common :
+struct extra_operations_gcc_ppc_common :
     public Base
 {
     typedef Base base_type;
@@ -85,192 +87,192 @@ struct gcc_ppc_extra_operations_common :
 };
 
 template< typename Base, std::size_t Size, bool Signed >
-struct gcc_ppc_extra_operations;
+struct extra_operations_gcc_ppc;
 
 #if defined(BOOST_ATOMIC_DETAIL_PPC_HAS_LBARX_STBCX)
 
 template< typename Base, bool Signed >
-struct gcc_ppc_extra_operations< Base, 1u, Signed > :
-    public generic_extra_operations< Base, 1u, Signed >
+struct extra_operations_gcc_ppc< Base, 1u, Signed > :
+    public extra_operations_generic< Base, 1u, Signed >
 {
-    typedef generic_extra_operations< Base, 1u, Signed > base_type;
+    typedef extra_operations_generic< Base, 1u, Signed > base_type;
     typedef typename base_type::storage_type storage_type;
 
     static BOOST_FORCEINLINE storage_type fetch_negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type add(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "add %1,%0,%3\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type sub(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "sub %1,%0,%3\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_and(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "and %1,%0,%3\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_or(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "or %1,%0,%3\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_xor(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "xor %1,%0,%3\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type fetch_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lbarx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "stbcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 };
 
 template< typename Base, bool Signed >
 struct extra_operations< Base, 1u, Signed, true > :
-    public gcc_ppc_extra_operations_common< gcc_ppc_extra_operations< Base, 1u, Signed > >
+    public extra_operations_gcc_ppc_common< extra_operations_gcc_ppc< Base, 1u, Signed > >
 {
 };
 
@@ -279,180 +281,180 @@ struct extra_operations< Base, 1u, Signed, true > :
 #if defined(BOOST_ATOMIC_DETAIL_PPC_HAS_LHARX_STHCX)
 
 template< typename Base, bool Signed >
-struct gcc_ppc_extra_operations< Base, 2u, Signed > :
-    public generic_extra_operations< Base, 2u, Signed >
+struct extra_operations_gcc_ppc< Base, 2u, Signed > :
+    public extra_operations_generic< Base, 2u, Signed >
 {
-    typedef generic_extra_operations< Base, 2u, Signed > base_type;
+    typedef extra_operations_generic< Base, 2u, Signed > base_type;
     typedef typename base_type::storage_type storage_type;
 
     static BOOST_FORCEINLINE storage_type fetch_negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type add(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "add %1,%0,%3\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type sub(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "sub %1,%0,%3\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_and(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "and %1,%0,%3\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_or(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "or %1,%0,%3\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_xor(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "xor %1,%0,%3\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type fetch_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lharx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "sthcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 };
@@ -460,374 +462,374 @@ struct gcc_ppc_extra_operations< Base, 2u, Signed > :
 #endif // defined(BOOST_ATOMIC_DETAIL_PPC_HAS_LHARX_STHCX)
 
 template< typename Base, bool Signed >
-struct gcc_ppc_extra_operations< Base, 4u, Signed > :
-    public generic_extra_operations< Base, 4u, Signed >
+struct extra_operations_gcc_ppc< Base, 4u, Signed > :
+    public extra_operations_generic< Base, 4u, Signed >
 {
-    typedef generic_extra_operations< Base, 4u, Signed > base_type;
+    typedef extra_operations_generic< Base, 4u, Signed > base_type;
     typedef typename base_type::storage_type storage_type;
 
     static BOOST_FORCEINLINE storage_type fetch_negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type add(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "add %1,%0,%3\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type sub(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "sub %1,%0,%3\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_and(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "and %1,%0,%3\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_or(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "or %1,%0,%3\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_xor(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "xor %1,%0,%3\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type fetch_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "lwarx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "stwcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 };
 
 template< typename Base, bool Signed >
 struct extra_operations< Base, 4u, Signed, true > :
-    public gcc_ppc_extra_operations_common< gcc_ppc_extra_operations< Base, 4u, Signed > >
+    public extra_operations_gcc_ppc_common< extra_operations_gcc_ppc< Base, 4u, Signed > >
 {
 };
 
 #if defined(BOOST_ATOMIC_DETAIL_PPC_HAS_LDARX_STDCX)
 
 template< typename Base, bool Signed >
-struct gcc_ppc_extra_operations< Base, 8u, Signed > :
-    public generic_extra_operations< Base, 8u, Signed >
+struct extra_operations_gcc_ppc< Base, 8u, Signed > :
+    public extra_operations_generic< Base, 8u, Signed >
 {
-    typedef generic_extra_operations< Base, 8u, Signed > base_type;
+    typedef extra_operations_generic< Base, 8u, Signed > base_type;
     typedef typename base_type::storage_type storage_type;
 
     static BOOST_FORCEINLINE storage_type fetch_negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type negate(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "neg %1,%0\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type add(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "add %1,%0,%3\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type sub(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "sub %1,%0,%3\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_and(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "and %1,%0,%3\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_or(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "or %1,%0,%3\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_xor(storage_type volatile& storage, storage_type v, memory_order order) BOOST_NOEXCEPT
     {
         storage_type original, result;
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "xor %1,%0,%3\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             : "b" (v)
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 
     static BOOST_FORCEINLINE storage_type fetch_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return original;
     }
 
     static BOOST_FORCEINLINE storage_type bitwise_complement(storage_type volatile& storage, memory_order order) BOOST_NOEXCEPT
     {
-        gcc_ppc_operations_base::fence_before(order);
+        core_arch_operations_gcc_ppc_base::fence_before(order);
         storage_type original, result;
         __asm__ __volatile__
         (
-            "1:\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_LABEL("1")
             "ldarx %0,%y2\n\t"
             "nor %1,%0,%0\n\t"
             "stdcx. %1,%y2\n\t"
-            "bne- 1b\n\t"
+            BOOST_ATOMIC_DETAIL_PPC_ASM_JUMP("bne-", "1b", "-12")
             : "=&b" (original), "=&b" (result), "+Z" (storage)
             :
             : BOOST_ATOMIC_DETAIL_ASM_CLOBBER_CC
         );
-        gcc_ppc_operations_base::fence_after(order);
+        core_arch_operations_gcc_ppc_base::fence_after(order);
         return result;
     }
 };
 
 template< typename Base, bool Signed >
 struct extra_operations< Base, 8u, Signed, true > :
-    public gcc_ppc_extra_operations_common< gcc_ppc_extra_operations< Base, 8u, Signed > >
+    public extra_operations_gcc_ppc_common< extra_operations_gcc_ppc< Base, 8u, Signed > >
 {
 };
 
@@ -836,5 +838,7 @@ struct extra_operations< Base, 8u, Signed, true > :
 } // namespace detail
 } // namespace atomics
 } // namespace boost
+
+#include <boost/atomic/detail/footer.hpp>
 
 #endif // BOOST_ATOMIC_DETAIL_EXTRA_OPS_GCC_ARM_PPC_INCLUDED_

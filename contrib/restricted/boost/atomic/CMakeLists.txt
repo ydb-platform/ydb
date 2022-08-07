@@ -14,13 +14,22 @@ target_compile_options(restricted-boost-atomic PRIVATE
 target_include_directories(restricted-boost-atomic PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/include
 )
+target_include_directories(restricted-boost-atomic PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/winapi/include
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src
+)
 target_link_libraries(restricted-boost-atomic PUBLIC
   contrib-libs-cxxsupp
   yutil
+  restricted-boost-align
   restricted-boost-assert
   restricted-boost-config
+  restricted-boost-predef
+  restricted-boost-preprocessor
   restricted-boost-type_traits
 )
 target_sources(restricted-boost-atomic PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lockpool.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse2.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/find_address_sse41.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/atomic/src/lock_pool.cpp
 )

@@ -25,6 +25,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-detail
   restricted-boost-endian
   restricted-boost-exception
+  restricted-boost-format
   restricted-boost-function_types
   restricted-boost-integer
   restricted-boost-interval

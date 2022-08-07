@@ -10,6 +10,10 @@
 #ifndef BOOST_DETAIL_WINAPI_GET_CURRENT_PROCESS_HPP
 #define BOOST_DETAIL_WINAPI_GET_CURRENT_PROCESS_HPP
 
+#include <boost/config/header_deprecated.hpp>
+
+BOOST_HEADER_DEPRECATED("<boost/winapi/get_current_process.hpp>")
+
 #include <boost/winapi/get_current_process.hpp>
 #include <boost/detail/winapi/detail/deprecated_namespace.hpp>
 

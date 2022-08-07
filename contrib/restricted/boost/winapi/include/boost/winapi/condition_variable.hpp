@@ -18,6 +18,7 @@
 #if BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN6
 
 #include <boost/winapi/basic_types.hpp>
+#include <boost/winapi/detail/header.hpp>
 
 #if !defined( BOOST_USE_WINDOWS_H )
 extern "C" {
@@ -25,22 +26,22 @@ struct _RTL_CONDITION_VARIABLE;
 struct _RTL_CRITICAL_SECTION;
 struct _RTL_SRWLOCK;
 
-BOOST_SYMBOL_IMPORT boost::winapi::VOID_ WINAPI
+BOOST_WINAPI_IMPORT boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
 InitializeConditionVariable(::_RTL_CONDITION_VARIABLE* ConditionVariable);
 
-BOOST_SYMBOL_IMPORT boost::winapi::VOID_ WINAPI
+BOOST_WINAPI_IMPORT boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
 WakeConditionVariable(::_RTL_CONDITION_VARIABLE* ConditionVariable);
 
-BOOST_SYMBOL_IMPORT boost::winapi::VOID_ WINAPI
+BOOST_WINAPI_IMPORT boost::winapi::VOID_ BOOST_WINAPI_WINAPI_CC
 WakeAllConditionVariable(::_RTL_CONDITION_VARIABLE* ConditionVariable);
 
-BOOST_SYMBOL_IMPORT boost::winapi::BOOL_ WINAPI
+BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 SleepConditionVariableCS(
     ::_RTL_CONDITION_VARIABLE* ConditionVariable,
     ::_RTL_CRITICAL_SECTION* CriticalSection,
     boost::winapi::DWORD_ dwMilliseconds);
 
-BOOST_SYMBOL_IMPORT boost::winapi::BOOL_ WINAPI
+BOOST_WINAPI_IMPORT boost::winapi::BOOL_ BOOST_WINAPI_WINAPI_CC
 SleepConditionVariableSRW(
     ::_RTL_CONDITION_VARIABLE* ConditionVariable,
     ::_RTL_SRWLOCK* SRWLock,
@@ -105,15 +106,17 @@ BOOST_FORCEINLINE BOOL_ SleepConditionVariableSRW(
 }
 
 #if defined( BOOST_USE_WINDOWS_H )
-const ULONG_ CONDITION_VARIABLE_LOCKMODE_SHARED_ = CONDITION_VARIABLE_LOCKMODE_SHARED;
+BOOST_CONSTEXPR_OR_CONST ULONG_ CONDITION_VARIABLE_LOCKMODE_SHARED_ = CONDITION_VARIABLE_LOCKMODE_SHARED;
 #else // defined( BOOST_USE_WINDOWS_H )
-const ULONG_ CONDITION_VARIABLE_LOCKMODE_SHARED_ = 0x00000001;
+BOOST_CONSTEXPR_OR_CONST ULONG_ CONDITION_VARIABLE_LOCKMODE_SHARED_ = 0x00000001;
 #endif // defined( BOOST_USE_WINDOWS_H )
 
-const ULONG_ condition_variable_lockmode_shared = CONDITION_VARIABLE_LOCKMODE_SHARED_;
+BOOST_CONSTEXPR_OR_CONST ULONG_ condition_variable_lockmode_shared = CONDITION_VARIABLE_LOCKMODE_SHARED_;
 
 }
 }
+
+#include <boost/winapi/detail/footer.hpp>
 
 #endif // BOOST_USE_WINAPI_VERSION >= BOOST_WINAPI_VERSION_WIN6
 

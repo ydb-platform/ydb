@@ -10,6 +10,10 @@
 #ifndef BOOST_DETAIL_WINAPI_TIMERS_HPP
 #define BOOST_DETAIL_WINAPI_TIMERS_HPP
 
+#include <boost/config/header_deprecated.hpp>
+
+BOOST_HEADER_DEPRECATED("<boost/winapi/timers.hpp>")
+
 #include <boost/winapi/timers.hpp>
 #include <boost/detail/winapi/detail/deprecated_namespace.hpp>
 

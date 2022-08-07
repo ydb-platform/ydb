@@ -5,14 +5,14 @@ Copyright 2014-2015 Glen Joseph Fernandes
 Distributed under the Boost Software License, Version 1.0.
 (http://www.boost.org/LICENSE_1_0.txt)
 */
-#ifndef BOOST_ALIGN_DETAIL_ALIGNED_ALLOC_HPP
-#define BOOST_ALIGN_DETAIL_ALIGNED_ALLOC_HPP
+#ifndef BOOST_ALIGN_DETAIL_ALIGNED_ALLOC_NEW_HPP
+#define BOOST_ALIGN_DETAIL_ALIGNED_ALLOC_NEW_HPP
 
 #include <boost/align/detail/is_alignment.hpp>
 #include <boost/align/align.hpp>
 #include <boost/align/alignment_of.hpp>
 #include <boost/assert.hpp>
-#include <cstdlib>
+#include <new>
 
 namespace boost {
 namespace alignment {
@@ -28,7 +28,7 @@ aligned_alloc(std::size_t alignment, std::size_t size) BOOST_NOEXCEPT
         alignment = N;
     }
     std::size_t n = size + alignment - N;
-    void* p = std::malloc(sizeof(void*) + n);
+    void* p = ::operator new(sizeof(void*) + n, std::nothrow);
     if (p) {
         void* r = static_cast<char*>(p) + sizeof(void*);
         (void)boost::alignment::align(alignment, size, r, n);
@@ -42,7 +42,7 @@ inline void
 aligned_free(void* ptr) BOOST_NOEXCEPT
 {
     if (ptr) {
-        std::free(*(static_cast<void**>(ptr) - 1));
+        ::operator delete(*(static_cast<void**>(ptr) - 1));
     }
 }
 

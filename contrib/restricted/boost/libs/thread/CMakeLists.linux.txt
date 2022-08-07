@@ -34,7 +34,7 @@ target_link_libraries(boost-libs-thread PUBLIC
   contrib-restricted-boost
   restricted-boost-atomic
   restricted-boost-exception
-  boost-libs-chrono
+  restricted-boost-chrono
   restricted-boost-system
 )
 target_sources(boost-libs-thread PRIVATE

@@ -2,8 +2,14 @@
 // Distributed under the Boost Software License, Version 1.0. (See
 // accompanying file LICENSE_1_0.txt or copy at
 // http://www.boost.org/LICENSE_1_0.txt)
-#ifndef IMPLICIT_CAST_DWA200356_HPP
-# define IMPLICIT_CAST_DWA200356_HPP
+
+#ifndef BOOST_IMPLICIT_CAST_DWA200356_HPP
+#define BOOST_IMPLICIT_CAST_DWA200356_HPP
+
+#include <boost/config.hpp>
+#ifdef BOOST_HAS_PRAGMA_ONCE
+# pragma once
+#endif
 
 namespace boost {
 
@@ -22,15 +28,11 @@ template<class T> struct icast_identity
 // The use of identity creates a non-deduced form, so that the
 // explicit template argument must be supplied
 template <typename T>
-inline T implicit_cast (typename boost::detail::icast_identity<T>::type x) {
+BOOST_CONSTEXPR inline T implicit_cast (typename boost::detail::icast_identity<T>::type x) {
     return x;
 }
-
-// incomplete return type now is here
-//template <typename T>
-//void implicit_cast (...);
 
 } // namespace boost
 
 
-#endif // IMPLICIT_CAST_DWA200356_HPP
+#endif // BOOST_IMPLICIT_CAST_DWA200356_HPP

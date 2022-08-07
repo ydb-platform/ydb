@@ -27,6 +27,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-exception
   restricted-boost-function_types
   restricted-boost-integer
+  restricted-boost-interval
   restricted-boost-io
   restricted-boost-logic
   restricted-boost-move

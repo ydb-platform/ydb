@@ -292,7 +292,7 @@ void Init(
             serviceCounters.Counters,
             {
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_ANALYTICS_COUNT_LIMIT, 100, 1000, NYq::ControlPlaneStorageServiceActorId()),
-                TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_STREAMING_COUNT_LIMIT,   3,  100, NYq::ControlPlaneStorageServiceActorId()),
+                TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_STREAMING_COUNT_LIMIT, 100, 1000, NYq::ControlPlaneStorageServiceActorId()),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_CPU_PERCENT_LIMIT, 200, 3200),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_MEMORY_LIMIT, 0),
                 TQuotaDescription(SUBJECT_TYPE_CLOUD, QUOTA_RESULT_LIMIT, 0),

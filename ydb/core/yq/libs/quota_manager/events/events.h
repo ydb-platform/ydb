@@ -18,11 +18,17 @@ namespace NYq {
 
 constexpr auto SUBJECT_TYPE_CLOUD = "cloud";
 
-constexpr auto QUOTA_CPU_LIMIT    = "yq.cpu.count";
-constexpr auto QUOTA_COUNT_LIMIT  = "yq.query.count";
-constexpr auto QUOTA_MEMORY_LIMIT = "yq.memory.size";
-constexpr auto QUOTA_TIME_LIMIT   = "yq.ttlInSeconds.count";
-constexpr auto QUOTA_RESULT_LIMIT = "yq.result.size";
+// Quota per cloud
+constexpr auto QUOTA_ANALYTICS_COUNT_LIMIT    = "yq.analyticsQuery.count";
+constexpr auto QUOTA_STREAMING_COUNT_LIMIT    = "yq.streamingQuery.count";
+constexpr auto QUOTA_CPU_PERCENT_LIMIT        = "yq.cpuPercent.count";
+constexpr auto QUOTA_MEMORY_LIMIT             = "yq.memory.size";
+constexpr auto QUOTA_RESULT_LIMIT             = "yq.result.size";
+
+// Quota per query
+constexpr auto QUOTA_ANALYTICS_DURATION_LIMIT = "yq.analyticsQueryDurationMinutes.count";
+constexpr auto QUOTA_STREAMING_DURATION_LIMIT = "yq.streamingQueryDurationMinutes.count"; // internal, for preview purposes
+constexpr auto QUOTA_QUERY_RESULT_LIMIT       = "yq.queryResult.size";
 
 struct TQuotaInfo {
     ui64 DefaultLimit;

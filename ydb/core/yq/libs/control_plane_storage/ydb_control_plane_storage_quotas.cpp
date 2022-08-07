@@ -25,12 +25,13 @@ using TQuotaCountExecuter = TDbExecuter<THashMap<TString, ui32>>;
 
 void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
 
-    if (ev->Get()->SubjectType != SUBJECT_TYPE_CLOUD || ev->Get()->MetricName != QUOTA_COUNT_LIMIT) {
+    if (ev->Get()->SubjectType != SUBJECT_TYPE_CLOUD 
+        || (ev->Get()->MetricName != QUOTA_ANALYTICS_COUNT_LIMIT && ev->Get()->MetricName != QUOTA_STREAMING_COUNT_LIMIT) ) {
         Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(ev->Get()->SubjectType, ev->Get()->SubjectId, ev->Get()->MetricName, 0));
     }
 
     if (QuotasUpdatedAt + Config.QuotaTtl > Now()) {
-        Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, ev->Get()->SubjectId, QUOTA_COUNT_LIMIT, QueryQuotas.Value(ev->Get()->SubjectId, 0)));
+        Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, ev->Get()->SubjectId, ev->Get()->MetricName, QueryQuotas.Value(ev->Get()->SubjectId, 0)));
     }
 
     QueryQuotaRequests[ev->Get()->SubjectId] = ev;
@@ -86,7 +87,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
             this->QueryQuotas.swap(executer.State);
             for (auto& it : this->QueryQuotaRequests) {
                 auto ev = it.second;
-                this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_COUNT_LIMIT, this->QueryQuotas.Value(it.first, 0)));
+                this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_ANALYTICS_COUNT_LIMIT, this->QueryQuotas.Value(it.first, 0)));
+                this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_STREAMING_COUNT_LIMIT, this->QueryQuotas.Value(it.first, 0)));
             }
             this->QueryQuotaRequests.clear();
             this->QuotasUpdating = false;

@@ -79,10 +79,23 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     TInstant startTime = TInstant::Now();
     const TEvControlPlaneStorage::TEvCreateQueryRequest& event = *ev->Get();
     const TString cloudId = event.CloudId;
-    auto it = event.Quotas.find(QUOTA_RESULT_LIMIT);
+    const YandexQuery::CreateQueryRequest& request = event.Request;
+    auto it = event.Quotas.find(QUOTA_QUERY_RESULT_LIMIT);
     ui64 resultLimit = (it != event.Quotas.end()) ? it->second.Limit.Value : 0;
-    auto exec_ttl_it = event.Quotas.find(QUOTA_TIME_LIMIT);
-    ui64 executionLimitMills = (exec_ttl_it != event.Quotas.end()) ? exec_ttl_it->second.Limit.Value : 0;
+    auto queryType = request.content().type();
+    ui64 executionLimitMills = 0;
+    if (queryType == YandexQuery::QueryContent::ANALYTICS) {
+        auto exec_ttl_it = event.Quotas.find(QUOTA_ANALYTICS_DURATION_LIMIT);
+        if (exec_ttl_it != event.Quotas.end()) {
+            executionLimitMills = exec_ttl_it->second.Limit.Value * 60 * 1000;
+        }
+    }
+    if (queryType == YandexQuery::QueryContent::STREAMING) {
+        auto exec_ttl_it = event.Quotas.find(QUOTA_STREAMING_DURATION_LIMIT);
+        if (exec_ttl_it != event.Quotas.end()) {
+            executionLimitMills = exec_ttl_it->second.Limit.Value * 60 * 1000;
+        }
+    }
     const TString scope = event.Scope;
     TRequestCountersPtr requestCounters = Counters.GetScopeCounters(cloudId, scope, RTS_CREATE_QUERY);
     requestCounters->InFly->Inc();
@@ -95,7 +108,6 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-    const YandexQuery::CreateQueryRequest& request = event.Request;
     const size_t byteSize = request.ByteSizeLong();
     const TString queryId = GetEntityIdAsString(Config.IdsPrefix, EEntityType::QUERY);
     CPS_LOG_T("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
@@ -113,7 +125,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     }
 
     {
-        auto it = event.Quotas.find(QUOTA_COUNT_LIMIT);
+        TQuotaMap::const_iterator it = event.Quotas.end();
+        if (queryType == YandexQuery::QueryContent::ANALYTICS) {
+            it = event.Quotas.find(QUOTA_ANALYTICS_COUNT_LIMIT);
+        }
+        if (queryType == YandexQuery::QueryContent::STREAMING) {
+            it = event.Quotas.find(QUOTA_STREAMING_COUNT_LIMIT);
+        }
         if (it != event.Quotas.end()) {
             auto& quota = it->second;
             if (!quota.Usage) {

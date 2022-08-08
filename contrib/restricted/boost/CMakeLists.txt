@@ -27,6 +27,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-exception
   restricted-boost-format
   restricted-boost-function_types
+  restricted-boost-fusion
   restricted-boost-integer
   restricted-boost-interval
   restricted-boost-intrusive

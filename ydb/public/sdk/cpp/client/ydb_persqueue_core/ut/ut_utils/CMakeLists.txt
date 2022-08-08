@@ -27,4 +27,5 @@ target_link_libraries(ydb_persqueue_core-ut-ut_utils PUBLIC
 target_sources(ydb_persqueue_core-ut-ut_utils PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.cpp
 )

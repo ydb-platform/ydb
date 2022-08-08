@@ -21,8 +21,9 @@ inline const TString& GetCodecId(const ECodec codec) {
     return idByCodec[codec];
 }
 
-class TWriteSessionEventsQueue : public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent> {
-    using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent>;
+class TWriteSessionEventsQueue: public TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor> {
+    using TParent = TBaseSessionEventsQueue<TWriteSessionSettings, TWriteSessionEvent::TEvent, TSessionClosedEvent, IExecutor>;
+
 public:
     TWriteSessionEventsQueue(const TWriteSessionSettings& settings)
     : TParent(settings)

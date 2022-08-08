@@ -471,7 +471,7 @@ public:
 
     //! Unique identifier of partition session.
     //! It is unique within one read session.
-    ui64 GetPartitionSessionId() const {
+    i64 GetPartitionSessionId() const {
         return PartitionSessionId;
     }
 
@@ -481,14 +481,14 @@ public:
     }
 
     //! Partition id.
-    ui64 GetPartitionId() const {
+    i64 GetPartitionId() const {
         return PartitionId;
     }
 
 protected:
-    ui64 PartitionSessionId;
+    i64 PartitionSessionId;
     TString TopicPath;
-    ui64 PartitionId;
+    i64 PartitionId;
 };
 
 //! Events for read session.
@@ -497,8 +497,14 @@ struct TReadSessionEvent {
     //! Contains batch of messages from single partition session.
     struct TDataReceivedEvent {
         struct TMessageInformation {
-            TMessageInformation(ui64 offset, TString producerId, ui64 seqNo, TInstant createTime, TInstant writeTime,
-                                TWriteSessionMeta::TPtr meta, ui64 uncompressedSize, TString messageGroupId);
+            TMessageInformation(ui64 offset,
+                                TString producerId,
+                                ui64 seqNo,
+                                TInstant createTime,
+                                TInstant writeTime,
+                                TWriteSessionMeta::TPtr meta,
+                                ui64 uncompressedSize,
+                                TString messageGroupId);
             ui64 Offset;
             TString ProducerId;
             ui64 SeqNo;
@@ -575,37 +581,38 @@ struct TReadSessionEvent {
         };
 
         struct TCompressedMessage: public IMessage {
+            TCompressedMessage(ECodec codec, const TString& data, const TMessageInformation& information,
+                               TPartitionSession::TPtr partitionSession);
+
+            virtual ~TCompressedMessage() {
+            }
+
             //! Message codec
             ECodec GetCodec() const;
 
             //! Message offset.
-            ui64 GetOffset(ui64 index) const;
+            ui64 GetOffset() const;
 
             //! Producer id
-            const TString& GetProducerId(ui64 index) const;
+            const TString& GetProducerId() const;
 
             //! Message group id.
-            const TString& GetMessageGroupId(ui64 index) const;
+            const TString& GetMessageGroupId() const;
 
             //! Sequence number.
-            ui64 GetSeqNo(ui64 index) const;
+            ui64 GetSeqNo() const;
 
             //! Message creation timestamp.
-            TInstant GetCreateTime(ui64 index) const;
+            TInstant GetCreateTime() const;
 
             //! Message write timestamp.
-            TInstant GetWriteTime(ui64 index) const;
+            TInstant GetWriteTime() const;
 
             //! Metainfo.
-            const TWriteSessionMeta::TPtr& GetMeta(ui64 index) const;
+            const TWriteSessionMeta::TPtr& GetMeta() const;
 
             //! Uncompressed size.
-            ui64 GetUncompressedSize(ui64 index) const;
-
-            virtual ~TCompressedMessage() {
-            }
-            TCompressedMessage(ECodec codec, const TString& data, const TVector<TMessageInformation>& information,
-                               TPartitionSession::TPtr partitionSession);
+            ui64 GetUncompressedSize() const;
 
             //! Commits all offsets in compressed message.
             void Commit() override;
@@ -615,8 +622,12 @@ struct TReadSessionEvent {
 
         private:
             ECodec Codec;
-            TVector<TMessageInformation> Information;
+            TMessageInformation Information;
         };
+
+    public:
+        TDataReceivedEvent(TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
+                           TPartitionSession::TPtr partitionSession);
 
         //! Partition session.
         const TPartitionSession::TPtr& GetPartitionSession() const {
@@ -657,9 +668,6 @@ struct TReadSessionEvent {
         void Commit();
 
         TString DebugString(bool printData = false) const;
-
-        TDataReceivedEvent(TVector<TMessage> messages, TVector<TCompressedMessage> compressedMessages,
-                           TPartitionSession::TPtr partitionSession);
 
     private:
         void CheckMessagesFilled(bool compressed) const {
@@ -739,6 +747,8 @@ struct TReadSessionEvent {
     //! Server can destroy partition session gracefully
     //! for rebalancing among all topic clients.
     struct TStopPartitionSessionEvent {
+        TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset);
+
         const TPartitionSession::TPtr& GetPartitionSession() const {
             return PartitionSession;
         }
@@ -753,8 +763,6 @@ struct TReadSessionEvent {
         void Confirm();
 
         TString DebugString() const;
-
-        TStopPartitionSessionEvent(TPartitionSession::TPtr partitionSession, bool committedOffset);
 
     private:
         TPartitionSession::TPtr PartitionSession;
@@ -812,6 +820,9 @@ struct TReadSessionEvent {
             ConnectionLost,
         };
 
+    public:
+        TPartitionSessionClosedEvent(TPartitionSession::TPtr partitionSession, EReason reason);
+
         const TPartitionSession::TPtr& GetPartitionSession() const {
             return PartitionSession;
         }
@@ -822,15 +833,17 @@ struct TReadSessionEvent {
 
         TString DebugString() const;
 
-        TPartitionSessionClosedEvent(TPartitionSession::TPtr partitionSession, EReason reason);
-
     private:
         TPartitionSession::TPtr PartitionSession;
         EReason Reason;
     };
 
-    using TEvent = std::variant<TDataReceivedEvent, TCommitOffsetAcknowledgementEvent, TStartPartitionSessionEvent,
-                                TStopPartitionSessionEvent, TPartitionSessionStatusEvent, TPartitionSessionClosedEvent,
+    using TEvent = std::variant<TDataReceivedEvent,
+                                TCommitOffsetAcknowledgementEvent,
+                                TStartPartitionSessionEvent,
+                                TStopPartitionSessionEvent,
+                                TPartitionSessionStatusEvent,
+                                TPartitionSessionClosedEvent,
                                 TSessionClosedEvent>;
 };
 

@@ -1,4 +1,4 @@
-#include "ut_utils.h"
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/ut_utils.h>
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/logger/log.h>
@@ -450,7 +450,7 @@ public:
     using IReadSessionConnectionProcessorFactory = ISessionConnectionProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
     using TMockProcessorFactory = ::TMockProcessorFactory<Ydb::PersQueue::V1::MigrationStreamingReadClientMessage, Ydb::PersQueue::V1::MigrationStreamingReadServerMessage>;
 
-    struct TMockErrorHandler : public IErrorHandler {
+    struct TMockErrorHandler : public IErrorHandler<true> {
         MOCK_METHOD(void, AbortSession, (TSessionClosedEvent&& closeEvent), (override));
     };
 
@@ -482,9 +482,9 @@ public:
     TReadSessionImplTestSetup();
     ~TReadSessionImplTestSetup() noexcept(false); // Performs extra validation and UNIT_ASSERTs
 
-    TSingleClusterReadSessionImpl* GetSession();
+    TSingleClusterReadSessionImpl<true>* GetSession();
 
-    std::shared_ptr<TReadSessionEventsQueue> GetEventsQueue();
+    std::shared_ptr<TReadSessionEventsQueue<true>> GetEventsQueue();
     ::IExecutor::TPtr GetDefaultExecutor();
 
     void SuccessfulInit(bool flag = true);
@@ -498,14 +498,14 @@ public:
     TReadSessionSettings Settings;
     TString ClusterName = "cluster";
     TLog Log = CreateLogBackend("cerr");
-    std::shared_ptr<TReadSessionEventsQueue> EventsQueue;
+    std::shared_ptr<TReadSessionEventsQueue<true>> EventsQueue;
     TIntrusivePtr<testing::StrictMock<TMockErrorHandler>> MockErrorHandler = MakeIntrusive<testing::StrictMock<TMockErrorHandler>>();
     std::shared_ptr<TFakeContext> FakeContext = std::make_shared<TFakeContext>();
     std::shared_ptr<TMockProcessorFactory> MockProcessorFactory = std::make_shared<TMockProcessorFactory>();
     TIntrusivePtr<TMockReadSessionProcessor> MockProcessor = MakeIntrusive<TMockReadSessionProcessor>();
     ui64 PartitionIdStart = 1;
     ui64 PartitionIdStep = 1;
-    TSingleClusterReadSessionImpl::TPtr Session;
+    typename TSingleClusterReadSessionImpl<true>::TPtr Session;
     std::shared_ptr<TThreadPool> ThreadPool;
     ::IExecutor::TPtr DefaultExecutor;
 };
@@ -609,7 +609,7 @@ TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
     return DefaultExecutor;
 }
 
-TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
+TSingleClusterReadSessionImpl<true>* TReadSessionImplTestSetup::GetSession() {
     if (!Session) {
         if (!Settings.DecompressionExecutor_) {
             Settings.DecompressionExecutor(GetDefaultExecutor());
@@ -617,7 +617,7 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
         if (!Settings.EventHandlers_.HandlersExecutor_) {
             Settings.EventHandlers_.HandlersExecutor(GetDefaultExecutor());
         }
-        Session = std::make_shared<TSingleClusterReadSessionImpl>(
+        Session = std::make_shared<TSingleClusterReadSessionImpl<true>>(
             Settings,
             "db",
             "sessionid",
@@ -632,9 +632,9 @@ TSingleClusterReadSessionImpl* TReadSessionImplTestSetup::GetSession() {
     return Session.get();
 }
 
-std::shared_ptr<TReadSessionEventsQueue> TReadSessionImplTestSetup::GetEventsQueue() {
+std::shared_ptr<TReadSessionEventsQueue<true>> TReadSessionImplTestSetup::GetEventsQueue() {
     if (!EventsQueue) {
-        EventsQueue = std::make_shared<TReadSessionEventsQueue>(Settings, std::weak_ptr<IUserRetrievedEventCallback>());
+        EventsQueue = std::make_shared<TReadSessionEventsQueue<true>>(Settings, std::weak_ptr<IUserRetrievedEventCallback<true>>());
     }
     return EventsQueue;
 }

@@ -12,6 +12,7 @@ target_link_libraries(cpp-client-ydb_topic PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
+  client-ydb_persqueue_public-codecs
   library-cpp-retry
   client-ydb_topic-impl
   cpp-client-ydb_proto

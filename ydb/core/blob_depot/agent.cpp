@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (TabletId, TabletID()),
             (PipeServerId, ev->Get()->ServerId));
+
         const auto it = PipeServerToNode.find(ev->Get()->ServerId);
         Y_VERIFY(it != PipeServerToNode.end());
         if (const auto& nodeId = it->second) {
@@ -27,6 +28,8 @@ namespace NKikimr::NBlobDepot {
             }
         }
         PipeServerToNode.erase(it);
+
+        RegisterAgentQ.erase(ev->Get()->ServerId);
     }
 
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
@@ -35,9 +38,16 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
+        if (!Configured || (Config.HasDecommitGroupId() && !DecommitBlocksFinished)) {
+            const auto [it, inserted] = RegisterAgentQ.emplace(ev->Recipient, ev.Release());
+            Y_VERIFY(inserted);
+            return;
+        }
+
         const ui32 nodeId = ev->Sender.NodeId();
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
+
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, req), (NodeId, nodeId),
             (PipeServerId, pipeServerId), (Id, ev->Cookie));
 
@@ -265,6 +275,17 @@ namespace NKikimr::NBlobDepot {
         };
 
         Execute(std::make_unique<TTxInvokeCallback>(this, ev));
+    }
+
+    void TBlobDepot::ProcessRegisterAgentQ() {
+        if (!Configured || (Config.HasDecommitGroupId() && !DecommitBlocksFinished)) {
+            return;
+        }
+
+        for (auto& [pipeServerId, ev] : std::exchange(RegisterAgentQ, {})) {
+            TAutoPtr<IEventHandle> tmp(ev.release());
+            Receive(tmp, TActivationContext::AsActorContext());
+        }
     }
 
 } // NKikimr::NBlobDepot

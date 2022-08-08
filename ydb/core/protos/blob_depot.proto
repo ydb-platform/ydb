@@ -47,6 +47,12 @@ message TGivenIdRange {
     repeated TChannelRange ChannelRanges = 1;
 }
 
+message TResolvedValueChain {
+    optional uint32 GroupId = 1;
+    optional NKikimrProto.TLogoBlobID BlobId = 2;
+    optional uint32 SubrangeBegin = 3;
+    optional uint32 SubrangeEnd = 4;
+}
 
 
 
@@ -190,7 +196,7 @@ message TEvResolveResult {
     message TResolvedKey {
         optional uint64 Cookie = 1;
         optional bytes Key = 2;
-        repeated TValueChain ValueChain = 3;
+        repeated TResolvedValueChain ValueChain = 3;
         optional bytes Meta = 4;
         repeated uint64 Owners = 5;
     }

@@ -18,6 +18,10 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
+    void TBlobDepotAgent::Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev) {
+        ev->Get()->Process(this);
+    }
+
     TBlobDepotAgent::TQuery *TBlobDepotAgent::CreateQuery(TAutoPtr<IEventHandle> ev) {
         switch (ev->GetTypeRewrite()) {
 #define XX(TYPE) \

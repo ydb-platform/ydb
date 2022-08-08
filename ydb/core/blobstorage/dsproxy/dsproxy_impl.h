@@ -258,15 +258,6 @@ class TBlobStorageGroupProxy : public TActorBootstrapped<TBlobStorageGroupProxy>
     void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
     void Handle(TEvDeathNote::TPtr ev);
 
-    template<typename TEvent>
-    void HandleCheckAssimilator(TAutoPtr<TEventHandle<TEvent>>& ev) {
-        if (/*Info->AssimilatorGroupId*/ false) {
-            //TActivationContext::Send(ev->Forward(MakeBlobStorageProxyID(*Info->AssimilatorGroupId)));
-        } else {
-            return HandleNormal(ev);
-        }
-    }
-
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Error state
 
@@ -405,7 +396,7 @@ public:
 
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
-            HANDLE_EVENTS(HandleCheckAssimilator);
+            HANDLE_EVENTS(HandleNormal);
             default: return StateCommon(ev, ctx);
         }
     }

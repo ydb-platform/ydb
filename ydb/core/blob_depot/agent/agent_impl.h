@@ -30,10 +30,8 @@ namespace NKikimr::NBlobDepot {
         using TPtr = std::shared_ptr<TRequestContext>;
     };
 
-    using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
-
     struct TTabletDisconnected {};
-    struct TKeyResolved { const TValueChain* ValueChain; };
+    struct TKeyResolved { const TResolvedValueChain* ValueChain; };
 
     class TRequestSender {
         THashMap<ui64, TRequestContext::TPtr> RequestsInFlight;
@@ -74,17 +72,20 @@ namespace NKikimr::NBlobDepot {
     };
 
     class TBlobDepotAgent
-        : public TActor<TBlobDepotAgent>
+        : public TActorBootstrapped<TBlobDepotAgent>
         , public TRequestSender
     {
         const ui32 VirtualGroupId;
+        const TActorId ProxyId;
         const ui64 AgentInstanceId;
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
 
     public:
-        TBlobDepotAgent(ui32 virtualGroupId);
+        TBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId);
         ~TBlobDepotAgent();
+
+        void Bootstrap();
 
 #define FORWARD_STORAGE_PROXY(TYPE) fFunc(TEvBlobStorage::TYPE, HandleStorageProxy);
         STRICT_STFUNC(StateFunc,
@@ -108,6 +109,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobStorage::TEvPutResult, HandleOtherResponse);
 
             ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
+            hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
         );
 #undef FORWARD_STORAGE_PROXY
 
@@ -120,14 +122,18 @@ namespace NKikimr::NBlobDepot {
             const auto& info = ev->Get()->Info;
             Y_VERIFY(info);
             Y_VERIFY(info->BlobDepotId);
-            TabletId = *info->BlobDepotId;
-            if (TabletId) {
-                ConnectToBlobDepot();
-            }
+            if (TabletId != *info->BlobDepotId) {
+                TabletId = *info->BlobDepotId;
+                if (TabletId) {
+                    ConnectToBlobDepot();
+                }
             
-            for (auto& ev : std::exchange(PendingEventQ, {})) {
-                TActivationContext::Send(ev.release());
+                for (auto& ev : std::exchange(PendingEventQ, {})) {
+                    TActivationContext::Send(ev.release());
+                }
             }
+
+            TActivationContext::Send(ev->Forward(ProxyId));
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -168,6 +174,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         ui32 BlobDepotGeneration = 0;
+        std::optional<ui32> DecommitGroupId;
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
@@ -233,6 +240,7 @@ namespace NKikimr::NBlobDepot {
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
 
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
+        void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         TQuery *CreateQuery(TAutoPtr<IEventHandle> ev);
         template<ui32 EventType> TQuery *CreateQuery(std::unique_ptr<IEventHandle> ev);
 
@@ -293,8 +301,8 @@ namespace NKikimr::NBlobDepot {
 
         struct TReadContext;
 
-        bool IssueRead(const TValueChain& values, ui64 offset, ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass,
-            bool mustRestoreFirst, TQuery *query, ui64 tag, bool vg, TString *error);
+        bool IssueRead(const TResolvedValueChain& values, ui64 offset, ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass,
+            bool mustRestoreFirst, TQuery *query, ui64 tag, TString *error);
 
         void HandleGetResult(const TRequestContext::TPtr& context, TEvBlobStorage::TEvGetResult& msg);
 

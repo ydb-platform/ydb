@@ -4,6 +4,6 @@
 
 namespace NKikimr::NBlobDepot {
 
-    IActor *CreateBlobDepotAgent(ui32 virtualGroupId);
+    IActor *CreateBlobDepotAgent(ui32 groupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId);
 
 } // NKikimr::NBlobDepot

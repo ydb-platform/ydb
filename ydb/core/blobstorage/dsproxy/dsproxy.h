@@ -132,7 +132,7 @@ NActors::NLog::EPriority PriorityForStatusResult(NKikimrProto::EReplyStatus stat
 NActors::NLog::EPriority PriorityForStatusInbound(NKikimrProto::EReplyStatus status);
 
 template<typename TDerived>
-class TBlobStorageGroupRequestActor : public TActorBootstrapped<TDerived> {
+class TBlobStorageGroupRequestActor : public TActor<TBlobStorageGroupRequestActor<TDerived>> {
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BS_GROUP_REQUEST;
@@ -142,7 +142,8 @@ public:
             TIntrusivePtr<TBlobStorageGroupProxyMon> mon, const TActorId& source, ui64 cookie, NWilson::TTraceId traceId,
             NKikimrServices::EServiceKikimr logComponent, bool logAccEnabled, TMaybe<TGroupStat::EKind> latencyQueueKind,
             TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters, ui32 restartCounter, TString name)
-        : Info(std::move(info))
+        : TActor<TBlobStorageGroupRequestActor<TDerived>>(&TThis::InitialStateFunc, Derived().ActorActivityType())
+        , Info(std::move(info))
         , GroupQueues(std::move(groupQueues))
         , Mon(std::move(mon))
         , PoolCounters(storagePoolCounters)
@@ -160,6 +161,17 @@ public:
             .Attribute("GroupId", Info->GroupID)
             .Attribute("RestartCounter", RestartCounter);
     }
+
+    void Registered(TActorSystem *as, const TActorId& parentId) override {
+        ProxyActorId = parentId;
+        as->Send(new IEventHandle(TEvents::TSystem::Bootstrap, 0,
+            TActor<TBlobStorageGroupRequestActor<TDerived>>::SelfId(), parentId, nullptr, 0));
+        TActor<TBlobStorageGroupRequestActor<TDerived>>::Registered(as, parentId);
+    }
+
+    STRICT_STFUNC(InitialStateFunc,
+        cFunc(TEvents::TSystem::Bootstrap, Derived().Bootstrap);
+    )
 
     template<typename T>
     void CountEvent(const T &ev) const {
@@ -258,10 +270,10 @@ public:
         }
 
         // make NodeWarden restart the query just after proxy reconfiguration
-        const TActorId& proxyId = GetProxyActorId();
         Y_VERIFY_DEBUG(RestartCounter < 100);
         auto q = self.RestartQuery(RestartCounter + 1);
         ++*Mon->NodeMon->RestartHisto[Min<size_t>(Mon->NodeMon->RestartHisto.size() - 1, RestartCounter)];
+        const TActorId& proxyId = MakeBlobStorageProxyID(Info->GroupID);
         TActivationContext::Send(new IEventHandle(nodeWardenId, Source, q.release(), 0, Cookie, &proxyId, Span.GetTraceId()));
         PassAway();
         return true;
@@ -386,6 +398,10 @@ public:
         }
     }
 
+    void SendToProxy(std::unique_ptr<IEventBase> event, ui64 cookie = 0, NWilson::TTraceId traceId = {}) {
+        Derived().Send(ProxyActorId, event.release(), 0, cookie, std::move(traceId));
+    }
+
     void SendResponseAndDie(std::unique_ptr<IEventBase>&& ev, TBlobStorageGroupProxyTimeStats *timeStats, TActorId source,
             ui64 cookie) {
         SendResponse(std::move(ev), timeStats, source, cookie);
@@ -396,15 +412,11 @@ public:
         SendResponseAndDie(std::move(ev), timeStats, Source, Cookie);
     }
 
-    TActorId GetProxyActorId() const {
-        return MakeBlobStorageProxyID(Info->GroupID);
-    }
-
     void PassAway() override {
         // ensure that we are dying for the first time
         Y_VERIFY(!std::exchange(Dead, true));
         TDerived::ActiveCounter(Mon)->Dec();
-        Derived().Send(GetProxyActorId(), new TEvDeathNote(Responsiveness));
+        SendToProxy(std::make_unique<TEvDeathNote>(Responsiveness));
         TActorBootstrapped<TDerived>::PassAway();
     }
 
@@ -445,13 +457,12 @@ public:
                 RequestBytes, GeneratedSubrequests, GeneratedSubrequestBytes, Timer.Passed());
         }
 
-        const TActorId proxyId = GetProxyActorId();
         if (timeStats) {
-            Derived().Send(proxyId, new TEvTimeStats(std::move(*timeStats)));
+            SendToProxy(std::make_unique<TEvTimeStats>(std::move(*timeStats)));
         }
 
         if (LatencyQueueKind) {
-            Derived().Send(proxyId, new TEvLatencyReport(*LatencyQueueKind, now - RequestStartTime));
+            SendToProxy(std::make_unique<TEvLatencyReport>(*LatencyQueueKind, now - RequestStartTime));
         }
 
         // KIKIMR-6737
@@ -501,6 +512,8 @@ private:
     }
 
 protected:
+    using TThis = TDerived;
+
     TIntrusivePtr<TBlobStorageGroupInfo> Info;
     TIntrusivePtr<TGroupQueues> GroupQueues;
     TIntrusivePtr<TBlobStorageGroupProxyMon> Mon;
@@ -527,6 +540,7 @@ private:
     THPTimer Timer;
     std::deque<std::unique_ptr<IEventHandle>> PostponedQ;
     TBlobStorageGroupInfo::TGroupFailDomains RacingDomains; // a set of domains we've received RACE from
+    TActorId ProxyActorId;
 };
 
 void Encrypt(char *destination, const char *source, size_t shift, size_t sizeBytes, const TLogoBlobID &id,
@@ -568,7 +582,7 @@ IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroup
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
     const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
     ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-    const TActorId &proxyId, bool useVPatch);
+    bool useVPatch);
 
 IActor* CreateBlobStorageGroupMultiGetRequest(const TIntrusivePtr<TBlobStorageGroupInfo> &info,
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,

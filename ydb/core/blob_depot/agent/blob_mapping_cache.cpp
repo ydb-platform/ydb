@@ -21,7 +21,8 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    const TValueChain *TBlobDepotAgent::TBlobMappingCache::ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context) {
+    const TResolvedValueChain *TBlobDepotAgent::TBlobMappingCache::ResolveKey(TString key, TQuery *query,
+            TRequestContext::TPtr context) {
         const auto [it, inserted] = Cache.try_emplace(std::move(key));
         auto& entry = it->second;
         if (inserted) {

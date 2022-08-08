@@ -9,7 +9,6 @@ namespace NKikimr::NBlobDepot {
         class TTxApplyConfig : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<IEventHandle> Response;
             TString ConfigProtobuf;
-            bool WasConfigured = false;
 
         public:
             TTxApplyConfig(TBlobDepot *self, TEvBlobDepot::TEvApplyConfig& ev, std::unique_ptr<IEventHandle> response,
@@ -33,7 +32,6 @@ namespace NKikimr::NBlobDepot {
                 if (!table.IsReady()) {
                     return false;
                 }
-                WasConfigured = table.IsValid() && table.HaveValue<Schema::Config::ConfigProtobuf>();
 
                 db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
                     NIceDb::TUpdate<Schema::Config::ConfigProtobuf>(ConfigProtobuf)
@@ -46,12 +44,12 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT17, "TTxApplyConfig::Complete", (TabletId, Self->TabletID()),
-                    (WasConfigured, WasConfigured));
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT17, "TTxApplyConfig::Complete", (TabletId, Self->TabletID()));
 
-                if (!WasConfigured) {
+                if (!std::exchange(Self->Configured, true)) {
                     Self->StartOperation();
                 }
+
                 TActivationContext::Send(Response.release());
             }
         };

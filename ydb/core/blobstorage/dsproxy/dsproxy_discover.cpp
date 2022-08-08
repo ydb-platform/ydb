@@ -602,8 +602,7 @@ class TBlobStorageGroupDiscoverRequest : public TBlobStorageGroupRequestActor<TB
                         getRequest->IsInternal = true;
                         getRequest->TabletId = TabletId;
                         getRequest->AcquireBlockedGeneration = true;
-                        bool isSent = SendToBSProxy(SelfId(), Info->GroupID, getRequest.release(), 0, Span.GetTraceId());
-                        Y_VERIFY(isSent);
+                        SendToProxy(std::move(getRequest), 0, Span.GetTraceId());
                         TotalSent++;
 
                         A_LOG_DEBUG_S("BSD10", "Sent EvGet logoBlobId# " << logoBlobId.ToString());

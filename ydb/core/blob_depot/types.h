@@ -158,6 +158,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;
+    using TResolvedValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TResolvedValueChain>;
 
     template<typename TCallback>
     void EnumerateBlobsForValueChain(const TValueChain& valueChain, ui64 tabletId, TCallback&& callback) {
@@ -165,11 +166,11 @@ namespace NKikimr::NBlobDepot {
             const auto& locator = item.GetLocator();
             const auto& blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
             if (locator.GetTotalDataLen() + locator.GetFooterLen() > MaxBlobSize) {
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()));
-                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()));
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_DATA_BLOB, 0, locator.GetTotalDataLen()), 0, locator.GetTotalDataLen());
+                callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_FOOTER_BLOB, 0, locator.GetFooterLen()), 0, 0);
             } else {
                 callback(blobSeqId.MakeBlobId(tabletId, EBlobType::VG_COMPOSITE_BLOB, 0, locator.GetTotalDataLen() +
-                    locator.GetFooterLen()));
+                    locator.GetFooterLen()), 0, locator.GetTotalDataLen());
             }
         }
     }

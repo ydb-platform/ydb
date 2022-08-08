@@ -33,7 +33,6 @@ class TBlobStorageGroupPatchRequest : public TBlobStorageGroupRequestActor<TBlob
     static constexpr ui32 TypicalMaxPartsCount = TypicalPartPlacementCount * TypicalPartsInBlob;
 
     TString Buffer;
-    TActorId ProxyActorId;
 
     ui32 OriginalGroupId;
     TLogoBlobID OriginalId;
@@ -90,11 +89,10 @@ public:
             const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
             ui64 cookie, NWilson::TTraceId traceId, TInstant now,
             TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-            const TActorId &proxyId, bool useVPatch = false)
+            bool useVPatch = false)
         : TBlobStorageGroupRequestActor(info, state, mon, source, cookie, std::move(traceId),
                 NKikimrServices::BS_PROXY_PATCH, false, {}, now, storagePoolCounters,
                 ev->RestartCounter, "DSProxy.Patch")
-        , ProxyActorId(proxyId)
         , OriginalGroupId(ev->OriginalGroupId)
         , OriginalId(ev->OriginalId)
         , PatchedId(ev->PatchedId)
@@ -172,7 +170,7 @@ public:
         std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
                 NKikimrBlobStorage::AsyncBlob, TEvBlobStorage::TEvPut::TacticDefault);
         put->Orbit = std::move(Orbit);
-        Send(ProxyActorId, put.release(), 0, OriginalId.Hash(), Span.GetTraceId());
+        SendToProxy(std::move(put), OriginalId.Hash(), Span.GetTraceId());
     }
 
     void Handle(TEvBlobStorage::TEvPutResult::TPtr &ev) {
@@ -528,7 +526,7 @@ public:
             NKikimrBlobStorage::AsyncRead);
         get->Orbit = std::move(Orbit);
         if (OriginalGroupId == Info->GroupID) {
-            Send(ProxyActorId, get.release(), 0, PatchedId.Hash(), Span.GetTraceId());
+            SendToProxy(std::move(get), PatchedId.Hash(), Span.GetTraceId());
         } else {
             SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash(), Span.GetTraceId());
         }
@@ -824,9 +822,9 @@ IActor* CreateBlobStorageGroupPatchRequest(const TIntrusivePtr<TBlobStorageGroup
         const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvPatch *ev,
         ui64 cookie, NWilson::TTraceId traceId, TInstant now,
         TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters,
-        const TActorId &proxyId, bool useVPatch) {
-    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(traceId),
-            now, storagePoolCounters, proxyId, useVPatch);
+        bool useVPatch) {
+    return new TBlobStorageGroupPatchRequest(info, state, source, mon, ev, cookie, std::move(traceId), now,
+        storagePoolCounters, useVPatch);
 }
 
 }//NKikimr

@@ -58,7 +58,7 @@ void TNodeWarden::RenderJsonGroupInfo(IOutputStream& out, const std::set<ui32>& 
             groupInfo["Status"] = "ejected";
         } else {
             TGroupRecord& group = Groups[groupId];
-            groupInfo["Status"] = group.ProxyRunning ? "started" : "stopped";
+            groupInfo["Status"] = group.ProxyId ? "started" : "stopped";
 
             if (const auto& info = group.Info) {
                 groupInfo["Generation"] = info->GroupGeneration;
@@ -220,7 +220,7 @@ void TNodeWarden::RenderDSProxies(IOutputStream& out) {
 
         ui32 numStarted = 0, numEjected = EjectedGroups.size();
         for (const auto& [groupId, group] : Groups) {
-            numStarted += group.ProxyRunning;
+            numStarted += bool(group.ProxyId);
         }
 
         H3() { out << "Started DSProxies"; }

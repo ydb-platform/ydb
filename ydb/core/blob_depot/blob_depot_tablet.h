@@ -153,6 +153,9 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr TDuration ExpirationTimeout = TDuration::Minutes(1);
 
+        // when in decommission mode and not all blocks are yet recovered, then we postpone agent registration
+        THashMap<TActorId, std::unique_ptr<TEvBlobDepot::TEvRegisterAgent::THandle>> RegisterAgentQ;
+
         struct TAgent {
             std::optional<TActorId> PipeServerId;
             std::optional<TActorId> AgentId;
@@ -198,6 +201,8 @@ namespace NKikimr::NBlobDepot {
         void ResetAgent(TAgent& agent);
         void Handle(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
 
+        void ProcessRegisterAgentQ();
+
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         void Enqueue(TAutoPtr<IEventHandle>& ev, const TActorContext&) override {
@@ -220,6 +225,7 @@ namespace NKikimr::NBlobDepot {
         void StartOperation() {
             InitChannelKinds();
             StartGroupAssimilator();
+            ProcessRegisterAgentQ();
         }
 
         void OnDetach(const TActorContext&) override {
@@ -272,6 +278,7 @@ namespace NKikimr::NBlobDepot {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Configuration
 
+        bool Configured = false;
         NKikimrBlobDepot::TBlobDepotConfig Config;
 
         void Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev);
@@ -309,6 +316,7 @@ namespace NKikimr::NBlobDepot {
         // Group assimilation
 
         TActorId RunningGroupAssimilator;
+        bool DecommitBlocksFinished = false;
 
         class TGroupAssimilator;
         class TGroupAssimilatorFetchMachine;

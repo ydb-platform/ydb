@@ -63,7 +63,8 @@ void TNodeWarden::SendRegisterNode() {
 
     TVector<ui32> startedDynamicGroups, generations;
     for (const auto& [groupId, group] : Groups) {
-        if (group.ProxyRunning && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic) {
+        if (group.ProxyId && TGroupID(groupId).ConfigurationType() == EGroupConfigurationType::Dynamic &&
+                (!group.Info || group.Info->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::DONE)) {
             startedDynamicGroups.push_back(groupId);
             generations.push_back(group.Info ? group.Info->GroupGeneration : 0);
         }

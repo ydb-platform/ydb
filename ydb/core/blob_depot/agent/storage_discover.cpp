@@ -108,7 +108,7 @@ namespace NKikimr::NBlobDepot {
                         if (ReadBody) {
                             TString error;
                             if (!Agent.IssueRead(item.GetValueChain(), 0, 0, NKikimrBlobStorage::Discover, true, this, 0,
-                                    true, &error)) {
+                                    &error)) {
                                 return EndWithError(NKikimrProto::ERROR, TStringBuilder() << "failed to read discovered blob: "
                                     << error);
                             }

@@ -221,7 +221,19 @@ namespace NKikimr::NBlobDepot {
                 item.SetCookie(*cookie);
             }
             item.SetKey(key.MakeBinaryKey());
-            item.MutableValueChain()->CopyFrom(value.ValueChain);
+            EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](const TLogoBlobID& id, ui32 begin, ui32 end) {
+                if (begin != end) {
+                    auto *out = item.AddValueChain();
+                    out->SetGroupId(Self->Info()->GroupFor(id.Channel(), id.Generation()));
+                    LogoBlobIDFromLogoBlobID(id, out->MutableBlobId());
+                    if (begin) {
+                        out->SetSubrangeBegin(begin);
+                    }
+                    if (end != id.BlobSize()) {
+                        out->SetSubrangeEnd(end);
+                    }
+                }
+            });
             if (value.Meta) {
                 item.SetMeta(value.Meta.data(), value.Meta.size());
             }

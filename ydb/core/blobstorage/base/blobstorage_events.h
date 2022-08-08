@@ -417,6 +417,14 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvBunchOfEvents : TEventLocal<TEvBunchOfEvents, EvBunchOfEvents> {
         std::vector<std::unique_ptr<IEventHandle>> Bunch;
+
+        void Process(IActor *actor) {
+            const TActorContext& ctx = TActivationContext::AsActorContext();
+            for (auto& ev : Bunch) {
+                TAutoPtr<IEventHandle> handle(ev.release());
+                actor->Receive(handle, ctx);
+            }
+        }
     };
 
     struct TEvBlobStorage::TEvAskRestartPDisk : TEventLocal<TEvAskRestartPDisk, EvAskRestartPDisk> {

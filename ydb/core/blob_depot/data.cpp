@@ -42,7 +42,7 @@ namespace NKikimr::NBlobDepot {
     void TData::PutKey(TKey key, TValue&& data) {
         ui64 referencedBytes = 0;
 
-        EnumerateBlobsForValueChain(data.ValueChain, Self->TabletID(), [&](TLogoBlobID id) {
+        EnumerateBlobsForValueChain(data.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32 /*begin*/, ui32 /*end*/) {
             if (!RefCount[id]++) {
                 // first mention of this id
                 auto& record = GetRecordsPerChannelGroup(id);
@@ -78,7 +78,7 @@ namespace NKikimr::NBlobDepot {
         const auto it = Data.find(key);
         Y_VERIFY(it != Data.end());
         TValue& value = it->second;
-        EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id) {
+        EnumerateBlobsForValueChain(value.ValueChain, Self->TabletID(), [&](TLogoBlobID id, ui32 /*begin*/, ui32 /*end*/) {
             const auto it = RefCount.find(id);
             Y_VERIFY(it != RefCount.end());
             if (!--it->second) {

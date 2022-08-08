@@ -127,7 +127,7 @@ struct TDSProxyEnv {
     std::unique_ptr<IActor> CreatePatchRequestActor(TEvBlobStorage::TEvPatch::TPtr &ev, bool useVPatch = false) {
         return std::unique_ptr<IActor>(CreateBlobStorageGroupPatchRequest(Info, GroupQueues, ev->Sender, Mon,
                 ev->Get(), ev->Cookie, std::move(ev->TraceId), TInstant::Now(), StoragePoolCounters,
-                FakeProxyActorId, useVPatch));
+                useVPatch));
     }
 };
 

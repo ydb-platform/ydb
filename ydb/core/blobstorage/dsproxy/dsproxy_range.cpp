@@ -250,7 +250,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
 
         A_LOG_DEBUG_S("DSR08", "sending TEvGet# " << get->ToString());
 
-        SendToBSProxy(SelfId(), Info->GroupID, get.release(), 0, Span.GetTraceId());
+        SendToProxy(std::move(get), 0, Span.GetTraceId());
 
         // switch state
         Become(&TThis::StateGet);

@@ -29,6 +29,7 @@ namespace NKikimr::NBlobDepot {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA06, "TEvRegisterAgentResult", (VirtualGroupId, VirtualGroupId),
             (Msg, msg));
         BlobDepotGeneration = msg.GetGeneration();
+        DecommitGroupId = msg.HasDecommitGroupId() ? std::make_optional(msg.GetDecommitGroupId()) : std::nullopt;
 
         THashSet<NKikimrBlobDepot::TChannelKind::E> vanishedKinds;
         for (const auto& [kind, _] : ChannelKinds) {

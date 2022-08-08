@@ -168,7 +168,7 @@ class TBlobStorageGroupIndexRestoreGetRequest
                         << " recoverable blob, id# " << Queries[idx].Id.ToString()
                         << " BlobStatus# " << DumpBlobStatus(idx)
                         << " sending EvGet");
-                SendToBSProxy(SelfId(), Info->GroupID, get.release(), 0);
+                SendToProxy(std::move(get));
                 RestoreQueriesStarted++;
             } else if (blobState == TBlobStorageGroupInfo::EBS_FULL) {
                 a.Status = NKikimrProto::OK;

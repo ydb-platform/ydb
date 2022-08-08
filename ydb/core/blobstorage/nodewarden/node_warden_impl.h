@@ -348,7 +348,8 @@ namespace NKikimr::NStorage {
             ui32 MaxKnownGeneration = 0; // maximum seen generation
             std::optional<NKikimrBlobStorage::TGroupInfo> Group; // group info as a protobuf
             NKikimrBlobStorage::TGroupInfo EncryptionParams; // latest encryption parameters; set only when encryption enabled; overlay in respect to Group
-            bool ProxyRunning = false;
+            TActorId ProxyId; // actor id of running DS proxy or agent
+            bool AgentProxy = false; // was the group started as an BlobDepot agent proxy?
             bool GetGroupRequestPending = false; // if true, then we are waiting for GetGroup response for this group
             bool ProposeRequestPending = false; // if true, then we have sent ProposeKey request and waiting for the group
             TActorId GroupResolver; // resolver actor id

@@ -1,5 +1,7 @@
 #include "blob_depot_tablet.h"
 #include "assimilator_fetch_machine.h"
+#include "schema.h"
+#include "blocks.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -77,7 +79,7 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT33, "TGroupAssimilator::TEvControllerNodeServiceSetUpdate", (GroupId, GroupId),
-                (Msg, ev->Get()->ToString()));
+                (Msg, ev->Get()->Record));
             NTabletPipe::CloseAndForgetClient(SelfId(), ControllerPipeId);
 
             auto& record = ev->Get()->Record;
@@ -152,7 +154,40 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    void TBlobDepot::Handle(TEvAssimilatedData::TPtr /*ev*/) {
+    void TBlobDepot::Handle(TEvAssimilatedData::TPtr ev) {
+        class TTxPutAssimilatedData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            std::unique_ptr<TEvAssimilatedData> Ev;
+
+        public:
+            TTxPutAssimilatedData(TBlobDepot *self, TEvAssimilatedData::TPtr ev)
+                : TTransactionBase(self)
+                , Ev(ev->Release().Release())
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                NIceDb::TNiceDb db(txc.DB);
+
+                for (const auto& block : Ev->Blocks) {
+                    Self->BlocksManager->AddBlockOnLoad(block.TabletId, block.BlockedGeneration, 0);
+                    db.Table<Schema::Blocks>().Key(block.TabletId).Update(
+                        NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(block.BlockedGeneration),
+                        NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
+                    );
+                }
+
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                if (!std::exchange(Self->DecommitBlocksFinished, Ev->BlocksFinished)) {
+                    STLOG(PRI_INFO, BLOB_DEPOT, BDTxx, "blocks assimilation complete", (TabletId, Self->TabletID()),
+                        (DecommitGroupId, Self->Config.GetDecommitGroupId()));
+                    Self->ProcessRegisterAgentQ();
+                }
+            }
+        };
+
+        Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
     }
 
 } // NKikimr::NBlobDepot

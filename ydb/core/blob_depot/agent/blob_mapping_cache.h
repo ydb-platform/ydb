@@ -20,7 +20,7 @@ namespace NKikimr::NBlobDepot {
 
         struct TCachedKeyItem : TIntrusiveListItem<TCachedKeyItem> {
             TStringBuf Key;
-            std::optional<TValueChain> Values;
+            std::optional<TResolvedValueChain> Values;
             bool ResolveInFlight = false;
             std::list<TQueryWaitingForKey> QueriesWaitingForKey;
         };
@@ -34,7 +34,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void HandleResolveResult(const NKikimrBlobDepot::TEvResolveResult& msg);
-        const TValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
+        const TResolvedValueChain *ResolveKey(TString key, TQuery *query, TRequestContext::TPtr context);
         void ProcessResponse(ui64 /*tag*/, TRequestContext::TPtr /*context*/, TResponse response);
     };
 

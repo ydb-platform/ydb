@@ -26,9 +26,9 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    bool TBlobDepotAgent::IssueRead(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>& values, ui64 offset,
-            ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass, bool mustRestoreFirst, TQuery *query,
-            ui64 tag, bool vg, TString *error) {
+    bool TBlobDepotAgent::IssueRead(const NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TResolvedValueChain>& values,
+            ui64 offset, ui64 size, NKikimrBlobStorage::EGetHandleClass getHandleClass, bool mustRestoreFirst,
+            TQuery *query, ui64 tag, TString *error) {
         ui64 outputOffset = 0;
 
         struct TReadItem {
@@ -41,19 +41,12 @@ namespace NKikimr::NBlobDepot {
         std::vector<TReadItem> items;
 
         for (const auto& value : values) {
-            if (!value.HasLocator()) {
-                *error = "TValueChain.Locator is missing";
-                return false;
-            }
-            const auto& locator = value.GetLocator();
-            const ui64 totalDataLen = locator.GetTotalDataLen();
-            if (!totalDataLen) {
-                *error = "TBlobLocator.TotalDataLen is missing or zero";
-                return false;
-            }
+            const ui32 groupId = value.GetGroupId();
+            const auto blobId = LogoBlobIDFromLogoBlobID(value.GetBlobId());
             const ui64 begin = value.GetSubrangeBegin();
-            const ui64 end = value.HasSubrangeEnd() ? value.GetSubrangeEnd() : totalDataLen;
-            if (end <= begin || totalDataLen < end) {
+            const ui64 end = value.HasSubrangeEnd() ? value.GetSubrangeEnd() : blobId.BlobSize();
+
+            if (end <= begin || blobId.BlobSize() < end) {
                 *error = "incorrect SubrangeBegin/SubrangeEnd pair";
                 return false;
             }
@@ -70,18 +63,7 @@ namespace NKikimr::NBlobDepot {
             partLen = Min(size ? size : Max<ui64>(), partLen - offset);
             Y_VERIFY(partLen);
 
-            auto blobSeqId = TBlobSeqId::FromProto(locator.GetBlobSeqId());
-
-            if (vg) {
-                const bool composite = totalDataLen + sizeof(TVirtualGroupBlobFooter) <= MaxBlobSize;
-                const EBlobType type = composite ? EBlobType::VG_COMPOSITE_BLOB : EBlobType::VG_DATA_BLOB;
-                const ui32 blobSize = totalDataLen + (composite ? sizeof(TVirtualGroupBlobFooter) : 0);
-                const auto id = blobSeqId.MakeBlobId(TabletId, type, 0, blobSize);
-                items.push_back(TReadItem{locator.GetGroupId(), id, static_cast<ui32>(offset + begin),
-                    static_cast<ui32>(partLen), outputOffset});
-            } else {
-                Y_FAIL();
-            }
+            items.push_back(TReadItem{groupId, blobId, ui32(offset + begin), ui32(partLen), outputOffset});
 
             outputOffset += partLen;
             offset = 0;

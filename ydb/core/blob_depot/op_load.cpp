@@ -8,8 +8,6 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::ExecuteTxLoad() {
         class TTxLoad : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-            bool Configured = false;
-
         public:
             TTxLoad(TBlobDepot *self)
                 : TTransactionBase(self)
@@ -31,8 +29,8 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     } else if (table.IsValid()) {
                         if (table.HaveValue<Schema::Config::ConfigProtobuf>()) {
-                            Configured = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
-                            Y_VERIFY(Configured);
+                            Self->Configured = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
+                            Y_VERIFY(Self->Configured);
                         }
                     }
                 }
@@ -87,9 +85,9 @@ namespace NKikimr::NBlobDepot {
 
             void Complete(const TActorContext&) override {
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (TabletId, Self->TabletID()),
-                    (Configured, Configured));
+                    (Configured, Self->Configured));
 
-                if (Configured) {
+                if (Self->Configured) {
                     Self->StartOperation();
                 }
 

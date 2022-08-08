@@ -570,7 +570,7 @@ public:
 
                 A_LOG_DEBUG_S("DSPDM17", "sending TEvGet# " << query->ToString());
 
-                SendToBSProxy(SelfId(), Info->GroupID, query.release());
+                SendToProxy(std::move(query));
                 ++RequestsInFlight;
             } else {
                 GetFinished = true;

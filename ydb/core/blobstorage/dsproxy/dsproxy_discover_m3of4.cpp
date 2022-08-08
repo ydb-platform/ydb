@@ -286,7 +286,7 @@ public:
                     // we have to process this blob
                     auto query = std::make_unique<TEvBlobStorage::TEvGet>(id, 0, 0, Deadline, HandleClass, true, !ReadBody, ForceBlockedGeneration);
                     query->IsInternal = true;
-                    SendToBSProxy(SelfId(), Info->GroupID, query.release());
+                    SendToProxy(std::move(query));
                     GetIssuedFor = id;
                     return;
                 }

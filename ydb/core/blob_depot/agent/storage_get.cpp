@@ -36,7 +36,7 @@ namespace NKikimr::NBlobDepot {
                     response.RequestedSize = query.Size;
 
                     TString blobId = query.Id.AsBinaryString();
-                    if (const TValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
+                    if (const TResolvedValueChain *value = Agent.BlobMappingCache.ResolveKey(blobId, this,
                             std::make_shared<TResolveKeyContext>(i))) {
                         if (!ProcessSingleResult(i, value)) {
                             return;
@@ -45,7 +45,7 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            bool ProcessSingleResult(ui32 queryIdx, const TValueChain *value) {
+            bool ProcessSingleResult(ui32 queryIdx, const TResolvedValueChain *value) {
                 auto& msg = GetQuery();
 
                 if (!value) {
@@ -57,7 +57,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (value) {
                     TString error;
                     const bool success = Agent.IssueRead(*value, msg.Queries[queryIdx].Shift, msg.Queries[queryIdx].Size,
-                        msg.GetHandleClass, msg.MustRestoreFirst, this, queryIdx, true, &error);
+                        msg.GetHandleClass, msg.MustRestoreFirst, this, queryIdx, &error);
                     if (!success) {
                         EndWithError(NKikimrProto::ERROR, std::move(error));
                         return false;

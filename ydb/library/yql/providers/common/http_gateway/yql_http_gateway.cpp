@@ -200,12 +200,30 @@ public:
     using TPtr = std::shared_ptr<TEasyCurlStream>;
     using TWeakPtr = std::weak_ptr<TEasyCurlStream>;
 
-    TEasyCurlStream(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, IHTTPGateway::THeaders headers, size_t offset, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish)
-        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, EMethod::GET, offset), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish)), Counter(std::make_shared<std::atomic_size_t>(0ULL))
+    TEasyCurlStream(
+        const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url, IHTTPGateway::THeaders headers,
+        size_t offset,
+        IHTTPGateway::TOnDownloadStart onStart,
+        IHTTPGateway::TOnNewDataPart onNewData,
+        IHTTPGateway::TOnDownloadFinish onFinish)
+        : TEasyCurl(counter, downloadedBytes, uploadededBytes, url, headers, EMethod::GET, offset), OnStart(std::move(onStart)), OnNewData(std::move(onNewData)), OnFinish(std::move(onFinish)), Counter(std::make_shared<std::atomic_size_t>(0ULL))
     {}
 
-    static TPtr Make(const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes, TString url, IHTTPGateway::THeaders headers, size_t offset, IHTTPGateway::TOnNewDataPart onNewData, IHTTPGateway::TOnDownloadFinish onFinish) {
-        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, std::move(onNewData), std::move(onFinish));
+    static TPtr Make(
+        const ::NMonitoring::TDynamicCounters::TCounterPtr&  counter,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes,
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadededBytes,
+        TString url,
+        IHTTPGateway::THeaders headers,
+        size_t offset,
+        IHTTPGateway::TOnDownloadStart onStart,
+        IHTTPGateway::TOnNewDataPart onNewData,
+        IHTTPGateway::TOnDownloadFinish onFinish)
+    {
+        return std::make_shared<TEasyCurlStream>(counter, downloadedBytes, uploadededBytes, std::move(url), std::move(headers), offset, std::move(onStart), std::move(onNewData), std::move(onFinish));
     }
 
     enum class EAction : i8 {
@@ -242,15 +260,22 @@ private:
         return OnFinish(TIssues{error});
     }
 
-    void Done(CURLcode result, long httpResponseCode) final {
+    void Done(CURLcode result, long) final {
         if (CURLE_OK != result)
             return Fail(TIssue(curl_easy_strerror(result)));
 
         Working = false;
-        return OnFinish(httpResponseCode);
+        return OnFinish(TIssues());
     }
 
     size_t Write(void* contents, size_t size, size_t nmemb) final {
+        if (!StreamStarted) {
+            StreamStarted = true;
+            long httpResponseCode = 0L;
+            curl_easy_getinfo(GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
+            OnStart(httpResponseCode);
+        }
+
         const auto realsize = size * nmemb;
         Position += realsize;
         OnNewData(IHTTPGateway::TCountedContent(TString(static_cast<char*>(contents), realsize), Counter));
@@ -259,12 +284,15 @@ private:
 
     size_t Read(char*, size_t, size_t) final { return 0ULL; }
 
+    const IHTTPGateway::TOnDownloadStart OnStart;
     const IHTTPGateway::TOnNewDataPart OnNewData;
     const IHTTPGateway::TOnDownloadFinish OnFinish;
+
     const std::shared_ptr<std::atomic_size_t> Counter;
     bool Working = false;
     size_t Position = 0ULL;
     bool Cancelled = false;
+    bool StreamStarted = false;
 };
 
 using TKeyType = std::tuple<TString, size_t, IHTTPGateway::THeaders, TString, IRetryPolicy<long>::TPtr>;
@@ -540,10 +568,11 @@ private:
         TString url,
         THeaders headers,
         size_t offset,
+        TOnDownloadStart onStart,
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish) final
     {
-        auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, std::move(onNewData), std::move(onFinish));
+        auto stream = TEasyCurlStream::Make(InFlightStreams, DownloadedBytes, UploadedBytes, std::move(url), std::move(headers), offset, std::move(onStart), std::move(onNewData), std::move(onFinish));
         const std::unique_lock lock(Sync);
         const auto handle = stream->GetHandle();
         TEasyCurlStream::TWeakPtr weak = stream;

@@ -94,14 +94,16 @@ public:
         const std::shared_ptr<std::atomic_size_t> Counter;
     };
 
+    using TOnDownloadStart = std::function<void(long)>; // http code.
     using TOnNewDataPart = std::function<void(TCountedContent&&)>;
-    using TOnDownloadFinish = std::function<void(std::variant<long, TIssues>)>; // http code or issues.
+    using TOnDownloadFinish = std::function<void(TIssues)>;
     using TCancelHook = std::function<void(TIssue)>;
 
     virtual TCancelHook Download(
         TString url,
         THeaders headers,
         std::size_t offset,
+        TOnDownloadStart onStart,
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish) = 0;
 };

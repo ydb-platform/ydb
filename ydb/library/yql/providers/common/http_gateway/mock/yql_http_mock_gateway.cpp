@@ -73,6 +73,7 @@ public:
             TString ,
             THeaders ,
             std::size_t ,
+            TOnDownloadStart ,
             TOnNewDataPart ,
             TOnDownloadFinish ) final {
         return {};

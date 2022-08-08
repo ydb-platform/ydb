@@ -125,7 +125,12 @@ TTypePrinter5::TTypePrinter5(const ITypeInfoHelper2& typeHelper2, const TType* t
 void TTypePrinter5::OnPgImpl(ui32 typeId) {
     auto* description = TypeHelper2_.FindPgTypeDescription(typeId);
     Y_VERIFY(description);
-    *Output_ << std::string_view(description->Name);
+    auto name = std::string_view(description->Name);
+    if (name.starts_with('_')) {
+        name.remove_prefix(1);
+        *Output_ << '_';
+    }
+    *Output_ << "pg" << name;
 }
 
 }

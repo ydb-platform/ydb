@@ -1606,6 +1606,7 @@ NUdf::ETypeKind TTypeInfoHelper::GetTypeKind(const NUdf::TType* type) const {
     case NMiniKQL::TType::EKind::EmptyList: return NUdf::ETypeKind::EmptyList;
     case NMiniKQL::TType::EKind::EmptyDict: return NUdf::ETypeKind::EmptyDict;
     case NMiniKQL::TType::EKind::Tagged: return NUdf::ETypeKind::Tagged;
+    case NMiniKQL::TType::EKind::Pg: return NUdf::ETypeKind::Pg;
     default:
         Y_VERIFY_DEBUG(false, "Wrong MQKL type kind %s", mkqlType->GetKindAsStr().data());
         return NUdf::ETypeKind::Unknown;

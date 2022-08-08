@@ -94,6 +94,7 @@ public:
 
     void Start() {
         if (auto guard = Server->ProtectShutdown()) {
+            OnBeforeCall();
             (Service->*RequestCallback)(&Context, &Request, Writer.Get(), CQ, CQ, GetGRpcTag());
         } else {
             // Server is shutting down, new requests cannot be started
@@ -115,11 +116,27 @@ public:
     }
 
     void DestroyRequest() override {
+        Y_VERIFY(!CallInProgress_, "Unexpected DestroyRequest while another grpc call is still in progress");
+        RequestDestroyed_ = true;
         if (RequestRegistered_) {
             Server->DeregisterRequestCtx(this);
             RequestRegistered_ = false;
         }
         delete this;
+    }
+
+private:
+    void OnBeforeCall() {
+        Y_VERIFY(!RequestDestroyed_, "Cannot start grpc calls after request is already destroyed");
+        Y_VERIFY(!Finished_, "Cannot start grpc calls after request is finished");
+        bool wasInProgress = std::exchange(CallInProgress_, true);
+        Y_VERIFY(!wasInProgress, "Another grpc call is already in progress");
+    }
+
+    void OnAfterCall() {
+        Y_VERIFY(!RequestDestroyed_, "Finished grpc call after request is already destroyed");
+        bool wasInProgress = std::exchange(CallInProgress_, false);
+        Y_VERIFY(wasInProgress, "Finished grpc call that was not in progress");
     }
 
 public:
@@ -270,6 +287,8 @@ private:
         ResponseSize = resp.ByteSize();
         ResponseStatus = status;
         StateFunc = &TSimpleRequest::FinishDone;
+        OnBeforeCall();
+        Finished_ = true;
         Writer->Finish(resp, Status::OK, GetGRpcTag());
     }
 
@@ -280,12 +299,16 @@ private:
             Name, Context.peer().c_str());
 
         StateFunc = &TSimpleRequest::FinishDoneWithoutProcessing;
+        OnBeforeCall();
+        Finished_ = true;
         Writer->Finish(resp,
                        grpc::Status(grpc::StatusCode::RESOURCE_EXHAUSTED, msg),
                        GetGRpcTag());
     }
 
     bool RequestDone(bool ok) {
+        OnAfterCall();
+
         auto makeRequestString = [&] {
             TString resp;
             if (ok) {
@@ -334,6 +357,7 @@ private:
     }
 
     bool FinishDone(bool ok) {
+        OnAfterCall();
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
         Counters->FinishProcessing(RequestSize, ResponseSize, ok, ResponseStatus,
@@ -345,6 +369,7 @@ private:
     }
 
     bool FinishDoneWithoutProcessing(bool ok) {
+        OnAfterCall();
         LOG_DEBUG(ActorSystem, NKikimrServices::GRPC_SERVER, "[%p] finished request without processing Name# %s ok# %s peer# %s", this,
             Name, ok ? "true" : "false", Context.peer().c_str());
 
@@ -373,6 +398,9 @@ private:
     TMaybe<NMsgBusProxy::TBusMessageContext> BusContext;
     bool InProgress_;
     bool RequestRegistered_ = false;
+    bool RequestDestroyed_ = false;
+    bool CallInProgress_ = false;
+    bool Finished_ = false;
 };
 
 } // namespace

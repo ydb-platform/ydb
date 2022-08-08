@@ -12,7 +12,7 @@
 /// \file stl_type_index.hpp
 /// \brief Contains boost::typeindex::stl_type_index class.
 ///
-/// boost::typeindex::stl_type_index class can be used as a drop-in replacement
+/// boost::typeindex::stl_type_index class can be used as a drop-in replacement 
 /// for std::type_index.
 ///
 /// It is used in situations when RTTI is enabled or typeid() method is available.
@@ -62,13 +62,13 @@ namespace boost { namespace typeindex {
 /// This class requires typeid() to work. For cases when RTTI is disabled see ctti_type_index.
 class stl_type_index
     : public type_index_facade<
-        stl_type_index,
+        stl_type_index, 
         #ifdef BOOST_NO_STD_TYPEINFO
             type_info
         #else
             std::type_info
         #endif
-    >
+    > 
 {
 public:
 #ifdef BOOST_NO_STD_TYPEINFO
@@ -115,7 +115,11 @@ inline const stl_type_index::type_info_t& stl_type_index::type_info() const BOOS
 
 
 inline const char* stl_type_index::raw_name() const BOOST_NOEXCEPT {
+#ifdef _MSC_VER
+    return data_->raw_name();
+#else
     return data_->name();
+#endif
 }
 
 inline const char* stl_type_index::name() const BOOST_NOEXCEPT {

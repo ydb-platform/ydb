@@ -45,6 +45,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-throw_exception
   restricted-boost-tti
   restricted-boost-tuple
+  restricted-boost-type_index
   restricted-boost-type_traits
   restricted-boost-typeof
   restricted-boost-utility

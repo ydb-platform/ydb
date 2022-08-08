@@ -30,7 +30,7 @@ target_link_libraries(ydb-services-fq-ut_integration PUBLIC
   yq-libs-private_client
   providers-common-db_id_async_resolver
   yql-sql-pg_dummy
-  common-clickhouse-client
+  clickhouse_client_udf
   library-yql-utils
   public-lib-fq
   ydb-services-ydb

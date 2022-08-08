@@ -6,6 +6,14 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(restricted-boost-crc INTERFACE)
+target_include_directories(restricted-boost-crc INTERFACE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/crc/include
+)
+target_link_libraries(restricted-boost-crc INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+  restricted-boost-config
+  restricted-boost-integer
+)

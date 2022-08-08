@@ -8,6 +8,9 @@
 
 
 add_library(clickhouse_client_udf INTERFACE)
+target_compile_options(clickhouse_client_udf INTERFACE
+  -DOS_LINUX
+)
 target_include_directories(clickhouse_client_udf INTERFACE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox
 )
@@ -37,9 +40,11 @@ target_link_libraries(clickhouse_client_udf INTERFACE
 )
 
 add_global_library_for(clickhouse_client_udf.global clickhouse_client_udf)
+target_compile_options(clickhouse_client_udf.global PUBLIC
+  -DOS_LINUX
+)
 target_compile_options(clickhouse_client_udf.global PRIVATE
   -DARCADIA_BUILD
-  -DOS_LINUX
   -DUSE_ARROW=0
   -DUSE_PARQUET=1
   -DUSE_ORC=0

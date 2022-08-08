@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(contrib-libs-pdqsort INTERFACE)
+target_link_libraries(contrib-libs-pdqsort INTERFACE
+  contrib-libs-cxxsupp
+  yutil
+)

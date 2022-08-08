@@ -6,6 +6,17 @@
 # original buildsystem will not be accepted.
 
 
-if (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(dragonbox)
+target_compile_options(dragonbox PRIVATE
+  -Wno-everything
+)
+target_include_directories(dragonbox PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox/include
+)
+target_link_libraries(dragonbox PUBLIC
+  contrib-libs-cxxsupp
+)
+target_sources(dragonbox PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/dragonbox/source/dragonbox_to_chars.cpp
+)

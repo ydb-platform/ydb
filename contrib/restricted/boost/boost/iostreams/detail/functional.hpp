@@ -76,6 +76,7 @@ class device_close_all_operation {
 public:
     typedef void result_type;
     device_close_all_operation(T& t) : t_(t) { }
+    device_close_all_operation(const device_close_all_operation& ohter) = default;
     void operator()() const { detail::close_all(t_); }
 private:
     BOOST_DELETED_FUNCTION(device_close_all_operation& operator=(const device_close_all_operation&));
@@ -114,6 +115,7 @@ public:
         : t_(t), which_(which) 
         { }
     void operator()() const { t_.close(which_); }
+    member_close_operation(member_close_operation const& other) = default;
 private:
     BOOST_DELETED_FUNCTION(member_close_operation& operator=(const member_close_operation&));
     T&                   t_;
@@ -131,6 +133,7 @@ template<typename T>
 class reset_operation {
 public:
     reset_operation(T& t) : t_(t) { }
+    reset_operation(reset_operation const& other) = default;
     void operator()() const { t_.reset(); }
 private:
     BOOST_DELETED_FUNCTION(reset_operation& operator=(const reset_operation&));

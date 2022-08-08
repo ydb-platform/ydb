@@ -30,11 +30,14 @@ BOOST_HANA_NAMESPACE_BEGIN
             -> decltype(Datatype(static_cast<X&&>(x)...))
         { return Datatype(static_cast<X&&>(x)...); }
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-value"
         template <typename ...X>
         static constexpr auto make_helper(long, X&& ...) {
             static_assert((sizeof...(X), false),
             "there exists no constructor for the given data type");
         }
+#pragma clang diagnostic pop
 
         template <typename ...X>
         static constexpr decltype(auto) apply(X&& ...x)

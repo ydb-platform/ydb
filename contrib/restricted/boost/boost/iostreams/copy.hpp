@@ -158,6 +158,7 @@ public:
         return copy_impl( src_, snk_, buffer_size_, 
                           is_direct<Source>(), is_direct<Sink>() );
     }
+    copy_operation(copy_operation const& other) = default;
 private:
     BOOST_DELETED_FUNCTION(copy_operation& operator=(const copy_operation&));
     Source&          src_;

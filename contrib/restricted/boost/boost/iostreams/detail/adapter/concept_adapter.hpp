@@ -67,6 +67,8 @@ public:
     explicit concept_adapter(const T& t) : t_(t)
     { BOOST_STATIC_ASSERT(!is_std_io<T>::value); }
 
+    concept_adapter(concept_adapter const& other) = default;
+
     T& operator*() { return t_; }
     T* operator->() { return &t_; }
 

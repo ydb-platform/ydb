@@ -14,6 +14,8 @@ Distributed under the Boost Software License, Version 1.0.
 
 #include <type_traits>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-value"
 
 BOOST_HANA_NAMESPACE_BEGIN namespace detail {
     template <bool ...b>
@@ -21,5 +23,7 @@ BOOST_HANA_NAMESPACE_BEGIN namespace detail {
         : std::is_same<fast_and<b...>, fast_and<(b, true)...>>
     { };
 } BOOST_HANA_NAMESPACE_END
+
+#pragma clang diagnostic pop
 
 #endif // !BOOST_HANA_DETAIL_FAST_AND_HPP

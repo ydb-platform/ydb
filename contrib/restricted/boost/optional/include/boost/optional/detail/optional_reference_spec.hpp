@@ -1,4 +1,4 @@
-// Copyright (C) 2015-2016 Andrzej Krzemienski.
+// Copyright (C) 2015-2018 Andrzej Krzemienski.
 //
 // Use, modification, and distribution is subject to the Boost Software
 // License, Version 1.0. (See accompanying file LICENSE_1_0.txt or copy at
@@ -151,7 +151,14 @@ public:
     T* get_ptr() const BOOST_NOEXCEPT { return ptr_; }
     T* operator->() const { BOOST_ASSERT(ptr_); return ptr_; }
     T& operator*() const { BOOST_ASSERT(ptr_); return *ptr_; }
-    T& value() const { return ptr_ ? *ptr_ : (throw_exception(bad_optional_access()), *ptr_); }
+    
+    T& value() const
+    {
+      if (this->is_initialized())
+        return this->get();
+      else
+        throw_exception(bad_optional_access());
+    }
     
     bool operator!() const BOOST_NOEXCEPT { return ptr_ == 0; }  
     BOOST_EXPLICIT_OPERATOR_BOOL_NOEXCEPT()
@@ -159,6 +166,25 @@ public:
     void reset() BOOST_NOEXCEPT { ptr_ = 0; }
 
     bool is_initialized() const BOOST_NOEXCEPT { return ptr_ != 0; }
+    bool has_value() const BOOST_NOEXCEPT { return ptr_ != 0; }
+    
+    template <typename F>
+    optional<typename boost::result_of<F(T&)>::type> map(F f) const
+    {
+      if (this->has_value())
+        return f(this->get());
+      else
+        return none;
+    }
+
+    template <typename F>
+    optional<typename optional_detail::optional_value_type<typename boost::result_of<F(T&)>::type>::type> flat_map(F f) const
+      {
+        if (this->has_value())
+          return f(get());
+        else
+          return none;
+      }
     
 #ifndef BOOST_OPTIONAL_DETAIL_NO_RVALUE_REFERENCES   
  

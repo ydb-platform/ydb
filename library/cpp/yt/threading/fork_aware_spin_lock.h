@@ -24,6 +24,7 @@ public:
     { }
 
     void Acquire() noexcept;
+    bool TryAcquire() noexcept;
     void Release() noexcept;
 
     bool IsLocked() const noexcept;

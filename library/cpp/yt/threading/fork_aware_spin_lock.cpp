@@ -12,6 +12,18 @@ void TForkAwareSpinLock::Acquire() noexcept
     SpinLock_.Acquire();
 }
 
+bool TForkAwareSpinLock::TryAcquire() noexcept
+{
+    if (!GetForkLock()->TryAcquireReaderForkFriendly()) {
+        return false;
+    }
+    if (!SpinLock_.TryAcquire()) {
+        GetForkLock()->ReleaseReader();
+        return false;
+    }
+    return true;
+}
+
 void TForkAwareSpinLock::Release() noexcept
 {
     SpinLock_.Release();

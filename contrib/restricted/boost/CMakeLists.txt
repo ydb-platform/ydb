@@ -30,7 +30,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-integer
   restricted-boost-interval
   restricted-boost-io
-  restricted-boost-logic
   restricted-boost-move
   restricted-boost-mp11
   restricted-boost-mpl

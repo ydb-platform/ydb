@@ -494,6 +494,18 @@ private:
             NewLine();
             Visit(msg.GetBlock8());
         }
+        if (msg.HasBlock9()) {
+            NewLine();
+            Visit(msg.GetBlock9());
+        }
+        if (msg.HasBlock10()) {
+            NewLine();
+            Visit(msg.GetBlock10());
+        }
+        if (msg.HasBlock11()) {
+            NewLine();
+            Visit(msg.GetBlock11());
+        }
     }
 
     void VisitDropTable(const TRule_drop_table_stmt& msg) {
@@ -1275,7 +1287,7 @@ private:
     }
 
     void VisitSimpleTableRef(const TRule_simple_table_ref& msg) {
-        Visit(msg.GetBlock1());
+        Visit(msg.GetRule_simple_table_ref_core1());
         if (msg.HasBlock2()) {
             NewLine();
             PushCurrentIndent();

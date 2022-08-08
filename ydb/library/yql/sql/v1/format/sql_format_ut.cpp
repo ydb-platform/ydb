@@ -232,6 +232,15 @@ Y_UNIT_TEST_SUITE(CheckSqlFormatter) {
              "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo')\n);\n"},
             {"create table user(changefeed user with (user='foo',user='bar'))",
              "CREATE TABLE user (\n\tCHANGEFEED user WITH (user = 'foo', user = 'bar')\n);\n"},
+             {"create table user(foo int32, bar bool ?) inherits (s3:$cluster.xxx) partition by hash(a,b,hash) with (inherits=interval('PT1D') ON logical_time) tablestore tablestore",
+              "CREATE TABLE user (\n"
+              "\tfoo int32,\n"
+              "\tbar bool?\n"
+              ")\n"
+              "INHERITS (s3: $cluster.xxx)\n"
+              "PARTITION BY HASH (a, b, hash)\n"
+              "WITH (inherits = interval('PT1D') ON logical_time)\n"
+              "TABLESTORE tablestore;\n"}
         };
 
         TSetup setup;

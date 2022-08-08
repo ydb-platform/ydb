@@ -1,10 +1,12 @@
 items:
   - name: Overview
     href: index.md
-  - name: Install
+  - name: Installation
     href: install.md
   - name: Authentication
     href: auth.md
+#  - name: Working with topics
+#    href: topic/topic.md
   - name: Test app
     include: { mode: link, path: example/toc_p.yaml }
   - name: Handling errors in the API

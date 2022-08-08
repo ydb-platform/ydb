@@ -21,9 +21,9 @@ namespace NKikimr::NPQ {
 
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
 
-ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
+using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
-typedef TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor> TPartitionLabeledCounters;
+ui64 GetOffsetEstimate(const std::deque<TDataKey>& container, TInstant timestamp, ui64 headOffset);
 
 class TKeyLevel;
 struct TMirrorerInfo;
@@ -408,7 +408,7 @@ private:
     std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
     TTabletCountersBase TabletCounters;
-    THolder<TPartitionLabeledCounters> PartitionCounters;
+    THolder<TPartitionLabeledCounters> PartitionCountersLabeled;
 
     TSubscriber Subscriber;
 

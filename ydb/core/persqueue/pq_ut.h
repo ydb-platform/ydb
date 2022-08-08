@@ -29,6 +29,7 @@ void SetupLogging(TTestActorRuntime& runtime) {
     NActors::NLog::EPriority otherPriority = NLog::PRI_INFO;
 
     runtime.SetLogPriority(NKikimrServices::PERSQUEUE, pqPriority);
+    runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, pqPriority);
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, priority);
     runtime.SetLogPriority(NKikimrServices::BOOTSTRAPPER, priority);
     runtime.SetLogPriority(NKikimrServices::TABLET_MAIN, priority);
@@ -115,10 +116,14 @@ struct TTestContext {
         return RequestTimeoutFilter(runtime, event, duration, deadline);
     }
 
-    void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone) {
+    void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone, bool isFirstClass = false, bool enableMonitoring = false) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
-        Runtime.Reset(new TTestBasicRuntime);
+        TTestBasicRuntime* runtime = new TTestBasicRuntime;
+        if (enableMonitoring) {
+            runtime->SetupMonitoring();
+        }
+        Runtime.Reset(runtime);
         Runtime->SetScheduledLimit(200);
 
         SetupLogging(*Runtime);
@@ -128,18 +133,17 @@ struct TTestContext {
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
             &CreatePersQueue);
 
-        TDispatchOptions options;
-        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->GetAppData(0).PQConfig.SetEnabled(true);
         // NOTE(shmel1k@): KIKIMR-14221
-        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
+        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(isFirstClass);
         Runtime->GetAppData(0).PQConfig.SetRequireCredentialsInNewProtocol(false);
         Runtime->GetAppData(0).PQConfig.SetClusterTablePath("/Root/PQ/Config/V2/Cluster");
         Runtime->GetAppData(0).PQConfig.SetVersionTablePath("/Root/PQ/Config/V2/Versions");
-        Runtime->GetAppData(0).PQConfig.SetTopicsAreFirstClassCitizen(false);
         Runtime->GetAppData(0).PQConfig.SetRoot("/Root/PQ");
         Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
 
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->DispatchEvents(options);
 
         CreateTestBootstrapper(*Runtime,
@@ -165,6 +169,8 @@ struct TTestContext {
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
             &CreatePersQueue);
 
+        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
+
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
         Runtime->DispatchEvents(options);
@@ -179,7 +185,6 @@ struct TTestContext {
         Edge = Runtime->AllocateEdgeActor();
 
         Runtime->SetScheduledEventFilter(&RequestTimeoutFilter);
-        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
     }
 
 
@@ -215,6 +220,10 @@ struct TTabletPreparationParameters {
     ui64 sidMaxCount{0};
     ui32 specVersion{0};
     i32 storageLimitBytes{0};
+    TString folderId{"somefolder"};
+    TString cloudId{"somecloud"};
+    TString databaseId{"root"};
+    TString account{"federationAccount"};
 };
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,

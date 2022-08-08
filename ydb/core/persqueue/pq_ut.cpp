@@ -1,14 +1,9 @@
 #include "pq_ut.h"
 
-#include <ydb/core/testlib/basics/runtime.h>
-#include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
-#include <ydb/public/lib/base/msgbus.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/global.h>
-#include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/persqueue/partition.h>
-#include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/security/ticket_parser.h>
 
 #include <ydb/core/testlib/fake_scheme_shard.h>
@@ -484,136 +479,6 @@ Y_UNIT_TEST(TestCheckACL) {
 }
 
 
-void CheckLabeledCountersResponse(ui32 count, TTestContext& tc, TVector<TString> mustHave = {}) {
-    IActor* actor = CreateClusterLabeledCountersAggregatorActor(tc.Edge, TTabletTypes::PersQueue);
-    tc.Runtime->Register(actor);
-
-    TAutoPtr<IEventHandle> handle;
-    TEvTabletCounters::TEvTabletLabeledCountersResponse *result;
-    result = tc.Runtime->GrabEdgeEvent<TEvTabletCounters::TEvTabletLabeledCountersResponse>(handle);
-    UNIT_ASSERT(result);
-    THashSet<TString> groups;
-
-    Cerr << "Checking with  " << count << " groups:\n";
-
-    for (ui32 i = 0; i < result->Record.LabeledCountersByGroupSize(); ++i) {
-        auto& c = result->Record.GetLabeledCountersByGroup(i);
-        groups.insert(c.GetGroup());
-        Cerr << "Has " << c.GetGroup() << "\n";
-    }
-    UNIT_ASSERT_VALUES_EQUAL(groups.size(), count);
-    for (auto& g : mustHave) {
-        UNIT_ASSERT(groups.contains(g));
-    }
-}
-
-Y_UNIT_TEST(TestSwitchOffImportantFlag) {
-    TTestContext tc;
-    RunTestWithReboots(tc.TabletIds, [&]() {
-        return tc.InitialEventsFilter.Prepare();
-    }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
-        TFinalizer finalizer(tc);
-        tc.Prepare(dispatchName, setup, activeZone);
-        activeZone = false;
-        tc.Runtime->SetScheduledLimit(600);
-        PQTabletPrepare({}, {}, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        CheckLabeledCountersResponse(8, tc); //only topic counters
-
-        PQTabletPrepare({}, {{"user", true}}, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-
-        CheckLabeledCountersResponse(8, tc, {NKikimr::JoinPath({"user/1", TOPIC_NAME})}); //topic counters + important
-
-        PQTabletPrepare({}, {}, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        auto MakeTopics = [&] (const TVector<TString>& users) {
-            TVector<TString> res;
-            for (const auto& u : users) {
-                res.emplace_back(NKikimr::JoinPath({u, TOPIC_NAME}));
-            }
-            return res;
-        };
-        CheckLabeledCountersResponse(8, tc, MakeTopics({"user/0"})); //topic counters + not important
-
-        PQTabletPrepare({}, {{"user", true}, {"user2", true}}, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        CheckLabeledCountersResponse(11, tc, MakeTopics({"user/1", "user2/1"})); //topic counters + not important
-
-        PQTabletPrepare({}, {{"user", true}, {"user2", false}}, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        CheckLabeledCountersResponse(12, tc, MakeTopics({"user/1", "user2/0"}));
-
-
-        PQTabletPrepare({}, {{"user", true}}, tc);
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        {
-            TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvTabletCounters::EvTabletAddLabeledCounters);
-            tc.Runtime->DispatchEvents(options);
-        }
-
-        CheckLabeledCountersResponse(8, tc, MakeTopics({"user/1"}));
-
-
-    });
-}
-
-
 Y_UNIT_TEST(TestSeveralOwners) {
     TTestContext tc;
     RunTestWithReboots(tc.TabletIds, [&]() {
@@ -624,7 +489,8 @@ Y_UNIT_TEST(TestSeveralOwners) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        // No important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare({}, {}, tc);
 
         TVector<std::pair<ui64, TString>> data;
 
@@ -656,7 +522,8 @@ Y_UNIT_TEST(TestWaitInOwners) {
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
 
-        PQTabletPrepare({}, {}, tc); //no important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        // No important clients, lifetimeseconds=0 - delete all right now, except last datablob
+        PQTabletPrepare({}, {}, tc);
 
         TVector<std::pair<ui64, TString>> data;
 

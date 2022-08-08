@@ -652,8 +652,8 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
-                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter, IsLocalDC,
-                                            DCId, Config, *Counters, ctx, true)),
+                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter,
+                                            IsLocalDC, DCId, Config, *Counters, ctx, true)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -987,8 +987,10 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
         Y_VERIFY(aggr->HasCounters());
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(ctx.SelfID.NodeId());
-        ctx.Send(countersAggregator, new TEvTabletCounters::TEvTabletAddLabeledCounters(
-                                        CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr));
+        ctx.Send(countersAggregator,
+                 new TEvTabletCounters::TEvTabletAddLabeledCounters(
+                     CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr)
+                 );
     }
 }
 
@@ -1535,7 +1537,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
     for (ui32 i = 0; i < req.CmdWriteSize(); ++i) {
         const auto& cmd = req.GetCmdWrite(i);
 
-        if (AppData(ctx)->Counters) {
+        if (AppData(ctx)->Counters && !AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             auto counters = AppData(ctx)->Counters;
             TString clientDC = to_lower(cmd.HasClientDC() ? cmd.GetClientDC() : "unknown");
             clientDC.to_title();
@@ -2117,6 +2119,7 @@ void TPersQueue::Handle(TEvInterconnect::TEvNodeInfo::TPtr& ev, const TActorCont
 }
 
 void TPersQueue::HandleWakeup(const TActorContext& ctx) {
+    // TIP: Send LabeledCounters here
     THashSet<TString> groups;
     for (auto& p : Partitions) {
         for (auto& m : p.second.LabeledCounters) {

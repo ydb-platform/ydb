@@ -40,9 +40,13 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
             if (tc.Runtime->GetAppData().PQConfig.GetTopicsAreFirstClassCitizen()) {
                 tabletConfig->SetTopicName("topic");
                 tabletConfig->SetTopicPath(tc.Runtime->GetAppData().PQConfig.GetDatabase() + "/topic");
+                tabletConfig->SetYcCloudId(parameters.cloudId);
+                tabletConfig->SetYcFolderId(parameters.folderId);
+                tabletConfig->SetYdbDatabaseId(parameters.databaseId);
+                tabletConfig->SetFederationAccount(parameters.account);
             } else {
-                tabletConfig->SetTopicName("rt3.dc1--topic");
-                tabletConfig->SetTopicPath("/Root/PQ/rt3.dc1--topic");
+                tabletConfig->SetTopicName("rt3.dc1--asdfgs--topic");
+                tabletConfig->SetTopicPath("/Root/PQ/rt3.dc1--asdfgs--topic");
             }
             tabletConfig->SetTopic("topic");
             tabletConfig->SetVersion(version);

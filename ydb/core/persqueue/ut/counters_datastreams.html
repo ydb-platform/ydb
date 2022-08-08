@@ -1,0 +1,94 @@
+<pre>
+cloud=somecloud:
+
+    folder=somefolder:
+
+        database=root:
+
+            stream=topic:
+                name=stream.incoming_bytes_per_second: 2700
+                name=stream.incoming_records_per_second: 150
+                name=stream.internal_write.bytes_per_second: 2700
+                name=stream.internal_write.compacted_bytes_per_second: 3720
+                name=stream.internal_write.records_per_second: 150
+                name=stream.internal_write.uncompressed_bytes_per_second: 1350
+
+                consumer=user:
+                    name=stream.internal_read.bytes_per_second: 0
+                    name=stream.internal_read.records_per_second: 0
+                    name=stream.outgoing_bytes_per_second: 0
+                    name=stream.outgoing_records_per_second: 0
+
+                    host=1:
+
+                        shard=0:
+                            name=stream.await_operating_milliseconds: 0
+
+                        shard=1:
+                            name=stream.await_operating_milliseconds: 0
+
+                    name=stream.internal_read.time_lags_milliseconds:
+                        bin=100: 0
+                        bin=1000: 0
+                        bin=10000: 0
+                        bin=180000: 0
+                        bin=200: 0
+                        bin=2000: 0
+                        bin=30000: 0
+                        bin=500: 0
+                        bin=5000: 0
+                        bin=60000: 0
+                        bin=999999: 0
+
+                host=1:
+
+                    shard=0:
+                        name=stream.internal_write.buffer_brimmed_duration_ms: 0
+
+                    shard=1:
+                        name=stream.internal_write.buffer_brimmed_duration_ms: 0
+
+                name=stream.internal_write.partition_write_quota_wait_milliseconds:
+                    bin=0: 150
+                    bin=1: 0
+                    bin=10: 0
+                    bin=100: 0
+                    bin=1000: 0
+                    bin=10000: 0
+                    bin=20: 0
+                    bin=2500: 0
+                    bin=5: 0
+                    bin=50: 0
+                    bin=500: 0
+                    bin=5000: 0
+                    bin=999999: 0
+
+                name=stream.internal_write.record_size_bytes:
+                    bin=1024: 150
+                    bin=10240: 0
+                    bin=102400: 0
+                    bin=1048576: 0
+                    bin=10485760: 0
+                    bin=20480: 0
+                    bin=204800: 0
+                    bin=2097152: 0
+                    bin=5120: 0
+                    bin=51200: 0
+                    bin=524288: 0
+                    bin=5242880: 0
+                    bin=67108864: 0
+                    bin=99999999: 0
+
+                name=stream.internal_write.time_lags_milliseconds:
+                    bin=100: 150
+                    bin=1000: 0
+                    bin=10000: 0
+                    bin=180000: 0
+                    bin=200: 0
+                    bin=2000: 0
+                    bin=30000: 0
+                    bin=500: 0
+                    bin=5000: 0
+                    bin=60000: 0
+                    bin=999999: 0
+</pre>

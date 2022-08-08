@@ -41,8 +41,7 @@ struct TPartition::THasDataReq {
     TMaybe<ui64> Cookie;
     TString ClientId;
 
-    bool operator < (const THasDataReq& req) const
-    {
+    bool operator < (const THasDataReq& req) const {
         return Num < req.Num;
     }
 };
@@ -51,8 +50,7 @@ struct TPartition::THasDataDeadline {
     TInstant Deadline;
     TPartition::THasDataReq Request;
 
-    bool operator < (const THasDataDeadline& dl) const
-    {
+    bool operator < (const THasDataDeadline& dl) const {
         return Deadline < dl.Deadline || Deadline == dl.Deadline && Request < dl.Request;
     }
 };
@@ -460,10 +458,6 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , InitDuration(TDuration::Zero())
     , InitDone(false)
     , NewPartition(newPartition)
-    // TODO: ToReview - Which name to use here? It verifies in tablet_counters_protobuf.h:633 on proper path
-    , PartitionCounters(
-            topicConverter->IsFirstClass() ? nullptr
-                                           : new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition))
     , Subscriber(partition, TabletCounters, Tablet)
     , WriteCycleStartTime(ctx.Now())
     , WriteCycleSize(0)
@@ -494,6 +488,12 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     CalcTopicWriteQuotaParams();
 
     TabletCounters.Populate(counters);
+
+    if (topicConverter->IsFirstClass()) {
+        PartitionCountersLabeled = THolder<TPartitionLabeledCounters>(nullptr);
+    } else {
+        PartitionCountersLabeled = THolder<TPartitionLabeledCounters>(new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition));
+    }
 }
 
 void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx) {
@@ -1699,11 +1699,11 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         Y_VERIFY(userInfoPair.second.Offset >= 0);
         ReadTimestampForOffset(userInfoPair.first, userInfoPair.second, ctx);
     }
-    if (PartitionCounters) {
-        PartitionCounters->GetCounters()[METRIC_INIT_TIME] = InitDuration.MilliSeconds();
-        PartitionCounters->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
-        PartitionCounters->GetCounters()[METRIC_PARTITIONS] = 1;
-        ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCounters));
+    if (PartitionCountersLabeled) {
+        PartitionCountersLabeled->GetCounters()[METRIC_INIT_TIME] = InitDuration.MilliSeconds();
+        PartitionCountersLabeled->GetCounters()[METRIC_LIFE_TIME] = CreationTime.MilliSeconds();
+        PartitionCountersLabeled->GetCounters()[METRIC_PARTITIONS] = 1;
+        ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
     UpdateUserInfoEndOffset(ctx.Now());
 
@@ -3151,7 +3151,7 @@ ui64 TPartition::GetSizeLag(i64 offset) {
 
 
 void TPartition::ReportCounters(const TActorContext& ctx) {
-    if (!PartitionCounters) {
+    if (!PartitionCountersLabeled) {
         return;
     }
     //per client counters
@@ -3287,58 +3287,58 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
         }
     }
     bool haveChanges = false;
-    if (SourceIdStorage.GetInMemorySourceIds().size() != PartitionCounters->GetCounters()[METRIC_MAX_NUM_SIDS].Get()) {
+    if (SourceIdStorage.GetInMemorySourceIds().size() != PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MAX_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
-        PartitionCounters->GetCounters()[METRIC_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
+        PartitionCountersLabeled->GetCounters()[METRIC_MAX_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
+        PartitionCountersLabeled->GetCounters()[METRIC_NUM_SIDS].Set(SourceIdStorage.GetInMemorySourceIds().size());
     }
 
     TDuration lifetimeNow = ctx.Now() - SourceIdStorage.MinAvailableTimestamp(ctx.Now());
-    if (lifetimeNow.MilliSeconds() != PartitionCounters->GetCounters()[METRIC_MIN_SID_LIFETIME].Get()) {
+    if (lifetimeNow.MilliSeconds() != PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
+        PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
     }
 
     const ui64 headGapSize = DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
     const ui64 gapSize = GapSize + headGapSize;
-    if (gapSize != PartitionCounters->GetCounters()[METRIC_GAPS_SIZE].Get()) {
+    if (gapSize != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MAX_GAPS_SIZE].Set(gapSize);
-        PartitionCounters->GetCounters()[METRIC_GAPS_SIZE].Set(gapSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_MAX_GAPS_SIZE].Set(gapSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Set(gapSize);
     }
 
     const ui32 gapsCount = GapOffsets.size() + (headGapSize ? 1 : 0);
-    if (gapsCount != PartitionCounters->GetCounters()[METRIC_GAPS_COUNT].Get()) {
+    if (gapsCount != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_COUNT].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MAX_GAPS_COUNT].Set(gapsCount);
-        PartitionCounters->GetCounters()[METRIC_GAPS_COUNT].Set(gapsCount);
+        PartitionCountersLabeled->GetCounters()[METRIC_MAX_GAPS_COUNT].Set(gapsCount);
+        PartitionCountersLabeled->GetCounters()[METRIC_GAPS_COUNT].Set(gapsCount);
     }
 
     ui64 speed = WriteQuota.GetTotalSpeed();
-    if (speed != PartitionCounters->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Get()) {
+    if (speed != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Set(speed);
+        PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_BYTES].Set(speed);
     }
 
     ui64 availSec = WriteQuota.GetAvailableAvgSec(ctx.Now());
-    if (availSec != PartitionCounters->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Get()) {
+    if (availSec != PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Set(availSec);
+        PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_SEC].Set(availSec);
     }
 
     ui64 availMin = WriteQuota.GetAvailableAvgMin(ctx.Now());
-    if (availMin != PartitionCounters->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Get()) {
+    if (availMin != PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Set(availMin);
+        PartitionCountersLabeled->GetCounters()[METRIC_MIN_WRITE_QUOTA_BYTES_AVAIL_MIN].Set(availMin);
     }
 
     ui32 id = METRIC_TOTAL_WRITE_SPEED_1;
     for (ui32 i = 0; i < AvgWriteBytes.size(); ++i) {
         ui64 avg = AvgWriteBytes[i].GetValue();
-        if (avg != PartitionCounters->GetCounters()[id].Get()) {
+        if (avg != PartitionCountersLabeled->GetCounters()[id].Get()) {
             haveChanges = true;
-            PartitionCounters->GetCounters()[id].Set(avg); //total
-            PartitionCounters->GetCounters()[id + 1].Set(avg); //max
+            PartitionCountersLabeled->GetCounters()[id].Set(avg); //total
+            PartitionCountersLabeled->GetCounters()[id + 1].Set(avg); //max
         }
         id += 2;
     }
@@ -3348,10 +3348,10 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
     id = METRIC_TOTAL_QUOTA_SPEED_1;
     for (ui32 i = 0; i < AvgQuotaBytes.size(); ++i) {
         ui64 avg = AvgQuotaBytes[i].GetValue();
-        if (avg != PartitionCounters->GetCounters()[id].Get()) {
+        if (avg != PartitionCountersLabeled->GetCounters()[id].Get()) {
             haveChanges = true;
-            PartitionCounters->GetCounters()[id].Set(avg); //total
-            PartitionCounters->GetCounters()[id + 1].Set(avg); //max
+            PartitionCountersLabeled->GetCounters()[id].Set(avg); //total
+            PartitionCountersLabeled->GetCounters()[id + 1].Set(avg); //max
         }
         id += 2;
     }
@@ -3359,39 +3359,38 @@ void TPartition::ReportCounters(const TActorContext& ctx) {
 
     if (WriteQuota.GetTotalSpeed()) {
         ui64 quotaUsage = ui64(AvgQuotaBytes[1].GetValue()) * 1000000 / WriteQuota.GetTotalSpeed() / 60;
-        if (quotaUsage != PartitionCounters->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Get()) {
+        if (quotaUsage != PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Get()) {
             haveChanges = true;
-            PartitionCounters->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Set(quotaUsage);
+            PartitionCountersLabeled->GetCounters()[METRIC_WRITE_QUOTA_USAGE].Set(quotaUsage);
         }
     }
 
     ui64 partSize = BodySize + Head.PackedSize;
-    if (partSize != PartitionCounters->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
+    if (partSize != PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Get()) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_MAX_PART_SIZE].Set(partSize);
-        PartitionCounters->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(partSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_MAX_PART_SIZE].Set(partSize);
+        PartitionCountersLabeled->GetCounters()[METRIC_TOTAL_PART_SIZE].Set(partSize);
     }
 
     ui64 ts = (WriteTimestamp.MilliSeconds() < MIN_TIMESTAMP_MS) ? Max<i64>() : WriteTimestamp.MilliSeconds();
-    if (PartitionCounters->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {
+    if (PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Get() != ts) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_LAST_WRITE_TIME].Set(ts);
+        PartitionCountersLabeled->GetCounters()[METRIC_LAST_WRITE_TIME].Set(ts);
     }
 
     ui64 timeLag = WriteLagMs.GetValue();
-    if (PartitionCounters->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Get() != timeLag) {
+    if (PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Get() != timeLag) {
         haveChanges = true;
-        PartitionCounters->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Set(timeLag);
+        PartitionCountersLabeled->GetCounters()[METRIC_WRITE_TIME_LAG_MS].Set(timeLag);
     }
 
     if (haveChanges) {
-        ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCounters));
+        ctx.Send(Tablet, new TEvPQ::TEvPartitionLabeledCounters(Partition, *PartitionCountersLabeled));
     }
 }
 
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
-
     auto& response = ev->Get()->Record;
 
     //check correctness of response
@@ -4002,11 +4001,14 @@ void TPartition::WriteClientInfo(const ui64 cookie, TUserInfo& userInfo, const T
             );
             offset = EndOffset;
             ev->Offset = offset;
-/*              TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
+/*
+            TODO:
+            TabletCounters.Cumulative()[COUNTER_PQ_SET_CLIENT_OFFSET_ERROR].Increment(1);
             ReplyError(ctx, ev->Cookie, NPersQueue::NErrorCode::SET_OFFSET_ERROR_COMMIT_TO_FUTURE,
                 TStringBuilder() << "can't commit to future. Offset " << offset << " EndOffset " << EndOffset);
             userInfo.UserActrs.pop_front();
-            continue;*/
+            continue;
+*/
         }
 
         TBuffer idata;
@@ -4270,7 +4272,8 @@ bool TPartition::AppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const
                             TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                             p.Msg.UncompressedSize, p.Msg.PartitionKey, p.Msg.ExplicitHashKey); //remove curOffset when LB will report CTime
 
-        ui64 writeLagMs = (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
+        const ui64 writeLagMs =
+            (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
         WriteLagMs.Update(writeLagMs, WriteTimestamp);
         if (InputTimeLag) {
             InputTimeLag->IncFor(writeLagMs, 1);

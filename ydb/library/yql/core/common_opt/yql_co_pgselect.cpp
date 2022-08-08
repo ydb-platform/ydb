@@ -2390,7 +2390,6 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         columnsItems.push_back(ctx.NewAtom(node->Pos(), x));
     }
 
-    auto sort = GetSetting(node->Head(), "sort");
     auto setItems = GetSetting(node->Head(), "set_items");
     const bool onlyOneSetItem = (setItems->Tail().ChildrenSize() == 1);
 
@@ -2415,6 +2414,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto window = GetSetting(setItem->Tail(), "window");
         auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
         auto distinctOn = GetSetting(setItem->Tail(), "distinct_on");
+        auto sort = GetSetting(setItem->Tail(), "sort");
         bool oneRow = !from;
         TExprNode::TPtr list;
         if (values) {
@@ -2479,7 +2479,11 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             if (distinctAll) {
                 list = ctx.NewCallable(node->Pos(), "SqlAggregateAll", { list });
             } else if (distinctOn) {
-                list = BuildDistinctOn(node->Pos(), list, distinctOn->TailPtr(), onlyOneSetItem ? sort : nullptr, ctx);
+                list = BuildDistinctOn(node->Pos(), list, distinctOn->TailPtr(), sort, ctx);
+            }
+
+            if (sort) {
+                list = BuildSort(node->Pos(), sort, list, ctx);
             }
         }
 
@@ -2493,8 +2497,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         list = ExpandPositionalUnionAll(*node, columnOrders, setItemNodes, ctx, optCtx);
     }
 
-    if (sort && sort->Tail().ChildrenSize() > 0) {
-        list = BuildSort(node->Pos(), sort, list, ctx);
+    auto finalSort = GetSetting(node->Head(), "sort");
+    if (finalSort && finalSort->Tail().ChildrenSize() > 0) {
+        list = BuildSort(node->Pos(), finalSort, list, ctx);
     }
 
     auto limit = GetSetting(node->Head(), "limit");

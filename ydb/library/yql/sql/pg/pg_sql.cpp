@@ -303,6 +303,28 @@ public:
             }
         }
 
+
+        TAstNode* sort = nullptr;
+        if (ListLength(value->sortClause) > 0) {
+            TVector<TAstNode*> sortItems;
+            for (int i = 0; i < ListLength(value->sortClause); ++i) {
+                auto node = ListNodeNth(value->sortClause, i);
+                if (NodeTag(node) != T_SortBy) {
+                    NodeNotImplemented(value, node);
+                    return nullptr;
+                }
+
+                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), setItems.size() == 1);
+                if (!sort) {
+                    return nullptr;
+                }
+
+                sortItems.push_back(sort);
+            }
+
+            sort = QVL(sortItems.data(), sortItems.size());
+        }
+
         TVector<TAstNode*> setItemNodes;
         for (const auto& x : setItems) {
             bool hasDistinctAll = false;
@@ -664,6 +686,10 @@ public:
                 setItemOptions.push_back(QL(QA("distinct_on"), distinctOn));
             }
 
+            if (setItems.size() == 1 && sort) {
+                setItemOptions.push_back(QL(QA("sort"), sort));
+            }
+
             auto setItem = L(A("PgSetItem"), QVL(setItemOptions.data(), setItemOptions.size()));
             setItemNodes.push_back(setItem);
         }
@@ -671,27 +697,6 @@ public:
         if (value->intoClause) {
             AddError("SelectStmt: not supported intoClause");
             return nullptr;
-        }
-
-        TAstNode* sort = nullptr;
-        if (ListLength(value->sortClause) > 0) {
-            TVector<TAstNode*> sortItems;
-            for (int i = 0; i < ListLength(value->sortClause); ++i) {
-                auto node = ListNodeNth(value->sortClause, i);
-                if (NodeTag(node) != T_SortBy) {
-                    NodeNotImplemented(value, node);
-                    return nullptr;
-                }
-
-                auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node));
-                if (!sort) {
-                    return nullptr;
-                }
-
-                sortItems.push_back(sort);
-            }
-
-            sort = QVL(sortItems.data(), sortItems.size());
         }
 
         if (ListLength(value->lockingClause) > 0) {
@@ -731,7 +736,7 @@ public:
         selectOptions.push_back(QL(QA("set_items"), QVL(setItemNodes.data(), setItemNodes.size())));
         selectOptions.push_back(QL(QA("set_ops"), QVL(setOpsNodes.data(), setOpsNodes.size())));
 
-        if (sort) {
+        if (setItems.size() > 1 && sort) {
             selectOptions.push_back(QL(QA("sort"), sort));
         }
 
@@ -1807,7 +1812,7 @@ public:
                 return nullptr;
             }
 
-            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node));
+            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), false);
             if (!sort) {
                 return nullptr;
             }
@@ -2045,7 +2050,7 @@ public:
         }
     }
 
-    TAstNode* ParseSortBy(const PG_SortBy* value) {
+    TAstNode* ParseSortBy(const PG_SortBy* value, bool allowAggregates) {
         bool asc = true;
         switch (value->sortby_dir) {
         case SORTBY_DEFAULT:
@@ -2073,6 +2078,7 @@ public:
         TExprSettings settings;
         settings.AllowColumns = true;
         settings.Scope = "ORDER BY";
+        settings.AllowAggregates = allowAggregates;
         auto expr = ParseExpr(value->node, settings);
         if (!expr) {
             return nullptr;

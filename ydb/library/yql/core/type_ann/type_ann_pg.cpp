@@ -2052,7 +2052,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         // pass 4 - window
         // pass 5 - result
         // pass 6 - distinct_all, distinct_on
-        for (ui32 pass = 0; pass < 7; ++pass) {
+        // pass 7 - sort
+        for (ui32 pass = 0; pass < 8; ++pass) {
             if (pass > 1 && !inputs.empty() && !hasJoinOps) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Missing join_ops"));
                 return IGraphTransformer::TStatus::Error;
@@ -2824,6 +2825,44 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     if (!newGroups.empty()) {
                         auto resultValue = ctx.Expr.NewList(options.Pos(), std::move(newGroups));
                         auto newSettings = ReplaceSetting(options, {}, "distinct_on", resultValue, ctx.Expr);
+                        output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
+                        return IGraphTransformer::TStatus::Repeat;
+                    }
+                }  else if (optionName == "sort") {
+                    if (pass != 7) {
+                        continue;
+                    }
+
+                    if (scanColumnsOnly) {
+                        continue;
+                    }
+
+                    if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    const auto& data = option->Tail();
+                    if (!EnsureTuple(data, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    for (const auto& x : data.Children()) {
+                        if (!x->IsCallable("PgSort")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected PgSort"));
+                        }
+                    }
+
+                    TInputs projectionInputs;
+                    projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), false, {} });
+                    if (data.ChildrenSize() > 0 && data.Child(0)->Child(0)->IsCallable("Void")) {
+                        TExprNode::TListType newSortTupleItems;
+                        // no effective types yet, scan lambda bodies
+                        if (!ValidateSort(projectionInputs, {}, data, ctx, newSortTupleItems)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto newSortTuple = ctx.Expr.NewList(data.Pos(), std::move(newSortTupleItems));
+                        auto newSettings = ReplaceSetting(options, {}, "sort", newSortTuple, ctx.Expr);
                         output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
                         return IGraphTransformer::TStatus::Repeat;
                     }

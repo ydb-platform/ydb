@@ -149,6 +149,21 @@ Datum PointerDatumFromPod(const NUdf::TUnboxedValuePod& value) {
     return (Datum)(((const char*)value.AsBoxed().Get()) + PallocHdrSize);
 }
 
+NUdf::TUnboxedValue CreatePgString(i32 typeLen, ui32 targetTypeId, TStringBuf data) {
+    // typname => 'cstring', typlen => '-2', the only type with typlen == -2
+    // typname = > 'text', typlen = > '-1'
+    Y_UNUSED(targetTypeId); // todo: verify typeLen
+    Y_ENSURE(typeLen == -1 || typeLen == -2);
+    switch (typeLen) {
+    case -1:
+        return PointerDatumToPod((Datum)MakeVar(data));
+    case -2:
+        return PointerDatumToPod((Datum)MakeCString(data));
+    default:
+        Y_UNREACHABLE();
+    }
+}
+
 void *MkqlAllocSetAlloc(MemoryContext context, Size size) {
     auto fullSize = size + PallocHdrSize;
     auto ptr = (char *)MKQLAllocDeprecated(fullSize);
@@ -1028,7 +1043,16 @@ NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUd
 }
 
 template <NUdf::EDataSlot Slot, bool IsCString>
-NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value) {
+NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value, TMaybe<NUdf::EDataSlot> actualSlot = {}) {
+#ifndef NDEBUG
+    // todo: improve checks
+    if (actualSlot && Slot != *actualSlot) {
+        throw yexception() << "Invalid data slot in ConvertFromPgValue, expected " << Slot << ", but actual: " << *actualSlot;
+    }
+#else
+    Y_UNUSED(actualSlot);
+#endif
+
     switch (Slot) {
     case NUdf::EDataSlot::Bool:
         return NUdf::TUnboxedValuePod((bool)DatumGetBool(ScalarDatumFromPod(value)));
@@ -1057,59 +1081,85 @@ NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod value) {
 }
 
 NUdf::TUnboxedValuePod ConvertFromPgValue(NUdf::TUnboxedValuePod source, ui32 sourceTypeId, NKikimr::NMiniKQL::TType* targetType) {
+    TMaybe<NUdf::EDataSlot> targetDataTypeSlot;
 #ifndef NDEBUG
-    // todo: vallidate targetType
-    Y_UNUSED(targetType);
+    bool isOptional = false;
+    auto targetDataType = UnpackOptionalData(targetType, isOptional);
+    YQL_ENSURE(targetDataType);
+
+    targetDataTypeSlot = targetDataType->GetDataSlot();
+    if (!source && !isOptional) {
+        throw yexception() << "Null value is not allowed for non-optional data type " << *targetType;
+    }
 #else
     Y_UNUSED(targetType);
 #endif
 
+    if (!source) {
+        return source;
+    }
+
     switch (sourceTypeId) {
     case BOOLOID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Bool, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Bool, false>(source, targetDataTypeSlot);
     case INT2OID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Int16, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Int16, false>(source, targetDataTypeSlot);
     case INT4OID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Int32, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Int32, false>(source, targetDataTypeSlot);
     case INT8OID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Int64, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Int64, false>(source, targetDataTypeSlot);
     case FLOAT4OID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Float, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Float, false>(source, targetDataTypeSlot);
     case FLOAT8OID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Double, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Double, false>(source, targetDataTypeSlot);
     case TEXTOID:
     case VARCHAROID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Utf8, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Utf8, false>(source, targetDataTypeSlot);
     case BYTEAOID:
-        return ConvertFromPgValue<NUdf::EDataSlot::String, false>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::String, false>(source, targetDataTypeSlot);
     case CSTRINGOID:
-        return ConvertFromPgValue<NUdf::EDataSlot::Utf8, true>(source);
+        return ConvertFromPgValue<NUdf::EDataSlot::Utf8, true>(source, targetDataTypeSlot);
     default:
         ythrow yexception() << "Unsupported type: " << NPg::LookupType(sourceTypeId).Name;
     }
 }
 
 NUdf::TUnboxedValuePod ConvertToPgValue(NUdf::TUnboxedValuePod source, NKikimr::NMiniKQL::TType* sourceType, ui32 targetTypeId) {
-    auto sourceDataType = AS_TYPE(TDataType, sourceType);
+    TMaybe<NUdf::EDataSlot> sourceDataTypeSlot;
+#ifndef NDEBUG
+    bool isOptional = false;
+    auto sourceDataType = UnpackOptionalData(sourceType, isOptional);
     YQL_ENSURE(sourceDataType);
+    sourceDataTypeSlot = sourceDataType->GetDataSlot();
+
+    if (!source && !isOptional) {
+        throw yexception() << "Null value is not allowed for non-optional data type " << *sourceType;
+    }
+#else
+    Y_UNUSED(sourceType);
+#endif
+
+    if (!source) {
+        return source;
+    }
 
     switch (targetTypeId) {
     case BOOLOID:
-        return ConvertToPgValue<NUdf::EDataSlot::Bool>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Bool>(source, sourceDataTypeSlot);
     case INT2OID:
-        return ConvertToPgValue<NUdf::EDataSlot::Int16>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Int16>(source, sourceDataTypeSlot);
     case INT4OID:
-        return ConvertToPgValue<NUdf::EDataSlot::Int32>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Int32>(source, sourceDataTypeSlot);
     case INT8OID:
-        return ConvertToPgValue<NUdf::EDataSlot::Int64>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Int64>(source, sourceDataTypeSlot);
     case FLOAT4OID:
-        return ConvertToPgValue<NUdf::EDataSlot::Float>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Float>(source, sourceDataTypeSlot);
     case FLOAT8OID:
-        return ConvertToPgValue<NUdf::EDataSlot::Double>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Double>(source, sourceDataTypeSlot);
     case TEXTOID:
-        return ConvertToPgValue<NUdf::EDataSlot::Utf8>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::Utf8>(source, sourceDataTypeSlot);
     case BYTEAOID:
-        return ConvertToPgValue<NUdf::EDataSlot::String>(source, sourceDataType->GetDataSlot());
+        return ConvertToPgValue<NUdf::EDataSlot::String>(source, sourceDataTypeSlot);
     default:
         ythrow yexception() << "Unsupported type: " << NPg::LookupType(targetTypeId).Name;
     }
@@ -1892,7 +1942,11 @@ NUdf::TUnboxedValue PgValueFromNativeBinary(const TStringBuf binary, ui32 pgType
 
         auto x = finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
-        Y_ENSURE(stringInfo.cursor == stringInfo.len);
+        if (stringInfo.cursor != stringInfo.len) {
+            TStringBuilder errMsg;
+            errMsg << "Not all data has been consumed by 'recv' function: " << NPg::LookupProc(receiveFuncId).Name << ", data size: " << stringInfo.len << ", consumed size: " << stringInfo.cursor;
+            UdfTerminate(errMsg.c_str());
+        }
         return typeInfo.PassByValue ? ScalarDatumToPod(x) : PointerDatumToPod(x);
     }
     PG_CATCH();
@@ -2763,11 +2817,7 @@ public:
     }
 
     NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {
-        // todo: implement
-        Y_UNUSED(typeLen);
-        Y_UNUSED(targetTypeId);
-        Y_UNUSED(data);
-        return NUdf::TUnboxedValue();
+        return CreatePgString(typeLen, targetTypeId, data);
     }
 };
 

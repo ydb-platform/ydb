@@ -2,14 +2,32 @@
 #include "mkql_computation_node_holders.h"
 
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_type_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
+#include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+namespace NYql {
+namespace NCommon {
+
+TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
+TString PgValueToNativeBinary(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId);
+
+}
+}
 
 namespace NKikimr {
 
 using namespace NUdf;
+using namespace NYql::NCommon;
 
 namespace NMiniKQL {
+
+namespace {
+    TString AsString(const TStringValue& v) {
+        return { v.Data(), v.Size() };
+    }
+}
 
 class TMiniKQLValueBuilderTest: public TTestBase {
 public:
@@ -18,8 +36,15 @@ public:
         , Env(Alloc)
         , MemInfo("Memory")
         , HolderFactory(Alloc.Ref(), MemInfo, FunctionRegistry.Get())
-        , Builder(HolderFactory)
+        , Builder(HolderFactory, NUdf::EValidatePolicy::Exception)
+        , TypeInfoHelper(new TTypeInfoHelper())
+        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {})
     {
+        BoolOid = NYql::NPg::LookupType("bool").TypeId;
+    }
+
+    const IPgBuilder& GetPgBuilder() const {
+        return Builder.GetPgBuilder();
     }
 
 private:
@@ -29,11 +54,20 @@ private:
     TMemoryUsageInfo MemInfo;
     THolderFactory HolderFactory;
     TDefaultValueBuilder Builder;
+    NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+    TFunctionTypeInfoBuilder FunctionTypeInfoBuilder;
+    ui32 BoolOid = 0;
 
     UNIT_TEST_SUITE(TMiniKQLValueBuilderTest);
         UNIT_TEST(TestEmbeddedVariant);
         UNIT_TEST(TestBoxedVariant);
         UNIT_TEST(TestSubstring);
+        UNIT_TEST(TestPgValueFromErrors);
+        UNIT_TEST(TestPgValueFromText);
+        UNIT_TEST(TestPgValueFromBinary);
+        UNIT_TEST(TestConvertToFromPg);
+        UNIT_TEST(TestConvertToFromPgNulls);
+        UNIT_TEST(TestPgNewString);
     UNIT_TEST_SUITE_END();
 
 
@@ -75,6 +109,151 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(string.AsStringValue().Data(), two.AsStringValue().Data());
     }
 
+    void TestPgValueFromErrors() {
+        const TBindTerminator bind(&Builder); // to raise exception instead of abort
+        {
+            TStringValue error("");
+            auto r = GetPgBuilder().ValueFromText(BoolOid, "", error);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "invalid input syntax for type boolean: \"\"");
+        }
+
+        {
+            TStringValue error("");
+            auto r = GetPgBuilder().ValueFromText(BoolOid, "zzzz", error);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "Terminate was called, reason(85): Error in 'in' function: boolin, reason: invalid input syntax for type boolean: \"zzzz\"");
+        }
+
+        {
+            TStringValue error("");
+            auto r = GetPgBuilder().ValueFromBinary(BoolOid, "", error);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "Error in 'recv' function: boolrecv, reason: no data left in message");
+        }
+
+        {
+            TStringValue error("");
+            auto r = GetPgBuilder().ValueFromBinary(BoolOid, "zzzz", error);
+            UNIT_ASSERT(!r);
+            UNIT_ASSERT_STRING_CONTAINS(AsString(error), "Not all data has been consumed by 'recv' function: boolrecv, data size: 4, consumed size: 1");
+        }
+    }
+
+    void TestPgValueFromText() {
+        const TBindTerminator bind(&Builder);
+        for (auto validTrue : { "t"sv, "true"sv }) {
+            TStringValue error("");
+            auto r = GetPgBuilder().ValueFromText(BoolOid, validTrue, error);
+            UNIT_ASSERT(r);
+            UNIT_ASSERT_VALUES_EQUAL(AsString(error), "");
+            auto s = PgValueToNativeText(r, BoolOid);
+            UNIT_ASSERT_VALUES_EQUAL(s, "t");
+        }
+
+        for (auto validFalse : { "f"sv, "false"sv }) {
+            TStringValue error("");
+            auto r = GetPgBuilder().ValueFromText(BoolOid, validFalse, error);
+            UNIT_ASSERT(r);
+            UNIT_ASSERT_VALUES_EQUAL(AsString(error), "");
+            auto s = PgValueToNativeText(r, BoolOid);
+            UNIT_ASSERT_VALUES_EQUAL(s, "f");
+        }
+    }
+
+    void TestPgValueFromBinary() {
+        const TBindTerminator bind(&Builder);
+        TStringValue error("");
+        auto t = GetPgBuilder().ValueFromText(BoolOid, "true", error);
+        UNIT_ASSERT(t);
+        auto f = GetPgBuilder().ValueFromText(BoolOid, "false", error);
+        UNIT_ASSERT(f);
+
+        auto ts = PgValueToNativeBinary(t, BoolOid);
+        auto fs = PgValueToNativeBinary(f, BoolOid);
+        {
+            auto r = GetPgBuilder().ValueFromBinary(BoolOid, ts, error);
+            UNIT_ASSERT(r);
+            auto s = PgValueToNativeText(r, BoolOid);
+            UNIT_ASSERT_VALUES_EQUAL(s, "t");
+        }
+
+        {
+            auto r = GetPgBuilder().ValueFromBinary(BoolOid, fs, error);
+            UNIT_ASSERT(r);
+            auto s = PgValueToNativeText(r, BoolOid);
+            UNIT_ASSERT_VALUES_EQUAL(s, "f");
+        }
+    }
+
+    void TestConvertToFromPg() {
+        const TBindTerminator bind(&Builder);
+        auto boolType = FunctionTypeInfoBuilder.SimpleType<bool>();
+        {
+            auto v = GetPgBuilder().ConvertToPg(TUnboxedValuePod(true), boolType, BoolOid);
+            auto s = PgValueToNativeText(v, BoolOid);
+            UNIT_ASSERT_VALUES_EQUAL(s, "t");
+
+            auto from = GetPgBuilder().ConvertFromPg(v, BoolOid, boolType);
+            UNIT_ASSERT_VALUES_EQUAL(from.Get<bool>(), true);
+        }
+
+        {
+            auto v = GetPgBuilder().ConvertToPg(TUnboxedValuePod(false), boolType, BoolOid);
+            auto s = PgValueToNativeText(v, BoolOid);
+            UNIT_ASSERT_VALUES_EQUAL(s, "f");
+
+            auto from = GetPgBuilder().ConvertFromPg(v, BoolOid, boolType);
+            UNIT_ASSERT_VALUES_EQUAL(from.Get<bool>(), false);
+        }
+    }
+
+    void TestConvertToFromPgNulls() {
+        const TBindTerminator bind(&Builder);
+        auto boolOptionalType = FunctionTypeInfoBuilder.Optional()->Item<bool>().Build();
+
+        {
+            auto v = GetPgBuilder().ConvertToPg(TUnboxedValuePod(), boolOptionalType, BoolOid);
+            UNIT_ASSERT(!v);
+        }
+
+        {
+            auto v = GetPgBuilder().ConvertFromPg(TUnboxedValuePod(), BoolOid, boolOptionalType);
+            UNIT_ASSERT(!v);
+        }
+    }
+
+    void TestPgNewString() {
+        {
+            auto& pgText = NYql::NPg::LookupType("text");
+            UNIT_ASSERT_VALUES_EQUAL(pgText.TypeLen, -1);
+
+            auto s = GetPgBuilder().NewString(pgText.TypeLen, pgText.TypeId, "ABC");
+            auto utf8Type = FunctionTypeInfoBuilder.SimpleType<TUtf8>();
+            auto from = GetPgBuilder().ConvertFromPg(s, pgText.TypeId, utf8Type);
+            UNIT_ASSERT_VALUES_EQUAL((TStringBuf)from.AsStringRef(), "ABC"sv);
+        }
+
+        {
+            auto& pgCString = NYql::NPg::LookupType("cstring");
+            UNIT_ASSERT_VALUES_EQUAL(pgCString.TypeLen, -2);
+
+            auto s = GetPgBuilder().NewString(pgCString.TypeLen, pgCString.TypeId, "ABC");
+            auto utf8Type = FunctionTypeInfoBuilder.SimpleType<TUtf8>();
+            auto from = GetPgBuilder().ConvertFromPg(s, pgCString.TypeId, utf8Type);
+            UNIT_ASSERT_VALUES_EQUAL((TStringBuf)from.AsStringRef(), "ABC"sv);
+        }
+
+        {
+            auto& byteaString = NYql::NPg::LookupType("bytea");
+            UNIT_ASSERT_VALUES_EQUAL(byteaString.TypeLen, -1);
+
+            auto s = GetPgBuilder().NewString(byteaString.TypeLen, byteaString.TypeId, "ABC");
+            auto stringType = FunctionTypeInfoBuilder.SimpleType<char*>();
+            auto from = GetPgBuilder().ConvertFromPg(s, byteaString.TypeId, stringType);
+            UNIT_ASSERT_VALUES_EQUAL((TStringBuf)from.AsStringRef(), "ABC"sv);
+        }
+    }
 };
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLValueBuilderTest);

@@ -5880,6 +5880,8 @@ struct TPeepHoleRules {
         {"AddMember", &ExpandAddMember},
         {"ReplaceMember", &ExpandReplaceMember},
         {"RemoveMember", &ExpandRemoveMember},
+        {"RemoveMembers", &ExpandRemoveMembers},
+        {"ForceRemoveMembers", &ExpandRemoveMembers},
         {"RemovePrefixMembers", &ExpandRemovePrefixMembers},
         {"AsSet", &ExpandAsSet},
         {"ForceRemoveMember", &ExpandRemoveMember},

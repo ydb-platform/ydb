@@ -1717,6 +1717,45 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    template <bool Forced>
+    IGraphTransformer::TStatus RemoveMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureStructType(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureTuple(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto structType = input->Head().GetTypeAnn()->Cast<TStructExprType>();
+        TVector<const TItemExprType*> newItems = structType->GetItems();
+
+        for (const auto& child : input->Tail().Children()) {
+            if (!EnsureAtom(*child, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            auto memberName = child->Content();
+            EraseIf(newItems, [&](const auto& item) { return item->GetName() == memberName; });
+
+            if (!Forced && !FindOrReportMissingMember(memberName, input->Pos(), *structType, ctx)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TStructExprType>(newItems));
+        if (!input->GetTypeAnn()->Cast<TStructExprType>()->Validate(input->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus RemovePrefixMembersWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
             return IGraphTransformer::TStatus::Error;
@@ -10984,6 +11023,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["FlattenMembers"] = &FlattenMembersWrapper;
         Functions["SelectMembers"] = &SelectMembersWrapper<true>;
         Functions["FilterMembers"] = &SelectMembersWrapper<false>;
+        Functions["RemoveMembers"] = &RemoveMembersWrapper<false>;
+        Functions["ForceRemoveMembers"] = &RemoveMembersWrapper<true>;
         Functions["DivePrefixMembers"] = &DivePrefixMembersWrapper;
         Functions["FlattenByColumns"] = &FlattenByColumns;
         Functions["ExtractMembers"] = &ExtractMembersWrapper;

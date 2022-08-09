@@ -579,6 +579,25 @@ TExprNode::TPtr ExpandRemoveMember(const TExprNode::TPtr& node, TExprContext& ct
     return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
 }
 
+TExprNode::TPtr ExpandRemoveMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
+    const auto& membersToRemove = node->Child(1);
+    MemberUpdaterFunc removeFunc = [&membersToRemove](TString& memberName, const TTypeAnnotationNode*) {
+        for (const auto& x : membersToRemove->Children()) {
+            if (memberName == x->Content()) {
+                return false;
+            }
+        }
+
+        return true;
+    };
+
+    TExprNode::TListType members;
+    if (!UpdateStructMembers(ctx, node->ChildPtr(0), node->Content(), members, removeFunc)) {
+        return node->ChildPtr(0);
+    }
+    return ctx.NewCallable(node->Pos(), "AsStruct", std::move(members));
+}
+
 TExprNode::TPtr ExpandRemovePrefixMembers(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
 

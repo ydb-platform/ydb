@@ -4108,6 +4108,8 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
 
     map["RemoveMember"] = std::bind(&ExpandRemoveMember, _1, _2);
     map["ForceRemoveMember"] = std::bind(&ExpandRemoveMember, _1, _2);
+    map["RemoveMembers"] = std::bind(&ExpandRemoveMembers, _1, _2);
+    map["ForceRemoveMembers"] = std::bind(&ExpandRemoveMembers, _1, _2);
     map["FlattenMembers"] = std::bind(&ExpandFlattenMembers, _1, _2);
     map["FlattenStructs"] = std::bind(&ExpandFlattenStructs, _1, _2);
     map["SelectMembers"] = std::bind(&ExpandSelectMembers<true>, _1, _2);

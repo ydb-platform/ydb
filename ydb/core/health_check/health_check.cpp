@@ -2135,6 +2135,7 @@ public:
                 .RelPath = "status",
                 .ActorSystem = TlsActivationContext->ExecutorThread.ActorSystem,
                 .ActorId = SelfId(),
+                .UseAuth = false,
             });
         }
         Become(&THealthCheckService::StateWork);

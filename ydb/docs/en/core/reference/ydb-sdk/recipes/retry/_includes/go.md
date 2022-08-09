@@ -24,8 +24,7 @@ If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries t
     )
     
     func main() {
-        db, err := ydb.Open(
-            ctx,
+        db, err := ydb.Open(ctx,
             os.Getenv("YDB_CONNECTION_STRING"),
         )
         if err != nil {
@@ -37,8 +36,7 @@ If the custom function returns an error, the {{ ydb-short-name }} Go SDK tries t
         var cancel context.CancelFunc
         // fix deadline for retries
         ctx, cancel := context.WithTimeout(ctx, time.Second)
-        err = retry.Retry(
-            ctx,
+        err = retry.Retry(ctx,
             func(ctx context.Context) error {
                 whoAmI, err := db.Discovery().WhoAmI(ctx)
                 if err != nil {

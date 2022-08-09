@@ -48,8 +48,7 @@ dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8s
 // IAM-токен
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // создаем объект подключения db, является входной точкой для сервисов YDB
-db, err := ydb.Open(
-  ctx,
+db, err := ydb.Open(ctx,
   dsn,
 //  yc.WithInternalCA(), // используем сертификаты Яндекс Облака
   ydb.WithAccessTokenCredentials(token), // аутентификация с помощью токена

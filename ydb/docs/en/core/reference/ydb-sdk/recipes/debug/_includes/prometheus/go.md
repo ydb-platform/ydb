@@ -13,8 +13,7 @@ import (
 func main() {
 	ctx := context.Background()
 	registry := prometheus.NewRegistry()
-	db, err := ydb.Open(
-		ctx,
+	db, err := ydb.Open(ctx,
 		os.Getenv("YDB_CONNECTION_STRING"),
 		metrics.WithTraces(
 			registry,

@@ -12,8 +12,7 @@ import (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	db, err := ydb.Open(
-		ctx,
+	db, err := ydb.Open(ctx,
 		os.Getenv("YDB_CONNECTION_STRING"),
 		yc.WithServiceAccountKeyFileCredentials(
 			os.Getenv("YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS"),

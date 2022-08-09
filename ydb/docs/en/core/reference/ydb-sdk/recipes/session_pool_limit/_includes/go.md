@@ -8,8 +8,7 @@ import (
 )
 
 func main() {
-	db, err := ydb.Open(
-		ctx,
+	db, err := ydb.Open(ctx,
 		os.Getenv("YDB_CONNECTION_STRING"),
 		ydb.WithSessionPoolSizeLimit(500),
 	)

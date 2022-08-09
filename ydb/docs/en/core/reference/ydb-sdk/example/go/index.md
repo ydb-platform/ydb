@@ -46,8 +46,7 @@ dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8s
 // IAM token
 token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
 // creating a DB connection object, which is the input point for YDB services
-db, err := ydb.Open(
-  ctx,
+db, err := ydb.Open(ctx,
   dsn,
 //  yc.WithInternalCA(), // using Yandex.Cloud certificates
   ydb.WithAccessTokenCredentials(token), // token-based authentication

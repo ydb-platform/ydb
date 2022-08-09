@@ -116,11 +116,13 @@ public:
         struct TNodeTabletStateCount {
             NKikimrTabletBase::TTabletTypes::EType Type;
             ETabletState State;
+            bool Leader;
             int Count = 1;
             TStackVec<TString> Identifiers;
 
             TNodeTabletStateCount(const NKikimrHive::TTabletInfo& info, const TTabletStateSettings& settings) {
                 Type = info.tablettype();
+                Leader = info.followerid() == 0;
                 if (info.volatilestate() == NKikimrHive::TABLET_VOLATILE_STATE_STOPPED) {
                     State = ETabletState::Stopped;
                 } else if (info.volatilestate() != NKikimrHive::TABLET_VOLATILE_STATE_RUNNING
@@ -135,7 +137,7 @@ public:
             }
 
             bool operator ==(const TNodeTabletStateCount& o) const {
-                return State == o.State && Type == o.Type;
+                return State == o.State && Type == o.Type && Leader == o.Leader;
             }
         };
 
@@ -1339,7 +1341,11 @@ public:
                             break;
                         case TNodeTabletState::ETabletState::Dead:
                             computeTabletStatus.set_state("DEAD");
-                            tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are dead", "tablet-state");
+                            if (count.Leader) {
+                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Tablets are dead", "tablet-state");
+                            } else {
+                                tabletContext.ReportStatus(Ydb::Monitoring::StatusFlag::YELLOW, "Followers are dead", "tablet-state");
+                            }
                             break;
                     }
                     computeTabletStatus.set_overall(tabletContext.GetOverallStatus());

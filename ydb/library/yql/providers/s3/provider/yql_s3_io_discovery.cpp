@@ -32,10 +32,11 @@ struct TListRequest {
     TString Token;
     TString Url;
     TString Pattern;
+    TString UserPath;
 };
 
 bool operator<(const TListRequest& a, const TListRequest& b) {
-    return std::tie(a.Token, a.Url, a.Pattern) < std::tie(b.Token, b.Url, b.Pattern);
+    return std::tie(a.Token, a.Url, a.Pattern, a.UserPath) < std::tie(b.Token, b.Url, b.Pattern, b.UserPath);
 }
 
 using TPendingRequests = TMap<TListRequest, NThreading::TFuture<IS3Lister::TListResult>>;
@@ -150,13 +151,10 @@ public:
                 }
 
                 const auto& listEntries = std::get<IS3Lister::TListEntries>(listResult);
-                if (listEntries.empty()) {
-                    if (IS3Lister::HasWildcards(req.Pattern)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(object.Pos()), TStringBuilder() << "Object " << req.Pattern << " has no items."));
-                    } else {
-                        ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
-                            TStringBuilder() << "Object " << req.Pattern << " doesn't exist" << (req.Pattern.EndsWith('/') ? " or is a directory." : ".")));
-                    }
+                if (listEntries.empty() && !generatedColumnsConfig && !req.UserPath.EndsWith("/")) {
+                    // request to list particular files that are missing
+                    ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
+                        TStringBuilder() << "Object " << req.UserPath << " doesn't exist."));
                     return TStatus::Error;
                 }
 
@@ -226,6 +224,21 @@ public:
 
             auto settings = read.Ref().Child(4)->ChildrenList();
             auto userSchema = ExtractSchema(settings);
+            if (pathNodes.empty()) {
+                auto data = ctx.Builder(read.Pos())
+                    .Callable("List")
+                        .Callable(0, "ListType")
+                            .Add(0, userSchema.front())
+                        .Seal()
+                    .Seal()
+                    .Build();
+                if (userSchema.back()) {
+                    data = ctx.NewCallable(read.Pos(), "AssumeColumnOrder", { data, userSchema.back() });
+                }
+                replaces.emplace(node, ctx.NewCallable(read.Pos(), "Cons!", { read.World().Ptr(), data }));
+                continue;
+            }
+
             TExprNode::TPtr s3Object;
             s3Object = Build<TS3Object>(ctx, object.Pos())
                     .Paths(ctx.NewList(object.Pos(), std::move(pathNodes)))
@@ -345,10 +358,15 @@ private:
             TListRequest req;
             req.Token = tokenStr;
             req.Url = url;
+            req.UserPath = path;
 
             if (partitionedBy.empty()) {
-                // treat paths as regular wildcard patterns
-                req.Pattern = path;
+                if (path.EndsWith("/")) {
+                    req.Pattern = path + "*";
+                } else {
+                    // treat paths as regular wildcard patterns
+                    req.Pattern = path;
+                }
             } else {
                 if (IS3Lister::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));

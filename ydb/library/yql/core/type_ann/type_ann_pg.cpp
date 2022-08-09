@@ -2934,8 +2934,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
+                    if (!EnsureTupleSize(option->Tail(), joinInputs.size(), ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
                     for (const auto& x : option->Tail().Children()) {
-                        if (!EnsureTupleSize(*x, joinInputs.size(), ctx.Expr)) {
+                        if (!EnsureTuple(*x, ctx.Expr)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 

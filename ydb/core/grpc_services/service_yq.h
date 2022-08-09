@@ -4,6 +4,7 @@
 #include <memory>
 
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/yq/libs/control_plane_proxy/utils.h>
 
 namespace NKikimr {
@@ -88,6 +89,31 @@ void DoYandexQueryListBindingsRequest(std::unique_ptr<IRequestOpCtx> p, const IF
 void DoYandexQueryDescribeBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
 void DoYandexQueryModifyBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
 void DoYandexQueryDeleteBindingRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& facility);
+
+std::unique_ptr<TEvProxyRuntimeEvent> CreateCreateQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateListQueriesRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDescribeQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateGetQueryStatusRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateModifyQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDeleteQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateControlQueryRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateGetResultDataRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+
+std::unique_ptr<TEvProxyRuntimeEvent> CreateListJobsRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDescribeJobRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+
+std::unique_ptr<TEvProxyRuntimeEvent> CreateCreateConnectionRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateListConnectionsRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDescribeConnectionRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateModifyConnectionRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDeleteConnectionRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateTestConnectionRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+
+std::unique_ptr<TEvProxyRuntimeEvent> CreateCreateBindingRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateListBindingsRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDescribeBindingRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateModifyBindingRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
+std::unique_ptr<TEvProxyRuntimeEvent> CreateDeleteBindingRequestOperationCall(TIntrusivePtr<NGrpc::IRequestContextBase> ctx);
 
 } // namespace NGRpcService
 } // namespace NKikimr

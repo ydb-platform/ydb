@@ -163,6 +163,9 @@ void assertEOF(ReadBuffer & buf);
 
 [[noreturn]] void throwAtAssertionFailed(const char * s, ReadBuffer & buf);
 
+[[noreturn]] void throwTypeParseFailed(int column);
+
+
 inline void assertChar(char symbol, ReadBuffer & buf)
 {
     if (buf.eof() || *buf.position() != symbol)

@@ -121,6 +121,29 @@ static void skipDelimiter(ReadBuffer & in, const char delimiter, bool is_last_co
         assertChar(delimiter, in);
 }
 
+static bool checkTypeValidness(ReadBuffer& in, const char delimiter, bool is_last_column)
+{
+    if (is_last_column)
+    {
+        if (in.eof())
+            return true;
+
+        char symb = *in.position();
+
+        // we support the extra delimiter at the end of the line
+        // if symb is one of those, data COULD be correct
+        // otherwise it's definitely incorrect
+        if (symb == delimiter || symb == '\n' || symb == '\r') {
+            return true;
+        }
+    }
+    else {
+        if (*in.position() == delimiter) {
+            return true;
+        }
+    }
+    return false;
+}
 
 /// Skip `whitespace` symbols allowed in CSV.
 static inline void skipWhitespacesAndTabs(ReadBuffer & in)
@@ -210,7 +233,6 @@ void CSVRowInputFormat::readPrefix()
         setupAllColumnsByTableSchema();
 }
 
-
 bool CSVRowInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext)
 {
     if (in.eof())
@@ -247,6 +269,9 @@ bool CSVRowInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext
             readCSVString(tmp, in, format_settings.csv);
         }
 
+        if (!checkTypeValidness(in, delimiter, is_last_file_column)) {
+            throwTypeParseFailed(file_column);
+        }
         skipDelimiter(in, delimiter, is_last_file_column);
     }
 

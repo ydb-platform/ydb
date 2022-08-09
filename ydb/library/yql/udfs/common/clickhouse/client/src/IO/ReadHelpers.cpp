@@ -93,6 +93,14 @@ void NO_INLINE throwAtAssertionFailed(const char * s, ReadBuffer & buf)
     throw ParsingException(out.str(), ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED);
 }
 
+void NO_INLINE throwTypeParseFailed(int column)
+{
+    WriteBufferFromOwnString out;
+    out << "Failed to parse type in column " << column << " of csv";
+
+    throw ParsingException(out.str(), ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED);
+}
+
 
 bool checkString(const char * s, ReadBuffer & buf)
 {

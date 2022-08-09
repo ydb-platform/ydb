@@ -7,7 +7,6 @@
 #if !defined(BOOST_TTI_DETAIL_PTMF_HPP)
 #define BOOST_TTI_DETAIL_PTMF_HPP
 
-#include <boost/config.hpp>
 #include <boost/mpl/push_front.hpp>
 #include <boost/function_types/member_function_pointer.hpp>
 

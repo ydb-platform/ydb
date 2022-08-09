@@ -120,8 +120,7 @@ private:
             .Build();
 
         auto s = FormatType(t);
-        // todo: fix format: Enum<'BLUE','GREEN','RED'>
-        UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Struct<'BLUE':Void,'GREEN':Void,'RED':Void>>");
+        UNIT_ASSERT_VALUES_EQUAL(s, "Enum<'BLUE','GREEN','RED'>");
     }
 
     void TestResourceTypeFormat() {
@@ -181,7 +180,7 @@ private:
                 .Build();
 
             auto s = FormatType(FunctionTypeInfoBuilder.Variant()->Over(t).Build());
-            UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Struct<'is_ok':Bool,'name':String>>");
+            UNIT_ASSERT_VALUES_EQUAL(s, "Variant<'is_ok':Bool,'name':String>");
         }
         {
             auto t = FunctionTypeInfoBuilder.Tuple(2)
@@ -190,7 +189,7 @@ private:
                 .Build();
 
             auto s = FormatType(FunctionTypeInfoBuilder.Variant()->Over(t).Build());
-            UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Tuple<Bool,String>>");
+            UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Bool,String>");
         }
     }
 

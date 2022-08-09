@@ -85,7 +85,7 @@ using TStubTypeVisitor = TStubTypeVisitor1;
 class TDataTypeInspector: public TStubTypeVisitor
 {
 public:
-    TDataTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TDataTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Data) {
             typeHelper.VisitType(type, this);
         }
@@ -109,7 +109,7 @@ private:
 class TDataAndDecimalTypeInspector: public TStubTypeVisitor
 {
 public:
-    TDataAndDecimalTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TDataAndDecimalTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Data) {
             typeHelper.VisitType(type, this);
         }
@@ -145,7 +145,7 @@ private:
 class TStructTypeInspector: public TStubTypeVisitor
 {
 public:
-    TStructTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TStructTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Struct) {
             typeHelper.VisitType(type, this);
         }
@@ -165,6 +165,8 @@ public:
     }
     const TStringRef& GetMemberName(ui32 i) const { return MembersNames_[i]; }
     const TType* GetMemberType(ui32 i) const { return MembersTypes_[i]; }
+    TStringRef* GetMemberNames() { return MembersNames_.data(); }
+    const TType** GetMemberTypes() { return MembersTypes_.data(); }
 
 private:
     void OnStruct(
@@ -194,7 +196,7 @@ private:
 class TListTypeInspector: public TStubTypeVisitor
 {
 public:
-    TListTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TListTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::List) {
             typeHelper.VisitType(type, this);
         }
@@ -218,7 +220,7 @@ private:
 class TOptionalTypeInspector: public TStubTypeVisitor
 {
 public:
-    TOptionalTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TOptionalTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Optional) {
             typeHelper.VisitType(type, this);
         }
@@ -242,7 +244,7 @@ private:
 class TTupleTypeInspector: public TStubTypeVisitor
 {
 public:
-    TTupleTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TTupleTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Tuple) {
             typeHelper.VisitType(type, this);
         }
@@ -251,6 +253,7 @@ public:
     explicit operator bool() const { return ElementsCount_ != Max<ui32>(); }
     ui32 GetElementsCount() const { return ElementsCount_; }
     const TType* GetElementType(ui32 i) const { return ElementsTypes_[i]; }
+    const TType** GetElementTypes() { return ElementsTypes_.data(); }
 
 private:
     void OnTuple(ui32 elementsCount, const TType** elementsTypes) override {
@@ -273,7 +276,7 @@ private:
 class TDictTypeInspector: public TStubTypeVisitor
 {
 public:
-    TDictTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TDictTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Dict) {
             typeHelper.VisitType(type, this);
         }
@@ -300,7 +303,7 @@ private:
 class TCallableTypeInspector: public TStubTypeVisitor
 {
 public:
-    TCallableTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TCallableTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Callable) {
             typeHelper.VisitType(type, this);
         }
@@ -360,7 +363,7 @@ private:
 class TStreamTypeInspector : public TStubTypeVisitor
 {
 public:
-    TStreamTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TStreamTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Stream) {
             typeHelper.VisitType(type, this);
         }
@@ -384,7 +387,7 @@ private:
 class TVariantTypeInspector : public TStubTypeVisitor
 {
 public:
-    TVariantTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TVariantTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Variant) {
             typeHelper.VisitType(type, this);
         }
@@ -409,7 +412,7 @@ private:
 class TResourceTypeInspector: public TStubTypeVisitor
 {
 public:
-    TResourceTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TResourceTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Resource) {
             typeHelper.VisitType(type, this);
         }
@@ -434,7 +437,7 @@ private:
 class TTaggedTypeInspector: public TStubTypeVisitor
 {
 public:
-    TTaggedTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TTaggedTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Tagged) {
             typeHelper.VisitType(type, this);
         }
@@ -462,7 +465,7 @@ private:
 class TPgTypeInspector: public TStubTypeVisitor
 {
 public:
-    TPgTypeInspector(const ITypeInfoHelper& typeHelper, const TType* type) {
+    TPgTypeInspector(const ITypeInfoHelper1& typeHelper, const TType* type) {
         if (typeHelper.GetTypeKind(type) == ETypeKind::Pg) {
             typeHelper.VisitType(type, this);
         }

@@ -1,4 +1,5 @@
 #include "udf_type_printer.h"
+#include "udf_type_inspection.h"
 
 namespace NYql {
 namespace NUdf {
@@ -34,14 +35,17 @@ void TTypePrinter1::OnDataType(TDataTypeId typeId) {
 
 void TTypePrinter1::OnStruct(ui32 membersCount, TStringRef* membersNames, const TType** membersTypes) {
     *Output_ << "Struct<";
+    OutStructPayload(membersCount, membersNames, membersTypes);
+    *Output_ << '>';
+}
+
+void TTypePrinter1::OutStructPayload(ui32 membersCount, TStringRef* membersNames, const TType** membersTypes) {
     for (ui32 i = 0U; i < membersCount; ++i) {
         *Output_ << "'" << std::string_view(membersNames[i]) << "':";
         OutImpl(membersTypes[i]);
         if (i < membersCount - 1U)
             *Output_ << ',';
-
     }
-    *Output_ << '>';
 }
 
 void TTypePrinter1::OnList(const TType* itemType) {
@@ -57,13 +61,16 @@ void TTypePrinter1::OnOptional(const TType* itemType) {
 
 void TTypePrinter1::OnTuple(ui32 elementsCount, const TType** elementsTypes) {
     *Output_ << "Tuple<";
+    OutTuplePayload(elementsCount, elementsTypes);
+    *Output_ << '>';
+}
+
+void TTypePrinter1::OutTuplePayload(ui32 elementsCount, const TType** elementsTypes) {
     for (ui32 i = 0U; i < elementsCount; ++i) {
         OutImpl(elementsTypes[i]);
         if (i < elementsCount - 1U)
             *Output_ << ',';
-
     }
-    *Output_ << '>';
 }
 
 void TTypePrinter1::OnDict(const TType* keyType, const TType* valueType) {
@@ -105,9 +112,40 @@ void TTypePrinter1::OnCallable(const TType* returnType, ui32 argsCount, const TT
 }
 
 void TTypePrinter1::OnVariant(const TType* underlyingType) {
-    *Output_ << "Variant<";
-    OutImpl(underlyingType);
+    switch (TypeHelper1_.GetTypeKind(underlyingType)) {
+    case ETypeKind::Struct: {
+        TStructTypeInspector s(TypeHelper1_, underlyingType);
+        const bool isEnum = std::all_of(s.GetMemberTypes(), s.GetMemberTypes() + s.GetMembersCount(), [this](auto memberType) {
+            return TypeHelper1_.GetTypeKind(memberType) == ETypeKind::Void;
+        });
+
+        if (isEnum) {
+            *Output_ << "Enum<";
+            OutEnumValues(s.GetMembersCount(), s.GetMemberNames());
+        } else {
+            *Output_ << "Variant<";
+            OutStructPayload(s.GetMembersCount(), s.GetMemberNames(), s.GetMemberTypes());
+        }
+        break;
+    }
+    case ETypeKind::Tuple: {
+        TTupleTypeInspector s(TypeHelper1_, underlyingType);
+        *Output_ << "Variant<";
+        OutTuplePayload(s.GetElementsCount(), s.GetElementTypes());
+        break;
+    }
+    default:
+        Y_VERIFY(false, "Unexpected underlying type in Variant");
+    }
     *Output_ << '>';
+}
+
+void TTypePrinter1::OutEnumValues(ui32 membersCount, TStringRef* membersNames) {
+    for (ui32 i = 0U; i < membersCount; ++i) {
+        *Output_ << "'" << std::string_view(membersNames[i]) << '\'';
+        if (i < membersCount - 1U)
+            *Output_ << ',';
+    }
 }
 
 void TTypePrinter1::OnStream(const TType* itemType) {

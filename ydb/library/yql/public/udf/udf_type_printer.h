@@ -28,6 +28,12 @@ protected:
     void OnResourceImpl(TStringRef tag);
     void OnTaggedImpl(const TType* baseType, TStringRef tag);
 
+private:
+    void OutStructPayload(ui32 membersCount, TStringRef* membersNames, const TType** membersTypes);
+    void OutTuplePayload(ui32 elementsCount, const TType** elementsTypes);
+    void OutEnumValues(ui32 membersCount, TStringRef* membersNames);
+
+protected:
     const ITypeInfoHelper1& TypeHelper1_;
     const TType* Type_;
 };

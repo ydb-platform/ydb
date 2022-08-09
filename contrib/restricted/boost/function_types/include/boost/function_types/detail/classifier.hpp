@@ -30,7 +30,7 @@ template<bits_t Flags, bits_t CCID, std::size_t Arity> struct encode_charr
   >::type type;
 };
 
-#if defined(BOOST_MSVC) || (defined(__BORLANDC__) && !defined(BOOST_DISABLE_WIN32))
+#if defined(BOOST_MSVC) || (defined(BOOST_BORLANDC) && !defined(BOOST_DISABLE_WIN32))
 #   define BOOST_FT_DECL __cdecl
 #else
 #   define BOOST_FT_DECL /**/

@@ -12,7 +12,7 @@
 #include <cstddef>
 #include <boost/detail/workaround.hpp>
 
-#if BOOST_WORKAROUND(__BORLANDC__, <= 0x582)
+#if BOOST_WORKAROUND(BOOST_BORLANDC, <= 0x582)
 #   include <boost/type_traits/remove_cv.hpp>
 #   include <boost/type_traits/remove_pointer.hpp>
 #   include <boost/type_traits/remove_reference.hpp>
@@ -22,7 +22,7 @@
 
 namespace boost { namespace function_types { namespace detail {
 
-#if !BOOST_WORKAROUND(__BORLANDC__, <= 0x582)
+#if !BOOST_WORKAROUND(BOOST_BORLANDC, <= 0x582)
 
 template<typename T> struct cv_traits 
 { typedef non_cv tag; typedef T type; };

@@ -12,6 +12,7 @@
 #include <cstddef>
 
 #include <boost/type_traits/integral_constant.hpp>
+#include <boost/type_traits/is_same.hpp>
 #include <boost/mpl/bitxor.hpp>
 
 
@@ -134,6 +135,20 @@ template<class Tag, class QueryTag> struct extract
   > mask; 
 };
 
+/*
+
+  The following is a metafunction which checks whether a
+  property tag is in a possibly compounded tag type.
+  
+  Here both the possibly compounded tag type and a property tag
+  is given.
+  
+*/
+
+template<class Tag, class PropertyTag> struct has_property_tag
+  : detail::represents_impl<Tag,  PropertyTag>
+{ };
+
 } } // namespace ::boost::function_types
 
 #include <boost/function_types/detail/pp_tags/preprocessed.hpp>
@@ -141,6 +156,43 @@ template<class Tag, class QueryTag> struct extract
 namespace boost { namespace function_types {
 #define BOOST_FT_cc_file <boost/function_types/detail/pp_tags/cc_tag.hpp>
 #include <boost/function_types/detail/pp_loop.hpp>
+
+/*
+
+  The following are metafunctions which check whether the
+  specific property tag is in a possibly compounded tag type.
+  Here only the possibly compounded tag type is given.
+  
+*/
+
+template<class Tag> struct has_property_tag<Tag,null_tag>
+  : ::boost::is_same<Tag, null_tag>
+{ };
+
+template<class Tag> struct has_variadic_property_tag
+  : has_property_tag<Tag,  variadic>
+{ };
+
+template<class Tag> struct has_default_cc_property_tag
+  : has_property_tag<Tag,  default_cc>
+{ };
+
+template<class Tag> struct has_const_property_tag
+  : has_property_tag<Tag,  const_qualified>
+{ };
+
+template<class Tag> struct has_volatile_property_tag
+  : has_property_tag<Tag,  volatile_qualified>
+{ };
+
+template<class Tag> struct has_cv_property_tag
+  : has_property_tag<Tag,  cv_qualified>
+{ };
+
+template<class Tag> struct has_null_property_tag
+  : has_property_tag<Tag,  null_tag>
+{ };
+
 } } // namespace boost::function_types
 
 #endif

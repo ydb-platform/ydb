@@ -363,9 +363,49 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
     }
 }
 
-void ConvertInputValue(const TUnboxedValuePod& value, const NDB::IColumn::MutablePtr& col, const TColumnMeta& meta) {
+void ConvertInputValue(const TUnboxedValuePod& value, NDB::IColumn* col, const TColumnMeta& meta) {
     if (meta.IsOptional && !value)
         return col->insert(NDB::Field());
+
+    if (meta.IsEmptyList) {
+        col->insertDefault();
+        return;
+    }
+
+    if (meta.IsList) {
+        auto& res = static_cast<NDB::ColumnArray&>(*col);
+        auto& offsets = res.getOffsets();
+        const auto data = &res.getData();
+        ui64 count = 0ULL;
+        if (const auto elements = value.GetElements()) {
+            for (const auto length = value.GetListLength(); count < length; ++count)
+                ConvertInputValue(elements[count], data, meta.Items.front());
+        } else {
+            const auto iterator = value.GetListIterator();
+            for (TUnboxedValue current; iterator.Next(current); ++count) {
+                ConvertInputValue(current, data, meta.Items.front());
+            }
+        }
+
+        const auto prev = offsets.back();
+        offsets.emplace_back(prev + count);
+        return;
+    }
+
+    if (meta.IsTuple) {
+        auto& res = static_cast<NDB::ColumnTuple&>(*col);
+        for (ui32 i = 0U; i < meta.Items.size(); ++i) {
+            const auto current = value.GetElement(i);
+            ConvertInputValue(current, &res.getColumn(i), meta.Items[i]);
+        }
+
+        return;
+    }
+
+    if (!meta.Slot) {
+        col->insertDefault();
+        return;
+    }
 
     switch (*meta.Slot) {
         case EDataSlot::Utf8:
@@ -853,7 +893,7 @@ class TSerializeFormat : public TBoxedValue {
                         auto columns = ins.first->second.first.mutateColumns();
                         for (auto i = 0U; i < columns.size(); ++i) {
                             const auto index = PayloadsIndexes[i];
-                            ConvertInputValue(row.GetElement(index), columns[i], InMeta[index]);
+                            ConvertInputValue(row.GetElement(index), columns[i].get(), InMeta[index]);
                         }
                         ins.first->second.first.setColumns(std::move(columns));
                         TotalSize += ins.first->second.first.bytes();

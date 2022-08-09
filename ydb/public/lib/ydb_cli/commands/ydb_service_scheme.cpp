@@ -5,7 +5,6 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 
 
 namespace NYdb {
@@ -160,7 +159,7 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
         return DescribeTable(driver);
     case NScheme::ESchemeEntryType::PqGroup:
     case NScheme::ESchemeEntryType::Topic:
-        return DescribeStream(driver);
+        return DescribeTopic(driver);
     default:
         WarnAboutTableOptions();
         PrintEntryVerbose(entry, ShowPermissions);
@@ -169,7 +168,7 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
 }
 
 namespace {
-    TString FormatCodecs(const TVector<NYdb::NPersQueue::ECodec> codecs) {
+    TString FormatCodecs(const TVector<NYdb::NTopic::ECodec>& codecs) {
         if (codecs.empty()) {
             return "";
         }
@@ -182,50 +181,47 @@ namespace {
         return ToString(builder);
     }
 
-    void PrintStreamReadRules(
-            const TVector<NYdb::NPersQueue::TDescribeTopicResult::
-                                  TTopicSettings::TReadRule>& readRules) {
-        if (readRules.empty()) {
+    void PrintTopicConsumers(
+            const TVector<NYdb::NTopic::TConsumer>& consumers) {
+        if (consumers.empty()) {
             return;
         }
         TPrettyTable table(
                 {"ConsumerName", "SupportedCodecs",
-                 "StartingMessageTimestamp", "Important",
-                 "ServiceType", "SupportedFormat", "Version"});
-        for (const auto& rule: readRules) {
+                 "ReadFrom", "Important"});
+        for (const auto& c: consumers) {
             table.AddRow()
-                .Column(0, rule.ConsumerName())
-                .Column(1, FormatCodecs(rule.SupportedCodecs()))
-                .Column(2, rule.StartingMessageTimestamp().ToRfc822StringLocal())
-                .Column(3, rule.Important())
-                .Column(4, rule.ServiceType())
-                .Column(5, rule.SupportedFormat())
-                .Column(6, rule.Version());
+                .Column(0, c.GetConsumerName())
+                .Column(1, FormatCodecs(c.GetSupportedCodecs()))
+                .Column(2, c.GetReadFrom().ToRfc822StringLocal())
+                .Column(3, c.GetImportant());
+//                .Column(4, rule.ServiceType())
+//                .Column(5, rule.Version());
         }
         Cout << Endl << "ReadRules: " << Endl;
         Cout << table;
     }
 }
 
-int TCommandDescribe::PrintStreamResponsePretty(const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings &settings) {
-    Cout << Endl << "RetentionPeriod: " << settings.RetentionPeriod().Hours() << " hours";
-    Cout << Endl << "PartitionsCount: " << settings.PartitionsCount();
-    Cout << Endl << "SupportedFormat: " << settings.SupportedFormat();
-    if (!settings.SupportedCodecs().empty()) {
-        Cout << Endl << "SupportedCodecs: " << FormatCodecs(settings.SupportedCodecs()) << Endl;
+int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& description) {
+    Cout << Endl << "RetentionPeriod: " << description.GetRetentionPeriod().Hours() << " hours";
+    Cout << Endl << "PartitionsCount: " << description.GetTotalPartitionsCount();
+    if (!description.GetSupportedCodecs().empty()) {
+        Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
     }
-    PrintStreamReadRules(settings.ReadRules());
+    PrintTopicConsumers(description.GetConsumers());
+    Cout << Endl;
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::PrintStreamResponseProtoJsonBase64(
-        const NYdb::NPersQueue::
+int TCommandDescribe::PrintTopicResponseProtoJsonBase64(
+        const NYdb::NTopic::
                 TDescribeTopicResult& result) {
     TString json;
     google::protobuf::util::JsonPrintOptions jsonOpts;
     jsonOpts.preserve_proto_field_names = true;
     auto convertStatus = google::protobuf::util::MessageToJsonString(
-            TProtoAccessor::GetProto(result),
+            TProtoAccessor::GetProto(result.GetTopicDescription()),
             &json,
             jsonOpts
     );
@@ -238,29 +234,29 @@ int TCommandDescribe::PrintStreamResponseProtoJsonBase64(
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopicResult& result) {
+int TCommandDescribe::PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResult& result) {
     switch (OutputFormat) {
         case EOutputFormat::Default:
         case EOutputFormat::Pretty:
-            PrintStreamResponsePretty(result.TopicSettings());
+            PrintTopicResponsePretty(result.GetTopicDescription());
             break;
         case EOutputFormat::Json:
             Cerr << "Warning! Option --json is deprecated and will be removed soon. "
                  << "Use \"--format proto-json-base64\" option instead." << Endl;
             [[fallthrough]];
         case EOutputFormat::ProtoJsonBase64:
-            return PrintStreamResponseProtoJsonBase64(result);
+            return PrintTopicResponseProtoJsonBase64(result);
         default:
             throw TMisuseException() << "This command doesn't support " << OutputFormat << " output format";
     }
     return EXIT_SUCCESS;
 }
 
-int TCommandDescribe::DescribeStream(TDriver& driver) {
-    NYdb::NPersQueue::TPersQueueClient persQueueClient(driver);
-    auto describeResult = persQueueClient.DescribeTopic(Path).GetValueSync();
+int TCommandDescribe::DescribeTopic(TDriver& driver) {
+    NYdb::NTopic::TTopicClient topicClient(driver);
+    auto describeResult = topicClient.DescribeTopic(Path).GetValueSync();
     ThrowOnError(describeResult);
-    return PrintStreamResponse(describeResult);
+    return PrintTopicResponse(describeResult);
 }
 
 int TCommandDescribe::DescribeTable(TDriver& driver) {

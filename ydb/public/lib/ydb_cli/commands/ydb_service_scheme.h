@@ -7,7 +7,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -48,10 +48,10 @@ private:
     int PrintResponseProtoJsonBase64(const NTable::TTableDescription& tableDescription);
     void WarnAboutTableOptions();
 
-    int DescribeStream(TDriver& driver);
-    int PrintStreamResponse(const NYdb::NPersQueue::TDescribeTopicResult& result);
-    int PrintStreamResponsePretty(const NYdb::NPersQueue::TDescribeTopicResult::TTopicSettings& settings);
-    int PrintStreamResponseProtoJsonBase64(const NYdb::NPersQueue::TDescribeTopicResult& result);
+    int DescribeTopic(TDriver& driver);
+    int PrintTopicResponse(const NYdb::NTopic::TDescribeTopicResult& result);
+    int PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescription& settings);
+    int PrintTopicResponseProtoJsonBase64(const NYdb::NTopic::TDescribeTopicResult& result);
 
     // Common options
     bool ShowPermissions = false;

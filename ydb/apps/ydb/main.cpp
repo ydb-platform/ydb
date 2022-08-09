@@ -1,11 +1,11 @@
 #include "commands/ydb_root.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
 
-TVector<NYdb::NPersQueue::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
-    return TVector<NYdb::NPersQueue::ECodec>{
-            NYdb::NPersQueue::ECodec::RAW,
-            NYdb::NPersQueue::ECodec::ZSTD,
-            NYdb::NPersQueue::ECodec::GZIP,
+TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
+    return TVector<NYdb::NTopic::ECodec>{
+            NYdb::NTopic::ECodec::RAW,
+            NYdb::NTopic::ECodec::ZSTD,
+            NYdb::NTopic::ECodec::GZIP,
     };
 }
 

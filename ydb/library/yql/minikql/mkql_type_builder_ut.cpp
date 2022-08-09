@@ -8,13 +8,12 @@ namespace NKikimr {
 
 namespace NMiniKQL {
 
-class TMiniKQLTypeBuilderTest: public TTestBase {
+class TMiniKQLTypeBuilderTest : public TTestBase {
 public:
     TMiniKQLTypeBuilderTest()
         : Env(Alloc)
         , TypeInfoHelper(new TTypeInfoHelper())
-        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {})
-    {
+        , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "", nullptr, {}) {
     }
 
 private:
@@ -27,12 +26,15 @@ private:
         UNIT_TEST(TestPgTypeFormat);
         UNIT_TEST(TestSingularTypeFormat);
         UNIT_TEST(TestOptionalTypeFormat);
-        UNIT_TEST(TestDataTypeFormat);
+        UNIT_TEST(TestEnumTypeFormat);
         UNIT_TEST(TestResourceTypeFormat);
         UNIT_TEST(TestTaggedTypeFormat);
         UNIT_TEST(TestContainerTypeFormat);
         UNIT_TEST(TestStructTypeFormat);
         UNIT_TEST(TestTupleTypeFormat);
+        UNIT_TEST(TestVariantTypeFormat);
+        UNIT_TEST(TestCallableTypeFormat);
+        UNIT_TEST(TestDataTypeFormat);
     UNIT_TEST_SUITE_END();
 
     TString FormatType(NUdf::TType* t) {
@@ -101,8 +103,25 @@ private:
         }
         {
             auto s = FormatType(FunctionTypeInfoBuilder.Set()->Key<char*>().Build());
-            UNIT_ASSERT_VALUES_EQUAL(s, "Dict<String,Void>");
+            UNIT_ASSERT_VALUES_EQUAL(s, "Set<String>");
         }
+        {
+            auto s = FormatType(FunctionTypeInfoBuilder.Stream()->Item<ui64>().Build());
+            UNIT_ASSERT_VALUES_EQUAL(s, "Stream<Uint64>");
+        }
+    }
+
+    void TestEnumTypeFormat() {
+        ui32 index = 0;
+        auto t = FunctionTypeInfoBuilder.Enum(2)
+            ->AddField("RED", &index)
+            .AddField("GREEN", &index)
+            .AddField("BLUE", &index)
+            .Build();
+
+        auto s = FormatType(t);
+        // todo: fix format: Enum<'BLUE','GREEN','RED'>
+        UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Struct<'BLUE':Void,'GREEN':Void,'RED':Void>>");
     }
 
     void TestResourceTypeFormat() {
@@ -150,6 +169,52 @@ private:
         {
             auto s = FormatType(t);
             UNIT_ASSERT_VALUES_EQUAL(s, "Tuple<Bool,String>");
+        }
+    }
+
+    void TestVariantTypeFormat() {
+        {
+            ui32 index = 0;
+            auto t = FunctionTypeInfoBuilder.Struct(2)
+                ->AddField<bool>("is_ok", &index)
+                .AddField<char*>("name", &index)
+                .Build();
+
+            auto s = FormatType(FunctionTypeInfoBuilder.Variant()->Over(t).Build());
+            UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Struct<'is_ok':Bool,'name':String>>");
+        }
+        {
+            auto t = FunctionTypeInfoBuilder.Tuple(2)
+                ->Add<bool>()
+                .Add<char*>()
+                .Build();
+
+            auto s = FormatType(FunctionTypeInfoBuilder.Variant()->Over(t).Build());
+            UNIT_ASSERT_VALUES_EQUAL(s, "Variant<Tuple<Bool,String>>");
+        }
+    }
+
+    void TestCallableTypeFormat() {
+        {
+            auto t = FunctionTypeInfoBuilder.Callable(0)->Returns<char*>().Build();
+            auto s = FormatType(t);
+            UNIT_ASSERT_VALUES_EQUAL(s, "Callable<()->String>");
+        }
+        {
+            auto t = FunctionTypeInfoBuilder.Callable(1)->Arg<i64>().Returns<char*>().Build();
+            auto s = FormatType(t);
+            UNIT_ASSERT_VALUES_EQUAL(s, "Callable<(Int64)->String>");
+        }
+        {
+            auto t = FunctionTypeInfoBuilder.Callable(2)->Arg<i64>().Arg<char*>().Returns<bool>().Build();
+            auto s = FormatType(t);
+            UNIT_ASSERT_VALUES_EQUAL(s, "Callable<(Int64,String)->Bool>");
+        }
+        {
+            auto arg3 = FunctionTypeInfoBuilder.Optional()->Item<char*>().Build();
+            auto t = FunctionTypeInfoBuilder.Callable(3)->Arg<i64>().Arg<NUdf::TUtf8>().Arg(arg3).OptionalArgs(1).Returns<bool>().Build();
+            auto s = FormatType(t);
+            UNIT_ASSERT_VALUES_EQUAL(s, "Callable<(Int64,Utf8,[String?])->Bool>");
         }
     }
 

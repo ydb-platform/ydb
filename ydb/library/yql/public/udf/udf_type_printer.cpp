@@ -67,10 +67,17 @@ void TTypePrinter1::OnTuple(ui32 elementsCount, const TType** elementsTypes) {
 }
 
 void TTypePrinter1::OnDict(const TType* keyType, const TType* valueType) {
-    *Output_ << "Dict<";
+    const bool isSet = TypeHelper1_.GetTypeKind(valueType) == ETypeKind::Void;
+    if (isSet) {
+        *Output_ << "Set<";
+    } else {
+        *Output_ << "Dict<";
+    }
     OutImpl(keyType);
-    *Output_ << ',';
-    OutImpl(valueType);
+    if (!isSet) {
+        *Output_ << ',';
+        OutImpl(valueType);
+    }
     *Output_ << '>';
 }
 
@@ -79,16 +86,22 @@ void TTypePrinter1::OnCallable(const TType* returnType, ui32 argsCount, const TT
     for (ui32 i = 0U; i < argsCount; ++i) {
         if (optionalArgsCount && i == argsCount -  optionalArgsCount)
             *Output_ << '[';
-        if (const std::string_view name = payload->GetArgumentName(i); !name.empty())
-            *Output_ << "'" << name << "':";
+        if (payload) {
+            const std::string_view name = payload->GetArgumentName(i);
+            if (!name.empty())
+                *Output_ << "'" << name << "':";
+        }
         OutImpl(argsTypes[i]);
-        if (ICallablePayload::TArgumentFlags::AutoMap == payload->GetArgumentFlags(i))
-            *Output_ << "{Flags:AutoMap}";
+        if (payload) {
+            if (ICallablePayload::TArgumentFlags::AutoMap == payload->GetArgumentFlags(i))
+                *Output_ << "{Flags:AutoMap}";
+        }
         if (i < argsCount - 1U)
             *Output_ << ',';
     }
     *Output_ << (optionalArgsCount ? "])->" : ")->");
     OutImpl(returnType);
+    *Output_ << ">";
 }
 
 void TTypePrinter1::OnVariant(const TType* underlyingType) {

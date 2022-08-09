@@ -227,7 +227,7 @@ void TTabletExecutedFlat::RenderHtmlPage(NMon::TEvRemoteHttpInfo::TPtr &ev, cons
                 DIV_CLASS("col-md-12") {str << "<a href=\"tablets?SsId=" << TabletID() << "\">State Storage</a>";}
             }
             DIV_CLASS("row") {
-                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?KillTabletID=" << TabletID() << "\">Kill</a>";}
+                DIV_CLASS("col-md-12") {str << "<a href=\"tablets?RestartTabletID=" << TabletID() << "\">Restart</a>";}
             }
         }
 

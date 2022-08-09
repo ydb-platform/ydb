@@ -154,7 +154,7 @@ void TTabletListRenderer::RenderTableBody(TStringStream& str,
                 if (filterInfo.FilterNodeId != 0)
                     str << "&filter_node_id=" << filterInfo.FilterNodeId;
                 str << "\">"
-                    << "<span class=\"glyphicon glyphicon-remove\" title=\"Kill Tablet\"/>"
+                    << "<span class=\"glyphicon glyphicon-remove\" title=\"Restart Tablet\"/>"
                     << "</span></a>";
             }
         }

@@ -227,6 +227,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
         cgi = &msg->Request.GetParams();
     }
 
+    // remove later
     if (cgi->Has("KillTabletID")) {
         const ui64 tabletId = TryParseTabletId(cgi->Get("KillTabletID"));
         if (tabletId) {
@@ -235,6 +236,18 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
             return;
         }
     }
+    //
+
+    // temporary copy-paste
+    if (cgi->Has("RestartTabletID")) {
+        const ui64 tabletId = TryParseTabletId(cgi->Get("RestartTabletID"));
+        if (tabletId) {
+            ctx.Register(CreateTabletKiller(tabletId));
+            ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes("<meta http-equiv=\"refresh\" content=\"0; tablets\" />"));
+            return;
+        }
+    }
+    //
 
     bool hasFollowerParam = cgi->Has("FollowerID");
     if (hasFollowerParam) {
@@ -296,7 +309,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\"/>"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << schemeRootTabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << schemeRootTabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                     }
                     for (auto hi : di.second->HiveUids) {
@@ -309,7 +322,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                     }
                     for (auto si : di.second->StateStorageGroups) {
@@ -322,7 +335,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                         tabletId = NKikimr::MakeCmsID(si);
                         TABLER() {
@@ -333,7 +346,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                         tabletId = NKikimr::MakeNodeBrokerID(si);
                         TABLER() {
@@ -344,7 +357,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                         tabletId = NKikimr::MakeTenantSlotBrokerID(si);
                         TABLER() {
@@ -355,7 +368,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                         tabletId = NKikimr::MakeConsoleID(si);
                         TABLER() {
@@ -366,7 +379,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                     }
                     for (auto tabletId : di.second->Coordinators) {
@@ -378,7 +391,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                     }
                     for (auto tabletId : di.second->Mediators) {
@@ -390,7 +403,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                     }
                     for (auto tabletId : di.second->TxAllocators) {
@@ -402,7 +415,7 @@ TTabletMonitoringProxyActor::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorCon
                                         << "<span class=\"glyphicon glyphicon-tasks\""
                                         << " title=\"State Storage\" />"
                                         << "</a>";}
-                            TABLED() {str << "<a href='tablets?KillTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Kill Tablet'/></a>";}
+                            TABLED() {str << "<a href='tablets?RestartTabletID=" << tabletId << "'><span class='glyphicon glyphicon-remove' title='Restart Tablet'/></a>";}
                         }
                     }
                 }

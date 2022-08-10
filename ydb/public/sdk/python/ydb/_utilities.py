@@ -13,6 +13,10 @@ except ImportError:
     interceptor = None
 
 
+_grpcs_protocol = "grpcs://"
+_grpc_protocol = "grpc://"
+
+
 def wrap_result_in_future(result):
     f = futures.Future()
     f.set_result(result)
@@ -31,6 +35,32 @@ def future():
 
 def x_ydb_sdk_build_info_header():
     return ("x-ydb-sdk-build-info", "ydb-python-sdk/" + ydb_version.VERSION)
+
+
+def is_secure_protocol(endpoint):
+    return endpoint.startswith("grpcs://")
+
+
+def wrap_endpoint(endpoint):
+    if endpoint.startswith(_grpcs_protocol):
+        return endpoint[len(_grpcs_protocol) :]
+    if endpoint.startswith(_grpc_protocol):
+        return endpoint[len(_grpc_protocol) :]
+    return endpoint
+
+
+def parse_connection_string(connection_string):
+    cs = connection_string
+    if not cs.startswith(_grpc_protocol) and not cs.startswith(_grpcs_protocol):
+        # default is grpcs
+        cs = _grpcs_protocol + cs
+
+    p = six.moves.urllib.parse.urlparse(connection_string)
+    b = six.moves.urllib.parse.parse_qs(p.query)
+    database = b.get("database", [])
+    assert len(database) > 0
+
+    return p.scheme + "://" + p.netloc, database[0]
 
 
 # Decorator that ensures no exceptions are leaked from decorated async call

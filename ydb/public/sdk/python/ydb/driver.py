@@ -4,40 +4,12 @@ from . import tracing
 import six
 import os
 import grpc
+from . import _utilities
 
 if six.PY2:
     Any = None
 else:
     from typing import Any  # noqa
-
-_grpcs_protocol = "grpcs://"
-_grpc_protocol = "grpc://"
-
-
-def is_secure_protocol(endpoint):
-    return endpoint.startswith("grpcs://")
-
-
-def wrap_endpoint(endpoint):
-    if endpoint.startswith(_grpcs_protocol):
-        return endpoint[len(_grpcs_protocol) :]
-    if endpoint.startswith(_grpc_protocol):
-        return endpoint[len(_grpc_protocol) :]
-    return endpoint
-
-
-def parse_connection_string(connection_string):
-    cs = connection_string
-    if not cs.startswith(_grpc_protocol) and not cs.startswith(_grpcs_protocol):
-        # default is grpcs
-        cs = _grpcs_protocol + cs
-
-    p = six.moves.urllib.parse.urlparse(connection_string)
-    b = six.moves.urllib.parse.parse_qs(p.query)
-    database = b.get("database", [])
-    assert len(database) > 0
-
-    return p.scheme + "://" + p.netloc, database[0]
 
 
 class RPCCompression:
@@ -152,11 +124,11 @@ class DriverConfig(object):
         self.database = database
         self.ca_cert = ca_cert
         self.channel_options = channel_options
-        self.secure_channel = is_secure_protocol(endpoint)
-        self.endpoint = wrap_endpoint(self.endpoint)
+        self.secure_channel = _utilities.is_secure_protocol(endpoint)
+        self.endpoint = _utilities.wrap_endpoint(self.endpoint)
         self.endpoints = []
         if endpoints is not None:
-            self.endpoints = [wrap_endpoint(endp) for endp in endpoints]
+            self.endpoints = [_utilities.wrap_endpoint(endp) for endp in endpoints]
         if auth_token is not None:
             credentials = credentials_impl.AuthTokenCredentials(auth_token)
         self.credentials = credentials
@@ -192,7 +164,7 @@ class DriverConfig(object):
     def default_from_connection_string(
         cls, connection_string, root_certificates=None, credentials=None, **kwargs
     ):
-        endpoint, database = parse_connection_string(connection_string)
+        endpoint, database = _utilities.parse_connection_string(connection_string)
         return cls(
             endpoint,
             database,

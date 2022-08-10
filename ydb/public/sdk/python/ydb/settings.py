@@ -11,6 +11,7 @@ class BaseRequestSettings(object):
         "tracer",
         "compression",
         "headers",
+        "need_rpc_auth",
     )
 
     def __init__(self):
@@ -23,6 +24,7 @@ class BaseRequestSettings(object):
         self.cancel_after = None
         self.operation_timeout = None
         self.compression = None
+        self.need_rpc_auth = True
         self.headers = []
 
     def make_copy(self):
@@ -34,6 +36,7 @@ class BaseRequestSettings(object):
             .with_cancel_after(self.cancel_after)
             .with_operation_timeout(self.operation_timeout)
             .with_compression(self.compression)
+            .with_need_rpc_auth(self.need_rpc_auth)
         )
 
     def with_compression(self, compression):
@@ -43,6 +46,10 @@ class BaseRequestSettings(object):
         :return The self instance.
         """
         self.compression = compression
+        return self
+
+    def with_need_rpc_auth(self, need_rpc_auth):
+        self.need_rpc_auth = need_rpc_auth
         return self
 
     def with_header(self, key, value):

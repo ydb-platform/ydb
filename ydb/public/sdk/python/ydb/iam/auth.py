@@ -6,13 +6,7 @@ import abc
 import six
 from datetime import datetime
 import json
-import threading
-from concurrent import futures
 import os
-import logging
-from ydb import issues
-
-logger = logging.getLogger(__name__)
 
 try:
     from yandex.cloud.iam.v1 import iam_token_service_pb2_grpc
@@ -51,161 +45,22 @@ def get_jwt(account_id, access_key_id, private_key, jwt_expiration_timeout):
     )
 
 
-class OneToManyValue(object):
-    def __init__(self):
-        self._value = None
-        self._condition = threading.Condition()
-
-    def consume(self, timeout=3):
-        with self._condition:
-            if self._value is None:
-                self._condition.wait(timeout=timeout)
-            return self._value
-
-    def update(self, n_value):
-        with self._condition:
-            prev_value = self._value
-            self._value = n_value
-            if prev_value is None:
-                self._condition.notify_all()
-
-
-class AtMostOneExecution(object):
-    def __init__(self):
-        self._can_schedule = True
-        self._lock = threading.Lock()
-        self._tp = futures.ThreadPoolExecutor(1)
-
-    def wrapped_execution(self, callback):
-        try:
-            callback()
-        except Exception:
-            pass
-
-        finally:
-            self.cleanup()
-
-    def submit(self, callback):
-        with self._lock:
-            if self._can_schedule:
-                self._tp.submit(self.wrapped_execution, callback)
-                self._can_schedule = False
-
-    def cleanup(self):
-        with self._lock:
-            self._can_schedule = True
-
-
 @six.add_metaclass(abc.ABCMeta)
-class IamTokenCredentials(credentials.Credentials):
-    def __init__(self, tracer=None):
-        super(IamTokenCredentials, self).__init__(tracer)
-        self._expires_in = 0
-        self._refresh_in = 0
-        self._hour = 60 * 60
-        self._iam_token = OneToManyValue()
-        self._tp = AtMostOneExecution()
-        self.logger = logger.getChild(self.__class__.__name__)
-        self.last_error = None
-        self.extra_error_message = ""
-
-    @abc.abstractmethod
-    def _get_iam_token(self):
-        pass
-
-    def _log_refresh_start(self, current_time):
-        self.logger.debug("Start refresh token from metadata")
-        if current_time > self._refresh_in:
-            self.logger.info(
-                "Cached token reached refresh_in deadline, current time %s, deadline %s",
-                current_time,
-                self._refresh_in,
-            )
-
-        if current_time > self._expires_in and self._expires_in > 0:
-            self.logger.error(
-                "Cached token reached expires_in deadline, current time %s, deadline %s",
-                current_time,
-                self._expires_in,
-            )
-
-    def _update_expiration_info(self, auth_metadata):
-        self._expires_in = time.time() + min(
-            self._hour, auth_metadata["expires_in"] / 2
-        )
-        self._refresh_in = time.time() + min(
-            self._hour / 2, auth_metadata["expires_in"] / 4
-        )
-
-    def _refresh(self):
-        current_time = time.time()
-        self._log_refresh_start(current_time)
-        try:
-            auth_metadata = self._get_iam_token()
-            self._iam_token.update(auth_metadata["access_token"])
-            self._update_expiration_info(auth_metadata)
-            self.logger.info(
-                "Token refresh successful. current_time %s, refresh_in %s",
-                current_time,
-                self._refresh_in,
-            )
-
-        except (KeyboardInterrupt, SystemExit):
-            return
-
-        except Exception as e:
-            self.last_error = str(e)
-            time.sleep(1)
-            self._tp.submit(self._refresh)
-
-    @property
-    @tracing.with_trace()
-    def iam_token(self):
-        current_time = time.time()
-        if current_time > self._refresh_in:
-            tracing.trace(self.tracer, {"refresh": True})
-            self._tp.submit(self._refresh)
-        iam_token = self._iam_token.consume(timeout=3)
-        tracing.trace(self.tracer, {"consumed": True})
-        if iam_token is None:
-            if self.last_error is None:
-                raise issues.ConnectionError(
-                    "%s: timeout occurred while waiting for token.\n%s"
-                    % self.__class__.__name__,
-                    self.extra_error_message,
-                )
-            raise issues.ConnectionError(
-                "%s: %s.\n%s"
-                % (self.__class__.__name__, self.last_error, self.extra_error_message)
-            )
-        return iam_token
-
-    def auth_metadata(self):
-        return [(credentials.YDB_AUTH_TICKET_HEADER, self.iam_token)]
-
-
-@six.add_metaclass(abc.ABCMeta)
-class TokenServiceCredentials(IamTokenCredentials):
+class TokenServiceCredentials(credentials.AbstractExpiringTokenCredentials):
     def __init__(self, iam_endpoint=None, iam_channel_credentials=None, tracer=None):
         super(TokenServiceCredentials, self).__init__(tracer)
+        assert (
+            iam_token_service_pb2_grpc is not None
+        ), "run pip install==ydb[yc] to use service account credentials"
+        self._get_token_request_timeout = 10
+        self._iam_token_service_pb2 = iam_token_service_pb2
+        self._iam_token_service_pb2_grpc = iam_token_service_pb2_grpc
         self._iam_endpoint = (
             "iam.api.cloud.yandex.net:443" if iam_endpoint is None else iam_endpoint
         )
         self._iam_channel_credentials = (
             {} if iam_channel_credentials is None else iam_channel_credentials
         )
-        self._get_token_request_timeout = 10
-        if (
-            iam_token_service_pb2_grpc is None
-            or jwt is None
-            or iam_token_service_pb2 is None
-        ):
-            raise RuntimeError(
-                "Install jwt & yandex python cloud library to use service account credentials provider"
-            )
-
-        self._iam_token_service_pb2 = iam_token_service_pb2
-        self._iam_token_service_pb2_grpc = iam_token_service_pb2_grpc
 
     def _channel_factory(self):
         return grpc.secure_channel(
@@ -218,7 +73,7 @@ class TokenServiceCredentials(IamTokenCredentials):
         pass
 
     @tracing.with_trace()
-    def _get_iam_token(self):
+    def _make_token_request(self):
         with self._channel_factory() as channel:
             tracing.trace(self.tracer, {"iam_token.from_service": True})
             stub = self._iam_token_service_pb2_grpc.IamTokenServiceStub(channel)
@@ -299,26 +154,24 @@ class YandexPassportOAuthIamCredentials(TokenServiceCredentials):
         )
 
 
-class MetadataUrlCredentials(IamTokenCredentials):
+class MetadataUrlCredentials(credentials.AbstractExpiringTokenCredentials):
     def __init__(self, metadata_url=None, tracer=None):
         """
-
         :param metadata_url: Metadata url
         :param ydb.Tracer tracer: ydb tracer
         """
         super(MetadataUrlCredentials, self).__init__(tracer)
-        if requests is None:
-            raise RuntimeError(
-                "Install requests library to use metadata credentials provider"
-            )
+        assert (
+            requests is not None
+        ), "Install requests library to use metadata credentials provider"
+        self.extra_error_message = "Check that metadata service configured properly since we failed to fetch it from metadata_url."
         self._metadata_url = (
             DEFAULT_METADATA_URL if metadata_url is None else metadata_url
         )
         self._tp.submit(self._refresh)
-        self.extra_error_message = "Check that metadata service configured properly and application deployed in VM or function at Yandex.Cloud."
 
     @tracing.with_trace()
-    def _get_iam_token(self):
+    def _make_token_request(self):
         response = requests.get(
             self._metadata_url, headers={"Metadata-Flavor": "Google"}, timeout=3
         )

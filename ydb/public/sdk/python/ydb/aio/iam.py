@@ -2,11 +2,10 @@ import grpc.aio
 import time
 
 import abc
-import asyncio
 import logging
 import six
-from ydb import issues, credentials
 from ydb.iam import auth
+from .credentials import AbstractExpiringTokenCredentials
 
 logger = logging.getLogger(__name__)
 
@@ -25,127 +24,20 @@ except ImportError:
     aiohttp = None
 
 
-class _OneToManyValue(object):
-    def __init__(self):
-        self._value = None
-        self._condition = asyncio.Condition()
-
-    async def consume(self, timeout=3):
-        async with self._condition:
-            if self._value is None:
-                try:
-                    await asyncio.wait_for(self._condition.wait(), timeout=timeout)
-                except Exception:
-                    return self._value
-            return self._value
-
-    async def update(self, n_value):
-        async with self._condition:
-            prev_value = self._value
-            self._value = n_value
-            if prev_value is None:
-                self._condition.notify_all()
-
-
-class _AtMostOneExecution(object):
-    def __init__(self):
-        self._can_schedule = True
-        self._lock = asyncio.Lock()  # Lock to guarantee only one execution
-
-    async def _wrapped_execution(self, callback):
-        await self._lock.acquire()
-        try:
-            res = callback()
-            if asyncio.iscoroutine(res):
-                await res
-        except Exception:
-            pass
-
-        finally:
-            self._lock.release()
-            self._can_schedule = True
-
-    def submit(self, callback):
-        if self._can_schedule:
-            self._can_schedule = False
-            asyncio.ensure_future(self._wrapped_execution(callback))
-
-
 @six.add_metaclass(abc.ABCMeta)
-class IamTokenCredentials(auth.IamTokenCredentials):
-    def __init__(self):
-        super(IamTokenCredentials, self).__init__()
-        self._tp = _AtMostOneExecution()
-        self._iam_token = _OneToManyValue()
-
-    @abc.abstractmethod
-    async def _get_iam_token(self):
-        pass
-
-    async def _refresh(self):
-        current_time = time.time()
-        self._log_refresh_start(current_time)
-
-        try:
-            auth_metadata = await self._get_iam_token()
-            await self._iam_token.update(auth_metadata["access_token"])
-            self.update_expiration_info(auth_metadata)
-            self.logger.info(
-                "Token refresh successful. current_time %s, refresh_in %s",
-                current_time,
-                self._refresh_in,
-            )
-
-        except (KeyboardInterrupt, SystemExit):
-            return
-
-        except Exception as e:
-            self.last_error = str(e)
-            await asyncio.sleep(1)
-            self._tp.submit(self._refresh)
-
-    async def iam_token(self):
-        current_time = time.time()
-        if current_time > self._refresh_in:
-            self._tp.submit(self._refresh)
-
-        iam_token = await self._iam_token.consume(timeout=3)
-        if iam_token is None:
-            if self.last_error is None:
-                raise issues.ConnectionError(
-                    "%s: timeout occurred while waiting for token.\n%s"
-                    % self.__class__.__name__,
-                    self.extra_error_message,
-                )
-            raise issues.ConnectionError(
-                "%s: %s.\n%s"
-                % (self.__class__.__name__, self.last_error, self.extra_error_message)
-            )
-        return iam_token
-
-    async def auth_metadata(self):
-        return [(credentials.YDB_AUTH_TICKET_HEADER, await self.iam_token())]
-
-
-@six.add_metaclass(abc.ABCMeta)
-class TokenServiceCredentials(IamTokenCredentials):
+class TokenServiceCredentials(AbstractExpiringTokenCredentials):
     def __init__(self, iam_endpoint=None, iam_channel_credentials=None):
         super(TokenServiceCredentials, self).__init__()
+        assert (
+            iam_token_service_pb2_grpc is not None
+        ), "run pip install==ydb[yc] to use service account credentials"
+        self._get_token_request_timeout = 10
         self._iam_endpoint = (
             "iam.api.cloud.yandex.net:443" if iam_endpoint is None else iam_endpoint
         )
         self._iam_channel_credentials = (
             {} if iam_channel_credentials is None else iam_channel_credentials
         )
-        self._get_token_request_timeout = 10
-        if (
-            iam_token_service_pb2_grpc is None
-            or jwt is None
-            or iam_token_service_pb2 is None
-        ):
-            raise RuntimeError(
-                "Install jwt & yandex python cloud library to use service account credentials provider"
-            )
 
     def _channel_factory(self):
         return grpc.aio.secure_channel(
@@ -157,7 +49,7 @@ class TokenServiceCredentials(IamTokenCredentials):
     def _get_token_request(self):
         pass
 
-    async def _get_iam_token(self):
+    async def _make_token_request(self):
         async with self._channel_factory() as channel:
             stub = iam_token_service_pb2_grpc.IamTokenServiceStub(channel)
             response = await stub.Create(
@@ -209,20 +101,19 @@ class YandexPassportOAuthIamCredentials(TokenServiceCredentials):
         )
 
 
-class MetadataUrlCredentials(IamTokenCredentials):
+class MetadataUrlCredentials(AbstractExpiringTokenCredentials):
     def __init__(self, metadata_url=None):
         super(MetadataUrlCredentials, self).__init__()
-        if aiohttp is None:
-            raise RuntimeError(
-                "Install aiohttp library to use metadata credentials provider"
-            )
+        assert (
+            aiohttp is not None
+        ), "Install aiohttp library to use metadata credentials provider"
         self._metadata_url = (
             auth.DEFAULT_METADATA_URL if metadata_url is None else metadata_url
         )
         self._tp.submit(self._refresh)
         self.extra_error_message = "Check that metadata service configured properly and application deployed in VM or function at Yandex.Cloud."
 
-    async def _get_iam_token(self):
+    async def _make_token_request(self):
         timeout = aiohttp.ClientTimeout(total=2)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(

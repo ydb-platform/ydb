@@ -138,7 +138,8 @@ def _construct_metadata(driver_config, settings):
     if driver_config.database is not None:
         metadata.append((YDB_DATABASE_HEADER, driver_config.database))
 
-    if driver_config.credentials is not None:
+    need_rpc_auth = getattr(settings, "need_rpc_auth", True)
+    if driver_config.credentials is not None and need_rpc_auth:
         metadata.extend(driver_config.credentials.auth_metadata())
 
     if settings is not None:

@@ -54,7 +54,10 @@ class Session(BaseSession):
         return await super().keep_alive(settings)
 
     async def create(self, settings=None):  # pylint: disable=W0236
-        return await super().create(settings)
+        res = super().create(settings)
+        if asyncio.iscoroutine(res):
+            res = await res
+        return res
 
     async def delete(self, settings=None):  # pylint: disable=W0236
         return await super().delete(settings)
@@ -184,13 +187,22 @@ class TxContext(BaseTxContext):
         return await super().execute(query, parameters, commit_tx, settings)
 
     async def commit(self, settings=None):  # pylint: disable=W0236
-        return await super().commit(settings)
+        res = super().commit(settings)
+        if asyncio.iscoroutine(res):
+            res = await res
+        return res
 
     async def rollback(self, settings=None):  # pylint: disable=W0236
-        return await super().rollback(settings)
+        res = super().rollback(settings)
+        if asyncio.iscoroutine(res):
+            res = await res
+        return res
 
     async def begin(self, settings=None):  # pylint: disable=W0236
-        return await super().begin(settings)
+        res = super().begin(settings)
+        if asyncio.iscoroutine(res):
+            res = await res
+        return res
 
 
 async def retry_operation(

@@ -4,12 +4,14 @@ import enum
 import six
 import json
 from . import _utilities, _apis
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import uuid
 import struct
 from google.protobuf import struct_pb2
 
 
+_SECONDS_IN_DAY = 60 * 60 * 24
+_EPOCH = datetime(1970, 1, 1)
 if six.PY3:
     _from_bytes = None
 else:
@@ -56,6 +58,42 @@ def _from_uuid(pb, value):
     pb.high_128 = struct.unpack("Q", value.bytes_le[8:16])[0]
 
 
+def _from_interval(value_pb, table_client_settings):
+    if (
+        table_client_settings is not None
+        and table_client_settings._native_interval_in_result_sets
+    ):
+        return timedelta(microseconds=value_pb.int64_value)
+    return value_pb.int64_value
+
+
+def _timedelta_to_microseconds(value):
+    return (value.days * _SECONDS_IN_DAY + value.seconds) * 1000000 + value.microseconds
+
+
+def _to_interval(pb, value):
+    if isinstance(value, timedelta):
+        pb.int64_value = _timedelta_to_microseconds(value)
+    else:
+        pb.int64_value = value
+
+
+def _from_timestamp(value_pb, table_client_settings):
+    if (
+        table_client_settings is not None
+        and table_client_settings._native_timestamp_in_result_sets
+    ):
+        return _EPOCH + timedelta(microseconds=value_pb.uint64_value)
+    return value_pb.uint64_value
+
+
+def _to_timestamp(pb, value):
+    if isinstance(value, datetime):
+        pb.uint64_value = _timedelta_to_microseconds(value - _EPOCH)
+    else:
+        pb.uint64_value = value
+
+
 @enum.unique
 class PrimitiveType(enum.Enum):
     """
@@ -81,8 +119,7 @@ class PrimitiveType(enum.Enum):
     Yson = _apis.primitive_types.YSON, "bytes_value"
     Json = _apis.primitive_types.JSON, "text_value", _from_json
     JsonDocument = _apis.primitive_types.JSON_DOCUMENT, "text_value", _from_json
-    UUID = _apis.primitive_types.UUID, None, _to_uuid, _from_uuid
-
+    UUID = (_apis.primitive_types.UUID, None, _to_uuid, _from_uuid)
     Date = (
         _apis.primitive_types.DATE,
         "uint32_value",
@@ -93,8 +130,18 @@ class PrimitiveType(enum.Enum):
         "uint32_value",
         _from_datetime_number,
     )
-    Timestamp = _apis.primitive_types.TIMESTAMP, "uint64_value"
-    Interval = _apis.primitive_types.INTERVAL, "int64_value"
+    Timestamp = (
+        _apis.primitive_types.TIMESTAMP,
+        None,
+        _from_timestamp,
+        _to_timestamp,
+    )
+    Interval = (
+        _apis.primitive_types.INTERVAL,
+        None,
+        _from_interval,
+        _to_interval,
+    )
 
     DyNumber = _apis.primitive_types.DYNUMBER, "text_value", _from_bytes
 

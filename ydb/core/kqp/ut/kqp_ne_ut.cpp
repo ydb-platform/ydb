@@ -3293,6 +3293,42 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
             UNIT_ASSERT_VALUES_EQUAL(FromString<i32>(read["limit"].GetString()), 10);
         }
     }
+
+    Y_UNIT_TEST(IdxLookupExtractMembers) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = 'true';
+
+            DECLARE $input AS List<Struct<
+                Key: Uint64,
+                Text: String,
+            >>;
+
+            $to_upsert = (
+                SELECT
+                    i.Key AS Key,
+                FROM AS_TABLE($input) AS i
+                JOIN EightShard AS s
+                USING (Key)
+                WHERE s.Key IS NULL OR s.Text != i.Text
+            );
+
+            $to_delete = (
+                SELECT s.Key AS Key
+                FROM EightShard AS s
+                JOIN AS_TABLE($input) AS i
+                USING (Key)
+            );
+
+            DELETE FROM EightShard ON SELECT Key FROM $to_delete;
+            UPSERT INTO EightShard SELECT * FROM $to_upsert;
+        )").ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
 }
 
 } // namespace NKikimr::NKqp

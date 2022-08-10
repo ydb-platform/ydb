@@ -697,6 +697,7 @@ message BriefBinding {
     string connection_id = 2 [(Ydb.length).range = {min: 1, max: 1024}];
     CommonMeta meta = 3;
     BindingSetting.BindingType type = 4;
+    Acl.Visibility visibility = 5;
 }
 
 message BindingContent {
@@ -737,6 +738,7 @@ message ListBindingsRequest {
         string connection_id = 1 [(Ydb.length).le = 1024];
         string name = 2 [(Ydb.length).le = 1024]; // bindings whose name contains the filter.name substring
         bool created_by_me = 3;
+        Acl.Visibility visibility = 4;
     }
     Filter filter = 4;
 }

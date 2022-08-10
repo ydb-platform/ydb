@@ -2,9 +2,9 @@
 
 This page contains a detailed description of the code of a [test app](https://github.com/yandex-cloud/ydb-java-sdk/tree/master/examples/basic_example) that is available as part of the {{ ydb-short-name }} [Java SDK](https://github.com/yandex-cloud/ydb-java-sdk).
 
-## Downloading SDK Examples and running an example {#download}
+## Downloading SDK Examples and running the example {#download}
 
-The startup script below uses [Git](https://git-scm.com/downloads) and [Maven](https://maven.apache.org/download.html).
+The following execution scenario is based on [Git](https://git-scm.com/downloads) and [Maven](https://maven.apache.org/download.html).
 
 Create a working directory and use it to run from the command line the command to clone the GitHub repository:
 
@@ -12,7 +12,7 @@ Create a working directory and use it to run from the command line the command t
 git clone https://github.com/yandex-cloud/ydb-java-sdk
 ```
 
-Next, build the SDK Examples
+Then build the SDK Examples
 
 ```bash
 ( cd ydb-java-sdk/examples && mvn package )
@@ -22,13 +22,13 @@ Next, from the same working directory, run the command to start the test app. Th
 
 {% include [run_options.md](_includes/run_options.md) %}
 
+
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Basic driver initialization parameters:
-
-* A connection string with information about the [endpoint](../../../../concepts/connect.md#endpoint) and [database](../../../../concepts/connect.md#database). The only required parameter.
-* An [authentication provider](../../auth.md#auth-provider). If there is no direct indication, an [anonymous connection](../../../../concepts/connect.md#auth-modes) is used.
-* [Session pool](../../recipes/session_pool_limit/index.md) settings.
+Main driver initialization parameters
+* A connection string containing details about an [endpoint](../../../../concepts/connect.md#endpoint) and [database](../../../../concepts/connect.md#database). This is the only parameter that is required.
+* [Authentication](../../auth.md##auth-provider) provider. Unless explicitly specified, an [anonymous connection](../../../../concepts/auth.md) is used.
+* [Session pool](../../recipes/session_pool_limit/index.md) settings
 
 App code snippet for driver initialization:
 
@@ -40,7 +40,7 @@ GrpcTableRpc rpc = GrpcTableRpc.ownTransport(transport);
 this.tableClient = TableClient.newClient(rpc).build();
 ```
 
-We recommend performing all YDB operations using the `SessionRetryContext` helper class that ensures a correct operation retry in the event of partial unavailability. Code snippet for initializing the retry context:
+We recommend that you use the `SessionRetryContext` helper class for all your operations with the YDB: it ensures proper retries in case the database becomes partially unavailable. Sample code to initialize the retry context:
 
 ```java
 this.retryCtx = SessionRetryContext.create(tableClient).build();
@@ -89,7 +89,7 @@ private void createTables() {
 }
 ```
 
-You can use the `Session.DescribeTable()` method to output information about the table structure and make sure that it was properly created:
+You can use the `Session.DescribeTable()` method to view information about the table structure and make sure that it was properly created:
 
 ```java
 private void describeTables() {
@@ -109,10 +109,9 @@ private void describeTables() {
     });
 }
 ```
-
 {% include [../steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-Code snippet for inserting and updating data:
+Code snippet for data insert/update:
 
 ```java
 private void upsertSimple() {
@@ -162,7 +161,7 @@ private void selectSimple() {
 }
 ```
 
-As a result of executing the query, an object of the `DataQueryResult` class is generated. It may contain several sets obtained using the `getResultSet( <index> )` method. Since there was only one `SELECT` statement in the query, the result contains only one selection indexed as `0`. The given code snippet outputs the following text to the console at startup:
+As a result of the query, an object of the `DataQueryResult` class is generated. It may contain several sets obtained using the `getResultSet( <index> )` method. Since there was only one `SELECT` statement in the query, the result contains only one selection indexed as `0`. The given code snippet prints the following text to the console at startup:
 
 ```bash
 12:06:36.548 INFO  App - --[ SelectSimple ]--
@@ -243,10 +242,9 @@ private void scanQueryWithParams(long seriesID, long seasonID) {
 
 {% include [multistep_transactions.md](../_includes/steps/09_multistep_transactions.md) %}
 
-To ensure that the retry context works properly while executing transactions, perform each transaction entirely inside the callback passed to `SessionRetryContext`. The callback should return a response after the transaction is fully completed.
+To ensure interoperability between the transactions and the retry context, each transaction must wholly execute inside the callback passed to `SessionRetryContext`. The callback must return after the entire transaction is completed.
 
-Code template for using complex transactions in `SessionRetryContext`
-
+Code template for running complex transactions inside `SessionRetryContext`
 ```java
 private void multiStepTransaction(long seriesID, long seasonID) {
     retryCtx.supplyStatus(session -> {
@@ -257,6 +255,7 @@ private void multiStepTransaction(long seriesID, long seasonID) {
         return CompletableFuture.completedFuture(Status.SUCCESS);
     }).join().expect("multistep transaction problem");
 }
+
 ```
 
 The first step is to prepare and execute the first query:
@@ -278,7 +277,7 @@ The first step is to prepare and execute the first query:
     )).join().expect("execute data query problem");
 ```
 
-Next, we can perform some client processing of the data received:
+After that, we can process the resulting data on the client side:
 
 ```java
     // Perform some client logic on returned values
@@ -290,7 +289,7 @@ Next, we can perform some client processing of the data received:
     LocalDate toDate = fromDate.plusDays(15);
 ```
 
-And get the current `transaction id` for further work within a single transaction:
+And get the current `transaction id` to continue processing within the same transaction:
 
 ```java
     // Get active transaction id
@@ -366,4 +365,5 @@ private void tclTransaction() {
     }).join().expect("tcl transaction problem");
 }
 ```
+
 

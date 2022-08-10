@@ -16,7 +16,6 @@ items:
 
 - { name: Managing databases,                    include: { mode: link, path: db/toc_p.yaml } }
 - { name: Managing a cluster,                    include: { mode: link, path: cluster/toc_p.yaml } }
-
 # References  
 - { name: YQL,                                   include: { mode: link, path: yql/toc_p.yaml } }
 - { name: Working with the YDB CLI,              include: { mode: link, path: reference/ydb-cli/toc_p.yaml } }

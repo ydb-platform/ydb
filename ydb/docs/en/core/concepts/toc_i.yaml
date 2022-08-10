@@ -1,15 +1,17 @@
 items:
 - { name: Overview,                                  href: index.md }
-- { name: Terms and definitions,                  href: databases.md }
-- { name: Connecting to and authenticating with a database,       href: connect.md }
-- { name: Data model and schema,                  href: datamodel.md }
-- { name: Serverless and Dedicated operation modes,   href: serverless_and_dedicated.md }
-- { name: Data types,                            href: datatypes.md, hidden: true } # Deprecated
-- { name: Transactions,                             href: transactions.md }
-- { name: Secondary indexes,                      href: secondary_indexes.md }
-- { name: Time to Live (TTL),                     href: ttl.md }
-- { name: Scan queries,                           href: scan_query.md }
-- { name: Database limits,                href: limits-ydb.md }
+- { name: Terms and definitions,                     href: databases.md }
+- { name: Connecting to a database,                  href: connect.md }
+- name: Authentication
+  href: auth.md
+- { name: Data model and schema,                     href: datamodel.md }
+- { name: Serverless and Dedicated operation modes,  href: serverless_and_dedicated.md }
+- { name: Data types,                                href: datatypes.md, hidden: true } # Deprecated
+- { name: Transactions,                              href: transactions.md }
+- { name: Secondary indexes,                         href: secondary_indexes.md }
+- { name: Time to Live (TTL),                        href: ttl.md }
+- { name: Scan queries,                              href: scan_query.md }
+- { name: Database limits,                           href: limits-ydb.md }
 - name: YDB cluster
   items:
   - name: Overview

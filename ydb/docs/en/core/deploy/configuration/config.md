@@ -6,7 +6,7 @@ This article describes the main groups of configurable parameters in this file.
 
 ## host_configs: Typical host configurations {#host-configs}
 
-A YDB cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and assigned IDs.
+A YDB cluster consists of multiple nodes, and one or more typical server configurations are usually used for their deployment. To avoid repeating its description for each node, there is a `host_configs` section in the configuration file that lists the used configurations and the assigned IDs.
 
 **Syntax**
 
@@ -28,7 +28,7 @@ The `host_config_id` attribute specifies a numeric configuration ID. The `drive`
 
 **Examples**
 
-One configuration with ID 1 and one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
+One configuration with ID 1, one SSD disk accessible via `/dev/disk/by-partlabel/ydb_disk_ssd_01`:
 
 ``` yaml
 host_configs:
@@ -60,7 +60,7 @@ host_configs:
 
 ### Kubernetes features {#host-configs-k8s}
 
-The YDB Kubernetes operator mounts NBS disks for Storage nodes at the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
+YDB Kubernetes operator mounts NBS disks for Storage nodes on the path `/dev/kikimr_ssd_00`. To use them, the following `host_configs` configuration must be specified:
 
 ``` yaml
 host_configs:
@@ -70,7 +70,7 @@ host_configs:
     type: SSD
 ```
 
-The example configuration files provided with the YDB Kubernetes operator contain this section, and it does not need to be changed.
+The configuration example files supplied as part of YDB Kubernetes operator contain such a section, and it does not need to be changed.
 
 ## hosts: Static cluster nodes {#hosts}
 
@@ -78,16 +78,16 @@ This group lists the static cluster nodes on which the Storage processes run and
 
 - Numeric node ID
 - DNS host name and port that can be used to connect to a node on the IP network
-- ID of the [standard host configuration](#host-configs)
+- ID of the [typical host configuration](#host-configs)
 - Placement in a specific availability zone, rack
-- Server inventory number (optional)
+- Server serial number (optional)
 
 **Syntax**
 
 ``` yaml
 hosts:
 - host: <DNS host name>
-  host_config_id: <numeric ID of the standard host configuration>
+  host_config_id: <numeric ID of the typical host configuration>
   port: <port> # 19001 by default
   location:
     unit: <string with the server serial number>
@@ -125,7 +125,7 @@ When deploying YDB with a Kubernetes operator, the entire `hosts` section is gen
 
 ## domains_config: Cluster domain {#domains-config}
 
-This section contains the configuration of the YDB cluster root domain, including Blob Storage (binary object storage) and State Storage configurations.
+This section contains the configuration of the YDB cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
 
 **Syntax**
 
@@ -135,6 +135,7 @@ domains_config:
   - name: <root domain name>
     storage_pool_types: <Blob Storage configuration>
   state_storage: <State Storage configuration>
+  security_config: <authentication configuration>
 ```
 
 ### Blob Storage configuration {#domains-blob}
@@ -150,10 +151,10 @@ The following [fault tolerance modes](../../cluster/topology.md) are available:
 
 | Mode | Description |
 --- | ---
-| `none` | There is no redundancy. Applies for testing. |
-| `block-4-2` | Redundancy factor of 1.5, applies to single data center clusters. |
-| `mirror-3-dc` | Redundancy factor of 3, applies to multi-data center clusters. |
-| `mirror-3dc-3-nodes` | Redundancy factor of 3. Applies for testing. |
+| `none` | There is no redundancy. Applied for testing. |
+| `block-4-2` | Redundancy with a factor of 1.5, applies to single data center clusters. |
+| `mirror-3-dc` | Redundancy with a factor of 3, applies to multi data center clusters. |
+| `mirror-3dc-3-nodes` | Redundancy with a factor of 3. Applied for testing. |
 
 **Syntax**
 
@@ -162,7 +163,7 @@ The following [fault tolerance modes](../../cluster/topology.md) are available:
   - kind: <storage pool name>
     pool_config:
       box_id: 1
-      encryption: <optional, specify 1 to encrypt data on the disk>
+      encryption: <optional, specify 1 to encrypt data on the disc>
       erasure_species: <fault tolerance mode name - none, block-4-2, or mirror-3-dc>
       kind: <storage pool name - specify the same value as above>
       pdisk_filter:
@@ -177,11 +178,11 @@ Each database in the cluster is assigned at least one of the available storage p
 
 ### State Storage configuration {#domains-state}
 
-State Storage is an independent in-memory storage for variable data that supports internal YDB processes. It stores data replicas on multiple assigned nodes.
+State Storage is an independent in-memory storage for modifiable data that supports internal YDB processes. It stores data replicas on multiple assigned nodes.
 
 State Storage usually does not need scaling for better performance, so the number of nodes in it must be kept as small as possible taking into account the required level of fault tolerance.
 
-State Storage availability is key for a YDB cluster because it affects all databases, regardless of which storage pools they use. To ensure fault tolerance of State Storage, its nodes must be selected to guarantee a working majority in case of expected failures.
+State Storage availability is key for a YDB cluster because it affects all databases, regardless of which storage pools they use. To ensure fault tolerance of State Storage, its nodes must be selected in such a way as to guarantee a working majority in case of expected failures.
 
 The following guidelines can be used to select State Storage nodes:
 
@@ -194,7 +195,6 @@ The following guidelines can be used to select State Storage nodes:
 When deploying State Storage on clusters that use multiple storage pools with a possible combination of fault tolerance modes, consider increasing the number of nodes and spreading them across different storage pools because unavailability of State Storage results in unavailability of the entire cluster.
 
 **Syntax**
-
 ``` yaml
 state_storage:
 - ring:
@@ -205,7 +205,25 @@ state_storage:
 
 Each State Storage client (for example, DataShard tablet) uses `nto_select` nodes to write copies of its data to State Storage. If State Storage consists of more than `nto_select` nodes, different nodes can be used for different clients, so you must ensure that any subset of `nto_select` nodes within State Storage meets the fault tolerance criteria.
 
-Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison to the nearest smaller odd number.
+Odd numbers must be used for `nto_select` because using even numbers does not improve fault tolerance in comparison with the nearest smaller odd number.
+
+### Authentication configuration {#auth}
+
+The [authentication mode](../../concepts/auth.md) in the {{ ydb-short-name }} cluster is created in the `domains_config.security_config` section.
+
+Syntax:
+
+``` yaml
+domains_config:
+  ...
+  security_config:
+    enforce_user_token_requirement: Bool
+  ...
+```
+
+ Key | Description 
+--- | ---
+ `enforce_user_token_requirement` | Require a user token.</br>Acceptable values:</br><ul><li>`false`: Anonymous authentication mode, no token needed.</li><li>`true`: Username/password authentication mode. A valid user token is needed for authentication.</li></ul> 
 
 ### Examples {#domains-examples}
 

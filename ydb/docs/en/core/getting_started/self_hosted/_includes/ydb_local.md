@@ -8,7 +8,7 @@ As a result of completing the steps described below, you'll get a YDB database r
 
 - [Endpoint](../../../concepts/connect.md#endpoint): `grpc://localhost:2136`
 - [DB path](../../../concepts/connect.md#database): `/Root/test`
-- [Authentication](../../../concepts/connect.md#auth-modes): Anonymous (no authentication)
+- [Authentication](../../../concepts/auth.md): Anonymous (no authentication)
 
 ## Installation {#install}
 
@@ -28,9 +28,7 @@ You can start a local YDB server with a disk or in-memory storage:
 
 - Disk storage
 
-  - {% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
-
-  - During the first run of the script, an 80 GB file named `ydb.data` is created in the working directory. Make sure you have enough free space to create it.
+   - To store data on a disk, when you run the script for the first time, a 64GB `ydb.data` file is created in the working directory. Make sure there's enough disk space to create it.
 
    - Run the following command from the working directory:
 

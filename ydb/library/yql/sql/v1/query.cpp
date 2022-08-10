@@ -1470,7 +1470,8 @@ TNodePtr BuildDropRoles(TPosition pos, const TString& service, const TDeferredAt
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapMR {
     {EWriteColumnMode::Default, ""},
     {EWriteColumnMode::Insert, "append"},
-    {EWriteColumnMode::Renew, "renew"}
+    {EWriteColumnMode::Renew, "renew"},
+    {EWriteColumnMode::Replace, "replace"},
 };
 
 static const TMap<EWriteColumnMode, TString> columnModeToStrMapStat {

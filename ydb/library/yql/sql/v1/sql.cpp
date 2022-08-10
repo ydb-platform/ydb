@@ -8297,7 +8297,6 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
     ESQLWriteColumnMode mode, const TPosition& pos) {
     Y_UNUSED(node);
     auto serviceName = table.Service;
-    const bool isMapReduce = serviceName == YtProviderName;
     const bool isKikimr = serviceName == KikimrProviderName || serviceName == YdbProviderName;
     const bool isRtmr = serviceName == RtmrProviderName;
     const bool isStat = serviceName == StatProviderName;
@@ -8314,13 +8313,7 @@ bool TSqlIntoTable::ValidateServiceName(const TRule_into_table_stmt& node, const
         }
     }
 
-    if (isMapReduce) {
-        if (mode == ESQLWriteColumnMode::ReplaceInto) {
-            Ctx.Error(pos) << "Meaning of REPLACE INTO has been changed, now you should use INSERT INTO <table> WITH TRUNCATE ... for " << serviceName;
-            Ctx.IncrementMonCounter("sql_errors", "ReplaceIntoConflictUsage");
-            return false;
-        }
-    } else if (isKikimr) {
+    if (isKikimr) {
         if (mode == ESQLWriteColumnMode::InsertIntoWithTruncate) {
             Ctx.Error(pos) << "INSERT INTO WITH TRUNCATE is not supported for " << serviceName << " tables";
             Ctx.IncrementMonCounter("sql_errors", TStringBuilder() << SqlIntoUserModeStr << "UnsupportedFor" << serviceName);

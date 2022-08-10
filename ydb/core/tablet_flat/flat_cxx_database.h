@@ -2037,7 +2037,10 @@ struct Schema {
     template <typename Type, typename... Types>
     struct SchemaTables: SchemaTables<Types...> {
         static bool Precharge(TToughDb& database) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wbitwise-instead-of-logical"
             return SchemaTables<Type>::Precharge(database) & SchemaTables<Types...>::Precharge(database);
+#pragma clang diagnostic pop
         }
 
         static void Materialize(TToughDb& database, EMaterializationMode mode = EMaterializationMode::All) {

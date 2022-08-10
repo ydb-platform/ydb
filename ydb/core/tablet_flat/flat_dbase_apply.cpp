@@ -70,7 +70,8 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         ui32 large = delta.HasLarge() ? delta.GetLarge() : family.Large;
 
         Y_VERIFY(ui32(cache) <= 2, "Invalid pages cache policy value");
-
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wbitwise-instead-of-logical"
         changes |= ChangeTableSetting(table, family.Cache, cache);
         changes |= ChangeTableSetting(table, family.Codec, codec);
         changes |= ChangeTableSetting(table, family.Small, small);
@@ -93,7 +94,7 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
         changes |= ChangeTableSetting(table, room.Main, main);
         changes |= ChangeTableSetting(table, room.Blobs, blobs);
         changes |= ChangeTableSetting(table, room.Outer, outer);
-
+#pragma clang diagnostic pop
     } else if (action == TAlterRecord::SetRedo) {
         const ui32 annex = delta.HasAnnex() ? delta.GetAnnex() : 0;
 

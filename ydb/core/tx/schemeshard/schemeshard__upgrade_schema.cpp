@@ -97,6 +97,8 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
 
         NIceDb::TNiceDb db(txc.DB);
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wbitwise-instead-of-logical"
         bool precharged = db.Table<Schema::Paths>().Precharge()
                 & db.Table<Schema::SubDomains>().Precharge()
                 & db.Table<Schema::UserAttributes>().Precharge();
@@ -106,6 +108,7 @@ struct TSchemeShard::TTxUpgradeSchema : public TTransactionBase<TSchemeShard> {
         }
 
         return UpgradeInitState(db, ctx) & ReplaceExtraPathSymbolsAllowed(db, ctx);
+#pragma clang diagnostic pop
     }
 
     void Complete(const TActorContext &ctx) override {

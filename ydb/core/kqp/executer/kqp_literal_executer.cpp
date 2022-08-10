@@ -412,7 +412,6 @@ private:
         response.MutableIssues()->Swap(issues);
 
         LWTRACK(KqpLiteralExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
-        ResponseEv->Orbit = std::move(ResponseEv->Orbit);
 
         Send(Target, ResponseEv.release());
         PassAway();

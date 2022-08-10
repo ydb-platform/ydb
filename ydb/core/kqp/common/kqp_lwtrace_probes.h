@@ -38,6 +38,9 @@ struct TQueryAction {
     PROBE(KqpSessionPhyQueryTxResponse, GROUPS("KQP"), \
         TYPES(ui64, ui32), \
         NAMES("currentTx", "resultsSize")) \
+    PROBE(KqpSessionSendRollback, GROUPS("KQP"), \
+        TYPES(ui64), \
+        NAMES("currentTx")) \
     PROBE(KqpSessionReplySuccess, GROUPS("KQP"), \
         TYPES(ui64), \
         NAMES("responseArenaSpaceUsed")) \
@@ -45,23 +48,32 @@ struct TQueryAction {
         TYPES(TString), \
         NAMES("errMsg")) \
     PROBE(KqpCompileRequestBootstrap, GROUPS("KQP"), \
-        TYPES(TString, ui64), \
-        NAMES("userSid", "queryHash")) \
+        TYPES(TString), \
+        NAMES("userSid")) \
     PROBE(KqpCompileRequestHandleServiceReply, GROUPS("KQP"), \
-        TYPES(TString, ui64), \
-        NAMES("userSid", "queryHash")) \
+        TYPES(TString), \
+        NAMES("userSid")) \
     PROBE(KqpCompileServiceHandleRequest, GROUPS("KQP"), \
-        TYPES(TString, ui64), \
-        NAMES("userSid", "queryHash")) \
+        TYPES(TString), \
+        NAMES("userSid")) \
     PROBE(KqpCompileServiceEnqueued, GROUPS("KQP"), \
-        TYPES(TString, ui64), \
-        NAMES("userSid", "queryHash")) \
+        TYPES(TString), \
+        NAMES("userSid")) \
     PROBE(KqpCompileServiceGetCompilation, GROUPS("KQP"), \
-        TYPES(TString, ui64, TString), \
-        NAMES("userSid", "queryHash", "compileActor")) \
+        TYPES(TString, TString), \
+        NAMES("userSid", "compileActor")) \
     PROBE(KqpCompileServiceReply, GROUPS("KQP"), \
-        TYPES(TString, ui64, TString), \
-        NAMES("userSid", "queryHash", "compileResult")) \
+        TYPES(TString, TString), \
+        NAMES("userSid", "compileResult")) \
+    PROBE(KqpCompileServiceReplyFromCache, GROUPS("KQP"), \
+        TYPES(), \
+        NAMES()) \
+    PROBE(KqpCompileServiceReplyError, GROUPS("KQP"), \
+        TYPES(), \
+        NAMES()) \
+    PROBE(KqpCompileServiceReplyInternalError, GROUPS("KQP"), \
+        TYPES(), \
+        NAMES()) \
     PROBE(KqpBaseExecuterHandleReady, GROUPS("KQP"), \
         TYPES(ui64), \
         NAMES("TxId")) \

@@ -1625,6 +1625,10 @@ public:
     }
 
     void SendRollbackRequest(TKqpTransactionContext* txCtx) {
+        if (QueryState) {
+            LWTRACK(KqpSessionSendRollback, QueryState->Orbit, QueryState->CurrentTx);
+        }
+        
         auto request = PreparePhysicalRequest(nullptr);
 
         request.EraseLocks = true;
@@ -1706,6 +1710,10 @@ public:
     }
 
     void HandleCleanup(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+        if (QueryState) {
+            QueryState->Orbit = std::move(ev->Get()->Orbit);
+        }
+
         auto& response = ev->Get()->Record.GetResponse();
         if (response.GetStatus() != Ydb::StatusIds::SUCCESS) {
             TIssues issues;

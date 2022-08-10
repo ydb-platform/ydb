@@ -604,7 +604,6 @@ protected:
         }
 
         LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
-        ResponseEv->Orbit = std::move(ResponseEv->Orbit);
 
         this->Send(Target, ResponseEv.release());
         this->PassAway();

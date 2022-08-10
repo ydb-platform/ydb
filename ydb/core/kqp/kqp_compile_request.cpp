@@ -41,8 +41,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         LWTRACK(KqpCompileRequestBootstrap, 
             Orbit, 
-            Query ? Query->UserSid : 0, 
-            Query ? Query->GetHash() : 0);
+            Query ? Query->UserSid : 0);
 
         TimeoutTimerId = CreateLongTimer(ctx, Deadline - TInstant::Now(),
             new IEventHandle(ctx.SelfID, ctx.SelfID, new TEvents::TEvWakeup()));
@@ -61,8 +60,7 @@ public:
         const auto& query = ev->Get()->CompileResult->Query;
         LWTRACK(KqpCompileRequestHandleServiceReply, 
             ev->Get()->Orbit, 
-            query ? query->UserSid : 0, 
-            query ? query->GetHash() : 0);
+            query ? query->UserSid : 0);
         
         auto compileResult = ev->Get()->CompileResult;
         const auto& stats = ev->Get()->Stats;
@@ -96,7 +94,7 @@ public:
             << ", queryUid: " << compileResult.Uid);
 
         auto recompileEv = MakeHolder<TEvKqp::TEvRecompileRequest>(UserToken, compileResult.Uid, compileResult.Query,
-            Deadline, DbCounters);
+            Deadline, DbCounters, std::move(DeferredResponse->Orbit));
         ctx.Send(MakeKqpCompileServiceID(ctx.SelfID.NodeId()), recompileEv.Release());
 
         DeferredResponse.Reset();

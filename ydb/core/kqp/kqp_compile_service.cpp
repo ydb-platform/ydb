@@ -408,8 +408,7 @@ private:
         const auto& query = ev->Get()->Query;
         LWTRACK(KqpCompileServiceHandleRequest, 
             ev->Get()->Orbit, 
-            query ? query->UserSid : 0, 
-            query ? query->GetHash() : 0);
+            query ? query->UserSid : 0);
 
         try {
             PerformRequest(ev, ctx);
@@ -498,8 +497,7 @@ private:
 
         LWTRACK(KqpCompileServiceEnqueued, 
             ev->Get()->Orbit, 
-            ev->Get()->Query ? ev->Get()->Query->UserSid : 0, 
-            ev->Get()->Query ? ev->Get()->Query->GetHash() : 0);
+            ev->Get()->Query ? ev->Get()->Query->UserSid : 0);
         
 
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
@@ -549,7 +547,7 @@ private:
             Counters->ReportCompileRequestCompile(dbCounters);
 
             TKqpCompileRequest compileRequest(ev->Sender, request.Uid, compileResult ? *compileResult->Query : *request.Query,
-                true, request.UserToken, request.Deadline, dbCounters);
+                true, request.UserToken, request.Deadline, dbCounters, ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit());
 
             if (!RequestsQueue.Enqueue(std::move(compileRequest))) {
                 Counters->ReportCompileRequestRejected(dbCounters);
@@ -612,7 +610,7 @@ private:
 
                 auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
                 for (auto& request : requests) {
-                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, request.Query.GetHash(), compileActorId.ToString());
+                    LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx, std::move(request.Orbit));
                 }
             } else {
@@ -621,7 +619,7 @@ private:
                 }
             }
 
-            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileRequest.Query.GetHash(), compileActorId.ToString());
+            LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx, std::move(compileRequest.Orbit));
         }
         catch (const std::exception& e) {
@@ -722,7 +720,6 @@ private:
         LWTRACK(KqpCompileServiceReply, 
             orbit, 
             query ? query->UserSid : 0, 
-            query ? query->GetHash() : 0, 
             compileResult->Issues.ToString());
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_SERVICE, "Send response"
@@ -747,12 +744,14 @@ private:
         NKqpProto::TKqpStatsCompile stats;
         stats.SetFromCache(true);
 
+        LWTRACK(KqpCompileServiceReplyFromCache, orbit);
         Reply(sender, compileResult, stats, ctx, std::move(orbit));
     }
 
     void ReplyError(const TActorId& sender, const TString& uid, Ydb::StatusIds::StatusCode status,
         const TIssues& issues, const TActorContext& ctx, NLWTrace::TOrbit orbit)
     {
+        LWTRACK(KqpCompileServiceReplyError, orbit);
         Reply(sender, TKqpCompileResult::Make(uid, status, issues), NKqpProto::TKqpStatsCompile(), ctx, std::move(orbit));
     }
 
@@ -762,6 +761,7 @@ private:
         NYql::TIssue issue(NYql::TPosition(), TStringBuilder() << "Internal error during query compilation.");
         issue.AddSubIssue(MakeIntrusive<TIssue>(NYql::TPosition(), message));
 
+        LWTRACK(KqpCompileServiceReplyInternalError, orbit);
         ReplyError(sender, uid, Ydb::StatusIds::INTERNAL_ERROR, {issue}, ctx, std::move(orbit));
     }
 

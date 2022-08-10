@@ -29,6 +29,7 @@ namespace {
             {}
 
             TOutputChannel(const TOutputChannel&) = default;
+            TOutputChannel &operator=(const TOutputChannel& other) = default;
         };
 
         struct TInputChannel {
@@ -52,6 +53,7 @@ namespace {
             {}
 
             TInputChannel(const TInputChannel&) = default;
+            TInputChannel &operator=(const TInputChannel& other) = default;
         };
 
         struct TInputChannels : std::unordered_map<ui16, TInputChannel> {
@@ -72,6 +74,7 @@ namespace {
             }
 
             TInputChannels(const TInputChannels&) = default;
+            TInputChannels &operator=(const TInputChannels& other) = default;
 
             const TInputChannel& Get(ui16 id) const {
                 const auto it = find(id);
@@ -361,6 +364,7 @@ namespace {
             {}
 
             TOutputChannel(const TOutputChannel&) = default;
+            TOutputChannel &operator=(const TOutputChannel& other) = default;
         };
 
         struct TInputChannel {
@@ -383,6 +387,7 @@ namespace {
             {}
 
             TInputChannel(const TInputChannel&) = default;
+            TInputChannel &operator=(const TInputChannel& other) = default;
         };
 
         struct TInputChannels : std::unordered_map<ui16, TInputChannel> {
@@ -404,6 +409,7 @@ namespace {
             }
 
             TInputChannels(const TInputChannels&) = default;
+            TInputChannels &operator=(const TInputChannels& other) = default;
 
             const TInputChannel& Get(ui16 id) const {
                 const auto it = find(id);

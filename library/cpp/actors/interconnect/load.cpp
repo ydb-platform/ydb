@@ -306,10 +306,10 @@ namespace NInterconnect {
         }
 
         void HandleWakeup(const TActorContext& ctx) {
-            ui32 numDropped = 0;
+            // ui32 numDropped = 0;
 
             while (TimeoutQueue && TimeoutQueue.front().first <= ctx.Now()) {
-                numDropped += InFly.erase(TimeoutQueue.front().second);
+                /*numDropped += */InFly.erase(TimeoutQueue.front().second);
                 TimeoutQueue.pop();
             }
             if (TimeoutQueue) {

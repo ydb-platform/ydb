@@ -25,7 +25,7 @@ When performing reads, the blob ID is specified, which can be arbitrary, but pre
 
 Blobs are written in a logical entity called *group*. A special actor called DS proxy is created on every node for each group that is written to. This actor is responsible for performing all operations related to the group. The actor is created automatically through the NodeWarden service that will be described below.
 
-Physically, a group is a set of multiple physical devices (OS block devices) that are located on different nodes so that the failure of one device correlates as little as possible with the failure of another device. These devices are usually located in different racks or different datacenters. On each of these devices, some space is allocated for the group, which is managed by a special service called *VDisk*. Each VDisk runs on top of a block storage device from which it is separated by another service called *PDisk*. Blobs are broken into fragments based on *erasure coding* with these fragments written to VDisks. Before splitting into fragments, optional encryption of the data in the group can be performed.
+Physically, a group is a set of multiple physical devices (OS block devices) that are located on different nodes so that the failure of one device correlates as little as possible with the failure of another device. These devices are usually located in different racks or different datacenters. On each of these devices, some space is allocated for the group, which is managed by a special service called *VDisk*. Each VDisk runs on top of a block storage device from which it is separated by another service called *PDisk*. Blobs are broken into fragments based on [erasure coding](https://en.wikipedia.org/wiki/Erasure_code) with these fragments written to VDisks. Before splitting into fragments, optional encryption of the data in the group can be performed.
 
 This scheme is shown in the figure below.
 
@@ -39,7 +39,7 @@ A group can be treated as a set of VDisks:
 
 Each VDisk within a group has a sequence number, and disks are numbered 0 to N-1, where N is the number of disks in the group.
 
-In addition, disks are combined into fail domains, and fail domains are combined into fail realms. As a rule, each fail domain comprises exactly one disk (although, in theory, it may have more but this has found no practical application), and multiple fail realms are only used for groups that host their data in three datacenters at once. Thus, in addition to a group sequence number, each VDisk is assigned an ID that consists of a fail realm index, the index that a fail domain has in a fail realm, and the index that a VDisk has in the fail domain. In string form, this ID is written as `VDISK[GroupId:GroupGeneration:FailRealm:FailDomain:VDisk]`.
+In addition, the group disks are grouped into fail domains and fail domains into fail realms. Each fail domain usually has exactly one disk inside (although, in theory, it may have more, but this is not used in practice), while multiple fail realms are only used for groups whose data is stored in all three data centers. Thus, in addition to a group sequence number, each VDisk is assigned an ID that consists of a fail realm index, the index that a fail domain has in a fail realm, and the index that a VDisk has in the fail domain. In string form, this ID is written as `VDISK[GroupId:GroupGeneration:FailRealm:FailDomain:VDisk]`.
 
 All fail realms have the same number of fail domains, and all fail domains include the same number of disks. The number of the fail realms, the number of the fail domains inside the fail realm, and the number of the disks inside the fail domain make up the geometry of the group. The geometry depends on the way the data is encoded in the group. For example, for block-4-2 numFailRealms = 1, numFailDomainsInFailRealm >= 8 (only 8 fail realms are used in practice), numVDisksInFailDomain >= 1 (strictly 1 fail domain is used in practice). For mirror-3-dc numFailRealms >= 3, numFailDomainsInFailRealm >= 3, and numVDisksInFailDomain >= 1 (3x3x1 are used).
 
@@ -58,7 +58,7 @@ A special concept of a *subgroup* is introduced for each blob. It is an ordered 
 Each disk in the subgroup corresponds to a disk in the group, but is limited by the allowed number of stored blobs. For example, for block-4-2 encoding with four data parts and two parity parts, the functional purpose of the disks in a subgroup is as follows:
 
 | Number in the subgroup | Possible PartIds |
-| ------------------- | ------------------- |
+|-------------------|-------------------|
 | 0 | 1 |
 | 1 | 2 |
 | 2 | 3 |
@@ -68,7 +68,7 @@ Each disk in the subgroup corresponds to a disk in the group, but is limited by 
 | 6 | 1,2,3,4,5,6 |
 | 7 | 1,2,3,4,5,6 |
 
-In this case, PartID=1..4 corresponds to the data parts (which are obtained by splitting the original blob into 4 equal parts), and PartID=5..6 are parity fragments. Disks numbered 6 and 7 in the subgroup are called *handoff disks*. Any part, either one or more, can be written to them. Disks 0..5 can only store the corresponding blob parts.
+
+In this case, PartId=1..4 corresponds to data fragments (resulting from dividing the original blob into 4 equal parts), while PartId=5..6 stands for parity fragments. Disks numbered 6 and 7 in the subgroup are called *handoff disks*. Any part, either one or more, can be written to them. You can only write the respective blob parts to disks 0..5.
 
 In practice, when performing writes, the system tries to write 6 parts to the first 6 disks of the subgroup and, in the vast majority of cases, these attempts are successful. However, if any of the disks is not available, a write operation cannot succeed, which is when handoff disks kick in receiving the parts belonging to the disks that did not respond in time. It may turn out that several fragments of the same blob are sent to the same handoff disk as a result of complicated brakes and races. This is acceptable although it makes no sense in terms of storage: each fragment must have its own unique disk.
-

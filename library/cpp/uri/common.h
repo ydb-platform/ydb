@@ -30,6 +30,7 @@ namespace NUri {
             FIELD_NAME(Path),
             FIELD_NAME(Query),
             FIELD_NAME(Frag),
+            FIELD_NAME(HashBang),
 
             // add fields above
             FieldUrlMAX,
@@ -121,7 +122,7 @@ namespace NUri {
 
 #define FEATURE_NAME(f) _BitFeature##f
 #define FEATURE_FLAG_NAME(f) Feature##f
-#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f)
+#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1ULL << FEATURE_NAME(f)
 
     protected:
         enum EBit {
@@ -251,19 +252,15 @@ namespace NUri {
             // internal usage: decode all encoded symbols
             FEATURE_NAME(DecodeANY),
 
+            // move and encode #! fragment after the query
+            FEATURE_NAME(FragmentToHashBang),
+
             // add before this line
             _FeatureMAX
         };
 
-    protected:
-        enum EPrivate : ui32 {
-            FEATURE_FLAG(DecodeANY),
-            FEATURE_FLAG(DecodeFieldAllowed),
-            FEATURE_FLAG(DecodeStandardExtra),
-        };
-
     public:
-        enum EPublic : ui32 {
+        enum EPublic : ui64 {
             FeatureMAX = _FeatureMAX,
             FEATURE_FLAG(AuthSupported),
             FEATURE_FLAG(SchemeKnown),
@@ -283,6 +280,7 @@ namespace NUri {
             FEATURE_FLAG(DecodeExtendedDelim),
             FEATURE_FLAG(EncodeCntrl),
             FEATURE_FLAG(EncodePercent),
+            FEATURE_FLAG(FragmentToHashBang),
             FEATURE_FLAG(HashBangToEscapedFragment),
             FEATURE_FLAG(EscapedToHashBangFragment),
             FEATURE_FLAG(PathDenyRootParent),
@@ -296,6 +294,9 @@ namespace NUri {
             FEATURE_FLAG(NoRelPath),
             FEATURE_FLAG_NAME(HierURI) = FEATURE_FLAG_NAME(NoRelPath),
             FEATURE_FLAG(UpperEncoded),
+            FEATURE_FLAG(DecodeANY),
+            FEATURE_FLAG(DecodeFieldAllowed),
+            FEATURE_FLAG(DecodeStandardExtra),
         };
 
 #undef FEATURE_NAME
@@ -303,7 +304,7 @@ namespace NUri {
 
     public:
         //==============================
-        enum ESets {
+        enum ESets : ui64 {
             // these are guaranteed and will change buffer size
 
             FeatureDecodeStandard = 0 | FeatureDecodeUnreserved | FeatureDecodeStandardExtra,
@@ -442,7 +443,7 @@ namespace NUri {
 
 #define FEATURE_NAME(f) _BitFeature##f
 #define FEATURE_FLAG_NAME(f) Feature##f
-#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1UL << FEATURE_NAME(f)
+#define FEATURE_FLAG(f) FEATURE_FLAG_NAME(f) = 1ULL << FEATURE_NAME(f)
 
     struct TQueryArg {
         TStringBuf Name;

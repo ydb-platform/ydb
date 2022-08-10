@@ -211,7 +211,7 @@ bool httpLoadAgent::startRequest(const char* url,
     URL_.Clear();
     PersistentConn_ = persistent;
 
-    long flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
+    ui64 flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
     if (HandleAuthorization_)
         flags |= THttpURL::FeatureAuthSupported;
 
@@ -231,7 +231,7 @@ bool httpLoadAgent::startRequest(const char* url,
     URL_.Clear();
     PersistentConn_ = persistent;
 
-    long flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
+    ui64 flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
     if (HandleAuthorization_)
         flags |= THttpURL::FeatureAuthSupported;
 
@@ -285,7 +285,7 @@ bool httpLoadAgent::setHost(const char* host_url,
     URL_.Clear();
     PersistentConn_ = true;
 
-    long flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
+    ui64 flags = THttpURL::FeatureSchemeKnown | THttpURL::FeaturesNormalizeSet;
     if (HandleAuthorization_)
         flags |= THttpURL::FeatureAuthSupported;
 

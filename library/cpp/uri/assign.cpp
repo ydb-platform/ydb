@@ -61,7 +61,7 @@ namespace NUri {
         // decoding shortens so writing over host in buf is OK
         TMemoryWriteBuffer out(buf.Get(), buflen);
         TEncoder decoder(out, FeatureDecodeANY | FeatureToLower);
-        const long outFlags = decoder.ReEncode(host);
+        const ui64 outFlags = decoder.ReEncode(host);
         hasExtended = 0 != (outFlags & FeatureEncodeExtendedASCII);
 
         // check again
@@ -106,7 +106,7 @@ namespace NUri {
 
     TStringBuf TUri::HostToAscii(const TStringBuf& host, TMallocPtr<char>& buf, bool allowIDN, ECharset enc) {
         // find what we have
-        long haveFlags = 0;
+        ui64 haveFlags = 0;
         for (size_t i = 0; i != host.length(); ++i) {
             haveFlags |= TEncoder::GetFlags(host[i]).FeatFlags;
         }
@@ -124,7 +124,7 @@ namespace NUri {
         return outHost;
     }
 
-    static inline bool AppendField(TMemoryWriteBuffer& out, TField::EField field, const TStringBuf& value, long flags) {
+    static inline bool AppendField(TMemoryWriteBuffer& out, TField::EField field, const TStringBuf& value, ui64 flags) {
         if (value.empty()) {
             return false;
         }
@@ -158,7 +158,7 @@ namespace NUri {
         // special processing for fields
 
         const bool convertIDN = parser.Flags & FeatureConvertHostIDN;
-        long flags = parser.Flags.Allow;
+        ui64 flags = parser.Flags.Allow;
         if (convertIDN) {
             flags |= FeatureAllowHostIDN | FeatureCheckHost;
         }
@@ -271,7 +271,7 @@ namespace NUri {
 
             char* beg = out.Buf();
             TStringBuf value = section.Get();
-            long careFlags = section.GetFlagsEncode();
+            ui64 careFlags = section.GetFlagsEncode();
 
             if (field == FieldQuery) {
                 if (queryEscapedFragment.IsInited()) {
@@ -279,7 +279,7 @@ namespace NUri {
                     if (!queryEscapedFragment.empty()) {
                         ReEncodeToField(
                             out, queryEscapedFragment,
-                            FieldQuery, FeatureDecodeANY | careFlags, 
+                            FieldQuery, FeatureDecodeANY | careFlags,
                             FieldFrag, FeatureDecodeANY | parser.GetFieldFlags(FieldFrag)
                         );
                     }
@@ -322,9 +322,9 @@ namespace NUri {
             FldSetNoDirty(field, TStringBuf(beg, end));
 
             // special character case
-            const long checkChars = section.GetFlagsAllPlaintext() & FeaturesCheckSpecialChar;
+            const ui64 checkChars = section.GetFlagsAllPlaintext() & FeaturesCheckSpecialChar;
             if (0 != checkChars) { // has unencoded special chars: check permission
-                const long allowChars = parser.GetFieldFlags(field) & checkChars;
+                const ui64 allowChars = parser.GetFieldFlags(field) & checkChars;
                 if (checkChars != allowChars) {
                     status = ParsedBadFormat;
                 }

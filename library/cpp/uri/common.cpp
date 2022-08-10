@@ -4,7 +4,7 @@
 #include <util/generic/singleton.h>
 
 namespace NUri {
-    static_assert(TFeature::FeatureMAX <= sizeof(unsigned long) * 8, "expect TFeature::FeatureMAX <= sizeof(unsigned long) * 8");
+    static_assert(TFeature::FeatureMAX <= sizeof(ui64) * 8, "expect TFeature::FeatureMAX <= sizeof(ui64) * 8");
 
     const TSchemeInfo TSchemeInfo::Registry[] = {
         TSchemeInfo(TScheme::SchemeEmpty, TStringBuf()), // scheme is empty and inited

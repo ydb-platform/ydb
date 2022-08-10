@@ -19,7 +19,7 @@
 namespace NUri {
     /********************************************************/
     class TUri
-       : public TFeature,
+        : public TFeature,
           public TField,
           public TScheme,
           public TState {
@@ -354,7 +354,7 @@ namespace NUri {
 
         void Merge(const TUri& base, int correctAbs = -1);
 
-        TLinkType Normalize(const TUri& base, const TStringBuf& link, const TStringBuf& codebase = TStringBuf(), long careFlags = FeaturesDefault, ECharset enc = CODES_UTF8);
+        TLinkType Normalize(const TUri& base, const TStringBuf& link, const TStringBuf& codebase = TStringBuf(), ui64 careFlags = FeaturesDefault, ECharset enc = CODES_UTF8);
 
     private:
         int PrintFlags(int flags) const {
@@ -543,15 +543,15 @@ namespace NUri {
             return LinkIsGlobal;
         }
 
-        static IOutputStream& ReEncodeField(IOutputStream& out, const TStringBuf& val, EField fld, long flags = FeaturesEncodeDecode) {
+        static IOutputStream& ReEncodeField(IOutputStream& out, const TStringBuf& val, EField fld, ui64 flags = FeaturesEncodeDecode) {
             return NEncode::TEncoder::ReEncode(out, val, NEncode::TEncodeMapper(flags, fld));
         }
 
-        static IOutputStream& ReEncodeToField(IOutputStream& out, const TStringBuf& val, EField srcfld, long srcflags, EField dstfld, long dstflags) {
+        static IOutputStream& ReEncodeToField(IOutputStream& out, const TStringBuf& val, EField srcfld, ui64 srcflags, EField dstfld, ui64 dstflags) {
             return NEncode::TEncoder::ReEncodeTo(out, val, NEncode::TEncodeMapper(srcflags, srcfld), NEncode::TEncodeToMapper(dstflags, dstfld));
         }
 
-        static IOutputStream& ReEncode(IOutputStream& out, const TStringBuf& val, long flags = FeaturesEncodeDecode) {
+        static IOutputStream& ReEncode(IOutputStream& out, const TStringBuf& val, ui64 flags = FeaturesEncodeDecode) {
             return ReEncodeField(out, val, FieldAllMAX, flags);
         }
 

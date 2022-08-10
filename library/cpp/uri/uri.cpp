@@ -287,7 +287,7 @@ namespace NUri {
 
     /********************************************************/
     TUri::TLinkType TUri::Normalize(const TUri& base,
-                                    const TStringBuf& link, const TStringBuf& codebase, long careFlags, ECharset enc) {
+                                    const TStringBuf& link, const TStringBuf& codebase, ui64 careFlags, ECharset enc) {
         // parse URL
         if (ParsedOK != ParseImpl(link, careFlags, 0, SchemeEmpty, enc))
             return LinkIsBad;

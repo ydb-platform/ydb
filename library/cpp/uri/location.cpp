@@ -2,7 +2,7 @@
 #include "uri.h"
 
 namespace NUri {
-    static const int URI_PARSE_FLAGS =
+    static const ui64 URI_PARSE_FLAGS =
         (TFeature::FeaturesRecommended | TFeature::FeatureConvertHostIDN | TFeature::FeatureEncodeExtendedDelim | TFeature::FeatureEncodePercent) & ~TFeature::FeatureHashBangToEscapedFragment;
 
     TString ResolveRedirectLocation(const TStringBuf& baseUrl,

@@ -120,6 +120,12 @@ namespace NTest {
             return erased ? Is(EReady::Gone) : Is(row, true, ERowOp::Erase);
         }
 
+        template<typename ...TArgs>
+        inline TChecker& NoKeyN(TArgs&&... args)
+        {
+            return NoKey(*TSchemedCookRow(Scheme).Col(std::forward<TArgs>(args)...));
+        }
+
         template<typename TListType>
         TChecker& IsTheSame(const TListType &list)
         {

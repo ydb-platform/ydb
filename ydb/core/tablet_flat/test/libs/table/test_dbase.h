@@ -82,6 +82,15 @@ namespace NTest {
         TDbExec& Reject() { return DoCommit(true, false); }
         TDbExec& Relax()  { return DoCommit(false, true); }
 
+        TDbExec& Cleanup() {
+            if (OnTx == EOnTx::Auto) {
+                DoCommit(false, false);
+            }
+
+            Y_VERIFY(OnTx == EOnTx::None);
+            return *this;
+        }
+
         TDbExec& ReadVer(TRowVersion readVersion) {
             DoBegin(false);
 
@@ -90,10 +99,44 @@ namespace NTest {
             return *this;
         }
 
+        TDbExec& ReadTx(ui64 txId) {
+            DoBegin(false);
+
+            ReadTxId = txId;
+
+            return *this;
+        }
+
         TDbExec& WriteVer(TRowVersion writeVersion) {
             Y_VERIFY(OnTx != EOnTx::None);
 
             WriteVersion = writeVersion;
+            WriteTxId = 0;
+
+            return *this;
+        }
+
+        TDbExec& WriteTx(ui64 txId) {
+            Y_VERIFY(OnTx != EOnTx::None);
+
+            WriteVersion = TRowVersion::Min();
+            WriteTxId = txId;
+
+            return *this;
+        }
+
+        TDbExec& CommitTx(ui32 table, ui64 txId) {
+            Y_VERIFY(OnTx != EOnTx::None);
+
+            Base->CommitTx(table, txId, WriteVersion);
+
+            return *this;
+        }
+
+        TDbExec& RemoveTx(ui32 table, ui64 txId) {
+            Y_VERIFY(OnTx != EOnTx::None);
+
+            Base->RemoveTx(table, txId);
 
             return *this;
         }
@@ -103,7 +146,11 @@ namespace NTest {
             const NTest::TRowTool tool(RowSchemeFor(table));
             auto pair = tool.Split(row, true, rop != ERowOp::Erase);
 
-            Base->Update(table, rop, pair.Key, pair.Ops, WriteVersion);
+            if (WriteTxId != 0) {
+                Base->UpdateTx(table, rop, pair.Key, pair.Ops, WriteTxId);
+            } else {
+                Base->Update(table, rop, pair.Key, pair.Ops, WriteVersion);
+            }
 
             return *this;
         }
@@ -119,6 +166,12 @@ namespace NTest {
             return Add(table, row, ERowOp::Upsert);
         }
 
+        template<typename ...TArgs>
+        inline TDbExec& PutN(ui32 table, TArgs&&... args)
+        {
+            return Put(table, *SchemedCookRow(table).Col(std::forward<TArgs>(args)...));
+        }
+
         TDbExec& Apply(const TSchemeChanges &delta)
         {
             Last = Max<ui32>(), Altered = true;
@@ -126,9 +179,9 @@ namespace NTest {
             return Base->Alter().Merge(delta), *this;
         }
 
-        TDbExec& Snapshot(ui32 table)
+        TEpoch Snapshot(ui32 table)
         {
-            return Base->TxSnapTable(table), *this;
+            return Base->TxSnapTable(table);
         }
 
         NTest::TSchemedCookRow SchemedCookRow(ui32 table) noexcept
@@ -140,7 +193,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckIter check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion };
+            TCheckIter check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId };
 
             return check.To(CurrentStep()), check;
         }
@@ -149,7 +202,7 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckIter check{ *Base, { nullptr, 0, true }, table, Scheme, ReadVersion, ENext::Data };
+            TCheckIter check{ *Base, { nullptr, 0, true }, table, Scheme, ReadVersion, ReadTxId, ENext::Data };
 
             return check.To(CurrentStep()), check;
         }
@@ -158,13 +211,15 @@ namespace NTest {
         {
             DoBegin(false), RowSchemeFor(table);
 
-            TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion };
+            TCheckSelect check{ *Base, { nullptr, 0, erased }, table, Scheme, ReadVersion, ReadTxId };
 
             return check.To(CurrentStep()), check;
         }
 
         TDbExec& Snap(ui32 table)
         {
+            Cleanup();
+
             const auto scn = Base->Head().Serial + 1;
 
             RedoLog.emplace_back(new TChange({ Gen, ++Step }, scn));
@@ -225,6 +280,8 @@ namespace NTest {
         {
             Y_VERIFY(OnTx != EOnTx::Real, "Commit TX before replaying");
 
+            Cleanup();
+
             const ui64 serial = Base->Head().Serial;
 
             Birth(), Base = nullptr, OnTx = EOnTx::None;
@@ -275,17 +332,10 @@ namespace NTest {
 
         const TRowScheme& RowSchemeFor(ui32 table) noexcept
         {
-            if (std::exchange(Last, table) == table) {
-                /* Safetly can use row scheme from cache */
-            } else if (Altered) {
-                TScheme temp(Base->GetScheme());
-                TSchemeModifier(temp).Apply(*Base->Alter());
-
-                const auto *info = temp.GetTableInfo(table);
-
-                Scheme = TRowScheme::Make(info->Columns, NUtil::TSecond());
-            } else {
-                Scheme = Base->Subset(table, { }, TEpoch::Zero())->Scheme;
+            if (std::exchange(Last, table) != table) {
+                // Note: it's ok if the table has been altered, since
+                // we should observe updated schema on all reads.
+                Scheme = Base->GetRowScheme(table);
             }
 
             return *Scheme;
@@ -415,6 +465,8 @@ namespace NTest {
 
             ReadVersion = TRowVersion::Max();
             WriteVersion = TRowVersion::Min();
+            ReadTxId = 0;
+            WriteTxId = 0;
 
             return *this;
         }
@@ -432,6 +484,8 @@ namespace NTest {
         TAutoPtr<TSteppedCookieAllocator> Annex;
         TRowVersion ReadVersion = TRowVersion::Max();
         TRowVersion WriteVersion = TRowVersion::Min();
+        ui64 ReadTxId = 0;
+        ui64 WriteTxId = 0;
     };
 
 }

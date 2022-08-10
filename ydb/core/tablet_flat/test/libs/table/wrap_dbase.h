@@ -11,11 +11,13 @@ namespace NTest {
 
         TWrapDbIterImpl(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
                 TRowVersion snapshot = TRowVersion::Max(),
+                ui64 readTxId = 0,
                 ENext mode = ENext::All)
             : Scheme(std::move(scheme))
             , Base(base)
             , Table(table)
             , Snapshot(snapshot)
+            , ReadTxId(readTxId)
             , Mode(mode)
         {
 
@@ -68,7 +70,12 @@ namespace NTest {
                 swap(range.MinInclusive, range.MaxInclusive);
             }
 
-            Iter = Base.IterateRangeGeneric<TIter>(Table, range, Scheme->Tags(), Snapshot);
+            ITransactionMapPtr txMap;
+            if (ReadTxId != 0 && Base.HasOpenTx(Table, ReadTxId)) {
+                txMap = new TSingleTransactionMap(ReadTxId, TRowVersion::Min());
+            }
+
+            Iter = Base.IterateRangeGeneric<TIter>(Table, range, Scheme->Tags(), Snapshot, txMap);
 
             return Iter->Next(Mode);
         }
@@ -90,6 +97,7 @@ namespace NTest {
     private:
         const ui32 Table = Max<ui32>();
         const TRowVersion Snapshot;
+        const ui64 ReadTxId;
         const ENext Mode;
         TAutoPtr<TIter> Iter;
     };

@@ -15,8 +15,9 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext&) override {
         BLOG_D("THive::TTxInitScheme::Execute");
+        bool wasEmpty = txc.DB.GetScheme().IsEmpty();
         NIceDb::TNiceDb(txc.DB).Materialize<Schema>();
-        if (!txc.DB.GetScheme().IsEmpty()) {
+        if (!wasEmpty) {
             auto row = NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(TSchemeIds::State::DatabaseVersion).Select<Schema::State::Value>();
             if (!row.IsReady())
                 return false;

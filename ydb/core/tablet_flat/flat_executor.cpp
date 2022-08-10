@@ -1579,7 +1579,7 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
 
     THPTimer cpuTimer;
 
-    TPageCollectionTxEnv env(*PrivatePageCache);
+    TPageCollectionTxEnv env(*Database, *PrivatePageCache);
 
     TTransactionContext txc(Owner->TabletID(), Generation(), Step(), *Database, env, seat->CurrentTxDataLimit, seat->TaskId);
     txc.NotEnoughMemory(seat->NotEnoughMemoryCount);
@@ -1589,11 +1589,6 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
     const bool done = seat->Self->Execute(txc, ctx.MakeFor(OwnerActorId));
     LWTRACK(TransactionExecuteEnd, seat->Self->Orbit, seat->UniqID, done);
     seat->CPUExecTime += cpuTimer.PassedReset();
-
-    if (done && !Stats->IsFollower) { /* possible rw commit */
-        for (auto one: env.MakeSnap)
-            Database->TxSnapTable(one.first /* table */);
-    }
 
     bool failed = false;
     TString failureReason;
@@ -1936,21 +1931,20 @@ void TExecutor::CommitTransactionLog(TAutoPtr<TSeat> seat, TPageCollectionTxEnv 
         Y_VERIFY(!force || commitResult.Commit);
         auto *commit = commitResult.Commit.Get(); // could be nullptr
 
-        Y_VERIFY(env.MakeSnap.size() == change->Snapshots.size());
+        for (auto& pr : env.MakeSnap) {
+            const ui32 table = pr.first;
+            auto& snap = pr.second;
 
-        for (auto seq: xrange(env.MakeSnap.size())) {
-            const auto &snap = change->Snapshots[seq];
+            Y_VERIFY(snap.Epoch, "Table was not snapshotted");
 
-            Y_VERIFY(snap.Epoch != NTable::TEpoch::Max(), "Table was not snapshoted");
-
-            for (auto &context: env.MakeSnap.at(snap.Table).Context) {
-                auto edge = NTable::TSnapEdge(change->Stamp, snap.Epoch);
+            for (auto &context: snap.Context) {
+                auto edge = NTable::TSnapEdge(change->Stamp - 1, *snap.Epoch);
 
                 if (!context->Impl)
                     context->Impl.Reset(new TTableSnapshotContext::TImpl);
 
-                context->Impl->Prepare(snap.Table, edge);
-                CompactionLogic->PrepareTableSnapshot(snap.Table, edge, context.Get());
+                context->Impl->Prepare(table, edge);
+                CompactionLogic->PrepareTableSnapshot(table, edge, context.Get());
                 WaitingSnapshots.insert(std::make_pair(context.Get(), context));
             }
         }
@@ -2961,8 +2955,10 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
             subset->ColdParts.insert(subset->ColdParts.end(), params->ColdParts.begin(), params->ColdParts.end());
         }
 
-        if (*subset && !subset->IsStickedToHead()) {
-            Y_FAIL("Got table subset with unexpected epoch marker");
+        if (*subset) {
+            Y_VERIFY_S(subset->IsStickedToHead(),
+                "Got table subset with unexpected head " << subset->Head
+                << " and epoch " << subset->Epoch());
         }
     } else {
         // This grabs a volatile snapshot of the mutable table state

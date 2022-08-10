@@ -67,9 +67,16 @@ namespace NMem {
 
         void Push(TUpdate* update) {
             const TUpdate* next = GetFirst();
-            while (next && update->RowVersion <= next->RowVersion) {
-                // Collapse row versions that are no longer reachable
-                next = next->Next;
+            // Collapse row versions that are no longer reachable to optimize
+            // future searches, however deltas are not collapsed because we
+            // don't know which version they may be committed at.
+            if (update->RowVersion.Step != Max<ui64>()) {
+                while (next &&
+                    next->RowVersion.Step != Max<ui64>() &&
+                    update->RowVersion <= next->RowVersion)
+                {
+                    next = next->Next;
+                }
             }
             update->Next = next;
             Chain = update;

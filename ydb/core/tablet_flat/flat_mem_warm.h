@@ -9,6 +9,7 @@
 #include "flat_page_blobs.h"
 #include "flat_sausage_solid.h"
 #include "flat_table_committed.h"
+#include "util_pool.h"
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_id.h>
 #include <ydb/core/util/btree_cow.h>
@@ -78,7 +79,90 @@ namespace NMem {
         }
     };
 
-    using TTree = TCowBTree<TTreeKey, TTreeValue, TKeyCmp>;
+    class TTreeAllocatorState {
+        struct TFreeItem {
+            TFreeItem* Next;
+        };
+
+    public:
+        explicit TTreeAllocatorState(size_t pageSize)
+            : PageSize(pageSize)
+        {
+            Y_VERIFY(PageSize >= sizeof(TFreeItem));
+        }
+
+        ~TTreeAllocatorState() noexcept {
+            TFreeItem* head = Head;
+            while (head) {
+                TFreeItem* next = head->Next;
+                ::operator delete(head, PageSize);
+                head = next;
+            }
+        }
+
+        [[nodiscard]] void* Allocate(size_t size) {
+            if (Y_LIKELY(size == PageSize)) {
+                if (Head) {
+                    TFreeItem* item = Head;
+                    Head = item->Next;
+                    NSan::Poison(item, PageSize);
+                    return item;
+                }
+            }
+            return ::operator new(size);
+        }
+
+        void Deallocate(void* p, size_t size) noexcept {
+            if (Y_LIKELY(size == PageSize)) {
+                NSan::Poison(p, size);
+                TFreeItem* item = reinterpret_cast<TFreeItem*>(p);
+                item->Next = Head;
+                Head = item;
+            } else {
+                ::operator delete(p, size);
+            }
+        }
+
+    private:
+        const size_t PageSize;
+        TFreeItem* Head = nullptr;
+    };
+
+    template<class T>
+    class TTreeAllocator {
+    public:
+        template<class U>
+        friend class TTreeAllocator;
+
+        using value_type = T;
+
+        TTreeAllocator(TTreeAllocatorState* state) noexcept
+            : State(state)
+        { }
+
+        template<class U>
+        TTreeAllocator(const TTreeAllocator<U>& other) noexcept
+            : State(other.State)
+        { }
+
+        [[nodiscard]] T* allocate(size_t n) {
+            return static_cast<T*>(State->Allocate(sizeof(T) * n));
+        }
+
+        void deallocate(T* p, size_t n) noexcept {
+            State->Deallocate(p, sizeof(T) * n);
+        }
+
+        template<class U>
+        bool operator==(const TTreeAllocator<U>& rhs) const noexcept {
+            return State == rhs.State;
+        }
+
+    private:
+        TTreeAllocatorState* State = nullptr;
+    };
+
+    using TTree = TCowBTree<TTreeKey, TTreeValue, TKeyCmp, TTreeAllocator<TTreeValue>, 512>;
 
     class TTreeIterator;
     class TTreeSnapshot;
@@ -89,26 +173,10 @@ namespace NMem {
 
     struct TMemTableSnapshot;
 
+    struct TMemTableRollbackState;
+
     class TMemTable : public TThrRefBase {
         friend class TMemIt;
-
-        template <size_t SizeCap = 512*1024, size_t Overhead = 64>
-        class TMyPolicy : public TMemoryPool::IGrowPolicy {
-        public:
-            size_t Next(size_t prev) const noexcept override
-            {
-                if (prev >= SizeCap - Overhead)
-                    return SizeCap - Overhead;
-
-                // Use same buckets as LF-alloc (4KB, 6KB, 8KB, 12KB, 16KB ...)
-                size_t size = FastClp2(prev);
-
-                if (size < prev + prev/3)
-                    size += size/2;
-
-                return size - Overhead;
-            }
-        };
 
     public:
         struct TTxIdStat {
@@ -127,11 +195,12 @@ namespace NMem {
             , Scheme(scheme)
             , Blobs(annex)
             , Comparator(*Scheme)
-            , Pool(chunk, &Policy)
-            , Tree(Comparator) // TODO: support TMemoryPool with caching
+            , Pool(chunk)
+            , TreeAllocatorState(TTree::PageSize)
+            , Tree(Comparator, &TreeAllocatorState)
         {}
 
-        void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<TMemGlob> pages, TRowVersion rowVersion,
+        void Update(ERowOp rop, TRawVals key_, TOpsRef ops, TArrayRef<const TMemGlob> pages, TRowVersion rowVersion,
                     NTable::ITransactionMapSimplePtr committed)
         {
             Y_VERIFY_DEBUG(
@@ -302,6 +371,9 @@ namespace NMem {
                     /* Transformation REDO ELargeObj to TBlobs reference */
 
                     const auto ref = Blobs.Push(pages.at(cell.AsValue<ui32>()));
+                    if (RollbackState) {
+                        RollbackState->AddedBlobs++;
+                    }
 
                     cell = TCell::Make<ui64>(ref);
 
@@ -331,6 +403,14 @@ namespace NMem {
             if (rowVersion.Step == Max<ui64>()) {
                 MinRowVersion = TRowVersion::Min();
                 MaxRowVersion = TRowVersion::Max();
+                if (RollbackState) {
+                    auto it = TxIdStats.find(rowVersion.TxId);
+                    if (it != TxIdStats.end()) {
+                        UndoBuffer.push_back(TUndoOpUpdateTxIdStats{ rowVersion.TxId, it->second });
+                    } else {
+                        UndoBuffer.push_back(TUndoOpEraseTxIdStats{ rowVersion.TxId });
+                    }
+                }
                 ++TxIdStats[rowVersion.TxId].OpsCount;
             } else {
                 MinRowVersion = Min(MinRowVersion, rowVersion);
@@ -341,14 +421,14 @@ namespace NMem {
         size_t GetUsedMem() const noexcept
         {
             return
-                Pool.MemoryAllocated()
+                Pool.Used()
                 + (Tree.AllocatedPages() - Tree.DroppedPages()) * TTree::PageSize
                 + Blobs.GetBytes();
         }
 
         size_t GetWastedMem() const noexcept
         {
-            return Pool.MemoryWaste();
+            return Pool.Wasted();
         }
 
         ui64 GetOpsCount() const noexcept { return OpsCount; }
@@ -369,6 +449,11 @@ namespace NMem {
             return &Blobs;
         }
 
+        void PrepareRollback();
+        void RollbackChanges();
+        void CommitChanges(TArrayRef<const TMemGlob> blobs);
+        void CommitBlobs(TArrayRef<const TMemGlob> blobs);
+
         const TTxIdStats& GetTxIdStats() const {
             return TxIdStats;
         }
@@ -376,9 +461,22 @@ namespace NMem {
         void CommitTx(ui64 txId, TRowVersion rowVersion) {
             auto it = Committed.find(txId);
             if (it == Committed.end() || it->second > rowVersion) {
+                if (RollbackState) {
+                    if (it != Committed.end()) {
+                        UndoBuffer.push_back(TUndoOpUpdateCommitted{ txId, it->second });
+                    } else {
+                        UndoBuffer.push_back(TUndoOpEraseCommitted{ txId });
+                    }
+                }
                 Committed[txId] = rowVersion;
                 if (it == Committed.end()) {
-                    Removed.erase(txId);
+                    auto itRemoved = Removed.find(txId);
+                    if (itRemoved != Removed.end()) {
+                        if (RollbackState) {
+                            UndoBuffer.push_back(TUndoOpInsertRemoved{ txId });
+                        }
+                        Removed.erase(itRemoved);
+                    }
                 }
             }
         }
@@ -386,7 +484,13 @@ namespace NMem {
         void RemoveTx(ui64 txId) {
             auto it = Committed.find(txId);
             if (it == Committed.end()) {
-                Removed.insert(txId);
+                auto itRemoved = Removed.find(txId);
+                if (itRemoved == Removed.end()) {
+                    if (RollbackState) {
+                        UndoBuffer.push_back(TUndoOpEraseRemoved{ txId });
+                    }
+                    Removed.insert(txId);
+                }
             }
         }
 
@@ -425,7 +529,7 @@ namespace NMem {
         {
             const bool small = TCell::CanInline(size);
 
-            return { small ? data : Pool.Append(data, size), size };
+            return { small ? data : (const char*)Pool.Append(data, size), size };
         }
 
         void DebugDump() const;
@@ -437,8 +541,8 @@ namespace NMem {
     private:
         NMem::TBlobs Blobs;
         const NMem::TKeyCmp Comparator;
-        TMyPolicy<> Policy;
-        TMemoryPool Pool;
+        NUtil::TMemoryPool Pool;
+        NMem::TTreeAllocatorState TreeAllocatorState;
         TTree Tree;
         ui64 OpsCount = 0;
         ui64 RowCount = 0;
@@ -447,6 +551,52 @@ namespace NMem {
         TTxIdStats TxIdStats;
         THashMap<ui64, TRowVersion> Committed;
         THashSet<ui64> Removed;
+
+    private:
+        struct TRollbackState {
+            TTree::TSnapshot Snapshot;
+            ui64 OpsCount;
+            ui64 RowCount;
+            TRowVersion MinRowVersion;
+            TRowVersion MaxRowVersion;
+            size_t AddedBlobs = 0;
+        };
+
+        std::optional<TRollbackState> RollbackState;
+
+    private:
+        struct TUndoOpUpdateCommitted {
+            ui64 TxId;
+            TRowVersion Value;
+        };
+        struct TUndoOpEraseCommitted {
+            ui64 TxId;
+        };
+        struct TUndoOpInsertRemoved {
+            ui64 TxId;
+        };
+        struct TUndoOpEraseRemoved {
+            ui64 TxId;
+        };
+        struct TUndoOpUpdateTxIdStats {
+            ui64 TxId;
+            TTxIdStat Value;
+        };
+        struct TUndoOpEraseTxIdStats {
+            ui64 TxId;
+        };
+
+        using TUndoOp = std::variant<
+            TUndoOpUpdateCommitted,
+            TUndoOpEraseCommitted,
+            TUndoOpInsertRemoved,
+            TUndoOpEraseRemoved,
+            TUndoOpUpdateTxIdStats,
+            TUndoOpEraseTxIdStats>;
+
+        // This buffer is applied in reverse on rollback
+        // Memory is reused to avoid hot path allocations
+        std::vector<TUndoOp> UndoBuffer;
 
     private:
         // Temporary buffers to avoid hot path allocations

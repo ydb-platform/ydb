@@ -20,6 +20,131 @@ TTable::TTable(TEpoch epoch) : Epoch(epoch) { }
 
 TTable::~TTable() { }
 
+void TTable::PrepareRollback()
+{
+    Y_VERIFY(!RollbackState);
+    auto& state = RollbackState.emplace(Epoch);
+    state.Annexed = Annexed;
+    state.Scheme = Scheme;
+    state.EraseCacheEnabled = EraseCacheEnabled;
+    state.EraseCacheConfig = EraseCacheConfig;
+    state.MutableExisted = bool(Mutable);
+    state.MutableUpdated = false;
+}
+
+void TTable::RollbackChanges()
+{
+    Y_VERIFY(RollbackState, "PrepareRollback needed to rollback changes");
+    auto& state = *RollbackState;
+
+    while (!RollbackOps.empty()) {
+        struct TApplyRollbackOp {
+            TTable* Self;
+
+            void operator()(const TRollbackRemoveOpenTx& op) const {
+                Self->OpenTransactions.erase(op.TxId);
+            }
+
+            void operator()(const TRollbackRemoveOpenTxMem& op) const {
+                Self->OpenTransactions[op.TxId].Mem.erase(op.Mem);
+            }
+
+            void operator()(const TRollbackAddCommittedTx& op) const {
+                Self->CommittedTransactions.Add(op.TxId, op.RowVersion);
+            }
+
+            void operator()(const TRollbackRemoveCommittedTx& op) const {
+                Self->CommittedTransactions.Remove(op.TxId);
+            }
+
+            void operator()(const TRollbackAddRemovedTx& op) const {
+                Self->RemovedTransactions.Add(op.TxId);
+            }
+
+            void operator()(const TRollbackRemoveRemovedTx& op) const {
+                Self->RemovedTransactions.Remove(op.TxId);
+            }
+        };
+
+        std::visit(TApplyRollbackOp{ this }, RollbackOps.back());
+        RollbackOps.pop_back();
+    }
+
+    if (Epoch != state.Epoch) {
+        // We performed a snapshot, roll it back
+        if (Mutable) {
+            ErasedKeysCache.Reset();
+            Mutable = nullptr;
+        }
+        Y_VERIFY(MutableBackup, "Previous mem table missing");
+        Mutable = std::move(MutableBackup);
+    } else if (!state.MutableExisted) {
+        // New memtable doesn't need rollback
+        if (Mutable) {
+            ErasedKeysCache.Reset();
+            Mutable = nullptr;
+        }
+    } else if (state.MutableUpdated) {
+        ErasedKeysCache.Reset();
+        Y_VERIFY(Mutable, "Mutable was updated, but it is missing");
+        Mutable->RollbackChanges();
+    }
+    Y_VERIFY(!MutableBackup);
+
+    Epoch = state.Epoch;
+    Annexed = state.Annexed;
+    if (state.Scheme) {
+        Levels.Reset();
+        ErasedKeysCache.Reset();
+        Scheme = std::move(state.Scheme);
+        EraseCacheEnabled = state.EraseCacheEnabled;
+        EraseCacheConfig = state.EraseCacheConfig;
+    }
+    RollbackState.reset();
+}
+
+void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
+{
+    Y_VERIFY(RollbackState, "PrepareRollback needed to rollback changes");
+    auto& state = *RollbackState;
+
+    RollbackOps.clear();
+
+    if (Epoch != state.Epoch) {
+        if (Mutable && blobs) {
+            Mutable->CommitBlobs(blobs);
+        }
+        // We performed a snapshot, move it to Frozen
+        Y_VERIFY(MutableBackup, "Mem table snaphot missing");
+        Frozen.insert(MutableBackup);
+        Stat_.FrozenWaste += MutableBackup->GetWastedMem();
+        Stat_.FrozenSize += MutableBackup->GetUsedMem();
+        Stat_.FrozenOps += MutableBackup->GetOpsCount();
+        Stat_.FrozenRows += MutableBackup->GetRowCount();
+        MutableBackup = nullptr;
+    } else if (!state.MutableExisted) {
+        // Fresh mem table is not prepared for rollback
+        if (Mutable && blobs) {
+            Mutable->CommitBlobs(blobs);
+        }
+    } else if (state.MutableUpdated) {
+        Y_VERIFY(Mutable, "Mutable was updated, but it is missing");
+        Mutable->CommitChanges(blobs);
+    }
+    Y_VERIFY(!MutableBackup);
+
+    RollbackState.reset();
+}
+
+void TTable::CommitNewTable(TArrayRef<const TMemGlob> blobs)
+{
+    Y_VERIFY(!RollbackState, "CommitBlobs must only be used for new tables without rollback");
+
+    if (Mutable && blobs) {
+        Mutable->CommitBlobs(blobs);
+    }
+}
+
 void TTable::SetScheme(const TScheme::TTableInfo &table)
 {
     Snapshot();
@@ -28,6 +153,12 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     ErasedKeysCache.Reset();
 
     Y_VERIFY(!Mutable && table.Columns);
+
+    if (RollbackState && !RollbackState->Scheme) {
+        RollbackState->Scheme = Scheme;
+        RollbackState->EraseCacheEnabled = EraseCacheEnabled;
+        RollbackState->EraseCacheConfig = EraseCacheConfig;
+    }
 
     auto to = TRowScheme::Make(table.Columns, NUtil::TSecond());
 
@@ -65,6 +196,9 @@ TAutoPtr<TSubset> TTable::Subset(TArrayRef<const TLogoBlobID> bundle, TEpoch hea
             if (x->Epoch < head) {
                 subset->Frozen.emplace_back(x, x->Immediate());
             }
+        }
+        if (MutableBackup && MutableBackup->Epoch < head) {
+            subset->Frozen.emplace_back(MutableBackup, MutableBackup->Immediate());
         }
         for (const auto &pr : TxStatus) {
             if (pr.second->Epoch < head) {
@@ -114,6 +248,10 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
         if (it->Epoch < head)
             subset->Frozen.emplace_back(it, it->Immediate());
 
+    if (MutableBackup && MutableBackup->Epoch < head) {
+        subset->Frozen.emplace_back(MutableBackup, MutableBackup->Immediate());
+    }
+
     // This method is normally used when we want to take some state snapshot
     // However it can still theoretically be used for iteration or compaction
     subset->CommittedTransactions = CommittedTransactions;
@@ -141,6 +279,13 @@ bool TTable::HasBorrowed(ui64 selfTabletId) const noexcept
 
 TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept
 {
+    if (RollbackState) {
+        Y_VERIFY(Epoch == RollbackState->Epoch &&
+            RollbackState->MutableExisted == bool(Mutable) &&
+            !RollbackState->MutableUpdated,
+            "Cannot take scan snapshot of a modified table");
+    }
+
     TAutoPtr<TSubset> subset = new TSubset(Epoch, Scheme);
 
     // TODO: we could filter LSM by the provided snapshot version, but it
@@ -198,6 +343,8 @@ TBundleSlicesMap TTable::LookupSlices(TArrayRef<const TLogoBlobID> bundles) cons
 
 void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     for (auto &kv : slices) {
         auto it = Flatten.find(kv.first);
         Y_VERIFY(it != Flatten.end(), "Got an unknown TPart in ReplaceSlices");
@@ -213,6 +360,8 @@ void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
 
 void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset) noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     for (const auto &partView : partViews) {
         Y_VERIFY(partView, "Replace(...) shouldn't get empty parts");
         Y_VERIFY(!partView.Screen, "Replace(...) shouldn't get screened parts");
@@ -341,6 +490,8 @@ void TTable::Replace(TArrayRef<const TPartView> partViews, const TSubset &subset
 
 void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus, const TSubset &subset) noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     for (auto &part : subset.TxStatus) {
         Y_VERIFY(part, "Unexpected empty TTxStatusPart in TSubset");
 
@@ -367,6 +518,8 @@ void TTable::ReplaceTxStatus(TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> 
 
 void TTable::Merge(TPartView partView) noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     Y_VERIFY(partView, "Merge(...) shouldn't get empty part");
     Y_VERIFY(partView.Slices, "Merge(...) shouldn't get parts without slices");
 
@@ -397,6 +550,8 @@ void TTable::Merge(TPartView partView) noexcept
 
 void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     Y_VERIFY(part, "Merge(...) shouldn't get empty parts");
 
     if (Mutable && part->Epoch >= Mutable->Epoch) {
@@ -424,6 +579,8 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
 
 void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     Y_VERIFY(txStatus, "Unexpected empty TTxStatusPart");
 
     for (auto& item : txStatus->TxStatusPage->GetCommittedItems()) {
@@ -517,6 +674,8 @@ ui64 TTable::GetSearchHeight() const noexcept
 
 TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const noexcept
 {
+    Y_VERIFY(!RollbackState, "Cannot perform this in a transaction");
+
     TVector<TIntrusiveConstPtr<TMemTable>> vec(Frozen.begin(), Frozen.end());
 
     if (Mutable)
@@ -530,11 +689,21 @@ TEpoch TTable::Snapshot() noexcept
     if (Mutable) {
         Annexed = Mutable->GetBlobs()->Tail();
 
-        Frozen.insert(Mutable);
-        Stat_.FrozenWaste += Mutable->GetWastedMem();
-        Stat_.FrozenSize += Mutable->GetUsedMem();
-        Stat_.FrozenOps += Mutable->GetOpsCount();
-        Stat_.FrozenRows += Mutable->GetRowCount();
+        if (RollbackState) {
+            Y_VERIFY(
+                RollbackState->Epoch == Mutable->Epoch &&
+                RollbackState->MutableExisted &&
+                !RollbackState->MutableUpdated,
+                "Cannot snapshot a modified table");
+            Y_VERIFY(!MutableBackup, "Another mutable backup already exists");
+            MutableBackup = std::move(Mutable);
+        } else {
+            Frozen.insert(Mutable);
+            Stat_.FrozenWaste += Mutable->GetWastedMem();
+            Stat_.FrozenSize += Mutable->GetUsedMem();
+            Stat_.FrozenOps += Mutable->GetOpsCount();
+            Stat_.FrozenRows += Mutable->GetRowCount();
+        }
 
         Mutable = nullptr; /* have to make new TMemTable on next update */
 
@@ -637,7 +806,7 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
     return ready ? EReady::Data : EReady::Page;
 }
 
-void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> apart, TRowVersion rowVersion)
+void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion)
 {
     Y_VERIFY(!(ops && TCellOp::HaveNoOps(rop)), "Given ERowOp can't have ops");
 
@@ -652,12 +821,38 @@ void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> a
     MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
 }
 
-void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<TMemGlob> apart, ui64 txId)
+TTable::TOpenTransaction& TTable::AddOpenTransaction(ui64 txId)
+{
+    TOpenTransactions::insert_ctx ctx = nullptr;
+    TOpenTransactions::iterator it = OpenTransactions.find(txId, ctx);
+
+    if (it == OpenTransactions.end()) {
+        if (RollbackState) {
+            RollbackOps.emplace_back(TRollbackRemoveOpenTx{ txId });
+        }
+
+        it = OpenTransactions.emplace_direct(
+            ctx,
+            std::piecewise_construct,
+            std::forward_as_tuple(txId),
+            std::forward_as_tuple());
+    }
+
+    return it->second;
+}
+
+void TTable::UpdateTx(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, ui64 txId)
 {
     // Use a special row version that marks this update as uncommitted
     TRowVersion rowVersion(Max<ui64>(), txId);
     MemTable().Update(rop, key, ops, apart, rowVersion, CommittedTransactions);
-    OpenTransactions[txId].Mem.insert(Mutable);
+
+    Y_VERIFY_DEBUG(Mutable->GetTxIdStats().contains(txId));
+
+    auto& openTx = AddOpenTransaction(txId);
+    if (openTx.Mem.insert(Mutable).second && RollbackState) {
+        RollbackOps.emplace_back(TRollbackRemoveOpenTxMem{ txId, Mutable });
+    }
 }
 
 void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
@@ -668,8 +863,18 @@ void TTable::CommitTx(ui64 txId, TRowVersion rowVersion)
     // Note: it is possible to have multiple CommitTx for the same TxId but at
     // different row versions. The commit with the minimum row version wins.
     if (const auto* prev = CommittedTransactions.Find(txId); Y_LIKELY(!prev) || *prev > rowVersion) {
+        if (RollbackState) {
+            if (prev) {
+                RollbackOps.emplace_back(TRollbackAddCommittedTx{ txId, *prev });
+            } else {
+                RollbackOps.emplace_back(TRollbackRemoveCommittedTx{ txId });
+            }
+        }
         CommittedTransactions.Add(txId, rowVersion);
         if (!prev) {
+            if (RollbackState && RemovedTransactions.Contains(txId)) {
+                RollbackOps.emplace_back(TRollbackAddRemovedTx{ txId });
+            }
             RemovedTransactions.Remove(txId);
         }
     }
@@ -687,6 +892,9 @@ void TTable::RemoveTx(ui64 txId)
     // due to complicated split/merge shard interactions. The commit actually
     // wins over removes in all cases.
     if (const auto* prev = CommittedTransactions.Find(txId); Y_LIKELY(!prev)) {
+        if (RollbackState && !RemovedTransactions.Contains(txId)) {
+            RollbackOps.emplace_back(TRollbackRemoveRemovedTx{ txId });
+        }
         RemovedTransactions.Add(txId);
     }
 }
@@ -700,10 +908,28 @@ bool TTable::HasOpenTx(ui64 txId) const
     return false;
 }
 
+bool TTable::HasCommittedTx(ui64 txId) const
+{
+    return CommittedTransactions.Find(txId);
+}
+
+bool TTable::HasRemovedTx(ui64 txId) const
+{
+    return RemovedTransactions.Contains(txId);
+}
+
 TMemTable& TTable::MemTable()
 {
-    return
-        *(Mutable ? Mutable : (Mutable = new TMemTable(Scheme, Epoch, Annexed)));
+    if (!Mutable) {
+        Mutable = new TMemTable(Scheme, Epoch, Annexed);
+    }
+    if (RollbackState && Epoch == RollbackState->Epoch && RollbackState->MutableExisted) {
+        if (!RollbackState->MutableUpdated) {
+            RollbackState->MutableUpdated = true;
+            Mutable->PrepareRollback();
+        }
+    }
+    return *Mutable;
 }
 
 TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
@@ -721,7 +947,11 @@ TAutoPtr<TTableIt> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ES
             observer));
 
     if (Mutable) {
-        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
+    }
+
+    if (MutableBackup) {
+        dbIter->Push(TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Forward));
     }
 
     for (auto& fti : Frozen) {
@@ -764,7 +994,11 @@ TAutoPtr<TTableReverseIt> TTable::IterateReverse(TRawVals key_, TTagsRef tags, I
             observer));
 
     if (Mutable) {
-        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+        dbIter->Push(TMemIt::Make(*Mutable, Mutable->Snapshot(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
+    }
+
+    if (MutableBackup) {
+        dbIter->Push(TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, seek, Scheme->Keys, &dbIter->Remap, env, EDirection::Reverse));
     }
 
     for (auto& fti : Frozen) {
@@ -824,6 +1058,18 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     if (Mutable) {
         lastEpoch = Mutable->Epoch;
         if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
+                // N.B. stop looking for snapshot after the first hit
+                snapshotFound = true;
+                it->Apply(row, committed);
+            }
+        }
+    }
+
+    // Mutable data that is transitioning to frozen
+    if (MutableBackup && !row.IsFinalized()) {
+        lastEpoch = MutableBackup->Epoch;
+        if (auto it = TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
@@ -926,6 +1172,8 @@ void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegi
 
     if (Mutable)
         Mutable->DebugDump(str, reg);
+    if (MutableBackup)
+        MutableBackup->DebugDump(str, reg);
     for (const auto& it : Frozen) {
         str << "Frozen " << it->Epoch << " dump: " << Endl;
         it->DebugDump(str, reg);

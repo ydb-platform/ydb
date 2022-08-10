@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(Redo) {
         ui32 serial = 0;
 
         for (auto &one: changes) {
-            me.To(++serial)->RollUp(one->Stamp, one->Scheme, one->Redo, { });
+            me.To(++serial).Cleanup()->RollUp(one->Stamp, one->Scheme, one->Redo, { });
 
             if (1 == serial) {
                 /* Just applied initial alter script, nothing to check */

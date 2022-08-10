@@ -219,13 +219,43 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
             Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
         }
     }
-    for (size_t index = 0; index < ops.size(); ++index) {
-        if (auto error = NScheme::HasUnexpectedValueSize(ops[index].Value)) {
-            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, ops[index].Tag, error.c_str());
+
+    NRedo::IAnnex* annex = Annex.Get();
+    NRedo::IAnnex::TLimit limit = annex->Limit(table);
+    limit.MinExternSize = Max(limit.MinExternSize, DatabaseImpl->AnnexByteLimit());
+
+    if (ModifiedRefs.size() < ops.size()) {
+        ModifiedRefs.resize(FastClp2(ops.size()));
+    }
+    ModifiedOps.assign(ops.begin(), ops.end());
+    for (size_t index = 0; index < ModifiedOps.size(); ++index) {
+        TUpdateOp& op = ModifiedOps[index];
+        if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
+            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+        }
+
+        if (op.Value.IsEmpty()) {
+            // Null values lose type id in redo log
+            op.Value = {};
+            // Null values must change ECellOp::Set to ECellOp::Null in redo log
+            op.Op = op.NormalizedCellOp();
+        }
+
+        Y_VERIFY(op.Op == ELargeObj::Inline, "User provided an invalid ECellOp");
+
+        TArrayRef<const char> raw = op.AsRef();
+        if (limit.IsExtern(raw.size())) {
+            if (auto got = annex->Place(table, op.Tag, raw)) {
+                ModifiedRefs[index] = got.Ref;
+                const auto payload = NUtil::NBin::ToRef(ModifiedRefs[index]);
+                op.Value = TRawTypeValue(payload, op.Value.Type());
+                op.Op = ELargeObj::Extern;
+            }
         }
     }
 
-    Redo->EvUpdate(table, rop, key, ops, rowVersion);
+    Redo->EvUpdate(table, rop, key, ModifiedOps, rowVersion);
+    RequireForUpdate(table)->Update(rop, key, ModifiedOps, Annex->Current(), rowVersion);
 }
 
 void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUpdateOp> ops, ui64 txId)
@@ -235,28 +265,56 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
             Y_FAIL("Key index %" PRISZT " validation failure: %s", index, error.c_str());
         }
     }
-    for (size_t index = 0; index < ops.size(); ++index) {
-        if (auto error = NScheme::HasUnexpectedValueSize(ops[index].Value)) {
-            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, ops[index].Tag, error.c_str());
+
+    ModifiedOps.assign(ops.begin(), ops.end());
+    for (size_t index = 0; index < ModifiedOps.size(); ++index) {
+        TUpdateOp& op = ModifiedOps[index];
+        if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
+            Y_FAIL("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
         }
+
+        if (op.Value.IsEmpty()) {
+            // Null values lose type id in redo log
+            op.Value = {};
+            // Null values must change ECellOp::Set to ECellOp::Null in redo log
+            op.Op = op.NormalizedCellOp();
+        }
+
+        Y_VERIFY(op.Op == ELargeObj::Inline, "User provided an invalid ECellOp");
+
+        // FIXME: we cannot handle blob references during scans, so we
+        //        avoid creating large objects when they are in deltas
     }
 
-    Redo->EvUpdateTx(table, rop, key, ops, txId);
+    Redo->EvUpdateTx(table, rop, key, ModifiedOps, txId);
+    RequireForUpdate(table)->UpdateTx(rop, key, ModifiedOps, Annex->Current(), txId);
 }
 
 void TDatabase::RemoveTx(ui32 table, ui64 txId)
 {
     Redo->EvRemoveTx(table, txId);
+    RequireForUpdate(table)->RemoveTx(txId);
 }
 
 void TDatabase::CommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
 {
     Redo->EvCommitTx(table, txId, rowVersion);
+    RequireForUpdate(table)->CommitTx(txId, rowVersion);
 }
 
 bool TDatabase::HasOpenTx(ui32 table, ui64 txId) const
 {
     return Require(table)->HasOpenTx(txId);
+}
+
+bool TDatabase::HasCommittedTx(ui32 table, ui64 txId) const
+{
+    return Require(table)->HasCommittedTx(txId);
+}
+
+bool TDatabase::HasRemovedTx(ui32 table, ui64 txId) const
+{
+    return Require(table)->HasRemovedTx(txId);
 }
 
 void TDatabase::RemoveRowVersions(ui32 table, const TRowVersion& lower, const TRowVersion& upper)
@@ -285,8 +343,9 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
     Y_VERIFY(!Redo, "Transaction already in progress");
     Y_VERIFY(!Env);
     Annex = new TAnnex(*DatabaseImpl->Scheme);
-    Redo = new NRedo::TWriter{ Annex.Get(), DatabaseImpl->AnnexByteLimit() };
-    Change = MakeHolder<TChange>(Stamp = stamp, DatabaseImpl->Serial() + 1);
+    Redo = new NRedo::TWriter;
+    DatabaseImpl->BeginTransaction();
+    Change = MakeHolder<TChange>(stamp, DatabaseImpl->Serial());
     Env = &env;
     NoMoreReadsFlag = false;
 }
@@ -355,28 +414,34 @@ TDatabase::TChg TDatabase::Head(ui32 table) const noexcept
     } else {
         auto &wrap = DatabaseImpl->Get(table, true);
 
-        return { wrap.Serial, wrap->Head() };
+        // We return numbers as they have been at the start of transaction,
+        // but possibly after schema changes or memtable flushes.
+        auto serial = wrap.DataModified && !wrap.EpochSnapshot ? wrap.SerialBackup : wrap.Serial;
+        auto head = wrap.EpochSnapshot ? *wrap.EpochSnapshot : wrap->Head();
+        return { serial, head };
     }
 }
 
 TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
 {
+    Y_VERIFY(!Redo, "Cannot SnapshotToLog inside a transaction");
+
     auto scn = DatabaseImpl->Serial() + 1;
     auto epoch = DatabaseImpl->Get(table, true)->Snapshot();
 
     DatabaseImpl->Rewind(scn);
 
-    return
-        NRedo::TWriter{ }
-            .EvBegin(ui32(ECompatibility::Head), ui32(ECompatibility::Edge), scn, stamp)
-            .EvFlush(table, stamp, epoch).Dump();
+    NRedo::TWriter writer;
+    writer.EvBegin(ui32(ECompatibility::Head), ui32(ECompatibility::Edge), scn, stamp);
+    writer.EvFlush(table, stamp, epoch);
+    return std::move(writer).Finish();
 }
 
-ui32 TDatabase::TxSnapTable(ui32 table)
+TEpoch TDatabase::TxSnapTable(ui32 table)
 {
-    Require(table);
-    Change->Snapshots.emplace_back(table);
-    return Change->Snapshots.size() - 1;
+    Y_VERIFY(Redo, "Cannot TxSnapTable outside a transaction");
+    ++Change->Snapshots;
+    return DatabaseImpl->FlushTable(table);
 }
 
 TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const
@@ -452,9 +517,8 @@ void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart> txStatus)
 TAlter& TDatabase::Alter()
 {
     Y_VERIFY(Redo, "Scheme change must be done within a transaction");
-    Y_VERIFY(!*Redo, "Scheme change must be done before any data updates");
 
-    return *(Alter_ ? Alter_ : (Alter_ = new TAlter()));
+    return *(Alter_ ? Alter_ : (Alter_ = new TAlter(DatabaseImpl.Get())));
 }
 
 void TDatabase::DebugDumpTable(ui32 table, IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {
@@ -510,15 +574,15 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         IteratedTables.clear();
     }
 
-    if (commit && (*Redo || Alter_ || Change->Snapshots || Change->RemovedRowVersions)) {
+    if (commit && (*Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions)) {
         Y_VERIFY(stamp >= Change->Stamp);
+        Y_VERIFY(DatabaseImpl->Serial() == Change->Serial);
 
-        /* TODO: Temporary hack fot getting correct Stamp and Serial state
-                against invocation of SnapshotToLog() between Begin(...) and
-                Commit(...). Read KIKIMR-5366 for details and progress. */
-
+        // FIXME: Temporary hack for using up to date change stamp when scan
+        //        is queued inside a transaction. In practice we just need to
+        //        stop using empty commits for scans. See KIKIMR-5366 for
+        //        details.
         const_cast<TTxStamp&>(Change->Stamp) = stamp;
-        const_cast<ui64&>(Change->Serial) = DatabaseImpl->Serial() + 1;
 
         NRedo::TWriter prefix{ };
 
@@ -526,12 +590,13 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             const ui32 head = ui32(ECompatibility::Head);
             const ui32 edge = ui32(ECompatibility::Edge);
 
-            prefix.EvBegin(head, edge,  Change->Serial, Change->Stamp);
+            prefix.EvBegin(head, edge, Change->Serial, Change->Stamp);
         }
 
         const auto offset = prefix.Bytes(); /* useful payload starts here */
 
-        if (auto annex = Annex->Unwrap()) {
+        auto annex = Annex->Unwrap();
+        if (annex) {
             Y_VERIFY(cookieAllocator, "Have to provide TCookieAllocator with enabled annex");
 
             TVector<NPageCollection::TGlobId> blobs;
@@ -547,29 +612,18 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             }
 
             prefix.EvAnnex(blobs);
-            DatabaseImpl->Assign(std::move(annex));
         }
 
-        DatabaseImpl->Switch(Stamp);
+        DatabaseImpl->CommitTransaction(Change->Stamp, annex, prefix);
 
-        if (Alter_) {
+        if (Alter_ && *Alter_) {
             auto delta = Alter_->Flush();
-
-            if (DatabaseImpl->Apply(*delta, &prefix))
-                Y_PROTOBUF_SUPPRESS_NODISCARD delta->SerializeToString(&Change->Scheme);
+            Y_PROTOBUF_SUPPRESS_NODISCARD delta->SerializeToString(&Change->Scheme);
         }
 
-        for (auto &one: Change->Snapshots) {
-            one.Epoch = Require(one.Table)->Snapshot();
-            prefix.EvFlush(one.Table, Stamp, one.Epoch);
-        }
+        prefix.Join(std::move(*Redo));
 
-        prefix.Join(*Redo);
-
-        Change->Redo = prefix.Dump();
-
-        for (auto &entry: prefix.Unwrap())
-            DatabaseImpl->ApplyRedo(entry);
+        Change->Redo = std::move(prefix).Finish();
 
         for (const auto& xpair : Change->RemovedRowVersions) {
             if (auto& wrap = DatabaseImpl->Get(xpair.first, false)) {
@@ -582,7 +636,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         Change->Garbage = std::move(DatabaseImpl->Garbage);
         Change->Deleted = std::move(DatabaseImpl->Deleted);
         Change->Affects = DatabaseImpl->GrabAffects();
-        Change->Annex = DatabaseImpl->GrabAnnex();
+        Change->Annex = std::move(annex);
 
         if (Change->Redo.size() == offset && !Change->Affects) {
             std::exchange(Change->Redo, { }); /* omit complete NOOP redo */
@@ -592,13 +646,15 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
             Y_Fail(
                 NFmt::Do(*Change) << " produced " << (Change->Redo.size() - offset)
                 << "b of non technical redo without leaving effects on data");
-        } else if (Change->Serial != DatabaseImpl->Serial()) {
+        } else if (Change->Redo && Change->Serial != DatabaseImpl->Serial()) {
             Y_Fail(
                 NFmt::Do(*Change) << " serial diverged from current db "
                 << DatabaseImpl->Serial() << " after rolling up redo log");
         } else if (Change->Deleted.size() != Change->Garbage.size()) {
             Y_Fail(NFmt::Do(*Change) << " has inconsistent garbage data");
         }
+    } else {
+        DatabaseImpl->RollbackTransaction();
     }
 
     Redo = nullptr;
@@ -614,6 +670,11 @@ TTable* TDatabase::Require(ui32 table) const noexcept
     return DatabaseImpl->Get(table, true).Self.Get();
 }
 
+TTable* TDatabase::RequireForUpdate(ui32 table) const noexcept
+{
+    return DatabaseImpl->GetForUpdate(table).Self.Get();
+}
+
 TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,
                                 TMemGlobs annex)
 {
@@ -626,7 +687,7 @@ TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRe
         bool parseOk = ParseFromStringNoSizeLimit(changes, delta);
         Y_VERIFY(parseOk);
 
-        DatabaseImpl->Apply(changes, nullptr);
+        DatabaseImpl->ApplySchema(changes);
     }
 
     if (redo) {

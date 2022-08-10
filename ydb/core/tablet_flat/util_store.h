@@ -108,14 +108,6 @@ namespace NUtil {
         TConcurrentStore() { }
 
         ~TConcurrentStore() noexcept {
-            clear();
-        }
-
-        TConstIterator Iterator() const noexcept {
-            return TConstIterator(this);
-        }
-
-        void clear() noexcept {
             size_t count = Count.exchange(0, std::memory_order_release);
             Head.store(nullptr, std::memory_order_release);
             auto* tail = Tail.exchange(nullptr, std::memory_order_release);
@@ -133,6 +125,10 @@ namespace NUtil {
             }
         }
 
+        TConstIterator Iterator() const noexcept {
+            return TConstIterator(this);
+        }
+
         /**
          * Emplaces a new element, not thread safe
          */
@@ -142,7 +138,8 @@ namespace NUtil {
             size_t index = Count.load(std::memory_order_relaxed);
 
             // Allocate a new chunk if necessary
-            auto* tail = Tail.load(std::memory_order_relaxed);
+            // Note: we acquire for the tail->Prev pointer here
+            auto* tail = Tail.load(std::memory_order_acquire);
             if (!tail || tail->EndOffset() <= index) {
                 size_t offset = tail ? tail->EndOffset() : 0;
                 size_t bytes = tail ? tail->Bytes * 2 : 512;
@@ -158,13 +155,43 @@ namespace NUtil {
                 Tail.store(tail, std::memory_order_release);
             }
 
-            Y_VERIFY_DEBUG(tail->Offset <= index);
+            // It is possible for new index to be located on some earlier
+            // chunk after we do a truncation.
+            void* ptr = FindPtr(tail, index);
 
-            // Construct new value and publish it by releasing the new count
-            void* ptr = tail->Values() + (index - tail->Offset);
+            // Construct a new value and publish the new count. Note that this
+            // does not actually publish value contents, since count is not
+            // acquired on access, but it's useful for iteration.
+            // Items must be synchronized externally.
             T* value = new (ptr) T(std::forward<TArgs>(args)...);
             Count.store(index + 1, std::memory_order_release);
             return *value;
+        }
+
+        /**
+         * Truncates store to a smaller size, not thread safe
+         */
+        void truncate(size_t new_size) {
+            size_t prev_size = Count.load(std::memory_order_relaxed);
+            Y_VERIFY(new_size <= prev_size);
+
+            if (new_size < prev_size) {
+                auto* tail = Tail.load(std::memory_order_acquire);
+                while (tail && new_size < tail->EndOffset()) {
+                    // We want to call destructor for all items
+                    // that are between new_size and prev_size
+                    if (tail->Offset < prev_size) {
+                        size_t fromIndex = std::max(new_size, tail->Offset) - tail->Offset;
+                        size_t toIndex = std::min(prev_size, tail->EndOffset()) - tail->Offset;
+                        T* values = tail->Values() + fromIndex;
+                        for (size_t index = fromIndex; index < toIndex; ++index, ++values) {
+                            values->~T();
+                        }
+                    }
+                    tail = tail->Prev;
+                }
+                Count.store(new_size, std::memory_order_release);
+            }
         }
 
         /**
@@ -190,6 +217,41 @@ namespace NUtil {
             Y_VERIFY_DEBUG(index < size());
 
             return *FindPtr(Tail.load(std::memory_order_acquire), index);
+        }
+
+        /**
+         * Runs callback(index, value) for each value between index and endIndex, not thread safe
+         */
+        template<class TCallback>
+        void Enumerate(size_t index, size_t endIndex, TCallback&& callback) {
+            Y_VERIFY(index <= endIndex);
+            if (index == endIndex) {
+                return;
+            }
+
+            size_t count = Count.load(std::memory_order_acquire);
+            Y_VERIFY(endIndex <= count);
+
+            auto* tail = Tail.load(std::memory_order_acquire);
+            while (tail && index < tail->Offset) {
+                tail = tail->Prev;
+            }
+
+            do {
+                Y_VERIFY_DEBUG(tail);
+                auto endOffset = tail->EndOffset();
+                Y_VERIFY_DEBUG(tail->Offset <= index && index < endOffset);
+                T* values = tail->Values() + (index - tail->Offset);
+                while (index < endOffset && index < endIndex) {
+                    callback(index, *values);
+                    ++index;
+                    ++values;
+                }
+                if (index == endIndex) {
+                    break;
+                }
+                tail = tail->Next.load(std::memory_order_acquire);
+            } while (tail && index < tail->EndOffset());
         }
 
     private:

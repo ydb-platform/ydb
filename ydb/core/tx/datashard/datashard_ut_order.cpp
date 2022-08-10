@@ -983,6 +983,7 @@ public:
 
         ui32 key = 0;
         TString body = ProgramTextSwap();
+
         for (ui32 point : Writes) {
             body += Sprintf(writePattern, key, point, key, TxId);
             ++key;
@@ -1007,6 +1008,9 @@ public:
     }
 
     ui64 GetTxId() const { return TxId; }
+    const TVector<ui32>& GetWrites() const { return Writes; }
+    const TVector<ui32>& GetReads() const { return Reads; }
+    const TVector<TSimpleRange>& GetRanges() const { return Ranges; }
     const TMap<ui32, ui32>& GetResults() const { return Results; }
 
     void SetResults(const TVector<ui32>& kv) {

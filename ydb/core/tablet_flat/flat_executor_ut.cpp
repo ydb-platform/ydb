@@ -4891,5 +4891,135 @@ Y_UNIT_TEST_SUITE(TFlatTableLongTxAndBlobs) {
 
 } // Y_UNIT_TEST_SUITE(TFlatTableLongTxAndBlobs)
 
+Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits) {
+
+    struct TTxMakeSnapshotAndWrite : public ITransaction {
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            TIntrusivePtr<TTableSnapshotContext> snapContext =
+                new TTestTableSnapshotContext({TRowsModel::TableId});
+            txc.Env.MakeSnapshot(snapContext);
+
+            for (i64 keyValue = 101; keyValue <= 104; ++keyValue) {
+                const auto key = NScheme::TInt64::TInstance(keyValue);
+
+                TString str = "value";
+                const auto val = NScheme::TString::TInstance(str);
+                NTable::TUpdateOp ops{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val };
+
+                txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { key }, { ops });
+            }
+
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    struct TTxBorrowSnapshot : public ITransactionWithExecutor {
+        TTxBorrowSnapshot(TString& snapBody, TIntrusivePtr<TTableSnapshotContext> snapContext, ui64 targetTabletId)
+            : SnapBody(snapBody)
+            , SnapContext(std::move(snapContext))
+            , TargetTabletId(targetTabletId)
+        { }
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            SnapBody = Executor->BorrowSnapshot(TRowsModel::TableId, *SnapContext, { }, { }, TargetTabletId);
+            txc.Env.DropSnapshot(SnapContext);
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+
+    private:
+        TString& SnapBody;
+        TIntrusivePtr<TTableSnapshotContext> SnapContext;
+        const ui64 TargetTabletId;
+    };
+
+    struct TTxCheckRows : public ITransaction {
+        bool Execute(TTransactionContext &txc, const TActorContext &) override
+        {
+            i64 keyId;
+            TVector<NTable::TTag> tags;
+            tags.push_back(TRowsModel::ColumnValueId);
+            TVector<TRawTypeValue> key;
+            key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
+
+            for (keyId = 1; keyId <= 104; ++keyId) {
+                NTable::TRowState row;
+                auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
+                if (ready == NTable::EReady::Page)
+                    return false;
+                Y_VERIFY_S(ready == NTable::EReady::Data, "Failed to find key " << keyId);
+                Y_VERIFY(row.GetRowState() == NTable::ERowOp::Upsert);
+                TStringBuf selected = row.Get(0).AsBuf();
+                TString expected = "value";
+                Y_VERIFY(selected == expected);
+            }
+
+            return true;
+        }
+
+        void Complete(const TActorContext &ctx) override
+        {
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+    };
+
+    Y_UNIT_TEST(SnapshotWithCommits) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+
+        // Start the first tablet
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+        env.WaitForWakeUp();
+
+        // Init schema
+        {
+            TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+            env.SendSync(rows.MakeScheme(std::move(policy)));
+        }
+
+        // Insert 100 rows
+        Cerr << "...inserting rows" << Endl;
+        env.SendSync(rows.MakeRows(100, 0, 100));
+
+        Cerr << "...making snapshot and writing to table" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxMakeSnapshotAndWrite });
+        Cerr << "...waiting for snapshot to complete" << Endl;
+        auto evSnapshot = env.GrabEdgeEvent<TEvTestFlatTablet::TEvSnapshotComplete>();
+        Cerr << "...borrowing snapshot" << Endl;
+        TString snapBody;
+        env.SendSync(new NFake::TEvExecute{ new TTxBorrowSnapshot(snapBody, evSnapshot->Get()->SnapContext, env.Tablet + 1) });
+
+        // Check all added rows one-by-one
+        Cerr << "...checking rows" << Endl;
+        env.SendSync(new NFake::TEvExecute{ new TTxCheckRows });
+
+        for (int i = 0; i < 2; ++i) {
+            Cerr << "...restarting tablet" << Endl;
+            env.SendSync(new TEvents::TEvPoison, false, true);
+            env.WaitForGone();
+            env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+                return new TTestFlatTablet(env.Edge, tablet, info);
+            });
+            env.WaitForWakeUp();
+
+            // Check all added rows one-by-one
+            Cerr << "...checking rows" << Endl;
+            env.SendSync(new NFake::TEvExecute{ new TTxCheckRows }, /* retry */ true);
+        }
+    }
+
+} // Y_UNIT_TEST_SUITE(TFlatTableSnapshotWithCommits)
+
 } // namespace NTabletFlatExecutor
 } // namespace NKikimr

@@ -10,12 +10,14 @@ namespace NTest {
     struct TWrapDbSelect {
 
         TWrapDbSelect(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
-                TRowVersion snapshot = TRowVersion::Max())
+                TRowVersion snapshot = TRowVersion::Max(),
+                ui64 readTxId = 0)
             : Scheme(std::move(scheme))
             , Remap_(TRemap::Full(*Scheme))
             , Base(base)
             , Table(table)
             , Snapshot(snapshot)
+            , ReadTxId(readTxId)
         {
 
         }
@@ -44,7 +46,12 @@ namespace NTest {
         {
             Y_VERIFY(seek == ESeek::Exact, "Db Select(...) is a point lookup");
 
-            return (Ready = Base.Select(Table, key, Scheme->Tags(), State, /* readFlags */ 0, Snapshot));
+            ITransactionMapPtr txMap;
+            if (ReadTxId != 0 && Base.HasOpenTx(Table, ReadTxId)) {
+                txMap = new TSingleTransactionMap(ReadTxId, TRowVersion::Min());
+            }
+
+            return (Ready = Base.Select(Table, key, Scheme->Tags(), State, /* readFlags */ 0, Snapshot, txMap));
         }
 
         EReady Next() noexcept
@@ -65,6 +72,7 @@ namespace NTest {
     private:
         const ui32 Table = Max<ui32>();
         const TRowVersion Snapshot;
+        const ui64 ReadTxId;
         EReady Ready = EReady::Gone;
         TRowState State;
     };

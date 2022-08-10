@@ -17,8 +17,9 @@
 namespace NKikimr {
 namespace NTable {
 
-    class TDatabaseImpl  {
-
+    class TDatabaseImpl final
+        : public IAlterSink
+    {
         struct TArgs {
             ui32 Table;
             TEpoch Head;
@@ -49,7 +50,12 @@ namespace NTable {
 
             bool Touch(ui64 edge, ui64 serial) noexcept
             {
-                return std::exchange(Serial, serial) <= edge;
+                ui64 prevSerial = std::exchange(Serial, serial);
+                if (prevSerial <= edge) {
+                    SerialBackup = prevSerial;
+                    return true;
+                }
+                return false;
             }
 
             void Aggr(TDbStats &aggr, bool enter) const noexcept
@@ -77,10 +83,40 @@ namespace NTable {
                 }
             }
 
+            void BackupMemStats() noexcept
+            {
+                BackupMemTableWaste = Self->GetMemWaste();
+                BackupMemTableBytes = Self->GetMemSize();
+                BackupMemTableOps = Self->GetOpsCount();
+            }
+
+            void RestoreMemStats(TDbStats &aggr) const noexcept
+            {
+                NUtil::SubSafe(aggr.MemTableWaste, BackupMemTableWaste);
+                NUtil::SubSafe(aggr.MemTableBytes, BackupMemTableBytes);
+                NUtil::SubSafe(aggr.MemTableOps, BackupMemTableOps);
+                aggr.MemTableWaste += Self->GetMemWaste();
+                aggr.MemTableBytes += Self->GetMemSize();
+                aggr.MemTableOps += Self->GetOpsCount();
+            }
+
             const ui32 Table = Max<ui32>();
             const TIntrusivePtr<TTable> Self;
             const TTxStamp Edge = 0;    /* Stamp of last snapshot       */
             ui64 Serial = 0;
+            ui64 SerialBackup = 0;
+
+            std::optional<TEpoch> EpochSnapshot;
+            ui64 BackupMemTableWaste;
+            ui64 BackupMemTableBytes;
+            ui64 BackupMemTableOps;
+
+            bool Created = false;
+            bool Dropped = false;
+            bool SchemePending = false;
+            bool SchemeModified = false;
+            bool DataModified = false;
+            bool RollbackPrepared = false;
         };
 
     public:
@@ -113,23 +149,312 @@ namespace NTable {
         {
             auto *wrap = Tables.FindPtr(table);
 
-            Y_VERIFY(wrap || !require, "Cannot find given table");
+            if (!wrap || wrap->Dropped) {
+                Y_VERIFY(!require, "Cannot find table %" PRIu32, table);
+                return Dummy;
+            }
 
-            return wrap ? *wrap : Dummy;
+            if (wrap->SchemePending) {
+                Y_VERIFY(InTransaction);
+
+                auto* info = Scheme->GetTableInfo(table);
+                Y_VERIFY(info, "No scheme for existing table %" PRIu32, table);
+
+                if (!wrap->Created && !wrap->RollbackPrepared) {
+                    wrap->BackupMemStats();
+                    (*wrap)->PrepareRollback();
+                    wrap->RollbackPrepared = true;
+                    Prepared.push_back(table);
+                }
+
+                if (!wrap->EpochSnapshot) {
+                    // We always flush mem table on schema modification,
+                    // which happens at the "start" of transaction.
+                    wrap->EpochSnapshot.emplace((*wrap)->Snapshot());
+                    // When this is an existing table we also simulate
+                    // EvFlush that is inserted in the redo log.
+                    if (!wrap->Created) {
+                        Flushed.push_back(table);
+                        if (wrap->Touch(Begin_, Serial_)) {
+                            Affects.push_back(table);
+                        }
+                    }
+                }
+
+                (*wrap)->SetScheme(*info);
+
+                wrap->SchemeModified = true;
+                wrap->SchemePending = false;
+            }
+
+            return *wrap;
+        }
+
+        TTableWrapper& GetForUpdate(ui32 table) noexcept
+        {
+            Y_VERIFY(InTransaction);
+            TTableWrapper& wrap = Get(table, true);
+            if (!wrap.Created && !wrap.RollbackPrepared) {
+                wrap.BackupMemStats();
+                wrap->PrepareRollback();
+                wrap.RollbackPrepared = true;
+                Prepared.push_back(table);
+            }
+            if (wrap.Touch(Begin_, Serial_)) {
+                Affects.push_back(table);
+            }
+            Y_VERIFY(wrap.Created || wrap.RollbackPrepared);
+            wrap.DataModified = true;
+            return wrap;
         }
 
         ui64 Rewind(ui64 serial) noexcept
         {
+            Y_VERIFY(!InTransaction, "Unexpected rewind inside a transaction");
             return std::exchange(Serial_, Max(Serial_, serial));
+        }
+
+        void BeginTransaction() noexcept
+        {
+            Y_VERIFY(!InTransaction);
+            InTransaction = true;
+
+            // We pretend as if we just processed Switch and EvBegin with the next serial
+            Begin_ = Serial_;
+            Affects = { };
+            Serial_++;
+
+            // Sanity checks
+            Y_VERIFY_DEBUG(Annex.empty());
+            Y_VERIFY_DEBUG(Flushed.empty());
+            Y_VERIFY_DEBUG(Prepared.empty());
+        }
+
+        TEpoch FlushTable(ui32 tid) noexcept
+        {
+            Y_VERIFY(InTransaction);
+            auto& wrap = Get(tid, true);
+            Y_VERIFY(!wrap.DataModified, "Cannot flush a modified table");
+            if (!wrap.EpochSnapshot) {
+                Y_VERIFY(!wrap.Created);
+                wrap.EpochSnapshot.emplace(wrap->Snapshot());
+                // Simulate inserting and processing EvFlush
+                Flushed.push_back(tid);
+                if (wrap.Touch(Begin_, Serial_)) {
+                    Affects.push_back(tid);
+                }
+            }
+            return *wrap.EpochSnapshot;
+        }
+
+        void CommitTransaction(TTxStamp stamp, TArrayRef<const TMemGlob> annex, NRedo::TWriter& writer) noexcept
+        {
+            Y_VERIFY(Stamp <= stamp, "Executor tx stamp cannot go to the past");
+            Stamp = stamp;
+
+            CommitScheme(annex);
+
+            for (ui32 tid : Prepared) {
+                auto it = Tables.find(tid);
+                if (it == Tables.end()) {
+                    // Table was actually dropped
+                    continue;
+                }
+                auto& wrap = it->second;
+                Y_VERIFY(wrap.RollbackPrepared);
+                wrap->CommitChanges(annex);
+                wrap.RestoreMemStats(Stats);
+                wrap.RollbackPrepared = false;
+                wrap.DataModified = false;
+            }
+            Prepared.clear();
+
+            THashSet<ui32> dropped;
+            for (ui32 tid : Flushed) {
+                auto it = Tables.find(tid);
+                if (it == Tables.end()) {
+                    // Table was actually dropped
+                    dropped.insert(tid);
+                    continue;
+                }
+                auto& wrap = it->second;
+                Y_VERIFY(wrap.EpochSnapshot);
+                writer.EvFlush(tid, Stamp - 1, *wrap.EpochSnapshot);
+                wrap.EpochSnapshot.reset();
+            }
+            Flushed.clear();
+
+            // Remove dropped tables (if any) from affects
+            if (!dropped.empty()) {
+                auto end = std::remove_if(
+                    Affects.begin(), Affects.end(),
+                    [&dropped](ui32 tid) {
+                        return dropped.contains(tid);
+                    });
+                Affects.erase(end, Affects.end());
+            }
+
+            // We expect database to drop commits without any side-effects
+            // So we rewind serial to match what it would be after a reboot
+            if (Affects.empty()) {
+                Serial_ = Begin_;
+            }
+
+            Stats.TxCommited++;
+            InTransaction = false;
+        }
+
+        void CommitScheme(TArrayRef<const TMemGlob> annex) noexcept
+        {
+            if (!SchemeRollbackState.Tables.empty() || SchemeRollbackState.Redo) {
+                // Table or redo settings have changed
+                CalculateAnnexEdge();
+            }
+
+            TScheme& scheme = *Scheme;
+            for (auto& pr : SchemeRollbackState.Tables) {
+                ui32 tid = pr.first;
+                auto* info = scheme.GetTableInfo(tid);
+                if (!info) {
+                    // This table doesn't exist in current schema,
+                    // which means it has been dropped.
+                    Y_VERIFY(Tables.contains(tid), "Unexpected drop for a table that doesn't exist");
+                    auto& wrap = Tables.at(tid);
+                    Y_VERIFY(wrap.Dropped);
+                    Y_VERIFY(!wrap.DataModified, "Unexpected drop of a modified table");
+                    if (wrap.RollbackPrepared) {
+                        wrap->CommitChanges(annex);
+                        wrap.RestoreMemStats(Stats);
+                        wrap.RollbackPrepared = false;
+                    }
+                    wrap.Aggr(Stats, false /* leave */);
+                    Deleted.emplace_back(tid);
+                    Garbage.emplace_back(wrap->Unwrap());
+                    Tables.erase(tid);
+                    NUtil::SubSafe(Stats.Tables, ui32(1));
+                    continue;
+                }
+
+                // This call will also apply schema changes
+                auto& wrap = Get(tid, true);
+                Y_VERIFY(!wrap.Dropped);
+                Y_VERIFY(!wrap.SchemePending);
+                Y_VERIFY(wrap.SchemeModified);
+
+                if (wrap.Created) {
+                    // If the table is both created and modified in the same
+                    // transaction, then make sure flags are cleared and the
+                    // table stats are accounted for.
+                    wrap.Created = false;
+                    wrap.DataModified = false;
+                    Y_VERIFY(!wrap.RollbackPrepared);
+                    wrap.EpochSnapshot.reset();
+                    wrap->CommitNewTable(annex);
+                    wrap.Aggr(Stats, true /* enter */);
+                }
+
+                wrap.SchemeModified = false;
+            }
+
+            SchemeRollbackState.Tables.clear();
+            SchemeRollbackState.Executor.reset();
+            SchemeRollbackState.Redo.reset();
+        }
+
+        void RollbackTransaction() noexcept
+        {
+            for (ui32 tid : Prepared) {
+                auto& wrap = Tables.at(tid);
+                Y_VERIFY(wrap.RollbackPrepared);
+                wrap->RollbackChanges();
+                wrap.RestoreMemStats(Stats);
+                wrap.RollbackPrepared = false;
+                wrap.SchemeModified = false;
+                wrap.DataModified = false;
+            }
+            Prepared.clear();
+
+            for (ui32 tid : Flushed) {
+                auto& wrap = Tables.at(tid);
+                Y_VERIFY(wrap.EpochSnapshot);
+                wrap.EpochSnapshot.reset();
+            }
+            Flushed.clear();
+
+            for (ui32 tid : Affects) {
+                auto& wrap = Tables.at(tid);
+                if (!wrap.Created) {
+                    wrap.Serial = wrap.SerialBackup;
+                }
+            }
+            Affects.clear();
+
+            RollbackScheme();
+            Serial_ = Begin_;
+            InTransaction = false;
+        }
+
+        void RollbackScheme() noexcept
+        {
+            // Note: we assume schema rollback is very rare,
+            // so it doesn't have to be efficient
+            TScheme& scheme = *Scheme;
+            if (SchemeRollbackState.Redo) {
+                scheme.Redo = *SchemeRollbackState.Redo;
+                SchemeRollbackState.Redo.reset();
+            }
+            if (SchemeRollbackState.Executor) {
+                scheme.Executor = *SchemeRollbackState.Executor;
+                SchemeRollbackState.Executor.reset();
+            }
+            // First pass: we remove all modified tables from schema to handle renames
+            for (auto& pr : SchemeRollbackState.Tables) {
+                auto it = scheme.Tables.find(pr.first);
+                if (it != scheme.Tables.end()) {
+                    scheme.TableNames.erase(it->second.Name);
+                    scheme.Tables.erase(it);
+                }
+            }
+            // Second pass: restore all tables that existed before transaction started
+            for (auto& pr : SchemeRollbackState.Tables) {
+                if (pr.second) {
+                    auto res = scheme.Tables.emplace(pr.first, *pr.second);
+                    Y_VERIFY(res.second);
+                    scheme.TableNames.emplace(res.first->second.Name, pr.first);
+                }
+            }
+            // Third pass: we check modified tables and rollback their schema changes
+            for (auto& pr : SchemeRollbackState.Tables) {
+                ui32 tid = pr.first;
+                auto& wrap = Tables.at(tid);
+                if (wrap.Created) {
+                    // This table didn't exist, just forget about it
+                    Tables.erase(tid);
+                    NUtil::SubSafe(Stats.Tables, ui32(1));
+                    continue;
+                }
+                // By the time schema rollback is called we expect changes to be rolled back already
+                Y_VERIFY(!wrap.SchemeModified, "Unexpected schema rollback on a modified table");
+                Y_VERIFY(!wrap.EpochSnapshot, "Unexpected schema rollback on a flushed table");
+                if (wrap.Dropped) {
+                    // This table is no longer dropped
+                    wrap.Dropped = false;
+                }
+                wrap.SchemePending = false;
+            }
+            SchemeRollbackState.Tables.clear();
         }
 
         TDatabaseImpl& Switch(TTxStamp stamp) noexcept
         {
-            if (std::exchange(Stamp, stamp) > stamp)
-                Y_FAIL("Executor tx stamp cannot go to the past");
+            Y_VERIFY(!InTransaction, "Unexpected switch inside a transaction");
+            Y_VERIFY(Stamp <= stamp, "Executor tx stamp cannot go to the past");
+            Stamp = stamp;
 
-            First_ = Max<ui64>(), Begin_ = Serial_;
-            Stats.TxCommited++, Affects = { };
+            First_ = Max<ui64>();
+            Begin_ = Serial_;
+            Stats.TxCommited++;
+            Affects = { };
 
             return *this;
         }
@@ -195,12 +520,12 @@ namespace NTable {
             wrap.Aggr(Stats, true /* enter */);
         }
 
-        bool Apply(const TSchemeChanges &delta, NRedo::TWriter *writer)
+        bool ApplySchema(const TSchemeChanges &delta)
         {
             TModifier modifier(*Scheme);
 
             if (modifier.Apply(delta)) {
-                Apply(modifier.Affects, writer);
+                ApplySchema(modifier.Affects);
 
                 return true;
             } else {
@@ -268,20 +593,12 @@ namespace NTable {
             return result.first->second;
         }
 
-        void Apply(const THashSet<ui32> &affects, NRedo::TWriter *writer)
+        void ApplySchema(const THashSet<ui32> &affects)
         {
             for (ui32 table : affects) {
                 auto &wrap = Get(table, false);
 
                 if (auto *info = Scheme->GetTableInfo(table)) {
-                    if (wrap && writer) {
-                        /* Hack keeps table epoches consistent in regular
-                            flow and on db bootstap. Required due to scheme
-                            deltas and redo log async rollup on bootstrap.
-                         */
-
-                        writer->EvFlush(table, Stamp, wrap->Snapshot());
-                    }
 
                     (wrap ? wrap : MakeTable(table, { }))->SetScheme(*info);
 
@@ -325,7 +642,7 @@ namespace NTable {
                 Serial_ = serial;
             } else {
                 Y_Fail("EvBegin{" << serial << " " << NFmt::TStamp(stamp)
-                    << "} is not fits to db state {" << Serial_ << " "
+                    << "} does not match db state {" << Serial_ << " "
                     << NFmt::TStamp(Stamp) << "} (redo log was reordered)");
             }
 
@@ -415,11 +732,40 @@ namespace NTable {
                 Legacy log (Evolution < 12) have no EvBegin and progression
                 of serial require hack with virtual insertion of EvBegin here.
              */
+            if (Y_UNLIKELY(Serial_ == Begin_)) {
+                ++Serial_;
+            }
 
-            if (wrap.Touch(Begin_, Begin_ == Serial_ ? ++Serial_ : Serial_))
+            if (wrap.Touch(Begin_, Serial_))
                 Affects.emplace_back(table);
 
-            return First_ = Min(First_, Serial_), wrap;
+            First_ = Min(First_, Serial_);
+            return wrap;
+        }
+
+    private:
+        bool ApplyAlterRecord(const TAlterRecord& record) override
+        {
+            Y_VERIFY(InTransaction, "Unexpected ApplyAlterRecord outside of transaction");
+            TSchemeModifier modifier(*Scheme, &SchemeRollbackState);
+            bool changes = modifier.Apply(record);
+            if (changes) {
+                // There will be at most one table id
+                for (ui32 tid : modifier.Affects) {
+                    auto* wrap = Tables.FindPtr(tid);
+                    if (!wrap) {
+                        wrap = &MakeTable(tid, { });
+                        wrap->Created = true;
+                    }
+                    Y_VERIFY(!wrap->DataModified, "Table %" PRIu32 " cannot be altered after being changed", tid);
+                    Y_VERIFY(!wrap->Dropped, "Table %" PRIu32 " cannot be altered after being dropped", tid);
+                    if (!Scheme->GetTableInfo(tid)) {
+                        wrap->Dropped = true;
+                    }
+                    wrap->SchemePending = true;
+                }
+            }
+            return changes;
         }
 
     public:
@@ -440,6 +786,11 @@ namespace NTable {
         NRedo::TPlayer<TDatabaseImpl> Redo;
         TVector<ui32> Affects;
         TVector<TMemGlob> Annex;
+        TVector<ui32> Flushed;
+        TVector<ui32> Prepared;
+
+        bool InTransaction = false;
+        TSchemeRollbackState SchemeRollbackState;
 
     public:
         const TAutoPtr<TScheme> Scheme;

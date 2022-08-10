@@ -1367,11 +1367,6 @@ public:
                     NUdf::TUnboxedValue replyValue = runValue.GetElement(0);
                     NUdf::TUnboxedValue writeValue = runValue.GetElement(1);
 
-                    TEngineFlatApplyContext applyCtx;
-                    applyCtx.Host = Settings.Host;
-                    applyCtx.Env = &Env;
-                    ApplyChanges(writeValue, applyCtx);
-
                     TCallableResults replyResults;
                     for (ui32 i = 0; i < replyStruct.GetValuesCount(); ++i) {
                         TRuntimeNode item = replyStruct.GetValue(i);
@@ -1387,6 +1382,13 @@ public:
                     }
 
                     auto replyStr = replyResults.ToString(holderFactory, Env);
+
+                    // Note: we must apply side effects even if we reply with an error below
+                    TEngineFlatApplyContext applyCtx;
+                    applyCtx.Host = Settings.Host;
+                    applyCtx.Env = &Env;
+                    ApplyChanges(writeValue, applyCtx);
+
                     if (replyStr.size() > MaxDatashardReplySize) {
                         TString error = TStringBuilder() << "Datashard " << pgm.first
                             << ": reply size limit exceeded. ("

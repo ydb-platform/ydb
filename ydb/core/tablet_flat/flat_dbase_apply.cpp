@@ -6,8 +6,9 @@ namespace NKikimr {
 namespace NTable {
 
 
-TSchemeModifier::TSchemeModifier(TScheme &scheme)
+TSchemeModifier::TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState)
     : Scheme(scheme)
+    , RollbackState(rollbackState)
 {
 
 }
@@ -38,14 +39,24 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
     } else if (action == TAlterRecord::AddColumnToKey) {
         changes = AddColumnToKey(table, delta.GetColumnId());
     } else if (action == TAlterRecord::AddFamily) {
-        auto &family = Table(table)->Families[delta.GetFamilyId()];
+        auto &tableInfo = *Table(table);
+        if (!tableInfo.Families.contains(delta.GetFamilyId())) {
+            PreserveTable(table);
+            changes = true;
+        }
+        auto &family = tableInfo.Families[delta.GetFamilyId()];
 
         const ui32 room = delta.GetRoomId();
 
-        changes = (std::exchange(family.Room, room) != room);
+        changes = ChangeTableSetting(table, family.Room, room);
 
     } else if (action == TAlterRecord::SetFamily) {
-        auto &family = Table(table)->Families[delta.GetFamilyId()];
+        auto &tableInfo = *Table(table);
+        if (!tableInfo.Families.contains(delta.GetFamilyId())) {
+            PreserveTable(table);
+            changes = true;
+        }
+        auto &family = tableInfo.Families[delta.GetFamilyId()];
 
         auto codec = delta.HasCodec() ? ECodec(delta.GetCodec()) :family.Codec;
 
@@ -60,51 +71,56 @@ bool TSchemeModifier::Apply(const TAlterRecord &delta)
 
         Y_VERIFY(ui32(cache) <= 2, "Invalid pages cache policy value");
 
-        changes =
-            (std::exchange(family.Cache, cache) != cache)
-            | (std::exchange(family.Codec, codec) != codec)
-            | (std::exchange(family.Small, small) != small)
-            | (std::exchange(family.Large, large) != large);
+        changes |= ChangeTableSetting(table, family.Cache, cache);
+        changes |= ChangeTableSetting(table, family.Codec, codec);
+        changes |= ChangeTableSetting(table, family.Small, small);
+        changes |= ChangeTableSetting(table, family.Large, large);
 
     } else if (action == TAlterRecord::AddColumnToFamily) {
         changes = AddColumnToFamily(table, delta.GetColumnId(), delta.GetFamilyId());
     } else if (action == TAlterRecord::SetRoom) {
-        auto &room = Table(table)->Rooms[delta.GetRoomId()];
+        auto &tableInfo = *Table(table);
+        if (!tableInfo.Rooms.contains(delta.GetRoomId())) {
+            PreserveTable(table);
+            changes = true;
+        }
+        auto &room = tableInfo.Rooms[delta.GetRoomId()];
 
-        ui32 main = delta.HasMain() ? delta.GetMain() : room.Main;
-        ui32 blobs = delta.HasBlobs() ? delta.GetBlobs() : room.Blobs;
-        ui32 outer = delta.HasOuter() ? delta.GetOuter() : room.Outer;
+        ui8 main = delta.HasMain() ? delta.GetMain() : room.Main;
+        ui8 blobs = delta.HasBlobs() ? delta.GetBlobs() : room.Blobs;
+        ui8 outer = delta.HasOuter() ? delta.GetOuter() : room.Outer;
 
-        changes =
-            (std::exchange(room.Main, main) != main)
-            | (std::exchange(room.Blobs, blobs) != blobs)
-            | (std::exchange(room.Outer, outer) != outer);
+        changes |= ChangeTableSetting(table, room.Main, main);
+        changes |= ChangeTableSetting(table, room.Blobs, blobs);
+        changes |= ChangeTableSetting(table, room.Outer, outer);
 
     } else if (action == TAlterRecord::SetRedo) {
         const ui32 annex = delta.HasAnnex() ? delta.GetAnnex() : 0;
 
-        changes = (std::exchange(Scheme.Redo.Annex, annex) != annex);
+        changes |= ChangeRedoSetting(Scheme.Redo.Annex, annex);
 
     } else if (action == TAlterRecord::SetTable) {
+        auto &tableInfo = *Table(table);
+
         if (delta.HasByKeyFilter()) {
             bool enabled = delta.GetByKeyFilter();
-            changes |= (std::exchange(Table(table)->ByKeyFilter, enabled) != enabled);
+            changes |= ChangeTableSetting(table, tableInfo.ByKeyFilter, enabled);
         }
 
         if (delta.HasEraseCacheEnabled()) {
             bool enabled = delta.GetEraseCacheEnabled();
-            changes |= (std::exchange(Table(table)->EraseCacheEnabled, enabled) != enabled);
+            changes |= ChangeTableSetting(table, tableInfo.EraseCacheEnabled, enabled);
             if (enabled) {
                 ui32 minRows = delta.GetEraseCacheMinRows();
                 ui32 maxBytes = delta.GetEraseCacheMaxBytes();
-                changes |= (std::exchange(Table(table)->EraseCacheMinRows, minRows) != minRows);
-                changes |= (std::exchange(Table(table)->EraseCacheMaxBytes, maxBytes) != maxBytes);
+                changes |= ChangeTableSetting(table, tableInfo.EraseCacheMinRows, minRows);
+                changes |= ChangeTableSetting(table, tableInfo.EraseCacheMaxBytes, maxBytes);
             }
         }
 
         if (delta.HasColdBorrow()) {
             bool enabled = delta.GetColdBorrow();
-            changes |= (std::exchange(Table(table)->ColdBorrow, enabled) != enabled);
+            changes |= ChangeTableSetting(table, tableInfo.ColdBorrow, enabled);
         }
 
     } else if (action == TAlterRecord::UpdateExecutorInfo) {
@@ -136,38 +152,66 @@ bool TSchemeModifier::AddColumnToFamily(ui32 tid, ui32 cid, ui32 family)
     auto* column = Scheme.GetColumnInfo(Table(tid), cid);
     Y_VERIFY(column);
 
-    return std::exchange(column->Family, family) != family;
+    if (column->Family != family) {
+        PreserveTable(tid);
+        column->Family = family;
+        return true;
+    }
+
+    return false;
 }
 
 bool TSchemeModifier::AddTable(const TString &name, ui32 id)
 {
+    auto it = Scheme.Tables.find(id);
     auto itName = Scheme.TableNames.find(name);
-    auto it = Scheme.Tables.emplace(id, TTable(name, id));
+
+    // We verify id match when a table with this name already exists
     if (itName != Scheme.TableNames.end()) {
-        Y_VERIFY(!it.second && it.first->second.Name == name && itName->second == it.first->first);
+        auto describeFailure = [&]() -> TString {
+            TStringBuilder out;
+            out << "Table " << id << " '" << name << "'"
+                << " conflicts with table " << itName->second << " '" << itName->first << "'";
+            if (it != Scheme.Tables.end()) {
+                out << " and table " << it->first << " '" << it->second.Name << "'";
+            }
+            return out;
+        };
+        Y_VERIFY_S(itName->second == id, describeFailure());
+        // Sanity check that this table really exists
+        Y_VERIFY(it != Scheme.Tables.end() && it->second.Name == name);
         return false;
-    } else if (!it.second) {
-        // renaming table
-        Scheme.TableNames.erase(it.first->second.Name);
+    }
+
+    PreserveTable(id);
+
+    // We assume table is renamed when the same id already exists
+    if (it != Scheme.Tables.end()) {
+        Scheme.TableNames.erase(it->second.Name);
+        it->second.Name = name;
         Scheme.TableNames.emplace(name, id);
-        it.first->second.Name = name;
-        return true;
-    } else {
-        Y_VERIFY(it.second);
-        Scheme.TableNames.emplace(name, id);
-        if (id >= 100) {
-            auto *table = &it.first->second;
-            // HACK: Force user tables to have some reasonable policy with multiple levels
-            table->CompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
-        }
         return true;
     }
+
+    // Creating a new table
+    auto pr = Scheme.Tables.emplace(id, TTable(name, id));
+    Y_VERIFY(pr.second);
+    it = pr.first;
+    Scheme.TableNames.emplace(name, id);
+
+    if (id >= 100) {
+        // HACK: Force user tables to have some reasonable policy with multiple levels
+        it->second.CompactionPolicy = NLocalDb::CreateDefaultUserTablePolicy();
+    }
+
+    return true;
 }
 
 bool TSchemeModifier::DropTable(ui32 id)
 {
     auto it = Scheme.Tables.find(id);
     if (it != Scheme.Tables.end()) {
+        PreserveTable(id);
         Scheme.TableNames.erase(it->second.Name);
         Scheme.Tables.erase(it);
         return true;
@@ -178,34 +222,51 @@ bool TSchemeModifier::DropTable(ui32 id)
 bool TSchemeModifier::AddColumn(ui32 tid, const TString &name, ui32 id, ui32 type, bool notNull, TCell null)
 {
     auto *table = Table(tid);
+
+    auto it = table->Columns.find(id);
     auto itName = table->ColumnNames.find(name);
-    bool haveName = itName != table->ColumnNames.end();
-    auto it = table->Columns.emplace(id, TColumn(name, id, type, notNull));
 
-    if (it.second)
-        it.first->second.SetDefault(null);
-
-    if (!it.second && !haveName && it.first->second.PType == type) {
-        // renaming column
-        table->ColumnNames.erase(it.first->second.Name);
-        table->ColumnNames.emplace(name, id);
-        it.first->second.Name = name;
-        return true;
-    } else {
-        // do we have inserted a new column, OR we already have the same column with the same name?
-        bool insertedNew = it.second && !haveName;
-        bool replacedExisting = !it.second && it.first->second.Name == name && haveName && itName->second == it.first->first;
-        Y_VERIFY_S((insertedNew || replacedExisting),
-            "NewName: " << name <<
-            " OldName: " << (haveName ? itName->first : it.first->second.Name) <<
-            " NewId: " << id <<
-            " OldId: " << (haveName ? itName->second : it.first->first));
-        if (!haveName) {
-            table->ColumnNames.emplace(name, id);
-            return true;
-        }
+    // We verify ids and types match when column with the same name already exists
+    if (itName != table->ColumnNames.end()) {
+        auto describeFailure = [&]() -> TString {
+            TStringBuilder out;
+            out << "Table " << tid << " '" << table->Name << "'"
+                << " adding column " << id << " '" << name << "'"
+                << " conflicts with column " << itName->second << " '" << itName->first << "'";
+            if (it != table->Columns.end()) {
+                out << " and column " << it->first << " '" << it->second.Name << "'";
+            }
+            return out;
+        };
+        Y_VERIFY_S(itName->second == id, describeFailure());
+        // Sanity check that this column exists and types match
+        Y_VERIFY(it != table->Columns.end() && it->second.Name == name);
+        Y_VERIFY_S(it->second.PType == type,
+            "Table " << tid << " '" << table->Name << "' column " << id << " '" << name << "' expected type " << type << ", existing type " << it->second.PType);
+        return false;
     }
-    return false;
+
+    PreserveTable(tid);
+
+    // We assume column is renamed when the same id already exists
+    if (it != table->Columns.end()) {
+        Y_VERIFY_S(it->second.PType == type,
+            "Table " << tid << " '" << table->Name << "' column " << id << " '" << it->second.Name << "' renamed to '" << name << "'"
+            << " with type " << type << ", existing type " << it->second.PType);
+        table->ColumnNames.erase(it->second.Name);
+        it->second.Name = name;
+        table->ColumnNames.emplace(name, id);
+        return true;
+    }
+
+    auto pr = table->Columns.emplace(id, TColumn(name, id, type, notNull));
+    Y_VERIFY(pr.second);
+    it = pr.first;
+    table->ColumnNames.emplace(name, id);
+
+    it->second.SetDefault(null);
+
+    return true;
 }
 
 bool TSchemeModifier::DropColumn(ui32 tid, ui32 id)
@@ -213,6 +274,7 @@ bool TSchemeModifier::DropColumn(ui32 tid, ui32 id)
     auto *table = Table(tid);
     auto it = table->Columns.find(id);
     if (it != table->Columns.end()) {
+        PreserveTable(tid);
         table->ColumnNames.erase(it->second.Name);
         table->Columns.erase(it);
         return true;
@@ -228,6 +290,7 @@ bool TSchemeModifier::AddColumnToKey(ui32 tid, ui32 columnId)
 
     auto keyPos = std::find(table->KeyColumns.begin(), table->KeyColumns.end(), column->Id);
     if (keyPos == table->KeyColumns.end()) {
+        PreserveTable(tid);
         column->KeyOrder = table->KeyColumns.size();
         table->KeyColumns.push_back(column->Id);
         return true;
@@ -237,32 +300,32 @@ bool TSchemeModifier::AddColumnToKey(ui32 tid, ui32 columnId)
 
 bool TSchemeModifier::SetExecutorCacheSize(ui64 size)
 {
-    return std::exchange(Scheme.Executor.CacheSize, size) != size;
+    return ChangeExecutorSetting(Scheme.Executor.CacheSize, size);
 }
 
 bool TSchemeModifier::SetExecutorAllowLogBatching(bool allow)
 {
-    return std::exchange(Scheme.Executor.AllowLogBatching, allow) != allow;
+    return ChangeExecutorSetting(Scheme.Executor.AllowLogBatching, allow);
 }
 
 bool TSchemeModifier::SetExecutorLogFastCommitTactic(bool allow)
 {
-    return std::exchange(Scheme.Executor.LogFastTactic, allow) != allow;
+    return ChangeExecutorSetting(Scheme.Executor.LogFastTactic, allow);
 }
 
 bool TSchemeModifier::SetExecutorLogFlushPeriod(TDuration delay)
 {
-    return std::exchange(Scheme.Executor.LogFlushPeriod, delay) != delay;
+    return ChangeExecutorSetting(Scheme.Executor.LogFlushPeriod, delay);
 }
 
 bool TSchemeModifier::SetExecutorLimitInFlyTx(ui32 limit)
 {
-    return std::exchange(Scheme.Executor.LimitInFlyTx, limit) != limit;
+    return ChangeExecutorSetting(Scheme.Executor.LimitInFlyTx, limit);
 }
 
 bool TSchemeModifier::SetExecutorResourceProfile(const TString &name)
 {
-    return std::exchange(Scheme.Executor.ResourceProfile, name) != name;
+    return ChangeExecutorSetting(Scheme.Executor.ResourceProfile, name);
 }
 
 bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TCompactionPolicy &proto)
@@ -271,8 +334,35 @@ bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrSchemeOp::TComp
     TIntrusiveConstPtr<TCompactionPolicy> policy(new TCompactionPolicy(proto));
     if (table->CompactionPolicy && *(table->CompactionPolicy) == *policy)
         return false;
+    PreserveTable(tid);
     table->CompactionPolicy = policy;
     return true;
+}
+
+void TSchemeModifier::PreserveTable(ui32 tid) noexcept
+{
+    if (RollbackState && !RollbackState->Tables.contains(tid)) {
+        auto it = Scheme.Tables.find(tid);
+        if (it != Scheme.Tables.end()) {
+            RollbackState->Tables[tid] = it->second;
+        } else {
+            RollbackState->Tables[tid] = std::nullopt;
+        }
+    }
+}
+
+void TSchemeModifier::PreserveExecutor() noexcept
+{
+    if (RollbackState && !RollbackState->Executor) {
+        RollbackState->Executor = Scheme.Executor;
+    }
+}
+
+void TSchemeModifier::PreserveRedo() noexcept
+{
+    if (RollbackState && !RollbackState->Redo) {
+        RollbackState->Redo = Scheme.Redo;
+    }
 }
 
 }

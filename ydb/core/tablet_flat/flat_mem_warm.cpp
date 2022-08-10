@@ -31,10 +31,85 @@ NMem::TTreeSnapshot TMemTable::Immediate() const {
     // 1) When taking a snapshot of a frozen mem table, in that case we know
     //    the tree is frozen and will not be modified, so using an unsafe
     //    snapshot is ok.
-    // 2) When taking a snapshot of a mutable mem table, but used in table
-    //    iterators. In all those cases we know mem table is not modified
-    //    until transaction is committed, so using unsafe snapshot is ok.
+    // 2) When taking a snapshot of a mutable mem table, but we can guarantee
+    //    mem table will not be changed while iterator is still valid, for
+    //    example during point reads.
     return NMem::TTreeSnapshot(Tree.UnsafeSnapshot());
+}
+
+void TMemTable::PrepareRollback() {
+    Y_VERIFY(!RollbackState);
+    auto& state = RollbackState.emplace();
+    state.Snapshot = Tree.Snapshot();
+    state.OpsCount = OpsCount;
+    state.RowCount = RowCount;
+    state.MinRowVersion = MinRowVersion;
+    state.MaxRowVersion = MaxRowVersion;
+    Pool.BeginTransaction();
+}
+
+void TMemTable::RollbackChanges() {
+    Y_VERIFY(RollbackState);
+    auto& state = *RollbackState;
+    Tree.RollbackTo(std::move(state.Snapshot));
+    Tree.CollectGarbage();
+    Pool.RollbackTransaction();
+    Blobs.Rollback(state.AddedBlobs);
+    OpsCount = state.OpsCount;
+    RowCount = state.RowCount;
+    MinRowVersion = state.MinRowVersion;
+    MaxRowVersion = state.MaxRowVersion;
+
+    struct TApplyUndoOp {
+        TMemTable* Self;
+
+        void operator()(const TUndoOpUpdateCommitted& op) const {
+            Self->Committed[op.TxId] = op.Value;
+        }
+
+        void operator()(const TUndoOpEraseCommitted& op) const {
+            Self->Committed.erase(op.TxId);
+        }
+
+        void operator()(const TUndoOpInsertRemoved& op) const {
+            Self->Removed.insert(op.TxId);
+        }
+
+        void operator()(const TUndoOpEraseRemoved& op) const {
+            Self->Removed.erase(op.TxId);
+        }
+
+        void operator()(const TUndoOpUpdateTxIdStats& op) const {
+            Self->TxIdStats[op.TxId] = op.Value;
+        }
+
+        void operator()(const TUndoOpEraseTxIdStats& op) const {
+            Self->TxIdStats.erase(op.TxId);
+        }
+    };
+
+    while (!UndoBuffer.empty()) {
+        std::visit(TApplyUndoOp{ this }, UndoBuffer.back());
+        UndoBuffer.pop_back();
+    }
+
+    RollbackState.reset();
+}
+
+void TMemTable::CommitChanges(TArrayRef<const TMemGlob> blobs) {
+    Y_VERIFY(RollbackState);
+    auto& state = *RollbackState;
+    state.Snapshot = { };
+    Tree.CollectGarbage();
+    Pool.CommitTransaction();
+    Blobs.Commit(state.AddedBlobs, blobs);
+    UndoBuffer.clear();
+    RollbackState.reset();
+}
+
+void TMemTable::CommitBlobs(TArrayRef<const TMemGlob> blobs) {
+    Y_VERIFY(!RollbackState);
+    Blobs.Commit(Blobs.Size(), blobs);
 }
 
 void TMemTable::DebugDump(IOutputStream& str, const NScheme::TTypeRegistry& typeRegistry) const {

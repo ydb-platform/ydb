@@ -25,6 +25,11 @@ namespace NTable {
             return bool(Blobs);
         }
 
+        TArrayRef<const NPageCollection::TMemGlob> Current() const noexcept
+        {
+            return Blobs;
+        }
+
     private:
         TLimit Limit(ui32 table) noexcept override
         {
@@ -41,11 +46,12 @@ namespace NTable {
 
             auto blob = NPage::TLabelWrapper::Wrap(data, EPage::Opaque, 0);
 
-            const TLogoBlobID fake(0, 0, 0, Room->Blobs, blob.size(), 0);
+            const ui32 ref = Blobs.size();
+            const TLogoBlobID fake(0, 0, 0, Room->Blobs, blob.size(), ref);
 
             Blobs.emplace_back(TGlobId{ fake, 0 }, std::move(blob));
 
-            return Blobs.size() - 1;
+            return ref;
         }
 
         bool Lookup(ui32 table) noexcept

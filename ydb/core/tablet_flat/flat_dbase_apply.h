@@ -15,7 +15,7 @@ namespace NTable {
         using ECodec = NPage::ECodec;
         using ECache = NPage::ECache;
 
-        explicit TSchemeModifier(TScheme &scheme);
+        explicit TSchemeModifier(TScheme &scheme, TSchemeRollbackState *rollbackState = nullptr);
 
         bool Apply(const TSchemeChanges &delta)
         {
@@ -27,9 +27,9 @@ namespace NTable {
             return changed;
         }
 
-    protected:
         bool Apply(const TAlterRecord &delta);
 
+    protected:
         bool AddTable(const TString& name, ui32 id);
         bool DropTable(ui32 id);
         bool AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null = { });
@@ -48,12 +48,47 @@ namespace NTable {
         TTable* Table(ui32 tid) const noexcept
         {
             auto* table = Scheme.GetTableInfo(tid);
-            Y_VERIFY(table, "Acccessing table that isn't exists");
+            Y_VERIFY(table, "Acccessing table that doesn't exist");
             return table;
         }
 
+        template<class T>
+        bool ChangeTableSetting(ui32 tid, T& dst, const T& value) {
+            if (dst != value) {
+                PreserveTable(tid);
+                dst = value;
+                return true;
+            }
+            return false;
+        }
+
+        template<class T>
+        bool ChangeExecutorSetting(T& dst, const T& value) {
+            if (dst != value) {
+                PreserveExecutor();
+                dst = value;
+                return true;
+            }
+            return false;
+        }
+
+        template<class T>
+        bool ChangeRedoSetting(T& dst, const T& value) {
+            if (dst != value) {
+                PreserveRedo();
+                dst = value;
+                return true;
+            }
+            return false;
+        }
+
+        void PreserveTable(ui32 tid) noexcept;
+        void PreserveExecutor() noexcept;
+        void PreserveRedo() noexcept;
+
     public:
         TScheme &Scheme;
+        TSchemeRollbackState *RollbackState;
         THashSet<ui32> Affects;
     };
 

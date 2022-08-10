@@ -61,7 +61,17 @@ TAutoPtr<TSchemeChanges> TScheme::GetSnapshot() const {
 
 TAlter& TAlter::Merge(const TSchemeChanges &log)
 {
-    Log.MutableDelta()->MergeFrom(log.GetDelta());
+    Y_VERIFY(&Log != &log, "Cannot merge changes onto itself");
+
+    int added = log.DeltaSize();
+    if (added > 0) {
+        auto* dst = Log.MutableDelta();
+        dst->Reserve(Log.DeltaSize() + added);
+        for (const auto& delta : log.GetDelta()) {
+            *dst->Add() = delta;
+            ApplyLastRecord();
+        }
+    }
 
     return *this;
 }
@@ -73,7 +83,7 @@ TAlter& TAlter::AddTable(const TString& name, ui32 id)
     delta.SetTableName(name);
     delta.SetTableId(id);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::DropTable(ui32 id)
@@ -82,7 +92,7 @@ TAlter& TAlter::DropTable(ui32 id)
     delta.SetDeltaType(TAlterRecord::DropTable);
     delta.SetTableId(id);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, bool notNull, TCell null)
@@ -98,7 +108,7 @@ TAlter& TAlter::AddColumn(ui32 table, const TString& name, ui32 id, ui32 type, b
     if (!null.IsNull())
         delta.SetDefault(null.Data(), null.Size());
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::DropColumn(ui32 table, ui32 id)
@@ -108,7 +118,7 @@ TAlter& TAlter::DropColumn(ui32 table, ui32 id)
     delta.SetTableId(table);
     delta.SetColumnId(id);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::AddColumnToFamily(ui32 table, ui32 column, ui32 family)
@@ -119,7 +129,7 @@ TAlter& TAlter::AddColumnToFamily(ui32 table, ui32 column, ui32 family)
     delta.SetColumnId(column);
     delta.SetFamilyId(family);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::AddFamily(ui32 table, ui32 family, ui32 room)
@@ -130,7 +140,7 @@ TAlter& TAlter::AddFamily(ui32 table, ui32 family, ui32 room)
     delta.SetFamilyId(family);
     delta.SetRoomId(room);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
@@ -140,7 +150,7 @@ TAlter& TAlter::AddColumnToKey(ui32 table, ui32 column)
     delta.SetTableId(table);
     delta.SetColumnId(column);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
@@ -153,7 +163,7 @@ TAlter& TAlter::SetFamily(ui32 table, ui32 family, ECache cache, ECodec codec)
     delta.SetCodec(ui32(codec));
     delta.SetCache(ui32(cache));
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
@@ -165,7 +175,7 @@ TAlter& TAlter::SetFamilyBlobs(ui32 table, ui32 family, ui32 small, ui32 large)
     delta.SetSmall(small);
     delta.SetLarge(large);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer)
@@ -179,7 +189,7 @@ TAlter& TAlter::SetRoom(ui32 table, ui32 room, ui32 main, ui32 blobs, ui32 outer
     delta->SetBlobs(blobs);
     delta->SetOuter(outer);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetRedo(ui32 annex)
@@ -189,7 +199,7 @@ TAlter& TAlter::SetRedo(ui32 annex)
     delta->SetDeltaType(TAlterRecord::SetRedo);
     delta->SetAnnex(annex);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetExecutorCacheSize(ui64 cacheSize)
@@ -198,7 +208,7 @@ TAlter& TAlter::SetExecutorCacheSize(ui64 cacheSize)
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
     delta.SetExecutorCacheSize(cacheSize);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetExecutorFastLogPolicy(bool allow)
@@ -207,7 +217,7 @@ TAlter& TAlter::SetExecutorFastLogPolicy(bool allow)
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
     delta.SetExecutorLogFastCommitTactic(allow);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetExecutorAllowLogBatching(bool allow)
@@ -216,7 +226,7 @@ TAlter& TAlter::SetExecutorAllowLogBatching(bool allow)
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
     delta.SetExecutorAllowLogBatching(allow);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetExecutorLogFlushPeriod(TDuration flushPeriod)
@@ -225,7 +235,7 @@ TAlter& TAlter::SetExecutorLogFlushPeriod(TDuration flushPeriod)
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
     delta.SetExecutorLogFlushPeriod(flushPeriod.MicroSeconds());
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetExecutorLimitInFlyTx(ui32 limitTxInFly)
@@ -234,7 +244,7 @@ TAlter& TAlter::SetExecutorLimitInFlyTx(ui32 limitTxInFly)
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
     delta.SetExecutorLimitInFlyTx(limitTxInFly);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetExecutorResourceProfile(const TString &name)
@@ -243,7 +253,7 @@ TAlter& TAlter::SetExecutorResourceProfile(const TString &name)
     delta.SetDeltaType(TAlterRecord::UpdateExecutorInfo);
     delta.SetExecutorResourceProfile(name);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPolicy)
@@ -253,7 +263,7 @@ TAlter& TAlter::SetCompactionPolicy(ui32 tableId, const TCompactionPolicy& newPo
     delta.SetTableId(tableId);
     newPolicy.Serialize(*delta.MutableCompactionPolicy());
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
@@ -263,7 +273,7 @@ TAlter& TAlter::SetByKeyFilter(ui32 tableId, bool enabled)
     delta.SetTableId(tableId);
     delta.SetByKeyFilter(enabled ? 1 : 0);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetColdBorrow(ui32 tableId, bool enabled)
@@ -273,7 +283,7 @@ TAlter& TAlter::SetColdBorrow(ui32 tableId, bool enabled)
     delta.SetTableId(tableId);
     delta.SetColdBorrow(enabled);
 
-    return *this;
+    return ApplyLastRecord();
 }
 
 TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes)
@@ -287,7 +297,12 @@ TAlter& TAlter::SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 max
         delta.SetEraseCacheMaxBytes(maxBytes);
     }
 
-    return *this;
+    return ApplyLastRecord();
+}
+
+TAlter::operator bool() const noexcept
+{
+    return Log.DeltaSize() > 0;
 }
 
 TAutoPtr<TSchemeChanges> TAlter::Flush()
@@ -295,6 +310,20 @@ TAutoPtr<TSchemeChanges> TAlter::Flush()
     TAutoPtr<TSchemeChanges> log(new TSchemeChanges);
     log->MutableDelta()->Swap(Log.MutableDelta());
     return log;
+}
+
+TAlter& TAlter::ApplyLastRecord()
+{
+    if (Sink) {
+        int deltasCount = Log.DeltaSize();
+        Y_VERIFY(deltasCount > 0);
+
+        if (!Sink->ApplyAlterRecord(Log.GetDelta(deltasCount - 1))) {
+            Log.MutableDelta()->RemoveLast();
+        }
+    }
+
+    return *this;
 }
 
 }

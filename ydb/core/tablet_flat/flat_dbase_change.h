@@ -12,13 +12,6 @@ namespace NTable {
     struct TChange {
         using TMemGlobs = TVector<NPageCollection::TMemGlob>;
 
-        struct TSnapshot {
-            TSnapshot(ui32 table) : Table(table) { }
-
-            ui32 Table = Max<ui32>();
-            TEpoch Epoch = TEpoch::Max();
-        };
-
         struct TStats {
             ui64 ChargeSieved = 0;
             ui64 ChargeWeeded = 0;
@@ -63,7 +56,7 @@ namespace NTable {
         TVector<ui32> Deleted;  /* Tables deleted in some alter */
         TGarbage Garbage;       /* Wiped tables, ids in Deleted */
 
-        TVector<TSnapshot> Snapshots;
+        ui32 Snapshots = 0;
 
         TMap<ui32, TVector<TRemovedRowVersions>> RemovedRowVersions;
 

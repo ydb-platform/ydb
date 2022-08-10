@@ -67,6 +67,11 @@ namespace NTabletFlatExecutor {
     };
 
     struct TPageCollectionTxEnv : public TPageCollectionReadEnv, public IExecuting {
+        TPageCollectionTxEnv(NTable::TDatabase& db, TPrivatePageCache& cache)
+            : TPageCollectionReadEnv(cache)
+            , DB(db)
+        { }
+
         using TLogoId = TLogoBlobID;
 
         struct TBorrowSnap {
@@ -118,6 +123,7 @@ namespace NTabletFlatExecutor {
 
         struct TSnapshot {
             TVector<TIntrusivePtr<TTableSnapshotContext>> Context;
+            std::optional<NTable::TEpoch> Epoch;
         };
 
         using TPageCollectionReadEnv::TPageCollectionReadEnv;
@@ -134,13 +140,7 @@ namespace NTabletFlatExecutor {
         }
 
     protected: /* IExecuting, tx stage func implementation */
-        void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
-        {
-            Y_VERIFY(snap->TablesToSnapshot());
-
-            for (ui32 table : snap->TablesToSnapshot())
-                MakeSnap[table].Context.push_back(snap);
-        }
+        void MakeSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override;
 
         void DropSnapshot(TIntrusivePtr<TTableSnapshotContext> snap) override
         {
@@ -193,6 +193,9 @@ namespace NTabletFlatExecutor {
         {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
+
+    protected:
+        NTable::TDatabase& DB;
 
     public:
         /*_ Pending database shanshots      */

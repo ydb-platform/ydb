@@ -64,7 +64,9 @@ namespace NMem {
             Store.emplace_back(glob, std::move(data));
             Bytes += glob.Logo.BlobSize();
 
-            return Head + (Store.size() - 1);
+            const ui64 ref = Head + (Store.size() - 1);
+
+            return ref;
         }
 
         void Assign(TArrayRef<NPageCollection::TLoadedPage> pages) noexcept
@@ -73,6 +75,33 @@ namespace NMem {
                 Y_VERIFY(one.PageId < Store.size());
 
                 Store[one.PageId].Data = std::move(one.Data);
+            }
+        }
+
+        void Commit(size_t count, TArrayRef<const NPageCollection::TMemGlob> pages) noexcept
+        {
+            if (count > 0) {
+                size_t currentSize = Store.size();
+                Y_VERIFY(count <= currentSize);
+                Store.Enumerate(currentSize - count, currentSize, [pages](size_t, NPageCollection::TMemGlob& blob) {
+                    Y_VERIFY(blob.GId.Logo.TabletID() == 0);
+                    const ui32 ref = blob.GId.Logo.Cookie();
+                    const auto& fixedBlob = pages.at(ref);
+                    Y_VERIFY(fixedBlob.GId.Logo.TabletID() != 0);
+                    blob.GId = fixedBlob.GId;
+                });
+            }
+        }
+
+        void Rollback(size_t count) noexcept
+        {
+            if (count > 0) {
+                size_t currentSize = Store.size();
+                Y_VERIFY(count <= currentSize);
+                Store.Enumerate(currentSize - count, currentSize, [this](size_t, NPageCollection::TMemGlob& blob) {
+                    Bytes -= blob.GId.Logo.BlobSize();
+                });
+                Store.truncate(currentSize - count);
             }
         }
 

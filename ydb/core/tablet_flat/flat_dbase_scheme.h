@@ -200,11 +200,44 @@ public:
     TRedo Redo;
 };
 
+/**
+ * This structure holds the rollback state for database schema, which allows
+ * schema to be rolled back to initial state when transaction decides not to
+ * commit. As this almost never happens it doesn't need to be very efficient.
+ */
+struct TSchemeRollbackState {
+    // This hash map has key for each modified table, where value either holds
+    // previous table schema, or empty if table didn't exist.
+    THashMap<ui32, std::optional<TScheme::TTableInfo>> Tables;
+    // Previous executor settings if modified
+    std::optional<TScheme::TExecutorInfo> Executor;
+    // Previous redo settings if modified
+    std::optional<TScheme::TRedo> Redo;
+};
+
+/**
+ * Sink is used to inspect and apply alter records
+ */
+class IAlterSink {
+public:
+    /**
+     * Sink attempts to apply the given alter record. When the return value
+     * is true the record is deemed useful, otherwise it is discarded.
+     */
+    virtual bool ApplyAlterRecord(const TAlterRecord& record) = 0;
+};
+
 // scheme delta
 class TAlter {
 public:
     using ECodec = NPage::ECodec;
     using ECache = NPage::ECache;
+
+    TAlter(IAlterSink* sink = nullptr)
+        : Sink(sink)
+    { }
+
+    explicit operator bool() const noexcept;
 
     const TSchemeChanges& operator*() const noexcept
     {
@@ -235,7 +268,12 @@ public:
     TAlter& SetEraseCache(ui32 tableId, bool enabled, ui32 minRows, ui32 maxBytes);
 
     TAutoPtr<TSchemeChanges> Flush();
+
+private:
+    TAlter& ApplyLastRecord();
+
 protected:
+    IAlterSink* Sink;
     TSchemeChanges Log;
 };
 

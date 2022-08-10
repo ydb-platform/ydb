@@ -745,7 +745,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
         check.Uint64(1u); // CoordinatedTxCompleted
-        check.Uint64(608u); // DataSize
+        check.Uint64(576u); // DataSize
         check.Uint64(1u); // ImmediateTxCompleted
         check.Uint64(0u); // IndexSize
         check.Uint64(0u); // InFlightTxCount

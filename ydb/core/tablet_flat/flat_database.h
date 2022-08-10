@@ -118,6 +118,8 @@ public:
      * Returns true when table has an open transaction that is not committed or removed yet
      */
     bool HasOpenTx(ui32 table, ui64 txId) const;
+    bool HasCommittedTx(ui32 table, ui64 txId) const;
+    bool HasRemovedTx(ui32 table, ui64 txId) const;
 
     /**
      * Remove row versions [lower, upper) from the given table
@@ -139,7 +141,7 @@ public:
 
     TAlter& Alter(); /* Begin DDL ALTER script */
 
-    ui32 TxSnapTable(ui32 table);
+    TEpoch TxSnapTable(ui32 table);
 
     const TScheme& GetScheme() const noexcept;
 
@@ -194,17 +196,20 @@ public:
 
 private:
     TTable* Require(ui32 tableId) const noexcept;
+    TTable* RequireForUpdate(ui32 tableId) const noexcept;
 
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;
 
-    ui64 Stamp = Max<ui64>();
     bool NoMoreReadsFlag;
     IPages* Env = nullptr;
     THolder<TChange> Change;
     TAutoPtr<TAlter> Alter_;
     TAutoPtr<TAnnex> Annex;
     TAutoPtr<NRedo::TWriter> Redo;
+
+    TVector<ui32> ModifiedRefs;
+    TVector<TUpdateOp> ModifiedOps;
 
     mutable TDeque<TPartSimpleIt> TempIterators; // Keeps the last result of Select() valid
     mutable THashSet<ui32> IteratedTables;

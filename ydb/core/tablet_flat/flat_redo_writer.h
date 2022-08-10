@@ -50,21 +50,14 @@ namespace NRedo {
 
     class TWriter {
     private:
-        struct TSizeInfo {
-            ui32 Size;
-            IAnnex::TLimit Limit;
+        struct TOutputMark {
         };
 
     public:
         using TOpsRef = TArrayRef<const TUpdateOp>;
-        using IOut = IOutputStream;
+        using IOut = TOutputMark;
 
-        TWriter(IAnnex *annex = nullptr, ui32 edge = 1024)
-            : Edge(edge)
-            , Annex(annex)
-        {
-
-        }
+        TWriter() = default;
 
         explicit operator bool() const noexcept
         {
@@ -76,23 +69,21 @@ namespace NRedo {
             return TotalSize;
         }
 
-        TList<TString> Unwrap() noexcept
-        {
-            return TotalSize = 0, std::move(Events);
-        }
-
         TWriter& EvBegin(ui32 tail, ui32 head, ui64 serial, ui64 stamp)
         {
             Y_VERIFY(tail <= head, "Invalid ABI/API evolution span");
             Y_VERIFY(serial > 0, "Serial of EvBegin starts with 1");
 
-            const ui32 size =  sizeof(TEvBegin_v1);
+            const ui32 size = sizeof(TEvBegin_v1);
 
             TEvBegin_v1 ev{ { ERedo::Begin, 0, 0x8000, size },
                                 tail, head, serial, stamp };
 
-            void* evBegin = &ev;
-            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
+            auto out = Begin(size);
+
+            Write(out, &ev, sizeof(ev));
+
+            return Flush(size);
         }
 
         TWriter& EvFlush(ui32 table, ui64 stamp, TEpoch epoch)
@@ -101,8 +92,12 @@ namespace NRedo {
 
             TEvFlush ev{ { ERedo::Flush, 0, 0x8000, size },
                                 table, 0, stamp, epoch.ToRedoLog() };
-            void* evBegin = &ev;
-            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
+
+            auto out = Begin(size);
+
+            Write(out, &ev, sizeof(ev));
+
+            return Flush(size);
         }
 
         TWriter& EvAnnex(TArrayRef<const NPageCollection::TGlobId> blobs)
@@ -111,7 +106,7 @@ namespace NRedo {
 
             Y_VERIFY(blobs.size() <= Max<ui32>(), "Too large blobs catalog");
 
-             const ui32 size = sizeof(TEvAnnex) + SizeOf(blobs);
+            const ui32 size = sizeof(TEvAnnex) + SizeOf(blobs);
 
             TEvAnnex ev{ { ERedo::Annex, 0, 0x8000, size }, ui32(blobs.size()) };
 
@@ -120,11 +115,11 @@ namespace NRedo {
             Write(out, &ev, sizeof(ev));
             Write(out, static_cast<const void*>(blobs.begin()), SizeOf(blobs));
 
-            return Push(std::move(out.Str()), size);
+            return Flush(size);
         }
 
         template<class TCallback>
-        TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback, bool isDelta = false)
+        TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, ERedo tag, ui32 tailSize, TCallback&& tailCallback)
         {
             if (TCellOp::HaveNoOps(rop) && ops) {
                 Y_FAIL("Given ERowOp cannot have update operations");
@@ -132,9 +127,7 @@ namespace NRedo {
                 Y_FAIL("Too large key or too many operations in one ops");
             }
 
-            const auto sizeInfo = CalcSize(key, ops, table, isDelta);
-
-            const ui32 size = sizeof(TEvUpdate) + tailSize + sizeInfo.Size;
+            const ui32 size = sizeof(TEvUpdate) + tailSize + CalcSize(key, ops);
             auto out = Begin(size);
 
             TEvUpdate ev{ { tag, 0, 0x8000, size },
@@ -145,9 +138,9 @@ namespace NRedo {
             tailCallback(out);
 
             Write(out, key);
-            Write(out, ops, table, sizeInfo.Limit);
+            Write(out, ops);
 
-            return Push(std::move(out.Str()), size);
+            return Flush(size);
         }
 
         TWriter& EvUpdate(ui32 table, ERowOp rop, TRawVals key, TOpsRef ops, TRowVersion rowVersion)
@@ -170,8 +163,7 @@ namespace NRedo {
                 [&](auto& out) {
                     TEvUpdateTx tail{ txId };
                     Write(out, &tail, sizeof(tail));
-                },
-                /* isDelta */ true);
+                });
         }
 
         TWriter& EvRemoveTx(ui32 table, ui64 txId)
@@ -181,8 +173,11 @@ namespace NRedo {
             TEvRemoveTx ev{ { ERedo::RemoveTx, 0, 0x8000, size },
                             table, 0, txId };
 
-            void* evBegin = &ev;
-            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
+            auto out = Begin(size);
+
+            Write(out, &ev, sizeof(ev));
+
+            return Flush(size);
         }
 
         TWriter& EvCommitTx(ui32 table, ui64 txId, TRowVersion rowVersion)
@@ -192,84 +187,50 @@ namespace NRedo {
             TEvCommitTx ev{ { ERedo::CommitTx, 0, 0x8000, size },
                             table, 0, txId, rowVersion.Step, rowVersion.TxId };
 
-            void* evBegin = &ev;
-            return Push(TString(NUtil::NBin::ToByte(evBegin), size), size);
+            auto out = Begin(size);
+
+            Write(out, &ev, sizeof(ev));
+
+            return Flush(size);
         }
 
-        TWriter& Join(TWriter &log)
+        TWriter& Join(TWriter &&log)
         {
             TotalSize += std::exchange(log.TotalSize, 0);
-            Events.splice(Events.end(), log.Events);
+            Events.append(log.Events);
+            log.Events.clear();
 
             return *this;
         }
 
-        TString Dump() const noexcept
+        TString Finish() && noexcept
         {
-            auto out = Begin(TotalSize);
+            TString events;
+            events.swap(Events);
 
-            for (auto one : Events)
-                out.Write(one);
+            NSan::CheckMemIsInitialized(events.data(), events.size());
 
-            Y_VERIFY(out.Str().size() == TotalSize);
-
-            NSan::CheckMemIsInitialized(out.Str().data(), out.Str().size());
-
-            return std::move(out.Str());
+            TotalSize = 0;
+            return events;
         }
 
     private:
-        static TStringStream Begin(size_t bytes)
+        TOutputMark Begin(size_t bytes)
         {
-            TStringStream out;
+            if ((Events.capacity() - Events.size()) < bytes) {
+                Events.reserve(FastClp2(Events.size() + bytes));
+            }
 
-            return out.Reserve(bytes), out;
+            return TOutputMark{};
         }
 
-        TWriter& Push(TString buf, size_t bytes)
+        TWriter& Flush(size_t bytes)
         {
-            Y_VERIFY(buf.size() == bytes, "Got an invalid redo entry buffer");
+            TotalSize += bytes;
 
-            TotalSize += buf.size();
-
-            Events.emplace_back(std::move(buf));
+            Y_VERIFY(Events.size() == TotalSize, "Got an inconsistent redo entry size");
 
             return *this;
-        }
-
-        IAnnex::TLimit GetLimit(ui32 table, bool isDelta) const noexcept
-        {
-            IAnnex::TLimit limit;
-            // FIXME: we cannot handle blob references during scans, so we
-            //        avoid creating large objects when they are in deltas
-            if (!isDelta && Annex && table != Max<ui32>()) {
-                limit = Annex->Limit(table);
-            } else {
-                limit = { Max<ui32>(), Max<ui32>() };
-            }
-            limit.MinExternSize = Max(limit.MinExternSize, Edge);
-            return limit;
-        }
-
-        TSizeInfo CalcSize(TRawVals key, TOpsRef ops, ui32 table, bool isDelta) const noexcept
-        {
-            auto limit = GetLimit(table, isDelta);
-
-            ui32 size = 0;
-
-            for (const auto &one : ops) {
-                /* hack for annex blobs, its replaced by 4-byte reference */
-                auto valueSize = one.Value.Size();
-                if (Annex && table != Max<ui32>() && limit.IsExtern(valueSize)) {
-                    valueSize = 4;
-                }
-
-                size += sizeof(TUpdate) + valueSize;
-            }
-
-            size += CalcSize(key);
-
-            return TSizeInfo{ size, limit };
         }
 
         ui32 CalcSize(TRawVals key) const noexcept
@@ -282,7 +243,18 @@ namespace NRedo {
             return size;
         }
 
-        void Write(IOut &out, TRawVals key) const noexcept
+        ui32 CalcSize(TRawVals key, TOpsRef ops) const noexcept
+        {
+            ui32 size = CalcSize(key);
+
+            for (const auto &one : ops) {
+                size += sizeof(TUpdate) + one.Value.Size();
+            }
+
+            return size;
+        }
+
+        void Write(IOut &out, TRawVals key) noexcept
         {
             for (const auto &one : key) {
                 /* The only way of converting nulls in keys now */
@@ -296,45 +268,30 @@ namespace NRedo {
             }
         }
 
-        void Write(IOut &out, TOpsRef ops, ui32 table, const IAnnex::TLimit &limit) const noexcept
+        void Write(IOut &out, TOpsRef ops) noexcept
         {
             for (const auto &one: ops) {
                 /* Log enty cannot represent this ECellOp types with payload */
 
                 Y_VERIFY(!(one.Value && TCellOp::HaveNoPayload(one.Op)));
 
-                /* Log entry cannot recover nulls written as ECellOp::Set with
-                    null cell. Nulls was encoded with hacky TypeId = 0, but
-                    the correct way is to use ECellOp::Null.
-                 */
+                const ui16 type = one.Value.Type();
 
-                const ui16 type = one.Value ? one.Value.Type() : 0;
-
-                auto cellOp = one.NormalizedCellOp();
-
-                if (cellOp != ELargeObj::Inline) {
-                    Y_FAIL("User supplied cell value has an invalid ECellOp");
-                } else if (auto got = Place(table, limit, one.Tag, one.AsRef())) {
-                    const auto payload = NUtil::NBin::ToRef(got.Ref);
-
-                    Write(out, cellOp = ELargeObj::Extern, one.Tag, type, payload);
-
-                } else {
-                    Write(out, cellOp, one.Tag, type, one.Value.AsRef());
+                if (one.Value.IsEmpty()) {
+                    // Log entry cannot recover null value type, since we
+                    // store null values using a special 0 type id.
+                    Y_VERIFY(type == 0, "Cannot write typed null values");
+                    // Null value cannot have ECellOp::Set as its op, since we
+                    // don't have the necessary type id, instead we expect
+                    // it to be either ECellOp::Null or ECellOp::Reset.
+                    Y_VERIFY(one.Op != ECellOp::Set, "Cannot write ECellOp::Set with a null value");
                 }
+
+                Write(out, one.Op, one.Tag, type, one.Value.AsRef());
             }
         }
 
-        IAnnex::TResult Place(ui32 table, const IAnnex::TLimit &limit, TTag tag, TArrayRef<const char> raw) const noexcept
-        {
-            if (Annex && table != Max<ui32>() && limit.IsExtern(raw.size())) {
-                return Annex->Place(table, tag, raw);
-            } else {
-                return { };
-            }
-        }
-
-        static void Write(IOut &out, TCellOp cellOp, TTag tag, ui16 type, TArrayRef<const char> raw)
+        void Write(IOut &out, TCellOp cellOp, TTag tag, ui16 type, TArrayRef<const char> raw)
         {
             TUpdate up = { cellOp, tag, { type , ui32(raw.size()) } };
 
@@ -342,18 +299,15 @@ namespace NRedo {
             Write(out, raw.data(), raw.size());
         }
 
-        static void Write(IOut &out, const void *ptr, size_t size)
+        void Write(IOut &, const void *ptr, size_t size)
         {
             NSan::CheckMemIsInitialized(ptr, size);
-
-            out.Write(ptr, size);
+            Events.append(reinterpret_cast<const char*>(ptr), size);
         }
 
     private:
-        const ui32 Edge = 1024;
-        IAnnex * const Annex = nullptr;
         size_t TotalSize = 0;
-        TList<TString> Events;
+        TString Events;
     };
 
 }

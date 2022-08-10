@@ -17,7 +17,7 @@
 
 #include <boost/config/pragma_message.hpp>
 
-#if defined(BOOST_ALLOW_DEPRECATED_HEADERS)
+#if 1 //defined(BOOST_ALLOW_DEPRECATED_HEADERS)
 # define BOOST_HEADER_DEPRECATED(a)
 #else
 # define BOOST_HEADER_DEPRECATED(a) BOOST_PRAGMA_MESSAGE("This header is deprecated. Use " a " instead.")

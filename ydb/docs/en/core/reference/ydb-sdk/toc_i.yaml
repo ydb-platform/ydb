@@ -11,6 +11,12 @@ items:
     include: { mode: link, path: example/toc_p.yaml }
   - name: Handling errors in the API
     href: error_handling.md
+  - name: gRPC API
+    items:
+    - name: Overview
+      href: overview-grpc-api.md
+    - name: Health Check API
+      href: health-check-api.md
   - name: Code recipes
     include: { mode: link, path: recipes/toc_p.yaml }
 

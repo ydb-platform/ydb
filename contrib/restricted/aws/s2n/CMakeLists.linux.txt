@@ -63,6 +63,7 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hkdf.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_hmac.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_libcrypto.c
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_locking.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_openssl_x509.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_pkey.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/crypto/s2n_rsa.c

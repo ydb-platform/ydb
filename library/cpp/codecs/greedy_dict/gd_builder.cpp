@@ -114,9 +114,9 @@ namespace NGreedyDict {
     }
 
     ui32 TDictBuilder::Build(ui32 maxentries, ui32 maxiters, ui32 mindiff) {
-        size_t totalsz = 0;
+        /* size_t totalsz = 0;
         for (auto it : Input)
-            totalsz += it.size();
+            totalsz += it.size();*/
 
         while (maxiters) {
             maxiters--;

@@ -250,6 +250,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
             case YandexQuery::BindingSetting::BINDING_NOT_SET:
             break;
             }
+            briefBinding.set_visibility(binding.content().acl().visibility());
         }
 
         if (result.binding_size() == limit + 1) {

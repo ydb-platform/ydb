@@ -1080,7 +1080,7 @@ TPath TPath::Root(TSchemeShard* ss) {
     return result;
 }
 
-TString TPath::PathString() const { // O(result length) complexity
+TString TPath::PathString() const { //O(1) if resolved, in other case O(result length) complexity
     if (!NameParts) {
         return TString();
     }
@@ -1145,6 +1145,11 @@ TPath TPath::FirstExistedParent() const {
     TPath result = *this;
     result.RiseUntilExisted();
     return result;
+}
+
+TString TPath::GetDomainPathString() const {
+    // TODO: not effective because of creating vectors in Init() method. should keep subdomain path somethere in struct TSubDomainInfo
+    return Init(GetPathIdForDomain(), SS).PathString();
 }
 
 TSubDomainInfo::TPtr TPath::DomainInfo() const {

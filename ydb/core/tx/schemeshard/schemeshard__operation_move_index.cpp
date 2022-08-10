@@ -503,6 +503,11 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
         return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
     }
 
+    const auto& moving = tx.GetMoveIndex();
+    const auto& mainTable = moving.GetTablePath();
+    const auto& srcIndex = moving.GetSrcPath();
+    const auto& dstIndex = moving.GetDstPath();
+
     {
         TString errStr;
         if (!context.SS->CheckApplyIf(tx, errStr)) {
@@ -510,11 +515,6 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveIndex(TOperationId nextId, 
         }
     }
 
-    auto moving = tx.GetMoveIndex();
-
-    const auto& mainTable = moving.GetTablePath();
-    const auto& srcIndex = moving.GetSrcPath();
-    const auto& dstIndex = moving.GetDstPath();
     bool allowOverwrite = moving.HasAllowOverwrite() && moving.GetAllowOverwrite();
 
     TPath mainTablePath = TPath::Resolve(mainTable, context.SS);

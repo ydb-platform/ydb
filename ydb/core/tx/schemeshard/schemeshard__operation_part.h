@@ -4,6 +4,7 @@
 #include "schemeshard_private.h"
 #include "schemeshard_tx_infly.h"
 #include "schemeshard_types.h"
+#include "schemeshard_audit_log_fragment.h"
 #include "schemeshard__operation_side_effects.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard__operation_db_changes.h"
@@ -89,6 +90,8 @@ public:
     TAutoPtr<NACLib::TUserToken> UserToken = nullptr;
     bool IsAllowedPrivateTables = false;
 
+    TVector<TAuditLogFragment> AuditLogFragments;
+
 private:
     NTabletFlatExecutor::TTransactionContext& Txc;
     bool ProtectDB = false;
@@ -106,6 +109,21 @@ public:
         , DbChanges(dbChange)
         , Txc(txc)
     {}
+
+    void AddAuditLogFragment(TAuditLogFragment&& op) {
+        AuditLogFragments.push_back(std::move(op));
+    }
+    
+    void ClearAuditLogFragments() {
+        AuditLogFragments.clear();
+    }
+
+    TString GetSubject() const {
+        if (UserToken) {
+            return UserToken->GetUserSID();
+        }
+        return "no subject";
+    }
 
     NTable::TDatabase& GetDB() {
         Y_VERIFY_S(ProtectDB == false,

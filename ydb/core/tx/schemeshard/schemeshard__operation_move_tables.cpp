@@ -16,17 +16,16 @@ TVector<ISubOperationBase::TPtr> CreateConsistentMoveTable(TOperationId nextId, 
 
     TVector<ISubOperationBase::TPtr> result;
 
+    const auto& moving = tx.GetMoveTable();
+    const auto& srcStr = moving.GetSrcPath();
+    const auto& dstStr = moving.GetDstPath();
+
     {
         TString errStr;
         if (!context.SS->CheckApplyIf(tx, errStr)) {
             return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, errStr)};
         }
     }
-
-    auto moving = tx.GetMoveTable();
-
-    auto& srcStr = moving.GetSrcPath();
-    auto& dstStr = moving.GetDstPath();
 
     TPath srcPath = TPath::Resolve(srcStr, context.SS);
     {

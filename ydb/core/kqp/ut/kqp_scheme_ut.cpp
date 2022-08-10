@@ -100,6 +100,77 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(CreateAndDropTableCheckAuditLog) {
+        TStringStream logStream;
+        TKikimrRunner kikimr(TKikimrSettings().SetLogStream(&logStream));
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+
+            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.create_table"});
+            AssertSuccessResult(schemeClient.ModifyPermissions("/Root",
+                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                ).ExtractValueSync()
+            );
+        }
+
+        auto driverConfig = TDriverConfig()
+            .SetEndpoint(kikimr.GetEndpoint())
+            .SetAuthToken("user0@builtin");
+        auto driver = TDriver(driverConfig);
+        auto db = NYdb::NTable::TTableClient(driver);
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            const static TString createTableQuery = R"(
+                CREATE TABLE `/Root/Test1234/KeyValue` (
+                    Key Uint32,
+                    Value String,
+                    PRIMARY KEY(Key)
+                );
+            )";
+            auto result = session.ExecuteSchemeQuery(createTableQuery).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            const static TString dropTableQuery = R"(
+                DROP TABLE `/Root/Test1234/KeyValue`;
+            )";
+            auto result = session.ExecuteSchemeQuery(dropTableQuery).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        TString line;
+        int mtc = 0;
+        int ctc = 0;
+        int dtc = 0;
+        while (logStream.ReadLine(line)) {
+            if (line.find("AUDIT:") == line.npos)
+                continue;
+
+            const TString modifyAclTablePattern("operation: MODIFY ACL");
+            if (line.find(modifyAclTablePattern) != line.npos) {
+                mtc += 1;
+            }
+
+            const TString createTablePattern("operation: CREATE TABLE");
+            if (line.find(createTablePattern) != line.npos) {
+                ctc += 1;
+            }
+
+            const TString dropTablePattern("operation: DROP TABLE");
+            if (line.find(dropTablePattern) != line.npos) {
+                dtc += 1;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(mtc, 1, mtc);
+        UNIT_ASSERT_VALUES_EQUAL_C(ctc, 1, ctc);
+        UNIT_ASSERT_VALUES_EQUAL_C(dtc, 1, dtc);
+    }
+
     Y_UNIT_TEST(CreateDropTableMultipleTime) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

@@ -82,7 +82,10 @@ bool ParseTopicInput(
     NPq::TTopicPartitionsSet& partitionsSet,
     TIssues& issues)
 {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-but-set-variable"
     bool result = true;
+#pragma clang diagnostic pop
     const char* queryKindStr = isSourceGraph ? "source" : "destination";
     const google::protobuf::Any& settingsAny = taskInput.GetSource().GetSettings();
     if (!settingsAny.Is<NYql::NPq::NProto::TDqPqTopicSource>()) {

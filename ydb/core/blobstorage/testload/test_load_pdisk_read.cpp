@@ -58,6 +58,7 @@ class TPDiskReaderTestLoadActor : public TActorBootstrapped<TPDiskReaderTestLoad
 
         TRequestInfo(const TRequestInfo &) = default;
         TRequestInfo() = default;
+        TRequestInfo &operator=(const TRequestInfo& other) = default;
     };
 
     struct TRequestStat {

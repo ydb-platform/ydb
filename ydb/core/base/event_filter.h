@@ -11,6 +11,7 @@ namespace NKikimr {
     public:
         TKikimrScopeId() = default;
         TKikimrScopeId(const TKikimrScopeId&) = default;
+        TKikimrScopeId &operator=(const TKikimrScopeId& other) = default;
 
         explicit TKikimrScopeId(const NActors::TScopeId& scopeId)
             : ScopeId(scopeId)

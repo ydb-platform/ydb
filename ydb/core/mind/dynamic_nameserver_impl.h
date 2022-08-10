@@ -45,6 +45,7 @@ struct TDynamicConfig : public TThrRefBase {
         }
 
         TDynamicNodeInfo(const TDynamicNodeInfo &other) = default;
+        TDynamicNodeInfo &operator=(const TDynamicNodeInfo &other) = default;
 
         bool EqualExceptExpire(const TDynamicNodeInfo &other) const
         {

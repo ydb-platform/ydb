@@ -61,6 +61,7 @@ struct TTimedValue {
     TTimedValue() = default;
     TTimedValue(const TTimedValue&) = default;
     TTimedValue(T value, const TInstant& updatedAt = TInstant::Zero()) : Value(value), UpdatedAt(updatedAt) {}
+    TTimedValue &operator=(const TTimedValue& other) = default;
 };
 
 using TTimedUint64 = TTimedValue<ui64>;
@@ -73,6 +74,7 @@ struct TQuotaUsage {
     TQuotaUsage(ui64 limit, const TInstant& limitUpdatedAt = Now()) : Limit(limit, limitUpdatedAt) {}
     TQuotaUsage(ui64 limit, const TInstant& limitUpdatedAt, ui64 usage, const TInstant& usageUpdatedAt = Now())
       : Limit(limit, limitUpdatedAt), Usage(NMaybe::TInPlace{}, usage, usageUpdatedAt) {}
+    TQuotaUsage &operator=(const TQuotaUsage& other) = default;
     void Merge(const TQuotaUsage& other);
     TString ToString() {
         return (Usage ? std::to_string(Usage->Value) : "*") + "/" + std::to_string(Limit.Value);

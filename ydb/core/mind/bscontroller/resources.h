@@ -19,6 +19,8 @@ namespace NKikimr {
                 : DataSize(dataSize)
             {}
 
+            TResourceValues &operator=(const TResourceValues& other) = default;
+
             T Max() const {
                 return DataSize;
             }

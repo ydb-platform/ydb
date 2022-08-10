@@ -181,6 +181,7 @@ namespace NKikimr::NBlobDepot {
     public:
         TGenStep() = default;
         TGenStep(const TGenStep&) = default;
+        TGenStep &operator=(const TGenStep& other) = default;
 
         explicit TGenStep(ui64 value)
             : Value(value)

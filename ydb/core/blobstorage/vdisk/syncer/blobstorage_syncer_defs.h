@@ -31,6 +31,7 @@ namespace NKikimr {
                 , Guid(guid)
                 , DbBirthLsn(dbBirthLsn)
             {}
+            TLocalSyncerState &operator=(const TLocalSyncerState &other) = default;
 
             void Output(IOutputStream &str) const {
                 str << "[State# " << State

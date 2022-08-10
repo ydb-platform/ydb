@@ -75,6 +75,7 @@ namespace NKikimr {
 
             TPDiskId() = default;
             TPDiskId(const TPDiskId&) = default;
+            TPDiskId &operator=(const TPDiskId &other) = default;
 
             TString ToString() const {
                 return TStringBuilder() << NodeId << ":" << PDiskId;
@@ -120,6 +121,8 @@ namespace NKikimr {
                 , PDiskId(pb.GetPDiskId())
                 , VSlotId(pb.GetVSlotId())
             {}
+
+            TVSlotId &operator=(const TVSlotId &other) = default;
 
             static TVSlotId MinForPDisk(TPDiskId pdiskId) {
                 return TVSlotId(pdiskId, Min<Schema::VSlot::VSlotID::Type>());

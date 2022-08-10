@@ -63,6 +63,7 @@ class TPDiskWriterTestLoadActor : public TActorBootstrapped<TPDiskWriterTestLoad
 
         TRequestInfo(const TRequestInfo &) = default;
         TRequestInfo() = default;
+        TRequestInfo &operator=(const TRequestInfo &other) = default;
 
     };
 

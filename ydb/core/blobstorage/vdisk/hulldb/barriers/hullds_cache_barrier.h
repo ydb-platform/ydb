@@ -19,6 +19,7 @@ namespace NKikimr {
 
             TCollectBarrier() = default;
             TCollectBarrier(const TCollectBarrier& other) = default;
+            TCollectBarrier &operator=(const TCollectBarrier& other) = default;
 
             auto ConvertToTuple() const {
                 return std::make_tuple(Gen, Step);

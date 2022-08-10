@@ -137,6 +137,8 @@ namespace NKikimr {
             TStackVec<TVDisk, TypicalDisksInFailDomain> VDisks;
 
             // Ill-formed because TVDisk is not assignable.
+            TFailDomain(const TFailDomain& other) = default;
+            TFailDomain() {};
             void operator=(const TFailDomain&) = delete;
 
             TString ToString() const {

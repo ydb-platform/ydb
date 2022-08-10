@@ -40,6 +40,7 @@ namespace NKikimr {
         }
 
         TLatencyHistogram(const TLatencyHistogram& other) = default;
+        TLatencyHistogram &operator=(const TLatencyHistogram& other) = default;
 
         void Update(TDuration sample, TInstant now) {
             Fadeout(now);

@@ -39,6 +39,8 @@ namespace NKikimr {
                 , IssuerGuid(issuerGuid)
             {}
 
+            TBlockedGen &operator=(const TBlockedGen &other) = default;
+
             bool IsBlocked(const TBlockedGen& gen) const {
                 return gen.Generation < Generation || (gen.Generation == Generation && (!IssuerGuid || gen.IssuerGuid != IssuerGuid));
             }

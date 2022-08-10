@@ -944,6 +944,7 @@ struct TShardInfo {
 
     TShardInfo() = default;
     TShardInfo(const TShardInfo& other) = default;
+    TShardInfo &operator=(const TShardInfo& other) = default;
 
     TShardInfo&& WithTabletID(TTabletId tabletId) && {
         TabletID = tabletId;

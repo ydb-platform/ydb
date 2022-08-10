@@ -18,6 +18,7 @@ namespace NKikimr {
 
         TVDiskIncarnationGuid() = default;
         TVDiskIncarnationGuid(const TVDiskIncarnationGuid &) = default;
+        TVDiskIncarnationGuid &operator=(const TVDiskIncarnationGuid &) = default;
         TVDiskIncarnationGuid(ui64 guid)
             : Guid(guid)
         {}
@@ -59,6 +60,7 @@ namespace NKikimr {
 
         TVDiskEternalGuid() = default;
         TVDiskEternalGuid(const TVDiskEternalGuid &) = default;
+        TVDiskEternalGuid &operator=(const TVDiskEternalGuid &other) = default;
         TVDiskEternalGuid(ui64 guid)
             : Guid(guid)
         {}

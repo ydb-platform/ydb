@@ -36,6 +36,7 @@ namespace NTable {
         TColInfo() = default;
 
         TColInfo(const TColInfo&) = default;
+        TColInfo &operator=(const TColInfo& other) = default;
 
         bool IsKey() const noexcept {
             return Key != Max<TPos>();

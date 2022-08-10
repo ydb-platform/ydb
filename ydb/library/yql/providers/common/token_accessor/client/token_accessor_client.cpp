@@ -20,27 +20,22 @@ class TTokenAccessorCredentialsProvider : public NYdb::ICredentialsProvider {
 private:
     class TImpl : public std::enable_shared_from_this<TImpl> {
     public:
-        TImpl(const TString& tokenAccessorEndpoint,
-            bool useSsl,
-            const TString& sslCaCert,
+        TImpl(
+            std::shared_ptr<NGrpc::TGRpcClientLow> client,
+            std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
             const TString& serviceAccountId,
             const TString& serviceAccountIdSignature,
             const TDuration& refreshPeriod,
             const TDuration& requestTimeout)
-            : Client(std::make_unique<NGrpc::TGRpcClientLow>())
+            : Client(std::move(client))
+            , Connection(std::move(connection))
             , NextTicketUpdate(TInstant::Zero())
-            , TokenAccessorEndpoint(tokenAccessorEndpoint)
             , ServiceAccountId(serviceAccountId)
             , ServiceAccountIdSignature(serviceAccountIdSignature)
             , RefreshPeriod(refreshPeriod)
             , RequestTimeout(requestTimeout)
             , Infly(0)
         {
-            NGrpc::TGRpcClientConfig grpcConf;
-            grpcConf.Locator = tokenAccessorEndpoint;
-            grpcConf.EnableSsl = useSsl;
-            grpcConf.SslCaCert = sslCaCert;
-            Connection = Client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
         }
 
         void UpdateTicket(bool sync = false) const {
@@ -51,9 +46,11 @@ private:
             RequestInflight = true;
             auto resultPromise = NThreading::NewPromise();
 
-            std::shared_ptr<const TImpl> self = shared_from_this();
-            auto cb = [self, resultPromise, sync](NGrpc::TGrpcStatus&& status, GetTokenResponse&& result) mutable {
-                self->ProcessResponse(std::move(status), std::move(result), sync);
+            std::weak_ptr<const TImpl> weakSelf = shared_from_this();
+            auto cb = [weakSelf, resultPromise, sync](NGrpc::TGrpcStatus&& status, GetTokenResponse&& result) mutable {
+                if (auto self = weakSelf.lock()) {
+                    self->ProcessResponse(std::move(status), std::move(result), sync);
+                }
                 resultPromise.SetValue();
             };
 
@@ -95,8 +92,6 @@ private:
 
         void Stop() {
             NeedStop = true;
-
-            Client.reset(); // Will trigger destroy
         }
 
     private:
@@ -106,7 +101,7 @@ private:
                     --Infly;
                     LastRequestError = TStringBuilder() << "Last request error was at " << TInstant::Now()
                         << ". GrpcStatusCode: " << status.GRpcStatusCode << " Message: \"" << status.Msg
-                        << "\" internal: " << status.InternalError << " token accessor endpoint: \"" << TokenAccessorEndpoint << "\"";
+                        << "\" internal: " << status.InternalError;
                 }
                 RequestInflight = false;
                 Sleep(std::min(BackoffTimeout, BACKOFF_MAX));
@@ -125,11 +120,10 @@ private:
         }
 
     private:
-        std::unique_ptr<NGrpc::TGRpcClientLow> Client;
-        std::unique_ptr<NGrpc::TServiceConnection<TokenAccessorService>> Connection;
+        const std::shared_ptr<NGrpc::TGRpcClientLow> Client;
+        const std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> Connection;
         mutable TString Ticket;
         mutable TInstant NextTicketUpdate;
-        const TString TokenAccessorEndpoint;
         const TString ServiceAccountId;
         const TString ServiceAccountIdSignature;
         const TDuration RefreshPeriod;
@@ -144,15 +138,14 @@ private:
 
 public:
     TTokenAccessorCredentialsProvider(
-        const TString& tokenAccessorEndpoint,
-        bool useSsl,
-        const TString& sslCaCert,
+        std::shared_ptr<NGrpc::TGRpcClientLow> client,
+        std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
         const TString& serviceAccountId,
         const TString& serviceAccountIdSignature,
         const TDuration& refreshPeriod,
         const TDuration& requestTimeout
     )
-        : Impl(std::make_shared<TImpl>(tokenAccessorEndpoint, useSsl, sslCaCert, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout))
+        : Impl(std::make_shared<TImpl>(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout))
     {
         Impl->UpdateTicket(true);
     }
@@ -183,7 +176,28 @@ std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvid
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod,
     const TDuration& requestTimeout
-) {
-    return std::make_shared<TTokenAccessorCredentialsProvider>(tokenAccessorEndpoint, useSsl, sslCaCert, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
+)
+{
+    auto client = std::make_unique<NGrpc::TGRpcClientLow>();
+    NGrpc::TGRpcClientConfig grpcConf;
+    grpcConf.Locator = tokenAccessorEndpoint;
+    grpcConf.EnableSsl = useSsl;
+    grpcConf.SslCaCert = sslCaCert;
+    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
+
+    return CreateTokenAccessorCredentialsProvider(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
 }
+
+std::shared_ptr<NYdb::ICredentialsProvider> CreateTokenAccessorCredentialsProvider(
+    std::shared_ptr<NGrpc::TGRpcClientLow> client,
+    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+    const TString& serviceAccountId,
+    const TString& serviceAccountIdSignature,
+    const TDuration& refreshPeriod,
+    const TDuration& requestTimeout
+)
+{
+    return std::make_shared<TTokenAccessorCredentialsProvider>(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
+}
+
 }

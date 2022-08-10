@@ -18,6 +18,7 @@ ISecuredServiceAccountCredentialsFactory::TPtr CreateSecuredServiceAccountCreden
     const TString& tokenAccessorEndpoint,
     bool useSsl,
     const TString& sslCaCert,
+    ui32 connectionPoolSize = 0,
     const TDuration& refreshPeriod = TDuration::Hours(1),
     const TDuration& requestTimeout = TDuration::Seconds(10)
 );

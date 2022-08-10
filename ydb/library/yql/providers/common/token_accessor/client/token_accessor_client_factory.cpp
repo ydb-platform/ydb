@@ -10,17 +10,15 @@ namespace {
 class TTokenAccessorCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {
 public:
     TTokenAccessorCredentialsProviderFactory(
-        const TString& tokenAccessorEndpoint,
-        bool useSsl,
-        const TString& sslCaCert,
+        std::shared_ptr<NGrpc::TGRpcClientLow> client,
+        std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
         const TString& serviceAccountId,
         const TString& serviceAccountIdSignature,
         const TDuration& refreshPeriod,
         const TDuration& requestTimeout
     )
-        : TokenAccessorEndpoint(tokenAccessorEndpoint)
-        , UseSsl(useSsl)
-        , SslCaCert(sslCaCert)
+        : Client(std::move(client))
+        , Connection(std::move(connection))
         , ServiceAccountId(serviceAccountId)
         , ServiceAccountIdSignature(serviceAccountIdSignature)
         , RefreshPeriod(refreshPeriod)
@@ -29,13 +27,12 @@ public:
     }
 
     std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
-        return CreateTokenAccessorCredentialsProvider(TokenAccessorEndpoint, UseSsl, SslCaCert, ServiceAccountId, ServiceAccountIdSignature, RefreshPeriod, RequestTimeout);
+        return CreateTokenAccessorCredentialsProvider(Client, Connection, ServiceAccountId, ServiceAccountIdSignature, RefreshPeriod, RequestTimeout);
     }
 
 private:
-    const TString TokenAccessorEndpoint;
-    const bool UseSsl;
-    const TString SslCaCert;
+    const std::shared_ptr<NGrpc::TGRpcClientLow> Client;
+    const std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> Connection;
     const TString ServiceAccountId;
     const TString ServiceAccountIdSignature;
     const TDuration RefreshPeriod;
@@ -51,8 +48,29 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateTokenAccessorCredential
     const TString& serviceAccountId,
     const TString& serviceAccountIdSignature,
     const TDuration& refreshPeriod,
-    const TDuration& requestTimeout)
+    const TDuration& requestTimeout
+)
 {
-    return std::make_shared<TTokenAccessorCredentialsProviderFactory>(tokenAccessorEndpoint, useSsl, sslCaCert, serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
+    auto client = std::make_unique<NGrpc::TGRpcClientLow>();
+    NGrpc::TGRpcClientConfig grpcConf;
+    grpcConf.Locator = tokenAccessorEndpoint;
+    grpcConf.EnableSsl = useSsl;
+    grpcConf.SslCaCert = sslCaCert;
+    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection = client->CreateGRpcServiceConnection<TokenAccessorService>(grpcConf);
+
+    return CreateTokenAccessorCredentialsProviderFactory(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);
 }
+
+std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateTokenAccessorCredentialsProviderFactory(
+    std::shared_ptr<NGrpc::TGRpcClientLow> client,
+    std::shared_ptr<NGrpc::TServiceConnection<TokenAccessorService>> connection,
+    const TString& serviceAccountId,
+    const TString& serviceAccountIdSignature,
+    const TDuration& refreshPeriod,
+    const TDuration& requestTimeout
+)
+{
+    return std::make_shared<TTokenAccessorCredentialsProviderFactory>(std::move(client), std::move(connection), serviceAccountId, serviceAccountIdSignature, refreshPeriod, requestTimeout);    
+}
+
 }

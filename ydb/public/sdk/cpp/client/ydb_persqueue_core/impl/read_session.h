@@ -441,7 +441,8 @@ public:
         }
     };
 
-    TPartitionStreamImpl<true>(ui64 partitionStreamId,
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<V>>
+    TPartitionStreamImpl(ui64 partitionStreamId,
                          TString topicPath,
                          TString cluster,
                          ui64 partitionGroupId,
@@ -464,7 +465,8 @@ public:
         MaxCommittedOffset = readOffset;
     }
 
-    TPartitionStreamImpl<false>(ui64 partitionStreamId,
+    template <bool V = UseMigrationProtocol, class = std::enable_if_t<!V>>
+    TPartitionStreamImpl(ui64 partitionStreamId,
                          TString topicPath,
                          i64 partitionId,
                          i64 assignId,
@@ -1064,10 +1066,10 @@ private:
 
         // Removes (partition stream, offset) from mapping.
         // Returns cookie ptr if this was the last message, otherwise nullptr.
-        typename TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
+        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr CommitOffset(ui64 partitionStreamId, ui64 offset);
 
         // Gets and then removes committed cookie from mapping.
-        typename TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
+        typename TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMapping::TCookie::TPtr RetrieveCommittedCookie(const Ydb::PersQueue::V1::CommitCookie& cookieProto);
 
         // Removes mapping on partition stream.
         void RemoveMapping(ui64 partitionStreamId);

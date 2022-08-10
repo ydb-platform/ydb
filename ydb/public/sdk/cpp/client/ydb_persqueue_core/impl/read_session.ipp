@@ -477,7 +477,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             }
         } else {
             auto& startRead = *req.mutable_start_partition_session_response();
-            startRead.set_partition_session_id(GetPartitionStreamId(partitionStream));
+            startRead.set_partition_session_id(partitionStream->GetAssignId());
             if (readOffset) {
                 startRead.set_read_offset(*readOffset);
             }
@@ -537,7 +537,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
             released.set_assign_id(partitionStream->GetAssignId());
         } else {
             auto& released = *req.mutable_stop_partition_session_response();
-            released.set_partition_session_id(partitionStream->GetPartitionSessionId());
+            released.set_partition_session_id(partitionStream->GetAssignId());
         }
 
         WriteToProcessorImpl(std::move(req));
@@ -579,7 +579,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Commit(const TPartitio
         } else {
             hasSomethingToCommit = true;
             auto* part_commit = req.mutable_commit_offset_request()->add_commit_offsets();
-            part_commit->set_partition_session_id(GetPartitionStreamId(partitionStream));
+            part_commit->set_partition_session_id(partitionStream->GetAssignId());
             auto* range = part_commit->add_offsets();
             range->set_start(startOffset);
             range->set_end(endOffset);
@@ -612,7 +612,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::RequestPartitionStream
             status.set_assign_id(partitionStream->GetAssignId());
         } else {
             auto& status = *req.mutable_partition_session_status_request();
-            status.set_partition_session_id(GetPartitionStreamId(partitionStream));
+            status.set_partition_session_id(partitionStream->GetAssignId());
         }
 
         WriteToProcessorImpl(std::move(req));
@@ -1258,6 +1258,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
             Cancel(ConnectTimeoutContext);
             Cancel(ConnectDelayContext);
 
+            if (ClientContext) {
+                ClientContext->Cancel();
+                ClientContext.reset();
+            }
+
             if (Processor) {
                 Processor->Cancel();
             }
@@ -1300,6 +1305,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl(
         CloseCallback = {};
     }
     Aborting = true; // So abort call will have no effect.
+    if (ClientContext) {
+        ClientContext->Cancel();
+        ClientContext.reset();
+    }
 }
 
 template<bool UseMigrationProtocol>

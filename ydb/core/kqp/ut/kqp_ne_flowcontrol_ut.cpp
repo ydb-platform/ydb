@@ -57,7 +57,14 @@ void DoFlowControlTest(ui64 limit, bool hasBlockedByCapacity, bool useSessionAct
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetMkqlHeavyProgramMemoryLimit(200ul << 20);
     appCfg.MutableTableServiceConfig()->MutableResourceManager()->SetQueryMemoryLimit(20ul << 30);
 
-    auto kikimr = KikimrRunnerEnableSessionActor(useSessionActor, {}, appCfg);
+    // TODO: KIKIMR-14294
+    auto kikimrSettings = TKikimrSettings()
+        .SetAppConfig(appCfg)
+        .SetEnableKqpSessionActor(useSessionActor)
+        .SetKqpSettings({})
+        .SetEnableKqpScanQueryStreamLookup(false);
+    TKikimrRunner kikimr{kikimrSettings};
+
     CreateSampleTables(kikimr);
     auto db = kikimr.GetTableClient();
 

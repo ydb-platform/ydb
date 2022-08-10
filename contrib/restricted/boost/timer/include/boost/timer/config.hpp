@@ -64,21 +64,6 @@
 
 #endif // !defined(BOOST_CHRONO_NO_LIB)
 
-// Plus, Chrono uses System, so we need to link that too
-
-#if !defined(BOOST_SYSTEM_NO_LIB)
-
-#if defined(BOOST_ALL_DYN_LINK) || defined(BOOST_SYSTEM_DYN_LINK)
-#  define BOOST_DYN_LINK
-#endif
-
-#define BOOST_LIB_NAME boost_system
-
-#include <boost/config/auto_link.hpp>
-
-#endif // !defined(BOOST_SYSTEM_NO_LIB)
-
 #endif  // auto-linking disabled
 
 #endif // BOOST_TIMER_CONFIG_HPP
-

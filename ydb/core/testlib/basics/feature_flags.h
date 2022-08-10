@@ -37,6 +37,7 @@ public:
     FEATURE_FLAG_SETTER(EnableKqpSessionActor)
     FEATURE_FLAG_SETTER(EnableKqpScanQueryStreamLookup)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
+    FEATURE_FLAG_SETTER(EnablePredicateExtractForDataQueries)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

@@ -199,7 +199,8 @@ struct TEvTaskRunFinished
         const TDqMemoryQuota::TProfileStats& profileStats = {},
         ui64 mkqlMemoryLimit = 0,
         THolder<NDqProto::TMiniKqlProgramState>&& programState = nullptr,
-        bool checkpointRequestedFromTaskRunner = false)
+        bool checkpointRequestedFromTaskRunner = false,
+        TDuration computeTime = TDuration::Zero())
         : RunStatus(runStatus)
         , Sensors(sensors)
         , InputChannelFreeSpace(std::move(inputMap))
@@ -208,6 +209,7 @@ struct TEvTaskRunFinished
         , MkqlMemoryLimit(mkqlMemoryLimit)
         , ProgramState(std::move(programState))
         , CheckpointRequestedFromTaskRunner(checkpointRequestedFromTaskRunner)
+        , ComputeTime(computeTime)
     { }
 
     NDq::ERunStatus RunStatus;
@@ -219,6 +221,7 @@ struct TEvTaskRunFinished
     ui64 MkqlMemoryLimit = 0;
     THolder<NDqProto::TMiniKqlProgramState> ProgramState;
     bool CheckpointRequestedFromTaskRunner = false;
+    TDuration ComputeTime;
 };
 
 struct TEvChannelPopFinished

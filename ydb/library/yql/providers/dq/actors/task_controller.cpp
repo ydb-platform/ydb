@@ -98,9 +98,10 @@ private:
             return;
         }
 
-        TString message = "Undelivered Event " + ToString(ev->Get()->SourceType)
-            + " from " + ToString(SelfId()) + " (Self) to " + ToString(ev->Sender) +
-            + " Reason: " + ToString(ev->Get()->Reason) + " Cookie: " + ToString(ev->Cookie);
+        TStringBuilder message;
+        message << "Undelivered Event " << ev->Get()->SourceType
+            << " from " << SelfId() << " (Self) to " << ev->Sender
+            << " Reason: " << ev->Get()->Reason << " Cookie: " << ev->Cookie;
         OnError(NYql::NDqProto::StatusIds::UNAVAILABLE, message);
     }
 
@@ -455,7 +456,7 @@ private:
             Stages.emplace(task.GetId(), taskMeta.GetStageId());
         }
 
-        YQL_CLOG(DEBUG, ProviderDq) << "Ready State:  X1=" << SelfId().RawX1() << ", X2=" << SelfId().RawX2();
+        YQL_CLOG(DEBUG, ProviderDq) << "Ready State: " << SelfId();
 
         MaybeUpdateChannels();
 

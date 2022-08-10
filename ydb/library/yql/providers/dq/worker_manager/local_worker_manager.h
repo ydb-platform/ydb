@@ -10,6 +10,8 @@
 
 #include <ydb/library/yql/providers/dq/task_runner_actor/task_runner_actor.h>
 
+#include <library/cpp/actors/core/actorid.h>
+
 namespace NYql {
 
 struct TWorkerRuntimeData;
@@ -34,6 +36,7 @@ namespace NYql::NDqs {
         ui64 MkqlMinAllocSize = 30_MB;
 
         bool CanUseComputeActor = true;
+        NActors::TActorId QuoterServiceActorId;
     };
 
     NActors::IActor* CreateLocalWorkerManager(const TLocalWorkerManagerOptions& options);

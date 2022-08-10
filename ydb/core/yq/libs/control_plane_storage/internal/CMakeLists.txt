@@ -24,6 +24,7 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   libs-control_plane_storage-proto
   yq-libs-quota_manager
   libs-quota_manager-events
+  libs-rate_limiter-events
   yq-libs-ydb
   ydb-library-security
   cpp-client-ydb_scheme

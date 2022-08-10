@@ -32,24 +32,34 @@ public:
     }
 
     void Wakeup(NActors::TEvents::TEvWakeup::TPtr&) {
+        RetryScheduled = false;
         SendRequest();
     }
 
     void Handle(typename TResponse::TPtr& ev) {
-        const TMaybe<TDuration> delay = RetryState->GetNextRetryDelay(ev->Get()->Status);
+        const TMaybe<TDuration> delay = !Canceled ? RetryState->GetNextRetryDelay(ev->Get()->Status) : Nothing();
         if (delay) {
             this->Schedule(*delay, new NActors::TEvents::TEvWakeup());
+            RetryScheduled = true;
+            LastResponse = std::move(ev);
         } else {
             this->Send(Parent, ev->Release().Release());
             this->PassAway();
         }
     }
 
+    void Handle(NActors::TEvents::TEvPoison::TPtr&) {
+        Canceled = true;
+        if (RetryScheduled && LastResponse) {
+            Handle(LastResponse); // Will send last response to parent
+        }
+    }
+
     STRICT_STFUNC(
         StateFunc,
-        cFunc(NActors::TEvents::TEvPoison::EventType, this->PassAway)
-        hFunc(NActors::TEvents::TEvWakeup, Wakeup)
-        hFunc(TResponse, Handle)
+        hFunc(NActors::TEvents::TEvPoison, Handle);
+        hFunc(NActors::TEvents::TEvWakeup, Wakeup);
+        hFunc(TResponse, Handle);
     )
 
     static ERetryErrorClass Retryable(const NYdb::TStatus& status) {
@@ -87,6 +97,9 @@ private:
     const IRetryPolicy::IRetryState::TPtr RetryState;
     const typename TRequest::TProto Proto;
     const NActors::TActorId Parent;
+    bool Canceled = false;
+    bool RetryScheduled = false;
+    typename TResponse::TPtr LastResponse;
 };
 
 } // namespace

@@ -15,5 +15,6 @@ target_link_libraries(libs-rate_limiter-events PUBLIC
   yq-libs-events
 )
 target_sources(libs-rate_limiter-events PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/events/events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/events/control_plane_events.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/yq/libs/rate_limiter/events/data_plane.cpp
 )

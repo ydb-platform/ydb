@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/services.pb.h>
 #include <ydb/core/yq/libs/events/events.h>
-#include <ydb/core/yq/libs/rate_limiter/events/events.h>
+#include <ydb/core/yq/libs/rate_limiter/events/control_plane_events.h>
 #include <ydb/core/yq/libs/rate_limiter/utils/path.h>
 #include <ydb/core/yq/libs/ydb/schema.h>
 #include <ydb/core/yq/libs/ydb/util.h>
@@ -337,11 +337,6 @@ private:
 
     std::vector<TRateLimiterRequestsQueue> RateLimiters;
 };
-
-NActors::TActorId RateLimiterControlPlaneServiceId() {
-    constexpr TStringBuf name = "RATE_LIM_CP";
-    return NActors::TActorId(0, name);
-}
 
 NActors::IActor* CreateRateLimiterControlPlaneService(
     const NConfig::TRateLimiterConfig& rateLimiterConfig,

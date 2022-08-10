@@ -5,8 +5,12 @@
 
 #include <ydb/library/yql/dq/common/dq_common.h>
 
+#include <ydb/core/base/quoter.h>
+
 namespace NYql {
 namespace NDq {
+
+constexpr TDuration MIN_QUOTED_CPU_TIME = TDuration::MilliSeconds(10);
 
 using namespace NActors;
 
@@ -34,12 +38,16 @@ public:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-        ::NMonitoring::TDynamicCounterPtr taskCounters)
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters,
+        const TActorId& quoterServiceActorId)
         : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ false, false, taskCounters)
         , TaskRunnerActorFactory(taskRunnerActorFactory)
         , ReadyToCheckpointFlag(false)
         , SentStatsRequest(false)
-    {}
+        , QuoterServiceActorId(quoterServiceActorId)
+    {
+        InitExtraMonCounters(taskCounters);
+    }
 
     void DoBootstrap() {
         const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
@@ -75,9 +83,18 @@ public:
         Send(TaskRunnerActorId,
             new NTaskRunnerActor::TEvTaskRunnerCreate(
                 GetTask(), limits, execCtx));
+
+        CA_LOG_D("Use CPU quota: " << UseCpuQuota() << ". Rate limiter resource: { \"" << Task.GetRateLimiter() << "\", \"" << Task.GetRateLimiterResource() << "\" }");
     }
 
     void FillExtraStats(NDqProto::TDqComputeActorStats* /* dst */, bool /* last */) {
+    }
+
+    void InitExtraMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
+        if (taskCounters && UseCpuQuota()) {
+            CpuTimeGetQuotaLatency = taskCounters->GetSubgroup("subsystem", "mkql")->GetHistogram("CpuTimeGetQuotaLatencyMs", NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 10'000, 60'000, 600'000}));
+            CpuTimeQuotaWaitDelay = taskCounters->GetSubgroup("subsystem", "mkql")->GetHistogram("CpuTimeQuotaWaitDelayMs", NMonitoring::ExplicitHistogram({0, 1, 5, 10, 50, 100, 500, 1000, 10'000, 60'000, 600'000}));
+        }
     }
 
 private:
@@ -93,6 +110,7 @@ private:
             hFunc(NTaskRunnerActor::TEvLoadTaskRunnerFromStateDone, OnTaskRunnerLoaded);
             hFunc(TEvDqCompute::TEvInjectCheckpoint, OnInjectCheckpoint);
             hFunc(TEvDqCompute::TEvRestoreFromCheckpoint, OnRestoreFromCheckpoint);
+            hFunc(NKikimr::TEvQuota::TEvClearance, OnCpuQuotaGiven);
             default:
                 TBase::BaseStateFuncBody(ev, ctx);
         };
@@ -241,7 +259,7 @@ private:
             return true;  // handled channels syncronously
         }
         CA_LOG_D("DoHandleChannelsAfterFinishImpl");
-        Send(TaskRunnerActorId, new NTaskRunnerActor::TEvContinueRun(std::move(req), /* checkpointOnly = */ true));
+        AskContinueRun(std::make_unique<NTaskRunnerActor::TEvContinueRun>(std::move(req), /* checkpointOnly = */ true));
         return false;
     }
 
@@ -296,6 +314,14 @@ private:
         if (TaskRunnerActor) {
             TaskRunnerActor->PassAway();
         }
+        if (UseCpuQuota() && CpuTimeSpent) {
+            // Send the rest of CPU time that we haven't taken into account
+            Send(QuoterServiceActorId,
+                new NKikimr::TEvQuota::TEvRequest(
+                    NKikimr::TEvQuota::EResourceOperator::And,
+                    { NKikimr::TEvQuota::TResourceLeaf(Task.GetRateLimiter(), Task.GetRateLimiterResource(), CpuTimeSpent.MilliSeconds(), true) },
+                    TDuration::Max()));
+        }
         TBase::PassAway();
     }
 
@@ -315,7 +341,7 @@ private:
         if (ProcessSourcesState.Inflight == 0) {
             auto req = GetCheckpointRequest();
             CA_LOG_T("DoExecuteImpl: " << (bool) req);
-            Send(TaskRunnerActorId, new NTaskRunnerActor::TEvContinueRun(std::move(req), /* checkpointOnly = */ false));
+            AskContinueRun(std::make_unique<NTaskRunnerActor::TEvContinueRun>(std::move(req), /* checkpointOnly = */ false));
         }
     }
 
@@ -379,6 +405,7 @@ private:
     }
 
     void OnRunFinished(NTaskRunnerActor::TEvTaskRunFinished::TPtr& ev, const NActors::TActorContext& ) {
+        ContinueRunInflight = false;
         TrySendAsyncChannelsData(); // send from previous cycle
 
         MkqlMemoryLimit = ev->Get()->MkqlMemoryLimit;
@@ -412,6 +439,12 @@ private:
         if (status == ERunStatus::Finished) {
             ReportStats(TInstant::Now());
         }
+
+        if (UseCpuQuota()) {
+            CpuTimeSpent += ev->Get()->ComputeTime;
+            AskCpuQuota();
+            ProcessContinueRun();
+        }
     }
 
     void SaveState(const NDqProto::TCheckpoint& checkpoint, NDqProto::TComputeActorState& state) const override {
@@ -438,7 +471,7 @@ private:
         ProcessSourcesState.Inflight--;
         if (ProcessSourcesState.Inflight == 0) {
             CA_LOG_T("send TEvContinueRun on OnAsyncInputPushFinished");
-            Send(TaskRunnerActorId, new NTaskRunnerActor::TEvContinueRun());
+            AskContinueRun(std::make_unique<NTaskRunnerActor::TEvContinueRun>());
         }
     }
 
@@ -654,6 +687,60 @@ private:
         }
     }
 
+    bool UseCpuQuota() const {
+        return QuoterServiceActorId && Task.GetRateLimiter() && Task.GetRateLimiterResource();
+    }
+
+    void AskCpuQuota() {
+        Y_VERIFY(!CpuTimeQuotaAsked);
+        if (CpuTimeSpent >= MIN_QUOTED_CPU_TIME) {
+            CA_LOG_D("Ask CPU quota: " << CpuTimeSpent.MilliSeconds() << "ms");
+            Send(QuoterServiceActorId,
+                new NKikimr::TEvQuota::TEvRequest(
+                    NKikimr::TEvQuota::EResourceOperator::And,
+                    { NKikimr::TEvQuota::TResourceLeaf(Task.GetRateLimiter(), Task.GetRateLimiterResource(), CpuTimeSpent.MilliSeconds(), true) },
+                    TDuration::Max()));
+            CpuTimeQuotaAsked = TInstant::Now();
+            CpuTimeSpent = TDuration::Zero();
+        }
+    }
+
+    void AskContinueRun(std::unique_ptr<NTaskRunnerActor::TEvContinueRun> continueRunEvent) {
+        if (!UseCpuQuota()) {
+            Send(TaskRunnerActorId, continueRunEvent.release());
+            return;
+        }
+
+        ContinueRunEvents.emplace_back(std::move(continueRunEvent), TInstant::Now());
+        ProcessContinueRun();
+    }
+
+    void ProcessContinueRun() {
+        if (!ContinueRunEvents.empty() && !CpuTimeQuotaAsked && !ContinueRunInflight) {
+            Send(TaskRunnerActorId, ContinueRunEvents.front().first.release());
+            const TDuration quotaWaitDelay = TInstant::Now() - ContinueRunEvents.front().second;
+            CpuTimeQuotaWaitDelay->Collect(quotaWaitDelay.MilliSeconds());
+            ContinueRunEvents.pop_front();
+            ContinueRunInflight = true;
+        }
+    }
+
+    void OnCpuQuotaGiven(NKikimr::TEvQuota::TEvClearance::TPtr& ev) {
+        const TDuration delay = TInstant::Now() - CpuTimeQuotaAsked;
+        CpuTimeQuotaAsked = TInstant::Zero();
+        CA_LOG_D("CPU quota delay: " << delay.MilliSeconds() << "ms");
+        if (CpuTimeGetQuotaLatency) {
+            CpuTimeGetQuotaLatency->Collect(delay.MilliSeconds());
+        }
+
+        if (ev->Get()->Result != NKikimr::TEvQuota::TEvClearance::EResult::Success) {
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssue("Error getting CPU quota"));
+            return;
+        }
+
+        ProcessContinueRun();
+    }
+
     NKikimr::NMiniKQL::TTypeEnvironment* TypeEnv = nullptr;
     NTaskRunnerActor::ITaskRunnerActor* TaskRunnerActor = nullptr;
     NActors::TActorId TaskRunnerActorId;
@@ -682,6 +769,15 @@ private:
     ui64 MkqlMemoryLimit = 0;
     TDqMemoryQuota::TProfileStats ProfileStats;
     bool CheckpointRequestedFromTaskRunner = false;
+
+    // Cpu quota
+    TActorId QuoterServiceActorId;
+    TInstant CpuTimeQuotaAsked;
+    TDuration CpuTimeSpent;
+    std::deque<std::pair<std::unique_ptr<NTaskRunnerActor::TEvContinueRun>, TInstant>> ContinueRunEvents;
+    bool ContinueRunInflight = false;
+    NMonitoring::THistogramPtr CpuTimeGetQuotaLatency;
+    NMonitoring::THistogramPtr CpuTimeQuotaWaitDelay;
 };
 
 
@@ -690,10 +786,11 @@ IActor* CreateDqAsyncComputeActor(const TActorId& executerId, const TTxId& txId,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     const NTaskRunnerActor::ITaskRunnerActorFactory::TPtr& taskRunnerActorFactory,
-    ::NMonitoring::TDynamicCounterPtr taskCounters)
+    ::NMonitoring::TDynamicCounterPtr taskCounters,
+    const TActorId& quoterServiceActorId)
 {
     return new TDqAsyncComputeActor(executerId, txId, std::move(task), std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, taskRunnerActorFactory, taskCounters);
+        functionRegistry, settings, memoryLimits, taskRunnerActorFactory, taskCounters, quoterServiceActorId);
 }
 
 } // namespace NDq

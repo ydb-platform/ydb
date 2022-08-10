@@ -13,6 +13,9 @@
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/yq/libs/quota_manager/quota_proxy.h>
 #include <ydb/core/yq/libs/rate_limiter/control_plane_service/rate_limiter_control_plane_service.h>
+#include <ydb/core/yq/libs/rate_limiter/events/control_plane_events.h>
+#include <ydb/core/yq/libs/rate_limiter/events/data_plane.h>
+#include <ydb/core/yq/libs/rate_limiter/quoter_service/quoter_service.h>
 #include <ydb/core/yq/libs/shared_resources/shared_resources.h>
 #include <ydb/library/folder_service/folder_service.h>
 #include <ydb/library/yql/providers/common/metrics/service_counters.h>
@@ -91,6 +94,10 @@ void Init(
         Y_VERIFY(protoConfig.GetQuotasManager().GetEnabled()); // Rate limiter resources want to know CPU quota on creation
         NActors::IActor* rateLimiterService = NYq::CreateRateLimiterControlPlaneService(protoConfig.GetRateLimiter(), yqSharedResources, credentialsProviderFactory);
         actorRegistrator(NYq::RateLimiterControlPlaneServiceId(), rateLimiterService);
+    }
+
+    if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
+        actorRegistrator(NYq::YqQuoterServiceActorId(), NYq::CreateQuoterService(protoConfig.GetRateLimiter(), yqSharedResources, credentialsProviderFactory));
     }
 
     if (protoConfig.GetAudit().GetEnabled()) {
@@ -185,6 +192,9 @@ void Init(
             [=](const NYql::NDqProto::TDqTask& task, const NYql::NDq::TLogFunc&) {
                 return lwmOptions.Factory->Get(task);
             });
+        if (protoConfig.GetRateLimiter().GetDataPlaneEnabled()) {
+            lwmOptions.QuoterServiceActorId = NYq::YqQuoterServiceActorId();
+        }
         auto resman = NYql::NDqs::CreateLocalWorkerManager(lwmOptions);
 
         actorRegistrator(NYql::NDqs::MakeWorkerManagerActorID(nodeId), resman);

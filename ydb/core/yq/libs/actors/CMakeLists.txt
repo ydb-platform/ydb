@@ -37,6 +37,7 @@ target_link_libraries(yq-libs-actors PUBLIC
   yq-libs-events
   yq-libs-grpc
   yq-libs-private_client
+  libs-rate_limiter-utils
   yq-libs-result_formatter
   yq-libs-shared_resources
   yq-libs-signer

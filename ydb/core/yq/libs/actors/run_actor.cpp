@@ -58,6 +58,7 @@
 #include <ydb/core/yq/libs/checkpoint_storage/storage_service.h>
 #include <ydb/core/yq/libs/private_client/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
+#include <ydb/core/yq/libs/rate_limiter/utils/path.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/yq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/yq/libs/tasks_packer/tasks_packer.h>
@@ -391,6 +392,10 @@ private:
             Send(RateLimiterResourceCreatorId, new NActors::TEvents::TEvPoison());
         }
 
+        if (RateLimiterResourceDeleterId) {
+            Send(RateLimiterResourceDeleterId, new NActors::TEvents::TEvPoison());
+        }
+
         KillExecuter();
     }
 
@@ -453,6 +458,11 @@ private:
             break;
         case YandexQuery::QueryMeta::STARTING:
             HandleConnections();
+            if (Params.RateLimiterConfig.GetEnabled()) {
+                if (StartRateLimiterResourceCreatorIfNeeded() || !RateLimiterResourceWasCreated) {
+                    return;
+                }
+            }
             RunProgram();
             break;
         case YandexQuery::QueryMeta::RESUMING:
@@ -652,7 +662,6 @@ private:
                         std::move(CredentialsForConsumersCreation)
                     )
                 );
-                StartRateLimiterResourceCreatorIfNeeded(); // Run in parallel with read rules creation.
             } else {
                 RunDqGraphs();
             }
@@ -705,6 +714,14 @@ private:
             RunEvalDqGraph(ev->Get()->GraphParams);
         } else {
             DqGraphParams.push_back(ev->Get()->GraphParams);
+
+            if (RateLimiterPath) {
+                const TString rateLimiterResource = GetRateLimiterResourcePath(Params.CloudId, Params.Scope.ParseFolder(), Params.QueryId);
+                for (auto& task : *DqGraphParams.back().MutableTasks()) {
+                    task.SetRateLimiter(RateLimiterPath);
+                    task.SetRateLimiterResource(rateLimiterResource);
+                }
+            }
 
             NYql::IDqGateway::TResult gatewayResult;
             // fake it till you make it
@@ -1110,9 +1127,8 @@ private:
             Finish(YandexQuery::QueryMeta::FAILED);
         } else {
             RateLimiterResourceWasCreated = true;
-            if (!ReadRulesCreatorId) { // Isn't creating now
-                RunDqGraphs();
-            }
+            RateLimiterPath = ev->Get()->Result.rate_limiter();
+            RunProgram();
         }
     }
 
@@ -1150,12 +1166,6 @@ private:
     }
 
     void RunDqGraphs() {
-        if (Params.RateLimiterConfig.GetEnabled()) {
-            if (StartRateLimiterResourceCreatorIfNeeded() || !RateLimiterResourceWasCreated) {
-                return;
-            }
-        }
-
         if (DqGraphParams.empty()) {
             QueryStateUpdateRequest.set_resign_query(false);
             const bool isOk = Issues.Size() == 0;
@@ -1814,6 +1824,7 @@ private:
     bool RateLimiterResourceWasDeleted = false;
     NActors::TActorId RateLimiterResourceCreatorId;
     NActors::TActorId RateLimiterResourceDeleterId;
+    TString RateLimiterPath;
 
     // Finish
     bool Finishing = false;

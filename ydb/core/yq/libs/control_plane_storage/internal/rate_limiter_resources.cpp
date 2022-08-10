@@ -4,8 +4,7 @@
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
 #include <ydb/core/yq/libs/quota_manager/quota_manager.h>
 #include <ydb/core/yq/libs/quota_manager/events/events.h>
-#include <ydb/core/yq/libs/rate_limiter/control_plane_service/rate_limiter_control_plane_service.h>
-#include <ydb/core/yq/libs/rate_limiter/events/events.h>
+#include <ydb/core/yq/libs/rate_limiter/events/control_plane_events.h>
 
 #include <util/datetime/base.h>
 #include <util/string/split.h>

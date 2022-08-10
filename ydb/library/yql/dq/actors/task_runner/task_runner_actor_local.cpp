@@ -140,6 +140,7 @@ private:
             ? Inputs
             : ev->Get()->InputChannels;
 
+        const TInstant start = TInstant::Now();
         NYql::NDq::ERunStatus res = ERunStatus::Finished;
         THashMap<ui32, ui64> inputChannelFreeSpace;
         THashMap<ui32, ui64> sourcesFreeSpace;
@@ -193,7 +194,8 @@ private:
                 MemoryQuota ? *MemoryQuota->GetProfileStats() : TDqMemoryQuota::TProfileStats(),
                 MemoryQuota ? MemoryQuota->GetMkqlMemoryLimit() : 0,
                 std::move(mkqlProgramState),
-                ev->Get()->CheckpointRequest.Defined()),
+                ev->Get()->CheckpointRequest.Defined(),
+                TInstant::Now() - start),
             /*flags=*/0,
             ev->Cookie);
     }

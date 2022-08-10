@@ -169,7 +169,7 @@ protected:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
-        ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr)
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
@@ -195,7 +195,7 @@ protected:
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        ::NMonitoring::TDynamicCounterPtr taskCounters = nullptr)
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr)
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task)
@@ -215,7 +215,7 @@ protected:
         InitMonCounters(taskCounters);
     }
 
-    void InitMonCounters(::NMonitoring::TDynamicCounterPtr taskCounters) {
+    void InitMonCounters(const ::NMonitoring::TDynamicCounterPtr& taskCounters) {
         if (taskCounters) {
             MkqlMemoryUsage = taskCounters->GetSubgroup("subsystem", "mkql")->GetCounter("MemoryUsage");
             MkqlMemoryLimit = taskCounters->GetSubgroup("subsystem", "mkql")->GetCounter("MemoryLimit");

@@ -82,7 +82,8 @@ IActor* CreateComputeActor(
             computeRuntimeSettings,
             memoryLimits,
             taskRunnerActorFactory,
-            taskCounters);
+            taskCounters,
+            options.QuoterServiceActorId);
     }
 }
 

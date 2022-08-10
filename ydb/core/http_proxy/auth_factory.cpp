@@ -18,9 +18,9 @@ void TAuthFactory::Initialize(
         ui32 grpcPort = 0;
         TString CA;
         grpcPort = grpcConfig.GetPort();
-        bool secure = false;
+        // bool secure = false;
         if (!grpcPort) {
-            secure = true;
+            // secure = true;
             grpcPort = grpcConfig.GetSslPort();
         }
         CA = grpcConfig.GetCA();

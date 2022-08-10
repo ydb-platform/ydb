@@ -2244,9 +2244,9 @@ namespace NTypeAnnImpl {
 
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
         const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
-        bool isOk = false;
+        // bool isOk = false;
         if (isLeftNumeric && isRightNumeric) {
-            isOk = true;
+            // isOk = true;
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
             commonType = ctx.Expr.MakeType<TDataExprType>(commonTypeSlot);
@@ -2315,9 +2315,9 @@ namespace NTypeAnnImpl {
 
         const bool isLeftNumeric = IsDataTypeNumeric(dataType[0]->GetSlot());
         const bool isRightNumeric = IsDataTypeNumeric(dataType[1]->GetSlot());
-        bool isOk = false;
+        // bool isOk = false;
         if (isLeftNumeric && isRightNumeric) {
-            isOk = true;
+            // isOk = true;
             auto commonTypeSlot = GetNumericDataTypeByLevel(Max(GetNumericDataTypeLevel(dataType[0]->GetSlot()),
                 GetNumericDataTypeLevel(dataType[1]->GetSlot())));
             commonType = ctx.Expr.MakeType<TDataExprType>(commonTypeSlot);

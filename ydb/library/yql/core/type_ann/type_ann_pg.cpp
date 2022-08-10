@@ -3050,7 +3050,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
         return IGraphTransformer::TStatus::Error;
     }
 
-    const TStructExprType* outputRowType = nullptr;
+    // const TStructExprType* outputRowType = nullptr;
     TExprNode* setItems = nullptr;
     TExprNode* setOps = nullptr;
     bool hasSort = false;
@@ -3109,7 +3109,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
 
                     setItems = &option->Tail();
                 } else {
-                    outputRowType = option->Tail().Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
+                    /*outputRowType = */option->Tail().Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->
                         Cast<TStructExprType>();
                 }
             } else if (optionName == "limit" || optionName == "offset") {

@@ -235,7 +235,9 @@ void RopeMeasureSplitTime(TErasureType &type, ui64 dataSize, const TString& buff
     THPTimer timer;
 
     const size_t attempts = dataSize < 10000 ? ATTEMPTS : 10;
+#ifdef LONG_TEST
     double time = 0;
+#endif
     for (ui64 i = 0; i < attempts; ++i) {
         ui64 begin = randGen.GenRand() % (buffer.size() - dataSize);
         TString rope = TString(buffer.data() + begin, buffer.data() + begin + dataSize);
@@ -251,8 +253,9 @@ void RopeMeasureSplitTime(TErasureType &type, ui64 dataSize, const TString& buff
                 ropes[i] = RopeFromStringReference(std::move(partSet.Parts[i].OwnedString));
             }
         }
-
+#ifdef LONG_TEST
         time += timer.PassedReset();
+#endif
     }
 
 

@@ -4327,7 +4327,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             Y_FAIL("You should change implementation according to grammar changes");
     }
 
-    bool onlyDots = true;
+    // bool onlyDots = true;
     bool isColumnRef = !expr;
     bool isFirstElem = true;
 
@@ -4335,7 +4335,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
         switch (b.Alt_case()) {
         case TRule_unary_subexpr_suffix::TBlock1::kAlt1: {
             // key_expr
-            onlyDots = false;
+            // onlyDots = false;
             break;
         }
         case TRule_unary_subexpr_suffix::TBlock1::kAlt2: {
@@ -4344,7 +4344,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
                 isColumnRef = false;
             }
 
-            onlyDots = false;
+            // onlyDots = false;
             break;
         }
         case TRule_unary_subexpr_suffix::TBlock1::kAlt3: {

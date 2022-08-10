@@ -118,7 +118,7 @@ AggregateFunctionPtr AggregateFunctionFactory::getImpl(
     bool has_null_arguments) const
 {
     String name = getAliasToOrName(name_param);
-    bool is_case_insensitive = false;
+    // bool is_case_insensitive = false;
     Value found;
 
     /// Find by exact match.
@@ -130,7 +130,7 @@ AggregateFunctionPtr AggregateFunctionFactory::getImpl(
     if (auto jt = case_insensitive_aggregate_functions.find(Poco::toLower(name)); jt != case_insensitive_aggregate_functions.end())
     {
         found = jt->second;
-        is_case_insensitive = true;
+        // is_case_insensitive = true;
     }
 /*
     ContextPtr query_context;

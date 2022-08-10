@@ -2950,7 +2950,7 @@ void TPDisk::EnqueueAll() {
 void TPDisk::Update() {
     Mon.UpdateDurationTracker.UpdateStarted();
 
-    ui32 userSectorSize = 0;
+    // ui32 userSectorSize = 0;
 
     // Make input queue empty
     {
@@ -2958,7 +2958,7 @@ void TPDisk::Update() {
         ForsetiMaxLogBatchNsCached = ForsetiMaxLogBatchNs;
         ForsetiOpPieceSizeCached = PDiskCategory.IsSolidState() ? ForsetiOpPieceSizeSsd : ForsetiOpPieceSizeRot;
         EnqueueAll();
-        userSectorSize = Format.SectorPayloadSize();
+        /*userSectorSize = */Format.SectorPayloadSize();
 
         // Switch the scheduler when possible
         ForsetiScheduler.SetIsBinLogEnabled(EnableForsetiBinLog);

@@ -664,10 +664,10 @@ public:
             auto it = context.SS->BlockStoreVolumes.FindPtr(targetPath->PathId);
             Y_VERIFY(it, "Missing BlockStoreVolume while creating BlockStorePartition tablet");
             auto volume = *it;
-            const auto* volumeConfig = &volume->VolumeConfig;
+            /*const auto* volumeConfig = &volume->VolumeConfig;
             if (volume->AlterData) {
                 volumeConfig = &volume->AlterData->VolumeConfig;
-            }
+            }*/
         }
 
         THolder<TEvHive::TEvCreateTablet> ev = MakeHolder<TEvHive::TEvCreateTablet>(ui64(shardIdx.GetOwnerId()), ui64(shardIdx.GetLocalId()), shard.TabletType, shard.BindedChannels);

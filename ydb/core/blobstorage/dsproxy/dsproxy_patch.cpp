@@ -423,7 +423,7 @@ public:
 
         for (const TPartPlacement &partPlacement : placement) {
             ui32 idxInSubgroup = partPlacement.VDiskIdxInSubgroup;
-            ui32 patchedPartId = partPlacement.PartId;
+            // ui32 patchedPartId = partPlacement.PartId;
             Y_VERIFY_S(idxInSubgroup < VDisks.size(), "vdisidxInSubgroupkIdx# " << idxInSubgroup << "/" << VDisks.size());
 
             Y_VERIFY(Info->GetIdxInSubgroup(VDisks[idxInSubgroup], OriginalId.Hash()) == idxInSubgroup);
@@ -431,7 +431,7 @@ public:
             if (patchedIdxInSubgroup != idxInSubgroup) {
                 // now only mirror3dc has this case (has 9 vdisks instead of 4 or 8)
                 Y_VERIFY(Info->Type.GetErasure() == TErasureType::ErasureMirror3dc);
-                patchedPartId = 1 + patchedIdxInSubgroup / 3;;
+                // patchedPartId = 1 + patchedIdxInSubgroup / 3;;
             }
 
             ReceivedResponseFlags[idxInSubgroup] = false;

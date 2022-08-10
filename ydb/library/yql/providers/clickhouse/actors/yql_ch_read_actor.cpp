@@ -91,11 +91,11 @@ private:
         }
     }
 
-    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 freeSpace) final {
+    i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueVector& buffer, bool& finished, i64 /*freeSpace*/) final {
         if (Result) {
             const auto size = Result->size();
             buffer.emplace_back(NKikimr::NMiniKQL::MakeString(std::string_view(*Result)));
-            freeSpace -= size;
+            // freeSpace -= size;
             finished = true;
             Result.reset();
             return size;

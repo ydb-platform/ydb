@@ -45,10 +45,10 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
 
     template<typename TPtr>
     void SendReply(TPtr& reply) {
-        ui32 size = 0;
+        /*ui32 size = 0;
         for (const TEvBlobStorage::TEvRangeResult::TResponse& resp : reply->Responses) {
             size += resp.Buffer.size();
-        }
+        }*/
         Mon->CountRangeResponseTime(TActivationContext::Now() - StartTime);
         SendResponseAndDie(std::move(reply));
     }

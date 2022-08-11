@@ -816,7 +816,7 @@ class TSerializeFormat : public TBoxedValue {
             const size_t Size;
         };
 
-        using TPartitionByPayload = std::pair<NDB::Block, bool>; //+ flag of first block on key.
+        using TPartitionByPayload = std::pair<NDB::Block, std::unique_ptr<NDB::IBlockOutputStream>>;
         using TPartitionsMap = std::unordered_map<TPartitionByKey, TPartitionByPayload, TPartitionMapStuff, TPartitionMapStuff, TStdAllocatorForUdf<std::pair<const TPartitionByKey, TPartitionByPayload>>>;
     public:
         TStreamValue(const IValueBuilder* valueBuilder, const TUnboxedValue& stream, const std::string& type, const NDB::FormatSettings& settings, const std::vector<ui32>& keysIndexes, const std::vector<ui32>& payloadsIndexes, size_t blockSizeLimit, size_t keysCountLimit, size_t totalSizeLimit, const std::vector<TColumnMeta>& inMeta, const NDB::ColumnsWithTypeAndName& columns, const TSourcePosition& pos)
@@ -831,19 +831,23 @@ class TSerializeFormat : public TBoxedValue {
             , Pos(pos)
             , HeaderBlock(columns)
             , Buffer(std::make_unique<NDB::WriteBufferFromOwnString>())
-            , BlockStream(std::make_unique<NDB::OutputStreamToOutputFormat>(NDB::FormatFactory::instance().getOutputFormat(type, *Buffer, HeaderBlock, nullptr, {}, settings)))
+            , Settings(settings)
+            , Type(type)
             , PartitionsMap(0ULL, TPartitionMapStuff(KeysIndexes.size()), TPartitionMapStuff(KeysIndexes.size()))
             , Cache(KeysIndexes.size() + 1U)
         {}
     private:
-        void FlushKey(const TPartitionsMap::const_iterator it, TUnboxedValue& result) {
+        void FlushKey(const TPartitionsMap::iterator it, TUnboxedValue& result) {
             TotalSize -= it->second.first.bytes();
-            if (it->second.second)
-                BlockStream->writePrefix();
-            BlockStream->write(it->second.first);
+            if (!it->second.second) {
+                it->second.second = std::make_unique<NDB::OutputStreamToOutputFormat>(NDB::FormatFactory::instance().getOutputFormat(Type, *Buffer, HeaderBlock, nullptr, {}, Settings));
+                it->second.second->writePrefix();
+            }
+            it->second.second->write(it->second.first);
             if (IsFinished)
-                BlockStream->writeSuffix();
-            BlockStream->flush();
+                it->second.second->writeSuffix();
+            it->second.second->flush();
+            it->second.first = HeaderBlock.cloneEmpty();
 
             if (KeysIndexes.empty())
                 result = ValueBuilder->NewString(Buffer->str());
@@ -870,24 +874,21 @@ class TSerializeFormat : public TBoxedValue {
                             const auto top = std::max_element(PartitionsMap.begin(), PartitionsMap.end(),
                                 [](const TPartitionsMap::value_type& l, const TPartitionsMap::value_type& r){ return l.second.first.bytes(), r.second.first.bytes(); });
                             FlushKey(top, result);
-                            top->second = std::make_pair(HeaderBlock.cloneEmpty(), false);
                         }
 
                         TPartitionByKey keys(KeysIndexes.size());
                         for (auto i = 0U; i < keys.size(); ++i)
                             keys[i] = row.GetElement(KeysIndexes[i]);
 
-                        const auto ins = PartitionsMap.emplace(keys, std::make_pair(HeaderBlock.cloneEmpty(), true));
+                        const auto ins = PartitionsMap.emplace(keys, std::make_pair(HeaderBlock.cloneEmpty(), nullptr));
 
                         if (ins.second && PartitionsMap.size() > KeysCountLimit) {
                             UdfTerminate((TStringBuilder() << ValueBuilder->WithCalleePosition(Pos) << " Too many unique keys: " << PartitionsMap.size()).data());
                         }
 
                         const bool flush = !ins.second && ins.first->second.first.bytes() >= BlockSizeLimit;
-                        if (flush) {
+                        if (flush)
                             FlushKey(ins.first, result);
-                            ins.first->second = std::make_pair(HeaderBlock.cloneEmpty(), false);
-                        }
 
                         TotalSize -= ins.first->second.first.bytes();
                         auto columns = ins.first->second.first.mutateColumns();
@@ -912,7 +913,7 @@ class TSerializeFormat : public TBoxedValue {
             if (PartitionsMap.empty())
                 return EFetchStatus::Finish;
 
-            FlushKey(PartitionsMap.cbegin(), result);
+            FlushKey(PartitionsMap.begin(), result);
             PartitionsMap.erase(PartitionsMap.cbegin());
             return EFetchStatus::Ok;
         }
@@ -935,7 +936,8 @@ class TSerializeFormat : public TBoxedValue {
 
         const NDB::Block HeaderBlock;
         const std::unique_ptr<NDB::WriteBufferFromOwnString> Buffer;
-        const std::unique_ptr<NDB::IBlockOutputStream> BlockStream;
+        const NDB::FormatSettings Settings;
+        const std::string Type;
 
         TPartitionsMap PartitionsMap;
 

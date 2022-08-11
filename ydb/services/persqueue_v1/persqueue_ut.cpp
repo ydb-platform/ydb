@@ -20,6 +20,7 @@
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/dynamic_counters/encode.h>
 #include <google/protobuf/text_format.h>
@@ -3280,8 +3281,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Codecs: "lzop"
       Codecs: "CUSTOM"
     }
-    ReadRuleServiceTypes: "data-transfer"
-    ReadRuleServiceTypes: "data-transfer"
+    ReadRuleServiceTypes: "data-streams"
+    ReadRuleServiceTypes: "data-streams"
     FormatVersion: 0
     Codecs {
       Ids: 2
@@ -3630,7 +3631,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
         checkDescribe({
-            {"acc/consumer1", "data-transfer"},
+            {"acc/consumer1", "data-streams"},
             {"acc/consumer2", "MyGreatType"}
         });
         {
@@ -3669,7 +3670,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
         }
         checkDescribe({
-            {"acc/consumer1", "data-transfer"},
+            {"acc/consumer1", "data-streams"},
             {"acc/consumer2", "AnotherType"},
             {"acc/consumer3", "SecondType"}
         });
@@ -3699,7 +3700,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
         }
         checkDescribe({
-            {"acc/consumer1", "data-transfer"},
+            {"acc/consumer1", "data-streams"},
             {"acc/consumer2", "AnotherType"},
             {"acc/consumer3", "SecondType"}
         });
@@ -4240,6 +4241,116 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             );
         }
     }
+
+
+    void TestReadRuleServiceTypePasswordImpl(bool forcePassword)
+    {
+        TServerSettings settings = PQSettings(0);
+        {
+            settings.PQConfig.SetDisallowDefaultClientServiceType(false);
+            settings.PQConfig.SetForceClientServiceTypePasswordCheck(forcePassword);
+            settings.PQConfig.MutableDefaultClientServiceType()->SetName("default_type");
+            settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+            auto type = settings.PQConfig.AddClientServiceType();
+            type->SetName("MyGreatType");
+            TString passwordHash = MD5::Data("password");
+            passwordHash.to_lower();
+            type->AddPasswordHashes(passwordHash);
+        }
+
+        NPersQueue::TTestServer server(settings);
+
+        {
+            NYdb::TDriverConfig driverCfg;
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+            std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+            auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
+
+            {
+                NYdb::NTopic::TCreateTopicSettings settings;
+
+                NYdb::NTopic::TConsumerSettings<NYdb::NTopic::TCreateTopicSettings> consumerSettings(settings, "consumer");
+                consumerSettings.AddAttribute("_service_type", "MyGreatType");
+                if (!forcePassword)
+                    consumerSettings.AddAttribute("_service_type_password", "aaa");
+
+                settings.PartitioningSettings(1,1).AppendConsumers(consumerSettings);
+
+                auto res = topicClient.CreateTopic("/Root/PQ/ttt", settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(!res.GetValue().IsSuccess());
+            }
+            {
+                NYdb::NTopic::TCreateTopicSettings settings;
+                settings.PartitioningSettings(1,1)
+                    .BeginAddConsumer("consumer").AddAttribute("_service_type", "MyGreatType")
+                                                 .AddAttribute("_service_type_password", "password")
+                    .EndAddConsumer();
+                auto res = topicClient.CreateTopic("/Root/PQ/ttt", settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+            }
+
+            {
+                NYdb::NTopic::TAlterTopicSettings settings;
+
+                NYdb::NTopic::TAlterConsumerSettings consumerSettings(settings, "consumer");
+
+                if (!forcePassword) {
+                    consumerSettings.BeginAlterAttributes().Add("_service_type_password", "aaa");
+                }
+
+                settings
+                    .BeginAddConsumer("consumer2")
+                    .EndAddConsumer()
+                    .AppendAlterConsumers(consumerSettings);
+                auto res = topicClient.AlterTopic("/Root/PQ/ttt", settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(!res.GetValue().IsSuccess());
+            }
+            {
+                NYdb::NTopic::TAlterTopicSettings settings;
+                settings
+                    .BeginAddConsumer("consumer2")
+                    .EndAddConsumer()
+                    .BeginAlterConsumer("consumer").BeginAlterAttributes().Alter("_service_type_password", "password")
+                                                   .EndAlterAttributes()
+                    .EndAlterConsumer();
+                auto res = topicClient.AlterTopic("/Root/PQ/ttt", settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+            }
+
+            {
+                NYdb::NTopic::TAlterTopicSettings settings;
+                settings.AppendDropConsumers("consumer");
+                auto res = topicClient.AlterTopic("/Root/PQ/ttt", settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+            }
+
+            { // check that important consumer is forbidden
+                NYdb::NTopic::TAlterTopicSettings settings;
+                settings
+                    .BeginAddConsumer("consumer2").Important(true)
+                    .EndAddConsumer();
+                auto res = topicClient.AlterTopic("/Root/PQ/ttt", settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(!res.GetValue().IsSuccess());
+            }
+        }
+    }
+    Y_UNIT_TEST(TestReadRuleServiceTypePassword) {
+        TestReadRuleServiceTypePasswordImpl(false);
+        TestReadRuleServiceTypePasswordImpl(true);
+    }
+
 
     Y_UNIT_TEST(TClusterTrackerTest) {
         APITestSetup setup{TEST_CASE_NAME};

@@ -56,6 +56,23 @@ public:
         appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER_X);
         appConfig.MutablePQConfig()->AddNonChargeableUser(NON_CHARGEABLE_USER_Y);
 
+        appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(128);
+        appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(512);
+        appConfig.MutablePQConfig()->AddValidWriteSpeedLimitsKbPerSec(1_KB);
+
+        auto limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
+        limit->SetMinPeriodSeconds(0);
+        limit->SetMaxPeriodSeconds(TDuration::Days(1).Seconds());
+        limit->SetMinStorageMegabytes(0);
+        limit->SetMaxStorageMegabytes(0);
+
+        limit = appConfig.MutablePQConfig()->AddValidRetentionLimits();
+        limit->SetMinPeriodSeconds(0);
+        limit->SetMaxPeriodSeconds(TDuration::Days(7).Seconds());
+        limit->SetMinStorageMegabytes(50_KB);
+        limit->SetMaxStorageMegabytes(1_MB);
+
+
         MeteringFile = MakeHolder<TTempFileHandle>("meteringData.txt");
         appConfig.MutableMeteringConfig()->SetMeteringFilePath(MeteringFile->Name());
 
@@ -179,13 +196,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             if (result.GetStatus() != EStatus::SUCCESS) {
                 result.GetIssues().PrintTo(Cerr);
             }
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
@@ -206,7 +224,8 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->DescribeStreamSummary(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description_summary().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
@@ -225,7 +244,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->ListStreams().ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names(0), streamName);
         }
@@ -242,14 +261,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->UpdateShardCount(streamName,
                 NYDS_V1::TUpdateShardCountSettings().TargetShardCount(15)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // now when stream is created delete should work fine
         {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // Describe should fail after delete
@@ -268,7 +287,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)
                                                 .RetentionPeriodHours(20)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -281,7 +300,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
                 Cerr << result.GetResult().DebugString() << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 sleep(1);
             }
         }
@@ -352,7 +371,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
                                                 .RetentionStorageMegabytes(storageMb)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -365,7 +384,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
                 Cerr << result.GetResult().DebugString() << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 sleep(1);
             }
         }
@@ -388,14 +407,15 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [storageMb](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("usage"));
                                 auto& usage = map.find("usage")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetUInteger(),
-                                               storageMb);
                                 UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
                                                TInstant::Now().Seconds() - 10);
                                 UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
                                                TInstant::Now().Seconds() - 9);
                                 UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
                                                          "mbyte*second");
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetUInteger(),
+                                               storageMb);
+
                             });
         UNIT_ASSERT_VALUES_EQUAL(storageSchemaFound, 20);
 
@@ -492,7 +512,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = client.PutRecords(streamPath, records).ExtractValueSync();
             Cerr << result.GetResult().DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -500,13 +520,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                  NYDS_V1::TUpdateStreamSettings().TargetShardCount(2)
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DeleteStream(streamPath).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         auto putUnitsSchemaFound =
@@ -554,6 +574,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)
                                                 .RetentionStorageMegabytes(40_GB / 1_MB)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
         }
 
@@ -603,7 +624,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)
                                                 .RetentionStorageMegabytes(50_GB / 1_MB)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -623,7 +644,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_status(),
                                      YDS_V1::StreamDescription::ACTIVE);
@@ -642,7 +663,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -666,7 +687,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                     ).ExtractValueSync();
                 Cerr << result.GetIssues().ToString() << "\n";
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             }
         }
 
@@ -675,7 +696,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         for (int i = 0; i < 3; i++) {
             auto result = testServer.DataStreamsClient->ListStreams(NYDS_V1::TListStreamsSettings().Limit(6).ExclusiveStartStreamName(startStream)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 6);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().has_more_streams(), true);
             streams.insert(result.GetResult().stream_names().begin(), result.GetResult().stream_names().end());
@@ -685,7 +706,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->ListStreams(NYDS_V1::TListStreamsSettings().Limit(6).ExclusiveStartStreamName(startStream)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_names().size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().has_more_streams(), false);
             streams.insert(result.GetResult().stream_names().begin(), result.GetResult().stream_names().end());
@@ -701,13 +722,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -718,14 +739,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1",
                 NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -738,7 +759,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName,
                 NYDS_V1::TDeleteStreamSettings().EnforceConsumerDeletion(true)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -750,14 +771,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(3)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1",
                 NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -771,14 +792,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->DeregisterStreamConsumer(streamName, "user1",
                 NYDS_V1::TDeregisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName,
                 NYDS_V1::TDeleteStreamSettings().EnforceConsumerDeletion(false)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
     }
 
@@ -789,21 +810,22 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         for (ui32 i = 0; i < 2; ++i) {
             auto result = testServer.DataStreamsClient->UpdateStream(streamName,
                  NYDS_V1::TUpdateStreamSettings().RetentionPeriodHours(5).TargetShardCount(20).WriteQuotaKbPerSec(128)
             ).ExtractValueSync();
+            Cerr << result.GetIssues().ToString() << "\n";
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards_size(), 20);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 5);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 128);
@@ -820,7 +842,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(1).RetentionStorageMegabytes(50_GB / 1_MB))
                 .ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -830,13 +852,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                  .RetentionStorageMegabytes(55_GB / 1_MB)
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().shards_size(), 10);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(),
                                      TDuration::Days(7).Hours());
@@ -853,14 +875,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->DescribeStream(streamName,
                 NYDS_V1::TDescribeStreamSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(), 24);
         }
 
@@ -877,7 +899,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TDecreaseStreamRetentionPeriodSettings().RetentionPeriodHours(8)
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -893,7 +915,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TIncreaseStreamRetentionPeriodSettings().RetentionPeriodHours(15)
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -906,7 +928,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
                 Cerr << result.GetResult().DebugString() << Endl;
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 sleep(1);
             }
         }
@@ -941,7 +963,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(9)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // describe stream
@@ -955,7 +977,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                         .ExclusiveStartShardId(exclusiveStartShardId)
                                                     ).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 auto& description = result.GetResult().stream_description();
                 UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 2);
                 UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), true);
@@ -972,7 +994,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                             .ExclusiveStartShardId(exclusiveStartShardId)
                 ).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 auto &description = result.GetResult().stream_description();
                 UNIT_ASSERT_VALUES_EQUAL(description.shards().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(description.has_more_shards(), false);
@@ -995,7 +1017,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken(""));
@@ -1005,7 +1027,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         auto putRecordResult =
             client.PutRecord("/Root/" + streamName, {dataStr, dataStr, dataStr}).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(putRecordResult.GetStatus(), EStatus::SUCCESS, putRecordResult.GetIssues().ToString());
     }
 
     Y_UNIT_TEST(TestPutRecordsWithRead) {
@@ -1016,7 +1038,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
@@ -1029,7 +1051,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         Cerr << putRecordResult.GetResult().DebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(putRecordResult.GetStatus(), EStatus::SUCCESS, putRecordResult.GetIssues().ToString());
 
         {
             std::vector<NYDS_V1::TDataRecord> records;
@@ -1040,7 +1062,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = client.PutRecords(streamName, records).ExtractValueSync();
             Cerr << result.GetResult().DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
@@ -1048,7 +1070,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1", NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user1");
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_status(),
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
@@ -1094,7 +1116,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
@@ -1112,7 +1134,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                    {{shortEnoughKey, shortEnoughKey, ""},
                                     {shortEnoughKey, shortEnoughKey, ""}}).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         // Test for too long data
         TString longData = TString(1_MB + 1, '1');
@@ -1128,7 +1150,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                    {{shortEnoughData, shortEnoughKey, ""},
                                     {"",              shortEnoughKey, ""}}).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         TString longExplicitHash = "340282366920938463463374607431768211456";
         TString shortEnoughExplicitHash = "340282366920938463463374607431768211455";
@@ -1150,13 +1172,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                    {{"", shortEnoughKey, shortEnoughExplicitHash},
                                     {"", shortEnoughKey, shortEnoughExplicitHash}}).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = client.PutRecords(streamName,
                                    {{"", shortEnoughKey, "0"},
                                     {"", shortEnoughKey, "0"}}).ExtractValueSync();
         UNIT_ASSERT(result.IsSuccess());
-        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_INFO);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PERSQUEUE, NLog::EPriority::PRI_INFO);
@@ -1271,7 +1293,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
             result = client.PutRecords(streamPath, records).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             Cerr << "PutRecordsResponse = " << result.GetResult().DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().failed_record_count(), 0);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records_size(), records.size());
@@ -1280,7 +1302,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             TString dataStr = "9876543210";
             auto putRecordResult = client.PutRecord(streamPath, {dataStr, dataStr, ""}).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(putRecordResult.GetStatus(), EStatus::SUCCESS, putRecordResult.GetIssues().ToString());
             Cerr << "PutRecord response = " << putRecordResult.GetResult().DebugString() << Endl;
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().shard_id(), "shard-000004");
             UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "7");
@@ -1298,7 +1320,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::EPriority::PRI_DEBUG);
         kikimr->GetRuntime()->SetLogPriority(NKikimrServices::PQ_WRITE_PROXY, NLog::EPriority::PRI_DEBUG);
@@ -1310,7 +1332,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         Cerr << putRecordResult.GetResult().DebugString() << Endl;
 
         UNIT_ASSERT_VALUES_EQUAL(putRecordResult.IsTransportError(), false);
-        UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetStatus(), EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(putRecordResult.GetStatus(), EStatus::SUCCESS, putRecordResult.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(putRecordResult.GetResult().sequence_number(), "0");
 
         NYdb::NPersQueue::TPersQueueClient pqClient(*driver);
@@ -1318,7 +1340,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1", NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user1");
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_status(),
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
@@ -1360,7 +1382,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // List stream consumers -> OK
@@ -1368,7 +1390,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(100)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 0);
         }
 
@@ -1409,7 +1431,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user1",
                 NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user1");
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_status(),
                                      YDS_V1::ConsumerDescription_ConsumerStatus_ACTIVE);
@@ -1420,7 +1442,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user2",
                 NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user2");
         }
 
@@ -1429,7 +1451,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(100)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 2);
         }
 
@@ -1438,7 +1460,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->DeregisterStreamConsumer(streamName, "user2",
                 NYDS_V1::TDeregisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // List stream consumers -> OK, there's only 1 now
@@ -1446,7 +1468,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(100)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 1);
         }
 
@@ -1455,7 +1477,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->RegisterStreamConsumer(streamName, "user2",
                 NYDS_V1::TRegisterStreamConsumerSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumer().consumer_name(), "user2");
         }
 
@@ -1472,7 +1494,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 1);
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetResult().next_token().size(), 0);
 
@@ -1480,7 +1502,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().NextToken(nextToken)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().next_token().size(), 0);
         }
@@ -1490,7 +1512,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListStreamConsumers(streamName,
                 NYDS_V1::TListStreamConsumersSettings().MaxResults(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().consumers().size(), 1);
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetResult().next_token().size(), 0);
 
@@ -1538,7 +1560,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->DeleteStream(streamName,
                 NYDS_V1::TDeleteStreamSettings().EnforceConsumerDeletion(true)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         // List consumers of deleted stream -> get BAD_REQUEST
@@ -1557,7 +1579,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -1578,7 +1600,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000001",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -1594,7 +1616,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("0")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -1603,7 +1625,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("0")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -1612,7 +1634,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("100")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -1621,7 +1643,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("001122")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -1639,7 +1661,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().Timestamp(TInstant::Now().MilliSeconds() * 0.99)
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             NKikimrPQ::TYdsShardIterator protoShardIterator;
             TString decoded;
@@ -1665,7 +1687,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         const ui32 recordsCount = 30;
@@ -1688,14 +1710,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
         }
 
@@ -1703,14 +1725,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
                 YDS_V1::ShardIteratorType::TRIM_HORIZON).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), recordsCount);
         }
 
@@ -1720,14 +1742,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("0002")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), recordsCount - 2);
         }
 
@@ -1737,14 +1759,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("0002")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), recordsCount - 3);
         }
 
@@ -1754,14 +1776,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("99999")
             ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
         }
 
@@ -1769,7 +1791,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
@@ -1784,7 +1806,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), recordsCount);
         }
 
@@ -1798,7 +1820,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream("/Root/" + streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         std::string data;
@@ -1809,7 +1831,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             NYDS_V1::TDataRecord dataRecord{{data.begin(), data.end()}, id, ""};
             auto result = testServer.DataStreamsClient->PutRecord(streamName, dataRecord).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         NYDS_V1::TDataStreamsClient client(*driver, TCommonClientSettings().AuthToken("user2@builtin"));
@@ -1848,7 +1870,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     YDS_V1::ShardIteratorType::TRIM_HORIZON
                 ).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
@@ -1856,7 +1878,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = client.GetRecords(shardIterator,
                                             NYDS_V1::TGetRecordsSettings().Limit(2)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(std::stoi(result.GetResult().records().begin()->sequence_number()), 0);
         }
@@ -1869,7 +1891,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         std::vector<std::string> putData;
@@ -1888,7 +1910,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     NYDS_V1::TDataRecord dataRecord{{data.begin(), data.end()}, id, ""};
                     auto result = testServer.DataStreamsClient->PutRecord(streamName, dataRecord).ExtractValueSync();
                     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 }
                 Sleep(TDuration::Seconds(1));
             }
@@ -1902,7 +1924,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     YDS_V1::ShardIteratorType::AT_SEQUENCE_NUMBER,
                      NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber(id)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 shardIterator = result.GetResult().shard_iterator();
             }
 
@@ -1910,7 +1932,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
                      NYDS_V1::TGetRecordsSettings().Limit(1)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(
                     std::stoi(result.GetResult().records().begin()->sequence_number()), i);
@@ -1927,7 +1949,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         const ui32 recordsCount = 24;
@@ -1946,7 +1968,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     timestamps.push_back(TInstant::Now().MilliSeconds());
                     auto result = testServer.DataStreamsClient->PutRecord(streamName, dataRecord).ExtractValueSync();
                     UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 }
                 Sleep(TDuration::Seconds(1));
             }
@@ -1960,7 +1982,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                     YDS_V1::ShardIteratorType::AT_TIMESTAMP,
                      NYDS_V1::TGetShardIteratorSettings().Timestamp(timestamps[i])).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 shardIterator = result.GetResult().shard_iterator();
             }
 
@@ -1968,7 +1990,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                 auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
                      NYDS_V1::TGetRecordsSettings().Limit(1)).ExtractValueSync();
                 UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
                 UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
                 UNIT_ASSERT_VALUES_EQUAL(std::stoi(result.GetResult().records().begin()->sequence_number()), i);
             }
@@ -1983,7 +2005,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(5)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         const ui32 recordsCount = 30;
@@ -2006,14 +2028,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000001",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
         }
 
@@ -2021,14 +2043,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000002",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
         }
 
@@ -2036,14 +2058,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000003",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
         }
 
@@ -2051,14 +2073,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000002",
                 YDS_V1::ShardIteratorType::LATEST).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             shardIterator = result.GetResult().shard_iterator();
         }
 
         {
             auto result = testServer.DataStreamsClient->GetRecords(shardIterator).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
         }
     }
@@ -2070,14 +2092,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
             auto result = testServer.DataStreamsClient->ListShards(streamName, {},
                 NYDS_V1::TListShardsSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
         {
@@ -2086,7 +2108,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListShards(streamName, filter,
                 NYDS_V1::TListShardsSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().shards().size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().shards().begin()->shard_id(), "shard-000000");
             UNIT_ASSERT_VALUES_UNEQUAL(result.GetResult().shards().begin()->shard_id(), "shard-000001");
@@ -2098,7 +2120,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListShards(streamName, filter,
                 NYDS_V1::TListShardsSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().shards().size(), 1);
         }
 
@@ -2109,7 +2131,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             auto result = testServer.DataStreamsClient->ListShards(streamName, filter,
                 NYDS_V1::TListShardsSettings()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().shards().size(), 1);
         }
 
@@ -2193,4 +2215,72 @@ Y_UNIT_TEST_SUITE(DataStreams) {
 
     }
 
+    Y_UNIT_TEST(TestInvalidRetentionCombinations) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        const ui32 shardCount = 5;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionStorageMegabytes(10)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+/*        { //TODO: datastreams api uses only one retention parameter
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionStorageMegabytes(55_KB).RetentionPeriodHours(8 * 24)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }*/
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionPeriodHours(6 * 24)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount).WriteQuotaKbPerSec(127)
+                                                .RetentionPeriodHours(24)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount).WriteQuotaKbPerSec(1025)
+                                                .RetentionPeriodHours(24)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName + "b",
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionStorageMegabytes(55_KB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName + "a",
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionPeriodHours(24)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            Cerr << result.GetIssues().ToString() << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+    }
 }

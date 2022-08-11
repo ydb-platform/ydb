@@ -33,25 +33,30 @@ namespace NKikimr::NGRpcProxy::V1 {
         const TString& path,
         const TString& database = TString(),
         const TString& localDc = TString()
+
     );
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
         const Ydb::Topic::AlterTopicRequest& request,
         NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr,
         const TActorContext& ctx,
-        TString& error
+        TString& error,
+        bool isCdcStream
     );
 
 
     struct TClientServiceType {
         TString Name;
         ui32 MaxCount;
+        TVector<TString> PasswordHashes;
     };
     typedef std::map<TString, TClientServiceType> TClientServiceTypes;
     TClientServiceTypes GetSupportedClientServiceTypes(const TActorContext& ctx);
 
     // Returns true if have duplicated read rules
-    bool CheckReadRulesConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes, TString& error, const TActorContext& ctx);
+    Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config, const TClientServiceTypes& supportedReadRuleServiceTypes,
+                                            TString& error, const TActorContext& ctx,
+                                            const Ydb::StatusIds::StatusCode dubsStatus = Ydb::StatusIds::BAD_REQUEST);
 
     TString AddReadRuleToConfig(
         NKikimrPQ::TPQTabletConfig *config,

@@ -55,7 +55,6 @@ message TPQConfig {
     optional uint32 ReadLatencyBigMs         = 23 [default = 550];
     optional uint32 ReadLatencyFromDiskBigMs = 28 [default = 1000];
 
-
     message TQuotingConfig {
         optional bool EnableQuoting = 1 [default = true];
         optional string QuotersDirectoryPath = 2 [default = ""];
@@ -109,6 +108,15 @@ message TPQConfig {
 
     repeated uint32 ValidWriteSpeedLimitsKbPerSec = 34;
 
+    message TValidRetentionLimit {
+        optional uint32 MinPeriodSeconds = 1;
+        optional uint32 MaxPeriodSeconds = 2;
+        optional uint64 MinStorageMegabytes = 3;
+        optional uint64 MaxStorageMegabytes = 4;
+    }
+
+    repeated TValidRetentionLimit ValidRetentionLimits = 48;
+
     message TReadMeteringConfig {
         message TPricing {
             optional string Name = 1 [default = "unknown"];
@@ -132,10 +140,14 @@ message TPQConfig {
     optional string Database = 38;
 
     message TClientServiceType {
-        optional string Name = 1 [default = "data-transfer"];
+        optional string Name = 1 [default = "data-streams"];
         optional string ReadPricingName = 2;
         optional uint32 MaxReadRulesCountPerTopic = 3 [default = 0]; // 0 means no limit. If you want to allow only zero count, then do not specify ClientServiceType.
+
+        repeated string PasswordHashes = 4; //if one password matches, then user can use this type
     }
+
+    optional bool ForceClientServiceTypePasswordCheck = 49 [default = false];
 
     repeated TClientServiceType ClientServiceType = 39;
     optional TClientServiceType DefaultClientServiceType = 40;

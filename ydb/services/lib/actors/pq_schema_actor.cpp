@@ -9,6 +9,8 @@
 
 #include <util/string/vector.h>
 
+#include <library/cpp/digest/md5/md5.h>
+
 namespace NKikimr::NGRpcProxy::V1 {
 
     constexpr TStringBuf GRPCS_ENDPOINT_PREFIX = "grpcs://";
@@ -24,12 +26,23 @@ namespace NKikimr::NGRpcProxy::V1 {
         ui32 count = pqConfig.GetDefaultClientServiceType().GetMaxReadRulesCountPerTopic();
         if (count == 0) count = Max<ui32>();
         TString name = pqConfig.GetDefaultClientServiceType().GetName();
-        serviceTypes.insert({name, {name, count}});
+        TVector<TString> passwordHashes;
+        for (auto ph : pqConfig.GetDefaultClientServiceType().GetPasswordHashes()) {
+            passwordHashes.push_back(ph);
+        }
+
+        serviceTypes.insert({name, {name, count, passwordHashes}});
+
         for (const auto& serviceType : pqConfig.GetClientServiceType()) {
             ui32 count = serviceType.GetMaxReadRulesCountPerTopic();
             if (count == 0) count = Max<ui32>();
             TString name = serviceType.GetName();
-            serviceTypes.insert({name, {name, count}});
+            TVector<TString> passwordHashes;
+            for (auto ph : serviceType.GetPasswordHashes()) {
+                passwordHashes.push_back(ph);
+            }
+
+            serviceTypes.insert({name, {name, count, passwordHashes}});
         }
         return serviceTypes;
     }
@@ -98,8 +111,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             ct->AddCodecs(to_lower(Ydb::PersQueue::V1::Codec_Name((Ydb::PersQueue::V1::Codec)codec)).substr(6));
         }
 
-        if (rr.important())
+        if (rr.important()) {
+            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return TStringBuilder() << "important flag is forbiden for consumer " << rr.consumer_name();
+            }
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+        }
 
         if (!rr.service_type().empty()) {
             if (!supportedClientServiceTypes.contains(rr.service_type())) {
@@ -138,6 +155,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         NKikimrPQ::TPQTabletConfig* config,
         const Ydb::Topic::Consumer& rr,
         const TClientServiceTypes& supportedClientServiceTypes,
+        const bool checkServiceType,
         const TActorContext& ctx
     ) {
         auto consumerName = NPersQueue::ConvertNewConsumerName(rr.name(), ctx);
@@ -162,12 +180,15 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->AddReadFromTimestampsMs(rr.read_from().seconds() * 1000);
 
         config->AddConsumerFormatVersions(0);
-        TString service_type;
+        TString serviceType;
         const auto& pqConfig = AppData(ctx)->PQConfig;
-        if (!pqConfig.GetDisallowDefaultClientServiceType()) {
-            const auto& defaultCientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
-            service_type = defaultCientServiceType;
-        }
+
+        const auto& defaultClientServiceType = pqConfig.GetDefaultClientServiceType().GetName();
+        serviceType = defaultClientServiceType;
+
+        TString passwordHash = "";
+        bool hasPassword = false;
+
         ui32 version = 0;
         for (auto& pair : rr.attributes()) {
             if (pair.first == "_version") {
@@ -183,14 +204,40 @@ namespace NKikimr::NGRpcProxy::V1 {
                         return TStringBuilder() << "Unknown _service_type '" << pair.second
                                                 << "' for consumer '" << rr.name() << "'";
                     }
-                    service_type = pair.second;
+                    serviceType = pair.second;
+                }
+            } else if (pair.first == "_service_type_password") {
+                passwordHash = MD5::Data(pair.second);
+                passwordHash.to_lower();
+                hasPassword = true;
+            }
+        }
+        if (serviceType.empty()) {
+            return TStringBuilder() << "service type cannot be empty for consumer '" << rr.name() << "'";
+        }
+
+        Y_VERIFY(supportedClientServiceTypes.find(serviceType) != supportedClientServiceTypes.end());
+
+        const NKikimr::NGRpcProxy::V1::TClientServiceType& clientServiceType = supportedClientServiceTypes.find(serviceType)->second;
+
+        if (checkServiceType) {
+            bool found = clientServiceType.PasswordHashes.empty() && !hasPassword;
+            for (auto ph : clientServiceType.PasswordHashes) {
+                if (ph == passwordHash) {
+                    found = true;
+                }
+            }
+            if (!found) {
+                if (hasPassword) {
+                    return "incorrect client service type password";
+                }
+                if (AppData(ctx)->PQConfig.GetForceClientServiceTypePasswordCheck()) { // no password and check is required
+                    return "no client service type password provided";
                 }
             }
         }
-        if (service_type.empty()) {
-            return TStringBuilder() << "service type cannot be empty for consumer '" << rr.name() << "'";
-        }
-        config->AddReadRuleServiceTypes(service_type);
+
+        config->AddReadRuleServiceTypes(serviceType);
         config->AddReadRuleVersions(version);
 
         auto ct = config->AddConsumerCodecs();
@@ -203,8 +250,12 @@ namespace NKikimr::NGRpcProxy::V1 {
             ct->AddCodecs(Ydb::Topic::Codec_IsValid(codec) ? LegacySubstr(to_lower(Ydb::Topic::Codec_Name((Ydb::Topic::Codec)codec)), 6) : "CUSTOM");
         }
 
-        if (rr.important())
+        if (rr.important()) {
+            if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return TStringBuilder() << "important flag is forbiden for consumer " << rr.name();
+            }
             config->MutablePartitionConfig()->AddImportantClientId(consumerName);
+        }
 
         return "";
     }
@@ -322,6 +373,66 @@ namespace NKikimr::NGRpcProxy::V1 {
         return false;
     }
 
+    Ydb::StatusIds::StatusCode CheckConfig(const NKikimrPQ::TPQTabletConfig& config,
+                              const TClientServiceTypes& supportedClientServiceTypes,
+                              TString& error, const TActorContext& ctx, const Ydb::StatusIds::StatusCode dubsStatus)
+    {
+        ui32 speed = config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond();
+        ui32 burst = config.GetPartitionConfig().GetBurstSize();
+
+        std::set<ui32> validLimits {};
+        if (AppData(ctx)->PQConfig.ValidWriteSpeedLimitsKbPerSecSize() == 0) {
+            validLimits.insert(speed);
+        } else {
+            const auto& limits = AppData()->PQConfig.GetValidWriteSpeedLimitsKbPerSec();
+            for (auto& limit : limits) {
+                validLimits.insert(limit * 1_KB);
+            }
+        }
+        if (validLimits.find(speed) == validLimits.end()) {
+            error = TStringBuilder() << "write_speed per second in partition must have values from set {" << JoinSeq(",", validLimits) << "}, got " << speed;
+            return Ydb::StatusIds::BAD_REQUEST;
+        }
+
+        if (burst > speed * 2 && burst > 1_MB) {
+            error = TStringBuilder()
+                    << "Invalid write burst in partition specified: " << burst
+                    << " vs " << Max(speed * 2, (ui32)1_MB);
+            return Ydb::StatusIds::BAD_REQUEST;
+        }
+
+        ui32 lifeTimeSeconds = config.GetPartitionConfig().GetLifetimeSeconds();
+        ui64 storageBytes = config.GetPartitionConfig().GetStorageLimitBytes();
+
+
+
+        auto retentionLimits = AppData()->PQConfig.GetValidRetentionLimits();
+        if (retentionLimits.size() == 0) {
+            auto* limit = retentionLimits.Add();
+            limit->SetMinPeriodSeconds(lifeTimeSeconds);
+            limit->SetMaxPeriodSeconds(lifeTimeSeconds);
+            limit->SetMinStorageMegabytes(storageBytes / 1_MB);
+            limit->SetMaxStorageMegabytes(storageBytes / 1_MB + 1);
+        }
+
+        TStringBuilder errStr;
+        errStr << "retention seconds and storage bytes must fit one of:";
+        bool found = false;
+        for (auto& limit : retentionLimits) {
+            errStr << " { seconds : [" << limit.GetMinPeriodSeconds() << ", " << limit.GetMaxPeriodSeconds() << "], "
+                   <<   " storage : [" << limit.GetMinStorageMegabytes() * 1_MB << ", " << limit.GetMaxStorageMegabytes() * 1_MB << "]},";
+            found = found || (lifeTimeSeconds >= limit.GetMinPeriodSeconds() && lifeTimeSeconds <= limit.GetMaxPeriodSeconds() &&
+                storageBytes >= limit.GetMinStorageMegabytes() * 1_MB && storageBytes <= limit.GetMaxStorageMegabytes() * 1_MB);
+        }
+        if (!found) {
+            error = errStr << " provided values: seconds " << lifeTimeSeconds << ", storage " << storageBytes;
+            return Ydb::StatusIds::BAD_REQUEST;
+        }
+
+        bool hasDuplicates = CheckReadRulesConfig(config, supportedClientServiceTypes, error, ctx);
+        return error.empty() ? Ydb::StatusIds::SUCCESS : (hasDuplicates ? dubsStatus : Ydb::StatusIds::BAD_REQUEST);
+    }
+
     NYql::TIssue FillIssue(const TString &errorReason, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode) {
         NYql::TIssue res(NYql::TPosition(), errorReason);
         res.SetCode(errorCode, NYql::ESeverity::TSeverityIds_ESeverityId_S_ERROR);
@@ -375,11 +486,15 @@ namespace NKikimr::NGRpcProxy::V1 {
             }  else if (pair.first == "_federation_account") {
                 config->SetFederationAccount(pair.second);
             } else if (pair.first == "_abc_id") {
-                try {
-                    config->SetAbcId(FromString<ui32>(pair.second));
-                } catch(...) {
-                    error = TStringBuilder() << "Attribute abc_id is " << pair.second << ", which is not integer";
-                    return Ydb::StatusIds::BAD_REQUEST;
+                if (pair.second.empty()) {
+                    config->SetAbcId(0);
+                } else {
+                    try {
+                        config->SetAbcId(FromString<ui32>(pair.second));
+                    } catch(...) {
+                        error = TStringBuilder() << "Attribute abc_id is " << pair.second << ", which is not integer";
+                        return Ydb::StatusIds::BAD_REQUEST;
+                    }
                 }
             } else if (pair.first == "_max_partition_storage_size") {
                 if (pair.second.empty()) {
@@ -475,7 +590,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->SetRequireAuthWrite(true);
         config->SetRequireAuthRead(true);
         if (!alter)
-            pqDescr->SetPartitionPerTablet(2);
+            pqDescr->SetPartitionPerTablet(1);
 
         auto res = ProcessAttributes(settings.attributes(), pqDescr, error, alter);
         if (res != Ydb::StatusIds::SUCCESS) {
@@ -731,8 +846,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        CheckReadRulesConfig(*config, supportedClientServiceTypes, error, ctx);
-        return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
+        return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
     }
 
 
@@ -765,7 +879,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         config->SetRequireAuthWrite(true);
         config->SetRequireAuthRead(true);
-        pqDescr->SetPartitionPerTablet(2);
+        pqDescr->SetPartitionPerTablet(1);
 
         partConfig->SetMaxCountInPartition(Max<i32>());
 
@@ -865,14 +979,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
         for (const auto& rr : request.consumers()) {
-            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, true, ctx);
             if (!error.Empty()) {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
 
-        CheckReadRulesConfig(*config, supportedClientServiceTypes, error, ctx);
-        return error.empty() ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::BAD_REQUEST;
+        return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
     }
 
 
@@ -880,9 +993,15 @@ namespace NKikimr::NGRpcProxy::V1 {
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
             const Ydb::Topic::AlterTopicRequest& request,
             NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, const TActorContext& ctx,
-            TString& error
+            TString& error, bool isCdcStream
     ) {
+        #define CHECK_CDC  if (isCdcStream) {\
+                    error = "Full alter of cdc stream is forbidden";\
+                    return Ydb::StatusIds::BAD_REQUEST;\
+            }
+
         if (request.has_alter_partitioning_settings() && request.alter_partitioning_settings().has_set_min_active_partitions()) {
+            CHECK_CDC;
             auto parts = request.alter_partitioning_settings().set_min_active_partitions();
             if (parts == 0) parts = 1;
             pqDescr.SetTotalGroupCount(parts);
@@ -892,6 +1011,10 @@ namespace NKikimr::NGRpcProxy::V1 {
         auto config = pqDescr.MutablePQTabletConfig();
         auto partConfig = config->MutablePartitionConfig();
 
+        if (request.alter_attributes().size()) {
+            CHECK_CDC;
+        }
+
         auto res = ProcessAttributes(request.alter_attributes(), &pqDescr, error, true);
         if (res != Ydb::StatusIds::SUCCESS) {
             return res;
@@ -900,6 +1023,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool local = true; //todo: check locality
 
         if (request.has_set_retention_period()) {
+            CHECK_CDC;
             if (request.set_retention_period().seconds() < 0) {
                 error = TStringBuilder() << "retention_period must be not negative, provided " <<
                         request.set_retention_period().DebugString();
@@ -914,6 +1038,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 
         if (request.has_set_retention_storage_mb()) {
+            CHECK_CDC;
             partConfig->ClearStorageLimitBytes();
             if (request.set_retention_storage_mb())
                 partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
@@ -921,6 +1046,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         if (local) {
             if (request.has_set_partition_write_speed_bytes_per_second()) {
+                CHECK_CDC;
                 auto partSpeed = request.set_partition_write_speed_bytes_per_second();
                 if (partSpeed == 0) {
                     partSpeed = DEFAULT_PARTITION_SPEED;
@@ -929,6 +1055,7 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
 
             if (request.has_set_partition_write_burst_bytes()) {
+                CHECK_CDC;
                 const auto& burstSpeed = request.set_partition_write_burst_bytes();
                 if (burstSpeed == 0) {
                     partConfig->SetBurstSize(partConfig->GetWriteSpeedInBytesPerSecond());
@@ -939,6 +1066,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         if (request.has_set_supported_codecs()) {
+            CHECK_CDC;
             config->ClearCodecs();
             auto ct = config->MutableCodecs();
             for(const auto& codec : request.set_supported_codecs().codecs()) {
@@ -961,7 +1089,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
 
 
-        std::vector<Ydb::Topic::Consumer> consumers;
+        std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
 
         i32 dropped = 0;
 
@@ -984,8 +1112,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                     break;
                 }
             }
-            consumers.push_back(Ydb::Topic::Consumer{});
-            auto& consumer = consumers.back();
+            consumers.push_back({false, Ydb::Topic::Consumer{}}); // do not check service type for presented consumers
+            auto& consumer = consumers.back().second;
             consumer.set_name(name);
             consumer.set_important(important);
             consumer.mutable_read_from()->set_seconds(config->GetReadFromTimestampsMs(i) / 1000);
@@ -997,7 +1125,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         for (auto& cons : request.add_consumers()) {
-            consumers.push_back(cons);
+            consumers.push_back({true, cons}); // check service type for added consumers is true
         }
 
         if (dropped != request.drop_consumers_size()) {
@@ -1010,9 +1138,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             auto oldName = NPersQueue::ConvertOldConsumerName(name, ctx);
             bool found = false;
             for (auto& consumer : consumers) {
-                if (consumer.name() == name || consumer.name() == oldName) {
+                if (consumer.second.name() == name || consumer.second.name() == oldName) {
                     found = true;
-                    ProcessAlterConsumer(consumer, alter);
+                    ProcessAlterConsumer(consumer.second, alter);
+                    consumer.first = true; // check service type
                     break;
                 }
             }
@@ -1032,14 +1161,12 @@ namespace NKikimr::NGRpcProxy::V1 {
         config->ClearReadRuleVersions();
 
         for (const auto& rr : consumers) {
-            error = AddReadRuleToConfig(config, rr, supportedClientServiceTypes, ctx);
+            error = AddReadRuleToConfig(config, rr.second, supportedClientServiceTypes, rr.first, ctx);
             if (!error.Empty()) {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
-
-        bool hasDuplicates = CheckReadRulesConfig(*config, supportedClientServiceTypes, error, ctx);
-        return error.empty() ? Ydb::StatusIds::SUCCESS : (hasDuplicates ? Ydb::StatusIds::ALREADY_EXISTS : Ydb::StatusIds::BAD_REQUEST);
+        return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
     }
 
 

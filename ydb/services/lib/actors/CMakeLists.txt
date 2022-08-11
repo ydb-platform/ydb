@@ -12,6 +12,7 @@ target_link_libraries(services-lib-actors PUBLIC
   contrib-libs-cxxsupp
   yutil
   cpp-grpc-server
+  cpp-digest-md5
   ydb-core-grpc_services
   ydb-core-mind
   library-persqueue-obfuscate

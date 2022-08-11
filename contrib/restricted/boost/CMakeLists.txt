@@ -56,6 +56,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-type_traits
   restricted-boost-typeof
   restricted-boost-utility
+  restricted-boost-variant
   restricted-boost-vmd
   restricted-boost-winapi
 )

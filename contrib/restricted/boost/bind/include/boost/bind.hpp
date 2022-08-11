@@ -31,7 +31,7 @@
 
 #ifndef BOOST_BIND_NO_PLACEHOLDERS
 
-#if !defined(BOOST_BIND_GLOBAL_PLACEHOLDERS)
+#if 0 //!defined(BOOST_BIND_GLOBAL_PLACEHOLDERS)
 
 BOOST_PRAGMA_MESSAGE(
   "The practice of declaring the Bind placeholders (_1, _2, ...) "

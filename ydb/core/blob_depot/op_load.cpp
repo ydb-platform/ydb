@@ -71,9 +71,12 @@ namespace NKikimr::NBlobDepot {
             }
 
             bool Precharge(NIceDb::TNiceDb& db) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wbitwise-instead-of-logical"
                 return db.Table<Schema::Config>().Precharge()
                     & db.Table<Schema::Blocks>().Precharge()
                     & db.Table<Schema::Barriers>().Precharge();
+#pragma clang diagnostic pop
             }
 
             void Complete(const TActorContext&) override {

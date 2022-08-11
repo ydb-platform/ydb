@@ -13,6 +13,7 @@ const TItemExprType* AddAlias(const TString& alias, const TItemExprType* item, T
 TStringBuf RemoveAlias(TStringBuf column);
 TStringBuf RemoveAlias(TStringBuf column, TStringBuf& alias);
 const TItemExprType* RemoveAlias(const TItemExprType* item, TExprContext& ctx);
+TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select);
 
 IGraphTransformer::TStatus PgStarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx);
 IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);

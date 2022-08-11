@@ -1560,7 +1560,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
 
 bool ScanColumnsForSublinks(bool& needRebuildSubLinks, const TNodeSet& sublinks,
     TInputs& inputs, const THashSet<TString>& possibleAliases, bool& hasColumnRef, THashSet<TString>& refs,
-    THashMap<TString, THashSet<TString>>* qualifiedRefs, TExtContext& ctx, bool scanColumnsOnly) {
+    THashMap<TString, THashSet<TString>>* qualifiedRefs, TExtContext& ctx, bool scanColumnsOnly, THashMap<ui32, TSet<TString>>* nonProjectionColumns = nullptr) {
     needRebuildSubLinks = false;
     for (const auto& s : sublinks) {
         if (s->Child(1)->IsCallable("Void")) {
@@ -1571,7 +1571,7 @@ bool ScanColumnsForSublinks(bool& needRebuildSubLinks, const TNodeSet& sublinks,
         if (!testRowLambda.IsCallable("Void")) {
             YQL_ENSURE(testRowLambda.IsLambda());
             if (!ScanColumns(testRowLambda.TailPtr(), inputs, possibleAliases, nullptr, hasColumnRef,
-                refs, qualifiedRefs, ctx, scanColumnsOnly)) {
+                refs, qualifiedRefs, ctx, scanColumnsOnly, nonProjectionColumns)) {
                 return false;
             }
         }
@@ -2006,11 +2006,97 @@ bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
     return true;
 }
 
-bool ValidateSort(TInputs& inputs, const THashSet<TString>& possibleAliases,
+THashMap<ui32, TSet<TString>> LoadExtraColumns(TExprNode::TPtr& value, ui32 inputsCount) {
+    THashMap<ui32, TSet<TString>> ret;
+    YQL_ENSURE(value->ChildrenSize() == inputsCount);
+    for (ui32 inputIndex = 0; inputIndex < inputsCount; ++inputIndex) {
+        auto child = value->Child(inputIndex);
+        if (child->ChildrenSize() == 0) {
+            continue;
+        }
+
+        auto& set = ret[inputIndex];
+        for (const auto& x : child->Children()) {
+            set.insert(TString(x->Content()));
+        }
+    }
+
+    return ret;
+}
+
+TExprNode::TPtr SaveExtraColumns(TPositionHandle pos, const THashMap<ui32, TSet<TString>>& columns, ui32 inputsCount, TExprContext& ctx) {
+    TExprNode::TListType groups;
+    for (ui32 i = 0; i < inputsCount; ++i) {
+        TExprNode::TListType columnsPerGroup;
+        auto it = columns.find(i);
+        if (it != columns.end()) {
+            for (const auto& x : it->second) {
+                columnsPerGroup.push_back(ctx.NewAtom(pos, x));
+            }
+        }
+
+        auto columnsPerGroupList = ctx.NewList(pos, std::move(columnsPerGroup));
+        groups.push_back(columnsPerGroupList);
+    }
+
+    return ctx.NewList(pos, std::move(groups));
+}
+
+bool AddExtraColumnsForSublinks(TExprNode::TPtr& value, const TExprNode& data, ui32 inputsCount, TExprContext& ctx) {
+    THashMap<ui32, TSet<TString>> columns = LoadExtraColumns(value, inputsCount);
+    for (auto oneSort : data.Children()) {
+        TNodeSet sublinks;
+        ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks);
+        for (const auto& s : sublinks) {
+            auto c = ExtractExternalColumns(s->Tail());
+            for (const auto& [name, index] : c) {
+                YQL_ENSURE(index < inputsCount);
+                columns[index].insert("_yql_extra_" + name);
+            }
+        }
+    }
+
+    value = SaveExtraColumns(value->Pos(), columns, inputsCount, ctx);
+    for (const auto&[index, set] : columns) {
+        if (!set.empty()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select) {
+    TMap<TString, ui32> res;
+    const auto& option = select.Head();
+    auto setItems = GetSetting(option, "set_items");
+    YQL_ENSURE(setItems);
+    for (const auto& s : setItems->Tail().Children()) {
+        YQL_ENSURE(s->IsCallable("PgSetItem"));
+        auto extTypes = GetSetting(s->Head(), "final_ext_types");
+        YQL_ENSURE(extTypes);
+        ui32 inputIndex = 0;
+        for (const auto& input : extTypes->Tail().Children()) {
+            auto type = input->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+            for (const auto& item : type->GetItems()) {
+                res.insert(std::make_pair(NTypeAnnImpl::MakeAliasedColumn(input->Head().Content(), item->GetName()), inputIndex));
+            }
+
+            ++inputIndex;
+        }
+    }
+
+    return res;
+}
+
+bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TString>& possibleAliases,
     const TExprNode& data, TExtContext& ctx, TExprNode::TListType& newSorts, bool scanColumnsOnly,
     THashMap<ui32, TSet<TString>>* nonProjectionColumns = nullptr) {
     newSorts.clear();
     for (auto oneSort : data.Children()) {
+        TNodeSet sublinks;
+        ScanSublinks(oneSort->Child(1)->TailPtr(), sublinks);
+
         bool hasColumnRef;
         THashSet<TString> refs;
         THashMap<TString, THashSet<TString>> qualifiedRefs;
@@ -2019,12 +2105,18 @@ bool ValidateSort(TInputs& inputs, const THashSet<TString>& possibleAliases,
             return false;
         }
 
+        bool needRebuildSubLinks;
+        if (!ScanColumnsForSublinks(needRebuildSubLinks, sublinks, subLinkInputs, possibleAliases,
+            hasColumnRef, refs, &qualifiedRefs, ctx, scanColumnsOnly, nonProjectionColumns)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
         if (scanColumnsOnly) {
             continue;
         }
 
         TVector<const TItemExprType*> items;
-        AddColumns(inputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
+        AddColumns(needRebuildSubLinks ? subLinkInputs : inputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
         auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
         if (!effectiveType->Validate(oneSort->Pos(), ctx.Expr)) {
             return false;
@@ -2032,19 +2124,33 @@ bool ValidateSort(TInputs& inputs, const THashSet<TString>& possibleAliases,
 
         auto typeNode = ExpandType(oneSort->Pos(), *effectiveType, ctx.Expr);
 
-        auto argNode = ctx.Expr.NewArgument(oneSort->Pos(), "row");
-        auto arguments = ctx.Expr.NewArguments(oneSort->Pos(), { argNode });
-        TExprNode::TPtr newRoot;
-        auto status = RebuildLambdaColumns(oneSort->Child(1)->TailPtr(), argNode, newRoot, inputs, nullptr, ctx);
-        if (status == IGraphTransformer::TStatus::Error) {
-            return false;
+        auto newChildren = oneSort->ChildrenList();
+        if (needRebuildSubLinks) {
+            auto arguments = ctx.Expr.NewArguments(oneSort->Pos(), { });
+
+            TExprNode::TPtr newRoot;
+            auto status = RebuildSubLinks(oneSort->Child(1)->TailPtr(), newRoot, sublinks, subLinkInputs, typeNode, ctx);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return false;
+            }
+
+            auto newLambda = ctx.Expr.NewLambda(oneSort->Pos(), std::move(arguments), std::move(newRoot));
+            newChildren[1] = newLambda;
+        } else if (oneSort->Child(1)->Head().ChildrenSize() == 0) {
+            auto argNode = ctx.Expr.NewArgument(oneSort->Pos(), "row");
+            auto arguments = ctx.Expr.NewArguments(oneSort->Pos(), { argNode });
+            TExprNode::TPtr newRoot;
+            auto status = RebuildLambdaColumns(oneSort->Child(1)->TailPtr(), argNode, newRoot, inputs, nullptr, ctx);
+            if (status == IGraphTransformer::TStatus::Error) {
+                return false;
+            }
+
+            auto newLambda = ctx.Expr.NewLambda(oneSort->Pos(), std::move(arguments), std::move(newRoot));
+
+            newChildren[0] = typeNode;
+            newChildren[1] = newLambda;
         }
 
-        auto newLambda = ctx.Expr.NewLambda(oneSort->Pos(), std::move(arguments), std::move(newRoot));
-
-        auto newChildren = oneSort->ChildrenList();
-        newChildren[0] = typeNode;
-        newChildren[1] = newLambda;
         auto newSort = ctx.Expr.ChangeChildren(*oneSort, std::move(newChildren));
         newSorts.push_back(newSort);
     }
@@ -2075,6 +2181,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         bool hasDistinctAll = false;
         bool hasDistinctOn = false;
         bool hasExtraSortColumns = false;
+        bool hasFinalExtraSortColumns = false;
 
         // pass 0 - from/values
         // pass 1 - join
@@ -2236,7 +2343,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                                     auto newLambda = ctx.Expr.NewLambda(column->Pos(), std::move(arguments), std::move(newRoot));
                                     newColumnChildren[2] = newLambda;
-                                } else {
+                                } else if (column->Tail().Head().ChildrenSize() == 0) {
                                     auto argNode = ctx.Expr.NewArgument(column->Pos(), "row");
                                     auto arguments = ctx.Expr.NewArguments(column->Pos(), { argNode });
                                     auto expandedColumns = column->HeadPtr();
@@ -2475,25 +2582,25 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                                 auto newSettings = ReplaceSetting(options, {}, TString(optionName), newWhere, ctx.Expr);
                                 output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
                                 return IGraphTransformer::TStatus::Repeat;
+                            } else if (data.Child(1)->Head().ChildrenSize() == 0) {
+                                auto argNode = ctx.Expr.NewArgument(data.Pos(), "row");
+                                auto arguments = ctx.Expr.NewArguments(data.Pos(), { argNode });
+                                TExprNode::TPtr newRoot;
+                                auto status = RebuildLambdaColumns(data.Child(1)->TailPtr(), argNode, newRoot, joinInputs, nullptr, ctx);
+                                if (status == IGraphTransformer::TStatus::Error) {
+                                    return IGraphTransformer::TStatus::Error;
+                                }
+
+                                auto newLambda = ctx.Expr.NewLambda(data.Pos(), std::move(arguments), std::move(newRoot));
+
+                                auto newChildren = data.ChildrenList();
+                                newChildren[0] = typeNode;
+                                newChildren[1] = newLambda;
+                                auto newWhere = ctx.Expr.NewCallable(data.Pos(), "PgWhere", std::move(newChildren));
+                                auto newSettings = ReplaceSetting(options, {}, TString(optionName), newWhere, ctx.Expr);
+                                output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
+                                return IGraphTransformer::TStatus::Repeat;
                             }
-
-                            auto argNode = ctx.Expr.NewArgument(data.Pos(), "row");
-                            auto arguments = ctx.Expr.NewArguments(data.Pos(), { argNode });
-                            TExprNode::TPtr newRoot;
-                            auto status = RebuildLambdaColumns(data.Child(1)->TailPtr(), argNode, newRoot, joinInputs, nullptr, ctx);
-                            if (status == IGraphTransformer::TStatus::Error) {
-                                return IGraphTransformer::TStatus::Error;
-                            }
-
-                            auto newLambda = ctx.Expr.NewLambda(data.Pos(), std::move(arguments), std::move(newRoot));
-
-                            auto newChildren = data.ChildrenList();
-                            newChildren[0] = typeNode;
-                            newChildren[1] = newLambda;
-                            auto newWhere = ctx.Expr.NewCallable(data.Pos(), "PgWhere", std::move(newChildren));
-                            auto newSettings = ReplaceSetting(options, {}, TString(optionName), newWhere, ctx.Expr);
-                            output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
-                            return IGraphTransformer::TStatus::Repeat;
                         }
                     }
                     else {
@@ -2801,7 +2908,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                         if (needRebuildSort) {
                             TExprNode::TListType newSorts;
-                            if (!ValidateSort(joinInputs, possibleAliases, *sort, ctx, newSorts, scanColumnsOnly)) {
+                            if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, newSorts, scanColumnsOnly)) {
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -2879,9 +2986,14 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         return IGraphTransformer::TStatus::Error;
                     }
 
+                    bool needScan = false;
                     for (const auto& x : data.Children()) {
                         if (!x->IsCallable("PgSort")) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(x->Pos()), "Expected PgSort"));
+                        }
+
+                        if (x->Child(0)->IsCallable("Void")) {
+                            needScan = true;
                         }
                     }
 
@@ -2891,45 +3003,44 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         projectionInputs.push_back(TInput{ "", outputRowType, Nothing(), TInput::Projection, {} });
                     }
 
-                    if (data.ChildrenSize() > 0 && data.Child(0)->Child(0)->IsCallable("Void")) {
+                    if (needScan) {
                         TExprNode::TListType newSortTupleItems;
                         // no effective types yet, scan lambda bodies
                         THashMap<ui32, TSet<TString>> extraSortColumns;
-                        if (!ValidateSort(projectionInputs, possibleAliases, data, ctx, newSortTupleItems, scanColumnsOnly, &extraSortColumns)) {
+                        if (!ValidateSort(projectionInputs, joinInputs, possibleAliases, data, ctx, newSortTupleItems, scanColumnsOnly, &extraSortColumns)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
                         if (!scanColumnsOnly) {
                             auto newSortTuple = ctx.Expr.NewList(data.Pos(), std::move(newSortTupleItems));
                             auto newSettings = ReplaceSetting(options, {}, "sort", newSortTuple, ctx.Expr);
-                            if (!extraSortColumns.empty()) {
-                                TExprNode::TListType groups;
-                                for (ui32 i = 0; i < joinInputs.size(); ++i) {
-                                    TExprNode::TListType columns;
-                                    auto it = extraSortColumns.find(i);
-                                    if (it != extraSortColumns.end()) {
-                                        for (const auto& x : it->second) {
-                                            columns.push_back(ctx.Expr.NewAtom(data.Pos(), x));
-                                        }
-                                    }
+                            auto extra = SaveExtraColumns(data.Pos(), extraSortColumns, joinInputs.size(), ctx.Expr);
+                            newSettings = AddSetting(*newSettings, {}, "extra_sort_columns", extra, ctx.Expr);
 
-                                    auto columnsList = ctx.Expr.NewList(data.Pos(), std::move(columns));
-                                    groups.push_back(columnsList);
-                                }
-
-                                newSettings = AddSetting(*newSettings, {}, "extra_sort_columns", ctx.Expr.NewList(data.Pos(), std::move(groups)), ctx.Expr);
+                            output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
+                            return IGraphTransformer::TStatus::Repeat;
+                        }
+                    } else {
+                        auto extra = GetSetting(options, "extra_sort_columns");
+                        if (extra) {
+                            auto value = extra->TailPtr();
+                            bool hasColumns = AddExtraColumnsForSublinks(value, data, joinInputs.size(), ctx.Expr);
+                            auto newSettings = RemoveSetting(options, "extra_sort_columns", ctx.Expr);
+                            if (hasColumns) {
+                                newSettings = AddSetting(*newSettings, {}, "final_extra_sort_columns", value, ctx.Expr);
                             }
 
                             output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
                             return IGraphTransformer::TStatus::Repeat;
                         }
                     }
-                } else if (optionName == "extra_sort_columns") {
+                } else if (optionName == "extra_sort_columns" || optionName == "final_extra_sort_columns") {
                     if (pass != 2) {
                         continue;
                     }
 
-                    hasExtraSortColumns = true;
+                    (optionName == "extra_sort_columns" ? hasExtraSortColumns : hasFinalExtraSortColumns) = true;
+
                     if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -2972,7 +3083,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
             return IGraphTransformer::TStatus::Error;
         }
 
-        if ((hasDistinctAll || hasDistinctOn) && hasExtraSortColumns) {
+        if ((hasDistinctAll || hasDistinctOn) && hasFinalExtraSortColumns) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "for SELECT DISTINCT, ORDER BY expressions must appear in select list"));
             return IGraphTransformer::TStatus::Error;
         }
@@ -3226,7 +3337,7 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
 
         if (data.ChildrenSize() > 0 && data.Child(0)->Child(0)->IsCallable("Void")) {
             // no effective types yet, scan lambda bodies
-            if (!ValidateSort(projectionInputs, {}, data, ctx, newSortTupleItems, false)) {
+            if (!ValidateSort(projectionInputs, projectionInputs, {}, data, ctx, newSortTupleItems, false)) {
                 return IGraphTransformer::TStatus::Error;
             }
 

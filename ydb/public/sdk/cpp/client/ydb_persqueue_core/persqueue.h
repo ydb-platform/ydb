@@ -948,8 +948,11 @@ private:
     bool Started = false;
     TAdaptiveLock StartLock;
 };
+
 IExecutor::TPtr CreateThreadPoolExecutorAdapter(std::shared_ptr<IThreadPool> threadPool); // Thread pool is expected to have been started.
 IExecutor::TPtr CreateThreadPoolExecutor(size_t threads);
+
+IExecutor::TPtr CreateSyncExecutor();
 
 //! Events for write session.
 struct TWriteSessionEvent {

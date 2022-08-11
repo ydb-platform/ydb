@@ -261,7 +261,7 @@ void TWriteSession::OnCdsResponse(
 void TWriteSession::InitWriter() { // No Lock, very initial start - no race yet as well.
     CompressionExecutor = Settings.CompressionExecutor_;
     IExecutor::TPtr executor;
-    executor = new TSyncExecutor();
+    executor = CreateSyncExecutor();
     executor->Start();
     Executor = std::move(executor);
 

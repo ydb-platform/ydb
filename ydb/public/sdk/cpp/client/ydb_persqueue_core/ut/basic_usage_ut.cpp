@@ -184,7 +184,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         auto setup = std::make_shared<TPersQueueYdbSdkTestSetup>(TEST_CASE_NAME);
         TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
-        IExecutor::TPtr executor = new TSyncExecutor();
+        IExecutor::TPtr executor = CreateSyncExecutor();
         writeSettings.CompressionExecutor(executor);
         // LOGBROKER-7189
         //SimpleWriteAndValidateData(setup.get(), writeSettings, 100u, false);

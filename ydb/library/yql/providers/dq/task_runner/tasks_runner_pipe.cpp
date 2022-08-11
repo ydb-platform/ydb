@@ -186,13 +186,13 @@ protected:
 
     virtual void PrepareForExec() {
         ExecArgs.resize(Args.size() + 1, nullptr);
-        for (uint i = 0; i < Args.size(); ++i) {
+        for (size_t i = 0; i < Args.size(); ++i) {
             ExecArgs[i] = const_cast<char*>(Args[i].c_str());
         }
         
         ExecEnv.resize(Env.size() + 1, nullptr);
         EnvElems.reserve(Env.size());
-        uint i = 0;
+        size_t i = 0;
         for (const auto& [k, v] : Env) {
             EnvElems.push_back(k + "=" + v);
             ExecEnv[i++] = const_cast<char*>(EnvElems.back().c_str());
@@ -200,7 +200,7 @@ protected:
     }
 
     virtual void Exec() {
-        for (uint i = 3; i < 32768; ++i) {
+        for (int i = 3; i < 32768; ++i) {
             close(i);
         }
 
@@ -410,13 +410,13 @@ private:
             "anon_limit=" + ToString(MemoryLimit)
         };
         ExecArgs.resize(ArgsElems.size() + 1, nullptr);
-        for (uint i = 0; i < ArgsElems.size(); ++i) {
+        for (size_t i = 0; i < ArgsElems.size(); ++i) {
             ExecArgs[i] = const_cast<char*>(ArgsElems[i].c_str());
         }
     }
 
     void Exec() override {
-        for (uint i = 3; i < 32768; ++i) {
+        for (int i = 3; i < 32768; ++i) {
             close(i);
         }
 

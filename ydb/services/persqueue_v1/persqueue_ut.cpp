@@ -4,6 +4,7 @@
 #include <ydb/services/persqueue_v1/ut/rate_limiter_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
+#include <ydb/services/persqueue_v1/ut/functions_executor_wrapper.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/sync_http_mon.h>
@@ -1805,18 +1806,114 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
     }
 
+    Y_UNIT_TEST(EventBatching) {
+        NPersQueue::TTestServer server;
+        server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
+        PrepareForGrpc(server);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateSyncExecutorWrapper();
+
+        NYdb::NPersQueue::TReadSessionSettings settings;
+        settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
+        auto reader = CreateReader(*driver, settings);
+
+        for (ui32 i = 0; i < 2; ++i) {
+            auto msg = reader->GetEvent(true, 1);
+            UNIT_ASSERT(msg);
+
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
+            UNIT_ASSERT(ev);
+
+            ev->Confirm();
+        }
+
+        auto writeDataAndWaitForDecompressionTasks = [&](const TString &message,
+                                                         const TString &sourceId,
+                                                         ui32 partitionId,
+                                                         size_t tasksCount) {
+            //
+            // write data
+            //
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, sourceId, partitionId, "raw");
+            writer->Write(message, 1);
+
+            writer->Close(TDuration::Seconds(10));
+
+            //
+            // wait for decompression tasks
+            //
+            while (decompressor->GetFuncsCount() < tasksCount) {
+                Sleep(TDuration::Seconds(1));
+            }
+        };
+
+        //
+        // stream #1: [0-, 2-]
+        // stream #2: [1-, 3-]
+        // session  : []
+        //
+        writeDataAndWaitForDecompressionTasks("111", "source_id_0", 1, 1); // 0
+        writeDataAndWaitForDecompressionTasks("333", "source_id_1", 2, 2); // 1
+        writeDataAndWaitForDecompressionTasks("222", "source_id_2", 1, 3); // 2
+        writeDataAndWaitForDecompressionTasks("444", "source_id_3", 2, 4); // 3
+
+        //
+        // stream #1: [0+, 2+]
+        // stream #2: [1+, 3+]
+        // session  : [(#1: 1), (#2: 1), (#1, 1)]
+        //
+        decompressor->StartFuncs({0, 3, 1, 2});
+
+        auto messages = reader->GetEvents(true);
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+
+        {
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&messages[0]);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages().size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages()[0].GetData(), "111");
+        }
+
+        {
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&messages[1]);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages().size(), 2);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages()[0].GetData(), "333");
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages()[1].GetData(), "444");
+        }
+
+        {
+            auto ev = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&messages[2]);
+            UNIT_ASSERT(ev);
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages().size(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(ev->GetMessages()[0].GetData(), "222");
+        }
+
+        //
+        // stream #1: []
+        // stream #2: []
+        // session  : []
+        //
+        auto msg = reader->GetEvent(false);
+        UNIT_ASSERT(!msg);
+    }
+
     Y_UNIT_TEST(CheckKillBalancer) {
         NPersQueue::TTestServer server;
         server.EnableLogs({ NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::PQ_READ_PROXY});
         PrepareForGrpc(server);
 
-        TPQDataWriter writer("source1", server);
-
-
         auto driver = server.AnnoyingClient->GetDriver();
+        auto decompressor = CreateThreadPoolExecutorWrapper(2);
 
         NYdb::NPersQueue::TReadSessionSettings settings;
         settings.ConsumerName("shared/user").AppendTopics(SHORT_TOPIC_NAME).ReadOriginal({"dc1"});
+        settings.DecompressionExecutor(decompressor);
         auto reader = CreateReader(*driver, settings);
 
 
@@ -1834,17 +1931,30 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         }
 
 
+        for (ui32 i = 0; i < 10; ++i) {
+            auto writer = CreateSimpleWriter(*driver, SHORT_TOPIC_NAME, TStringBuilder() << "source" << i);
+            bool res = writer->Write("valuevaluevalue", 1);
+            UNIT_ASSERT(res);
+            res = writer->Close(TDuration::Seconds(10));
+            UNIT_ASSERT(res);
+        }
 
-        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), "rt3.dc1--topic1");
-        Cerr << "Balancer killed\n";
 
 
-        ui32 createEv = 0, destroyEv = 0;
-        for (ui32 i = 0; i < 4; ++i) {
+        ui32 createEv = 0, destroyEv = 0, dataEv = 0;
+        std::vector<ui32> gotDestroy{0, 0};
+
+        auto doRead = [&]() {
             auto msg = reader->GetEvent(true, 1);
             UNIT_ASSERT(msg);
 
             Cerr << "Got message: " << NYdb::NPersQueue::DebugString(*msg) << "\n";
+
+
+            if (std::get_if<NYdb::NPersQueue::TReadSessionEvent::TDataReceivedEvent>(&*msg)) {
+                ++dataEv;
+                return;
+            }
 
             auto ev1 = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent>(&*msg);
             auto ev2 = std::get_if<NYdb::NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent>(&*msg);
@@ -1853,15 +1963,47 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
             if (ev1) {
                 ++destroyEv;
+                UNIT_ASSERT(ev1->GetPartitionStream()->GetPartitionId() < 2);
+                gotDestroy[ev1->GetPartitionStream()->GetPartitionId()]++;
             }
             if (ev2) {
-                ev2->Confirm();
+                ev2->Confirm(ev2->GetEndOffset());
                 ++createEv;
+                UNIT_ASSERT(ev2->GetPartitionStream()->GetPartitionId() < 2);
+                UNIT_ASSERT_VALUES_EQUAL(gotDestroy[ev2->GetPartitionStream()->GetPartitionId()], 1);
 
             }
+        };
+
+        decompressor->StartFuncs({0, 1, 2, 3, 4});
+
+        for (ui32 i = 0; i < 5; ++i) {
+            doRead();
         }
-        UNIT_ASSERT(createEv == 2);
-        UNIT_ASSERT(destroyEv == 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
+
+        server.AnnoyingClient->RestartBalancerTablet(server.CleverServer->GetRuntime(), "rt3.dc1--topic1");
+        Cerr << "Balancer killed\n";
+
+        Sleep(TDuration::Seconds(5));
+
+        for (ui32 i = 0; i < 4; ++i) {
+            doRead();
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(createEv, 2);
+        UNIT_ASSERT_VALUES_EQUAL(destroyEv, 2);
+
+        UNIT_ASSERT_VALUES_EQUAL(dataEv, 5);
+
+        decompressor->StartFuncs({5, 6, 7, 8, 9});
+
+        Sleep(TDuration::Seconds(5));
+
+        auto msg = reader->GetEvent(false, 1);
+
+        UNIT_ASSERT(!msg);
 
         UNIT_ASSERT(!reader->WaitEvent().Wait(TDuration::Seconds(1)));
     }

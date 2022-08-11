@@ -1153,6 +1153,8 @@ public:
             if (!ParseAlias(value->alias, alias, colnames)) {
                 return {};
             }
+        } else {
+            alias = value->relname;
         }
 
         if (view) {

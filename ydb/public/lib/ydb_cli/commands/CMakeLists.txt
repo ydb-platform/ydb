@@ -21,6 +21,7 @@ target_link_libraries(clicommands PUBLIC
   common
   lib-ydb_cli-dump
   lib-ydb_cli-import
+  topic
   cpp-client-draft
   cpp-client-ydb_discovery
   cpp-client-ydb_export

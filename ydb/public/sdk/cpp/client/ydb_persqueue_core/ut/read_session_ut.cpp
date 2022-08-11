@@ -1180,13 +1180,14 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                    .CompressMessage(i, TStringBuilder() << "message" << i)); // Callback will be called.
         }
 
-        for (ui64 i = 1; i <= 2; ++i) {
+        for (ui64 i = 1; i <= 2; ) {
             TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             auto& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages()[0].GetData(), TStringBuilder() << "message" << i);
+            for (ui32 j = 0; j < dataEvent.GetMessages().size(); ++j, ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(dataEvent.GetMessages()[j].GetData(), TStringBuilder() << "message" << i);
+            }
         }
 
         setup.AssertNoEvents();
@@ -1588,13 +1589,15 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                 }
             }));
 
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < 2; ) {
             TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);
             UNIT_ASSERT(event);
             UNIT_ASSERT_EVENT_TYPE(*event, TReadSessionEvent::TDataReceivedEvent);
             TReadSessionEvent::TDataReceivedEvent& dataEvent = std::get<TReadSessionEvent::TDataReceivedEvent>(*event);
             Cerr << "got data event: " << dataEvent.DebugString() << "\n";
             dataEvent.Commit();
+
+            i += dataEvent.GetMessagesCount();
         }
 
         UNIT_ASSERT(has1);
@@ -1661,11 +1664,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         auto calledPromise = NThreading::NewPromise<void>();
         int time = 0;
         setup.Settings.EventHandlers_.DataReceivedHandler([&](TReadSessionEvent::TDataReceivedEvent& event) {
-            ++time;
-            UNIT_ASSERT_VALUES_EQUAL(event.GetMessages().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[0].GetData(), TStringBuilder() << "message" << time);
-            if (time == 2) {
-                calledPromise.SetValue();
+            for (ui32 i = 0; i < event.GetMessages().size(); ++i) {
+                ++time;
+                UNIT_ASSERT_VALUES_EQUAL(event.GetMessages()[i].GetData(), TStringBuilder() << "message" << time);
+
+                if (time == 2) {
+                    calledPromise.SetValue();
+                }
             }
         });
         setup.SuccessfulInit();
@@ -1678,6 +1683,13 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
                                                .PartitionData(2)
                                                .Batch("src_id")
                                                .CompressMessage(2, "message2"));
+
+        //
+        // when the PartitionStreamClosed arrives the raw messages are deleted
+        // we give time to process the messages
+        //
+        Sleep(TDuration::Seconds(2));
+
         setup.MockProcessor->AddServerResponse(TMockReadSessionProcessor::TServerReadInfo()
                                                .ForcefulReleasePartitionStream());
         TMaybe<TReadSessionEvent::TEvent> event = setup.EventsQueue->GetEvent(true);

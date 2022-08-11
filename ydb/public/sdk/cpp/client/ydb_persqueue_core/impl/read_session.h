@@ -168,8 +168,10 @@ private:
 };
 
 template <bool UseMigrationProtocol>
-class TDataDecompressionInfo {
+class TDataDecompressionInfo : public std::enable_shared_from_this<TDataDecompressionInfo<UseMigrationProtocol>> {
 public:
+    using TPtr = std::shared_ptr<TDataDecompressionInfo<UseMigrationProtocol>>;
+
     TDataDecompressionInfo(const TDataDecompressionInfo&) = default;
     TDataDecompressionInfo(TDataDecompressionInfo&&) = default;
     TDataDecompressionInfo(
@@ -203,6 +205,10 @@ public:
 
     TPartitionData<UseMigrationProtocol>& GetServerMessage() {
         return ServerMessage;
+    }
+
+    bool GetDoDecompress() const {
+        return DoDecompress;
     }
 
     TMaybe<std::pair<size_t, size_t>> GetReadyThreshold() const {
@@ -252,7 +258,7 @@ private:
     };
 
     struct TDecompressionTask {
-        explicit TDecompressionTask(TDataDecompressionInfo* parent, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, TReadyMessageThreshold* ready);
+        TDecompressionTask(TDataDecompressionInfo::TPtr parent, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, TReadyMessageThreshold* ready);
 
         // Decompress and notify about memory consumption changes.
         void operator()();
@@ -267,7 +273,7 @@ private:
         }
 
     private:
-        TDataDecompressionInfo* Parent;
+        TDataDecompressionInfo::TPtr Parent;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
         i64 SourceDataSize = 0;
         i64 EstimatedDecompressedSize = 0;
@@ -299,6 +305,33 @@ private:
     TAdaptiveLock DecompressionErrorsStructLock;
     std::vector<std::vector<std::exception_ptr>> DecompressionErrors;
 };
+ 
+template <bool UseMigrationProtocol>
+class TDataDecompressionEvent {
+public:
+    TDataDecompressionEvent(size_t batch, size_t message, typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent, std::atomic<bool> &ready) :
+        Batch{batch},
+        Message{message},
+        Parent{std::move(parent)},
+        Ready{ready}
+    {
+    }
+
+    bool IsReady() const {
+        return Ready;
+    }
+
+    bool TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>* messages,
+                  TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TCompressedMessage>* compressedMessages,
+                  size_t* maxByteSize) const;
+
+private:
+    size_t Batch;
+    size_t Message;
+    typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr Parent;
+    std::atomic<bool> &Ready;
+};
 
 template <bool UseMigrationProtocol>
 struct IUserRetrievedEventCallback {
@@ -317,6 +350,7 @@ struct TReadSessionEventInfo {
     // Event with only partition stream ref.
     // Partition stream holds all its events.
     TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
+    size_t DataCount = 0;
     TMaybe<TEvent> Event;
     std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> Session;
 
@@ -333,33 +367,15 @@ struct TReadSessionEventInfo {
     // Data event.
     TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session);
 
-    TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                          std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
-                          TVector<TMessage> messages,
-                          TVector<TCompressedMessage> compressedMessages);
-
     bool IsEmpty() const;
     bool IsDataEvent() const;
-
-    // Takes data. Returns true if event has more unpacked data.
-    bool TakeData(TVector<TMessage>* messages,
-                  TVector<TCompressedMessage>* comressedMessages,
-                  size_t* maxByteSize);
 
     TEvent& GetEvent() {
         Y_ASSERT(Event);
         return *Event;
     }
 
-    // Move event to partition stream queue.
-    void MoveToPartitionStream();
-
-    void ExtractFromPartitionStream();
-
     void OnUserRetrievedEvent();
-
-    bool HasMoreData() const; // Has unread data.
-    bool HasReadyUnreadData() const; // Has ready unread data.
 
     bool IsSessionClosedEvent() const {
         return Event && std::holds_alternative<TASessionClosedEvent<UseMigrationProtocol>>(*Event);
@@ -371,18 +387,20 @@ template <bool UseMigrationProtocol>
 struct TRawPartitionStreamEvent {
     using TEvent = typename TAReadSessionEvent<UseMigrationProtocol>::TEvent;
 
-    std::variant<TDataDecompressionInfo<UseMigrationProtocol>, TEvent> Event;
-    bool Signalled = false;
+    std::variant<TDataDecompressionEvent<UseMigrationProtocol>, TEvent> Event;
 
     TRawPartitionStreamEvent(const TRawPartitionStreamEvent&) = default;
     TRawPartitionStreamEvent(TRawPartitionStreamEvent&&) = default;
 
-    TRawPartitionStreamEvent(
-        TPartitionData<UseMigrationProtocol>&& msg,
-        std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session,
-        bool doDecompress
-    )
-        : Event(std::in_place_type_t<TDataDecompressionInfo<UseMigrationProtocol>>(), std::move(msg), std::move(session), doDecompress)
+    TRawPartitionStreamEvent(size_t batch,
+                             size_t message,
+                             typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
+                             std::atomic<bool> &ready)
+        : Event(std::in_place_type_t<TDataDecompressionEvent<UseMigrationProtocol>>(),
+                batch,
+                message,
+                std::move(parent),
+                ready)
     {
     }
 
@@ -393,17 +411,12 @@ struct TRawPartitionStreamEvent {
     }
 
     bool IsDataEvent() const {
-        return std::holds_alternative<TDataDecompressionInfo<UseMigrationProtocol>>(Event);
+        return std::holds_alternative<TDataDecompressionEvent<UseMigrationProtocol>>(Event);
     }
 
-    const TDataDecompressionInfo<UseMigrationProtocol>& GetData() const {
+    const TDataDecompressionEvent<UseMigrationProtocol>& GetDataEvent() const {
         Y_ASSERT(IsDataEvent());
-        return std::get<TDataDecompressionInfo<UseMigrationProtocol>>(Event);
-    }
-
-    TDataDecompressionInfo<UseMigrationProtocol>& GetData() {
-        Y_ASSERT(IsDataEvent());
-        return std::get<TDataDecompressionInfo<UseMigrationProtocol>>(Event);
+        return std::get<TDataDecompressionEvent<UseMigrationProtocol>>(Event);
     }
 
     TEvent& GetEvent() {
@@ -417,13 +430,60 @@ struct TRawPartitionStreamEvent {
     }
 
     bool IsReady() const {
-        return !IsDataEvent() || GetData().IsReady();
-    }
+        if (!IsDataEvent()) {
+            return true;
+        }
 
-    void Signal(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, TReadSessionEventsQueue<UseMigrationProtocol>* queue, TDeferredActions<UseMigrationProtocol>& deferred);
+        return std::get<TDataDecompressionEvent<UseMigrationProtocol>>(Event).IsReady();
+    }
 };
 
+template <bool UseMigrationProtocol>
+class TRawPartitionStreamEventQueue {
+public:
+    TRawPartitionStreamEventQueue() = default;
 
+    template <class... Ts>
+    TRawPartitionStreamEvent<UseMigrationProtocol>& emplace_back(Ts&&... event)
+    {
+        return NotReady.emplace_back(std::forward<Ts>(event)...);
+    }
+
+    bool empty() const
+    {
+        return Ready.empty() && NotReady.empty();
+    }
+
+    TRawPartitionStreamEvent<UseMigrationProtocol>& front()
+    {
+        Y_VERIFY(!empty());
+
+        return (Ready.empty() ? NotReady : Ready).front();
+    }
+
+    void pop_front()
+    {
+        Y_VERIFY(!empty());
+
+        (Ready.empty() ? NotReady : Ready).pop_front();
+    }
+
+    void pop_back()
+    {
+        Y_VERIFY(!empty());
+
+        (NotReady.empty() ? Ready : NotReady).pop_back();
+    }
+
+    void SignalReadyEvents(TPartitionStreamImpl<UseMigrationProtocol>& stream,
+                           TReadSessionEventsQueue<UseMigrationProtocol>& queue,
+                           TDeferredActions<UseMigrationProtocol>& deferred);
+    void DeleteNotReadyTail();
+
+private:
+    std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> Ready;
+    std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> NotReady;
+};
 
 template <bool UseMigrationProtocol>
 class TPartitionStreamImpl : public TAPartitionStream<UseMigrationProtocol> {
@@ -517,12 +577,13 @@ public:
         EventsQueue.emplace_back(std::forward<T>(event));
     }
 
-    TDataDecompressionInfo<UseMigrationProtocol>& InsertDataEvent(
-        TPartitionData<UseMigrationProtocol>&& msg,
-        bool doDecompress
-    ) {
+    void InsertDataEvent(size_t batch,
+                         size_t message,
+                         typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
+                         std::atomic<bool> &ready)
+    {
         ++DataDecompressionEventsCount;
-        return EventsQueue.emplace_back(std::move(msg), Session, doDecompress).GetData();
+        EventsQueue.emplace_back(batch, message, std::move(parent), ready);
     }
 
     bool IsWaitingForDataDecompression() const {
@@ -534,10 +595,6 @@ public:
     }
 
     TRawPartitionStreamEvent<UseMigrationProtocol>& TopEvent() {
-        return EventsQueue.front();
-    }
-
-    const TRawPartitionStreamEvent<UseMigrationProtocol>& TopEvent() const {
         return EventsQueue.front();
     }
 
@@ -615,6 +672,7 @@ public:
         return true;
     }
 
+    void DeleteNotReadyTail();
 
 private:
     const TKey Key;
@@ -622,7 +680,7 @@ private:
     ui64 FirstNotReadOffset;
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     typename IErrorHandler<UseMigrationProtocol>::TPtr ErrorHandler;
-    std::deque<TRawPartitionStreamEvent<UseMigrationProtocol>> EventsQueue;
+    TRawPartitionStreamEventQueue<UseMigrationProtocol> EventsQueue;
     size_t DataDecompressionEventsCount = 0;
     ui64 MaxReadOffset = 0;
     ui64 MaxCommittedOffset = 0;
@@ -646,50 +704,45 @@ class TReadSessionEventsQueue: public TBaseSessionEventsQueue<TAReadSessionSetti
 public:
     explicit TReadSessionEventsQueue(const TAReadSessionSettings<UseMigrationProtocol>& settings, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session);
 
-    TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> GetDataEventImpl(TReadSessionEventInfo<UseMigrationProtocol>& srcDataEventInfo, size_t* maxByteSize); // Assumes that we're under lock.
+    typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent
+        GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream, size_t* maxByteSize); // Assumes that we're under lock.
 
-    TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> TryGetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock.
+    TReadSessionEventInfo<UseMigrationProtocol> GetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock.
         Y_ASSERT(TParent::HasEventsImpl());
-        TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage> messages;
+
         if (!TParent::Events.empty()) {
-            TReadSessionEventInfo<UseMigrationProtocol> event = std::move(TParent::Events.front());
-            TParent::Events.pop();
-            TParent::RenewWaiterImpl();
-            auto partitionStream = event.PartitionStream;
+            TReadSessionEventInfo<UseMigrationProtocol>& front = TParent::Events.front();
+            auto partitionStream = front.PartitionStream;
 
             if (!partitionStream->HasEvents()) {
                 Y_FAIL("can't be here - got events in global queue, but nothing in partition queue");
-                return Nothing();
             }
+
+            TMaybe<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> event;
 
             if (partitionStream->TopEvent().IsDataEvent()) {
-                return GetDataEventImpl(event, maxByteSize);
+                event = GetDataEventImpl(partitionStream, maxByteSize);
+            } else {
+                event = std::move(partitionStream->TopEvent().GetEvent());
+                partitionStream->PopEvent();
+
+                TParent::Events.pop();
             }
 
-            event = TReadSessionEventInfo<UseMigrationProtocol>(partitionStream.Get(), event.Session, partitionStream->TopEvent().GetEvent());
-            partitionStream->PopEvent();
-            return event;
+            TParent::RenewWaiterImpl();
+
+            return {partitionStream, front.Session, std::move(*event)};
         }
 
         Y_ASSERT(TParent::CloseEvent);
-        return TReadSessionEventInfo<UseMigrationProtocol>(*TParent::CloseEvent, Session);
-    }
 
-    TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> GetEventImpl(size_t* maxByteSize) { // Assumes that we're under lock and that the event queue has events.
-        do {
-            TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> result = TryGetEventImpl(maxByteSize); // We could have read all the data in current message previous time.
-            if (result) {
-                return result;
-            }
-        } while (TParent::HasEventsImpl());
-        return Nothing();
+        return {*TParent::CloseEvent, Session};
     }
 
     TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> GetEvents(bool block = false, TMaybe<size_t> maxEventsCount = Nothing(), size_t maxByteSize = std::numeric_limits<size_t>::max()) {
         TVector<TReadSessionEventInfo<UseMigrationProtocol>> eventInfos;
         const size_t maxCount = maxEventsCount ? *maxEventsCount : std::numeric_limits<size_t>::max();
         TDeferredActions<UseMigrationProtocol> deferred;
-        std::vector<TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>>> partitionStreamsForSignalling;
         with_lock (TParent::Mutex) {
             eventInfos.reserve(Min(TParent::Events.size() + TParent::CloseEvent.Defined(), maxCount));
             do {
@@ -700,23 +753,14 @@ public:
                 ApplyCallbacksToReadyEventsImpl(deferred);
 
                 while (TParent::HasEventsImpl() && eventInfos.size() < maxCount && maxByteSize > 0) {
-                    TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> event = GetEventImpl(&maxByteSize);
-                    if (event) {
-                        const TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStreamForSignalling = event->IsDataEvent() ? event->PartitionStream : nullptr;
-                        eventInfos.emplace_back(std::move(*event));
-                        if (eventInfos.back().IsSessionClosedEvent()) {
-                            break;
-                        }
-                        if (partitionStreamForSignalling) {
-                            partitionStreamsForSignalling.emplace_back(std::move(partitionStreamForSignalling));
-                        }
+                    TReadSessionEventInfo<UseMigrationProtocol> event = GetEventImpl(&maxByteSize);
+                    eventInfos.emplace_back(std::move(event));
+                    if (eventInfos.back().IsSessionClosedEvent()) {
+                        break;
                     }
                 }
             } while (block && (eventInfos.empty() || eventInfos.back().IsSessionClosedEvent()));
             ApplyCallbacksToReadyEventsImpl(deferred);
-            for (const auto& partitionStreamForSignalling : partitionStreamsForSignalling) {
-                SignalReadyEventsImpl(partitionStreamForSignalling.Get(), deferred);
-            }
         }
 
         TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TEvent> result;
@@ -732,7 +776,6 @@ public:
         TMaybe<TReadSessionEventInfo<UseMigrationProtocol>> eventInfo;
         TDeferredActions<UseMigrationProtocol> deferred;
         with_lock (TParent::Mutex) {
-            TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStreamForSignalling;
             do {
                 if (block) {
                     TParent::WaitEventsImpl();
@@ -742,17 +785,11 @@ public:
 
                 if (TParent::HasEventsImpl()) {
                     eventInfo = GetEventImpl(&maxByteSize);
-                    if (eventInfo && eventInfo->IsDataEvent()) {
-                        partitionStreamForSignalling = eventInfo->PartitionStream;
-                    }
                 } else if (!appliedCallbacks) {
                     return Nothing();
                 }
             } while (block && !eventInfo);
             ApplyCallbacksToReadyEventsImpl(deferred);
-            if (partitionStreamForSignalling) {
-                SignalReadyEventsImpl(partitionStreamForSignalling.Get(), deferred);
-            }
         }
         if (eventInfo) {
             eventInfo->OnUserRetrievedEvent();
@@ -780,12 +817,17 @@ public:
     bool ApplyCallbacksToReadyEventsImpl(TDeferredActions<UseMigrationProtocol>& deferred);
 
     // Push usual event.
-    void PushEvent(TReadSessionEventInfo<UseMigrationProtocol> eventInfo, TDeferredActions<UseMigrationProtocol>& deferred);
+    void PushEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                   std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
+                   typename TAReadSessionEvent<UseMigrationProtocol>::TEvent event,
+                   TDeferredActions<UseMigrationProtocol>& deferred);
 
     // Push data event.
-    TDataDecompressionInfo<UseMigrationProtocol>*
-    PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-                  TPartitionData<UseMigrationProtocol>&& msg);
+    void PushDataEvent(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> stream,
+                       size_t batch,
+                       size_t message,
+                       typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
+                       std::atomic<bool> &ready);
 
     void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
 
@@ -1088,13 +1130,14 @@ private:
     };
 
     struct TDecompressionQueueItem {
-        TDecompressionQueueItem(TDataDecompressionInfo<UseMigrationProtocol>* batchInfo, TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream)
-            : BatchInfo(batchInfo)
+        TDecompressionQueueItem(typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr batchInfo,
+                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream)
+            : BatchInfo(std::move(batchInfo))
             , PartitionStream(std::move(partitionStream))
         {
         }
 
-        TDataDecompressionInfo<UseMigrationProtocol>* BatchInfo;
+        typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr BatchInfo;
         TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
     };
 

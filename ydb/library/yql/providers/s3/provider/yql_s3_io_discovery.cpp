@@ -28,11 +28,14 @@ std::array<TExprNode::TPtr, 2U> ExtractSchema(TExprNode::TListType& settings) {
     return {};
 }
 
+using namespace NPathGenerator;
+
 struct TListRequest {
     TString Token;
     TString Url;
     TString Pattern;
     TString UserPath;
+    TVector<IPathGenerator::TColumnWithValue> ColumnValues;
 };
 
 bool operator<(const TListRequest& a, const TListRequest& b) {
@@ -43,6 +46,7 @@ using TPendingRequests = TMap<TListRequest, NThreading::TFuture<IS3Lister::TList
 
 struct TGeneratedColumnsConfig {
     TVector<TString> Columns;
+    TPathGeneratorPtr Generator;
     TExprNode::TPtr SchemaTypeNode;
 };
 
@@ -131,7 +135,16 @@ public:
                 }
             }
 
-            TMap<TMaybe<std::vector<TString>>, NS3Details::TPathList> pathsByMatchedGlobs;
+            struct TExtraColumnValue {
+                TString Name;
+                TMaybe<NUdf::EDataSlot> Type;
+                TString Value;
+                bool operator<(const TExtraColumnValue& other) const {
+                    return std::tie(Name, Type, Value) < std::tie(other.Name, other.Type, other.Value);
+                }
+            };
+
+            TMap<TMaybe<TVector<TExtraColumnValue>>, NS3Details::TPathList> pathsByExtraValues;
             const TGeneratedColumnsConfig* generatedColumnsConfig = nullptr;
             if (auto it = genColumnsByNode.find(node); it != genColumnsByNode.end()) {
                 generatedColumnsConfig = &it->second;
@@ -165,7 +178,32 @@ public:
                         return TStatus::Error;
                     }
 
-                    auto& pathList = pathsByMatchedGlobs[generatedColumnsConfig ? entry.MatchedGlobs : TMaybe<std::vector<TString>>{}];
+                    TMaybe<TVector<TExtraColumnValue>> extraValues;
+                    if (generatedColumnsConfig) {
+                        extraValues = TVector<TExtraColumnValue>{};
+                        if (!req.ColumnValues.empty()) {
+                            // explicit partitioning
+                            YQL_ENSURE(req.ColumnValues.size() == generatedColumnsConfig->Columns.size());
+                            for (auto& cv : req.ColumnValues) {
+                                TExtraColumnValue value;
+                                value.Name = cv.Name;
+                                value.Type = cv.Type;
+                                value.Value = cv.Value;
+                                extraValues->push_back(std::move(value));
+                            }
+                        } else {
+                            // last entry matches file name
+                            YQL_ENSURE(entry.MatchedGlobs.size() == generatedColumnsConfig->Columns.size() + 1);
+                            for (size_t i = 0; i < generatedColumnsConfig->Columns.size(); ++i) {
+                                TExtraColumnValue value;
+                                value.Name = generatedColumnsConfig->Columns[i];
+                                value.Value = entry.MatchedGlobs[i];
+                                extraValues->push_back(std::move(value));
+                            }
+                        }
+                    }
+
+                    auto& pathList = pathsByExtraValues[extraValues];
                     pathList.emplace_back(entry.Path, entry.Size);
                     ++count;
                     readSize += entry.Size;
@@ -175,26 +213,43 @@ public:
                 totalSize += readSize;
             }
 
-            for (const auto& [matchedGlobs, pathList] : pathsByMatchedGlobs) {
+            for (const auto& [extraValues, pathList] : pathsByExtraValues) {
                 TExprNodeList extraColumnsAsStructArgs;
-                if (generatedColumnsConfig) {
-                    YQL_ENSURE(matchedGlobs.Defined());
-                    YQL_ENSURE(generatedColumnsConfig->Columns.size() <= matchedGlobs->size());
+                if (extraValues) {
+                    YQL_ENSURE(generatedColumnsConfig);
                     YQL_ENSURE(generatedColumnsConfig->SchemaTypeNode);
 
-                    for (size_t i = 0; i < generatedColumnsConfig->Columns.size(); ++i) {
-                        auto& col = generatedColumnsConfig->Columns[i];
+                    for (auto& ev : *extraValues) {
+                        auto resultType = ctx.Builder(object.Pos())
+                            .Callable("StructMemberType")
+                                .Add(0, generatedColumnsConfig->SchemaTypeNode)
+                                .Atom(1, ev.Name)
+                            .Seal()
+                            .Build();
+                        TExprNode::TPtr value;
+                        if (ev.Type.Defined()) {
+                            value = ctx.Builder(object.Pos())
+                                .Callable("StrictCast")
+                                    .Callable(0, "Data")
+                                        .Add(0, ExpandType(object.Pos(), *ctx.MakeType<TDataExprType>(*ev.Type), ctx))
+                                        .Atom(1, ev.Value)
+                                    .Seal()
+                                    .Add(1, resultType)
+                                .Seal()
+                                .Build();
+                        } else {
+                            value = ctx.Builder(object.Pos())
+                                .Callable("DataOrOptionalData")
+                                    .Add(0, resultType)
+                                    .Atom(1, ev.Value)
+                                .Seal()
+                                .Build();
+                        }
                         extraColumnsAsStructArgs.push_back(
                             ctx.Builder(object.Pos())
                                 .List()
-                                    .Atom(0, col)
-                                    .Callable(1, "DataOrOptionalData")
-                                        .Callable(0, "StructMemberType")
-                                            .Add(0, generatedColumnsConfig->SchemaTypeNode)
-                                            .Atom(1, col)
-                                        .Seal()
-                                        .Atom(1, (*matchedGlobs)[i])
-                                    .Seal()
+                                    .Atom(0, ev.Name)
+                                    .Add(1, value)
                                 .Seal()
                                 .Build()
                         );
@@ -345,16 +400,20 @@ private:
         const TString url = connect.Url;
         const TString tokenStr = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
-        TString generatedPattern;
+        TGeneratedColumnsConfig config;
         if (!partitionedBy.empty()) {
-            TGeneratedColumnsConfig config;
-            if (!BuildGeneratedPattern(projection, partitionedBy, schema->ChildPtr(1), config, generatedPattern)) {
-                return false;
+            config.Columns = partitionedBy;
+            config.SchemaTypeNode = schema->ChildPtr(1);
+            if (!projection.empty()) {
+                config.Generator = CreatePathGenerator(projection, partitionedBy);
             }
             GenColumnsByNode_[read.Raw()] = config;
         }
 
         for (const auto& path : paths) {
+            // each path in CONCAT() can generate multiple list requests for explicit partitioning
+            TVector<TListRequest> reqs;
+
             TListRequest req;
             req.Token = tokenStr;
             req.Url = url;
@@ -367,39 +426,41 @@ private:
                     // treat paths as regular wildcard patterns
                     req.Pattern = path;
                 }
+                reqs.push_back(req);
             } else {
                 if (IS3Lister::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
-                req.Pattern = path + generatedPattern;
+                if (!config.Generator) {
+                    // Hive-style partitioning
+                    TString generated;
+                    for (auto& col : config.Columns) {
+                        generated += "/" + col + "=*";
+                    }
+                    generated += "/*";
+                    req.Pattern = path + generated;
+                    reqs.push_back(req);
+                } else {
+                    for (auto& rule : config.Generator->GetRules()) {
+                        YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
+                        req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
+                        req.Pattern = path + rule.Path + "/*";
+                        reqs.push_back(req);
+                    }
+                }
             }
 
-            RequestsByNode_[read.Raw()].push_back(req);
-            if (PendingRequests_.find(req) == PendingRequests_.end()) {
-                auto future = Lister_->List(req.Token, req.Url, req.Pattern);
-                PendingRequests_[req] = future;
-                futures.push_back(std::move(future));
+            for (auto& req : reqs) {
+                RequestsByNode_[read.Raw()].push_back(req);
+                if (PendingRequests_.find(req) == PendingRequests_.end()) {
+                    auto future = Lister_->List(req.Token, req.Url, req.Pattern);
+                    PendingRequests_[req] = future;
+                    futures.push_back(std::move(future));
+                }
             }
         }
 
-        return true;
-    }
-
-    static bool BuildGeneratedPattern(const TString& projection, const TVector<TString>& partitionedBy,
-        const TExprNode::TPtr& schemaTypeNode, TGeneratedColumnsConfig& config, TString& generatedPattern)
-    {
-        if (!projection.empty()) {
-            ythrow yexception() << "Projection settings are not supported yet";
-        }
-
-        generatedPattern.clear();
-        config.Columns = partitionedBy;
-        config.SchemaTypeNode = schemaTypeNode;
-        for (auto& col : partitionedBy) {
-            generatedPattern += "/" + col + "=*";
-        }
-        generatedPattern += "/*";
         return true;
     }
 

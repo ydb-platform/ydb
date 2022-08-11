@@ -42,6 +42,7 @@ target_link_libraries(providers-s3-provider PUBLIC
   providers-dq-interface
   providers-result-expr_nodes
   providers-s3-expr_nodes
+  providers-s3-path_generator
   providers-s3-proto
   providers-s3-range_helpers
   library-yql-utils

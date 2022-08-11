@@ -257,14 +257,15 @@ public:
         }
 
         if (input->ChildrenSize() > TS3Object::idx_Settings) {
-            auto validator = [](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+            bool haveProjection = false;
+            bool havePartitionedBy = false;
+            auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
                 if ((name == "compression" || name == "projection" || name == "data.interval.unit") && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
                     return false;
                 }
 
-                bool havePartitionedBy = false;
                 if (name == "compression") {
                     auto& value = setting.Tail();
                     TStringBuf compression;
@@ -324,6 +325,7 @@ public:
                 }
 
                 YQL_ENSURE(name == "projection");
+                haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
                     return false;
                 }
@@ -333,16 +335,15 @@ public:
                     return false;
                 }
 
-                if (!havePartitionedBy) {
-                    ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Missing partitioned_by setting for projection"));
-                    return false;
-                }
-
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
                                      { "compression", "partitionedby", "projection", "data.interval.unit" }, validator, ctx))
             {
+                return TStatus::Error;
+            }
+            if (haveProjection && !havePartitionedBy) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Object::idx_Settings)->Pos()), "Missing partitioned_by setting for projection"));
                 return TStatus::Error;
             }
         }

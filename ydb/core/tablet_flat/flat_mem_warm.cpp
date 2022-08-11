@@ -51,7 +51,8 @@ void TMemTable::PrepareRollback() {
 void TMemTable::RollbackChanges() {
     Y_VERIFY(RollbackState);
     auto& state = *RollbackState;
-    Tree.RollbackTo(std::move(state.Snapshot));
+    Tree.RollbackTo(state.Snapshot);
+    state.Snapshot = { };
     Tree.CollectGarbage();
     Pool.RollbackTransaction();
     Blobs.Rollback(state.AddedBlobs);

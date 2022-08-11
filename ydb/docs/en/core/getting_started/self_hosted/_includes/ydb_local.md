@@ -28,7 +28,9 @@ You can start a local YDB server with a disk or in-memory storage:
 
 - Disk storage
 
-   - To store data on a disk, when you run the script for the first time, a 64GB `ydb.data` file is created in the working directory. Make sure there's enough disk space to create it.
+   - {% include [_includes/storage-device-requirements.md](../../../_includes/storage-device-requirements.md) %}
+
+   - The first time you run the script, an 80GB `ydb.data` file will be created in the working directory. Make sure there's enough disk space to create it.
 
    - Run the following command from the working directory:
 

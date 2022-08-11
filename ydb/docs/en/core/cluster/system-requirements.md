@@ -20,9 +20,11 @@ The number of servers and disks is determined by the fault-tolerance requirement
 
    A {{ ydb-short-name }} server can run on servers with any disk type (HDD/SSD/NVMe). However, we recommend using SSD/NVMe disks for better performance.
 
-   The minimum disk size must be at least 80 GB, otherwise the node won't be able to use the block store volume. Correct and uninterrupted operation with minimum-size disks is not guaranteed. We recommend using such disks exclusively for testing purposes. For YDB to work efficiently, we recommend using disks larger than 800 GB as block devices.
+   {% include [_includes/storage-device-requirements.md](../_includes/storage-device-requirements.md) %}
 
    {{ ydb-short-name }} does not use a file system to store data and accesses disk volumes directly. Don't mount a file system or perform other operations with a partition that uses {{ ydb-short-name }}. We also do not recommend sharing the block device with other processes because this can lead to significant performance degradation.
+
+   {{ ydb-short-name }} health and performance weren't tested on any types of virtual or network storage devices.
 
 ## Software configuration {#software}
 

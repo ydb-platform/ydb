@@ -25,18 +25,16 @@ If started successfully, you'll see the ID of the created container.
 
 `-h` is the container host name. Be sure to pass the `localhost` value. Otherwise, the container will be started with a random hostname.
 
-`-v` means mounting the host system directories into a container like `<host system directory>:<mount directory in the container>`. The YDB container uses the following mount directories:
-
+`-v`: Mount the host system directories into a container as `<host system directory>:<mount directory within the container>`. The YDB container uses the following mount directories:
 - `/ydb_data` for storing data. If this directory is not mounted, the container will be started without saving data to the host system disk.
 - `/ydb_certs` for storing certificates to establish a TLS connection. The started container will write to this directory the certificates to be used for a TLS client connection. If this directory is not mounted, you won't be able to connect via TLS due to having no certificate information.
 
-`-e`: means setting environment variables in `<name>=<value>` format. The YDB container uses the following environment variables:
-
+`-e` means setting environment variables in `<name>=<value>` format. The YDB container uses the following environment variables:
 - `YDB_DEFAULT_LOG_LEVEL`: The logging level. Acceptable values: `CRIT`, `ERROR`, `WARN`, `NOTICE`, and `INFO`. Defaults to `NOTICE`.
 - `GRPC_PORT`: The port for unencrypted connections. Defaults to 2136.
 - `GRPC_TLS_PORT`: The port for TLS connections. Defaults to 2135.
-- `MON_PORT`: The port for the built-in web UI with [monitoring and introspection tools](../../../../maintenance/embedded_monitoring/ydb_monitoring.md). Defaults to 8765.
-- `YDB_PDISK_SIZE`: The size of the disk for storing data in `<NUM>GB` format (for example, `YDB_PDISK_SIZE=128GB`). Acceptable values: `80GB` and higher. Defaults to 80GB.
+- `MON_PORT`: The port for the built-in web UI with [monitoring and introspection](../../../../maintenance/embedded_monitoring/ydb_monitoring.md) tools. Defaults to 8765.
+- `YDB_PDISK_SIZE`: The size of the data storage disk in `<NUM>GB` format (for example, `YDB_PDISK_SIZE=128GB`). Acceptable values: `80GB` and higher. Defaults to 80GB.
 - `YDB_USE_IN_MEMORY_PDISKS`: Using disks in memory. Acceptable values are `true` and `false`, defaults to `false`. If enabled, the container's file system is not used for working with data, all data is only stored in the memory of a process and is lost when it's stopped. Currently, you can start the container on Apple M1 in this mode only.
 
 {% include [_includes/storage-device-requirements.md](../../../../_includes/storage-device-requirements.md) %}

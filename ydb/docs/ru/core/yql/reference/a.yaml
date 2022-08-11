@@ -1,0 +1,34 @@
+title: Deploy docs
+service: yql
+
+ci:
+  secret: sec-01g9mj0b528x9wg348pdh5nv8n
+  runtime:
+    sandbox:
+      owner: YQL
+      # Настройки уведомлений при падении сборки (https://docs.yandex-team.ru/ci/runtime)
+      notifications:
+        - statuses: FAILURE
+          transport: email # доступные транспорты: telegram, email, jabber, q
+          # логины сотрудников, Sandbox-группы, рассылки (рассылки только для email уведомлений) и др.
+          recipients: yql-dev@yandex-team.ru
+
+  actions:
+    # определение экшена, который будет вызван при пулл-реквесте,
+    # затрагивающим вашу документацию
+    docs:
+      title: Deploy docs
+      flow: deploy-pr-docs
+      triggers:
+        - on: pr
+
+  flows:
+    deploy-pr-docs:
+      jobs:
+        deploy:
+          title: Deploy docs
+          task: common/docs/deploy
+          input:
+            targets: yql/docs_yfm/yt;yql/docs_yfm/ydb;yql/docs_yfm/rtmr;yql/docs_yfm/main;yql/docs_yfm/s_expressions
+            arcanum_review_id: ${context.launch_pull_request_info.pull_request.id}
+            notify: true # оставлять комментарий к ПР с ссылкой на выложенную документацию

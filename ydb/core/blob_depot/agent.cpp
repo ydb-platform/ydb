@@ -4,15 +4,13 @@
 namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerConnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (TabletId, TabletID()),
-            (PipeServerId, ev->Get()->ServerId));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT01, "TEvServerConnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
         const auto [it, inserted] = PipeServerToNode.emplace(ev->Get()->ServerId, std::nullopt);
         Y_VERIFY(inserted);
     }
 
     void TBlobDepot::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (TabletId, TabletID()),
-            (PipeServerId, ev->Get()->ServerId));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT02, "TEvServerDisconnected", (Id, GetLogId()), (PipeServerId, ev->Get()->ServerId));
 
         const auto it = PipeServerToNode.find(ev->Get()->ServerId);
         Y_VERIFY(it != PipeServerToNode.end());
@@ -38,9 +36,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
-        if (!Configured || (Config.HasDecommitGroupId() && !DecommitBlocksFinished)) {
-            const auto [it, inserted] = RegisterAgentQ.emplace(ev->Recipient, ev.Release());
-            Y_VERIFY(inserted);
+        if (!Configured || (Config.HasDecommitGroupId() && DecommitState < EDecommitState::BlocksFinished)) {
+            auto& q = RegisterAgentQ[ev->Recipient];
+            Y_VERIFY(q.empty());
+            q.emplace_back(ev.Release());
             return;
         }
 
@@ -48,7 +47,7 @@ namespace NKikimr::NBlobDepot {
         const TActorId& pipeServerId = ev->Recipient;
         const auto& req = ev->Get()->Record;
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (TabletId, TabletID()), (Msg, req), (NodeId, nodeId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT03, "TEvRegisterAgent", (Id, GetLogId()), (Msg, req), (NodeId, nodeId),
             (PipeServerId, pipeServerId), (Id, ev->Cookie));
 
         const auto it = PipeServerToNode.find(pipeServerId);
@@ -91,7 +90,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvAllocateIds::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (TabletId, TabletID()), (Msg, ev->Get()->Record),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT04, "TEvAllocateIds", (Id, GetLogId()), (Msg, ev->Get()->Record),
             (PipeServerId, ev->Recipient));
 
         const ui32 generation = Executor()->Generation();
@@ -177,7 +176,7 @@ namespace NKikimr::NBlobDepot {
                     Data->OnLeastExpectedBlobIdChange(range.GetChannel());
                 }
 
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (TabletId, TabletID()),
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT05, "IssueNewRange", (Id, GetLogId()),
                     (AgentId, agent.ConnectedNodeId), (Channel, range.GetChannel()),
                     (Begin, range.GetBegin()), (End, range.GetEnd()));
             }
@@ -207,7 +206,7 @@ namespace NKikimr::NBlobDepot {
             Channels[channel].GivenIdRanges.Subtract(agentGivenIdRange);
             const ui32 channel_ = channel;
             const auto& agentGivenIdRange_ = agentGivenIdRange;
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (TabletId, TabletID()), (AgentId, agent.ConnectedNodeId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT06, "ResetAgent", (Id, GetLogId()), (AgentId, agent.ConnectedNodeId),
                 (Channel, channel_), (GivenIdRanges, Channels[channel_].GivenIdRanges),
                 (Agent.GivenIdRanges, agentGivenIdRange_));
             agentGivenIdRange = {};
@@ -216,7 +215,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::InitChannelKinds() {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (TabletId, TabletID()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT07, "InitChannelKinds", (Id, GetLogId()));
 
         TTabletStorageInfo *info = Info();
         const ui32 generation = Executor()->Generation();
@@ -278,13 +277,15 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::ProcessRegisterAgentQ() {
-        if (!Configured || (Config.HasDecommitGroupId() && !DecommitBlocksFinished)) {
+        if (!Configured || (Config.HasDecommitGroupId() && DecommitState < EDecommitState::BlocksFinished)) {
             return;
         }
 
-        for (auto& [pipeServerId, ev] : std::exchange(RegisterAgentQ, {})) {
-            TAutoPtr<IEventHandle> tmp(ev.release());
-            Receive(tmp, TActivationContext::AsActorContext());
+        for (auto& [pipeServerId, events] : std::exchange(RegisterAgentQ, {})) {
+            for (auto& ev : events) {
+                TAutoPtr<IEventHandle> tmp(ev.release());
+                Receive(tmp, TActivationContext::AsActorContext());
+            }
         }
     }
 

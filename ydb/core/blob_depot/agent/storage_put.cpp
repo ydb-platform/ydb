@@ -24,6 +24,11 @@ namespace NKikimr::NBlobDepot {
             void Initiate() override {
                 auto& msg = *Event->Get<TEvBlobStorage::TEvPut>();
 
+                // zero step -- for decommission blobs just issue put immediately
+                if (msg.Decommission) {
+                    IssuePuts();
+                }
+
                 // first step -- check blocks
                 const auto status = Agent.BlocksManager.CheckBlockForTablet(msg.Id.TabletID(), msg.Id.Generation(), this, nullptr);
                 if (status == NKikimrProto::OK) {
@@ -66,7 +71,9 @@ namespace NKikimr::NBlobDepot {
                 auto sendPut = [&](TLogoBlobID id, const TString& buffer) {
                     auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, buffer, msg.Deadline, msg.HandleClass, msg.Tactic);
                     ev->ExtraBlockChecks = msg.ExtraBlockChecks;
-                    ev->ExtraBlockChecks.emplace_back(Agent.TabletId, Agent.BlobDepotGeneration);
+                    if (!msg.Decommission) { // do not check original blob against blocks when writing decommission copy
+                        ev->ExtraBlockChecks.emplace_back(msg.Id.TabletID(), msg.Id.Generation());
+                    }
                     Agent.SendToProxy(GroupId, std::move(ev), this, nullptr);
                 };
 

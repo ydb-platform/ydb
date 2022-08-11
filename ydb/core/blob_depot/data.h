@@ -213,6 +213,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobDepot::EKeepState KeepState;
             bool Public;
             bool Unconfirmed;
+            std::optional<TLogoBlobID> OriginalBlobId;
 
             TValue() = delete;
             TValue(const TValue&) = delete;
@@ -227,6 +228,9 @@ namespace NKikimr::NBlobDepot {
                 , KeepState(proto.GetKeepState())
                 , Public(proto.GetPublic())
                 , Unconfirmed(proto.GetUnconfirmed())
+                , OriginalBlobId(proto.HasOriginalBlobId()
+                    ? std::make_optional(LogoBlobIDFromLogoBlobID(proto.GetOriginalBlobId()))
+                    : std::nullopt)
             {}
 
             explicit TValue(NKikimrBlobDepot::EKeepState keepState)
@@ -331,6 +335,7 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
 
         void AddDataOnLoad(TKey key, TString value);
+        void AddDataOnDecommit(const TBlobDepot::TBlob& blob, NTabletFlatExecutor::TTransactionContext& txc);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 

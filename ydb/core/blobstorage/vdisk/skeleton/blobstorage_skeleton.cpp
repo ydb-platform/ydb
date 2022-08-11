@@ -111,7 +111,9 @@ namespace NKikimr {
 
         template<typename TEvent>
         bool CheckIfWriteAllowed(TAutoPtr<TEventHandle<TEvent>>& ev, const TActorContext& ctx) {
-            if (Config->BaseInfo.DonorMode) {
+            if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
+                ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, TAppData::TimeProvider->Now());
+            } else if (Config->BaseInfo.DonorMode) {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
             } else if (BlockWrites(GInfo->DecommitStatus)) {
                 ReplyError(NKikimrProto::ERROR, "group is being decommitted", ev, ctx, TAppData::TimeProvider->Now());

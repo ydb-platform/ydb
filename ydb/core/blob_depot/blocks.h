@@ -39,7 +39,8 @@ namespace NKikimr::NBlobDepot {
             : Self(self)
         {}
 
-        void AddBlockOnLoad(ui64 tabletId, ui32 generation, ui64 issuerGuid);
+        void AddBlockOnLoad(const TBlobDepot::TBlock& block);
+        void AddBlockOnDecommit(const TBlobDepot::TBlock& block, NTabletFlatExecutor::TTransactionContext& txc);
         void OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,
             std::unique_ptr<IEventHandle> response);
         void Handle(TEvBlobDepot::TEvBlock::TPtr ev);

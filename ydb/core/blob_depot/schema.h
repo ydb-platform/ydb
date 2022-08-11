@@ -5,15 +5,27 @@
 
 namespace NKikimr::NBlobDepot {
 
+    enum class EDecommitState : ui32 {
+        Default = 0, // at start or not running
+        BlocksFinished = 1,
+        BarriersFinished = 2,
+        BlobsFinished = 3,
+        BlobsCopied = 4,
+    };
+
     struct Schema : NIceDb::Schema {
         struct Config : Table<1> {
             struct Key : Column<1, NScheme::NTypeIds::Uint32> { static constexpr Type Value = 0; };
             struct ConfigProtobuf : Column<2, NScheme::NTypeIds::String> {};
+            struct DecommitState : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDecommitState; static constexpr Type Default = EDecommitState::Default; };
+            struct AssimilatorState : Column<4, NScheme::NTypeIds::String> {};
 
             using TKey = TableKey<Key>;
             using TColumns = TableColumns<
                 Key,
-                ConfigProtobuf
+                ConfigProtobuf,
+                DecommitState,
+                AssimilatorState
             >;
         };
 
@@ -40,18 +52,18 @@ namespace NKikimr::NBlobDepot {
         struct Barriers : Table<3> {
             struct TabletId : Column<1, NScheme::NTypeIds::Uint64> {};
             struct Channel : Column<2, NScheme::NTypeIds::Uint8> {};
-            struct RecordGeneration : Column<3, NScheme::NTypeIds::Uint32> {};
-            struct PerGenerationCounter : Column<4, NScheme::NTypeIds::Uint32> {};
+            struct HardGenCtr : Column<7, NScheme::NTypeIds::Uint64> {};
             struct Soft : Column<5, NScheme::NTypeIds::Uint64> {};
+            struct SoftGenCtr : Column<8, NScheme::NTypeIds::Uint64> {};
             struct Hard : Column<6, NScheme::NTypeIds::Uint64> {};
 
             using TKey = TableKey<TabletId, Channel>;
             using TColumns = TableColumns<
                 TabletId,
                 Channel,
-                RecordGeneration,
-                PerGenerationCounter,
+                HardGenCtr,
                 Soft,
+                SoftGenCtr,
                 Hard
             >;
         };

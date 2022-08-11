@@ -215,9 +215,11 @@ namespace NKikimr::NStorage {
                     group.ProxyId = Register(NBlobDepot::CreateBlobDepotAgent(groupId, info, group.ProxyId),
                         TMailboxType::ReadAsFilled, AppData()->SystemPoolId);
                     as->RegisterLocalService(MakeBlobStorageProxyID(groupId), group.ProxyId);
-                } else {
-                    Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(info), std::move(counters)));
                 }
+
+                // forward ConfigureProxy anyway, because when we switch to BlobDepot agent, we still need to update
+                // ds proxy configuration
+                Send(group.ProxyId, new TEvBlobStorage::TEvConfigureProxy(std::move(info), std::move(counters)));
             }
 
             if (const auto& info = group.Info) {

@@ -49,7 +49,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxLoad::Execute", (TabletId, Self->TabletID()));
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxLoad::Execute", (Id, Self->GetLogId()));
 
             NIceDb::TNiceDb db(txc.DB);
             bool progress = false;
@@ -138,7 +138,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxLoad::Complete", (TabletId, Self->TabletID()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxLoad::Complete", (Id, Self->GetLogId()),
                 (SuccessorTx, bool(SuccessorTx)), (LoadState.index, LoadState.index()));
 
             if (SuccessorTx) {

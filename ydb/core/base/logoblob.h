@@ -131,6 +131,14 @@ namespace NKikimr {
         static bool Parse(TLogoBlobID &out, const TString &buf, TString &errorExplanation);
         static void Out(IOutputStream &o, const TVector<TLogoBlobID> &vec);
 
+        void Save(IOutputStream *out) const {
+            ::Save(out, Raw.X);
+        }
+
+        void Load(IInputStream *in) {
+            ::Load(in, Raw.X);
+        }
+
         // Returns -1 if *this < x, 0 if *this == x, 1 if *this > x
         int Compare(const TLogoBlobID &x) const {
             const ui64 *r1 = GetRaw();

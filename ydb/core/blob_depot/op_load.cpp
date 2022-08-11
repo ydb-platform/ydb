@@ -14,7 +14,7 @@ namespace NKikimr::NBlobDepot {
             {}
 
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT19, "TTxLoad::Execute", (TabletId, Self->TabletID()));
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT19, "TTxLoad::Execute", (Id, Self->GetLogId()));
 
                 NIceDb::TNiceDb db(txc.DB);
 
@@ -32,6 +32,10 @@ namespace NKikimr::NBlobDepot {
                             Self->Configured = Self->Config.ParseFromString(table.GetValue<Schema::Config::ConfigProtobuf>());
                             Y_VERIFY(Self->Configured);
                         }
+                        Self->DecommitState = table.GetValueOrDefault<Schema::Config::DecommitState>();
+                        if (table.HaveValue<Schema::Config::AssimilatorState>()) {
+                            Self->AssimilatorState.emplace(table.GetValue<Schema::Config::AssimilatorState>());
+                        }
                     }
                 }
 
@@ -42,11 +46,7 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     }
                     while (table.IsValid()) {
-                        Self->BlocksManager->AddBlockOnLoad(
-                            table.GetValue<Schema::Blocks::TabletId>(),
-                            table.GetValue<Schema::Blocks::BlockedGeneration>(),
-                            table.GetValue<Schema::Blocks::IssuerGuid>()
-                        );
+                        Self->BlocksManager->AddBlockOnLoad(TBlock::FromRow(table));
                         if (!table.Next()) {
                             return false;
                         }
@@ -60,14 +60,7 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     }
                     while (table.IsValid()) {
-                        Self->BarrierServer->AddBarrierOnLoad(
-                            table.GetValue<Schema::Barriers::TabletId>(),
-                            table.GetValue<Schema::Barriers::Channel>(),
-                            table.GetValue<Schema::Barriers::RecordGeneration>(),
-                            table.GetValue<Schema::Barriers::PerGenerationCounter>(),
-                            TGenStep(table.GetValue<Schema::Barriers::Soft>()),
-                            TGenStep(table.GetValue<Schema::Barriers::Hard>())
-                        );
+                        Self->BarrierServer->AddBarrierOnLoad(TBarrier::FromRow(table));
                         if (!table.Next()) {
                             return false;
                         }
@@ -84,7 +77,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (TabletId, Self->TabletID()),
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (Id, Self->GetLogId()),
                     (Configured, Self->Configured));
 
                 if (Self->Configured) {

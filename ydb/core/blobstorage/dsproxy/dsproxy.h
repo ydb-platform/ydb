@@ -223,7 +223,7 @@ public:
         Y_VERIFY_S(status == NKikimrProto::RACE || vdiskId.GroupGeneration <= Info->GroupGeneration ||
             TEvent::EventType == TEvBlobStorage::EvVStatusResult,
             "status# " << NKikimrProto::EReplyStatus_Name(status) << " vdiskId.GroupGeneration# " << vdiskId.GroupGeneration
-            << " Info->GroupGeneration# " << Info->GroupGeneration);
+            << " Info->GroupGeneration# " << Info->GroupGeneration << " Response# " << ev->Get()->ToString());
 
         if (status != NKikimrProto::RACE && status != NKikimrProto::BLOCKED && status != NKikimrProto::DEADLINE) {
             return false; // these statuses are non-terminal

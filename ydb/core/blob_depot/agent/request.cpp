@@ -25,8 +25,7 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     }
                 };
-                const bool success = tryToProcess(Agent.TabletRequestInFlight) || tryToProcess(Agent.OtherRequestInFlight);
-                Y_VERIFY(success);
+                tryToProcess(Agent.TabletRequestInFlight) || tryToProcess(Agent.OtherRequestInFlight);
             }
         }
     }

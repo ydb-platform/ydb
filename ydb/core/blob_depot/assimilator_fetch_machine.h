@@ -22,6 +22,7 @@ namespace NKikimr::NBlobDepot {
             std::deque<TBlob> Blobs;
             std::optional<TLogoBlobID> LastBlob;
             bool Finished = false;
+            bool RequestInFlight = false;
 
             ui64 FirstBlock() const {
                 Y_VERIFY_DEBUG(!Blocks.empty());
@@ -92,10 +93,9 @@ namespace NKikimr::NBlobDepot {
 
         std::vector<TPerDiskState> PerDiskState;
         std::vector<TPerDiskState*> Heap;
-        ui64 CurrentBlock = 0;
-        std::tuple<ui64, ui8> CurrentBarrier{0, 0};
-        TLogoBlobID CurrentBlob;
-        std::optional<TBlobStorageGroupInfo::TGroupVDisks> VDisksInHeap;
+        std::optional<ui64> LastProcessedBlock;
+        std::optional<std::tuple<ui64, ui8>> LastProcessedBarrier;
+        std::optional<TLogoBlobID> LastProcessedBlob;
 
         struct TRequestInFlight {
             ui32 OrderNumber;
@@ -112,9 +112,11 @@ namespace NKikimr::NBlobDepot {
         TRequestsInFlight RequestsInFlight;
         THashMap<ui32, TNodeInfo> Nodes;
 
+        bool AssimilateDataInFlight = false;
+
     public:
         TGroupAssimilatorFetchMachine(TActorIdentity self, TIntrusivePtr<TBlobStorageGroupInfo> info,
-                TActorId blobDepotId);
+            TActorId blobDepotId, const std::optional<TString>& assimilatorState);
         void Handle(TAutoPtr<IEventHandle>& ev);
         void OnPassAway();
 
@@ -125,6 +127,7 @@ namespace NKikimr::NBlobDepot {
         void Handle(TEvents::TEvUndelivered::TPtr ev);
         ui32 EndRequest(ui64 id);
         void Handle(TEvBlobStorage::TEvVAssimilateResult::TPtr ev);
+        void HandleAssimilateDataConfirm();
         void Merge();
         void MergeDone();
     };

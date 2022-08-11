@@ -79,7 +79,7 @@ namespace NKikimr::NBlobDepot {
                 Y_VERIFY(blobSeqId.Channel < Self->Channels.size());
 
                 const ui64 value = blobSeqId.ToSequentialNumber();
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "MarkGivenIdCommitted", (TabletId, Self->TabletID()),
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT18, "MarkGivenIdCommitted", (Id, Self->GetLogId()),
                     (AgentId, agent.ConnectedNodeId), (BlobSeqId, blobSeqId), (Value, value),
                     (GivenIdRanges, Self->Channels[blobSeqId.Channel].GivenIdRanges),
                     (Agent.GivenIdRanges, agent.GivenIdRanges[blobSeqId.Channel]));

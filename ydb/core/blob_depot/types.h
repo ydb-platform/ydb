@@ -97,40 +97,10 @@ namespace NKikimr::NBlobDepot {
     };
 
     class TGivenIdRange {
-        struct TRange {
-            ui64 Begin;
-            ui64 End;
-            ui32 NumSetBits = 0;
-            TDynBitMap Bits;
+        static constexpr size_t BitsPerChunk = 256;
+        using TChunk = TBitMap<BitsPerChunk, ui64>;
 
-            TRange(ui64 begin, ui64 end)
-                : Begin(begin)
-                , End(end)
-                , NumSetBits(end - begin)
-            {
-                Bits.Set(0, end - begin);
-            }
-
-            static constexpr struct TZero {} Zero{};
-
-            TRange(ui64 begin, ui64 end, TZero)
-                : Begin(begin)
-                , End(end)
-                , NumSetBits(0)
-            {
-                Bits.Reset(0, end - begin);
-            }
-
-            struct TCompare {
-                bool operator ()(const TRange& x, const TRange& y) const { return x.Begin < y.Begin; }
-                bool operator ()(const TRange& x, ui64 y) const { return x.Begin < y; }
-                bool operator ()(ui64 x, const TRange& y) const { return x < y.Begin; }
-                using is_transparent = void;
-            };
-        };
-
-        using TRanges = std::set<TRange, TRange::TCompare>; // FIXME: deque?
-        TRanges Ranges;
+        std::map<ui64, TChunk> Ranges;
         ui32 NumAvailableItems = 0;
 
     public:
@@ -152,9 +122,6 @@ namespace NKikimr::NBlobDepot {
 
         std::vector<bool> ToDebugArray(size_t numItems) const;
         void CheckConsistency() const;
-
-    private:
-        void Pop(TRanges::iterator it, ui64 value);
     };
 
     using TValueChain = NProtoBuf::RepeatedPtrField<NKikimrBlobDepot::TValueChain>;

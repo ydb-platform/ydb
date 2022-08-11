@@ -23,6 +23,15 @@ namespace NKikimr::NBlobDepot {
             void Initiate() override {
                 auto& msg = GetQuery();
 
+                if (msg.Decommission) {
+                    // just forward this message to underlying proxy
+                    Y_VERIFY(Agent.ProxyId);
+                    const bool sent = TActivationContext::Send(Event->Forward(Agent.ProxyId));
+                    Y_VERIFY(sent);
+                    delete this;
+                    return;
+                }
+
                 Response = std::make_unique<TEvBlobStorage::TEvGetResult>(NKikimrProto::OK, msg.QuerySize,
                     Agent.VirtualGroupId);
                 AnswersRemain = msg.QuerySize;

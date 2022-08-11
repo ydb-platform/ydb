@@ -1,4 +1,5 @@
 #include "data.h"
+#include "garbage_collection.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -22,6 +23,35 @@ namespace NKikimr::NBlobDepot {
         const bool success = proto.ParseFromString(value);
         Y_VERIFY(success);
         PutKey(std::move(key), TValue(std::move(proto)));
+    }
+
+    void TData::AddDataOnDecommit(const TBlobDepot::TBlob& blob, NTabletFlatExecutor::TTransactionContext& txc) {
+        bool underSoft, underHard;
+        Self->BarrierServer->GetBlobBarrierRelation(blob.Id, &underSoft, &underHard);
+        if (underHard || (underSoft && !blob.Keep)) {
+            return; // we can skip this blob as it is already being collected
+        }
+
+        TKey key(blob.Id);
+
+        NKikimrBlobDepot::EKeepState keepState = blob.Keep ? NKikimrBlobDepot::EKeepState::Keep : NKikimrBlobDepot::EKeepState::Default;
+        if (const auto it = Data.find(key); it != Data.end()) {
+            keepState = Max(keepState, it->second.KeepState);
+        }
+
+        NKikimrBlobDepot::TValue value;
+        value.SetKeepState(keepState);
+        value.SetUnconfirmed(true);
+        LogoBlobIDFromLogoBlobID(blob.Id, value.MutableOriginalBlobId());
+
+        TString valueData;
+        const bool success = value.SerializeToString(&valueData);
+        Y_VERIFY(success);
+
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::Data>().Key(key.MakeBinaryKey()).Update<Schema::Data::Value>(valueData);
+
+        PutKey(key, TValue(std::move(value)));
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
@@ -53,7 +83,7 @@ namespace NKikimr::NBlobDepot {
             referencedBytes += id.BlobSize();
         });
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (TabletId, Self->TabletID()), (Key, key),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (Id, Self->GetLogId()), (Key, key),
             (ValueChain.size, data.ValueChain.size()), (ReferencedBytes, referencedBytes),
             (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
 
@@ -216,7 +246,7 @@ namespace NKikimr::NBlobDepot {
 
             record.TIntrusiveListItem<TRecordsPerChannelGroup, TRecordWithTrash>::Unlink();
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "issuing TEvCollectGarbage", (TabletId, Self->TabletID()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT11, "issuing TEvCollectGarbage", (Id, Self->GetLogId()),
                 (Channel, int(record.Channel)), (GroupId, record.GroupId), (Msg, ev->ToString()),
                 (LastConfirmedGenStep, record.LastConfirmedGenStep), (IssuedGenStep, record.IssuedGenStep),
                 (TrashInFlight.size, record.TrashInFlight.size()));
@@ -243,7 +273,7 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TData::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (TabletId, ev->Get()->TabletId),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT12, "TEvCollectGarbageResult", (Id, Self->GetLogId()),
             (Channel, ev->Get()->Channel), (GroupId, ev->Cookie), (Msg, ev->Get()->ToString()));
         const auto& key = std::make_tuple(ev->Get()->TabletId, ev->Get()->Channel, ev->Cookie);
         const auto it = RecordsPerChannelGroup.find(key);
@@ -294,7 +324,7 @@ namespace NKikimr::NBlobDepot {
                 return s.Str();
             };
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (TabletId, Self->TabletID()), (AgentId, agent.ConnectedNodeId),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT13, "Trim", (Id, Self->GetLogId()), (AgentId, agent.ConnectedNodeId),
                 (Id, ev->Cookie), (Channel, channel_), (InvalidatedStep, invalidatedStep_),
                 (GivenIdRanges, Self->Channels[channel_].GivenIdRanges),
                 (Agent.GivenIdRanges, agent.GivenIdRanges[channel_]),

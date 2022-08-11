@@ -49,6 +49,7 @@ class TGetImpl {
     const TString RequestPrefix;
 
     const bool PhantomCheck;
+    const bool Decommission;
 
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
@@ -67,6 +68,7 @@ public:
         , Blackboard(info, groupQueues, NKikimrBlobStorage::AsyncBlob, ev->GetHandleClass)
         , RequestPrefix(requestPrefix)
         , PhantomCheck(ev->PhantomCheck)
+        , Decommission(ev->Decommission)
     {
         Y_VERIFY(QuerySize > 0);
     }
@@ -77,6 +79,7 @@ public:
             ReportDetailedPartMap);
         ev->RestartCounter = counter;
         ev->PhantomCheck = PhantomCheck;
+        ev->Decommission = Decommission;
         return ev;
     }
 

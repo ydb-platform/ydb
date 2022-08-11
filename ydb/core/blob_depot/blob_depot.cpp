@@ -19,6 +19,12 @@ namespace NKikimr::NBlobDepot {
 
     STFUNC(TBlobDepot::StateWork) {
         try {
+            // postpone any messages from agents until metadata suction is done
+            if (const auto it = RegisterAgentQ.find(ev->Recipient); it != RegisterAgentQ.end()) {
+                it->second.emplace_back(ev.Release());
+                return;
+            }
+
             switch (const ui32 type = ev->GetTypeRewrite()) {
                 cFunc(TEvents::TSystem::Poison, HandlePoison);
 
@@ -55,9 +61,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepot::PassAway() {
-        if (RunningGroupAssimilator) {
-            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, RunningGroupAssimilator, SelfId(),
-                nullptr, 0));
+        for (const TActorId& actorId : {RunningGroupAssimilator, CopierId}) {
+            if (actorId) {
+                TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
+            }
         }
 
         TActor::PassAway();

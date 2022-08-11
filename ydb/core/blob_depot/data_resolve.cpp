@@ -32,7 +32,7 @@ namespace NKikimr::NBlobDepot {
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             NIceDb::TNiceDb db(txc.DB);
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT22, "TTxResolve::Execute", (TabletId, Self->TabletID()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT22, "TTxResolve::Execute", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (ItemIndex, ItemIndex),
                 (LastScannedKey, LastScannedKey));
 
@@ -158,7 +158,7 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Complete(const TActorContext&) override {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (TabletId, Self->TabletID()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, bool(SuccessorTx)),
                 (Outbox.size, Outbox.size()));
 
@@ -256,7 +256,7 @@ namespace NKikimr::NBlobDepot {
     };
 
     void TData::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (TabletId, Self->TabletID()), (Msg, ev->Get()->ToString()),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
             (Sender, ev->Sender), (Cookie, ev->Cookie));
         Self->Execute(std::make_unique<TTxResolve>(Self, ev));
     }

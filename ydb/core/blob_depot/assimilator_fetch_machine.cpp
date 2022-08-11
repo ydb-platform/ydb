@@ -4,21 +4,30 @@ namespace NKikimr::NBlobDepot {
 
     using TFetchMachine = TBlobDepot::TGroupAssimilatorFetchMachine;
 
+    struct TStateMask {
+        enum {
+            Block = 1,
+            Barrier = 2,
+            Blob = 4,
+        };
+    };
+
     TFetchMachine::TGroupAssimilatorFetchMachine(TActorIdentity self, TIntrusivePtr<TBlobStorageGroupInfo> info,
-            TActorId blobDepotId)
+            TActorId blobDepotId, const std::optional<TString>& assimilatorState)
         : Self(self)
         , Info(std::move(info))
         , BlobDepotId(blobDepotId)
     {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT38, "TGroupAssimilatorFetchMachine start", (GroupId, Info->GroupID));
+
         PerDiskState.resize(Info->GetTotalVDisksNum());
-        VDisksInHeap.emplace(&Info->GetTopology());
         for (ui32 i = 0; i < PerDiskState.size(); ++i) {
             const TActorId actorId = Info->GetActorId(i);
             const ui32 nodeId = actorId.NodeId();
             TNodeInfo& node = Nodes[nodeId];
             node.OrderNumbers.push_back(i);
         }
+
         for (const auto& [nodeId, node] : Nodes) {
             if (nodeId != Self.NodeId()) {
                 TActivationContext::Send(new IEventHandle(TEvInterconnect::EvConnectNode, 0,
@@ -29,6 +38,21 @@ namespace NKikimr::NBlobDepot {
                 }
             }
         }
+
+        if (assimilatorState) {
+            TStringInput stream(*assimilatorState);
+            ui8 mask = 0;
+            Load(&stream, mask);
+            if (mask & TStateMask::Block) {
+                Load(&stream, LastProcessedBlock.emplace());
+            }
+            if (mask & TStateMask::Barrier) {
+                Load(&stream, LastProcessedBarrier.emplace());
+            }
+            if (mask & TStateMask::Blob) {
+                Load(&stream, LastProcessedBlob.emplace());
+            }
+        }
     }
 
     void TFetchMachine::Handle(TAutoPtr<IEventHandle>& ev) {
@@ -37,6 +61,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvInterconnect::TEvNodeConnected, Handle);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Handle);
+            cFunc(TEvPrivate::EvAssimilatedDataConfirm, HandleAssimilateDataConfirm);
 
             default:
                 Y_VERIFY_DEBUG(false, "unexpected event Type# %08" PRIx32, type);
@@ -47,7 +72,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& [nodeId, node] : Nodes) {
             if (nodeId != Self.NodeId()) {
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0,
-                   TActivationContext::InterconnectProxy(nodeId), Self, nullptr, 0));
+                    TActivationContext::InterconnectProxy(nodeId), Self, nullptr, 0));
             }
         }
     }
@@ -60,19 +85,24 @@ namespace NKikimr::NBlobDepot {
 
         TPerDiskState& state = PerDiskState[orderNumber];
         Y_VERIFY(!state.Finished);
+        Y_VERIFY(!state.RequestInFlight);
+        state.RequestInFlight = true;
+
+        auto maxOpt = [](const auto& x, const auto& y) { return !y ? *x : !x ? *y : *x < *y ? *y : *x; };
 
         auto ev = std::make_unique<TEvBlobStorage::TEvVAssimilate>(Info->GetVDiskId(orderNumber));
         auto& record = ev->Record;
-        if (state.LastBlock) {
-            record.SetSkipBlocksUpTo(*state.LastBlock);
+        if (state.LastBlock || LastProcessedBlock) {
+            record.SetSkipBlocksUpTo(maxOpt(state.LastBlock, LastProcessedBlock));
         }
-        if (state.LastBarrier) {
+        if (state.LastBarrier || LastProcessedBarrier) {
             auto *x = record.MutableSkipBarriersUpTo();
-            x->SetTabletId(std::get<0>(*state.LastBarrier));
-            x->SetChannel(std::get<1>(*state.LastBarrier));
+            const auto& [tabletId, channel] = maxOpt(state.LastBarrier, LastProcessedBarrier);
+            x->SetTabletId(tabletId);
+            x->SetChannel(channel);
         }
-        if (state.LastBlob) {
-            LogoBlobIDFromLogoBlobID(*state.LastBlob, record.MutableSkipBlobsUpTo());
+        if (state.LastBlob || LastProcessedBlob) {
+            LogoBlobIDFromLogoBlobID(maxOpt(state.LastBlob, LastProcessedBlob), record.MutableSkipBlobsUpTo());
         }
 
         const ui64 id = ++LastRequestId;
@@ -88,10 +118,8 @@ namespace NKikimr::NBlobDepot {
     void TFetchMachine::Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
         const ui32 nodeId = ev->Get()->NodeId;
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT40, "NodeConnected", (GroupId, Info->GroupID), (NodeId, nodeId));
-        TNodeInfo& node = Nodes[nodeId];
-        for (const ui32 orderNumber : node.OrderNumbers) {
-            auto& state = PerDiskState[orderNumber];
-            if (!state.Finished) {
+        for (const ui32 orderNumber : Nodes[nodeId].OrderNumbers) {
+            if (auto& state = PerDiskState[orderNumber]; !state.Finished) {
                 IssueAssimilateCmdToVDisk(orderNumber);
             }
         }
@@ -100,17 +128,23 @@ namespace NKikimr::NBlobDepot {
     void TFetchMachine::Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
         const ui32 nodeId = ev->Get()->NodeId;
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT41, "NodeDisconnected", (GroupId, Info->GroupID), (NodeId, nodeId));
-        TNodeInfo& node = Nodes[nodeId];
-        for (const auto *kv : std::exchange(node.RequestsInFlight, {})) {
+        for (const auto *kv : std::exchange(Nodes[nodeId].RequestsInFlight, {})) {
+            TPerDiskState& state = PerDiskState[kv->second.OrderNumber];
+            Y_VERIFY(state.RequestInFlight);
+            state.RequestInFlight = false;
             const size_t num = RequestsInFlight.erase(kv->first);
             Y_VERIFY(num == 1);
         }
+        Merge();
+        TActivationContext::Send(new IEventHandle(TEvInterconnect::EvConnectNode, 0,
+            TActivationContext::InterconnectProxy(nodeId), Self, nullptr, 0));
     }
 
     void TFetchMachine::Handle(TEvents::TEvUndelivered::TPtr ev) {
         if (ev->Get()->SourceType == TEvBlobStorage::EvVAssimilate) {
             // TODO: undelivery may be caused by moving VDisk actor out, handle it
             EndRequest(ev->Cookie);
+            Merge();
         }
     }
 
@@ -118,6 +152,9 @@ namespace NKikimr::NBlobDepot {
         const auto it = RequestsInFlight.find(id);
         Y_VERIFY(it != RequestsInFlight.end());
         const ui32 orderNumber = it->second.OrderNumber;
+        TPerDiskState& state = PerDiskState[orderNumber];
+        Y_VERIFY(state.RequestInFlight);
+        state.RequestInFlight = false;
         const TActorId actorId = Info->GetActorId(orderNumber);
         const ui32 nodeId = actorId.NodeId();
         TNodeInfo& node = Nodes[nodeId];
@@ -142,7 +179,7 @@ namespace NKikimr::NBlobDepot {
         for (const auto& item : record.GetBlocks()) {
             const ui64 tabletId = item.GetTabletId();
             state.LastBlock.emplace(tabletId);
-            if (CurrentBlock <= *state.LastBlock) {
+            if (!LastProcessedBlock || *LastProcessedBlock <= *state.LastBlock) {
                 state.Blocks.emplace_back(item);
             }
         }
@@ -150,7 +187,7 @@ namespace NKikimr::NBlobDepot {
             const ui64 tabletId = item.GetTabletId();
             const ui8 channel = item.GetChannel();
             state.LastBarrier.emplace(tabletId, channel);
-            if (CurrentBarrier <= *state.LastBarrier) {
+            if (!LastProcessedBarrier || *LastProcessedBarrier <= *state.LastBarrier) {
                 state.Barriers.emplace_back(item);
             }
         }
@@ -173,7 +210,7 @@ namespace NKikimr::NBlobDepot {
             }
             const TLogoBlobID id(raw);
             state.LastBlob.emplace(id);
-            if (CurrentBlob <= *state.LastBlob) {
+            if (!LastProcessedBlob || *LastProcessedBlob <= *state.LastBlob) {
                 state.Blobs.emplace_back(item, id);
             }
         }
@@ -181,7 +218,6 @@ namespace NKikimr::NBlobDepot {
         if (wasExhausted && !state.Exhausted()) {
             Heap.push_back(&state);
             std::push_heap(Heap.begin(), Heap.end(), TPerDiskState::THeapCompare());
-            *VDisksInHeap |= {&Info->GetTopology(), Info->GetVDiskId(orderNumber)};
         }
 
         if (record.BlocksSize() + record.BarriersSize() + record.BlobsSize() == 0 && record.GetStatus() == NKikimrProto::OK) {
@@ -194,50 +230,71 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TFetchMachine::Merge() {
-        auto ev = std::make_unique<TEvAssimilatedData>(Info->GroupID);
+        if (AssimilateDataInFlight) {
+            return;
+        }
 
-        bool quorumCorrect = Info->GetQuorumChecker().CheckQuorumForGroup(*VDisksInHeap);
+        auto ev = std::make_unique<TEvAssimilatedData>();
+
+        const TBlobStorageGroupInfo::TTopology *top = &Info->GetTopology();
+        TBlobStorageGroupInfo::TGroupVDisks mergeableDisks(top);
+        for (ui32 i = 0; i < PerDiskState.size(); ++i) {
+            TPerDiskState& state = PerDiskState[i];
+            if (!state.Exhausted() || state.Finished) {
+                mergeableDisks |= {top, top->GetVDiskId(i)};
+            } else if (state.RequestInFlight) {
+                return;
+            }
+        }
+
+        static constexpr ui64 MaxBlock = Max<ui64>();
+        static constexpr std::tuple<ui64, ui8> MaxBarrier = std::make_tuple(Max<ui64>(), Max<ui8>());
+        static const TLogoBlobID MaxBlob = Max<TLogoBlobID>();
+
+        bool quorumCorrect = Info->GetQuorumChecker().CheckQuorumForGroup(mergeableDisks);
         while (quorumCorrect) {
             if (Heap.empty()) {
-                CurrentBlob = Max<TLogoBlobID>();
+                LastProcessedBlock.emplace(MaxBlock);
+                LastProcessedBarrier.emplace(MaxBarrier);
+                LastProcessedBlob.emplace(MaxBlob);
                 break;
             }
 
             std::optional<TBlock> block;
             std::optional<TBarrier> barrier;
             std::optional<TBlob> blob;
+            TSubgroupPartLayout layout;
 
             auto callback = [&](auto&& value, ui32 orderNumber) {
                 using T = std::decay_t<decltype(value)>;
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "AssimilatedItem", (GroupId, Info->GroupID), (OrderNumber, orderNumber),
                     (Value, value));
                 if constexpr (std::is_same_v<T, TBlock>) {
-                    Y_VERIFY(CurrentBlock <= value.TabletId);
-                    CurrentBlock = value.TabletId;
+                    Y_VERIFY(!LastProcessedBlock || *LastProcessedBlock < value.TabletId);
                     if (block) {
                         block->Merge(value);
                     } else {
                         block.emplace(std::move(value));
                     }
                 } else if constexpr (std::is_same_v<T, TBarrier>) {
-                    CurrentBlock = Max<ui64>();
-                    Y_VERIFY(CurrentBarrier <= std::make_tuple(value.TabletId, value.Channel));
-                    CurrentBarrier = {value.TabletId, value.Channel};
+                    Y_VERIFY(!LastProcessedBarrier || *LastProcessedBarrier < std::make_tuple(value.TabletId, value.Channel));
                     if (barrier) {
                         barrier->Merge(value);
                     } else {
                         barrier.emplace(std::move(value));
                     }
                 } else if constexpr (std::is_same_v<T, TBlob>) {
-                    CurrentBarrier = {Max<ui64>(), Max<ui8>()};
-                    Y_VERIFY(CurrentBlob <= value.Id);
-                    CurrentBlob = value.Id;
+                    Y_VERIFY(!LastProcessedBlob || *LastProcessedBlob < value.Id);
                     if (blob) {
                         blob->Merge(value);
                     } else {
                         blob.emplace(std::move(value));
                     }
-                    // special handling for part layout here -- we can't just merge the blobs
+
+                    auto local = TIngress(value.Ingress).LocalParts(top->GType);
+                    for (ui8 partIdx = local.FirstPosition(); partIdx != local.GetSize(); partIdx = local.NextPosition(partIdx)) {
+                        layout.AddItem(top->GetIdxInSubgroup(top->GetVDiskId(orderNumber), blob->Id.Hash()), partIdx, top->GType);
+                    }
                 } else {
                     static_assert(TDependentFalse<T>, "incorrect case");
                 }
@@ -255,8 +312,8 @@ namespace NKikimr::NBlobDepot {
                         // data not yet received -- ask for it
                         IssueAssimilateCmdToVDisk(orderNumber);
                         // mark disk temporarily unavailable
-                        *VDisksInHeap -= {&Info->GetTopology(), Info->GetVDiskId(orderNumber)};
-                        quorumCorrect = Info->GetQuorumChecker().CheckQuorumForGroup(*VDisksInHeap);
+                        mergeableDisks -= {top, top->GetVDiskId(orderNumber)};
+                        quorumCorrect = Info->GetQuorumChecker().CheckQuorumForGroup(mergeableDisks);
                     }
                     // remove item from the heap -- it has no valid data to process
                     Heap.pop_back();
@@ -267,20 +324,59 @@ namespace NKikimr::NBlobDepot {
             }
 
             if (block) {
+                LastProcessedBlock.emplace(block->TabletId);
                 ev->Blocks.push_back(std::move(*block));
             } else if (barrier) {
+                LastProcessedBlock.emplace(MaxBlock);
+                LastProcessedBarrier.emplace(barrier->TabletId, barrier->Channel);
                 ev->Barriers.push_back(std::move(*barrier));
             } else if (blob) {
+                blob->Keep = TIngress(blob->Ingress).KeepUnconditionally(TIngress::IngressMode(top->GType));
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT48, "assimilated blob", (GroupId, Info->GroupID), (Id, blob->Id),
+                    (Layout, layout.ToString(top->GType)), (Keep, blob->Keep));
+                LastProcessedBlock.emplace(MaxBlock);
+                LastProcessedBarrier.emplace(MaxBarrier);
+                LastProcessedBlob.emplace(blob->Id);
                 ev->Blobs.push_back(std::move(*blob));
             } else {
                 Y_FAIL();
             }
+
+            if (ev->Blocks.size() + ev->Barriers.size() + ev->Blobs.size() == 10'000) {
+                break;
+            }
         }
 
-        ev->BlobsFinished = CurrentBlob == Max<TLogoBlobID>();
-        ev->BarriersFinished = ev->BlobsFinished || CurrentBarrier == std::make_tuple(Max<ui64>(), Max<ui8>());
-        ev->BlocksFinished = ev->BarriersFinished || CurrentBlock == Max<ui64>();
+        ev->BlocksFinished = LastProcessedBlock == MaxBlock;
+        ev->BarriersFinished = LastProcessedBarrier == MaxBarrier;
+        ev->BlobsFinished = LastProcessedBlob == MaxBlob;
+        Y_VERIFY(ev->BlocksFinished >= ev->BarriersFinished && ev->BarriersFinished >= ev->BlobsFinished);
+
+        // store the assimilator state
+        TStringOutput stream(ev->AssimilatorState);
+
+        Save(&stream, ui8((LastProcessedBlock ? TStateMask::Block : 0)
+            | (LastProcessedBarrier ? TStateMask::Barrier : 0)
+            | (LastProcessedBlob ? TStateMask::Blob : 0)));
+        if (LastProcessedBlock) {
+            Save(&stream, *LastProcessedBlock);
+        }
+        if (LastProcessedBarrier) {
+            Save(&stream, *LastProcessedBarrier);
+        }
+        if (LastProcessedBlob) {
+            Save(&stream, *LastProcessedBlob);
+        }
+
         Self.Send(BlobDepotId, ev.release());
+
+        AssimilateDataInFlight = true;
+    }
+
+    void TFetchMachine::HandleAssimilateDataConfirm() {
+        Y_VERIFY(AssimilateDataInFlight);
+        AssimilateDataInFlight = false;
+        Merge();
     }
 
 } // NKikimr::NBlobDepot

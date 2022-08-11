@@ -36,6 +36,7 @@ message TValue {
     optional EKeepState KeepState = 3;
     optional bool Public = 4;
     optional bool Unconfirmed = 5;
+    optional NKikimrProto.TLogoBlobID OriginalBlobId = 6;
 }
 
 message TGivenIdRange {

@@ -1,7 +1,10 @@
 #include "blob_depot_tablet.h"
 #include "assimilator_fetch_machine.h"
+#include "assimilator_copier.h"
 #include "schema.h"
 #include "blocks.h"
+#include "garbage_collection.h"
+#include "data.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -13,14 +16,16 @@ namespace NKikimr::NBlobDepot {
         const ui32 GroupId;
         const NKikimrBlobDepot::TBlobDepotConfig Config;
         const ui64 TabletId;
+        std::optional<TString> AssimilatorState;
         TActorId BlobDepotId;
         TIntrusivePtr<TBlobStorageGroupInfo> Info;
 
     public:
-        TGroupAssimilator(const NKikimrBlobDepot::TBlobDepotConfig& config, ui64 tabletId)
+        TGroupAssimilator(const NKikimrBlobDepot::TBlobDepotConfig& config, ui64 tabletId, std::optional<TString> assimilatorState)
             : GroupId(config.GetDecommitGroupId())
             , Config(config)
             , TabletId(tabletId)
+            , AssimilatorState(std::move(assimilatorState))
         {
             Y_VERIFY(Config.GetOperationMode() == NKikimrBlobDepot::EOperationMode::VirtualGroup);
         }
@@ -116,7 +121,8 @@ namespace NKikimr::NBlobDepot {
 
         void StartAssimilation() {
             Become(&TThis::StateAssimilate);
-            FetchMachine = std::make_unique<TGroupAssimilatorFetchMachine>(SelfId(), Info, BlobDepotId);
+            FetchMachine = std::make_unique<TGroupAssimilatorFetchMachine>(SelfId(), Info, BlobDepotId,
+                std::move(AssimilatorState));
         }
 
         void StateAssimilate(STFUNC_SIG) {
@@ -142,7 +148,8 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::StartGroupAssimilator() {
         if (!RunningGroupAssimilator && Config.HasDecommitGroupId()) {
-            RunningGroupAssimilator = Register(new TGroupAssimilator(Config, TabletID()));
+            CopierId = RegisterWithSameMailbox(new TGroupAssimilatorCopierActor(this));
+            RunningGroupAssimilator = Register(new TGroupAssimilator(Config, TabletID(), AssimilatorState));
         }
     }
 
@@ -157,6 +164,7 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::Handle(TEvAssimilatedData::TPtr ev) {
         class TTxPutAssimilatedData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
             std::unique_ptr<TEvAssimilatedData> Ev;
+            bool UnblockRegisterActorQ = false;
 
         public:
             TTxPutAssimilatedData(TBlobDepot *self, TEvAssimilatedData::TPtr ev)
@@ -168,26 +176,62 @@ namespace NKikimr::NBlobDepot {
                 NIceDb::TNiceDb db(txc.DB);
 
                 for (const auto& block : Ev->Blocks) {
-                    Self->BlocksManager->AddBlockOnLoad(block.TabletId, block.BlockedGeneration, 0);
-                    db.Table<Schema::Blocks>().Key(block.TabletId).Update(
-                        NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(block.BlockedGeneration),
-                        NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
-                    );
+                    Self->BlocksManager->AddBlockOnDecommit(block, txc);
                 }
+                for (const auto& barrier : Ev->Barriers) {
+                    Self->BarrierServer->AddBarrierOnDecommit(barrier, txc);
+                }
+                for (const auto& blob : Ev->Blobs) {
+                    Self->Data->AddDataOnDecommit(blob, txc);
+                }
+
+                if (Ev->BlocksFinished && Self->DecommitState < EDecommitState::BlocksFinished) {
+                    Self->DecommitState = EDecommitState::BlocksFinished;
+                    UnblockRegisterActorQ = true;
+                }
+                if (Ev->BarriersFinished && Self->DecommitState < EDecommitState::BarriersFinished) {
+                    Self->DecommitState = EDecommitState::BarriersFinished;
+                }
+                if (Ev->BlobsFinished && Self->DecommitState < EDecommitState::BlobsFinished) {
+                    Self->DecommitState = EDecommitState::BlobsFinished;
+                }
+
+                db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
+                    NIceDb::TUpdate<Schema::Config::DecommitState>(Self->DecommitState),
+                    NIceDb::TUpdate<Schema::Config::AssimilatorState>(Ev->AssimilatorState)
+                );
 
                 return true;
             }
 
             void Complete(const TActorContext&) override {
-                if (!std::exchange(Self->DecommitBlocksFinished, Ev->BlocksFinished)) {
-                    STLOG(PRI_INFO, BLOB_DEPOT, BDTxx, "blocks assimilation complete", (TabletId, Self->TabletID()),
+                if (UnblockRegisterActorQ) {
+                    STLOG(PRI_INFO, BLOB_DEPOT, BDT35, "blocks assimilation complete", (Id, Self->GetLogId()),
                         (DecommitGroupId, Self->Config.GetDecommitGroupId()));
                     Self->ProcessRegisterAgentQ();
+                }
+
+                if (EDecommitState::BlobsFinished <= Self->DecommitState) {
+                    // finished metadata replication, time to kill the assimilator
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Self->RunningGroupAssimilator,
+                        Self->SelfId(), nullptr, 0));
+                    Self->RunningGroupAssimilator = {};
+                } else {
+                    TActivationContext::Send(new IEventHandle(TEvPrivate::EvAssimilatedDataConfirm, 0,
+                        Self->RunningGroupAssimilator, Self->SelfId(), nullptr, 0)); // ask assimilator to resume process
                 }
             }
         };
 
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT47, "received TEvAssimilatedData", (Id, GetLogId()),
+            (Blocks.size, ev->Get()->Blocks.size()), (Barriers.size, ev->Get()->Barriers.size()),
+            (Blobs.size, ev->Get()->Blobs.size()), (BlocksFinished, ev->Get()->BlocksFinished),
+            (BarriersFinished, ev->Get()->BarriersFinished), (BlobsFinished, ev->Get()->BlobsFinished));
         Execute(std::make_unique<TTxPutAssimilatedData>(this, ev));
+    }
+
+    void TBlobDepot::ProcessAssimilatedData(TEvAssimilatedData& msg) {
+        (void)msg;
     }
 
 } // NKikimr::NBlobDepot

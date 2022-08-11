@@ -142,14 +142,14 @@ namespace NKikimr::NBlobDepot {
         }
 
         void SendBlock(ui32 groupId) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "issing TEvBlock", (TabletId, Self->TabletID()), (BlockedTabletId,
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT08, "issing TEvBlock", (Id, Self->GetLogId()), (BlockedTabletId,
                 TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, groupId), (IssuerGuid, IssuerGuid));
             SendToBSProxy(SelfId(), groupId, new TEvBlobStorage::TEvBlock(TabletId, BlockedGeneration, TInstant::Max(),
                 IssuerGuid), groupId);
         }
 
         void Handle(TEvBlobStorage::TEvBlockResult::TPtr ev) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "TEvBlockResult", (TabletId, Self->TabletID()), (Msg, ev->Get()->ToString()),
+            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT09, "TEvBlockResult", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
                 (BlockedTabletId, TabletId), (BlockedGeneration, BlockedGeneration), (GroupId, ev->Cookie));
             switch (ev->Get()->Status) {
                 case NKikimrProto::OK:
@@ -190,10 +190,23 @@ namespace NKikimr::NBlobDepot {
         )
     };
 
-    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 generation, ui64 issuerGuid) {
-        auto& block = Blocks[tabletId];
-        block.BlockedGeneration = generation;
-        block.IssuerGuid = issuerGuid;
+    void TBlobDepot::TBlocksManager::AddBlockOnLoad(const TBlobDepot::TBlock& block) {
+        Blocks[block.TabletId] = {
+            .BlockedGeneration = block.BlockedGeneration,
+            .IssuerGuid = block.IssuerGuid,
+        };
+    }
+
+    void TBlobDepot::TBlocksManager::AddBlockOnDecommit(const TBlobDepot::TBlock& block, NTabletFlatExecutor::TTransactionContext& txc) {
+        AddBlockOnLoad(block);
+
+        NIceDb::TNiceDb db(txc.DB);
+        db.Table<Schema::Blocks>().Key(block.TabletId).Update(
+            NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(block.BlockedGeneration),
+            NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(block.IssuerGuid)
+        );
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT44, "adding block through decommission", (Id, Self->GetLogId()), (Block, block));
     }
 
     void TBlobDepot::TBlocksManager::OnBlockCommitted(ui64 tabletId, ui32 blockedGeneration, ui32 nodeId, ui64 issuerGuid,

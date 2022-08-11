@@ -13,11 +13,11 @@ namespace NPDisk {
 // Log write completion action
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 void TCompletionLogWrite::Exec(TActorSystem *actorSystem) {
-    bool isNewChunksCommited = false;
+    // bool isNewChunksCommited = false;
     if (CommitedLogChunks) {
         auto* req = PDisk->ReqCreator.CreateFromArgs<TCommitLogChunks>(std::move(CommitedLogChunks));
         PDisk->InputRequest(req);
-        isNewChunksCommited = true;
+        //isNewChunksCommited = true;
     }
     for (auto it = Commits.begin(); it != Commits.end(); ++it) {
         TLogWrite *evLog = *it;

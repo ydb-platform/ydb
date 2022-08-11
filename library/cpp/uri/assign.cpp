@@ -11,6 +11,9 @@
 #include <util/system/sys_alloc.h>
 
 namespace NUri {
+
+    static const TStringBuf ESCAPED_FRAGMENT(TStringBuf("_escaped_fragment_="));
+
     TMallocPtr<char> TUri::IDNToAscii(const wchar32* idna) {
         // XXX: don't use punycode_encode directly as it doesn't include
         // proper stringprep and splitting on dot-equivalent characters
@@ -136,6 +139,124 @@ namespace NUri {
         return true;
     }
 
+    class THashBangModifier {
+    public:
+        TStringBuf HashBang;
+        TStringBuf Query;
+
+        bool FromFragmentToHashBang = false;
+        bool FromQueryToFragment = false;
+        bool FromFragmentToQuery = false;
+
+        THashBangModifier() = default;
+
+        bool ParseHashBangFromFragment(const TParser& parser) {
+            const TSection& fragment = parser.Get(TField::FieldFragment);
+            if (fragment.IsSet()) {
+                HashBang = fragment.Get();
+                if (!HashBang.empty() && '!' == HashBang[0]) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        bool ParseHashBangFromQuery(const TParser& parser) {
+            const TSection& query = parser.Get(TField::FieldQuery);
+            if (query.IsSet()) {
+                query.Get().RSplit('&', Query, HashBang);
+                if (HashBang.StartsWith(ESCAPED_FRAGMENT)) {
+                    HashBang.Skip(ESCAPED_FRAGMENT.length());
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        void Parse(const TParser& parser, size_t& buflen) {
+            if (0 != (parser.Flags & TFeature::FeatureFragmentToHashBang)) {
+                if (ParseHashBangFromFragment(parser)) {
+                    FromFragmentToHashBang = true;
+                    buflen += 1; // for '\0'
+                    buflen += 2 * HashBang.length(); // encode
+                }
+            } else if (0 != (parser.Flags & TFeature::FeatureHashBangToEscapedFragment)) {
+                if (ParseHashBangFromFragment(parser)) {
+                    HashBang.Skip(1); // remove !
+                    FromFragmentToQuery = true;
+                    buflen += ESCAPED_FRAGMENT.length();
+                    buflen += 2 * HashBang.length(); // encode
+                }
+            } else if (0 != (parser.Flags & TFeature::FeatureEscapedToHashBangFragment)) {
+                if (ParseHashBangFromQuery(parser)) {
+                    FromQueryToFragment = true;
+                    buflen += 2; // for '!' and '\0'
+                    buflen -= ESCAPED_FRAGMENT.length();
+                }
+            }
+        }
+
+        bool AppendQuery(TMemoryWriteBuffer& out, const TParser& parser) const {
+            const TSection& query = parser.Get(TField::FieldQuery);
+            if (FromQueryToFragment) {
+                return AppendField(out, TField::FieldQuery, Query, query.GetFlagsEncode());
+            }
+            if (FromFragmentToQuery) {
+                if (AppendField(out, TField::FieldQuery, query.Get(), query.GetFlagsEncode())) {
+                    out << '&';
+                }
+                out << ESCAPED_FRAGMENT;
+                const TSection& fragment = parser.Get(TField::FieldFragment);
+                TUri::ReEncodeToField(
+                    out, HashBang,
+                    TField::FieldFragment, fragment.GetFlagsEncode(),
+                    TField::FieldQuery, parser.GetFieldFlags(TField::FieldQuery)
+                );
+                return true;
+            }
+            if (!query.IsSet()) {
+                return false;
+            }
+            AppendField(out, TField::FieldQuery, query.Get(), query.GetFlagsEncode());
+            return true; // may be empty
+        }
+
+        bool AppendHashBang(TMemoryWriteBuffer& out, const TParser& parser) const {
+            if (FromFragmentToHashBang) {
+                const TSection& fragment = parser.Get(TField::FieldFragment);
+                TUri::ReEncodeToField(
+                    out, HashBang,
+                    TField::FieldFragment, fragment.GetFlagsEncode(),
+                    TField::FieldHashBang, parser.GetFieldFlags(TField::FieldHashBang)
+                );
+                return true;
+            }
+            return false;
+        }
+
+        bool AppendFragment(TMemoryWriteBuffer& out, const TParser& parser) const {
+            if (FromFragmentToQuery || FromFragmentToHashBang) {
+                return false;
+            }
+            if (FromQueryToFragment) {
+                const TSection& query = parser.Get(TField::FieldQuery);
+                out << '!';
+                TUri::ReEncodeToField(
+                    out, HashBang,
+                    TField::FieldQuery, TFeature::FeatureDecodeANY | query.GetFlagsEncode(),
+                    TField::FieldFragment, TFeature::FeatureDecodeANY | parser.GetFieldFlags(TField::FieldFragment)
+                );
+                return true;
+            }
+            const TSection& fragment = parser.Get(TField::FieldFragment);
+            if (!fragment.IsSet()) {
+                return false;
+            }
+            AppendField(out, TField::FieldQuery, fragment.Get(), fragment.GetFlagsEncode());
+            return true;
+        }
+    };
+
     TState::EParsed TUri::AssignImpl(const TParser& parser, TScheme::EKind defaultScheme) {
         Clear();
 
@@ -196,7 +317,7 @@ namespace NUri {
 
         // add unprocessed fields
 
-        for (int i = 0; i < FieldUrlMAX; ++i) {
+        for (ui32 i = 0; i < FieldUrlMAX; ++i) {
             const EField field = EField(i);
             const TSection& section = parser.Get(field);
 
@@ -211,43 +332,9 @@ namespace NUri {
         // process #! fragments
         // https://developers.google.com/webmasters/ajax-crawling/docs/specification
 
-        static const TStringBuf escapedFragment(TStringBuf("_escaped_fragment_="));
-
-        bool encodeHashBang = false;
-        TStringBuf queryBeforeEscapedFragment;
-        TStringBuf queryEscapedFragment;
-
-        if (!FldIsSet(FieldFrag) && !FldIsSet(FieldQuery)) {
-            const TSection& frag = parser.Get(FieldFrag);
-
-            if (frag.IsSet()) {
-                if (0 != (parser.Flags & FeatureHashBangToEscapedFragment)) {
-                    const TStringBuf fragBuf = frag.Get();
-                    if (!fragBuf.empty() && '!' == fragBuf[0]) {
-                        encodeHashBang = true;
-                        // '!' will make space for '&' or '\0' if needed
-                        buflen += escapedFragment.length();
-                        buflen += 2 * fragBuf.length(); // we don't know how many will be encoded
-                    }
-                }
-            } else {
-                const TSection& query = parser.Get(FieldQuery);
-                if (query.IsSet()) {
-                    // FeatureHashBangToEscapedFragment has preference
-                    if (FeatureEscapedToHashBangFragment == (parser.Flags & FeaturesEscapedFragment)) {
-                        const TStringBuf queryBuf = query.Get();
-
-                        queryBuf.RSplit('&', queryBeforeEscapedFragment, queryEscapedFragment);
-                        if (queryEscapedFragment.StartsWith(escapedFragment)) {
-                            queryEscapedFragment.Skip(escapedFragment.length());
-                            buflen += 2; // for '!' and '\0' in fragment
-                            buflen -= escapedFragment.length();
-                        } else {
-                            queryEscapedFragment.Clear();
-                        }
-                    }
-                }
-            }
+        THashBangModifier modifier;
+        if (!FldIsSet(FieldFragment) && !FldIsSet(FieldQuery)) {
+            modifier.Parse(parser, buflen);
         }
 
         // now set all fields prior to validating
@@ -255,64 +342,36 @@ namespace NUri {
         Alloc(buflen);
 
         TMemoryWriteBuffer out(Buffer.data(), Buffer.size());
-        for (int i = 0; i < FieldUrlMAX; ++i) {
+        for (ui32 i = 0; i < FieldUrlMAX; ++i) {
             const EField field = EField(i);
-
+            if (FldIsSet(field)) {
+                continue;
+            }
             const TSection& section = parser.Get(field);
-            if (!section.IsSet() || FldIsSet(field)) {
-                continue;
-            }
-            if (FieldQuery == field && encodeHashBang) {
-                continue;
-            }
-            if (FieldFrag == field && queryEscapedFragment.IsInited()) {
-                continue;
-            }
-
             char* beg = out.Buf();
-            TStringBuf value = section.Get();
-            ui64 careFlags = section.GetFlagsEncode();
 
             if (field == FieldQuery) {
-                if (queryEscapedFragment.IsInited()) {
-                    out << '!';
-                    if (!queryEscapedFragment.empty()) {
-                        ReEncodeToField(
-                            out, queryEscapedFragment,
-                            FieldQuery, FeatureDecodeANY | careFlags,
-                            FieldFrag, FeatureDecodeANY | parser.GetFieldFlags(FieldFrag)
-                        );
-                    }
-                    FldSetNoDirty(FieldFrag, TStringBuf(beg, out.Buf()));
-                    if (queryBeforeEscapedFragment.empty()) {
-                        continue;
-                    }
-                    out << '\0';
-                    beg = out.Buf();
-                    value = queryBeforeEscapedFragment;
-                }
-            } else if (field == FieldFrag) {
-                if (encodeHashBang) {
-                    const TSection& query = parser.Get(FieldQuery);
-                    if (query.IsSet() && AppendField(out, FieldQuery, query.Get(), query.GetFlagsEncode())) {
-                        out << '&';
-                    }
-                    out << escapedFragment;
-                    value.Skip(1); // skip '!'
-                    ReEncodeToField(
-                        out, value,
-                        FieldFrag, careFlags,
-                        FieldQuery, parser.GetFieldFlags(FieldQuery)
-                    );
-                    FldSetNoDirty(FieldQuery, TStringBuf(beg, out.Buf()));
+                if (!modifier.AppendQuery(out, parser)) {
                     continue;
                 }
+            } else if (field == FieldHashBang) {
+                if (!modifier.AppendHashBang(out, parser)) {
+                    continue;
+                }
+            } else if (field == FieldFragment) {
+                if (!modifier.AppendFragment(out, parser)) {
+                    continue;
+                }
+            } else {
+                if (!section.IsSet()) {
+                    continue;
+                }
+                AppendField(out, field, section.Get(), section.GetFlagsEncode()); // may be empty
             }
 
-            AppendField(out, field, value, careFlags);
+            // path operations case
             char* end = out.Buf();
-
-            if (careFlags & FeaturePathOperation) {
+            if (section.GetFlagsEncode() & FeaturePathOperation) {
                 if (!PathOperation(beg, end, PathOperationFlag(parser.Flags))) {
                     return ParsedBadPath;
                 }
@@ -320,6 +379,7 @@ namespace NUri {
                 out.SetPos(end);
             }
             FldSetNoDirty(field, TStringBuf(beg, end));
+            out << '\0';
 
             // special character case
             const ui64 checkChars = section.GetFlagsAllPlaintext() & FeaturesCheckSpecialChar;
@@ -329,13 +389,12 @@ namespace NUri {
                     status = ParsedBadFormat;
                 }
             }
-            out << '\0';
         }
 
         if (inHostNonAsciiChars) {
             char* beg = out.Buf();
             out << hostAsciiBuf;
-            const EField field = convertIDN ? FieldHost : FieldHostAscii;
+            auto field = convertIDN ? FieldHost : FieldHostAscii;
             FldSetNoDirty(field, TStringBuf(beg, out.Buf()));
             out << '\0';
         }
@@ -355,7 +414,7 @@ namespace NUri {
 
         const TStringBuf& port = GetField(FieldPort);
         if (!port.empty() && !TryFromString<ui16>(port, Port)) {
-            status = ParsedBadPort;
+            return ParsedBadPort;
         }
         if (ParsedOK != status) {
             return status;

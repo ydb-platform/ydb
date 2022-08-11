@@ -76,6 +76,7 @@ public:
             false /*isIndexOnly*/, ForceBlockedGeneration, IsInternal, IsVerboseNoDataEnabled, CollectDebugInfo,
             ReportDetailedPartMap);
         ev->RestartCounter = counter;
+        ev->PhantomCheck = PhantomCheck;
         return ev;
     }
 

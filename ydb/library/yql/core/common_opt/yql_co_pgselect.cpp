@@ -410,9 +410,19 @@ std::pair<TExprNode::TPtr, TExprNode::TPtr> RewriteSubLinks(TPositionHandle pos,
                             ctx.NewCallable(node->Pos(), "RemoveSystemMembers", { arg }) });
 
                         auto filterExpr = ctx.ReplaceNodes(testLambda->TailPtr(), {
-                            {testLambda->Head().Child(0), originalRow},
+                            {testLambda->Head().Child(0), arg},
                             {testLambda->Head().Child(1), value},
                             });
+
+                        auto status = OptimizeExpr(filterExpr, filterExpr, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+                            if (node->IsCallable("Member") && node->Child(0) == arg.Get()) {
+                                return ctx.ChangeChild(*node, 1, ctx.NewAtom(node->Pos(), TString("_yql_join_sublink_") + ToString(it->second) + "_" + node->Child(1)->Content()));
+                            }
+
+                            return node;
+                        }, ctx, TOptimizeExprSettings(optCtx.Types));
+
+                        YQL_ENSURE(status.Level != IGraphTransformer::TStatus::Error);
 
                         root = ctx.NewCallable(node->Pos(), "FromPg", { filterExpr });
                         break;

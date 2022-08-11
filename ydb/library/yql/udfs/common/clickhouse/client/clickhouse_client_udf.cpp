@@ -44,8 +44,16 @@ using namespace NYql;
 using namespace NUdf;
 
 namespace {
+struct TPgConvertInfo {
+    ui32 TypeId = 0;
+    TStringRef TypeName;
+    i32 TypeLen = 0;
+    const TType* SourceDataType = nullptr;
+    std::optional<EDataSlot> SourceLogicalSlot; // empty means that there is not corresponding type for pg type, e.g. point
+};
 
 struct TColumnMeta {
+    std::optional<TPgConvertInfo> PgConvertInfo;
     std::optional<TString> Aggregation;
     std::optional<EDataSlot> Slot; // empty if null type
     bool IsOptional = false;
@@ -58,15 +66,55 @@ struct TColumnMeta {
     std::unordered_map<i16, std::pair<TString, ui32>> EnumVar;
 };
 
+std::pair<std::optional<EDataSlot>, TType*> InferSlotFromPgType(IFunctionTypeInfoBuilder& typeInfoBuilder, const TStringRef typeName) {
+    if (typeName == TStringRef("bool")) {
+        return { EDataSlot::Bool, typeInfoBuilder.SimpleType<bool>() };
+    }
+    if (typeName == TStringRef("int4")) {
+        return { EDataSlot::Int32, typeInfoBuilder.SimpleType<i32>() };
+    }
+    if (typeName == TStringRef("int8")) {
+        return { EDataSlot::Int64, typeInfoBuilder.SimpleType<i64>() };
+    }
+    if (typeName == TStringRef("float4")) {
+        return { EDataSlot::Float, typeInfoBuilder.SimpleType<float>() };
+    }
+    if (typeName == TStringRef("float8")) {
+        return { EDataSlot::Double, typeInfoBuilder.SimpleType<double>() };
+    }
+    if (typeName == TStringRef("text")) {
+        return { EDataSlot::Utf8, typeInfoBuilder.SimpleType<TUtf8>() };
+    }
+    if (IsIn({ TStringRef("cstring"), TStringRef("varchar"), TStringRef("bytea") }, typeName)) {
+        return { EDataSlot::String, nullptr };
+    }
+    return {};
+}
+
+TPgConvertInfo GetPgConvertInfo(IFunctionTypeInfoBuilder& typeInfoBuilder, const ITypeInfoHelper& typeHelper, const TType* type) {
+    TPgConvertInfo info;
+    info.TypeId = TPgTypeInspector(typeHelper, type).GetTypeId();
+    auto* pgDescription = typeHelper.FindPgTypeDescription(info.TypeId);
+    Y_ENSURE(pgDescription);
+    info.TypeLen = pgDescription->Typelen;
+    info.TypeName = pgDescription->Name;
+    
+    std::tie(info.SourceLogicalSlot, info.SourceDataType) = InferSlotFromPgType(typeInfoBuilder, pgDescription->Name);
+    if (info.SourceDataType) {
+        info.SourceDataType = typeInfoBuilder.Optional()->Item(info.SourceDataType).Build();
+    }
+    return info;
+}
+
 template<bool MaybeOptional = true>
-bool GetDataType(const ITypeInfoHelper& typeHelper, const TType* type, TColumnMeta& meta) {
+bool GetDataType(IFunctionTypeInfoBuilder& typeInfoBuilder, const ITypeInfoHelper& typeHelper, const TType* type, TColumnMeta& meta) {
     switch (typeHelper.GetTypeKind(type)) {
     case ETypeKind::Tuple: {
         meta.IsTuple = true;
         const TTupleTypeInspector tupleType(typeHelper, type);
         meta.Items.resize(tupleType.GetElementsCount());
         for (auto i = 0U; i < meta.Items.size(); ++i)
-            if (!GetDataType(typeHelper, tupleType.GetElementType(i), meta.Items[i]))
+            if (!GetDataType(typeInfoBuilder, typeHelper, tupleType.GetElementType(i), meta.Items[i]))
                 return false;
         return true;
     }
@@ -74,12 +122,12 @@ bool GetDataType(const ITypeInfoHelper& typeHelper, const TType* type, TColumnMe
         meta.IsList = true;
         type = TListTypeInspector(typeHelper, type).GetItemType();
         meta.Items.resize(1U);
-        return GetDataType(typeHelper, type, meta.Items.front());
+        return GetDataType(typeInfoBuilder, typeHelper, type, meta.Items.front());
     case ETypeKind::Optional:
         if constexpr (MaybeOptional) {
             meta.IsOptional = true;
             type = TOptionalTypeInspector(typeHelper, type).GetItemType();
-            return GetDataType<false>(typeHelper, type, meta);
+            return GetDataType<false>(typeInfoBuilder, typeHelper, type, meta);
         }
         else
             break;
@@ -90,13 +138,48 @@ bool GetDataType(const ITypeInfoHelper& typeHelper, const TType* type, TColumnMe
         meta.Scale = dataType.GetScale();
         return true;
     }
+    case ETypeKind::Pg: {
+        meta.PgConvertInfo = GetPgConvertInfo(typeInfoBuilder, typeHelper, type);
+        return true;
+    }
     default:
         break;
     }
     return false;
 }
 
+NDB::DataTypePtr PgMetaToClickHouse(const TPgConvertInfo& info) {
+    if (info.TypeName == TStringRef("bool")) {
+        return std::make_shared<NDB::DataTypeUInt8>();
+    }
+
+    if (info.TypeName == TStringRef("int4")) {
+        return std::make_shared<NDB::DataTypeInt32>();
+    }
+    
+    if (info.TypeName == TStringRef("int8")) {
+        return std::make_shared<NDB::DataTypeInt64>();
+    }
+
+    if (info.TypeName == TStringRef("float4")) {
+        return std::make_shared<NDB::DataTypeFloat32>();
+    }
+
+    if (info.TypeName == TStringRef("float8")) {
+        return std::make_shared<NDB::DataTypeFloat64>();
+    }
+    return std::make_shared<NDB::DataTypeString>();
+}
+
+NDB::DataTypePtr PgMetaToNullableClickHouse(const TPgConvertInfo& info) {
+    return makeNullable(PgMetaToClickHouse(info));
+}
+
 NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
+    if (meta.PgConvertInfo) {
+        return PgMetaToNullableClickHouse(*meta.PgConvertInfo);
+    }
+
     if (!meta.Enum.empty()) {
         if (meta.Enum.size() < 256) {
             NDB::DataTypeEnum8::Values values;
@@ -209,7 +292,7 @@ NDB::DataTypePtr MetaToClickHouse(const TColumnMeta& meta) {
             ret = std::make_shared<NDB::DataTypeUUID>();
             break;
         default:
-            throw yexception() << "Unsupported argument type: " << GetDataTypeInfo(*meta.Slot).Name;
+            ythrow yexception() << "Unsupported argument type: " << GetDataTypeInfo(*meta.Slot).Name;
         }
     }
 
@@ -226,8 +309,67 @@ void PermuteUuid(const char* src, char* dst) {
     }
 }
 
+TUnboxedValuePod ConvertOutputValueForPgType(const NDB::IColumn* col, const TPgConvertInfo& meta,
+    const IValueBuilder* valueBuilder, ssize_t externalIndex)
+{
+    Y_ENSURE(col->getDataType() == NDB::TypeIndex::Nullable);
+    NDB::StringRef ref;
+    if (col->isNullAt(externalIndex)) {
+        return {};
+    }
+
+    auto& pgBuilder = valueBuilder->GetPgBuilder();
+    ref = static_cast<const NDB::ColumnNullable*>(col)->getNestedColumn().getDataAt(externalIndex);
+    if (!meta.SourceLogicalSlot) {
+        // just parse pg value
+        TStringValue parseError("");
+        if (ref.size > std::numeric_limits<ui32>::max()) {
+            ythrow yexception() << "Too huge payload to parse pg value: " << ref.size;
+        }
+        auto ret = pgBuilder.ValueFromText(meta.TypeId, { ref.data, static_cast<ui32>(ref.size) }, parseError);
+        if (!ret) {
+            ythrow yexception() << "Failed to parse value of pg type " << meta.TypeName << ", details: " << TStringBuf(parseError.Data(), parseError.Size());
+        }
+    }
+
+    switch (*meta.SourceLogicalSlot) {
+    case EDataSlot::Bool:
+        [[fallthrough]];
+    case EDataSlot::Int32:
+        [[fallthrough]];
+    case EDataSlot::Int64:
+        [[fallthrough]];
+    case EDataSlot::Float:
+        [[fallthrough]];
+    case EDataSlot::Double: {
+        TUnboxedValuePod ret = TUnboxedValuePod::Zero();
+        Y_ENSURE(ref.size <= 8);
+        memcpy(&ret, ref.data, ref.size);
+        // todo: fix ABI and remove const_cast
+        return pgBuilder.ConvertToPg(ret, const_cast<TType*>(meta.SourceDataType), meta.TypeId).Release();
+    }
+    case EDataSlot::Utf8:
+        if (!IsUtf8(std::string_view(ref))) {
+            ythrow yexception() << "Bad Utf8.";
+        }
+        [[fallthrough]];
+    case EDataSlot::String:
+        if (ref.size > std::numeric_limits<ui32>::max()) {
+            ythrow yexception() << "Too huge payload to build pg string: " << ref.size;
+        }
+
+        return pgBuilder.NewString(meta.TypeLen, meta.TypeId, { ref.data,  static_cast<ui32>(ref.size) }).Release();
+    default:
+        ythrow yexception() << "Unexpected slot " << *meta.SourceLogicalSlot << " for pg type " << meta.TypeName;
+    }
+}
+
 TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& meta, ui32 tzId,
     const IValueBuilder* valueBuilder, ssize_t externalIndex = 0) {
+    if (meta.PgConvertInfo) {
+        return ConvertOutputValueForPgType(col, *meta.PgConvertInfo, valueBuilder, externalIndex);
+    }
+
     if (!meta.Enum.empty()) {
         auto ref = col->getDataAt(externalIndex);
         i16 value;
@@ -238,13 +380,13 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
             value = *(const i16*)ref.data;
         }
         else {
-            throw yexception() << "Unsupported column type: " << col->getName();
+            ythrow yexception() << "Unsupported column type: " << col->getName();
         }
 
         Y_ENSURE(meta.EnumVar.size() == meta.Enum.size());
         const auto x = meta.EnumVar.find(value);
         if (x == meta.EnumVar.cend()) {
-            throw yexception() << "Missing enum value: " << value;
+            ythrow yexception() << "Missing enum value: " << value;
         }
 
         const ui32 index = x->second.second;
@@ -254,7 +396,11 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
     if (meta.Aggregation) {
         auto field = (*col)[externalIndex];
         const auto& state = field.get<NDB::AggregateFunctionStateData &>();
-        return valueBuilder->NewString({ state.data.data(), (ui32)state.data.size() }).Release();
+        if (state.data.size() > std::numeric_limits<ui32>::max()) {
+            ythrow yexception() << "Too huge aggregation state to put it into string: " << state.data.size();
+        }
+
+        return valueBuilder->NewString({ state.data.data(), static_cast<ui32>(state.data.size()) }).Release();
     }
 
     if (meta.IsEmptyList) {
@@ -307,22 +453,37 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
     }
 
     if (const auto slot = *meta.Slot; slot == EDataSlot::String) {
-        return valueBuilder->NewString({ ref.data, (ui32)ref.size }).Release();
+        if (ref.size > std::numeric_limits<ui32>::max()) {
+            ythrow yexception() << "Too huge payload to build string: " << ref.size;
+        }
+
+        return valueBuilder->NewString({ ref.data, static_cast<ui32>(ref.size) }).Release();
     }
     else if (slot == EDataSlot::Utf8) {
         if (!IsUtf8(std::string_view(ref))) {
             ythrow yexception() << "Bad Utf8.";
         }
-        return valueBuilder->NewString({ ref.data, (ui32)ref.size }).Release();
+        if (ref.size > std::numeric_limits<ui32>::max()) {
+            ythrow yexception() << "Too huge payload to build Utf8 string: " << ref.size;
+        }
+
+        return valueBuilder->NewString({ ref.data, static_cast<ui32>(ref.size) }).Release();
     }
     else if (slot == EDataSlot::Json) {
         if (!NDom::IsValidJson(std::string_view(ref))) {
             ythrow yexception() << "Bad Json.";
         }
-        return valueBuilder->NewString({ ref.data, (ui32)ref.size }).Release();
+        if (ref.size > std::numeric_limits<ui32>::max()) {
+            ythrow yexception() << "Too huge payload to build Json string: " << ref.size;
+        }
+
+        return valueBuilder->NewString({ ref.data, static_cast<ui32>(ref.size) }).Release();
     }
     else if (slot == EDataSlot::Uuid) {
         char uuid[16];
+        if (ref.size != sizeof(uuid)) {
+            ythrow yexception() << "Unsupported Uuid of size " << ref.size;
+        }
         PermuteUuid<false>(ref.data, uuid);
         return valueBuilder->NewString({ uuid, sizeof(uuid) }).Release();
     }
@@ -337,6 +498,7 @@ TUnboxedValuePod ConvertOutputValue(const NDB::IColumn* col, const TColumnMeta& 
     else {
         auto size = GetDataTypeInfo(*meta.Slot).FixedSize;
         TUnboxedValuePod ret = TUnboxedValuePod::Zero();
+        Y_ENSURE(ref.size <= 8);
         memcpy(&ret, ref.data, size);
         if (tzId) {
             if (*meta.Slot == EDataSlot::TzDatetime) {
@@ -1193,7 +1355,7 @@ public:
             if (structType) {
                 std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
                 for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
-                    if (auto& meta = outMeta[i]; !GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
+                    if (auto& meta = outMeta[i]; !GetDataType(builder, *typeHelper, structType.GetMemberType(i), meta)) {
                         ::TStringBuilder sb;
                         sb << "Incompatible column '" << structType.GetMemberName(i) << "' type: ";
                         TTypePrinter(*typeHelper, structType.GetMemberType(i)).Out(sb.Out);
@@ -1258,7 +1420,7 @@ public:
                 std::vector<TColumnMeta> outMeta(structType.GetMembersCount());
                 NDB::ColumnsWithTypeAndName columns(structType.GetMembersCount());
                 for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
-                    if (auto& meta = outMeta[i]; GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
+                    if (auto& meta = outMeta[i]; GetDataType(builder, *typeHelper, structType.GetMemberType(i), meta)) {
                         auto& colsumn = columns[i];
                         colsumn.type = MetaToClickHouse(meta);
                         colsumn.name = structType.GetMemberName(i);
@@ -1351,7 +1513,7 @@ public:
                 NDB::ColumnsWithTypeAndName columns;
                 columns.reserve(payloadIndexes.size());
                 for (ui32 i = 0U; i < structType.GetMembersCount(); ++i) {
-                    if (auto& meta = inMeta[i]; GetDataType(*typeHelper, structType.GetMemberType(i), meta)) {
+                    if (auto& meta = inMeta[i]; GetDataType(builder, *typeHelper, structType.GetMemberType(i), meta)) {
                         const std::string_view name = structType.GetMemberName(i);
                         bool payload = true;
                         for (ui32 k = 0U; k < keys.size(); ++k) {

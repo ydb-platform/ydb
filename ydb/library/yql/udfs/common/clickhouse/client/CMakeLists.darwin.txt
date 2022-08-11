@@ -55,7 +55,7 @@ target_compile_options(clickhouse_client_udf.global PRIVATE
   -DDBMS_VERSION_PATCH=0
   -Wno-unused-parameter
   -DUDF_ABI_VERSION_MAJOR=2
-  -DUDF_ABI_VERSION_MINOR=23
+  -DUDF_ABI_VERSION_MINOR=25
   -DUDF_ABI_VERSION_PATCH=0
 )
 target_include_directories(clickhouse_client_udf.global PUBLIC

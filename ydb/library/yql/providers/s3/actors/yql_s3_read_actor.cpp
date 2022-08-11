@@ -27,6 +27,7 @@
 #include <ydb/library/yql/minikql/mkql_program_builder.h>
 #include <ydb/library/yql/minikql/invoke_builtins/mkql_builtins.h>
 #include <ydb/library/yql/minikql/mkql_function_registry.h>
+#include <ydb/library/yql/minikql/mkql_node_cast.h>
 #include <ydb/library/yql/minikql/mkql_terminator.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_factories.h>
 #include <ydb/library/yql/providers/common/schema/mkql/yql_mkql_schema.h>
@@ -618,6 +619,39 @@ private:
 };
 
 using namespace NKikimr::NMiniKQL;
+// the same func exists in clickhouse client udf :(
+NDB::DataTypePtr PgMetaToClickHouse(const TPgType* type) {
+    auto typeId = type->GetTypeId();
+    TTypeInfoHelper typeInfoHelper;
+    auto* pgDescription = typeInfoHelper.FindPgTypeDescription(typeId);
+    Y_ENSURE(pgDescription);
+    const auto typeName = pgDescription->Name;
+    using NUdf::TStringRef;
+    if (typeName == TStringRef("bool")) {
+        return std::make_shared<NDB::DataTypeUInt8>();
+    }
+
+    if (typeName == TStringRef("int4")) {
+        return std::make_shared<NDB::DataTypeInt32>();
+    }
+
+    if (typeName == TStringRef("int8")) {
+        return std::make_shared<NDB::DataTypeInt64>();
+    }
+
+    if (typeName == TStringRef("float4")) {
+        return std::make_shared<NDB::DataTypeFloat32>();
+    }
+
+    if (typeName == TStringRef("float8")) {
+        return std::make_shared<NDB::DataTypeFloat64>();
+    }
+    return std::make_shared<NDB::DataTypeString>();
+}
+
+NDB::DataTypePtr PgMetaToNullableClickHouse(const TPgType* type) {
+    return makeNullable(PgMetaToClickHouse(type));
+}
 
 NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializationInterval::EUnit unit) {
     switch (type->GetKind()) {
@@ -635,6 +669,8 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
                 elems.emplace_back(MetaToClickHouse(tupleType->GetElementType(i), unit));
             return std::make_shared<NDB::DataTypeTuple>(elems);
         }
+        case TType::EKind::Pg:
+            return PgMetaToNullableClickHouse(AS_TYPE(TPgType, type));
         case TType::EKind::Data: {
             const auto dataType = static_cast<const TDataType*>(type);
             switch (const auto slot = *dataType->GetDataSlot()) {
@@ -674,11 +710,11 @@ NDB::DataTypePtr MetaToClickHouse(const TType* type, NSerialization::TSerializat
             case NUdf::EDataSlot::Interval:
                 return NSerialization::GetInterval(unit);
             default:
-                break;
+                throw yexception() << "Unsupported data slot in MetaToClickHouse: " << slot;
             }
         }
         default:
-            break;
+            throw yexception() << "Unsupported type kind in MetaToClickHouse: " << type->GetKindAsStr();
     }
     return nullptr;
 }

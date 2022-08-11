@@ -7,31 +7,34 @@
 
 
 
-add_library(yabseil-cpp-tstring-y_absl-time)
-target_compile_options(yabseil-cpp-tstring-y_absl-time PRIVATE
+add_library(abseil-cpp-tstring-y_absl-time)
+target_compile_options(abseil-cpp-tstring-y_absl-time PRIVATE
   -Wno-everything
 )
-target_include_directories(yabseil-cpp-tstring-y_absl-time PUBLIC
+target_include_directories(abseil-cpp-tstring-y_absl-time PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(yabseil-cpp-tstring-y_absl-time PUBLIC
+target_link_libraries(abseil-cpp-tstring-y_absl-time PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yabseil-cpp-tstring-y_absl-base
-  ybase-internal-raw_logging
-  ybase-internal-spinlock_wait
-  ybase-internal-throw_delegate
-  yabsl-base-log_severity
-  yabseil-cpp-tstring-y_absl-numeric
-  yabseil-cpp-tstring-y_absl-strings
-  ystrings-internal-absl_strings_internal
-  yabsl-time-civil_time
-  yabsl-time-time_zone
+  abseil-cpp-tstring-y_absl-base
+  abseil-cpp-tstring-y_absl-numeric
+  abseil-cpp-tstring-y_absl-strings
 )
-target_sources(yabseil-cpp-tstring-y_absl-time PRIVATE
+target_sources(abseil-cpp-tstring-y_absl-time PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/civil_time.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/clock.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/duration.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/format.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/civil_time_detail.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_fixed.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_format.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_if.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_impl.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_info.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_libc.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_lookup.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/time_zone_posix.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/internal/cctz/src/zone_info_source.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/time/time.cc
 )

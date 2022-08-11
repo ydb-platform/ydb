@@ -7,31 +7,23 @@
 
 
 
-add_library(yabseil-cpp-tstring-y_absl-hash)
-target_compile_options(yabseil-cpp-tstring-y_absl-hash PRIVATE
+add_library(abseil-cpp-tstring-y_absl-hash)
+target_compile_options(abseil-cpp-tstring-y_absl-hash PRIVATE
   -Wno-everything
 )
-target_include_directories(yabseil-cpp-tstring-y_absl-hash PUBLIC
+target_include_directories(abseil-cpp-tstring-y_absl-hash PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(yabseil-cpp-tstring-y_absl-hash PUBLIC
+target_link_libraries(abseil-cpp-tstring-y_absl-hash PUBLIC
   contrib-libs-cxxsupp
   yutil
-  yabseil-cpp-tstring-y_absl-base
-  ybase-internal-raw_logging
-  ybase-internal-spinlock_wait
-  ybase-internal-throw_delegate
-  yabsl-base-log_severity
-  yabseil-cpp-tstring-y_absl-city
-  yabsl-hash-internal
-  yabseil-cpp-tstring-y_absl-numeric
-  yabseil-cpp-tstring-y_absl-strings
-  ystrings-internal-absl_strings_internal
+  abseil-cpp-tstring-y_absl-base
+  abseil-cpp-tstring-y_absl-city
+  abseil-cpp-tstring-y_absl-numeric
+  abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-types
-  yabsl-types-bad_optional_access
-  yabsl-types-bad_variant_access
-  y_absl-types-internal
 )
-target_sources(yabseil-cpp-tstring-y_absl-hash PRIVATE
+target_sources(abseil-cpp-tstring-y_absl-hash PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal/hash.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal/low_level_hash.cc
 )

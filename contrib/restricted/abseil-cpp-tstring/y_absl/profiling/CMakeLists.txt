@@ -7,17 +7,18 @@
 
 
 
-add_library(abseil-cpp-tstring-y_absl-numeric)
-target_compile_options(abseil-cpp-tstring-y_absl-numeric PRIVATE
+add_library(abseil-cpp-tstring-y_absl-profiling)
+target_compile_options(abseil-cpp-tstring-y_absl-profiling PRIVATE
   -Wno-everything
 )
-target_include_directories(abseil-cpp-tstring-y_absl-numeric PUBLIC
+target_include_directories(abseil-cpp-tstring-y_absl-profiling PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring
 )
-target_link_libraries(abseil-cpp-tstring-y_absl-numeric PUBLIC
+target_link_libraries(abseil-cpp-tstring-y_absl-profiling PUBLIC
   contrib-libs-cxxsupp
   yutil
 )
-target_sources(abseil-cpp-tstring-y_absl-numeric PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/numeric/int128.cc
+target_sources(abseil-cpp-tstring-y_absl-profiling PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/exponential_biased.cc
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/profiling/internal/periodic_sampler.cc
 )

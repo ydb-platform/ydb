@@ -9,5 +9,5 @@
 
 add_library(abseil-cpp-tstring-y_absl-meta INTERFACE)
 target_link_libraries(abseil-cpp-tstring-y_absl-meta INTERFACE
-  yabseil-cpp-tstring-y_absl-base
+  abseil-cpp-tstring-y_absl-base
 )

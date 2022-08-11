@@ -41,16 +41,12 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   contrib-libs-re2
   contrib-libs-xxhash
   ZLIB::ZLIB
-  yabseil-cpp-tstring-y_absl-hash
+  abseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-meta
-  yabseil-cpp-tstring-y_absl-status
-  yabsl-status-statusor
-  yabseil-cpp-tstring-y_absl-strings
-  yabsl-strings-cord
-  ystrings-internal-str_format
-  yabseil-cpp-tstring-y_absl-synchronization
-  yabseil-cpp-tstring-y_absl-time
-  yabsl-time-time_zone
+  abseil-cpp-tstring-y_absl-status
+  abseil-cpp-tstring-y_absl-strings
+  abseil-cpp-tstring-y_absl-synchronization
+  abseil-cpp-tstring-y_absl-time
   library-cpp-resource
 )
 target_sources(libs-grpc-grpc PRIVATE

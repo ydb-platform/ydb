@@ -14,11 +14,18 @@ namespace {
         { EOutputFormat::JsonUnicode, "Input in json format, binary strings are decoded with unicode characters" },
         { EOutputFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" },
         { EOutputFormat::Csv, "Input in csv format" },
-        { EOutputFormat::Tsv, "Input in tsv format" }
+        { EOutputFormat::Tsv, "Input in tsv format" },
+        { EOutputFormat::SingleMessage, "Input data as a single message"}, // TODO
+        { EOutputFormat::NewlineDelimited, "Input data is '\\n' delimited"}, // TODO
+//        { EOutputFormat::JsonRawStreamConcat, ""}, // TODO,
+//        { EOutputFormat::JsonRawArray, ""}, // TODO
     };
 
     THashMap<EOutputFormat, TString> FormatDescriptions = {
         { EOutputFormat::Pretty, "Human readable output" },
+        { EOutputFormat::PrettyRaw, "Human readable format with raw data printed"}, // TODO(shmel1k@): improve
+        { EOutputFormat::PrettyUnicode, "Human readable format with data printed as unicode"}, // TODO(shmel1k@): improve
+        { EOutputFormat::PrettyBase64, "Human readable format with data printed as base64 encoded"}, // TODO(shmel1k@): improve
         { EOutputFormat::Json, "Output in json format" },
         { EOutputFormat::JsonUnicode, "Output in json format, binary strings are encoded with unicode characters. "
                                       "Every row is a separate json on a separate line." },
@@ -30,8 +37,18 @@ namespace {
         { EOutputFormat::JsonBase64Array, "Output in json format, binary strings are encoded with base64. "
                                            "Every resultset is a json array of rows. "
                                            "Every row is a separate json on a separate line." },
+        { EOutputFormat::JsonRawArray, "Output in json format, binary strings are not encoded."
+                                        "Every resultset is a json array of rows. "
+                                        "Every row is a separate binary data on a separate line"},
         { EOutputFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
         { EOutputFormat::Csv, "Output in csv format" },
+        { EOutputFormat::SingleMessage, "Output result is presented as a single message"}, // TODO(shmel1k@): improve
+        { EOutputFormat::NewlineDelimited, "Newline delimited"}, // TODO(shmel1k@): improve
+        { EOutputFormat::NewlineBase64, "Newline base64"}, // TODO(shmel1k@): improve,
+        { EOutputFormat::Concatenated, "Concatenated"}, // TODO(shmel1k@): improve,
+        { EOutputFormat::JsonBase64StreamConcat, "Concatenated base64 stream"}, // TODO(shmel1k@): improve,
+        { EOutputFormat::JsonUnicodeStreamConcat, "Concatenated unicode stream"}, // TODO(shmel1k@): improve,
+        { EOutputFormat::JsonRawStreamConcat, "Concated raw stream"}, // TODO(shmel1k@): improve
     };
 }
 

@@ -198,7 +198,7 @@ namespace {
 //                .Column(4, rule.ServiceType())
 //                .Column(5, rule.Version());
         }
-        Cout << Endl << "ReadRules: " << Endl;
+        Cout << Endl << "Consumers: " << Endl;
         Cout << table;
     }
 }

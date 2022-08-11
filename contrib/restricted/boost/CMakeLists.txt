@@ -48,6 +48,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-smart_ptr
   restricted-boost-static_assert
   restricted-boost-throw_exception
+  restricted-boost-tokenizer
   restricted-boost-tti
   restricted-boost-tuple
   restricted-boost-type_index

@@ -103,8 +103,8 @@ Y_FORCE_INLINE
 template <bool Desc>
 Y_FORCE_INLINE
     NYql::NDecimal::TInt128 DecodeDecimal(TStringBuf& input) {
-    MKQL_ENSURE(input.size() > 0U && input.size() <= DecimalSize, "premature end of input");
-    const auto des = NYql::NDecimal::Deserialize(input.data());
+    const auto des = NYql::NDecimal::Deserialize(input.data(), input.size());
+    MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
     input.Skip(des.second);
     return Desc ? -des.first : des.first;
 }

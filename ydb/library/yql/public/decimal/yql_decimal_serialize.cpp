@@ -46,8 +46,8 @@ size_t Serialize(TInt128 value, char* buf) {
     return size;
 }
 
-std::pair<TInt128, size_t> Deserialize(const char* b) {
-    if (!b)
+std::pair<TInt128, size_t> Deserialize(const char* b, size_t len) {
+    if (!b || len == 0U)
         return std::make_pair(Err(), 0U);
 
     const auto mark = ui8(*b);
@@ -64,6 +64,8 @@ std::pair<TInt128, size_t> Deserialize(const char* b) {
 
     const bool neg = mark < 0x80u;
     const auto used = neg ? 0x80u - mark : mark - 0x7Fu;
+    if (len < used)
+        return std::make_pair(Err(), 0U);
 
     TInt128 v;
     const auto size = sizeof(v);

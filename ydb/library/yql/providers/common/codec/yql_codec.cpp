@@ -870,9 +870,9 @@ NUdf::TUnboxedValue ReadYsonValue(TType* type,
         case NUdf::TDataType<NUdf::TDecimal>::Id: {
             auto nextString = ReadNextString(cmd, buf);
             if (isTableFormat) {
-                const auto& des = NDecimal::Deserialize(nextString.data());
-                YQL_ENSURE(nextString.size() == des.second);
+                const auto& des = NDecimal::Deserialize(nextString.data(), nextString.size());
                 YQL_ENSURE(!NDecimal::IsError(des.first));
+                YQL_ENSURE(nextString.size() == des.second);
                 return NUdf::TUnboxedValuePod(des.first);
             } else {
                 const auto params = static_cast<TDataDecimalType*>(type)->GetParams();
@@ -1440,9 +1440,9 @@ NUdf::TUnboxedValue ReadSkiffData(TType* type, ui64 nativeYtTypeFlags, TInputBuf
             YQL_ENSURE(size > 0U && size <= maxSize, "Bad decimal field size: " << size);
             char data[maxSize];
             buf.ReadMany(data, size);
-            const auto& v = NDecimal::Deserialize(data);
-            YQL_ENSURE(size == v.second, "Bad decimal field size: " << size);
+            const auto& v = NDecimal::Deserialize(data, size);
             YQL_ENSURE(!NDecimal::IsError(v.first), "Bad decimal field data: " << data);
+            YQL_ENSURE(size == v.second, "Bad decimal field size: " << size);
             return NUdf::TUnboxedValuePod(v.first);
         }
     }

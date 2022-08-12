@@ -17,7 +17,6 @@ struct TDqSettings {
     struct TDefault {
         static constexpr ui32 MaxTasksPerStage = 20U;
         static constexpr ui32 MaxTasksPerOperation = 70U;
-        static constexpr ui64 PortoMemoryLimit = 3_GB;
         static constexpr bool EnablePorto = false;
         static constexpr ui64 DataSizePerJob = 128_MB;
         static constexpr ui64 MaxDataSizePerJob = 600_MB;

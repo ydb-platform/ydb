@@ -189,8 +189,6 @@ public:
         const TIntrusivePtr<TTransactionCounters>& counters,
         TSqsEvents::TExecutedCallback cb = TSqsEvents::TExecutedCallback());
 
-    ~TMiniKqlExecutionActor();
-
     void Bootstrap();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

@@ -15,7 +15,6 @@ public:
     };
 
     TCleanupActor(const TQueuePath& queuePath, ui32 tablesFormat, const TActorId& queueLeader, ECleanupType cleanupType);
-    ~TCleanupActor();
 
     void Bootstrap();
 

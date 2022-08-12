@@ -19,7 +19,6 @@
 #include <ydb/core/base/quoter.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/probes.h>
 #include <ydb/core/ymq/base/secure_protobuf_printer.h>
 #include <ydb/core/tx/scheme_board/cache.h>
@@ -261,14 +260,6 @@ static TString GetEndpoint(const NKikimrConfig::TSqsConfig& config) {
     } else {
         return TStringBuilder() << "http://" << FQDNHostName() << ":" << config.GetHttpServerConfig().GetPort();
     }
-}
-
-TSqsService::TSqsService() {
-    DebugInfo->SqsServiceActorPtr = this;
-}
-
-TSqsService::~TSqsService() {
-    DebugInfo->SqsServiceActorPtr = nullptr;
 }
 
 void TSqsService::Bootstrap() {

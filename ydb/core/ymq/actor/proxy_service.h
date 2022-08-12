@@ -55,9 +55,6 @@ public:
     using TProxyRequestInfoRef = TIntrusivePtr<TProxyRequestInfo>;
 
 public:
-    TSqsProxyService();
-    ~TSqsProxyService();
-
     void Bootstrap();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

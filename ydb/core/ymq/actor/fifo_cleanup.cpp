@@ -5,7 +5,6 @@
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -25,13 +24,7 @@ TCleanupActor::TCleanupActor(
     , RequestId_(CreateGuidAsString())
     , QueueLeader_(queueLeader)
     , CleanupType(cleanupType)
-{
-    DebugInfo->QueueCleanupActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
-}
-
-TCleanupActor::~TCleanupActor() {
-    DebugInfo->QueueCleanupActors.EraseKeyValue(TStringBuilder() << TLogQueueName(QueuePath_), this);
-}
+{}
 
 void TCleanupActor::Bootstrap() {
     RLOG_SQS_INFO("Bootstrap cleanup actor for queue " << TLogQueueName(QueuePath_));

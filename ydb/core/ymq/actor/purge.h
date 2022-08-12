@@ -34,7 +34,6 @@ public:
         const TActorId& queueLeader,
         bool isFifo
     );
-    ~TPurgeActor();
 
     void Bootstrap();
 

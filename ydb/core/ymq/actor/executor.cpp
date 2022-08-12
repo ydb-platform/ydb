@@ -7,7 +7,6 @@
 
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/public/lib/value/value.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/queues/common/db_queries_maker.h>
 
 #include <ydb/library/yql/minikql/mkql_node_serialization.h>
@@ -131,13 +130,7 @@ TMiniKqlExecutionActor::TMiniKqlExecutionActor(
     , Counters_(counters)
     , QueuePath_(path)
     , RetryOnTimeout_(retryOnTimeout)
-{
-    DebugInfo->ExecutorActors.emplace(RequestId_, this);
-}
-
-TMiniKqlExecutionActor::~TMiniKqlExecutionActor() {
-    DebugInfo->ExecutorActors.EraseKeyValue(RequestId_, this);
-}
+{}
 
 void TMiniKqlExecutionActor::Bootstrap() {
     StartTs_ = TActivationContext::Now();

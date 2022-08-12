@@ -33,7 +33,6 @@ target_sources(core-ymq-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/acl.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/action.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/counters.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/debug_info.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/dlq_helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/helpers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp

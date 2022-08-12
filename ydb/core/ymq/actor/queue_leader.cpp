@@ -9,7 +9,6 @@
 #include <ydb/core/ymq/actor/serviceid.h>
 #include <ydb/core/ymq/base/constants.h>
 #include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/probes.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/quoter.h>
@@ -48,14 +47,9 @@ TQueueLeader::TQueueLeader(TString userName, TString queueName, TString folderId
     , Counters_(std::move(counters))
     , UserCounters_(std::move(userCounters))
 {
-    DebugInfo->QueueLeaders.emplace(TStringBuilder() << TLogQueueName(UserName_, QueueName_), this);
     if (quoterResourcesForUser) {
         QuoterResources_ = new TSqsEvents::TQuoterResourcesForActions(*quoterResourcesForUser);
     }
-}
-
-TQueueLeader::~TQueueLeader() {
-    DebugInfo->QueueLeaders.EraseKeyValue(TStringBuilder() << TLogQueueName(UserName_, QueueName_), this);
 }
 
 void TQueueLeader::Bootstrap() {

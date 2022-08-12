@@ -22,9 +22,6 @@ class TSqsService
     : public TActorBootstrapped<TSqsService>
 {
 public:
-    TSqsService();
-    ~TSqsService();
-
     void Bootstrap();
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

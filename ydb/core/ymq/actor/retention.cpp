@@ -5,7 +5,6 @@
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
 #include <library/cpp/actors/core/hfunc.h>
@@ -18,13 +17,7 @@ TRetentionActor::TRetentionActor(const TQueuePath& queuePath, ui32 tablesFormat,
     , TablesFormat_(tablesFormat)
     , RequestId_(CreateGuidAsString())
     , QueueLeader_(queueLeader)
-{
-    DebugInfo->QueueRetentionActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
-}
-
-TRetentionActor::~TRetentionActor() {
-    DebugInfo->QueueRetentionActors.EraseKeyValue(TStringBuilder() << TLogQueueName(QueuePath_), this);
-}
+{}
 
 void TRetentionActor::Bootstrap() {
     RLOG_SQS_INFO("Bootstrap retention actor for queue " << TLogQueueName(QueuePath_));

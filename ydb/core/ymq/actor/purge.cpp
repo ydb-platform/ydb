@@ -6,7 +6,6 @@
 #include "serviceid.h"
 
 #include <ydb/core/ymq/base/counters.h>
-#include <ydb/core/ymq/base/debug_info.h>
 #include <ydb/core/ymq/base/query_id.h>
 #include <ydb/core/ymq/queues/common/key_hashes.h>
 
@@ -27,13 +26,7 @@ TPurgeActor::TPurgeActor(
     , Counters_(std::move(counters))
     , QueueLeader_(queueLeader)
     , IsFifo_(isFifo)
-{
-    DebugInfo->QueuePurgeActors.emplace(TStringBuilder() << TLogQueueName(QueuePath_), this);
-}
-
-TPurgeActor::~TPurgeActor() {
-    DebugInfo->QueuePurgeActors.EraseKeyValue(TStringBuilder() << TLogQueueName(QueuePath_), this);
-}
+{}
 
 void TPurgeActor::Bootstrap() {
     RLOG_SQS_INFO("Create purge actor for queue " << TString(QueuePath_));

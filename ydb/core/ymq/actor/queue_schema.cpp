@@ -354,6 +354,7 @@ void TCreateQueueSchemaActorV2::OnReadQueueParams(TSqsEvents::TEvExecuted::TPtr&
     } else {
         resp = MakeErrorResponse(NErrors::INTERNAL_FAILURE);
         resp->Error = "Failed to read queue params.";
+        RLOG_SQS_ERROR("Failed to read queue params: " << record);
     }
 
     Y_VERIFY(resp);

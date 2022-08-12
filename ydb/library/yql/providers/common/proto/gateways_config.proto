@@ -3,6 +3,7 @@ option java_package = "ru.yandex.yql.proto";
 
 import "ydb/library/yql/protos/clickhouse.proto";
 
+
 /////////////////////////////// common ///////////////////////////////
 
 message TActivationByHour {
@@ -56,6 +57,9 @@ message THttpGatewayConfig {
     optional uint32 MaxInFlightCount = 1;
     optional uint64 MaxSimulatenousDownloadsSize = 2;
     optional uint32 BuffersSizePerStream = 3;
+    optional uint64 ConnectionTimeoutSeconds = 4;
+    optional uint64 BytesPerSecondLimit = 5;
+    optional uint64 DownloadBufferBytesLimit = 6;
 }
 
 /////////////////////////////// YT ///////////////////////////////

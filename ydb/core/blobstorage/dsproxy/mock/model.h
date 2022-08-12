@@ -29,6 +29,7 @@ namespace NFake {
 
             TBarrier() = default;
             TBarrier(const TBarrier& other) = default;
+            TBarrier& operator=(const TBarrier& other) = default;
 
             TBarrier(TGeneration recordGeneration, ui32 perGenerationCounter, TGeneration collectGeneration,
                     TStep collectStep)

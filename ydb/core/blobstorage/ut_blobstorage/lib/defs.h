@@ -12,7 +12,11 @@
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/mind/bscontroller/types.h>
 #include <ydb/core/mind/dynamic_nameserver.h>
+#include <ydb/core/mind/labels_maintainer.h>
 #include <ydb/core/mind/local.h>
+#include <ydb/core/mind/tenant_pool.h>
+#include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/tx_allocator/txallocator.h>
 #include <ydb/core/tx/mediator/mediator.h>

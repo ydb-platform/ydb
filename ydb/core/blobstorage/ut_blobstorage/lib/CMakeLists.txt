@@ -23,6 +23,7 @@ target_link_libraries(blobstorage-ut_blobstorage-lib PUBLIC
   ydb-core-mind
   core-mind-bscontroller
   core-mind-hive
+  core-sys_view-service
   core-tx-scheme_board
   core-tx-tx_allocator
   core-tx-mediator

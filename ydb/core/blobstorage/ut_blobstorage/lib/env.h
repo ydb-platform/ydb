@@ -9,6 +9,7 @@
 struct TEnvironmentSetup {
     std::unique_ptr<TTestActorSystem> Runtime;
     static constexpr ui32 DrivesPerNode = 5;
+    const TString DomainName = "Root";
     const ui32 DomainId = 1;
     const ui64 TabletId = MakeBSControllerID(DomainId);
     const ui32 GroupId = 0;
@@ -31,10 +32,7 @@ struct TEnvironmentSetup {
         const bool Cache = false;
         const ui32 NumDataCenters = 0;
         const std::function<TNodeLocation(ui32)> LocationGenerator;
-        const bool SetupTablets = false;
-        const ui64 BlobDepotId = 0;
-        const ui32 BlobDepotChannels = 0;
-        const bool BlobDepotUseMockGroup = true;
+        const bool SetupHive = false;
     };
 
     const TSettings Settings;
@@ -112,11 +110,13 @@ struct TEnvironmentSetup {
         SetupLogging();
         Runtime->Start();
         auto *appData = Runtime->GetAppData();
-        if (Settings.SetupTablets) {
-            SetupDomainForTablets();
-        } else {
-            appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructEmptyDomain("dom", DomainId).Release());
+
+        auto domain = TDomainsInfo::TDomain::ConstructEmptyDomain(DomainName, DomainId);
+        appData->DomainsInfo->AddDomain(domain.Get());
+        if (Settings.SetupHive) {
+            appData->DomainsInfo->AddHive(domain->DefaultHiveUid, MakeDefaultHiveID(domain->DefaultStateStorageGroup));
         }
+
         if (Settings.LocationGenerator) {
             Runtime->SetupTabletRuntime(Settings.LocationGenerator, Settings.ControllerNodeId);
         } else {
@@ -125,9 +125,6 @@ struct TEnvironmentSetup {
         SetupStaticStorage();
         SetupTablet();
         SetupStorage();
-        if (Settings.SetupTablets) {
-            InitRoot();
-        }
     }
 
     void StopNode(ui32 nodeId) {
@@ -238,6 +235,8 @@ struct TEnvironmentSetup {
             NActorsServices::TEST,
 //            NKikimrServices::BLOB_DEPOT,
 //            NKikimrServices::BLOB_DEPOT_AGENT,
+//            NKikimrServices::HIVE,
+//            NKikimrServices::LOCAL,
 //            NActorsServices::INTERCONNECT,
 //            NActorsServices::INTERCONNECT_SESSION,
         };
@@ -289,64 +288,21 @@ struct TEnvironmentSetup {
         }
     }
 
-    void SetupDomainForTablets() {
-        TAppData *appData = Runtime->GetAppData();
-
-        const ui32 hiveUid = 1;
-
-        appData->DomainsInfo->AddDomain(TDomainsInfo::TDomain::ConstructDomain<std::vector<ui32>, std::vector<ui64>>(
-            "Root",
-            DomainId,
-            72075186232723360,
-            1,
-            1,
-            {1},
-            hiveUid,
-            {hiveUid},
-            100,
-            {1, 2, 3},
-            {1, 2, 3},
-            {1, 2, 3}
-        ).Release());
-
-        appData->DomainsInfo->AddHive(hiveUid, MakeDefaultHiveID(1));
-    }
-
     void SetupTablet() {
         struct TTabletInfo {
             ui64 TabletId;
             TTabletTypes::EType Type;
             IActor* (*Create)(const TActorId&, TTabletStorageInfo*);
-            ui32 NumChannels = 4;
+            ui32 NumChannels = 3;
         };
         std::vector<TTabletInfo> tablets{
             {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
         };
-        if (Settings.BlobDepotId && Settings.BlobDepotUseMockGroup) {
-            tablets.push_back(TTabletInfo{Settings.BlobDepotId, TTabletTypes::BlobDepot, &NBlobDepot::CreateBlobDepot,
-                Settings.BlobDepotChannels});
-        }
 
         auto *appData = Runtime->GetAppData();
 
         for (const auto& [uid, tabletId] : appData->DomainsInfo->HivesByHiveUid) {
             tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Hive, &CreateDefaultHive});
-        }
-
-        const TDomainsInfo::TDomain& domain = appData->DomainsInfo->GetDomain(DomainId);
-        if (domain.SchemeRoot) {
-            tablets.push_back(TTabletInfo{domain.SchemeRoot, TTabletTypes::SchemeShard, &CreateFlatTxSchemeShard});
-        }
-        for (const ui64 tabletId : domain.Coordinators) {
-            tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Coordinator, &CreateFlatTxCoordinator});
-        }
-        for (const ui64 tabletId : domain.Mediators) {
-            tablets.push_back(TTabletInfo{tabletId, TTabletTypes::Mediator, &CreateTxMediator});
-        }
-        TVector<ui64> allocators;
-        for (const ui64 tabletId : domain.TxAllocators) {
-            tablets.push_back(TTabletInfo{tabletId, TTabletTypes::TxAllocator, &CreateTxAllocator});
-            allocators.push_back(tabletId);
         }
 
         for (const TTabletInfo& tablet : tablets) {
@@ -359,46 +315,23 @@ struct TEnvironmentSetup {
         }
 
         auto localConfig = MakeIntrusive<TLocalConfig>();
+
         localConfig->TabletClassInfo[TTabletTypes::BlobDepot] = TLocalConfig::TTabletClassInfo(new TTabletSetupInfo(
             &NBlobDepot::CreateBlobDepot, TMailboxType::ReadAsFilled, appData->SystemPoolId, TMailboxType::ReadAsFilled,
             appData->SystemPoolId));
 
-        if (Settings.SetupTablets) {
+        auto tenantPoolConfig = MakeIntrusive<TTenantPoolConfig>(localConfig);
+        tenantPoolConfig->AddStaticSlot(DomainName);
+
+        if (Settings.SetupHive) {
             for (ui32 nodeId : Runtime->GetNodes()) {
-                Runtime->RegisterService(MakeTxProxyID(), Runtime->Register(CreateTxProxy(allocators), nodeId));
-                Runtime->RegisterService(MakeLocalID(nodeId), Runtime->Register(CreateLocal(localConfig.Get()), nodeId));
-
-                auto config = MakeIntrusive<NSchemeCache::TSchemeCacheConfig>();
-                config->Roots.emplace_back(DomainId, domain.SchemeRoot, domain.Name);
-                config->Counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
-                Runtime->RegisterService(MakeSchemeCacheID(), Runtime->Register(CreateSchemeBoardSchemeCache(config.Get()), nodeId));
+                Runtime->RegisterService(MakeTenantPoolRootID(),
+                    Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeId));
+                Runtime->RegisterService(NSysView::MakeSysViewServiceID(nodeId),
+                    Runtime->Register(NSysView::CreateSysViewServiceForTests().Release(), nodeId));
+                Runtime->Register(CreateTenantNodeEnumerationPublisher(), nodeId);
+                Runtime->Register(CreateLabelsMaintainer({}), nodeId);
             }
-        }
-    }
-
-    void SetupBlobDepot(ui32 group) {
-        Runtime->CreateTestBootstrapper(
-            TTestActorSystem::CreateTestTabletInfo(Settings.BlobDepotId, TTabletTypes::BlobDepot, Settings.Erasure.GetErasure(), group, Settings.BlobDepotChannels),
-            &NBlobDepot::CreateBlobDepot, Settings.ControllerNodeId);
-
-        bool working = true;
-        Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
-    }
-
-    void InitRoot() {
-        auto *appData = Runtime->GetAppData();
-        auto& domain = appData->DomainsInfo->GetDomain(DomainId);
-        if (domain.SchemeRoot) {
-            auto edge = Runtime->AllocateEdgeActor(1);
-            auto pipeId = Runtime->Register(NTabletPipe::CreateClient(edge, domain.SchemeRoot), 1);
-            Runtime->WrapInActorContext(edge, [&] {
-                const TActorContext& ctx = TActivationContext::AsActorContext();
-                NTabletPipe::SendData(ctx, pipeId, new NSchemeShard::TEvSchemeShard::TEvInitRootShard(edge, domain.DomainRootTag(), domain.Name));
-                NTabletPipe::CloseClient(ctx, pipeId);
-            });
-            auto res = WaitForEdgeActorEvent<NSchemeShard::TEvSchemeShard::TEvInitRootShardResult>(edge);
-            Cerr << res->Get()->ToString() << Endl;
-            ::exit(1);
         }
     }
 

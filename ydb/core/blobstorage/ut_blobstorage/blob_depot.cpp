@@ -22,9 +22,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         envPtr = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
             .NodeCount = nodeCount,
             .Erasure = erasure,
-            .BlobDepotId = BLOB_DEPOT_TABLET_ID,
-            .BlobDepotChannels = 4,
-            .BlobDepotUseMockGroup = false,
+            .SetupHive = true,
         });
 
         envPtr->CreateBoxAndPool(1, numGroups + 1);
@@ -32,41 +30,40 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
         std::vector<ui32> allGroups = envPtr->GetGroups();
 
-        envPtr->SetupBlobDepot(allGroups[numGroups]);
-        blobDepotGroup = allGroups[numGroups];
+        blobDepotGroup = allGroups.back();
         allGroups.pop_back();
 
         regularGroups = allGroups;
 
         NKikimrBlobStorage::TConfigRequest request;
-        auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
-        cmd->SetName("vg");
-        cmd->SetHiveId(1);
-        cmd->SetStoragePoolName(envPtr->StoragePoolName);
-        cmd->SetBlobDepotId(envPtr->Settings.BlobDepotId);
-        auto *prof = cmd->AddChannelProfiles();
-        prof->SetStoragePoolKind("");
-        prof->SetCount(2);
-        prof = cmd->AddChannelProfiles();
-        prof->SetStoragePoolKind("");
-        prof->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
-        prof->SetCount(2);
+        TString virtualPool = "virtual_pool";
+        {
+            auto *cmd = request.AddCommand()->MutableDefineStoragePool();
+            cmd->SetBoxId(1);
+            cmd->SetName(virtualPool);
+            cmd->SetErasureSpecies("none");
+            cmd->SetVDiskKind("Default");
+        }
+        {
+            auto *cmd = request.AddCommand()->MutableAllocateVirtualGroup();
+            cmd->SetName("vg");
+            cmd->SetHiveId(envPtr->Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
+            cmd->SetStoragePoolName(virtualPool);
+            auto *prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(envPtr->StoragePoolName);
+            prof->SetCount(2);
+            prof = cmd->AddChannelProfiles();
+            prof->SetStoragePoolName(envPtr->StoragePoolName);
+            prof->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+            prof->SetCount(2);
+        }
 
         auto response = envPtr->Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
 
-        {
-            auto ev = std::make_unique<TEvBlobDepot::TEvApplyConfig>();
-            auto *config = ev->Record.MutableConfig();
-            config->SetOperationMode(NKikimrBlobDepot::VirtualGroup);
-            config->MutableChannelProfiles()->CopyFrom(cmd->GetChannelProfiles());
+        blobDepot = response.GetStatus(1).GetGroupId(0);
 
-            const TActorId edge = envPtr->Runtime->AllocateEdgeActor(1, __FILE__, __LINE__);
-            envPtr->Runtime->SendToPipe(envPtr->Settings.BlobDepotId, edge, ev.release(), 0, TTestActorSystem::GetPipeConfigWithRetries());
-            envPtr->WaitForEdgeActorEvent<TEvBlobDepot::TEvApplyConfigResult>(edge);
-        }
-
-        blobDepot = response.GetStatus(0).GetGroupId(0);
+        envPtr->Sim(TDuration::Seconds(5)); // some time for blob depot to crank up
     }
 
     TString DataGen(ui32 len) {

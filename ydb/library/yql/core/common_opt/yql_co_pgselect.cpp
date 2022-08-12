@@ -2582,10 +2582,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 RewriteAggs(projectionLambda, aggId, ctx, optCtx, false);
             }
 
-            bool aggregated = false;
             if (!aggs.empty() || groupBy) {
                 list = BuildGroup(node->Pos(), list, aggs, groupBy, finalExtTypes, ctx);
-                aggregated = true;
             }
 
             if (having) {

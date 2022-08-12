@@ -427,7 +427,7 @@ TExprBase DqPushBaseLMapToStage(TExprBase node, TExprContext& ctx, IOptimization
         return node;
     }
 
-    const TTypeAnnotationNode* lmapItemTy = GetSeqItemType(lmap.Ref().GetTypeAnn()); 
+    const TTypeAnnotationNode* lmapItemTy = GetSeqItemType(lmap.Ref().GetTypeAnn());
     if (lmapItemTy->GetKind() == ETypeAnnotationKind::Variant) {
         // preserve typing by Mux'ing several stage outputs into one
         const auto variantItemTy = lmapItemTy->template Cast<TVariantExprType>();
@@ -1061,11 +1061,11 @@ TExprBase DqBuildSkipStage(TExprBase node, TExprContext& ctx, IOptimizationConte
 TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoTake>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoTakeBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    auto take = node.Cast<TCoTake>();
+    auto take = node.Cast<TCoTakeBase>();
     auto dqUnion = take.Input().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
@@ -1076,7 +1076,7 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTake::idx_Input, std::move(connToPushableStage)));
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTakeBase::idx_Input, std::move(connToPushableStage)));
     }
 
     auto result = dqUnion.Output().Stage().Program().Body();
@@ -1121,11 +1121,11 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
 TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoTake>().Input().Maybe<TCoSkip>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoTakeBase>().Input().Maybe<TCoSkip>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    auto take = node.Cast<TCoTake>();
+    auto take = node.Cast<TCoTakeBase>();
     auto skip = take.Input().Cast<TCoSkip>();
     auto dqUnion = skip.Input().Cast<TDqCnUnionAll>();
 
@@ -1142,7 +1142,7 @@ TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationC
     }
 
     if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTake::idx_Input, std::move(connToPushableStage)));
+        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoTakeBase::idx_Input, std::move(connToPushableStage)));
     }
 
     auto lambda = Build<TCoLambda>(ctx, node.Pos())
@@ -1627,8 +1627,8 @@ TExprBase DqBuildScalarPrecompute(TExprBase node, TExprContext& ctx, IOptimizati
     }
     if (auto connToPushableStage = DqBuildPushableStage(unionAll, ctx)) {
         return TExprBase(ctx.ChangeChild(
-            *node.Raw(), 
-            node.Maybe<TCoToOptional>() ? TCoToOptional::idx_List : TCoHead::idx_Input, 
+            *node.Raw(),
+            node.Maybe<TCoToOptional>() ? TCoToOptional::idx_List : TCoHead::idx_Input,
             std::move(connToPushableStage)));
     }
 

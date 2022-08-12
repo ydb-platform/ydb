@@ -44,6 +44,7 @@ public:
         AddHandler(0, &TKqlReadTableRangesBase::Match, HNDL(ApplyExtractMembersToReadTableRanges<false>));
         AddHandler(0, &TKqpReadOlapTableRangesBase::Match, HNDL(ApplyExtractMembersToReadOlapTable<false>));
         AddHandler(0, &TKqlLookupTableBase::Match, HNDL(ApplyExtractMembersToLookupTable<false>));
+        AddHandler(0, &TCoTopSort::Match, HNDL(TopSortOverExtend));
 
         AddHandler(1, &TCoFlatMap::Match, HNDL(PushExtractedPredicateToReadTable));
         AddHandler(1, &TKqlReadTableIndex::Match, HNDL(RewriteIndexRead));
@@ -166,6 +167,12 @@ protected:
     TMaybeNode<TExprBase> DropTakeOverLookupTable(TExprBase node, TExprContext& ctx) {
         TExprBase output = KqpDropTakeOverLookupTable(node, ctx, KqpCtx);
         DumpAppliedRule("DropTakeOverLookupTable", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> TopSortOverExtend(TExprBase node, TExprContext& ctx, const TGetParents& getParents) {
+        auto output = KqpTopSortOverExtend(node, ctx, *getParents());
+        DumpAppliedRule("TopSortOverExtend", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

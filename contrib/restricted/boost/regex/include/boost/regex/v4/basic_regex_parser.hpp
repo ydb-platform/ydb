@@ -378,11 +378,9 @@ bool basic_regex_parser<charT, traits>::parse_extended()
       result = parse_literal();
       break;
    case regex_constants::syntax_or:
-      result = parse_alt();
-      break;
+      return parse_alt();
    case regex_constants::syntax_open_set:
-      result = parse_set();
-      break;
+      return parse_set();
    case regex_constants::syntax_newline:
       if(this->flags() & regbase::newline_alt)
          return parse_alt();

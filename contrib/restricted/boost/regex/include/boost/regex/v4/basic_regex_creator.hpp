@@ -48,6 +48,9 @@ struct digraph : public std::pair<charT, charT>
    digraph(charT c1, charT c2) : std::pair<charT, charT>(c1, c2)
    {}
    digraph(const digraph<charT>& d) : std::pair<charT, charT>(d.first, d.second){}
+#ifndef BOOST_NO_CXX11_DEFAULTED_FUNCTIONS
+   digraph<charT>& operator=(const digraph<charT>&) = default;
+#endif
    template <class Seq>
    digraph(const Seq& s) : std::pair<charT, charT>()
    {

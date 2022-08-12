@@ -1,6 +1,6 @@
 #include "topic_util.h"
 #include "topic_write.h"
-#include <contrib/libs/openssl/include/openssl/sha.h>
+#include <openssl/sha.h>
 #include <util/generic/overloaded.h>
 #include <util/stream/tokenizer.h>
 #include <util/string/hex.h>

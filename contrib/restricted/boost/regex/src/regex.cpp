@@ -28,7 +28,9 @@
 #  include <malloc.h>
 #endif
 #ifdef BOOST_REGEX_HAS_MS_STACK_GUARD
-#define WIN32_LEAN_AND_MEAN
+#ifndef WIN32_LEAN_AND_MEAN
+#  define WIN32_LEAN_AND_MEAN
+#endif
 #ifndef NOMINMAX
 #  define NOMINMAX
 #endif

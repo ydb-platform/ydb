@@ -1,4 +1,4 @@
-#include <contrib/libs/openssl/include/openssl/sha.h>
+#include <openssl/sha.h>
 
 #include "ydb_service_topic.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>

@@ -2,7 +2,6 @@
 #include "fifo_cleanup.h"
 #include "executor.h"
 #include "log.h"
-#include "migration.h"
 #include "purge.h"
 #include "retention.h"
 
@@ -61,7 +60,8 @@ TQueueLeader::~TQueueLeader() {
 
 void TQueueLeader::Bootstrap() {
     Become(&TQueueLeader::StateInit);
-    Register(new TQueueMigrationActor(UserName_, QueueName_, SelfId(), SchemeCache_, Counters_));
+    QueueAttributesCacheTime_ = TDuration::MilliSeconds(Cfg().GetQueueAttributesCacheTimeMs());
+    RequestConfiguration();
 }
 
 void TQueueLeader::BecomeWorking() {
@@ -114,7 +114,6 @@ STATEFN(TQueueLeader::StateInit) {
         hFunc(TSqsEvents::TEvQueueId, HandleQueueId); // discover dlq id and version
         hFunc(TSqsEvents::TEvExecuted, HandleExecuted); // from executor
         hFunc(TEvWakeup, HandleWakeup);
-        hFunc(TSqsEvents::TEvMigrationDone, HandleMigrationDone); // from migration actor
     default:
         LOG_SQS_ERROR("Unknown type of event came to SQS background queue " << TLogQueueName(UserName_, QueueName_) << " leader actor: " << ev->Type << " (" << ev->GetBase()->ToString() << "), sender: " << ev->Sender);
     }
@@ -200,19 +199,6 @@ void TQueueLeader::HandleWakeup(TEvWakeup::TPtr& ev) {
     }
     default:
         Y_FAIL("Unknown wakeup tag: %lu", ev->Get()->Tag);
-    }
-}
-
-void TQueueLeader::HandleMigrationDone(TSqsEvents::TEvMigrationDone::TPtr& ev) {
-    if (ev->Get()->Success) {
-        const auto& cfg = Cfg();
-        QueueAttributesCacheTime_ = TDuration::MilliSeconds(cfg.GetQueueAttributesCacheTimeMs());
-        RequestConfiguration();
-    } else {
-        INC_COUNTER(Counters_, QueueMasterStartProblems);
-        INC_COUNTER(Counters_, QueueLeaderStartProblems);
-        Register(new TQueueMigrationActor(UserName_, QueueName_, SelfId(), SchemeCache_, Counters_, TDuration::MilliSeconds(500)));
-        FailRequestsDuringStartProblems();
     }
 }
 

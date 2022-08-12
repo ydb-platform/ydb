@@ -82,7 +82,6 @@ target_sources(core-ymq-actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/local_rate_limiter_allocator.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/message_delay_stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/metering.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/migration.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/modify_permissions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/node_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/proxy_actor.cpp

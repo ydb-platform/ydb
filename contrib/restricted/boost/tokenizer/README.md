@@ -5,7 +5,23 @@
 
 
 
-Boost tokenizer is a part of [Boost C++ Libraries](http://github.com/boostorg).  The Boost.Tokenizer package provides a flexible and easy-to-use way to break a string or other character sequence into a series of tokens.
+Boost.Tokenizer is a part of [Boost C++ Libraries](http://github.com/boostorg).  The Boost.Tokenizer package provides a flexible and easy-to-use way to break a string or other character sequence into a series of tokens.
+
+## License
+
+Distributed under the [Boost Software License, Version 1.0](http://www.boost.org/LICENSE_1_0.txt).
+
+## Properties
+
+* C++03
+* Header-Only
+
+## Build Status
+
+Branch          | GHA CI | Appveyor | Coverity Scan | codecov.io | Deps | Docs | Tests |
+:-------------: | ------ | -------- | ------------- | ---------- | ---- | ---- | ----- |
+[`master`](https://github.com/boostorg/tokenizer/tree/master) | [![Build Status](https://github.com/boostorg/tokenizer/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/boostorg/tokenizer/actions?query=branch:master) | [![Build status](https://ci.appveyor.com/api/projects/status/vc81nhd5i2f6hi8y/branch/master?svg=true)](https://ci.appveyor.com/project/jeking3/tokenizer-c6pnd/branch/master) | [![Coverity Scan Build Status](https://scan.coverity.com/projects/15854/badge.svg)](https://scan.coverity.com/projects/boostorg-tokenizer) | [![codecov](https://codecov.io/gh/boostorg/tokenizer/branch/master/graph/badge.svg)](https://codecov.io/gh/boostorg/tokenizer/branch/master)| [![Deps](https://img.shields.io/badge/deps-master-brightgreen.svg)](https://pdimov.github.io/boostdep-report/master/tokenizer.html) | [![Documentation](https://img.shields.io/badge/docs-master-brightgreen.svg)](https://www.boost.org/doc/libs/master/libs/tokenizer/doc/index.html) | [![Enter the Matrix](https://img.shields.io/badge/matrix-master-brightgreen.svg)](http://www.boost.org/development/tests/master/developer/tokenizer.html)
+[`develop`](https://github.com/boostorg/tokenizer/tree/develop) | [![Build Status](https://github.com/boostorg/tokenizer/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/boostorg/tokenizer/actions?query=branch:develop) | [![Build status](https://ci.appveyor.com/api/projects/status/vc81nhd5i2f6hi8y/branch/develop?svg=true)](https://ci.appveyor.com/project/jeking3/tokenizer-c6pnd/branch/develop) | [![Coverity Scan Build Status](https://scan.coverity.com/projects/15854/badge.svg)](https://scan.coverity.com/projects/boostorg-tokenizer) | [![codecov](https://codecov.io/gh/boostorg/tokenizer/branch/develop/graph/badge.svg)](https://codecov.io/gh/boostorg/tokenizer/branch/develop) | [![Deps](https://img.shields.io/badge/deps-develop-brightgreen.svg)](https://pdimov.github.io/boostdep-report/develop/tokenizer.html) | [![Documentation](https://img.shields.io/badge/docs-develop-brightgreen.svg)](https://www.boost.org/doc/libs/develop/libs/tokenizer/doc/index.html) | [![Enter the Matrix](https://img.shields.io/badge/matrix-develop-brightgreen.svg)](http://www.boost.org/development/tests/develop/developer/tokenizer.html)
 
 
 ## Overview

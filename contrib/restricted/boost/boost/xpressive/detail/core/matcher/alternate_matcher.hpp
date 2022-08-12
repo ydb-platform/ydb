@@ -98,6 +98,8 @@ namespace boost { namespace xpressive { namespace detail
         {
         }
 
+        alternate_matcher(const alternate_matcher& other) = default;
+
         template<typename BidiIter, typename Next>
         bool match(match_state<BidiIter> &state, Next const &next) const
         {

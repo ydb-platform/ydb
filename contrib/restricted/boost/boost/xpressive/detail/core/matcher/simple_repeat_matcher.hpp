@@ -82,6 +82,8 @@ namespace boost { namespace xpressive { namespace detail
             BOOST_ASSERT(Xpr::width == unknown_width() || Xpr::width == width);
         }
 
+        simple_repeat_matcher(const simple_repeat_matcher& other) = default;
+
         template<typename BidiIter, typename Next>
         bool match(match_state<BidiIter> &state, Next const &next) const
         {

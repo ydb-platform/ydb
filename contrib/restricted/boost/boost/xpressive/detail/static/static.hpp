@@ -128,6 +128,8 @@ struct static_xpression
     {
     }
 
+    static_xpression(static_xpression const &other) = default;
+
     // match
     //  delegates to the Matcher
     template<typename BidiIter>

@@ -1633,6 +1633,12 @@ bool TPath::IsValidLeafName(TString& explain) const {
         return false;
     }
 
+    if (IsPathPartContainsOnlyDots(leaf)) {
+        explain += TStringBuilder()
+            << "is not allowed path part contains only dots '" << leaf << "'";
+        return false;
+    }
+
     auto brokenAt = PathPartBrokenAt(leaf, schemeLimits.ExtraPathSymbolsAllowed);
     if (brokenAt != leaf.end()) {
         explain += TStringBuilder()

@@ -101,6 +101,16 @@ bool IsStartWithSlash(const TString &l) {
     return TStringBuf(l).StartsWith(TStringBuf("/"));
 }
 
+bool IsPathPartContainsOnlyDots(const TString &part) {
+    for (auto it = part.begin(); it != part.end(); ++it) {
+        if (*it != '.') {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf extraSymbols) {
     static constexpr TStringBuf basicSymbols = "-_.";
     for (auto it = part.begin(); it != part.end(); ++it) {
@@ -130,6 +140,11 @@ bool CheckDbPath(const TString &path, const TString &domain, TString &error) {
     for (auto &part : parts) {
         if (!part) {
             error = "Database names and path parts shouldn't be empty";
+            return false;
+        }
+
+        if (IsPathPartContainsOnlyDots(part)) {
+            error = Sprintf("Is not allowed in database names and path parts contains only dots");
             return false;
         }
 

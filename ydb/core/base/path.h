@@ -18,6 +18,7 @@ TStringBuf ExtractParent(const TString& path) noexcept;
 bool IsEqualPaths(const TString& l, const TString& r) noexcept;
 bool IsStartWithSlash(const TString& l);
 bool CheckDbPath(const TString &path, const TString &domain, TString &error);
+bool IsPathPartContainsOnlyDots(const TString &part);
 TString::const_iterator PathPartBrokenAt(const TString &part, const TStringBuf extraSymbols = {});
 bool TrySplitPathByDb(const TString& path, const TString& database,
     std::pair<TString, TString>& result, TString& error);

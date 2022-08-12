@@ -287,6 +287,27 @@ Y_UNIT_TEST_SUITE(TSchemeShardExtSubDomainTest) {
                             NLs::UserAttrsEqual({{"user__attr_1", "value"}})});
     }
 
+    Y_UNIT_TEST(CreateWithOnlyDotsNotAllowed) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", ".", {NKikimrScheme::StatusSchemeError});
+        TestMkDir(runtime, ++txId, "/MyRoot", "..", {NKikimrScheme::StatusSchemeError});
+        TestMkDir(runtime, ++txId, "/MyRoot", "...", {NKikimrScheme::StatusSchemeError});
+        TestMkDir(runtime, ++txId, "/MyRoot", "................", {NKikimrScheme::StatusSchemeError});
+        TestMkDir(runtime, ++txId, "/MyRoot", ".SubDirA");
+        TestMkDir(runtime, ++txId, "/MyRoot", "SubDirB.");
+        TestMkDir(runtime, ++txId, "/MyRoot", "a.............");
+        TestMkDir(runtime, ++txId, "/MyRoot", ".......a......");
+        TestMkDir(runtime, ++txId, "/MyRoot", ".............a");
+
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", "Name: \".\"", {NKikimrScheme::StatusSchemeError});
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", "Name: \"..\"", {NKikimrScheme::StatusSchemeError});
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", "Name: \"...\"", {NKikimrScheme::StatusSchemeError});
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", "Name: \"................\"", {NKikimrScheme::StatusSchemeError});
+    }
+
     Y_UNIT_TEST(CreateWithExtraPathSymbolsAllowed) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

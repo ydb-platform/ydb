@@ -1537,17 +1537,15 @@ TReadWriteVersions TDataShard::GetReadWriteVersions(TOperation* op) const {
     if (!IsMvccEnabled())
         return {TRowVersion::Max(), SnapshotManager.GetMinWriteVersion()};
 
-    if (op && op->MvccReadWriteVersion) {
+    if (op) {
+        if (!op->MvccReadWriteVersion) {
+            op->MvccReadWriteVersion = GetMvccTxVersion(op->IsReadOnly() ? EMvccTxMode::ReadOnly : EMvccTxMode::ReadWrite, op);
+        }
+
         return *op->MvccReadWriteVersion;
     }
 
-    auto mvccVersion = GetMvccTxVersion(EMvccTxMode::ReadWrite, op);
-
-    if (op) {
-        op->MvccReadWriteVersion = mvccVersion;
-    }
-
-    return mvccVersion;
+    return GetMvccTxVersion(EMvccTxMode::ReadWrite, nullptr);
 }
 
 TDataShard::TPromotePostExecuteEdges TDataShard::PromoteImmediatePostExecuteEdges(

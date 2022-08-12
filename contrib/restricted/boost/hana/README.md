@@ -171,21 +171,13 @@ Please see [LICENSE.md](LICENSE.md).
 
 
 ## Releasing
-This section acts as a reminder of the few simple steps required to release a
-new version of the library. This is only relevant to Hana's developers. To
-release a new version of the library, make sure the current version in
-`include/boost/hana/version.hpp` matches the release you're about to publish.
-Then, create an annotated tag with:
-```sh
-git tag -a --file=- v<version> <<EOM
-...your message here...
-EOM
-```
-
-Then, push the tag and create a new GitHub release pointing to that tag.
-Once that is done, bump the version number in `include/boost/hana/version.hpp`
-so that it matches the next _planned_ release. Finally, do not forget to update
-the [Homebrew formula][] to point to the latest version.
+To release a new version of Hana, use the `util/release.sh` script. The script
+will merge `develop` to `master`, create a tag on `master` and then bump the
+version on `develop`. The tag on `master` will be annotated with the contents
+of the `RELEASE_NOTES.md` file. Once the `release.sh` script has been run, the
+`master` and `develop` branches should be pushed manually, as well as the tag
+that was created on `master`. Finally, create a GitHub release pointing to the
+new tag on `master`.
 
 
 <!-- Links -->
@@ -199,4 +191,3 @@ the [Homebrew formula][] to point to the latest version.
 [eRuby]: http://en.wikipedia.org/wiki/ERuby
 [Hana.docs]: http://boostorg.github.io/hana
 [Hana.wiki]: https://github.com/boostorg/hana/wiki
-[Homebrew formula]: https://github.com/Homebrew/homebrew-core/blob/master/Formula/hana.rb

@@ -18,7 +18,10 @@ you contribute:
    running the tests:
 
    ```shell
-   make check
+   mkdir build
+   cd build
+   cmake ..
+   cmake --build . --target check
    ```
 5. Commit your changes. Your commit message should start with a one line
    short description of the modifications, with the details and explanations

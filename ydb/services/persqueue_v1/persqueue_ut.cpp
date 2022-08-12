@@ -4639,12 +4639,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server.AnnoyingClient->CreateTopic(legacyName, 100);
 
         runTest(legacyName, shortLegacyName, topicName, srcId1, 5, 100);
-        runTest(legacyName, legacyName, topicName, srcId2, 6, 100);
+        runTest(legacyName, shortLegacyName, topicName, srcId2, 6, 100);
         runTest("", "", topicName, srcId1, 5, 100);
         runTest("", "", topicName, srcId2, 6, 100);
 
         ui64 time = (TInstant::Now() + TDuration::Hours(4)).MilliSeconds();
-        runTest(legacyName, legacyName, topicName, srcId2, 7, time);
+        runTest(legacyName, shortLegacyName, topicName, srcId2, 7, time);
     }
 
     Y_UNIT_TEST(TestReadPartitionStatus) {

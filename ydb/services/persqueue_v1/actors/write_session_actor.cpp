@@ -320,13 +320,7 @@ void TWriteSessionActor::Handle(TEvPQProxy::TEvWriteInit::TPtr& ev, const TActor
 
 void TWriteSessionActor::InitAfterDiscovery(const TActorContext& ctx) {
     try {
-        // "Bad" hash - in legacy mode calculated from full name ("rt3...", not short name);
-        // Here we had a bug for all the time being and now have to keep compatibility was invalid hashes
-        // Generally GetTopicForSrcIdHash for encoding. Do not copy-paste this line;
-        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcId(), SourceId);
-
-        // Good hash and proper way of calcultion;
-        CompatibleHash = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId).Hash;
+        EncodedSourceId = NSourceIdEncoding::EncodeSrcId(FullConverter->GetTopicForSrcIdHash(), SourceId);
     } catch (yexception& e) {
         CloseSession(TStringBuilder() << "incorrect sourceId \"" << SourceId << "\": " << e.what(),  PersQueue::ErrorCode::BAD_REQUEST, ctx);
         return;
@@ -465,7 +459,6 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
         ProceedPartition(partitionId, ctx);
         return;
     }
-    SendSelectPartitionRequest(CompatibleHash, FullConverter->GetClientsideName(), ctx);
     SendSelectPartitionRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
     State = ES_WAIT_TABLE_REQUEST_1;
 }
@@ -475,11 +468,11 @@ void TWriteSessionActor::SendSelectPartitionRequest(ui32 hash, const TString& to
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    ev->Record.MutableRequest()->SetKeepSession(false);
+    ev->Record.MutableRequest()->SetKeepSession(true);
     ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery);
     ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
     // fill tx settings: set commit tx flag & begin new serializable tx.
-    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+    ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
     ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
@@ -552,6 +545,10 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         SelectSrcIdsInflight--;
         auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
 
+        TxId = record.GetResponse().GetTxMeta().id();
+        KqpSessionId = record.GetResponse().GetSessionId();
+        Y_VERIFY(!TxId.empty());
+
         if (t.ListSize() != 0) {
             auto& tt = t.GetList(0).GetStruct(0);
             if (tt.HasOptional() && tt.GetOptional().HasUint32()) { //already got partition
@@ -592,6 +589,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         }
         return;
     } else if (State == EState::ES_WAIT_TABLE_REQUEST_2) {
+
         SourceIdUpdatesInflight--;
         if (!SourceIdUpdatesInflight) {
             LastSourceIdUpdate = ctx.Now();
@@ -620,7 +618,12 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     ev->Record.MutableRequest()->SetKeepSession(false);
     // fill tx settings: set commit tx flag & begin new serializable tx.
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
-    ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    if (TxId) {
+        ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
+        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
+    } else {
+        ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+    }
     // keep compiled query in cache.
     ev->Record.MutableRequest()->MutableQueryCachePolicy()->set_keep_in_cache(true);
 
@@ -638,12 +641,6 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
 }
 
 void TWriteSessionActor::SendUpdateSrcIdsRequests(const TActorContext& ctx) {
-    {
-        //full legacy name (rt3.dc--acc--topic)
-        auto ev = MakeUpdateSourceIdMetadataRequest(CompatibleHash, FullConverter->GetClientsideName(), ctx);
-        SourceIdUpdatesInflight++;
-        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
-    }
     {
         auto ev = MakeUpdateSourceIdMetadataRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
         SourceIdUpdatesInflight++;
@@ -666,6 +663,8 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
     auto it = PartitionToTablet.find(Partition);
 
     ui64 tabletId = it != PartitionToTablet.end() ? it->second : 0;
+
+    TxId = "";
 
     if (!tabletId) {
         CloseSession(

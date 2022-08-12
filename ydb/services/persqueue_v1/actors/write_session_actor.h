@@ -238,6 +238,8 @@ private:
     TString ClientDC;
     TString SelectSourceIdQuery;
     TString UpdateSourceIdQuery;
+    TString TxId;
+    TString KqpSessionId;
     ui32 SelectSrcIdsInflight = 0;
     ui64 MaxSrcIdAccessTime = 0;
 

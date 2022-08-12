@@ -34,6 +34,7 @@ struct TEnvironmentSetup {
         const bool SetupTablets = false;
         const ui64 BlobDepotId = 0;
         const ui32 BlobDepotChannels = 0;
+        const bool BlobDepotUseMockGroup = true;
     };
 
     const TSettings Settings;
@@ -235,8 +236,8 @@ struct TEnvironmentSetup {
 //            NKikimrServices::BS_PROXY_INDEXRESTOREGET,
 //            NKikimrServices::BS_PROXY_STATUS,
             NActorsServices::TEST,
-            NKikimrServices::BLOB_DEPOT,
-            NKikimrServices::BLOB_DEPOT_AGENT,
+//            NKikimrServices::BLOB_DEPOT,
+//            NKikimrServices::BLOB_DEPOT_AGENT,
 //            NActorsServices::INTERCONNECT,
 //            NActorsServices::INTERCONNECT_SESSION,
         };
@@ -321,7 +322,7 @@ struct TEnvironmentSetup {
         std::vector<TTabletInfo> tablets{
             {MakeBSControllerID(DomainId), TTabletTypes::BSController, &CreateFlatBsController},
         };
-        if (Settings.BlobDepotId) {
+        if (Settings.BlobDepotId && Settings.BlobDepotUseMockGroup) {
             tablets.push_back(TTabletInfo{Settings.BlobDepotId, TTabletTypes::BlobDepot, &NBlobDepot::CreateBlobDepot,
                 Settings.BlobDepotChannels});
         }
@@ -373,6 +374,15 @@ struct TEnvironmentSetup {
                 Runtime->RegisterService(MakeSchemeCacheID(), Runtime->Register(CreateSchemeBoardSchemeCache(config.Get()), nodeId));
             }
         }
+    }
+
+    void SetupBlobDepot(ui32 group) {
+        Runtime->CreateTestBootstrapper(
+            TTestActorSystem::CreateTestTabletInfo(Settings.BlobDepotId, TTabletTypes::BlobDepot, Settings.Erasure.GetErasure(), group, Settings.BlobDepotChannels),
+            &NBlobDepot::CreateBlobDepot, Settings.ControllerNodeId);
+
+        bool working = true;
+        Runtime->Sim([&] { return working; }, [&](IEventHandle& event) { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
     }
 
     void InitRoot() {

@@ -1004,7 +1004,7 @@ public:
                     return nullptr;
                 }
             } else {
-                AddError(TStringBuilder() << "VariableSetStmt, expected string argument for " << value->name << " option");
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
         } else if (name.StartsWith("dq.") || name.StartsWith("yt.")) {
@@ -1024,7 +1024,21 @@ public:
                 Statements.push_back(L(A("let"), A("world"), L(A(TString(NYql::ConfigureName)), A("world"), providerSource,
                     QA("Attr"), QAX(name.substr(dotPos + 1)), QAX(rawStr))));
             } else {
-                AddError(TStringBuilder() << "VariableSetStmt, expected string argument for " << value->name << " option");
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
+                return nullptr;
+            }
+        } else if (name == "tablepathprefix") {
+            if (ListLength(value->args) != 1) {
+                AddError(TStringBuilder() << "VariableSetStmt, expected 1 arg, but got: " << ListLength(value->args));
+                return nullptr;
+            }
+
+            auto arg = ListNodeNth(value->args, 0);
+            if (NodeTag(arg) == T_A_Const && (NodeTag(CAST_NODE(A_Const, arg)->val) == T_String)) {
+                auto rawStr = StrVal(CAST_NODE(A_Const, arg)->val);
+                TablePathPrefix = rawStr;
+            } else {
+                AddError(TStringBuilder() << "VariableSetStmt, expected string literal for " << value->name << " option");
                 return nullptr;
             }
         } else {
@@ -1169,7 +1183,7 @@ public:
 
         auto source = L(A("DataSource"), QAX(*p), QAX(value->schemaname));
         return { L(A("Read!"), A("world"), source, L(A("Key"),
-            QL(QA("table"), L(A("String"), QAX(value->relname)))),
+            QL(QA("table"), L(A("String"), QAX(TablePathPrefix + value->relname)))),
             L(A("Void")),
             QL()), alias, colnames, true };
     }
@@ -2457,6 +2471,7 @@ private:
     ui32 ReadIndex = 0;
     TViews Views;
     TVector<TViews> CTE;
+    TString TablePathPrefix;
 };
 
 NYql::TAstParseResult PGToYql(const TString& query, const NSQLTranslation::TTranslationSettings& settings) {

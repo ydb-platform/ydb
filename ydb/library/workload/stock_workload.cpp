@@ -74,6 +74,16 @@ TQueryInfoList TStockWorkloadGenerator::GetInitialData() {
     return res;
 }
 
+std::string TStockWorkloadGenerator::GetCleanDDLQueries() const {
+    std::string clean_query = R"(
+        DROP TABLE `stock`;
+        DROP TABLE `orders`;
+        DROP TABLE `orderLines`;
+    )";
+
+    return clean_query;
+}
+
 TQueryInfo TStockWorkloadGenerator::FillStockData() const {
     std::string query = R"(--!syntax_v1
         DECLARE $stocks AS List<Struct<product:Utf8,quantity:Int64>>;

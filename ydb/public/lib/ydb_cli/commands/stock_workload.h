@@ -25,6 +25,15 @@ private:
     bool PartitionsByLoad;
 };
 
+class TCommandStockClean : public TWorkloadCommand {
+public:
+    TCommandStockClean();
+    virtual void Config(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
+
+};
+
 class TCommandStockRun : public TClientCommandTree {
 public:
     TCommandStockRun();

@@ -11,6 +11,7 @@ add_library(core-blobstorage-testload)
 target_link_libraries(core-blobstorage-testload PUBLIC
   contrib-libs-cxxsupp
   yutil
+  cpp-histogram-hdr
   contrib-libs-protobuf
   monlib-dynamic_counters-percentile
   monlib-service-pages

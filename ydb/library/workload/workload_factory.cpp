@@ -4,18 +4,17 @@
 
 namespace NYdbWorkload {
 
-    std::shared_ptr<IWorkloadQueryGenerator> TWorkloadFactory::GetWorkloadQueryGenerator(const std::string& workloadName, 
-        const TWorkloadParams* params) 
+    std::shared_ptr<IWorkloadQueryGenerator> TWorkloadFactory::GetWorkloadQueryGenerator(const EWorkload& type , const TWorkloadParams* params) 
     {
         if (!params) {
-            return nullptr;
+            throw yexception() << "Params not specified";
         }
 
-        if (workloadName == "stock") {
+        if (type == EWorkload::STOCK) {
             return std::shared_ptr<TStockWorkloadGenerator>(TStockWorkloadGenerator::New(static_cast<const TStockWorkloadParams*>(params)));
-        } else {
-            return nullptr;
         }
+
+        throw yexception() << "Unknown workload";
     }
 
 }

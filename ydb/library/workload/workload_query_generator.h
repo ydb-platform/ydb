@@ -31,6 +31,7 @@ public:
 
     virtual std::string GetDDLQueries() const = 0;
     virtual TQueryInfoList GetInitialData() = 0;
+    virtual std::string GetCleanDDLQueries() const = 0;
 
     virtual TQueryInfoList GetWorkload(int type) = 0;
 };

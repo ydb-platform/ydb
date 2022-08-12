@@ -22,7 +22,7 @@ public:
 
     static TStockWorkloadGenerator* New(const TStockWorkloadParams* params) {
         if (!validateDbPath(params->DbPath)) {
-            return nullptr;
+            throw yexception() << "Invalid path to database." << Endl;
         }
         return new TStockWorkloadGenerator(params);
     }
@@ -32,6 +32,8 @@ public:
     std::string GetDDLQueries() const override;
 
     TQueryInfoList GetInitialData() override;
+
+    std::string GetCleanDDLQueries() const override;
 
     TQueryInfoList GetWorkload(int type) override;
 

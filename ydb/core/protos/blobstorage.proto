@@ -1529,23 +1529,22 @@ message TEvTestLoadRequest {
 
     message TKqpLoadStart {
         message TStockWorkload {
-            optional uint64 ProductCount = 1;
-            optional uint64 Quantity = 2;
+            optional uint64 ProductCount = 1 [default = 100];
+            optional uint64 Quantity = 2 [default = 1000];
+            optional uint64 OrderCount = 3 [default = 100];
+            optional uint64 Limit = 4 [default = 10]; 
+            optional bool PartitionsByLoad = 5 [default = true];
         }
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;
-        optional uint32 NumOfSessions = 3;
-        optional uint32 MaxInFlight = 4;
-        optional uint32 StringValueSize = 5 [default = 8000];
-        optional uint64 FirstKey = 6 [default = 0];
-        optional bool DeleteTableOnFinish = 7 [default = true];
-        optional bool SequentialWrite = 8 [default = true];
-        optional uint32 UniformPartitionsCount = 9 [default = 1];
-        optional uint64 TotalRowsToUpsert = 10;
-        optional string WorkingDir = 11;
-        optional string WorkloadName = 12;
+        optional uint32 WindowDuration = 3;
+        optional string WorkingDir = 4;
+        optional uint32 NumOfSessions = 5;
+        optional bool DeleteTableOnFinish = 6;
+        optional uint32 UniformPartitionsCount = 7;
+        optional uint32 WorkloadType = 8;
         oneof Workload {
-            TStockWorkload Stock = 13;
+            TStockWorkload Stock = 9;
         }
     }
 

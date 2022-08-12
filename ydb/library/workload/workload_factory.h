@@ -6,9 +6,13 @@
 
 namespace NYdbWorkload {
 
+enum class EWorkload {
+    STOCK,
+};
+
 class TWorkloadFactory {
 public:
-    std::shared_ptr<IWorkloadQueryGenerator> GetWorkloadQueryGenerator(const std::string& workloadName, const TWorkloadParams* params);
+    std::shared_ptr<IWorkloadQueryGenerator> GetWorkloadQueryGenerator(const EWorkload& type, const TWorkloadParams* params);
 };
 
 } // namespace NYdbWorkload

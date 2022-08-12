@@ -172,6 +172,12 @@ public:
                 return result;
             }
         }
+        TString errStr;
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterCdcStream, errStr))
+        {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         auto guard = context.DbGuard();
         context.DbChanges.PersistAlterCdcStream(streamPath.Base()->PathId);
@@ -391,6 +397,11 @@ public:
 
         if (!context.SS->CheckLocks(tablePath.Base()->PathId, Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterCdcStreamAtTable, errStr))
+        {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 

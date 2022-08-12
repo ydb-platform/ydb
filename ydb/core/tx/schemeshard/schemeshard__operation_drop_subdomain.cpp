@@ -227,6 +227,10 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxDropSubDomain, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropSubDomain, path.Base()->PathId);
         // Dirty hack: drop step must not be zero because 0 is treated as "hasn't been dropped"

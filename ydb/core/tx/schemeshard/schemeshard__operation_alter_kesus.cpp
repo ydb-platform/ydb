@@ -361,6 +361,10 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterKesus, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         kesus->AlterConfig.Reset(new Ydb::Coordination::Config);
         kesus->AlterConfig->CopyFrom(kesus->Config);

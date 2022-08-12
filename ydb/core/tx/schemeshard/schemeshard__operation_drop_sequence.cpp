@@ -364,6 +364,10 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxDropSequence, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxDropSequence, path->PathId);
         txState.State = TTxState::DropParts;

@@ -428,6 +428,10 @@ THolder<TProposeResponse> TCreateFileStore::Propose(
         result->SetError(status, errStr);
         return result;
     }
+    if (!context.SS->CheckInFlightLimit(TTxState::TxCreateFileStore, errStr)) {
+        result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        return result;
+    }
 
     dstPath.MaterializeLeaf(owner);
     result->SetPathId(dstPath.Base()->PathId.LocalPathId);

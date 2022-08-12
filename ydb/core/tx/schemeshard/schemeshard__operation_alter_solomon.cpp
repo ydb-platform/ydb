@@ -291,6 +291,10 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Unable to construct channel binding with the storage pool");
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterSolomonVolume, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         result->SetPathId(path.Base()->PathId.LocalPathId);
 

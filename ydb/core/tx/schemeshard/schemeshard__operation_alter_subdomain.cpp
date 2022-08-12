@@ -312,6 +312,10 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterSubDomain, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         if (settings.HasDeclaredSchemeQuotas()) {
             alterData->SetDeclaredSchemeQuotas(settings.GetDeclaredSchemeQuotas());

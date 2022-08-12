@@ -6,6 +6,7 @@ import "ydb/core/protos/blobstorage_vdisk_config.proto";
 import "ydb/core/protos/blobstorage_pdisk_config.proto";
 import "ydb/core/protos/cms.proto";
 import "ydb/core/protos/config_units.proto";
+import "ydb/core/protos/counters_schemeshard.proto";
 import "ydb/core/protos/drivemodel.proto";
 import "ydb/core/protos/flat_scheme_op.proto";
 import "ydb/core/protos/http_config.proto";
@@ -1436,6 +1437,12 @@ message TDataShardConfig {
 }
 
 message TSchemeShardConfig {
+    message TInFlightCounterConfig {
+        optional NKikimr.NSchemeShard.ESimpleCounters Type = 1;
+        // after this amount scheme shard begin to abort the operations
+        // to disable set to 0
+        optional uint32 InFlightLimit = 2 [default = 10000];
+    }
     // after this amount of time we forcely write full stats to local DB
     // to disable set to 0
     optional uint32 StatsBatchTimeoutMs = 1 [default = 100];
@@ -1445,6 +1452,8 @@ message TSchemeShardConfig {
     optional uint32 StatsMaxBatchSize = 2 [default = 100];
 
     optional uint32 StatsMaxExecuteMs = 3 [default = 10];
+
+    repeated TInFlightCounterConfig InFlightCounterConfig = 4;
 }
 
 message TCompactionConfig {

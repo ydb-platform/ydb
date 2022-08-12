@@ -147,9 +147,13 @@ public:
             return result;
         }
 
-        TString errMsg;
-        if (!context.SS->CheckLocks(pathId, Transaction, errMsg)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errMsg);
+        TString errStr;
+        if (!context.SS->CheckLocks(pathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxDropLock, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 

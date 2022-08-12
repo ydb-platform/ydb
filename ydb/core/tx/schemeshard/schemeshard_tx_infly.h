@@ -38,6 +38,7 @@ struct TTxState {
     #define TX_STATE_ENUM_NAME(n, ...) case n: return #n;
     #define TX_STATE_IN_FLIGHT_COUNTER(n, ...) case n: return COUNTER_IN_FLIGHT_OPS_##n ;
     #define TX_STATE_FINISHED_COUNTER(n, ...) case n: return COUNTER_FINISHED_OPS_##n ;
+    #define TX_STATE_FROM_COUNTER(n, ...) case ESimpleCounters::COUNTER_IN_FLIGHT_OPS_##n: return ETxType::n;
 
     // WARNING: DO NOT REORDER this constants
     // reordering breaks update
@@ -142,6 +143,13 @@ struct TTxState {
             TX_STATE_TYPE_ENUM(TX_STATE_FINISHED_COUNTER)
         default:
             return COUNTER_FINISHED_OPS_UNKNOWN;
+        }
+    }
+    static ETxType ConvertToTxType(ESimpleCounters t) {
+        switch(t) {
+            TX_STATE_TYPE_ENUM(TX_STATE_FROM_COUNTER)
+        default:
+            return TTxState::ETxType::TxInvalid;
         }
     }
     #undef TX_STATE_TYPE_ENUM

@@ -221,6 +221,10 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxMkDir, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         auto guard = context.DbGuard();
         TPathId allocatedPathId = context.SS->AllocatePathId();

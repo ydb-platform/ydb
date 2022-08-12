@@ -215,20 +215,24 @@ public:
             }
         }
 
-        TString errMsg;
+        TString errStr;
 
-        if (!context.SS->CheckLocks(parentPath.Base()->PathId, Transaction, errMsg)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errMsg);
+        if (!context.SS->CheckLocks(parentPath.Base()->PathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
 
         TTableIndexInfo::TPtr newIndexData = nullptr;
         {
-            newIndexData = TTableIndexInfo::Create(tableIndexCreation, errMsg);
+            newIndexData = TTableIndexInfo::Create(tableIndexCreation, errStr);
             if (!newIndexData) {
-                result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, errMsg);
+                result->SetError(TEvSchemeShard::EStatus::StatusInvalidParameter, errStr);
                 return result;
             }
+        }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateTableIndex, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
         }
 
         auto guard = context.DbGuard();

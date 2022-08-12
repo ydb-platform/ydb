@@ -407,6 +407,10 @@ public:
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxDropColumnTable, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
         storeInfo->ColumnTablesUnderOperation.insert(path->PathId);

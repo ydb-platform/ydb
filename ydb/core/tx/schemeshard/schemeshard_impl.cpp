@@ -3839,6 +3839,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
+    ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -6099,7 +6100,9 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasSchemeShardConfig()) {
-        ConfigureStatsBatching(appConfig.GetSchemeShardConfig(), ctx);
+        const auto& schemeShardConfig = appConfig.GetSchemeShardConfig();
+        ConfigureStatsBatching(schemeShardConfig, ctx);
+        ConfigureStatsOperations(schemeShardConfig, ctx);
     }
 
     if (IsShemeShardConfigured()) {
@@ -6130,6 +6133,45 @@ void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfi
                  "StatsBatching config: StatsBatchTimeout# " << StatsBatchTimeout
                  << ", StatsMaxBatchSize# " << StatsMaxBatchSize
                  << ", StatsMaxExecuteTime# " << StatsMaxExecuteTime);
+}
+
+void TSchemeShard::ConfigureStatsOperations(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
+    for (const auto& operationConfig: config.GetInFlightCounterConfig()) {
+        ui32 limit = operationConfig.GetInFlightLimit();
+        auto txState = TTxState::ConvertToTxType(operationConfig.GetType());
+        InFlightLimits[txState] = limit;
+    }
+    
+    if (InFlightLimits.empty()) {
+        NKikimrConfig::TSchemeShardConfig_TInFlightCounterConfig inFlightCounterConfig;
+        auto defaultInFlightLimit = inFlightCounterConfig.GetInFlightLimit();
+        InFlightLimits[TTxState::ETxType::TxSplitTablePartition] = defaultInFlightLimit;
+        InFlightLimits[TTxState::ETxType::TxMergeTablePartition] = defaultInFlightLimit;
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "OperationsProcessing config: using default configuration");
+    }
+
+    for (auto it = InFlightLimits.begin(); it != InFlightLimits.end(); ++it) {
+        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "OperationsProcessing config: type " << TTxState::TypeName(it->first)
+                    << ", limit " << it->second);
+    }
+}
+
+bool TSchemeShard::CheckInFlightLimit(const TTxState::ETxType txType, TString& errStr) const {
+    auto it = InFlightLimits.find(txType);
+    if (it == InFlightLimits.end()) {
+        return true; 
+    }
+    if (it->second != 0 && TabletCounters->Simple()[TTxState::TxTypeInFlightCounter(txType)].Get() >= it->second)
+    {
+        errStr = TStringBuilder() << "the limit of operations with type " << TTxState::TypeName(txType)
+                                            << " has been exceeded"
+                                            << ", limit: " << it->second;
+        return false;
+    }
+    
+    return true;
 }
 
 void TSchemeShard::ConfigureCompactionQueues(

@@ -258,6 +258,7 @@ public:
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
     ui32 StatsMaxBatchSize = 0;
+    THashMap<TTxState::ETxType, ui32> InFlightLimits;
 
     // time when we opened the batch
     TMonotonic StatsBatchStartTs;
@@ -382,6 +383,10 @@ public:
         const NKikimrConfig::TSchemeShardConfig& config,
         const TActorContext &ctx);
 
+    void ConfigureStatsOperations(
+        const NKikimrConfig::TSchemeShardConfig& config,
+        const TActorContext &ctx);
+
     void ConfigureCompactionQueues(
         const NKikimrConfig::TCompactionConfig& config,
         const TActorContext &ctx);
@@ -393,6 +398,10 @@ public:
     void ConfigureBorrowedCompactionQueue(
         const NKikimrConfig::TCompactionConfig::TBorrowedCompactionConfig& config,
         const TActorContext &ctx);
+
+    bool CheckInFlightLimit(
+        const TTxState::ETxType txType,
+        TString& errStr) const;
 
     void StartStopCompactionQueues();
 

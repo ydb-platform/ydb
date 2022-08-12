@@ -349,6 +349,10 @@ public:
                 return result;
             }
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateReplication, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         path.MaterializeLeaf(owner);
         path->CreateTxId = OperationId.GetTxId();

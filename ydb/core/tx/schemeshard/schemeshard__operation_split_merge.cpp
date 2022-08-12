@@ -954,6 +954,10 @@ public:
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Invalid request: only 1->N or N->1 are supported");
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxSplitTablePartition, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         ///////////
         /// Accept operation

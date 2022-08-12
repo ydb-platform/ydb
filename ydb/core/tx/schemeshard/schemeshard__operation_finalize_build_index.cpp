@@ -406,6 +406,10 @@ public:
             result->SetError(TEvSchemeShard::EStatus::StatusPathDoesNotExist, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxFinalizeBuildIndex, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         NIceDb::TNiceDb db(context.GetDB());
 

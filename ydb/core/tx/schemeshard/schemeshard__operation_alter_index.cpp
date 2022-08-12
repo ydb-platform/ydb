@@ -205,10 +205,14 @@ public:
 
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
 
-        TString errMsg;
+        TString errStr;
 
-        if (!context.SS->CheckLocks(parentPath.Base()->PathId, Transaction, errMsg)) {
-            result->SetError(NKikimrScheme::StatusMultipleModifications, errMsg);
+        if (!context.SS->CheckLocks(parentPath.Base()->PathId, Transaction, errStr)) {
+            result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
+            return result;
+        }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterTableIndex, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 

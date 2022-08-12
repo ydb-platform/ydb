@@ -496,6 +496,10 @@ public:
             result->SetError(status, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxAlterColumnTable, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         Y_VERIFY(storeInfo->ColumnTables.contains(path->PathId));
         storeInfo->ColumnTablesUnderOperation.insert(path->PathId);

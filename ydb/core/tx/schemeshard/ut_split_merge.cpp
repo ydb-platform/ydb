@@ -326,4 +326,84 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTest) {
         }, true);
     }
 
+    void TryMergeWithInflyLimit(TTestActorRuntime &runtime, TTestEnv &env, const ui64 mergeNum, const ui64 remainMergeNum, const ui64 acceptedMergeNum, ui64 &txId) {
+        const ui64 shardsNum = mergeNum * 2;    
+        const ui64 startMergePart = mergeNum - remainMergeNum;
+        TSet<ui64> txIds;
+        ui64 startTxId = txId;
+        for (ui64 i = startMergePart * 2; i < shardsNum; i += 2) {
+            AsyncSplitTable(runtime, txId, "/MyRoot/Table",
+                                Sprintf(R"(
+                                    SourceTabletId: %lu
+                                    SourceTabletId: %lu
+                                )", TTestTxConfig::FakeHiveTablets + i, TTestTxConfig::FakeHiveTablets + i + 1));
+            txIds.insert(txId++);
+        }
+
+        for (ui64 i = startTxId; i < startTxId + acceptedMergeNum ; i++)
+            TestModificationResult(runtime, i, NKikimrScheme::StatusAccepted);
+        for (ui64 i = startTxId + acceptedMergeNum; i < txId; i++)
+            TestModificationResult(runtime, i, NKikimrScheme::StatusResourceExhausted);
+
+        env.TestWaitNotification(runtime, txIds);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"), {
+                            NLs::ShardsInsideDomain(mergeNum + remainMergeNum - acceptedMergeNum)
+                        });
+    };
+
+    void AsyncMergeWithInflyLimit(const ui64 mergeNum, const ui64 mergeLimit) {
+        const ui64 shardsNum = mergeNum * 2;        
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 123;
+        auto& appData = runtime.GetAppData();
+
+        // set batching only by timeout
+        NKikimrConfig::TSchemeShardConfig_TInFlightCounterConfig *inFlightCounter = appData.SchemeShardConfig.AddInFlightCounterConfig();
+        inFlightCounter->SetType(NKikimr::NSchemeShard::ESimpleCounters::COUNTER_IN_FLIGHT_OPS_TxSplitTablePartition);
+        inFlightCounter->SetInFlightLimit(mergeLimit);
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        TestCreateTable(runtime, txId++, "/MyRoot", Sprintf(R"(
+                        Name: "Table"
+                        Columns { Name: "key"       Type: "Uint64"}
+                        Columns { Name: "value"      Type: "Utf8"}
+                        KeyColumnNames: ["key"]
+                        UniformPartitionsCount: %lu
+                        PartitionConfig {
+                            PartitioningPolicy {
+                                MinPartitionsCount: 0
+                            }
+                        })", shardsNum));
+
+        env.TestWaitNotification(runtime, txId - 1);
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Table"),
+                           {NLs::IsTable,
+                            NLs::ShardsInsideDomain(shardsNum)});
+        ui64 remainMergeNum = mergeNum;
+
+        while (remainMergeNum > 0)
+        {
+            ui64 acceptedMergeNum = mergeLimit == 0
+                ? remainMergeNum
+                : std::min(remainMergeNum, mergeLimit);
+            TryMergeWithInflyLimit(runtime, env, mergeNum, remainMergeNum, acceptedMergeNum, txId);
+            remainMergeNum -= acceptedMergeNum;
+        }
+    }
+
+    Y_UNIT_TEST(Make11MergeOperationsWithInflyLimit10) {
+        AsyncMergeWithInflyLimit(11, 10);
+    }
+
+    Y_UNIT_TEST(Make20MergeOperationsWithInflyLimit5) {
+        AsyncMergeWithInflyLimit(20, 5);
+    }
+
+    Y_UNIT_TEST(Make20MergeOperationsWithoutLimit) {
+        AsyncMergeWithInflyLimit(20, 0);
+    }
+
 }

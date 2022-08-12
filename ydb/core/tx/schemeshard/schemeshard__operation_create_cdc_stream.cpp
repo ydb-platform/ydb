@@ -224,6 +224,10 @@ public:
             result->SetError(NKikimrScheme::StatusMultipleModifications, errStr);
             return result;
         }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateCdcStream, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+            return result;
+        }
 
         auto stream = TCdcStreamInfo::Create(streamDesc);
         Y_VERIFY(stream);
@@ -447,6 +451,10 @@ public:
         TString errStr;
         if (!context.SS->CheckApplyIf(Transaction, errStr)) {
             result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+        if (!context.SS->CheckInFlightLimit(TTxState::TxCreateCdcStreamAtTable, errStr)) {
+            result->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
             return result;
         }
 

@@ -57,6 +57,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-type_index
   restricted-boost-type_traits
   restricted-boost-typeof
+  restricted-boost-unordered
   restricted-boost-utility
   restricted-boost-variant
   restricted-boost-vmd

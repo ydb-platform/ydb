@@ -21,7 +21,7 @@ namespace NKikimr::NBlobDepot {
     public:
         TTxCollectGarbage(TBlobDepot *self, ui64 tabletId, ui8 channel, ui32 keepIndex = 0, ui32 doNotKeepIndex = 0)
             : TTransactionBase(self)
-            , Barrier(Self->BarrierServer->Barriers[std::make_pair(tabletId, channel)])
+            , Barrier(Self->BarrierServer->Barriers[std::make_tuple(tabletId, channel)])
             , Request(Barrier.ProcessingQ.front())
             , TabletId(tabletId)
             , Channel(channel)
@@ -67,7 +67,7 @@ namespace NKikimr::NBlobDepot {
                 } else if (!record.HasGeneration() || !record.HasPerGenerationCounter()) {
                     Error = "Generation/PerGenerationCounter are not set";
                 } else {
-                    const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
+                    const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
                     auto& barriers = Self->BarrierServer->Barriers;
                     if (const auto it = barriers.find(key); it != barriers.end()) {
                         // extract existing barrier record
@@ -146,7 +146,7 @@ namespace NKikimr::NBlobDepot {
                     return false;
                 }
 
-                const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
+                const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
                 auto& barrier = Self->BarrierServer->Barriers[key];
                 TGenStep& barrierGenCtr = record.GetHard() ? barrier.HardGenCtr : barrier.SoftGenCtr;
                 TGenStep& barrierGenStep = record.GetHard() ? barrier.Hard : barrier.Soft;
@@ -175,45 +175,50 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    void TBlobDepot::TBarrierServer::AddBarrierOnLoad(const TBlobDepot::TBarrier& barrier) {
-        Barriers[std::make_pair(barrier.TabletId, barrier.Channel)] = {
-            .SoftGenCtr = barrier.Soft.GenCtr,
-            .Soft = barrier.Soft.Collect,
-            .HardGenCtr = barrier.Hard.GenCtr,
-            .Hard = barrier.Hard.Collect,
+    void TBlobDepot::TBarrierServer::AddBarrierOnLoad(ui64 tabletId, ui8 channel, TGenStep softGenCtr, TGenStep soft,
+            TGenStep hardGenCtr, TGenStep hard) {
+        Barriers[std::make_tuple(tabletId, channel)] = {
+            .SoftGenCtr = softGenCtr,
+            .Soft = soft,
+            .HardGenCtr = hardGenCtr,
+            .Hard = hard,
         };
     }
 
-    void TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TBlobDepot::TBarrier& barrier,
+    void TBlobDepot::TBarrierServer::AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier,
             NTabletFlatExecutor::TTransactionContext& txc) {
         NIceDb::TNiceDb db(txc.DB);
 
-        const auto key = std::make_pair(barrier.TabletId, barrier.Channel);
+        const auto key = std::make_tuple(barrier.TabletId, barrier.Channel);
         auto& current = Barriers[key];
 #define DO(TYPE) \
-        if (current.TYPE##GenCtr < barrier.TYPE.GenCtr) { \
-            if (current.TYPE <= barrier.TYPE.Collect) { \
-                current.TYPE##GenCtr = barrier.TYPE.GenCtr; \
-                current.TYPE = barrier.TYPE.Collect; \
-                db.Table<Schema::Barriers>().Key(barrier.TabletId, barrier.Channel).Update( \
-                    NIceDb::TUpdate<Schema::Barriers::TYPE##GenCtr>(ui64(barrier.TYPE.GenCtr)), \
-                    NIceDb::TUpdate<Schema::Barriers::TYPE>(ui64(barrier.TYPE.Collect)) \
-                ); \
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT45, "replacing " #TYPE " barrier through decommission", \
-                    (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                    (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                    (Barrier, barrier)); \
-            } else { \
-                STLOG(PRI_ERROR, BLOB_DEPOT, BDT36, "decreasing " #TYPE " barrier through decommission", \
+        { \
+            const TGenStep barrierGenCtr(barrier.TYPE.RecordGeneration, barrier.TYPE.PerGenerationCounter); \
+            const TGenStep barrierCollect(barrier.TYPE.CollectGeneration, barrier.TYPE.CollectStep); \
+            if (current.TYPE##GenCtr < barrierGenCtr) { \
+                if (current.TYPE <= barrierCollect) { \
+                    current.TYPE##GenCtr = barrierGenCtr; \
+                    current.TYPE = barrierCollect; \
+                    db.Table<Schema::Barriers>().Key(barrier.TabletId, barrier.Channel).Update( \
+                        NIceDb::TUpdate<Schema::Barriers::TYPE##GenCtr>(ui64(barrierGenCtr)), \
+                        NIceDb::TUpdate<Schema::Barriers::TYPE>(ui64(barrierCollect)) \
+                    ); \
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT45, "replacing " #TYPE " barrier through decommission", \
+                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
+                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
+                        (Barrier, barrier)); \
+                } else { \
+                    STLOG(PRI_ERROR, BLOB_DEPOT, BDT36, "decreasing " #TYPE " barrier through decommission", \
+                        (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
+                        (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
+                        (Barrier, barrier)); \
+                } \
+            } else if (current.TYPE##GenCtr == barrierGenCtr && current.TYPE != barrierCollect) { \
+                STLOG(PRI_ERROR, BLOB_DEPOT, BDT43, "barrier value mismatch through decommission", \
                     (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
                     (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
                     (Barrier, barrier)); \
             } \
-        } else if (current.TYPE##GenCtr == barrier.TYPE.GenCtr && current.TYPE != barrier.TYPE.Collect) { \
-            STLOG(PRI_ERROR, BLOB_DEPOT, BDT43, "barrier value mismatch through decommission", \
-                (TabletId, barrier.TabletId), (Channel, int(barrier.Channel)), \
-                (GenCtr, current.TYPE##GenCtr), (Collect, current.TYPE), \
-                (Barrier, barrier)); \
         }
 
         DO(Hard)
@@ -222,7 +227,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepot::TBarrierServer::Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev) {
         const auto& record = ev->Get()->Record;
-        const auto key = std::make_pair(record.GetTabletId(), record.GetChannel());
+        const auto key = std::make_tuple(record.GetTabletId(), record.GetChannel());
         auto& barrier = Barriers[key];
         barrier.ProcessingQ.emplace_back(ev.Release());
         if (Self->Data->IsLoaded() && barrier.ProcessingQ.size() == 1) {
@@ -231,12 +236,12 @@ namespace NKikimr::NBlobDepot {
     }
 
     bool TBlobDepot::TBarrierServer::CheckBlobForBarrier(TLogoBlobID id) const {
-        const auto it = Barriers.find(std::make_pair(id.TabletID(), id.Channel()));
+        const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
         return it == Barriers.end() || TGenStep(id) > Max(it->second.Soft, it->second.Hard);
     }
 
     void TBlobDepot::TBarrierServer::GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const {
-        const auto it = Barriers.find(std::make_pair(id.TabletID(), id.Channel()));
+        const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
         const TGenStep genStep(id);
         *underSoft = it == Barriers.end() ? false : genStep <= it->second.Soft;
         *underHard = it == Barriers.end() ? false : genStep <= it->second.Hard;
@@ -245,7 +250,8 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::TBarrierServer::OnDataLoaded() {
         for (auto& [key, barrier] : Barriers) {
             if (!barrier.ProcessingQ.empty()) {
-                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, key.first, key.second));
+                const auto& [tabletId, channel] = key;
+                Self->Execute(std::make_unique<TTxCollectGarbage>(Self, tabletId, channel));
             }
         }
     }

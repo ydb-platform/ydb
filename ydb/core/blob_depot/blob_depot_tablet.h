@@ -16,138 +16,7 @@ namespace NKikimr::NBlobDepot {
         struct TEvPrivate {
             enum {
                 EvCheckExpiredAgents = EventSpaceBegin(TEvents::ES_PRIVATE),
-                EvAssimilatedData,
-                EvAssimilatedDataConfirm,
             };
-        };
-
-        struct TBlock {
-            ui64 TabletId;
-            ui32 BlockedGeneration;
-            ui64 IssuerGuid = 0;
-
-            TBlock() = default;
-
-            TBlock(const NKikimrBlobStorage::TEvVAssimilateResult::TBlock& item)
-                : TabletId(item.GetTabletId())
-                , BlockedGeneration(item.GetBlockedGeneration())
-            {}
-
-            template<typename T>
-            static TBlock FromRow(T&& row) {
-                TBlock block;
-                block.TabletId = row.template GetValue<Schema::Blocks::TabletId>();
-                block.BlockedGeneration = row.template GetValue<Schema::Blocks::BlockedGeneration>();
-                block.IssuerGuid = row.template GetValue<Schema::Blocks::IssuerGuid>();
-                return block;
-            }
-
-            void Merge(TBlock& other) {
-                Y_VERIFY_DEBUG(other.TabletId == TabletId);
-                BlockedGeneration = Max(BlockedGeneration, other.BlockedGeneration);
-            }
-
-            TString ToString() const {
-                return TStringBuilder() << "{" << TabletId << ":" << BlockedGeneration << "}";
-            }
-        };
-
-        struct TBarrier {
-            struct TValue {
-                TGenStep GenCtr;
-                TGenStep Collect;
-
-                TValue() = default;
-
-                TValue(const NKikimrBlobStorage::TEvVAssimilateResult::TBarrier::TValue& value)
-                    : GenCtr(value.GetRecordGeneration(), value.GetPerGenerationCounter())
-                    , Collect(value.GetCollectGeneration(), value.GetCollectStep())
-                {}
-
-                void Merge(TValue& other) {
-                    if (GenCtr < other.GenCtr) {
-                        *this = other;
-                    }
-                }
-
-                TString ToString() const {
-                    return TStringBuilder() << "{" << GenCtr.ToString() << "=>" << Collect.ToString() << "}";
-                }
-            };
-
-            ui64 TabletId;
-            ui8 Channel;
-            TValue Hard;
-            TValue Soft;
-
-            TBarrier() = default;
-
-            TBarrier(const NKikimrBlobStorage::TEvVAssimilateResult::TBarrier& item)
-                : TabletId(item.GetTabletId())
-                , Channel(item.GetChannel())
-                , Hard(item.HasHard() ? TValue(item.GetHard()) : TValue())
-                , Soft(item.HasSoft() ? TValue(item.GetSoft()) : TValue())
-            {}
-
-            template<typename TRow>
-            static TBarrier FromRow(TRow&& row) {
-                using T = Schema::Barriers;
-                TBarrier barrier;
-                barrier.TabletId = row.template GetValue<T::TabletId>();
-                barrier.Channel = row.template GetValue<T::Channel>();
-                if (row.template HaveValue<T::HardGenCtr>() && row.template HaveValue<T::Hard>()) {
-                    barrier.Hard.GenCtr = TGenStep(row.template GetValue<T::HardGenCtr>());
-                    barrier.Hard.Collect = TGenStep(row.template GetValue<T::Hard>());
-                }
-                if (row.template HaveValue<T::SoftGenCtr>() && row.template HaveValue<T::Soft>()) {
-                    barrier.Soft.GenCtr = TGenStep(row.template GetValue<T::SoftGenCtr>());
-                    barrier.Soft.Collect = TGenStep(row.template GetValue<T::Soft>());
-                }
-                return barrier;
-            }
-
-            void Merge(TBarrier& other) {
-                Y_VERIFY_DEBUG(TabletId == other.TabletId && Channel == other.Channel);
-                Hard.Merge(other.Hard);
-                Soft.Merge(other.Soft);
-            }
-
-            TString ToString() const {
-                return TStringBuilder() << "{" << TabletId << ":" << int(Channel) << "@" << Hard.ToString() << "/"
-                    << Soft.ToString() << "}";
-            }
-        };
-
-        struct TBlob {
-            TLogoBlobID Id;
-            ui64 Ingress;
-            bool Keep = false;
-
-            TBlob() = default;
-
-            TBlob(const NKikimrBlobStorage::TEvVAssimilateResult::TBlob& item, const TLogoBlobID& id)
-                : Id(id)
-                , Ingress(item.GetIngress())
-            {}
-
-            void Merge(TBlob& other) {
-                Y_VERIFY_DEBUG(Id == other.Id);
-                Ingress |= other.Ingress;
-            }
-
-            TString ToString() const {
-                return TStringBuilder() << "{" << Id.ToString() << "/" << Ingress << "}";
-            }
-        };
-
-        struct TEvAssimilatedData : TEventLocal<TEvAssimilatedData, TEvPrivate::EvAssimilatedData> {
-            std::deque<TBlock> Blocks;
-            bool BlocksFinished = false;
-            std::deque<TBarrier> Barriers;
-            bool BarriersFinished = false;
-            std::deque<TBlob> Blobs;
-            bool BlobsFinished = false;
-            TString AssimilatorState;
         };
 
     public:
@@ -337,20 +206,13 @@ namespace NKikimr::NBlobDepot {
         struct TToken {};
         std::shared_ptr<TToken> Token = std::make_shared<TToken>();
 
-        TActorId RunningGroupAssimilator;
-        TActorId CopierId;
+        TActorId GroupAssimilatorId;
         EDecommitState DecommitState = EDecommitState::Default;
         std::optional<TString> AssimilatorState;
 
         class TGroupAssimilator;
-        class TGroupAssimilatorFetchMachine;
-
-        class TGroupAssimilatorCopierActor;
 
         void StartGroupAssimilator();
-        void HandleGone(TAutoPtr<IEventHandle> ev);
-        void Handle(TEvAssimilatedData::TPtr ev);
-        void ProcessAssimilatedData(TEvAssimilatedData& msg);
     };
 
 } // NKikimr::NBlobDepot

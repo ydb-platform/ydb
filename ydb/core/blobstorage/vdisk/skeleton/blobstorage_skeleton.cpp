@@ -1215,9 +1215,21 @@ namespace NKikimr {
         // ASSIMILATION
         ////////////////////////////////////////////////////////////////////////
 
+        void ReplyError(NKikimrProto::EReplyStatus status, const TString& errorReason, TEvBlobStorage::TEvVAssimilate::TPtr &ev,
+                        const TActorContext &ctx, const TInstant &now) {
+            using namespace NErrBuilder;
+            std::unique_ptr<IEventBase> res(ErroneousResult(VCtx, status, errorReason, ev, now, SkeletonFrontIDPtr,
+                SelfVDiskId, Db->GetVDiskIncarnationGuid(), GInfo));
+            SendVDiskResponse(ctx, ev->Sender, res.release(), ev->Cookie);
+        }
+
         void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
-            const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev));
-            ActiveActors.insert(actorId);
+            if (!SelfVDiskId.SameDisk(ev->Get()->Record.GetVDiskID())) {
+                ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, TAppData::TimeProvider->Now());
+            } else {
+                const TActorId actorId = RunInBatchPool(ctx, CreateAssimilationActor(Hull->GetIndexSnapshot(), ev, SelfVDiskId));
+                ActiveActors.insert(actorId);
+            }
         }
 
         ////////////////////////////////////////////////////////////////////////

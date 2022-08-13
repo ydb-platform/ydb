@@ -118,10 +118,10 @@ namespace NKikimr::NBlobDepot {
                     std::make_heap(Channels.begin(), Channels.end(), TChannelCompare());
                 }
 
-                std::pair<ui8, ui64> PickChannelBlobSeq() {
+                std::tuple<ui8, ui64> PickChannelBlobSeq() {
                     std::pop_heap(Channels.begin(), Channels.end(), TChannelCompare());
                     TChannelInfo *channel = Channels.back();
-                    auto res = std::make_pair(channel->Index, channel->NextBlobSeqId++);
+                    auto res = std::make_tuple(channel->Index, channel->NextBlobSeqId++);
                     std::push_heap(Channels.begin(), Channels.end(), TChannelCompare());
                     Size += 4 << 20; // assume each written blob of this size in a first approximation
                     return res;

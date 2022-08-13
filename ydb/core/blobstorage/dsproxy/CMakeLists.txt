@@ -28,6 +28,7 @@ target_sources(core-blobstorage-dsproxy PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_stat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_state.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_blackboard.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_assimilate.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_block.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_collect.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/dsproxy/dsproxy_discover.cpp

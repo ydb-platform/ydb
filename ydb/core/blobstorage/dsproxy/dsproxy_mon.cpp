@@ -47,6 +47,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     EventStopPutBatching = EventGroup->GetCounter("EvStopPutBatching", true);
     EventStopGetBatching = EventGroup->GetCounter("EvStopGetBatching", true);
     EventPatch = EventGroup->GetCounter("EvPatch", true);
+    EventAssimilate = EventGroup->GetCounter("EvAssimilate", true);
 
     PutsSentViaPutBatching = EventGroup->GetCounter("PutsSentViaPutBatching", true);
     PutBatchesSent = EventGroup->GetCounter("PutBatchesSent", true);
@@ -72,6 +73,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     ActiveCollectGarbage = ActiveRequestsGroup->GetCounter("ActiveCollectGarbage");
     ActiveStatus = ActiveRequestsGroup->GetCounter("ActiveStatus");
     ActivePatch = ActiveRequestsGroup->GetCounter("ActivePatch");
+    ActiveAssimilate = ActiveRequestsGroup->GetCounter("ActiveAssimilate");
 
     // special patch counters
     VPatchContinueFailed = ActiveRequestsGroup->GetCounter("VPatchContinueFailed");
@@ -101,6 +103,7 @@ TBlobStorageGroupProxyMon::TBlobStorageGroupProxyMon(const TIntrusivePtr<::NMoni
     RespStatCollectGarbage.emplace(respStatGroup->GetSubgroup("request", "collectGarbage"));
     RespStatStatus.emplace(respStatGroup->GetSubgroup("request", "status"));
     RespStatPatch.emplace(respStatGroup->GetSubgroup("request", "patch"));
+    RespStatAssimilate.emplace(respStatGroup->GetSubgroup("request", "assimilate"));
 }
 
 void TBlobStorageGroupProxyMon::BecomeFull() {

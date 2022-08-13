@@ -8,7 +8,7 @@ namespace NKikimr::NBlobDepot {
 
     struct TChannelKind {
         std::array<ui8, 256> ChannelToIndex;
-        std::vector<std::pair<ui8, ui32>> ChannelGroups;
+        std::vector<std::tuple<ui8, ui32>> ChannelGroups;
     };
 
 #pragma pack(push, 1)

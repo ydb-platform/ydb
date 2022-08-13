@@ -2512,8 +2512,20 @@ namespace NKikimr {
     struct TEvBlobStorage::TEvVAssimilate : TEventPB<TEvVAssimilate, NKikimrBlobStorage::TEvVAssimilate, EvVAssimilate> {
         TEvVAssimilate() = default;
 
-        TEvVAssimilate(const TVDiskID& vdiskId) {
+        TEvVAssimilate(const TVDiskID& vdiskId, std::optional<ui64> skipBlocksUpTo,
+                std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo, std::optional<TLogoBlobID> skipBlobsUpTo) {
             VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+            if (skipBlocksUpTo) {
+                Record.SetSkipBlocksUpTo(*skipBlocksUpTo);
+            }
+            if (skipBarriersUpTo) {
+                auto *barrier = Record.MutableSkipBarriersUpTo();
+                barrier->SetTabletId(std::get<0>(*skipBarriersUpTo));
+                barrier->SetChannel(std::get<1>(*skipBarriersUpTo));
+            }
+            if (skipBlobsUpTo) {
+                LogoBlobIDFromLogoBlobID(*skipBlobsUpTo, Record.MutableSkipBlobsUpTo());
+            }
         }
     };
 
@@ -2521,11 +2533,12 @@ namespace NKikimr {
     {
         TEvVAssimilateResult() = default;
 
-        TEvVAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason) {
+        TEvVAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason, TVDiskID vdiskId) {
             Record.SetStatus(status);
             if (status != NKikimrProto::OK) {
                 Record.SetErrorReason(errorReason);
             }
+            VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
         }
     };
 

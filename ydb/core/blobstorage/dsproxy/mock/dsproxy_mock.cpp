@@ -49,6 +49,11 @@ namespace NKikimr {
                         ev->Cookie);
             }
 
+            void Handle(TEvBlobStorage::TEvAssimilate::TPtr& ev) {
+                STLOG(PRI_DEBUG, BS_PROXY, BSPM09, "TEvAssimilate", (Msg, ev->Get()->ToString()));
+                Send(ev->Sender, new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR, "not implemented"));
+            }
+
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev) {
                 STLOG(PRI_DEBUG, BS_PROXY, BSPM08, "TEvPoisonPill");
                 Send(ev->Sender, new TEvents::TEvPoisonTaken);

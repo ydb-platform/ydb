@@ -55,7 +55,7 @@ namespace NKikimr::NBlobDepot {
         return TBlobSeqId::FromSequentalNumber(channel, agent.BlobDepotGeneration, value);
     }
 
-    std::pair<TLogoBlobID, ui32> TBlobDepotAgent::TChannelKind::MakeBlobId(TBlobDepotAgent& agent,
+    std::tuple<TLogoBlobID, ui32> TBlobDepotAgent::TChannelKind::MakeBlobId(TBlobDepotAgent& agent,
             const TBlobSeqId& blobSeqId, EBlobType type, ui32 part, ui32 size) const {
         auto id = blobSeqId.MakeBlobId(agent.TabletId, type, part, size);
         const auto [channel, groupId] = ChannelGroups[ChannelToIndex[blobSeqId.Channel]];

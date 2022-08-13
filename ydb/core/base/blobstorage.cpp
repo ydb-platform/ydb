@@ -115,6 +115,11 @@ std::unique_ptr<TEvBlobStorage::TEvStatusResult> TEvBlobStorage::TEvStatus::Make
     return res;
 }
 
+std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> TEvBlobStorage::TEvAssimilate::MakeErrorResponse(
+        NKikimrProto::EReplyStatus status, const TString& errorReason, ui32 /*groupId*/) {
+    return std::make_unique<TEvBlobStorage::TEvAssimilateResult>(status, errorReason);
+}
+
 };
 
 template<>

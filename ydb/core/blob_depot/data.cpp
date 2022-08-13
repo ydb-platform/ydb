@@ -25,7 +25,8 @@ namespace NKikimr::NBlobDepot {
         PutKey(std::move(key), TValue(std::move(proto)));
     }
 
-    void TData::AddDataOnDecommit(const TBlobDepot::TBlob& blob, NTabletFlatExecutor::TTransactionContext& txc) {
+    void TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
+            NTabletFlatExecutor::TTransactionContext& txc) {
         bool underSoft, underHard;
         Self->BarrierServer->GetBlobBarrierRelation(blob.Id, &underSoft, &underHard);
         if (underHard || (underSoft && !blob.Keep)) {

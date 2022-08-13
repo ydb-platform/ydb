@@ -155,6 +155,7 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
                 TYPE_CASE(TEvBlobStorage::TEvVCollectGarbage)
                 TYPE_CASE(TEvBlobStorage::TEvVGetBarrier)
                 TYPE_CASE(TEvBlobStorage::TEvVStatus)
+                TYPE_CASE(TEvBlobStorage::TEvVAssimilate)
 #undef TYPE_CASE
                 default:
                     return Sprintf("0x%08" PRIx32, item.Event.GetType());

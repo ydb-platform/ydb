@@ -290,6 +290,7 @@ public:
             CHECK(TEvVCollectGarbageResult);
             CHECK(TEvVGetBarrierResult);
             CHECK(TEvVStatusResult);
+            CHECK(TEvVAssimilateResult);
 #undef CHECK
 
             case TEvBlobStorage::EvProxySessionsState: {
@@ -331,7 +332,7 @@ public:
 
     template<typename T>
     void SendToQueue(std::unique_ptr<T> event, ui64 cookie, bool timeStatsEnabled = false) {
-        if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus>) {
+        if constexpr (!std::is_same_v<T, TEvBlobStorage::TEvVStatus> && !std::is_same_v<T, TEvBlobStorage::TEvVAssimilate>) {
             event->MessageRelevanceTracker = MessageRelevanceTracker;
         }
         const TActorId queueId = GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(),
@@ -445,6 +446,7 @@ public:
             XX(CollectGarbage)
             XX(Status)
             XX(Patch)
+            XX(Assimilate)
             default:
                 Y_FAIL();
 #undef XX
@@ -630,6 +632,11 @@ IActor* CreateBlobStorageGroupStatusRequest(const TIntrusivePtr<TBlobStorageGrou
     const TIntrusivePtr<TGroupQueues> &state, const TActorId &source,
     const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon, TEvBlobStorage::TEvStatus *ev,
     ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters> &storagePoolCounters);
+
+IActor* CreateBlobStorageGroupAssimilateRequest(const TIntrusivePtr<TBlobStorageGroupInfo>& info,
+    const TIntrusivePtr<TGroupQueues>& state, const TActorId& source,
+    const TIntrusivePtr<TBlobStorageGroupProxyMon>& mon, TEvBlobStorage::TEvAssimilate *ev,
+    ui64 cookie, NWilson::TTraceId traceId, TInstant now, TIntrusivePtr<TStoragePoolCounters>& storagePoolCounters);
 
 IActor* CreateBlobStorageGroupEjectedProxy(ui32 groupId, TIntrusivePtr<TDsProxyNodeMon> &nodeMon);
 

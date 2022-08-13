@@ -53,6 +53,10 @@ namespace NKikimr {
                     return NKikimrBlobStorage::EVDiskQueueId::GetFastRead;
                 }
 
+                static NKikimrBlobStorage::EVDiskQueueId VDiskQueueId(const TEvBlobStorage::TEvVAssimilate&) {
+                    return NKikimrBlobStorage::EVDiskQueueId::GetAsyncRead;
+                }
+
                 TQueue& GetQueue(NKikimrBlobStorage::EVDiskQueueId queueId) {
                     switch (queueId) {
                         case NKikimrBlobStorage::EVDiskQueueId::PutTabletLog: return PutTabletLog;
@@ -179,6 +183,7 @@ namespace NKikimr {
         }
 
         void SetUpSubmitTimestamp(TEvBlobStorage::TEvVStatus& /*event*/) {}
+        void SetUpSubmitTimestamp(TEvBlobStorage::TEvVAssimilate& /*event*/) {}
 
         template<typename TEvent>
         TActorId Send(const IActor& actor, const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<TEvent> event,

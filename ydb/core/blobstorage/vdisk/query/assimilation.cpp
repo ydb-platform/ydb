@@ -15,16 +15,16 @@ namespace NKikimr {
         std::optional<TKeyBarrier> SkipBarriersUpTo;
         std::optional<TKeyLogoBlob> SkipBlobsUpTo;
         ui64 LastRawBlobId[3] = {0, 0, 0};
-        size_t RecordSize = CountUnsigned(NKikimrBlobStorage::TEvVAssimilateResult::kStatusFieldNumber, NKikimrProto::OK);
+        size_t RecordSize;
 
         static constexpr TDuration MaxQuantumTime = TDuration::MilliSeconds(10);
         static constexpr size_t MaxResultSize = 5'000'000; // may overshoot a little
 
     public:
-        TAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev)
+        TAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId)
             : Snap(std::move(snap))
             , Ev(ev.Release())
-            , Result(std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(NKikimrProto::OK, TString()))
+            , Result(std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(NKikimrProto::OK, TString(), vdiskId))
         {
             const auto& record = Ev->Get()->Record;
             if (record.HasSkipBlocksUpTo()) {
@@ -37,6 +37,8 @@ namespace NKikimr {
             if (record.HasSkipBlobsUpTo()) {
                 SkipBlobsUpTo.emplace(LogoBlobIDFromLogoBlobID(record.GetSkipBlobsUpTo()));
             }
+
+            RecordSize = Result->Record.ByteSizeLong();
         }
 
         void Bootstrap(const TActorId& parentId) {
@@ -257,8 +259,8 @@ namespace NKikimr {
         }
     };
 
-    IActor *CreateAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev) {
-        return new TAssimilationActor(std::move(snap), ev);
+    IActor *CreateAssimilationActor(THullDsSnap&& snap, TEvBlobStorage::TEvVAssimilate::TPtr& ev, TVDiskID vdiskId) {
+        return new TAssimilationActor(std::move(snap), ev, vdiskId);
     }
 
 } // NKikimr

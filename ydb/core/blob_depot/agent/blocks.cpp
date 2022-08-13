@@ -67,7 +67,7 @@ namespace NKikimr::NBlobDepot {
         });
     }
 
-    std::pair<ui32, ui64> TBlobDepotAgent::TBlocksManager::GetBlockForTablet(ui64 tabletId) {
+    std::tuple<ui32, ui64> TBlobDepotAgent::TBlocksManager::GetBlockForTablet(ui64 tabletId) {
         if (const auto it = Blocks.find(tabletId); it != Blocks.end()) {
             const auto& record = it->second;
             return {record.BlockedGeneration, record.IssuerGuid};

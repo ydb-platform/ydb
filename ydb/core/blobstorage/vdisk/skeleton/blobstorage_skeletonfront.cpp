@@ -1342,12 +1342,6 @@ namespace NKikimr {
             ctx.Send(ev->Sender, new TEvBlobStorage::TEvVStatusResult(status, ev->Get()->Record.GetVDiskID()),
                 flags, ev->Cookie);
         }
-
-        void Reply(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx,
-                NKikimrProto::EReplyStatus status, const TString& errorReason, TInstant /*now*/) {
-            const ui32 flags = IEventHandle::MakeFlags(ev->GetChannel(), 0);
-            ctx.Send(ev->Sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason), flags, ev->Cookie);
-        }
         // FIXME: don't forget about counters
 
 

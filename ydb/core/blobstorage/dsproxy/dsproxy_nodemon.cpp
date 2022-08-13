@@ -58,6 +58,7 @@ TDsProxyNodeMon::TDsProxyNodeMon(TIntrusivePtr<::NMonitoring::TDynamicCounters> 
         RestartCollectGarbage = group->GetCounter("EvCollectGarbage", true);
         RestartIndexRestoreGet = group->GetCounter("EvIndexRestoreGet", true);
         RestartStatus = group->GetCounter("EvStatus", true);
+        RestartAssimilate = group->GetCounter("EvAssimilate", true);
     }
 
     {

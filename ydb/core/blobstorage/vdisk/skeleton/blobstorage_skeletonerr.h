@@ -439,6 +439,15 @@ namespace NKikimr {
             return std::make_unique<TEvBlobStorage::TEvVSyncGuidResult>(status, vdiskID, now, counterPtr, nullptr,
                 ev->GetChannel());
         }
+
+        static inline std::unique_ptr<IEventBase>
+        ErroneousResult(const TVDiskContextPtr& /*vctx*/, const NKikimrProto::EReplyStatus status, const TString& errorReason,
+                        TEvBlobStorage::TEvVAssimilate::TPtr& /*ev*/, const TInstant& /*now*/,
+                        const TActorIDPtr &/*skeletonFrontIDPtr*/, const TVDiskID &vdiskID, ui64 /*vdiskIncarnationGuid*/,
+                        const TIntrusivePtr<TBlobStorageGroupInfo>& /*groupInfo*/)
+        {
+            return std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(status, errorReason, vdiskID);
+        }
     } // NErrBuilder
 
 } // NKikimr

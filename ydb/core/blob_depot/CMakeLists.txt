@@ -19,8 +19,6 @@ target_sources(ydb-core-blob_depot PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blob_depot.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/agent.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator_copier.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/assimilator_fetch_machine.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/blocks.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blob_depot/data_gc.cpp

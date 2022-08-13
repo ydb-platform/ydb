@@ -13,6 +13,7 @@ namespace NKikimr::NBlobDepot {
         XX(EvCollectGarbage) \
         XX(EvStatus) \
         XX(EvPatch) \
+        XX(EvAssimilate) \
         // END
 
     class TBlobDepotAgent;
@@ -270,7 +271,7 @@ namespace NKikimr::NBlobDepot {
             void IssueGivenIdRange(const NKikimrBlobDepot::TGivenIdRange& proto);
             ui32 GetNumAvailableItems() const;
             std::optional<TBlobSeqId> Allocate(TBlobDepotAgent& agent);
-            std::pair<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TBlobSeqId& blobSeqId, EBlobType type,
+            std::tuple<TLogoBlobID, ui32> MakeBlobId(TBlobDepotAgent& agent, const TBlobSeqId& blobSeqId, EBlobType type,
                     ui32 part, ui32 size) const;
             void Trim(ui8 channel, ui32 generation, ui32 invalidatedStep);
             void RebuildHeap();

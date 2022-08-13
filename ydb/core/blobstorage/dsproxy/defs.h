@@ -20,5 +20,6 @@
 #include <util/generic/deque.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/map.h>
+#include <util/generic/overloaded.h>
 #include <util/string/escape.h>
 #include <library/cpp/monlib/service/pages/templates.h>

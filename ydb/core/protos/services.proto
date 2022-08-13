@@ -50,6 +50,7 @@ enum EServiceKikimr {
     BS_VDISK_SCRUB = 344;
     BS_VDISK_PATCH = 345;
     BS_VDISK_DEFRAG = 346;
+    BS_PROXY_ASSIMILATE = 347;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -903,5 +904,6 @@ message TActivity {
         BS_STORAGE_STATS_ACTOR = 573;
         DS_LOAD_ACTOR = 574;
         PQ_META_CACHE = 575;
+        BS_GROUP_ASSIMILATE = 576;
     };
 };

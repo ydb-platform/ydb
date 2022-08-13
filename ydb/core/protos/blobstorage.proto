@@ -616,6 +616,7 @@ message TEvVAssimilateResult {
 
     optional NKikimrProto.EReplyStatus Status = 1;
     optional string ErrorReason = 2;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
 
     repeated TBlock Blocks = 10;
     repeated TBarrier Barriers = 11;

@@ -90,7 +90,7 @@ namespace NKikimr {
             if (ev.InterconnectSession) {
                 handle->Rewrite(TEvInterconnect::EvForward, ev.InterconnectSession);
             }
-            return std::make_pair(std::move(handle), record);
+            return std::make_tuple(std::move(handle), record);
         }
     };
 

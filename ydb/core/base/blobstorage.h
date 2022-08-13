@@ -459,6 +459,7 @@ struct TEvBlobStorage {
         EvVBaldSyncLog,
         EvPatch,
         EvInplacePatch,
+        EvAssimilate,
 
         //
         EvPutResult = EvPut + 512,                              /// 268 632 576
@@ -472,6 +473,7 @@ struct TEvBlobStorage {
         EvVBaldSyncLogResult,
         EvPatchResult,
         EvInplacePatchResult,
+        EvAssimilateResult,
 
         // proxy <-> vdisk interface
         EvVPut = EvPut + 2 * 512,                               /// 268 633 088
@@ -868,6 +870,7 @@ struct TEvBlobStorage {
     struct TEvStatusResult;
     struct TEvPatchResult;
     struct TEvInplacePatchResult;
+    struct TEvAssimilateResult;
 
     struct TEvPut : public TEventLocal<TEvPut, EvPut> {
         enum ETactic {
@@ -1986,6 +1989,170 @@ struct TEvBlobStorage {
                 str << " ErrorReason# \"" << ErrorReason << "\"";
             }
             str << "}";
+            return str.Str();
+        }
+
+        TString ToString() const {
+            return Print(false);
+        }
+    };
+
+    struct TEvAssimilate : TEventLocal<TEvAssimilate, EvAssimilate> {
+        std::optional<ui64> SkipBlocksUpTo;
+        std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
+        std::optional<TLogoBlobID> SkipBlobsUpTo;
+        ui32 RestartCounter = 0;
+
+        TEvAssimilate(std::optional<ui64> skipBlocksUpTo, std::optional<std::tuple<ui64, ui8>> skipBarriersUpTo,
+                std::optional<TLogoBlobID> skipBlobsUpTo)
+            : SkipBlocksUpTo(skipBlocksUpTo)
+            , SkipBarriersUpTo(skipBarriersUpTo)
+            , SkipBlobsUpTo(skipBlobsUpTo)
+        {}
+
+        TString Print(bool /*isFull*/) const {
+            return ToString();
+        }
+
+        TString ToString() const {
+            TStringStream str;
+            str << "TEvAssimilate {";
+            const char *prefix = "";
+            if (SkipBlocksUpTo) {
+                str << std::exchange(prefix, " ") << "SkipBlocksUpTo# " << *SkipBlocksUpTo;
+            }
+            if (SkipBarriersUpTo) {
+                str << std::exchange(prefix, " " ) << "SkipBarriersUpTo# " << std::get<0>(*SkipBarriersUpTo)
+                    << ":" << int(std::get<1>(*SkipBarriersUpTo));
+            }
+            if (SkipBlobsUpTo) {
+                str << std::exchange(prefix, " " ) << "SkipBlobsUpTo# ";
+                SkipBlobsUpTo->Out(str);
+            }
+            str << "}";
+            return str.Str();
+        }
+
+        ui32 CalculateSize() const {
+            return sizeof(*this);
+        }
+
+        std::unique_ptr<TEvAssimilateResult> MakeErrorResponse(NKikimrProto::EReplyStatus status, const TString& errorReason,
+            ui32 groupId);
+    };
+
+    struct TEvAssimilateResult : TEventLocal<TEvAssimilateResult, EvAssimilateResult> {
+        struct TBlock {
+            ui64 TabletId;
+            ui32 BlockedGeneration;
+
+            TString ToString() const {
+                TStringStream str;
+                Output(str);
+                return str.Str();
+            }
+
+            void Output(IOutputStream& s) const {
+                s << "{" << TabletId << "=>" << BlockedGeneration << "}";
+            }
+        };
+
+        struct TBarrier {
+            struct TValue {
+                ui32 RecordGeneration;
+                ui32 PerGenerationCounter;
+                ui32 CollectGeneration;
+                ui32 CollectStep;
+
+                void Output(IOutputStream& s) const {
+                    if (RecordGeneration || PerGenerationCounter || CollectGeneration || CollectGeneration) {
+                        s << "{" << RecordGeneration << ":" << PerGenerationCounter << "=>" << CollectGeneration
+                            << ":" << CollectStep << "}";
+                    }
+                }
+            };
+
+            ui64 TabletId;
+            ui8 Channel;
+            TValue Soft;
+            TValue Hard;
+
+            TString ToString() const {
+                TStringStream str;
+                Output(str);
+                return str.Str();
+            }
+
+            void Output(IOutputStream& s) const {
+                s << "{" << TabletId << ":" << int(Channel) << "=>soft";
+                Soft.Output(s);
+                s << "/hard";
+                Hard.Output(s);
+                s << "}";
+            }
+        };
+
+        struct TBlob {
+            TLogoBlobID Id;
+            bool Keep;
+            bool DoNotKeep;
+
+            TString ToString() const {
+                TStringStream str;
+                Output(str);
+                return str.Str();
+            }
+
+            void Output(IOutputStream& s) const {
+                Id.Out(s);
+                if (Keep) {
+                    s << "k";
+                }
+                if (DoNotKeep) {
+                    s << "d";
+                }
+            }
+        };
+
+        NKikimrProto::EReplyStatus Status;
+        TString ErrorReason;
+        std::deque<TBlock> Blocks;
+        std::deque<TBarrier> Barriers;
+        std::deque<TBlob> Blobs;
+
+        TEvAssimilateResult(NKikimrProto::EReplyStatus status, TString errorReason = {})
+            : Status(status)
+            , ErrorReason(std::move(errorReason))
+        {}
+
+        TString Print(bool isFull) const {
+            TStringStream str;
+            str << "TEvAssimilateResult {"
+                << "Status# " << NKikimrProto::EReplyStatus_Name(Status)
+                << " ErrorReason# '" << ErrorReason << "'";
+
+            auto out = [&](const char *name, auto& container) {
+                str << " " << name << "# ";
+                if (isFull) {
+                    str << "[";
+                    for (auto it = container.begin(); it != container.end(); ++it) {
+                        if (it != container.begin()) {
+                            str << " ";
+                        }
+                        it->Output(str);
+                    }
+                    str << "]";
+                } else {
+                    str << "size=" << container.size();
+                }
+            };
+
+            out("Blocks", Blocks);
+            out("Barriers", Barriers);
+            out("Blobs", Blobs);
+
+            str << "}";
+
             return str.Str();
         }
 

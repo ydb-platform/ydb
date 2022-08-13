@@ -234,6 +234,7 @@ private:
 
                 case TEvBlobStorage::EvVGetResult:
                 case TEvBlobStorage::EvVStatusResult:
+                case TEvBlobStorage::EvVAssimilateResult:
                     expected = InterconnectChannel;
                     break;
 
@@ -458,6 +459,7 @@ private:
                 ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false));
                 Queue.DrainQueue(status, TStringBuilder() << "BS_QUEUE: " << errorReason, ctx);
                 DrainStatus(status, ctx);
+                DrainAssimilate(status, errorReason, ctx);
                 break;
         }
         State = EState::INITIAL;
@@ -668,6 +670,48 @@ private:
         ctx.Send(sender, response.release(), 0, cookie);
     }
 
+    THashMap<ui64, std::pair<TActorId, ui64>> AssimilateRequests;
+    ui64 NextAssimilateRequestCookie = 1;
+
+    void Handle(TEvBlobStorage::TEvVAssimilate::TPtr& ev, const TActorContext& ctx) {
+        if (IsReady()) {
+            const ui64 id = NextAssimilateRequestCookie++;
+            ctx.Send(RemoteVDisk, ev->Release().Release(), IEventHandle::MakeFlags(InterconnectChannel,
+                IEventHandle::FlagTrackDelivery), id, std::move(ev->TraceId));
+            AssimilateRequests.emplace(id, std::make_pair(ev->Sender, ev->Cookie));
+        } else {
+            ctx.Send(ev->Sender, new TEvBlobStorage::TEvVAssimilateResult(NKikimrProto::NOTREADY, "no connection",
+                VDiskId), 0, ev->Cookie);
+        }
+    }
+
+    void DrainAssimilate(NKikimrProto::EReplyStatus status, TString errorReason, const TActorContext& ctx) {
+        for (const auto& [id, ep] : std::exchange(AssimilateRequests, {})) {
+            const auto& [sender, cookie] = ep;
+            ctx.Send(sender, new TEvBlobStorage::TEvVAssimilateResult(status, errorReason, VDiskId), 0, cookie);
+        }
+    }
+
+    void Handle(TEvBlobStorage::TEvVAssimilateResult::TPtr& ev, const TActorContext& ctx) {
+        if (!CheckReply(ev, ctx)) {
+            return;
+        }
+        if (const auto it = AssimilateRequests.find(ev->Cookie); it != AssimilateRequests.end()) {
+            const auto& [sender, cookie] = it->second;
+            ctx.Send(sender, ev->Release().Release(), 0, cookie, std::move(ev->TraceId));
+            AssimilateRequests.erase(it);
+        } else {
+            const TString& message = TStringBuilder() << "unexpected TEvVAssimilateResult received"
+                << " Cookie# " << ev->Cookie
+                << " Sender# " << ev->Sender
+                << " Msg# " << ev->Get()->ToString()
+                << " VDiskId# " << VDiskId;
+            Y_VERIFY_DEBUG(false, "%s", message.data());
+            QLOG_CRIT_S("BSQ39", message);
+        }
+        ResetWatchdogTimer(ctx.Now());
+    }
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // REQUEST TIME TRACKING AND REPORTING SYSTEM
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////0
@@ -825,6 +869,8 @@ private:
     XX(TEvBlobStorage::EvVReadyNotify, EvVReadyNotify) \
     XX(TEvBlobStorage::EvVStatus, EvVStatus) \
     XX(TEvBlobStorage::EvVStatusResult, EvVStatusResult) \
+    XX(TEvBlobStorage::EvVAssimilate, EvVAssimilate) \
+    XX(TEvBlobStorage::EvVAssimilateResult, EvVAssimilateResult) \
     XX(TEvBlobStorage::EvRequestProxyQueueState, EvRequestProxyQueueState) \
     XX(TEvBlobStorage::EvVWindowChange, EvVWindowChange) \
     XX(TEvInterconnect::EvNodeConnected, EvNodeConnected) \
@@ -896,6 +942,8 @@ private:
 
             HFunc(TEvBlobStorage::TEvVStatus, Handle)
             HFunc(TEvBlobStorage::TEvVStatusResult, Handle)
+            HFunc(TEvBlobStorage::TEvVAssimilate, Handle)
+            HFunc(TEvBlobStorage::TEvVAssimilateResult, Handle)
 
             HFunc(TEvRequestProxyQueueState, Handle)
 

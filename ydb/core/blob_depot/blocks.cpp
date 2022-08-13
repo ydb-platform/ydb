@@ -190,20 +190,21 @@ namespace NKikimr::NBlobDepot {
         )
     };
 
-    void TBlobDepot::TBlocksManager::AddBlockOnLoad(const TBlobDepot::TBlock& block) {
-        Blocks[block.TabletId] = {
-            .BlockedGeneration = block.BlockedGeneration,
-            .IssuerGuid = block.IssuerGuid,
+    void TBlobDepot::TBlocksManager::AddBlockOnLoad(ui64 tabletId, ui32 blockedGeneration, ui64 issuerGuid) {
+        Blocks[tabletId] = {
+            .BlockedGeneration = blockedGeneration,
+            .IssuerGuid = issuerGuid,
         };
     }
 
-    void TBlobDepot::TBlocksManager::AddBlockOnDecommit(const TBlobDepot::TBlock& block, NTabletFlatExecutor::TTransactionContext& txc) {
-        AddBlockOnLoad(block);
+    void TBlobDepot::TBlocksManager::AddBlockOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlock& block,
+            NTabletFlatExecutor::TTransactionContext& txc) {
+        AddBlockOnLoad(block.TabletId, block.BlockedGeneration, 0);
 
         NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::Blocks>().Key(block.TabletId).Update(
             NIceDb::TUpdate<Schema::Blocks::BlockedGeneration>(block.BlockedGeneration),
-            NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(block.IssuerGuid)
+            NIceDb::TUpdate<Schema::Blocks::IssuerGuid>(0)
         );
 
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT44, "adding block through decommission", (Id, Self->GetLogId()), (Block, block));

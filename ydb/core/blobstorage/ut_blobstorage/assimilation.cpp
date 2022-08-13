@@ -92,21 +92,8 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
             for (;;) {
                 const TActorId vdiskId = info->GetActorId(i);
                 const TActorId client = runtime->AllocateEdgeActor(vdiskId.NodeId(), __FILE__, __LINE__);
-                auto ev = std::make_unique<TEvBlobStorage::TEvVAssimilate>(info->GetVDiskId(i));
-                {
-                    auto& record = ev->Record;
-                    if (lastBlock) {
-                        record.SetSkipBlocksUpTo(*lastBlock);
-                    }
-                    if (lastBarrier) {
-                        auto *x = record.MutableSkipBarriersUpTo();
-                        x->SetTabletId(lastBarrier->first);
-                        x->SetChannel(lastBarrier->second);
-                    }
-                    if (lastBlob) {
-                        LogoBlobIDFromLogoBlobID(*lastBlob, record.MutableSkipBlobsUpTo());
-                    }
-                }
+                auto ev = std::make_unique<TEvBlobStorage::TEvVAssimilate>(info->GetVDiskId(i), lastBlock, lastBarrier,
+                    lastBlob);
                 runtime->Send(new IEventHandle(vdiskId, client, ev.release()), vdiskId.NodeId());
                 auto res = env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVAssimilateResult>(client);
                 const auto& record = res->Get()->Record;

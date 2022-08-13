@@ -75,6 +75,7 @@ struct TDsProxyNodeMon : public TThrRefBase {
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartIndexRestoreGet;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartStatus;
     ::NMonitoring::TDynamicCounters::TCounterPtr RestartPatch;
+    ::NMonitoring::TDynamicCounters::TCounterPtr RestartAssimilate;
 
     std::array<::NMonitoring::TDynamicCounters::TCounterPtr, 4> RestartHisto;
 

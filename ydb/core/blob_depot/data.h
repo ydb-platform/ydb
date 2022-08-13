@@ -335,7 +335,7 @@ namespace NKikimr::NBlobDepot {
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
 
         void AddDataOnLoad(TKey key, TString value);
-        void AddDataOnDecommit(const TBlobDepot::TBlob& blob, NTabletFlatExecutor::TTransactionContext& txc);
+        void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob, NTabletFlatExecutor::TTransactionContext& txc);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 

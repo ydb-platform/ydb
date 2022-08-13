@@ -46,7 +46,11 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     }
                     while (table.IsValid()) {
-                        Self->BlocksManager->AddBlockOnLoad(TBlock::FromRow(table));
+                        Self->BlocksManager->AddBlockOnLoad(
+                            table.GetValue<Schema::Blocks::TabletId>(),
+                            table.GetValue<Schema::Blocks::BlockedGeneration>(),
+                            table.GetValue<Schema::Blocks::IssuerGuid>()
+                        );
                         if (!table.Next()) {
                             return false;
                         }
@@ -60,7 +64,14 @@ namespace NKikimr::NBlobDepot {
                         return false;
                     }
                     while (table.IsValid()) {
-                        Self->BarrierServer->AddBarrierOnLoad(TBarrier::FromRow(table));
+                        Self->BarrierServer->AddBarrierOnLoad(
+                            table.GetValue<Schema::Barriers::TabletId>(),
+                            table.GetValue<Schema::Barriers::Channel>(),
+                            TGenStep(table.GetValue<Schema::Barriers::SoftGenCtr>()),
+                            TGenStep(table.GetValue<Schema::Barriers::Soft>()),
+                            TGenStep(table.GetValue<Schema::Barriers::HardGenCtr>()),
+                            TGenStep(table.GetValue<Schema::Barriers::Hard>())
+                        );
                         if (!table.Next()) {
                             return false;
                         }

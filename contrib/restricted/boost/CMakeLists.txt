@@ -41,6 +41,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-move
   restricted-boost-mp11
   restricted-boost-mpl
+  restricted-boost-multi_array
   restricted-boost-numeric_conversion
   restricted-boost-optional
   restricted-boost-polygon

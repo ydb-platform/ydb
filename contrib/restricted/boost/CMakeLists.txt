@@ -13,6 +13,7 @@ target_include_directories(contrib-restricted-boost INTERFACE
 )
 target_link_libraries(contrib-restricted-boost INTERFACE
   contrib-libs-cxxsupp
+  restricted-boost-algorithm
   restricted-boost-align
   restricted-boost-any
   restricted-boost-array

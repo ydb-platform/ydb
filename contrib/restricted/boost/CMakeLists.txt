@@ -49,6 +49,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-polygon
   restricted-boost-predef
   restricted-boost-preprocessor
+  restricted-boost-proto
   restricted-boost-qvm
   restricted-boost-range
   restricted-boost-rational

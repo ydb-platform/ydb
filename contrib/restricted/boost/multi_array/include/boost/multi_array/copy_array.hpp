@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef COPY_ARRAY_RG092101_HPP
-#define COPY_ARRAY_RG092101_HPP
+#ifndef BOOST_MULTI_ARRAY_COPY_ARRAY_HPP
+#define BOOST_MULTI_ARRAY_COPY_ARRAY_HPP
 
 //
 // copy_array.hpp - generic code for copying the contents of one
@@ -65,4 +65,4 @@ void copy_array (Array1& source, Array2& dest) {
 } // namespace detail
 } // namespace boost
 
-#endif // COPY_ARRAY_RG092101_HPP
+#endif

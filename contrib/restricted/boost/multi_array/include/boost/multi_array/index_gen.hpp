@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BOOST_INDEX_GEN_RG071801_HPP
-#define BOOST_INDEX_GEN_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_INDEX_GEN_HPP
+#define BOOST_MULTI_ARRAY_INDEX_GEN_HPP
 
 #include "boost/array.hpp"
 #include "boost/multi_array/index_range.hpp"
@@ -78,4 +78,4 @@ public:
 } // namespace boost
 
 
-#endif // BOOST_INDEX_GEN_RG071801_HPP
+#endif

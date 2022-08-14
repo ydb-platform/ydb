@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef RANGE_LIST_RG072501_HPP
-#define RANGE_LIST_RG072501_HPP
+#ifndef BOOST_MULTI_ARRAY_RANGE_LIST_HPP
+#define BOOST_MULTI_ARRAY_RANGE_LIST_HPP
 //
 // range_list.hpp - helper to build boost::arrays for *_set types
 //
@@ -67,4 +67,4 @@ public:
 } // namespace detail
 } // namespace boost
 
-#endif // RANGE_LIST_RG072501_HPP
+#endif

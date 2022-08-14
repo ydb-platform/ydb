@@ -11,8 +11,8 @@
 //  See http://www.boost.org/libs/multi_array for documentation.
 
 
-#ifndef BOOST_MULTI_ARRAY_TYPES_RG071801_HPP
-#define BOOST_MULTI_ARRAY_TYPES_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_TYPES_HPP
+#define BOOST_MULTI_ARRAY_TYPES_HPP
 
 //
 // types.hpp - supply types that are needed by several headers
@@ -35,4 +35,4 @@ typedef std::ptrdiff_t index;
 
 
 
-#endif // BOOST_MULTI_ARRAY_TYPES_RG071801_HPP
+#endif

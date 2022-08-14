@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BOOST_EXTENT_RANGE_RG071801_HPP
-#define BOOST_EXTENT_RANGE_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_EXTENT_RANGE_HPP
+#define BOOST_MULTI_ARRAY_EXTENT_RANGE_HPP
 
 #include <utility>
 
@@ -46,4 +46,4 @@ public:
 } // namespace boost
 
 
-#endif // BOOST_EXTENT_RANGE_RG071801_HPP
+#endif

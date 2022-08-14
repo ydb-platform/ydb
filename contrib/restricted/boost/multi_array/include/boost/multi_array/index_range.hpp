@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BOOST_INDEX_RANGE_RG071801_HPP
-#define BOOST_INDEX_RANGE_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_INDEX_RANGE_HPP
+#define BOOST_MULTI_ARRAY_INDEX_RANGE_HPP
 
 #include <boost/config.hpp>
 #include <utility>
@@ -107,6 +107,12 @@ namespace multi_array {
 
     index stride() const { return stride_; }
 
+    size_type size(index idx) const
+    {
+      return (start_ == from_start() || finish_ == to_end())
+        ? idx : ((finish_ - start_) / stride_);
+    }
+
     void set_index_range(index start, index finish, index stride=1)
     {
       start_ = start;
@@ -185,4 +191,4 @@ namespace multi_array {
 } // namespace detail  
 } // namespace boost
 
-#endif // BOOST_INDEX_RANGE_RG071801_HPP
+#endif

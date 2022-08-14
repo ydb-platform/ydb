@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BOOST_MULTI_ARRAY_REF_RG071801_HPP
-#define BOOST_MULTI_ARRAY_REF_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_MULTI_ARRAY_REF_HPP
+#define BOOST_MULTI_ARRAY_MULTI_ARRAY_REF_HPP
 
 //
 // multi_array_ref.hpp - code for creating "views" of array data.
@@ -619,4 +619,4 @@ protected:
 
 } // namespace boost
 
-#endif // BOOST_MULTI_ARRAY_REF_RG071801_HPP
+#endif

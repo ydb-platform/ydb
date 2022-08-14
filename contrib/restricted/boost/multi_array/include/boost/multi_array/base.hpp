@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BASE_RG071801_HPP
-#define BASE_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_BASE_HPP
+#define BOOST_MULTI_ARRAY_BASE_HPP
 
 //
 // base.hpp - some implementation base classes for from which
@@ -498,4 +498,4 @@ protected:
 
 } // namespace boost
 
-#endif // BASE_RG071801_HPP
+#endif

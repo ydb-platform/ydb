@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef COLLECTION_CONCEPT_RG103101_HPP
-#define COLLECTION_CONCEPT_RG103101_HPP
+#ifndef BOOST_MULTI_ARRAY_COLLECTION_CONCEPT_HPP
+#define BOOST_MULTI_ARRAY_COLLECTION_CONCEPT_HPP
 
 #include "boost/concept_check.hpp"
 
@@ -23,4 +23,4 @@ namespace multi_array { // Old location for this
 }
 
 }
-#endif // COLLECTION_CONCEPT_RG103101_HPP
+#endif

@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BOOST_STORAGE_ORDER_RG071801_HPP
-#define BOOST_STORAGE_ORDER_RG071801_HPP
+#ifndef BOOST_MULTI_ARRAY_STORAGE_ORDER_HPP
+#define BOOST_MULTI_ARRAY_STORAGE_ORDER_HPP
 
 #include "boost/multi_array/types.hpp"
 #include "boost/array.hpp"
@@ -122,4 +122,4 @@ namespace boost {
 
 } // namespace boost
 
-#endif // BOOST_ARRAY_STORAGE_RG071801_HPP
+#endif

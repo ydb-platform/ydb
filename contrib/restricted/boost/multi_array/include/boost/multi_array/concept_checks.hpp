@@ -10,8 +10,8 @@
 //           Andrew Lumsdaine
 //  See http://www.boost.org/libs/multi_array for documentation.
 
-#ifndef BOOST_MULTI_ARRAY_CONCEPT_CHECKS_RG110101_HPP
-#define BOOST_MULTI_ARRAY_CONCEPT_CHECKS_RG110101_HPP
+#ifndef BOOST_MULTI_ARRAY_CONCEPT_CHECKS_HPP
+#define BOOST_MULTI_ARRAY_CONCEPT_CHECKS_HPP
 
 //
 // concept-checks.hpp - Checks out Const MultiArray and MultiArray
@@ -218,4 +218,4 @@ namespace detail {
 } // namespace boost
 
 
-#endif // BOOST_MULTI_ARRAY_CONCEPT_CHECKS_RG110101_HPP
+#endif

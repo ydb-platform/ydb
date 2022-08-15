@@ -80,17 +80,19 @@ public:
             TNodeSet visited;
             Scan(*input, ctx, good, dataSize, visited, hasJoin);
 
+            if (good && hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB)) {
+                Statistics_["DqAnalyzerBigJoin"]++;
+                AddInfo(ctx, TStringBuilder() << "too big join input: " << dataSize);
+                good = false;
+            }
+
             if (good) {
                 Statistics_["DqAnalyzerOk"]++;
             } else {
                 Statistics_["DqAnalyzerFail"] ++;
             }
 
-            if ((hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) {
-                Statistics_["DqAnalyzerBigJoin"]++;
-            }
-
-            if (!good || (hasJoin && dataSize > State_->Settings->MaxDataSizePerQuery.Get().GetOrElse(10_GB))) {
+            if (!good) {
                 YQL_CLOG(DEBUG, ProviderDq) << "good: " << good << " hasJoin: " << hasJoin << " dataSize: " << dataSize;
                 return TStatus::Ok;
             }

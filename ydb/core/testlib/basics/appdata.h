@@ -79,6 +79,7 @@ namespace NKikimr {
         void AddSystemBackupSID(const TString& sid);
         void SetEnableProtoSourceIdInfo(std::optional<bool> value);
         void SetEnablePqBilling(std::optional<bool> value);
+        void SetEnableDbCounters(bool value);
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;

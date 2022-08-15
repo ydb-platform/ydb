@@ -33,11 +33,11 @@ struct IPathGenerator {
         TString Format;
         TString From;
         TString To;
-        int64_t Min = 0;
-        int64_t Max = 0;
+        i64 Min = 0;
+        i64 Max = 0;
         EIntervalUnit IntervalUnit = EIntervalUnit::DAYS;
-        int64_t Interval = 1;
-        int32_t Digits = 0;
+        i64 Interval = 1;
+        i32 Digits = 0;
         std::vector<TString> Values;
     };
 

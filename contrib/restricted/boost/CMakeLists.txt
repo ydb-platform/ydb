@@ -47,6 +47,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-multi_array
   restricted-boost-numeric_conversion
   restricted-boost-optional
+  restricted-boost-phoenix
   restricted-boost-polygon
   restricted-boost-predef
   restricted-boost-preprocessor

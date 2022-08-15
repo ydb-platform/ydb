@@ -46,6 +46,7 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   abseil-cpp-tstring-y_absl-status
   abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-synchronization
+  abseil-cpp-tstring-y_absl-utility
   abseil-cpp-tstring-y_absl-time
   library-cpp-resource
 )

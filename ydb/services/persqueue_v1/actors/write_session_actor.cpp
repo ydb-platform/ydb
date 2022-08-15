@@ -574,11 +574,11 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         }
 
         LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " messageGroupId "
-            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " hash " << CompatibleHash << " partition " << Partition << " partitions "
-            << PartitionToTablet.size() << "(" << CompatibleHash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
+            << SourceId << " escaped " << EncodedSourceId.EscapedSourceId << " partition " << Partition << " partitions "
+            << PartitionToTablet.size() << "(" << EncodedSourceId.Hash % PartitionToTablet.size() << ") create " << SourceIdCreateTime << " result " << t);
 
         if (!PartitionFound && (PreferedPartition < Max<ui32>() || !AppData(ctx)->PQConfig.GetRoundRobinPartitionMapping())) {
-            Partition = PreferedPartition < Max<ui32>() ? PreferedPartition : CompatibleHash % PartitionToTablet.size(); //choose partition default value
+            Partition = PreferedPartition < Max<ui32>() ? PreferedPartition : EncodedSourceId.Hash % PartitionToTablet.size(); //choose partition default value
             PartitionFound = true;
         }
 

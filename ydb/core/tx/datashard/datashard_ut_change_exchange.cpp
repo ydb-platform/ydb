@@ -1597,6 +1597,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"update":{"value":20},"key":[2]})",
         });
 
+        // reboot original shard
+        RebootTablet(*env.GetServer()->GetRuntime(), tabletIds.at(0), env.GetEdgeActor());
+
         // merge
         preventEnqueueing = true;
         ExecSQL(env.GetServer(), env.GetEdgeActor(), R"(

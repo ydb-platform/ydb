@@ -74,6 +74,8 @@ namespace boost { namespace proto
     ///
     #define BOOST_PROTO_DEFINE_FUN_OP_IMPL_(Z, N, DATA, Const)                                      \
         BOOST_PP_IF(N, BOOST_PROTO_TEMPLATE_YES_, BOOST_PROTO_TEMPLATE_NO_)(Z, N)                   \
+        BOOST_PROTO_PUSH_WARNINGS                                                                   \
+        BOOST_PROTO_DISABLE_MSVC_C4180                                                              \
         BOOST_PROTO_DISABLE_MSVC_C4714 BOOST_FORCEINLINE                                            \
         typename BOOST_PROTO_RESULT_OF<                                                             \
             proto_generator(                                                                        \
@@ -98,12 +100,15 @@ namespace boost { namespace proto
                 )                                                                                   \
             );                                                                                      \
         }                                                                                           \
+        BOOST_PROTO_POP_WARNINGS                                                                    \
         /**/
 
     /// INTERNAL ONLY
     ///
     #define BOOST_PROTO_DEFINE_FUN_OP_VARIADIC_IMPL_(Const)                                         \
         template<typename... A>                                                                     \
+        BOOST_PROTO_PUSH_WARNINGS                                                                   \
+        BOOST_PROTO_DISABLE_MSVC_C4180                                                              \
         BOOST_PROTO_DISABLE_MSVC_C4714 BOOST_FORCEINLINE                                            \
         typename BOOST_PROTO_RESULT_OF<                                                             \
             proto_generator(                                                                        \
@@ -128,6 +133,7 @@ namespace boost { namespace proto
                 )                                                                                   \
             );                                                                                      \
         }                                                                                           \
+        BOOST_PROTO_POP_WARNINGS                                                                    \
         /**/
 
     /// INTERNAL ONLY
@@ -175,6 +181,8 @@ namespace boost { namespace proto
         typedef boost::proto::tag::proto_expr<proto_tag, proto_domain> fusion_tag;                  \
         BOOST_PP_REPEAT(BOOST_PROTO_MAX_ARITY, BOOST_PROTO_EXTENDS_CHILD, ~)                        \
                                                                                                     \
+        BOOST_PROTO_PUSH_WARNINGS                                                                   \
+                                                                                                    \
         BOOST_PROTO_DISABLE_MSVC_C4714 BOOST_FORCEINLINE                                            \
         static proto_derived_expr const make(Expr const &e)                                         \
         {                                                                                           \
@@ -199,6 +207,8 @@ namespace boost { namespace proto
         {                                                                                           \
             return boost::addressof(this->proto_base().child0);                                     \
         }                                                                                           \
+                                                                                                    \
+        BOOST_PROTO_POP_WARNINGS                                                                    \
         /**/
 
     #define BOOST_PROTO_BASIC_EXTENDS(Expr, Derived, Domain)                                        \
@@ -207,6 +217,7 @@ namespace boost { namespace proto
         /**< INTERNAL ONLY */
 
     #define BOOST_PROTO_EXTENDS_COPY_ASSIGN_IMPL_(This, Const, Typename)                            \
+        BOOST_PROTO_PUSH_WARNINGS                                                                   \
         BOOST_PROTO_DISABLE_MSVC_C4522                                                              \
         BOOST_PROTO_DISABLE_MSVC_C4714 BOOST_FORCEINLINE                                            \
         Typename() BOOST_PROTO_RESULT_OF<                                                           \
@@ -239,6 +250,7 @@ namespace boost { namespace proto
             };                                                                                      \
             return Typename() This::proto_generator()(that);                                        \
         }                                                                                           \
+        BOOST_PROTO_POP_WARNINGS                                                                    \
         /**/
 
         // MSVC 8.0 and higher seem to need copy-assignment operator to be overloaded on *both*
@@ -258,6 +270,8 @@ namespace boost { namespace proto
         ///
     #define BOOST_PROTO_EXTENDS_ASSIGN_IMPL_(ThisConst, ThatConst)                                  \
         template<typename A>                                                                        \
+        BOOST_PROTO_PUSH_WARNINGS                                                                   \
+        BOOST_PROTO_DISABLE_MSVC_C4180                                                              \
         BOOST_PROTO_DISABLE_MSVC_C4714 BOOST_FORCEINLINE                                            \
         typename BOOST_PROTO_RESULT_OF<                                                             \
             proto_generator(                                                                        \
@@ -289,6 +303,7 @@ namespace boost { namespace proto
             };                                                                                      \
             return proto_generator()(that);                                                         \
         }                                                                                           \
+        BOOST_PROTO_POP_WARNINGS                                                                    \
         /**/
 
     #define BOOST_PROTO_EXTENDS_ASSIGN_CONST_()                                                     \
@@ -325,6 +340,8 @@ namespace boost { namespace proto
         ///
     #define BOOST_PROTO_EXTENDS_SUBSCRIPT_IMPL_(ThisConst, ThatConst)                               \
         template<typename A>                                                                        \
+        BOOST_PROTO_PUSH_WARNINGS                                                                   \
+        BOOST_PROTO_DISABLE_MSVC_C4180                                                              \
         BOOST_PROTO_DISABLE_MSVC_C4714 BOOST_FORCEINLINE                                            \
         typename BOOST_PROTO_RESULT_OF<                                                             \
             proto_generator(                                                                        \
@@ -356,6 +373,7 @@ namespace boost { namespace proto
             };                                                                                      \
             return proto_generator()(that);                                                         \
         }                                                                                           \
+        BOOST_PROTO_POP_WARNINGS                                                                    \
         /**/
 
     #define BOOST_PROTO_EXTENDS_SUBSCRIPT_CONST()                                                   \

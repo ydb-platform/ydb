@@ -946,8 +946,7 @@ private:
 
     void SaveQueryResponse(NYql::NDqs::TEvQueryResponse::TPtr& ev) {
         auto& result = ev->Get()->Record;
-        LOG_D("Query response. Retryable: " << result.GetDeprecatedRetriable()
-            << ". Result set index: " << DqGraphIndex
+        LOG_D("Query response. Result set index: " << DqGraphIndex
             << ". Issues count: " << result.IssuesSize()
             << ". Rows count: " << result.GetRowsCount());
 
@@ -1044,7 +1043,6 @@ private:
         if (ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS) {
             ev->Get()->Record.SetStatusCode(NYql::NDqProto::StatusIds::CANCELLED);
         }
-        ev->Get()->Record.SetDeprecatedRetriable(false); // User aborted => don't retry, only show issues
 
         QueryResponseArrived = true;
         SaveQueryResponse(ev);

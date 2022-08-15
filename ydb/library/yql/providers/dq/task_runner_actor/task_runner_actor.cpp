@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/counters/counters.h>
 #include <ydb/library/yql/providers/dq/task_runner/tasks_runner_proxy.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_common.h>
 
 #include <ydb/library/yql/minikql/mkql_string_util.h>
 
@@ -84,16 +85,8 @@ public:
     })
 
 private:
-    struct TRunResult {
-        bool Retriable;
-        bool Fallback;
-        TString FilteredStderr;
-
-        TRunResult() : Retriable(false), Fallback(false), FilteredStderr() {
-        }
-    };
-
-    static TRunResult ParseStderr(const TString& input, TIntrusivePtr<TDqConfiguration> settings) {
+    static std::pair<NYql::NDqProto::StatusIds::StatusCode, TString> ParseStderr(const TString& input, TIntrusivePtr<TDqConfiguration> settings) {
+        TString filteredStderr;
         THashSet<TString> fallbackOn;
         if (settings->_FallbackOnRuntimeErrors.Get()) {
             TString parts = settings->_FallbackOnRuntimeErrors.Get().GetOrElse("");
@@ -102,66 +95,73 @@ private:
             }
         }
 
-        TRunResult result;
+        bool fallback = false;
+        bool retry = false;
         for (TStringBuf line: StringSplitter(input).SplitByString("\n").SkipEmpty()) {
             if (line.Contains("mlockall failed")) {
                 // skip
             } else {
-                if (!result.Fallback) {
+                if (!fallback) {
                     if (line.Contains("FindColumnInfo(): requirement memberType->GetKind() == TType::EKind::Data")) {
                     // YQL-14757: temporary workaround for part6/produce-reduce_lambda_list_table-default.txt
-                        result.Fallback = true;
+                        fallback = true;
                     } else if (line.Contains("embedded:Len")) {
                         // YQL-14763
-                        result.Fallback = true;
+                        fallback = true;
                     } else if (line.Contains("Container killed by OOM")) {
                         // temporary workaround for YQL-12066
-                        result.Fallback = true;
+                        fallback = true;
                     } else if (line.Contains("Expected data or optional of data, actual:")) {
                         // temporary workaround for YQL-12835
-                        result.Fallback = true;
+                        fallback = true;
                     } else if (line.Contains("Pattern nodes can not get computation node by index:")) {
                         // temporary workaround for YQL-12987
-                        result.Fallback = true;
+                        fallback = true;
                     } else if (line.Contains("contrib/libs/protobuf/src/google/protobuf/messagext.cc") && line.Contains("Message size") && line.Contains("exceeds")) {
                         // temporary workaround for YQL-12988
-                        result.Fallback = true;
+                        fallback = true;
                     } else if (line.Contains("Cannot start container")) {
                         // temporary workaround for YQL-14221
-                        result.Retriable = true;
-                        result.Fallback = true;
+                        retry = true;
+                        fallback = true;
                     } else if (line.Contains("Cannot execl")) {
                         // YQL-14099
-                        result.Retriable = true;
-                        result.Fallback = true;
+                        retry = true;
+                        fallback = true;
                     } else {
                         for (const auto& part : fallbackOn) {
                             if (line.Contains(part)) {
-                                result.Fallback = true;
+                                fallback = true;
                             }
                         }
                     }
                 }
 
-                result.FilteredStderr += line;
-                result.FilteredStderr += "\n";
+                filteredStderr += line;
+                filteredStderr += "\n";
             }
         }
-        return result;
+        auto status = NYql::NDqProto::StatusIds::BAD_REQUEST;  // no retries, no fallback, error though
+        if (retry) {
+            status = NYql::NDqProto::StatusIds::UNAVAILABLE;  // retries, fallback on retries limit
+        } else if (fallback) {
+            status = NYql::NDqProto::StatusIds::UNSUPPORTED;  // no retries, fallback immediately
+        }
+        return {status, filteredStderr};
     }
 
-    static THolder<TEvDq::TEvAbortExecution> StatusToError(
+    static THolder<TEvDq::TEvAbortExecution> MakeError(
         const TEvError::TStatus& status,
         TIntrusivePtr<TDqConfiguration> settings,
         ui64 stageId,
         TString message = CurrentExceptionMessage()) {
         // stderr always affects retriable/fallback flags
-        auto runResult = ParseStderr(status.Stderr, settings);
+        auto [queryStatus, filteredStderr] = ParseStderr(status.Stderr, settings);
         auto stderrStr = TStringBuilder{}
             << "ExitCode: " << status.ExitCode << "\n"
             << "StageId: " << stageId << "\n"
-            << runResult.FilteredStderr;
-        auto issueCode = runResult.Fallback
+            << filteredStderr;
+        auto issueCode = NCommon::NeedFallback(queryStatus)
             ? TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR
             : TIssuesIds::DQ_GATEWAY_ERROR;
         TIssue issue;
@@ -177,7 +177,8 @@ private:
                 issue.AddSubIssue(MakeIntrusive<TIssue>(YqlIssue(parsedPos.GetOrElse(TPosition()), TIssuesIds::DQ_GATEWAY_ERROR, TString{terminationMessage})));
             }
         }
-        return MakeHolder<NDq::TEvDq::TEvAbortExecution>(runResult.Retriable ? NYql::NDqProto::StatusIds::UNAVAILABLE : (runResult.Fallback ? NYql::NDqProto::StatusIds::UNSUPPORTED : NYql::NDqProto::StatusIds::BAD_REQUEST), TVector<TIssue>{issue});
+        Y_VERIFY(queryStatus != NYql::NDqProto::StatusIds::SUCCESS);
+        return MakeHolder<NDq::TEvDq::TEvAbortExecution>(queryStatus, TVector<TIssue>{issue});
     }
 
     void PassAway() override {
@@ -233,7 +234,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -278,7 +279,7 @@ private:
                     new IEventHandle(
                         parentId,
                         selfId,
-                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -356,7 +357,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -424,7 +425,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }
@@ -496,7 +497,7 @@ private:
             } catch (...) {
                 auto status = taskRunner->GetStatus();
                 actorSystem->Send(
-                    new IEventHandle(replyTo, selfId, StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(), 0, cookie));
+                    new IEventHandle(replyTo, selfId, MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(), 0, cookie));
             }
         });
     }
@@ -556,7 +557,7 @@ private:
                     new IEventHandle(
                         replyTo,
                         selfId,
-                        StatusToError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
+                        MakeError({status.ExitCode, status.Stderr}, settings, stageId).Release(),
                         /*flags=*/0,
                         cookie));
             }

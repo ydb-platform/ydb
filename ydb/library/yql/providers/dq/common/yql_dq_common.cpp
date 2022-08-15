@@ -101,7 +101,10 @@ bool IsRetriable(NYql::NDqProto::StatusIds::StatusCode statusCode) {
     case NYql::NDqProto::StatusIds::BAD_REQUEST:
     case NYql::NDqProto::StatusIds::LIMIT_EXCEEDED:
     case NYql::NDqProto::StatusIds::UNSUPPORTED:
+    case NYql::NDqProto::StatusIds::ABORTED:
+    case NYql::NDqProto::StatusIds::CANCELLED:
         return false;
+    case NYql::NDqProto::StatusIds::UNAVAILABLE:
     default:
         return true;
     }
@@ -121,6 +124,7 @@ bool NeedFallback(NYql::NDqProto::StatusIds::StatusCode statusCode) {
     case NYql::NDqProto::StatusIds::PRECONDITION_FAILED:
         return false;
     case NYql::NDqProto::StatusIds::LIMIT_EXCEEDED:
+    case NYql::NDqProto::StatusIds::UNAVAILABLE:
     default:
         return true;
     }

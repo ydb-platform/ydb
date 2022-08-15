@@ -88,7 +88,7 @@ private:
             issue.SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR);
             Issues.AddIssues({issue});
             *ExecutionTimeoutCounter += 1;
-            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED, /*retriable=*/ false, /*needFallback=*/ true);
+            Finish(NYql::NDqProto::StatusIds::LIMIT_EXCEEDED);
         })
         cFunc(TEvents::TEvWakeup::EventType, OnWakeup)
     })
@@ -134,9 +134,8 @@ private:
         Y_VERIFY(!ResultId);
         YQL_CLOG(DEBUG, ProviderDq) << "TDqExecuter::OnGraph";
         TFailureInjector::Reach("dq_fail_on_graph", [&] {
-            auto ev = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_SUCCESS);
-            ev->Record.SetDeprecatedNeedFallback(false);
-            ev->Record.SetDeprecatedRetriable(false);
+            // YQL-15117, it's very likely that the status was INTERNAL_ERROR, originated from worker_actor::OnTaskRunnerCreated (with no issues attached)
+            auto ev = MakeHolder<TEvDqFailure>(NYql::NDqProto::StatusIds::StatusCode::StatusIds_StatusCode_INTERNAL_ERROR);
             Send(SelfId(), std::move(ev));
         });
         ControlId = NActors::ActorIdFromProto(ev->Get()->Record.GetControlId());
@@ -243,17 +242,15 @@ private:
         }
     }
 
-    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode, bool retriable, bool needFallback = false)
+    void Finish(NYql::NDqProto::StatusIds::StatusCode statusCode)
     {
-        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << ", retriable=" << retriable << ", needFallback=" << needFallback;
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " with status=" << static_cast<int>(statusCode) << " issues=" << Issues.ToString();
         if (Finished) {
-            YQL_CLOG(WARN, ProviderDq) << "Re-Finish IGNORED with Retriable=" << retriable << ", NeedFallback=" << needFallback;
+            YQL_CLOG(WARN, ProviderDq) << "Re-Finish IGNORED with status=" << static_cast<int>(statusCode);
         } else {
             FlushCounter("ExecutionTime");
             TQueryResponse result;
             IssuesToMessage(Issues, result.MutableIssues());
-            result.SetDeprecatedRetriable(retriable);
-            result.SetDeprecatedNeedFallback(needFallback);
             result.SetStatusCode(statusCode);
             FlushCounters(result);
             Send(ControlId, MakeHolder<TEvQueryResponse>(std::move(result)));
@@ -265,24 +262,18 @@ private:
         if (!Finished) {
             YQL_LOG_CTX_ROOT_SCOPE(TraceId);
             YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ 
-                            << " with Retriable=" << ev->Get()->Record.GetDeprecatedRetriable() 
-                            << ", NeedFallback=" << ev->Get()->Record.GetDeprecatedNeedFallback() 
-                            << ", status=" << (int) ev->Get()->Record.GetStatusCode()
+                            << ", status=" << static_cast<int>(ev->Get()->Record.GetStatusCode())
+                            << ", issues size=" << ev->Get()->Record.IssuesSize()
                             << ", sender=" << ev->Sender;
             AddCounters(ev->Get()->Record);
-            bool retriable = ev->Get()->Record.GetDeprecatedRetriable();
-            // while we're investigating YQL-15117, we want to be sure that any failure leads to the fallback (except explicitly retriable ones)
-            bool fallback = true;
-            auto status = ev->Get()->Record.GetStatusCode();
-            if (status == NYql::NDqProto::StatusIds::UNSPECIFIED) {
-                status = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
-            }
             if (ev->Get()->Record.IssuesSize()) {
                 TIssues issues;
                 IssuesFromMessage(ev->Get()->Record.GetIssues(), issues);
                 Issues.AddIssues(issues);
+                YQL_CLOG(DEBUG, ProviderDq) << "Issues: " << Issues.ToString();
             }
-            Finish(status, retriable, fallback);
+            Y_VERIFY(ev->Get()->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
+            Finish(ev->Get()->Record.GetStatusCode());
         }
     }
 
@@ -292,11 +283,11 @@ private:
         if (!Finished) {
             try {
                 TFailureInjector::Reach("dq_fail_on_finish", [] { throw yexception() << "dq_fail_on_finish"; });
-                Finish(NYql::NDqProto::StatusIds::SUCCESS, false);
+                Finish(NYql::NDqProto::StatusIds::SUCCESS);
             } catch (...) {
                 YQL_CLOG(ERROR, ProviderDq) << " FailureInjector " << CurrentExceptionMessage();
                 Issues.AddIssue(TIssue("FailureInjection"));
-                Finish(NYql::NDqProto::StatusIds::UNAVAILABLE, true);
+                Finish(NYql::NDqProto::StatusIds::UNAVAILABLE);
             }
         }
     }
@@ -305,7 +296,7 @@ private:
 
     void OnQueryResponse(TEvQueryResponse::TPtr& ev, const TActorContext&) {
         YQL_LOG_CTX_ROOT_SCOPE(TraceId);
-        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__;
+        YQL_CLOG(DEBUG, ProviderDq) << __FUNCTION__ << " status=" << static_cast<int>(ev->Get()->Record.GetStatusCode()) << " issuses_size=" << ev->Get()->Record.IssuesSize();
         Send(PrinterId, ev->Release().Release());
         PassAway();
     }
@@ -336,7 +327,7 @@ private:
                     << ev->Get()->Record.GetError().GetMessage() << ":"
                     << static_cast<int>(ev->Get()->Record.GetError().GetErrorCode());
                 Issues.AddIssue(TIssue(ev->Get()->Record.GetError().GetMessage()).SetCode(TIssuesIds::DQ_GATEWAY_NEED_FALLBACK_ERROR, TSeverityIds::S_ERROR));
-                Finish(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED, /*retriable = */ true, /*fallback = */ true);
+                Finish(NYql::NDqProto::StatusIds::CLUSTER_OVERLOADED);
                 return;
             }
             case TAllocateWorkersResponse::kNodes:

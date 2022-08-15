@@ -184,10 +184,9 @@ private:
         }
         // hacky conversion to TEvDqFailure
         auto convertedError = MakeHolder<TEvDqFailure>();
-        convertedError->Record.SetDeprecatedRetriable(NCommon::IsRetriable(ev));
-        convertedError->Record.SetDeprecatedNeedFallback(NCommon::NeedFallback(ev));
         convertedError->Record.SetStatusCode(ev->Get()->Record.GetStatusCode());
         convertedError->Record.MutableIssues()->Swap(ev->Get()->Record.MutableIssues());
+        Y_VERIFY(convertedError->Record.GetStatusCode() != NYql::NDqProto::StatusIds::SUCCESS);
         SendFailure(std::move(convertedError));  // enreached with stats inside
     }
 
@@ -248,6 +247,7 @@ private:
         TaskRunnerPrepared = true;
 
         try {
+            TFailureInjector::Reach("dq_fail_on_task_runner_created", [] { throw yexception() << "dq_fail_on_task_runner_created"; });
             Stat.AddCounters2(ev->Get()->Sensors);
 
             const auto& secureParams = ev->Get()->SecureParams;
@@ -347,6 +347,7 @@ private:
 
     void OnChannelPopFinished(TEvChannelPopFinished::TPtr& ev, const NActors::TActorContext& ctx) {
         try {
+            TFailureInjector::Reach("dq_fail_on_channel_pop_finished", [] { throw yexception() << "dq_fail_on_channel_pop_finished"; });
             auto outputActorId = OutChannelId2ActorId[ev->Get()->ChannelId];
             auto& outChannel = OutputMap[outputActorId];
             TPullResponse response;

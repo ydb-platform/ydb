@@ -22,6 +22,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         NPersQueue::TWriteSessionSettings writeSettings;
         writeSettings.Path(setup->GetTestTopic()).MessageGroupId("src_id");
+        writeSettings.Codec(NPersQueue::ECodec::RAW);
         NPersQueue::IExecutor::TPtr executor = new NPersQueue::TSyncExecutor();
         writeSettings.CompressionExecutor(executor);
 
@@ -30,11 +31,12 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         auto& client = setup->GetPersQueueClient();
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
-        TString messageBase = "message-";
+        TString messageBase = "message----";
         TVector<TString> sentMessages;
 
         for (auto i = 0u; i < count; i++) {
-            sentMessages.emplace_back(messageBase * (i+1) + ToString(i));
+            // sentMessages.emplace_back(messageBase * (i+1) + ToString(i));
+            sentMessages.emplace_back(messageBase * (200 * 1024));
             auto res = session->Write(sentMessages.back());
             UNIT_ASSERT(res);
         }
@@ -59,6 +61,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         NYdb::NTopic::TReadSessionSettings readSettings;
         readSettings
             .ConsumerName(setup->GetTestClient())
+            .MaxMemoryUsageBytes(1_MB)
             .AppendTopics(setup->GetTestTopic());
 
         Cerr << "Session was created" << Endl;
@@ -79,7 +82,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
         ReadSession = topicClient.CreateReadSession(readSettings);
 
         checkedPromise.GetFuture().GetValueSync();
-        ReadSession->Close(TDuration::Zero());
+        ReadSession->Close(TDuration::Seconds(1));
     }
 }
 

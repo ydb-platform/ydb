@@ -158,7 +158,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail()
 
     swap(head, NotReady);
 }
- 
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TSingleClusterReadSessionImpl
 
@@ -435,8 +435,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
         if constexpr (UseMigrationProtocol) {
             req.mutable_read();
         } else {
-            req.mutable_read_request()->set_bytes_size(GetCompressedDataSizeLimit() - CompressedDataSize);
-            // TODO account serverside bytes_size!
+            if (ReadSizeBudget <= 0) {
+                return;
+            }
+            req.mutable_read_request()->set_bytes_size(ReadSizeBudget);
+            ReadSizeBudget = 0;
         }
 
         WriteToProcessorImpl(std::move(req));
@@ -1042,11 +1045,12 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     Ydb::Topic::StreamReadMessage::ReadResponse&& msg,
     TDeferredActions<false>& deferred) { // Assumes that we're under lock.
 
-    // TODO account bytes_size!
-
     if (Closing || Aborting) {
         return; // Don't process new data.
     }
+
+    i64 serverBytesSize = msg.bytes_size();
+
     UpdateMemoryUsageStatisticsImpl();
     for (TPartitionData<false>& partitionData : *msg.mutable_partition_data()) {
         auto partitionStreamIt = PartitionStreams.find(partitionData.partition_session_id());
@@ -1097,7 +1101,11 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
 
         auto decompressionInfo = std::make_shared<TDataDecompressionInfo<false>>(std::move(partitionData),
                                                                                  shared_from_this(),
-                                                                                 Settings.Decompress_);
+                                                                                 Settings.Decompress_,
+                                                                                 serverBytesSize);
+        // TODO (ildar-khisam@): share serverBytesSize between partitions data according to their actual sizes;
+        //                       for now whole serverBytesSize goes with first (and only) partition data.
+        serverBytesSize = 0;
         Y_VERIFY(decompressionInfo);
 
         if (decompressionInfo) {
@@ -1262,7 +1270,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressi
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount) {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize) {
     TDeferredActions<UseMigrationProtocol> deferred;
     --DecompressionTasksInflight;
 
@@ -1283,6 +1291,9 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
         }
         if (Aborting) {
             return;
+        }
+        if constexpr (!UseMigrationProtocol) {
+            ReadSizeBudget += serverBytesSize;
         }
         ContinueReadingDataImpl();
         StartDecompressionTasksImpl(deferred);
@@ -1663,7 +1674,7 @@ typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent TReadSessi
 
     Y_VERIFY(event.PartitionStream == stream);
     Y_VERIFY(event.DataCount > 0);
- 
+
     for (; (event.DataCount > 0) && (*maxByteSize > 0); --event.DataCount) {
         stream->TopEvent().GetDataEvent().TakeData(stream, &messages, &compressedMessages, maxByteSize);
         stream->PopEvent();
@@ -1809,11 +1820,13 @@ template<bool UseMigrationProtocol>
 TDataDecompressionInfo<UseMigrationProtocol>::TDataDecompressionInfo(
     TPartitionData<UseMigrationProtocol>&& msg,
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session,
-    bool doDecompress
+    bool doDecompress,
+    i64 serverBytesSize
 )
     : ServerMessage(std::move(msg))
     , Session(std::move(session))
     , DoDecompress(doDecompress)
+    , ServerBytesSize(serverBytesSize)
 {
     for (const auto& batch : ServerMessage.batches()) {
         for (const auto& messageData : batch.message_data()) {
@@ -2036,7 +2049,7 @@ bool TDataDecompressionInfo<UseMigrationProtocol>::TakeData(const TIntrusivePtr<
                               << minOffset << "-" << maxOffset << ")");
     return CurrentReadingMessage <= *readyThreshold;
 }
- 
+
 template<bool UseMigrationProtocol>
 bool TDataDecompressionEvent<UseMigrationProtocol>::TakeData(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                                                              TVector<typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent::TMessage>* messages,
@@ -2225,7 +2238,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     std::shared_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session = Parent->Session.lock();
 
     if (session) {
-        session->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed);
+        session->OnDataDecompressed(SourceDataSize, EstimatedDecompressedSize, DecompressedSize, messagesProcessed, Parent->ServerBytesSize);
     }
 
     Parent->SourceDataNotProcessed -= dataProcessed;

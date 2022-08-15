@@ -177,7 +177,8 @@ public:
     TDataDecompressionInfo(
         TPartitionData<UseMigrationProtocol>&& msg,
         std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> session,
-        bool doDecompress
+        bool doDecompress,
+        i64 serverBytesSize = 0 // to increment read request bytes size
     );
 
     i64 StartDecompressionTasks(const typename IAExecutor<UseMigrationProtocol>::TPtr& executor,
@@ -294,6 +295,7 @@ private:
     std::weak_ptr<TSingleClusterReadSessionImpl<UseMigrationProtocol>> Session;
     bool DoDecompress;
     i64 CompressedDataSize = 0;
+    i64 ServerBytesSize = 0;
     std::atomic<i64> SourceDataNotProcessed = 0;
     std::pair<size_t, size_t> CurrentDecompressingMessage = {0, 0}; // (Batch, Message)
     std::deque<TReadyMessageThreshold> ReadyThresholds;
@@ -305,7 +307,7 @@ private:
     TAdaptiveLock DecompressionErrorsStructLock;
     std::vector<std::vector<std::exception_ptr>> DecompressionErrors;
 };
- 
+
 template <bool UseMigrationProtocol>
 class TDataDecompressionEvent {
 public:
@@ -961,6 +963,7 @@ public:
         , ErrorHandler(std::move(errorHandler))
         , ClientContext(std::move(clientContext))
         , CookieMapping(ErrorHandler)
+        , ReadSizeBudget(GetCompressedDataSizeLimit())
     {
     }
 
@@ -971,7 +974,7 @@ public:
     void Commit(const TPartitionStreamImpl<UseMigrationProtocol>* partitionStream, ui64 startOffset, ui64 endOffset);
 
     void OnCreateNewDecompressionTask();
-    void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount);
+    void OnDataDecompressed(i64 sourceSize, i64 estimatedDecompressedSize, i64 decompressedSize, size_t messagesCount, i64 serverBytesSize = 0);
 
     TReadSessionEventsQueue<UseMigrationProtocol>* GetEventsQueue() {
         return EventsQueue.get();
@@ -1180,6 +1183,7 @@ private:
     bool Closing = false;
     std::function<void()> CloseCallback;
     std::atomic<int> DecompressionTasksInflight = 0;
+    i64 ReadSizeBudget;
 };
 
 // High level class that manages several read session impls.

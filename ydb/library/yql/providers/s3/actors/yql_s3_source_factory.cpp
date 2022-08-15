@@ -1,5 +1,7 @@
 #include "yql_s3_source_factory.h"
-#ifdef __linux__
+
+#include <util/system/platform.h>
+#if defined(_linux_) || defined(_darwin_)
 #include "yql_s3_read_actor.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
@@ -13,7 +15,7 @@ void RegisterS3ReadActorFactory(
         ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr gateway,
         const std::shared_ptr<NYql::NS3::TRetryConfig>&) {
-#ifdef __linux__
+#if defined(_linux_) || defined(_darwin_)
     NDB::registerFormats();
     factory.RegisterSource<NS3::TSource>("S3Source",
         [credentialsFactory, gateway](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {

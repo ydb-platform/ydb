@@ -1,4 +1,5 @@
-#ifdef __linux__
+#include <util/system/platform.h>
+#if defined(_linux_) || defined(_darwin_)
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeArray.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeDate.h>
 #include <ydb/library/yql/udfs/common/clickhouse/client/src/DataTypes/DataTypeEnum.h>

@@ -139,6 +139,18 @@ Y_UNIT_TEST_SUITE(HttpProxy) {
         UNIT_ASSERT_EQUAL(response->Body, "this is test.");
     }
 
+    Y_UNIT_TEST(BasicParsingContentLength0) {
+        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
+        EatPartialString(request, "GET /test HTTP/1.1\r\nHost: test\r\nContent-Length: 0\r\n\r\n");
+        UNIT_ASSERT_EQUAL(request->Stage, NHttp::THttpIncomingRequest::EParseStage::Done);
+        UNIT_ASSERT_EQUAL(request->Method, "GET");
+        UNIT_ASSERT_EQUAL(request->URL, "/test");
+        UNIT_ASSERT_EQUAL(request->Protocol, "HTTP");
+        UNIT_ASSERT_EQUAL(request->Version, "1.1");
+        UNIT_ASSERT_EQUAL(request->Host, "test");
+        UNIT_ASSERT_EQUAL(request->Headers, "Host: test\r\nContent-Length: 0\r\n\r\n");
+    }
+
     Y_UNIT_TEST(AdvancedParsing) {
         NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest();
         EatWholeString(request, "GE");

@@ -108,7 +108,9 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
             case EParseStage::Header: {
                 if (ProcessData(Header, data, "\r\n", MaxHeaderSize)) {
                     if (Header.empty()) {
-                        if (HaveBody()) {
+                        if (HaveBody() && (ContentLength.empty() || ContentLength != "0")) {
+                            Stage = EParseStage::Body;
+                        } else if (TotalSize.has_value() && !data.empty()) {
                             Stage = EParseStage::Body;
                         } else {
                             Stage = EParseStage::Done;
@@ -118,7 +120,10 @@ void THttpParser<THttpRequest, TSocketBuffer>::Advance(size_t len) {
                     }
                     Headers = TStringBuf(Headers.data(), data.data() - Headers.data());
                 }
-                break;
+                if (Stage != EParseStage::Body) {
+                    break;
+                }
+                [[fallthrough]];
             }
             case EParseStage::Body: {
                 if (!ContentLength.empty()) {
@@ -271,7 +276,10 @@ void THttpParser<THttpResponse, TSocketBuffer>::Advance(size_t len) {
                     }
                     Headers = TStringBuf(Headers.data(), data.data() - Headers.data());
                 }
-                break;
+                if (Stage != EParseStage::Body) {
+                    break;
+                }
+                [[fallthrough]];
             }
             case EParseStage::Body: {
                 if (!ContentLength.empty()) {

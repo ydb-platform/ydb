@@ -21,7 +21,7 @@ namespace NYdb::NConsoleClient {
             bool commit,
             bool wait,
             EOutputFormat format,
-            TVector<EStreamMetadataField> metadataFields,
+            TVector<ETopicMetadataField> metadataFields,
             ETransformBody transform,
             TDuration idleTimeout);
 
@@ -29,7 +29,7 @@ namespace NYdb::NConsoleClient {
         TTopicReaderSettings(const TTopicReaderSettings&) = default;
         TTopicReaderSettings(TTopicReaderSettings&&) = default;
 
-        GETTER(TVector<EStreamMetadataField>, MetadataFields);
+        GETTER(TVector<ETopicMetadataField>, MetadataFields);
         GETTER(bool, Commit);
         GETTER(TMaybe<i64>, Limit);
         GETTER(bool, Wait);
@@ -39,7 +39,7 @@ namespace NYdb::NConsoleClient {
         // TODO(shmel1k@): add batching settings.
 
     private:
-        TVector<EStreamMetadataField> MetadataFields_;
+        TVector<ETopicMetadataField> MetadataFields_;
         TMaybe<TDuration> FlushDuration_;
         TMaybe<int> FlushSize_;
         TMaybe<int> FlushMessagesCount_;

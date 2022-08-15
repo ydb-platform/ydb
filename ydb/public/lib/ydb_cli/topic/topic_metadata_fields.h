@@ -3,7 +3,7 @@
 #include <util/string/vector.h>
 
 namespace NYdb::NConsoleClient {
-    enum class EStreamMetadataField {
+    enum class ETopicMetadataField {
         Body /* "body" */,
         WriteTime /* "write_time" */,
         CreateTime /* "create_time" */,

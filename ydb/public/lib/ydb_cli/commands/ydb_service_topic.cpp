@@ -29,39 +29,39 @@ namespace NYdb::NConsoleClient {
         };
 
         // TODO(shmel1k@): improve docs
-        THashMap<EStreamMetadataField, TString> StreamMetadataFieldsDescriptions = {
-            {EStreamMetadataField::Body, "message content"},
-            {EStreamMetadataField::WriteTime, "message write time"},
-            {EStreamMetadataField::CreateTime, "message creation time"},
-            {EStreamMetadataField::MessageGroupID, "message group id"},
-            {EStreamMetadataField::Offset, "offset"},
-            {EStreamMetadataField::SeqNo, "seqno"},
-            {EStreamMetadataField::Meta, "meta"},
+        THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
+            {ETopicMetadataField::Body, "Message data"},
+            {ETopicMetadataField::WriteTime, "Message write time. This time defines the UNIX timestamp the messages was written to server"},
+            {ETopicMetadataField::CreateTime, "Message creation time. This time defines the UNIX timestamp the message was created by client"},
+            {ETopicMetadataField::MessageGroupID, "Message group id. This identifier is used to stick to concrete partition using round-robin algorithm. All messages with the same message group id are guaranteed to be read in FIFO order"},
+            {ETopicMetadataField::Offset, "Message offset. Offset defines unique message number in his partition"},
+            {ETopicMetadataField::SeqNo, "Message sequence number, which is used for message deduplication"},
+            {ETopicMetadataField::Meta, "Message additional metadata"},
         };
 
-        const TVector<EStreamMetadataField> AllStreamMetadataFields = {
-            EStreamMetadataField::Body,
-            EStreamMetadataField::WriteTime,
-            EStreamMetadataField::CreateTime,
-            EStreamMetadataField::MessageGroupID,
-            EStreamMetadataField::Offset,
-            EStreamMetadataField::SeqNo,
-            EStreamMetadataField::Meta,
+        const TVector<ETopicMetadataField> AllTopicMetadataFields = {
+            ETopicMetadataField::Body,
+            ETopicMetadataField::WriteTime,
+            ETopicMetadataField::CreateTime,
+            ETopicMetadataField::MessageGroupID,
+            ETopicMetadataField::Offset,
+            ETopicMetadataField::SeqNo,
+            ETopicMetadataField::Meta,
         };
 
-        const THashMap<TString, EStreamMetadataField> StreamMetadataFieldsMap = {
-            {"body", EStreamMetadataField::Body},
-            {"write_time", EStreamMetadataField::WriteTime},
-            {"create_time", EStreamMetadataField::CreateTime},
-            {"message_group_id", EStreamMetadataField::MessageGroupID},
-            {"offset", EStreamMetadataField::Offset},
-            {"seq_no", EStreamMetadataField::SeqNo},
-            {"meta", EStreamMetadataField::Meta},
+        const THashMap<TString, ETopicMetadataField> TopicMetadataFieldsMap = {
+            {"body", ETopicMetadataField::Body},
+            {"write_time", ETopicMetadataField::WriteTime},
+            {"create_time", ETopicMetadataField::CreateTime},
+            {"message_group_id", ETopicMetadataField::MessageGroupID},
+            {"offset", ETopicMetadataField::Offset},
+            {"seq_no", ETopicMetadataField::SeqNo},
+            {"meta", ETopicMetadataField::Meta},
         };
 
         THashMap<ETransformBody, TString> TransformBodyDescriptions = {
-            {ETransformBody::None, "do not transform body to any format"},
-            {ETransformBody::Base64, "transform body to base64 format"},
+            {ETransformBody::None, "Do not transform body to any format"},
+            {ETransformBody::Base64, "Transform body to base64 format"},
         };
 
         constexpr TDuration DefaultIdleTimeout = TDuration::Seconds(1);
@@ -258,7 +258,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicConsumerAdd::Config(TConfig& config) {
-        TYdbCommand::Parse(config);
+        TYdbCommand::Config(config);
         config.Opts->AddLongOption("consumer-name", "New consumer for topic")
             .Required()
             .StoreResult(&ConsumerName_);
@@ -343,7 +343,7 @@ namespace NYdb::NConsoleClient {
         TStringStream description;
         description << "Comma-separated list of message fields to print. Available fields: ";
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        for (const auto& iter : StreamMetadataFieldsDescriptions) {
+        for (const auto& iter : TopicMetadataFieldsDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }
 
@@ -368,7 +368,7 @@ namespace NYdb::NConsoleClient {
     void TCommandTopicRead::Config(TConfig& config) {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<stream-path>", "Stream to read data");
+        SetFreeArgTitle(0, "<topic-path>", "Topic to read data");
 
         AddFormats(config, {
                                EOutputFormat::Pretty,
@@ -389,15 +389,16 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('f', "file", "File to write data to")
             .Optional()
             .StoreResult(&File_);
-        config.Opts->AddLongOption("flush-duration", "Duration for message flushing")
-            .Optional()
-            .StoreResult(&FlushDuration_);
-        config.Opts->AddLongOption("flush-size", "Maximum flush size") // TODO(shmel1k@): improve
-            .Optional()
-            .StoreResult(&FlushSize_);
-        config.Opts->AddLongOption("flush-messages-count", "") // TODO(shmel1k@): improve
-            .Optional()
-            .StoreResult(&FlushMessagesCount_);
+// NOTE(shmel1k@): temporary disabled options
+//        config.Opts->AddLongOption("flush-duration", "Duration for message flushing")
+//            .Optional()
+//            .StoreResult(&FlushDuration_);
+//        config.Opts->AddLongOption("flush-size", "Maximum flush size") // TODO(shmel1k@): improve
+//            .Optional()
+//            .StoreResult(&FlushSize_);
+//        config.Opts->AddLongOption("flush-messages-count", "") // TODO(shmel1k@): improve
+//            .Optional()
+//            .StoreResult(&FlushMessagesCount_);
         config.Opts->AddLongOption("idle-timeout", "Max wait duration for new messages")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
@@ -406,9 +407,10 @@ namespace NYdb::NConsoleClient {
             .Optional()
             .DefaultValue(true)
             .StoreResult(&Commit_);
-        config.Opts->AddLongOption("message-size-limit", "Maximum message size")
-            .Optional()
-            .StoreResult(&MessageSizeLimit_);
+// NOTE(shmel1k@): temporary disabled option
+//        config.Opts->AddLongOption("message-size-limit", "Maximum message size")
+//            .Optional()
+//            .StoreResult(&MessageSizeLimit_);
         config.Opts->AddLongOption("discard-above-limits", "Do not print messages with size more than defined in 'message-size-limit' option")
             .Optional()
             .StoreResult(&DiscardAboveLimits_);
@@ -428,7 +430,7 @@ namespace NYdb::NConsoleClient {
     }
 
     void TCommandTopicRead::ParseMetadataFields() {
-        MetadataFields_ = AllStreamMetadataFields;
+        MetadataFields_ = AllTopicMetadataFields;
 
         // TODO(shmel1k@): discuss: disable all fields?
         if (WithMetadataFields_ == "all") {
@@ -440,21 +442,21 @@ namespace NYdb::NConsoleClient {
             return;
         }
 
-        TSet<EStreamMetadataField> set;
+        TSet<ETopicMetadataField> set;
         for (const auto& field : split) {
-            auto f = StreamMetadataFieldsMap.find(field);
-            if (f == StreamMetadataFieldsMap.end()) {
+            auto f = TopicMetadataFieldsMap.find(field);
+            if (f == TopicMetadataFieldsMap.end()) {
                 throw TMisuseException() << "Field " << field << " not found in available fields"; // TODO(shmel1k@): improve message.
             }
             set.insert(f->second);
         }
 
-        TVector<EStreamMetadataField> result;
+        TVector<ETopicMetadataField> result;
         result.reserve(set.size());
         // NOTE(shmel1k@): preserving the order from AllMetadataFields
         for (const auto metadataField : set) {
-            auto f = std::find(AllStreamMetadataFields.begin(), AllStreamMetadataFields.end(), metadataField);
-            if (f == AllStreamMetadataFields.end()) {
+            auto f = std::find(AllTopicMetadataFields.begin(), AllTopicMetadataFields.end(), metadataField);
+            if (f == AllTopicMetadataFields.end()) {
                 continue;
             }
             result.push_back(metadataField);

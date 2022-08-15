@@ -121,7 +121,7 @@ namespace NYdb::NConsoleClient {
         TDuration IdleTimeout_;
 
         TString WithMetadataFields_ = "all"; // TODO(shmel1k@): improve.
-        TVector<EStreamMetadataField> MetadataFields_;
+        TVector<ETopicMetadataField> MetadataFields_;
 
         TMaybe<ui64> MessageSizeLimit_;
         TMaybe<i64> Limit_ = Nothing();

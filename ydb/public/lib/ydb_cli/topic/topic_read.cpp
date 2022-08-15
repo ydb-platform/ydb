@@ -25,7 +25,7 @@ namespace NYdb::NConsoleClient {
         bool commit,
         bool wait,
         EOutputFormat format,
-        TVector<EStreamMetadataField> metadataFields,
+        TVector<ETopicMetadataField> metadataFields,
         ETransformBody transform,
         TDuration idleTimeout)
         : MetadataFields_(metadataFields)
@@ -83,9 +83,9 @@ namespace NYdb::NConsoleClient {
 
         using TReceivedMessage = NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
-        void AddMetadataFieldToRow(TPrettyTable::TRow& row, const TReceivedMessage& message, EOutputFormat format, ETransformBody transform, EStreamMetadataField f, size_t idx) {
+        void AddMetadataFieldToRow(TPrettyTable::TRow& row, const TReceivedMessage& message, EOutputFormat format, ETransformBody transform, ETopicMetadataField f, size_t idx) {
             switch (f) {
-                case EStreamMetadataField::Body:
+                case ETopicMetadataField::Body:
                     if (format == EOutputFormat::PrettyBase64) {
                         row.Column(idx, FormatBody(message.GetData(), transform));
                     }
@@ -97,22 +97,22 @@ namespace NYdb::NConsoleClient {
                     }
                     break;
 
-                case EStreamMetadataField::CreateTime:
+                case ETopicMetadataField::CreateTime:
                     row.Column(idx, message.GetCreateTime());
                     break;
-                case EStreamMetadataField::MessageGroupID:
+                case ETopicMetadataField::MessageGroupID:
                     row.Column(idx, message.GetMessageGroupId());
                     break;
-                case EStreamMetadataField::Offset:
+                case ETopicMetadataField::Offset:
                     row.Column(idx, message.GetOffset());
                     break;
-                case EStreamMetadataField::WriteTime:
+                case ETopicMetadataField::WriteTime:
                     row.Column(idx, message.GetWriteTime()); // improve for pretty
                     break;
-                case EStreamMetadataField::SeqNo:
+                case ETopicMetadataField::SeqNo:
                     row.Column(idx, message.GetSeqNo());
                     break;
-                case EStreamMetadataField::Meta:
+                case ETopicMetadataField::Meta:
                     NJson::TJsonValue json;
                     for (auto const& [k, v] : message.GetMeta()->Fields) {
                         json[k] = v;
@@ -127,7 +127,7 @@ namespace NYdb::NConsoleClient {
         for (const auto& message : ReceivedMessages_) {
             TPrettyTable::TRow& row = OutputTable_->AddRow();
             for (size_t i = 0; i < ReaderParams_.MetadataFields().size(); ++i) {
-                EStreamMetadataField f = ReaderParams_.MetadataFields()[i];
+                ETopicMetadataField f = ReaderParams_.MetadataFields()[i];
                 AddMetadataFieldToRow(row, message, ReaderParams_.OutputFormat(), ReaderParams_.Transform(), f, i);
             }
         }

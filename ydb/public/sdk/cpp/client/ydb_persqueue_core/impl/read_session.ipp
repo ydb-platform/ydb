@@ -435,7 +435,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ContinueReadingDataImp
         if constexpr (UseMigrationProtocol) {
             req.mutable_read();
         } else {
-            if (ReadSizeBudget <= 0) {
+            if (ReadSizeBudget == 0 || ReadSizeServerDelta <= 0) {
                 return;
             }
             req.mutable_read_request()->set_bytes_size(ReadSizeBudget);
@@ -1050,6 +1050,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     }
 
     i64 serverBytesSize = msg.bytes_size();
+    ReadSizeServerDelta -= serverBytesSize;
 
     UpdateMemoryUsageStatisticsImpl();
     for (TPartitionData<false>& partitionData : *msg.mutable_partition_data()) {
@@ -1294,6 +1295,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnDataDecompressed(i64
         }
         if constexpr (!UseMigrationProtocol) {
             ReadSizeBudget += serverBytesSize;
+            ReadSizeServerDelta += serverBytesSize;
         }
         ContinueReadingDataImpl();
         StartDecompressionTasksImpl(deferred);

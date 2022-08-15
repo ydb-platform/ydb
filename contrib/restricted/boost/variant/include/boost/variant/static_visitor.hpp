@@ -50,10 +50,8 @@ public: // typedefs
 protected: // for use as base class only
 #if !defined(BOOST_NO_CXX11_DEFAULTED_FUNCTIONS) && !defined(BOOST_NO_CXX11_NON_PUBLIC_DEFAULTED_FUNCTIONS)
     static_visitor() = default;
-    ~static_visitor() = default;
 #else
     static_visitor()  BOOST_NOEXCEPT { }
-    ~static_visitor()  BOOST_NOEXCEPT { }
 #endif
 };
 
@@ -84,7 +82,7 @@ struct is_static_visitor_impl
 } // namespace detail
 
 template< typename T > struct is_static_visitor
-	: public ::boost::integral_constant<bool,(::boost::detail::is_static_visitor_impl<T>::value)>
+  : public ::boost::integral_constant<bool,(::boost::detail::is_static_visitor_impl<T>::value)>
 {
 public:
     BOOST_MPL_AUX_LAMBDA_SUPPORT(1,is_static_visitor,(T))

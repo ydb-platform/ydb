@@ -68,41 +68,12 @@ public: // static visitor interfaces
         boost::throw_exception(bad_visit());
     }
 
-#if !defined(BOOST_NO_VOID_RETURNS)
-
 public: // static visitor interfaces, cont.
 
     result_type operator()(argument_fwd_type operand) const
     {
         return visitor_(operand);
     }
-
-#else // defined(BOOST_NO_VOID_RETURNS)
-
-private: // helpers, for static visitor interfaces (below)
-
-    result_type execute_impl(argument_fwd_type operand, mpl::false_) const
-    {
-        return visitor_(operand);
-    }
-
-        BOOST_VARIANT_AUX_RETURN_VOID_TYPE
-    execute_impl(argument_fwd_type operand, mpl::true_) const
-    {
-        visitor_(operand);
-        BOOST_VARIANT_AUX_RETURN_VOID;
-    }
-
-public: // static visitor interfaces, cont.
-
-        BOOST_VARIANT_AUX_GENERIC_RESULT_TYPE(result_type)
-    operator()(argument_fwd_type operand) const
-    {
-        typedef typename is_void<result_type>::type has_void_result;
-        return execute_impl(operand, has_void_result());
-    }
-
-#endif // BOOST_NO_VOID_RETURNS workaround
 
 };
 

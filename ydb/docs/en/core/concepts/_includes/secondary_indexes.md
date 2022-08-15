@@ -9,8 +9,6 @@ The current version of {{ ydb-short-name }} implements _synchronous_ and _asynch
 
 When a user sends an SQL query to insert, modify, or delete data, the database transparently generates commands to modify the index table. A table may have multiple secondary indexes. An index may include multiple columns, and the sequence of columns in an index matters. A single column may be included in multiple indexes. In addition to the specified columns, every index implicitly stores the table primary key columns, to enable nvaigation from an index record to the table row.
 
-Одна колонка может состоять в нескольких индексах. В дополнение к включенным в индекс колонкам в индексе всегда неявно сохраняются значения колонок первичного ключа таблицы, чтобы от найденной записи в индексе можно было перейти к записи в таблице.
-
 ## Synchronous secondary index {#sync}
 
 A synchronous index is updated simultaneously with the table that it indexes. This index ensures [strict consistency](https://en.wikipedia.org/wiki/Consistency_model) through [distributed transactions](../transactions.md#distributed-tx). While reads and blind writes to a table with no index can be performed without a planning stage, significantly reducing delays, such optimization is impossible when writing data to a table with a synchronous index.

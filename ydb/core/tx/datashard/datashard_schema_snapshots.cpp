@@ -30,7 +30,6 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
         return false;
     }
 
-    const auto& tables = Self->GetUserTables();
     while (!rowset.EndOfSet()) {
         const ui64 oid = rowset.GetValue<Schema::SchemaSnapshots::PathOwnerId>();
         const ui64 tid = rowset.GetValue<Schema::SchemaSnapshots::LocalPathId>();
@@ -43,13 +42,10 @@ bool TSchemaSnapshotManager::Load(NIceDb::TNiceDb& db) {
         const bool ok = ParseFromStringNoSizeLimit(desc, schema);
         Y_VERIFY(ok);
 
-        auto it = tables.find(tid);
-        Y_VERIFY_S(it != tables.end(), "Cannot find table: " << tid);
-
         const auto res = Snapshots.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(oid, tid, version),
-            std::forward_as_tuple(new TUserTable(it->second->LocalTid, desc, 0), step, txId)
+            std::forward_as_tuple(new TUserTable(0, desc, 0), step, txId)
         );
         Y_VERIFY_S(res.second, "Duplicate schema snapshot: " << res.first->first);
 

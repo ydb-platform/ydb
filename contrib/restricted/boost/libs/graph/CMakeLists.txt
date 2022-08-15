@@ -13,6 +13,6 @@ target_link_libraries(boost-libs-graph INTERFACE
   contrib-restricted-boost
   restricted-boost-atomic
   restricted-boost-exception
-  boost-libs-filesystem
+  restricted-boost-filesystem
   boost-libs-thread
 )

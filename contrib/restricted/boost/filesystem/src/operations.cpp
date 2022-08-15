@@ -10,9 +10,6 @@
 
 //--------------------------------------------------------------------------------------// 
 
-#if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ < 24
-// Android fully supports 64-bit file offsets only for API 24 and above.
-#else
 //  define 64-bit offset macros BEFORE including boost/config.hpp (see ticket #5355) 
 #if defined(__ANDROID__) && defined(__ANDROID_API__) && __ANDROID_API__ < 24
 // Android fully supports 64-bit file offsets only for API 24 and above.
@@ -54,7 +51,6 @@
 // That is required at least on Solaris, and possibly on other
 // systems as well.
 #define _FILE_OFFSET_BITS 64
-#endif
 #endif
 
 // define BOOST_FILESYSTEM_SOURCE so that <boost/filesystem/config.hpp> knows
@@ -450,7 +446,7 @@ namespace
 
   bool not_found_error(int errval)
   {
-    return errno == ENOENT || errno == ENOTDIR;
+    return errval == ENOENT || errval == ENOTDIR;
   }
 
   bool // true if ok
@@ -919,20 +915,20 @@ namespace detail
   BOOST_FILESYSTEM_DECL
   void copy(const path& from, const path& to, system::error_code* ec)
   {
-    file_status s(symlink_status(from, ec));
+    file_status s(detail::symlink_status(from, ec));
     if (ec != 0 && *ec) return;
 
     if(is_symlink(s))
     {
-      copy_symlink(from, to, *ec);
+      detail::copy_symlink(from, to, ec);
     }
     else if(is_directory(s))
     {
-      copy_directory(from, to, *ec);
+      detail::copy_directory(from, to, ec);
     }
     else if(is_regular_file(s))
     {
-      copy_file(from, to, fs::copy_option::fail_if_exists, *ec);
+      detail::copy_file(from, to, detail::fail_if_exists, ec);
     }
     else
     {
@@ -1919,6 +1915,7 @@ namespace detail
   path system_complete(const path& p, system::error_code* ec)
   {
 #   ifdef BOOST_POSIX_API
+    (void)ec;
     return (p.empty() || p.is_absolute())
       ? p : current_path()/ p;
 
@@ -2345,9 +2342,7 @@ namespace detail
         && (filename.size()== 1
           || (filename[1] == dot
             && filename.size()== 2)))
-        {
-          detail::directory_iterator_increment(it, ec);
-        }
+        { detail::directory_iterator_increment(it, ec); }
     }
   }
 

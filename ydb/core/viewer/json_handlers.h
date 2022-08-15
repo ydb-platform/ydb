@@ -52,6 +52,9 @@ struct TJsonHandlers {
     void Handle(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
         NMon::TEvHttpInfo* msg = ev->Get();
         auto itJson = JsonHandlers.find(msg->Request.GetPage()->Path + msg->Request.GetPathInfo());
+        if (itJson == JsonHandlers.end()) {
+            itJson = JsonHandlers.find(msg->Request.GetPathInfo());
+        }
         if (itJson != JsonHandlers.end()) {
             try {
                 ctx.ExecutorThread.RegisterActor(itJson->second->CreateRequestActor(viewer, ev));
@@ -108,8 +111,8 @@ struct TVDiskTagInfo {
     static constexpr auto TagName = "vdisk";
 };
 
-using TViewerJsonHadlers = TJsonHandlers<TViewerTagInfo>;
-using TVDiskJsonHadlers = TJsonHandlers<TVDiskTagInfo>;
+using TViewerJsonHandlers = TJsonHandlers<TViewerTagInfo>;
+using TVDiskJsonHandlers = TJsonHandlers<TVDiskTagInfo>;
 
 
 }

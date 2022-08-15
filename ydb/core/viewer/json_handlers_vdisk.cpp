@@ -7,7 +7,7 @@
 namespace NKikimr::NViewer {
 
 template <>
-void TVDiskJsonHadlers::Init() {
+void TVDiskJsonHandlers::Init() {
     JsonHandlers["vdisk/json/vdiskstat"] = new TJsonHandler<TJsonVDiskStat>;
     JsonHandlers["vdisk/json/getblob"] = new TJsonHandler<TJsonGetBlob>;
 }

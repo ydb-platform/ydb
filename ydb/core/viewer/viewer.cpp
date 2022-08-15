@@ -168,8 +168,8 @@ public:
     }
 
 private:
-    TViewerJsonHadlers ViewerJsonHandlers;
-    TVDiskJsonHadlers VDiskJsonHandlers;
+    TViewerJsonHandlers ViewerJsonHandlers;
+    TVDiskJsonHandlers VDiskJsonHandlers;
     THashMap<TString, TAutoPtr<TJsonHandlerBase>> JsonHandlers;
     const TKikimrRunConfig KikimrRunConfig;
     std::unordered_multimap<NKikimrViewer::EObjectType, TVirtualHandler> VirtualHandlersByParentType;

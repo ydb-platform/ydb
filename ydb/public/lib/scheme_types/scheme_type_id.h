@@ -39,8 +39,11 @@ static constexpr TTypeId PairUi64Ui64 = 0x101; // DEPRECATED, don't use
 static constexpr TTypeId String = NYql::NProto::String;
 static constexpr TTypeId String4k = 0x1011;
 static constexpr TTypeId String2m = 0x1012;
+static constexpr TTypeId Bytes = String;
 
 static constexpr TTypeId Utf8 = NYql::NProto::Utf8;
+static constexpr TTypeId Text = Utf8;
+
 static constexpr TTypeId Yson = NYql::NProto::Yson;
 static constexpr TTypeId Json = NYql::NProto::Json;
 

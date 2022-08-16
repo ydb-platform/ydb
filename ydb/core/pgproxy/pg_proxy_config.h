@@ -13,6 +13,7 @@ struct TNetworkConfig {
     static constexpr TDuration SOCKET_TIMEOUT = TDuration::MilliSeconds(60000);
     static constexpr TDuration CONNECTION_TIMEOUT = TDuration::MilliSeconds(60000);
     using TSocketType = TInet64StreamSocket;
+    using TSecureSocketType = TInet64SecureStreamSocket;
     using TSocketAddressType = std::shared_ptr<ISockAddr>;
 };
 

@@ -2,10 +2,13 @@
 
 #include <optional>
 #include <util/network/sock.h>
+#include <library/cpp/actors/interconnect/poller_actor.h>
+#include "pg_proxy_ssl.h"
 
 namespace NPG {
 
-class TInet64StreamSocket: public TStreamSocket {
+class TInet64StreamSocket : public TStreamSocket {
+    using TBase = TStreamSocket;
 protected:
     TInet64StreamSocket(const TInet64StreamSocket& parent, SOCKET fd)
         : TStreamSocket(fd)
@@ -17,6 +20,9 @@ public:
     TInet64StreamSocket(int af = {}) {
         CreateSocket(af);
     }
+
+    TInet64StreamSocket(TInet64StreamSocket&& socket) = default;
+    virtual ~TInet64StreamSocket() = default;
 
     static bool IsIPv6(const TString& host) {
         if (host.find_first_not_of(":0123456789abcdef") != TString::npos) {
@@ -70,6 +76,41 @@ public:
         return TInet64StreamSocket(*this, s);
     }
 
+    bool WantsToRead = false;
+    bool WantsToWrite = false;
+
+    void ResetPollerState() {
+        WantsToRead = false;
+        WantsToWrite = false;
+    }
+
+    void RequestPoller(NActors::TPollerToken::TPtr& pollerToken) {
+        if (pollerToken && (WantsToRead || WantsToWrite)) {
+            pollerToken->Request(WantsToRead, WantsToWrite);
+            ResetPollerState();
+        }
+    }
+
+    virtual ssize_t Send(const void* msg, size_t len, int flags = 0) {
+        ssize_t res = TBase::Send(msg, len, flags);
+        if (res < 0) {
+            if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                WantsToWrite = true;
+            }
+        }
+        return res;
+    }
+
+    virtual ssize_t Recv(void* buf, size_t len, int flags = 0) {
+        ssize_t res = TBase::Recv(buf, len, flags);
+        if (res < 0) {
+            if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                WantsToRead = true;
+            }
+        }
+        return res;
+    }
+
 protected:
     int AF = 0;
 
@@ -88,6 +129,68 @@ protected:
         }
         TSocketHolder sock(s);
         sock.Swap(*this);
+    }
+};
+
+class TInet64SecureStreamSocket : public TInet64StreamSocket, TSslLayer<TStreamSocket> {
+    template<typename T>
+    using TSslHolder = TSslLayer<TStreamSocket>::TSslHolder<T>;
+
+    TSslHolder<BIO> Bio;
+    TSslHolder<SSL> Ssl;
+
+public:
+    TInet64SecureStreamSocket(int af = {})
+        : TInet64StreamSocket(af)
+    {}
+
+    TInet64SecureStreamSocket(TInet64StreamSocket&& socket)
+        : TInet64StreamSocket(std::move(socket))
+    {}
+
+    void InitServerSsl(SSL_CTX* ctx) {
+        Bio.reset(BIO_new(TSslLayer<TStreamSocket>::IoMethod()));
+        BIO_set_data(Bio.get(), static_cast<TStreamSocket*>(this));
+        BIO_set_nbio(Bio.get(), 1);
+        Ssl = TSslHelpers::ConstructSsl(ctx, Bio.get());
+        SSL_set_accept_state(Ssl.get());
+    }
+
+    int ProcessResult(int res) {
+        if (res <= 0) {
+            res = SSL_get_error(Ssl.get(), res);
+            switch(res) {
+            case SSL_ERROR_WANT_READ:
+                WantsToRead = true;
+                return -EAGAIN;
+            case SSL_ERROR_WANT_WRITE:
+                WantsToWrite = true;
+                return -EAGAIN;
+            default:
+                return -EIO;
+            }
+        }
+        return res;
+    }
+
+    int SecureAccept(SSL_CTX* ctx) {
+        if (!Ssl) {
+            InitServerSsl(ctx);
+        }
+        int res = SSL_accept(Ssl.get());
+        return ProcessResult(res);
+    }
+
+    ssize_t Send(const void* msg, size_t len, int flags = 0) override {
+        Y_UNUSED(flags);
+        int res = SSL_write(Ssl.get(), msg, len);
+        return ProcessResult(res);
+    }
+
+    ssize_t Recv(void* buf, size_t len, int flags = 0) override {
+        Y_UNUSED(flags);
+        int res = SSL_read(Ssl.get(), buf, len);
+        return ProcessResult(res);
     }
 };
 

@@ -30,7 +30,6 @@ public:
         : Poller(poller)
         , DatabaseProxy(databaseProxy)
         , Settings(settings)
-        , Socket(new TSocketDescriptor())
     {}
 
     STATEFN(StateWorking) {
@@ -41,13 +40,22 @@ public:
     }
 
     void Bootstrap() {
-        TSocketAddressType bindAddress(Socket->Socket.MakeAddress("::", Settings.Port));
-        int err = Socket->Socket.Bind(bindAddress.get());
+        TSocketType socket;
+        TSocketAddressType bindAddress(socket.MakeAddress("::", Settings.Port));
+        int err = socket.Bind(bindAddress.get());
         if (err == 0) {
-            err = Socket->Socket.Listen(LISTEN_QUEUE);
+            std::shared_ptr<TEndpointInfo> endpoint = std::make_shared<TEndpointInfo>();
+            if (Settings.SslCertificatePem) {
+                endpoint->SecureContext = TSslHelpers::CreateServerContext(Settings.SslCertificatePem);
+            } else if (Settings.CertificateFile && Settings.PrivateKeyFile) {
+                endpoint->SecureContext = TSslHelpers::CreateServerContext(Settings.CertificateFile, Settings.PrivateKeyFile);
+            }
+            Socket = new TSocketDescriptor(std::move(socket), endpoint);
+
+            err = Socket->Listen(LISTEN_QUEUE);
             if (err == 0) {
-                BLOG_D("Listening on " << bindAddress->ToString());
-                SetNonBlock(Socket->Socket);
+                BLOG_D("Listening on " << bindAddress->ToString() << (endpoint->SecureContext ? " (ssl)" : ""));
+                Socket->SetNonBlock();
                 Send(Poller, new NActors::TEvPollerRegister(Socket, SelfId(), SelfId()));
                 Become(&TThis::StateWorking);
                 return;
@@ -71,11 +79,10 @@ public:
     void Handle(NActors::TEvPollerReady::TPtr) {
         for (;;) {
             TSocketAddressType addr;
-            std::optional<TSocketType> s = Socket->Socket.Accept(addr);
-            if (!s) {
+            TIntrusivePtr<TSocketDescriptor> socket = Socket->Accept(addr);
+            if (!socket) {
                 break;
             }
-            TIntrusivePtr<TSocketDescriptor> socket = new TSocketDescriptor(std::move(s).value());
             NActors::IActor* connectionSocket = CreatePGConnection(socket, addr, DatabaseProxy);
             NActors::TActorId connectionId = Register(connectionSocket);
             Send(Poller, new TEvPollerRegister(socket, connectionId, connectionId));

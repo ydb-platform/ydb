@@ -73,25 +73,6 @@
                 typedef typename
                     boost::result_of<fn(BOOST_PHOENIX_a)>::type
                     type;
-                /*
-                typedef typename
-                    mpl::eval_if_c<
-                        has_phx2_result<
-                            fn
-                          , BOOST_PP_ENUM(BOOST_PHOENIX_ITERATION, M0, _)
-                        >::value
-                      , boost::result_of<
-                            fn(
-                                BOOST_PHOENIX_a
-                            )
-                        >
-                      , phx2_result<
-                            fn
-                          , BOOST_PHOENIX_a
-                        >
-                    >::type
-                    type;
-                */
             };
 
             template <typename F, BOOST_PHOENIX_typename_A, typename Context>

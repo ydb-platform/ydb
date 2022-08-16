@@ -10,7 +10,7 @@
 
 #include <boost/phoenix/core/limits.hpp>
 #include <boost/is_placeholder.hpp>
-#include <boost/mpl/bool.hpp>
+#include <boost/mpl/int.hpp>
 #include <boost/phoenix/core/terminal.hpp>
 #include <boost/proto/matches.hpp>
 
@@ -102,12 +102,36 @@ namespace boost { namespace phoenix
                     this->evaluate(
                         e1
                       , e2
-                      , typename proto::arity_of<Expr1>::type()
+                      , mpl::int_<proto::arity_of<Expr1>::value - 1>()
                     );
             }
 
-            private:
-            #include <boost/phoenix/core/detail/cpp03/function_equal.hpp>
+        private:
+            template <typename Expr1>
+            static BOOST_FORCEINLINE result_type
+            evaluate(Expr1 const& e1, Expr1 const& e2, mpl::int_<0>)
+            {
+                return
+                    function_equal_()(
+                        proto::child_c<0>(e1)
+                      , proto::child_c<0>(e2)
+                    );
+            }
+
+            template <typename Expr1, int N>
+            static BOOST_FORCEINLINE result_type
+            evaluate(Expr1 const& e1, Expr1 const& e2, mpl::int_<N>)
+            {
+                return
+                    evaluate(
+                        e1
+                      , e2
+                      , mpl::int_<N - 1>()
+                    ) && function_equal_()(
+                        proto::child_c<N>(e1)
+                      , proto::child_c<N>(e2)
+                    );
+            }
 #else
             template <typename Expr1>
             result_type operator()(Expr1 const& e1, Expr1 const& e2) const
@@ -120,24 +144,17 @@ namespace boost { namespace phoenix
                     );
             }
 
-            private:
-            template <typename Expr1>
-            result_type
-            evaluate(Expr1 const& /*e1*/, Expr1 const& /*e2*/, index_sequence<>) const
+        private:
+            template <typename Expr1, std::size_t... I>
+            static BOOST_FORCEINLINE result_type
+            evaluate(Expr1 const& e1, Expr1 const& e2, index_sequence<I...>)
             {
-                return true;
-            }
-            template <typename Expr1, std::size_t Head, std::size_t... Tail>
-            result_type
-            evaluate(Expr1 const& e1, Expr1 const& e2, index_sequence<Head, Tail...>) const
-            {
-                return
-                  function_equal_()(proto::child_c<Head>(e1), proto::child_c<Head>(e2)) &&
-                  this->evaluate(
-                      e1
-                    , e2
-                    , index_sequence<Tail...>()
-                  );
+                bool result = true;
+                int dummy[] = { (result && (
+                        result = function_equal_()(proto::child_c<I>(e1), proto::child_c<I>(e2))
+                    ))... };
+                (void)dummy;
+                return result;
             }
 #endif
         };

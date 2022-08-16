@@ -26,6 +26,7 @@ public:
     static constexpr TDuration InactivityTimeout = TDuration::Minutes(10);
     TEvPollerReady* InactivityEvent = nullptr;
     bool IsAuthRequired = true;
+    bool IsSslSupported = true;
     bool ConnectionEstablished = false;
     bool CloseConnection = false;
     bool PasswordWasSupplied = false;
@@ -49,6 +50,7 @@ public:
         , DatabaseProxy(databaseProxy)
     {
         SetNonBlock();
+        IsSslSupported = IsSslSupported && Socket->IsSslSupported();
     }
 
     void Bootstrap() {
@@ -69,30 +71,30 @@ public:
     }
 
 protected:
-    void SetNonBlock(bool nonBlock = true) noexcept {
-        try {
-            ::SetNonBlock(Socket->Socket, nonBlock);
-        }
-        catch (const yexception&) {
-        }
+    void SetNonBlock() noexcept {
+        Socket->SetNonBlock();
     }
 
     void Shutdown() {
         if (Socket) {
-            ::shutdown(Socket->Socket, SHUT_RDWR);
+            Socket->Shutdown();
         }
     }
 
     ssize_t SocketSend(const void* data, size_t size) {
-        return Socket->Socket.Send(data, size);
+        return Socket->Send(data, size);
     }
 
     ssize_t SocketReceive(void* data, size_t size) {
-        return Socket->Socket.Recv(data, size);
+        return Socket->Receive(data, size);
+    }
+
+    void RequestPoller() {
+        Socket->RequestPoller(PollerToken);
     }
 
     SOCKET GetRawSocket() const {
-        return static_cast<SOCKET>(Socket->Socket);
+        return Socket->GetRawSocket();
     }
 
     TString LogPrefix() const {
@@ -243,8 +245,24 @@ protected:
 
     void HandleMessage(const TPGInitial* message) {
         if (message->Protocol == 0x2f16d204) { // 790024708 SSL handshake
-            BLOG_D("<- 'N' \"Decline SSL\"");
-            BufferOutput.Append('N');
+            if (IsSslSupported) {
+                BufferOutput.Append('S');
+                if (!FlushOutput()) {
+                    return;
+                }
+                // TODO(xenoxeno): wait for reply to be sent
+                if (!UpgradeToSecure()) {
+                    return;
+                }
+                RequestPoller();
+            } else {
+                BLOG_D("<- 'N' \"Decline SSL\"");
+                BufferOutput.Append('N');
+                if (!FlushOutput()) {
+                    return;
+                }
+                RequestPoller();
+            }
             BufferInput.Append('i'); // initial packet pseudo-message
             return;
         }
@@ -298,7 +316,10 @@ protected:
             FinishHandshake();
         }
 
-        FlushOutput();
+        if (!FlushOutput()) {
+            return;
+        }
+        RequestPoller();
     }
 
     void HandleConnected(TEvPGEvents::TEvRowDescription::TPtr& ev) {
@@ -317,7 +338,10 @@ protected:
         }
         SendStream(rowDescription);
 
-        FlushOutput();
+        if (!FlushOutput()) {
+            return;
+        }
+        RequestPoller();
     }
 
     void HandleConnected(TEvPGEvents::TEvDataRows::TPtr& ev) {
@@ -330,7 +354,10 @@ protected:
             SendStream(dataRow);
         }
 
-        FlushOutput();
+        if (!FlushOutput()) {
+            return;
+        }
+        RequestPoller();
     }
 
     void HandleConnected(TEvPGEvents::TEvCommandComplete::TPtr& ev) {
@@ -340,7 +367,10 @@ protected:
 
         SendReadyForQuery();
 
-        FlushOutput();
+        if (!FlushOutput()) {
+            return;
+        }
+        RequestPoller();
     }
 
     void HandleConnected(TEvPGEvents::TEvErrorResponse::TPtr& ev) {
@@ -353,7 +383,10 @@ protected:
 
         SendReadyForQuery();
 
-        FlushOutput();
+        if (!FlushOutput()) {
+            return;
+        }
+        RequestPoller();
     }
 
     bool HasInputMessage() const {
@@ -414,9 +447,6 @@ protected:
                         return;
                     }
                 } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                    if (PollerToken) {
-                        PollerToken->Request(true, false);
-                    }
                     break;
                 } else if (-res == EINTR) {
                     continue;
@@ -440,8 +470,11 @@ protected:
             }
         }
         if (event->Get()->Write) {
-            FlushOutput();
+            if (!FlushOutput()) {
+                return;
+            }
         }
+        RequestPoller();
     }
 
     void HandleConnected(TEvPollerRegisterResult::TPtr ev) {
@@ -457,9 +490,6 @@ protected:
             } else if (-res == EINTR) {
                 continue;
             } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
-                if (PollerToken) {
-                    PollerToken->Request(false, true);
-                }
                 break;
             } else {
                 BLOG_ERROR("connection closed - error in FlushOutput: " << strerror(-res));
@@ -471,6 +501,24 @@ protected:
             BLOG_D("connection closed");
             PassAway();
             return false;
+        }
+        return true;
+    }
+
+    bool UpgradeToSecure() {
+        for (;;) {
+            int res = Socket->UpgradeToSecure();
+            if (res >= 0) {
+                break;
+            } else if (-res == EINTR) {
+                continue;
+            } else if (-res == EAGAIN || -res == EWOULDBLOCK) {
+                break;
+            } else {
+                BLOG_ERROR("connection closed - error in UpgradeToSecure: " << strerror(-res));
+                PassAway();
+                return false;
+            }
         }
         return true;
     }

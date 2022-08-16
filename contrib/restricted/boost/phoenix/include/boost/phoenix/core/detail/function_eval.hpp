@@ -14,7 +14,6 @@
 #include <boost/phoenix/core/call.hpp>
 #include <boost/phoenix/core/expression.hpp>
 #include <boost/phoenix/core/meta_grammar.hpp>
-#include <boost/phoenix/core/detail/phx2_result.hpp>
 #include <boost/utility/result_of.hpp>
 
 #ifndef BOOST_PHOENIX_NO_VARIADIC_FUNCTION_EVAL

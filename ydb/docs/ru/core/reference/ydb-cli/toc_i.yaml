@@ -33,6 +33,8 @@ items:
       href: commands/scan-query.md
   - name: Загрузка и выгрузка данных
     include: { mode: link, path: export_import/toc_p.yaml }
+  - name: Работа с топиками
+    href: topic.md
 #  - name: Утилиты
 #    items:
     # - name: Копирование таблиц

@@ -1934,6 +1934,31 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
             auto win = window->Tail().Child(x.first);
             const auto& frameSettings = win->Tail();
 
+            TExprNode::TListType keys;
+            for (auto p : win->Child(2)->Children()) {
+                YQL_ENSURE(p->IsCallable("PgGroup"));
+                const auto& member = p->Tail().Tail();
+                YQL_ENSURE(member.IsCallable("Member"));
+                keys.push_back(member.TailPtr());
+            }
+
+            auto keysNode = ctx.NewList(pos, std::move(keys));
+            auto sortNode = ctx.NewCallable(pos, "Void", {});
+            TExprNode::TPtr keyLambda;
+            if (win->Child(3)->ChildrenSize() > 0) {
+                sortNode = BuildSortTraits(pos, *win->Child(3), ret, ctx);
+                keyLambda = sortNode->TailPtr();
+            } else {
+                keyLambda = ctx.Builder(pos)
+                    .Lambda()
+                        .Param("row")
+                        .Callable("Void")
+                        .Seal()
+                    .Seal()
+                    .Build();
+            }
+
+
             TExprNode::TListType args;
             // default frame
             auto begin = ctx.NewCallable(pos, "Void", {});
@@ -1969,7 +1994,21 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                         value = ctx.Builder(pos)
                             .Callable("RowNumber")
                                 .Callable(0, "TypeOf")
+                                .Add(0, list)
+                                .Seal()
+                            .Seal()
+                            .Build();
+                    } else if (name == "rank" || name == "dense_rank") {
+                        value = ctx.Builder(pos)
+                            .Callable((name == "rank") ? "Rank" : "DenseRank")
+                                .Callable(0, "TypeOf")
                                     .Add(0, list)
+                                .Seal()
+                                .Add(1, keyLambda)
+                                .List(2)
+                                    .List(0)
+                                        .Atom(0, "ansi")
+                                    .Seal()
                                 .Seal()
                             .Seal()
                             .Build();
@@ -2008,20 +2047,6 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                 .Seal()
                 .Build();
 
-            TExprNode::TListType keys;
-            for (auto p : win->Child(2)->Children()) {
-                YQL_ENSURE(p->IsCallable("PgGroup"));
-                const auto& member = p->Tail().Tail();
-                YQL_ENSURE(member.IsCallable("Member"));
-                keys.push_back(member.TailPtr());
-            }
-
-            auto keysNode = ctx.NewList(pos, std::move(keys));
-            auto sortNode = ctx.NewCallable(pos, "Void", {});
-            if (win->Child(3)->ChildrenSize() > 0) {
-                sortNode = BuildSortTraits(pos, *win->Child(3), ret, ctx);
-            }
-
             ret = ctx.Builder(pos)
                 .Callable("CalcOverWindow")
                     .Add(0, ret)
@@ -2042,7 +2067,7 @@ TExprNode::TPtr BuildWindows(TPositionHandle pos, const TExprNode::TPtr& list, c
                     .Seal()
                     .Build();
 
-                if (node->Head().Content() == "row_number") {
+                if (node->Head().Content() == "row_number" || node->Head().Content() == "rank" || node->Head().Content() == "dense_rank") {
                     ret = ctx.Builder(node->Pos())
                         .Callable("ToPg")
                             .Callable(0, "SafeCast")

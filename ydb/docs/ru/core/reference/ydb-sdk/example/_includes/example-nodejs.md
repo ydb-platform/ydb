@@ -37,7 +37,7 @@ async function createTables(session: Session, logger: Logger) {
         new TableDescription()
             .withColumn(new Column(
                 'series_id',
-                Types.optional(Types.UINT64),
+                Types.UINT64,  // not null column
             ))
             .withColumn(new Column(
                 'title',

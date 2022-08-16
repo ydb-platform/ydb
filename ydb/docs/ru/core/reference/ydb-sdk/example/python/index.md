@@ -52,7 +52,7 @@ def create_tables(session, path):
     session.create_table(
         os.path.join(path, 'series'),
         ydb.TableDescription()
-        .with_column(ydb.Column('series_id', ydb.OptionalType(ydb.PrimitiveType.Uint64)))
+        .with_column(ydb.Column('series_id', ydb.PrimitiveType.Uint64))  # not null column 
         .with_column(ydb.Column('title', ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column('series_info', ydb.OptionalType(ydb.PrimitiveType.Utf8)))
         .with_column(ydb.Column('release_date', ydb.OptionalType(ydb.PrimitiveType.Uint64)))

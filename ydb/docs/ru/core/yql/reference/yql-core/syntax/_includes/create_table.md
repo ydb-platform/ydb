@@ -39,7 +39,11 @@
 {% if feature_not_null == true %}
 Без дополнительных модификаторов колонка приобретает [опциональный тип](../../types/optional.md) тип, и допускает запись `NULL` в качестве значений. Для получения неопционального типа необходимо использовать `NOT NULL`.
 {% else %}
+{% if feature_not_null_for_pk %}
+По умолчанию все колонки [опциональные](../../types/optional.md) и могут иметь значение NULL. Ограничение `NOT NULL` можно указать только для колонок, входящих в первичный ключ.
+{% else %}
 Все колонки допускают запись `NULL` в качестве значений, то есть являются [опциональными](../../types/optional.md).
+{% endif %}
 {% endif %}
 {% if feature_map_tables %}
 Обязательно указание `PRIMARY KEY` с непустым списком колонок. Эти колонки становятся частью ключа в порядке перечисления.
@@ -48,7 +52,7 @@
 **Пример**
 
     CREATE TABLE my_table (
-        a Uint64,
+{% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
         b Bool,
 {% if feature_not_null %}        c Float NOT NULL,{% else %}        c Float,{% endif %}
 {% if feature_column_container_type %}         d "List<List<Int32>>"{% endif %}

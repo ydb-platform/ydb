@@ -29,7 +29,7 @@
 //! Creates sample tables with CrateTable API.
     ThrowOnError(client.RetryOperationSync([path](TSession session) {
         auto seriesDesc = TTableBuilder()
-            .AddNullableColumn("series_id", EPrimitiveType::Uint64)
+            .AddNonNullableColumn("series_id", EPrimitiveType::Uint64)
             .AddNullableColumn("title", EPrimitiveType::Utf8)
             .AddNullableColumn("series_info", EPrimitiveType::Utf8)
             .AddNullableColumn("release_date", EPrimitiveType::Uint64)
@@ -65,7 +65,7 @@
 
 ```bash
 > Describe table: series
-Column, name: series_id, type: Uint64?
+Column, name: series_id, type: Uint64
 Column, name: title, type: Utf8?
 Column, name: series_info, type: Utf8?
 Column, name: release_date, type: Uint64?
@@ -139,7 +139,7 @@ static TStatus SelectSimpleTransaction(TSession session, const TString& path,
     TResultSetParser parser(*resultSet);
     if (parser.TryNextRow()) {
         Cout << "> SelectSimple:" << Endl << "Series"
-            << ", Id: " << parser.ColumnParser("series_id").GetOptionalUint64()
+            << ", Id: " << parser.ColumnParser("series_id").GetUint64()
             << ", Title: " << parser.ColumnParser("title").GetOptionalUtf8()
             << ", Release date: " << parser.ColumnParser("release_date").GetOptionalString()
             << Endl;

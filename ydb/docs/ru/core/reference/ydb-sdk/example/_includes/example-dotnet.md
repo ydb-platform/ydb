@@ -43,7 +43,7 @@ var response = await tableClient.SessionExec(async session =>
 {
     return await session.ExecuteSchemeQuery(@"
         CREATE TABLE series (
-            series_id Uint64,
+            series_id Uint64 NOT NULL,
             title Utf8,
             series_info Utf8,
             release_date Date,
@@ -147,7 +147,7 @@ var resultSet = queryResponse.Result.ResultSets[0];
 foreach (var row in resultSet.Rows)
 {
     Console.WriteLine($"> Series, " +
-        $"series_id: {(ulong?)row["series_id"]}, " +
+        $"series_id: {(ulong)row["series_id"]}, " +
         $"title: {(string?)row["title"]}, " +
         $"release_date: {(DateTime?)row["release_date"]}");
 }
@@ -177,7 +177,7 @@ public void executeScanQuery()
       foreach (var row in resultSet.Rows)
       {
         Console.WriteLine($"> ScanQuery, " +
-          $"series_id: {(ulong?)row["series_id"]}, " +
+          $"series_id: {(ulong)row["series_id"]}, " +
           $"season_id: {(ulong?)row["season_id"]}, " +
           $"episodes_count: {(ulong)row["episodes_count"]}");
       }

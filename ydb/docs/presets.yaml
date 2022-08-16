@@ -30,6 +30,7 @@ default:
   ydb-cli: ydb
   k8s: Kubernetes
   oss: true
+  feature_not_null_for_pk: true
 
   ydb-doc-repo: https://github.com/ydb-platform/ydb/tree/main/ydb/docs
 

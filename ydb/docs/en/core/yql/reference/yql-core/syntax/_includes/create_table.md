@@ -38,7 +38,11 @@ For key columns and non-key columns, only [primitive](../../types/primitive.md) 
 {% if feature_not_null == true %}
 Without additional modifiers, the column is assigned the [optional type](../../types/optional.md) and can accept `NULL` values. To create a non-optional type, use `NOT NULL`.
 {% else %}
+{% if feature_not_null_for_pk %}
+By default, all columns are [optional](../../types/optional.md) and can accept `NULL` values. `NOT NULL` constraint is supported only for primary keys.
+{% else %}
 All columns allow writing `NULL` values, that is, they are [optional](../../types/optional.md).
+{% endif %}
 {% endif %}
 {% if feature_map_tables %}
 It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. Those columns become part of the key in the listed order.
@@ -47,7 +51,7 @@ It is mandatory to specify the `PRIMARY KEY` with a non-empty list of columns. T
 **Example**
 
     CREATE TABLE my_table (
-        a Uint64,
+{% if feature_not_null_for_pk %}        a Uint64 NOT NULL,{% else %}        a Uint64,{% endif %}
         b Bool,
 {% if feature_not_null %}        c Float NOT NULL,{% else %}        c Float,{% endif %}
 {% if feature_column_container_type %}         d "List<List<Int32>>"{% endif %}

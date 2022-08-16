@@ -258,6 +258,20 @@ namespace NKikimr::NBlobDepot {
     void TData::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
             (Sender, ev->Sender), (Cookie, ev->Cookie));
+
+        if (Self->Config.HasDecommitGroupId() && Self->DecommitState <= EDecommitState::BlobsFinished) {
+            for (const auto& item : ev->Get()->Record.GetItems()) {
+                std::optional<TKey> end = item.HasEndingKey()
+                    ? std::make_optional(TKey::FromBinaryKey(item.GetEndingKey(), Self->Config))
+                    : std::nullopt;
+
+                if (!end || !LastAssimilatedKey || *LastAssimilatedKey < *end) {
+                    // see if we have to query BS for this range and to apply items here
+                    Y_VERIFY_DEBUG(false, "going to return corrupt data");
+                }
+            }
+        }
+
         Self->Execute(std::make_unique<TTxResolve>(Self, ev));
     }
 

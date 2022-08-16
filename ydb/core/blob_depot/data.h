@@ -286,6 +286,7 @@ namespace NKikimr::NBlobDepot {
         THashMap<std::tuple<ui64, ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         TIntrusiveList<TRecordsPerChannelGroup, TRecordWithTrash> RecordsWithTrash;
         std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
+        std::optional<TKey> LastAssimilatedKey;
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
 
@@ -331,6 +332,8 @@ namespace NKikimr::NBlobDepot {
                 }
             }
         }
+
+        NKikimrBlobDepot::EKeepState GetKeepState(const TKey& key) const;
 
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
 

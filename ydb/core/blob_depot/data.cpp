@@ -5,6 +5,11 @@ namespace NKikimr::NBlobDepot {
 
     using TData = TBlobDepot::TData;
 
+    NKikimrBlobDepot::EKeepState TData::GetKeepState(const TKey& key) const {
+        const auto it = Data.find(key);
+        return it != Data.end() ? it->second.KeepState : NKikimrBlobDepot::EKeepState::Default;
+    }
+
     TData::TRecordsPerChannelGroup& TData::GetRecordsPerChannelGroup(TLogoBlobID id) {
         TTabletStorageInfo *info = Self->Info();
         const ui32 groupId = info->GroupFor(id.Channel(), id.Generation());
@@ -35,10 +40,11 @@ namespace NKikimr::NBlobDepot {
 
         TKey key(blob.Id);
 
-        NKikimrBlobDepot::EKeepState keepState = blob.Keep ? NKikimrBlobDepot::EKeepState::Keep : NKikimrBlobDepot::EKeepState::Default;
-        if (const auto it = Data.find(key); it != Data.end()) {
-            keepState = Max(keepState, it->second.KeepState);
-        }
+        // calculate keep state for this blob
+        const auto it = Data.find(key);
+        const NKikimrBlobDepot::EKeepState keepState = Max(it != Data.end() ? it->second.KeepState : NKikimrBlobDepot::EKeepState::Default,
+            blob.DoNotKeep ? NKikimrBlobDepot::EKeepState::DoNotKeep :
+            blob.Keep      ? NKikimrBlobDepot::EKeepState::Keep : NKikimrBlobDepot::EKeepState::Default);
 
         NKikimrBlobDepot::TValue value;
         value.SetKeepState(keepState);
@@ -53,6 +59,7 @@ namespace NKikimr::NBlobDepot {
         db.Table<Schema::Data>().Key(key.MakeBinaryKey()).Update<Schema::Data::Value>(valueData);
 
         PutKey(key, TValue(std::move(value)));
+        LastAssimilatedKey = key;
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {

@@ -237,8 +237,9 @@ namespace NKikimr::NBsController {
                         meta->SetCurrentGeneration(cur.Generation);
                     }
                 }
-                Y_VERIFY(prev.VDisksInGroup.size() == cur.VDisksInGroup.size());
-                for (size_t i = 0; i < prev.VDisksInGroup.size(); ++i) {
+                Y_VERIFY(prev.VDisksInGroup.size() == cur.VDisksInGroup.size() ||
+                    (cur.VDisksInGroup.empty() && cur.DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE));
+                for (size_t i = 0; i < cur.VDisksInGroup.size(); ++i) {
                     const TVSlotInfo& prevSlot = *prev.VDisksInGroup[i];
                     const TVSlotInfo& curSlot = *cur.VDisksInGroup[i];
                     if (prevSlot.VSlotId != curSlot.VSlotId) {

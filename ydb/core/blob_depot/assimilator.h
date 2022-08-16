@@ -6,12 +6,27 @@
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TGroupAssimilator : public TActorBootstrapped<TGroupAssimilator> {
+        struct TEvPrivate {
+            enum {
+                EvResume = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+        };
+
         std::weak_ptr<TToken> Token;
         TBlobDepot *Self;
 
         std::optional<ui64> SkipBlocksUpTo;
         std::optional<std::tuple<ui64, ui8>> SkipBarriersUpTo;
         std::optional<TLogoBlobID> SkipBlobsUpTo;
+
+        std::optional<TLogoBlobID> LastScannedKey;
+        std::set<TLogoBlobID> NeedfulBlobs; // in current tablet, original blob ids
+
+        static constexpr ui32 MaxSizeToQuery = 10'000'000;
+
+        ui32 NumPutsInFlight = 0;
+
+        TActorId PipeId;
 
     public:
         TGroupAssimilator(TBlobDepot *self)
@@ -26,8 +41,19 @@ namespace NKikimr::NBlobDepot {
         STATEFN(StateFunc);
 
     private:
-        void SendRequest();
+        void Action();
+        void SendAssimilateRequest();
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
+        void ScanDataForCopying();
+        void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);
+        void Handle(TEvBlobStorage::TEvPutResult::TPtr ev);
+        void IssueCollects();
+        void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
+        void OnCopyDone();
+        void CreatePipe();
+        void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
+        void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
+        void Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev);
         TString SerializeAssimilatorState() const;
     };
 

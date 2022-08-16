@@ -120,17 +120,21 @@ namespace NKikimr::NBlobDepot {
         }
 
         void Handle(TEvBlobStorage::TEvConfigureProxy::TPtr ev) {
-            const auto& info = ev->Get()->Info;
-            Y_VERIFY(info);
-            Y_VERIFY(info->BlobDepotId);
-            if (TabletId != *info->BlobDepotId) {
-                TabletId = *info->BlobDepotId;
-                if (TabletId) {
-                    ConnectToBlobDepot();
+            if (const auto& info = ev->Get()->Info) {
+                Y_VERIFY(info->BlobDepotId);
+                if (TabletId != *info->BlobDepotId) {
+                    TabletId = *info->BlobDepotId;
+                    if (TabletId) {
+                        ConnectToBlobDepot();
+                    }
+                
+                    for (auto& ev : std::exchange(PendingEventQ, {})) {
+                        TActivationContext::Send(ev.release());
+                    }
                 }
-            
-                for (auto& ev : std::exchange(PendingEventQ, {})) {
-                    TActivationContext::Send(ev.release());
+                if (!info->GetTotalVDisksNum()) {
+                    TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ProxyId, {}, nullptr, 0));
+                    return;
                 }
             }
 

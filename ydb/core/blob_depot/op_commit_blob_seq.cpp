@@ -26,12 +26,17 @@ namespace NKikimr::NBlobDepot {
                 const ui32 generation = Self->Executor()->Generation();
 
                 for (const auto& item : Request->Get()->Record.GetItems()) {
+                    auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
+
                     auto *responseItem = responseRecord->AddItems();
                     responseItem->SetStatus(NKikimrProto::OK);
 
                     NKikimrBlobDepot::TValue value;
                     if (item.HasMeta()) {
                         value.SetMeta(item.GetMeta());
+                    }
+                    if (const auto keepState = Self->Data->GetKeepState(key); keepState != NKikimrBlobDepot::EKeepState::Default) {
+                        value.SetKeepState(keepState);
                     }
                     auto *chain = value.AddValueChain();
                     auto *locator = chain->MutableLocator();
@@ -54,9 +59,7 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
-                    auto key = TData::TKey::FromBinaryKey(item.GetKey(), Self->Config);
-
-                    if (!CheckKeyAgainstBarrier(key)) {
+                    if (!CheckKeyAgainstBarrier(key, value)) {
                         responseItem->SetStatus(NKikimrProto::ERROR);
                         responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString()
                             << " is being put beyond the barrier");
@@ -93,10 +96,11 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            bool CheckKeyAgainstBarrier(const TData::TKey& key) {
+            bool CheckKeyAgainstBarrier(const TData::TKey& key, const NKikimrBlobDepot::TValue& value) {
                 const auto& v = key.AsVariant();
                 const auto *id = std::get_if<TLogoBlobID>(&v);
-                return !id || Self->BarrierServer->CheckBlobForBarrier(*id);
+                return !id || Self->BarrierServer->CheckBlobForBarrier(*id) ||
+                    value.GetKeepState() == NKikimrBlobDepot::EKeepState::Keep;
             }
 
             void Complete(const TActorContext&) override {

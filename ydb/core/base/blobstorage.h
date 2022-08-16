@@ -788,6 +788,8 @@ struct TEvBlobStorage {
         EvControllerScrubQuantumFinished,
         EvControllerScrubReportQuantumInProgress,
         EvControllerUpdateNodeDrives,
+        EvControllerGroupDecommittedNotify,
+        EvControllerGroupDecommittedResponse,
 
         // EvControllerReadSchemeStringResult = EvPut + 12 * 512,
         // EvControllerReadDataStringResult,
@@ -1801,6 +1803,8 @@ struct TEvBlobStorage {
         bool IsMultiCollectAllowed;
         bool IsMonitored = true;
 
+        bool Decommission = false;
+
         ui32 RestartCounter = 0;
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
@@ -2241,6 +2245,8 @@ struct TEvBlobStorage {
     struct TEvResponseControllerInfo;
     struct TEvTestLoadRequest;
     struct TEvTestLoadResponse;
+    struct TEvControllerGroupDecommittedNotify;
+    struct TEvControllerGroupDecommittedResponse;
 
     struct TEvMonStreamQuery;
     struct TEvMonStreamActorDeathNote;

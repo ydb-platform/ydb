@@ -28,6 +28,7 @@ class TBlobStorageGroupMultiCollectRequest
     const ui32 CollectStep;
     const bool Hard;
     const bool Collect;
+    const bool Decommission;
 
     ui64 FlagRequestsInFlight;
     ui64 CollectRequestsInFlight;
@@ -108,6 +109,7 @@ public:
         , CollectStep(ev->CollectStep)
         , Hard(ev->Hard)
         , Collect(ev->Collect)
+        , Decommission(ev->Decommission)
         , FlagRequestsInFlight(0)
         , CollectRequestsInFlight(0)
         , StartTime(now)
@@ -152,6 +154,7 @@ public:
             TabletId, RecordGeneration, PerGenerationCounter + idx, Channel,
             isCollect, CollectGeneration, CollectStep, keepPart.release(), doNotKeepPart.release(), Deadline, false,
             Hard));
+        ev->Decommission = Decommission; // retain decommission flag
         R_LOG_DEBUG_S("BPMC3", "SendRequest idx# " << idx
             << " isLast# " << isLast
             << " ev# " << ev->ToString());

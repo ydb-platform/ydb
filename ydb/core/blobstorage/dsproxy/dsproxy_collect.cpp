@@ -24,6 +24,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const ui32 CollectStep;
     const bool Hard;
     const bool Collect;
+    const bool Decommission;
 
     TGroupQuorumTracker QuorumTracker;
     TInstant StartTime;
@@ -127,6 +128,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
             Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, Hard);
         ev->RestartCounter = counter;
+        ev->Decommission = Decommission;
         return ev;
     }
 
@@ -157,6 +159,7 @@ public:
         , CollectStep(ev->CollectStep)
         , Hard(ev->Hard)
         , Collect(ev->Collect)
+        , Decommission(ev->Decommission)
         , QuorumTracker(Info.Get())
         , StartTime(now)
     {}

@@ -262,6 +262,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
         case TEvBlobStorage::EvControllerNodeReport:                   return 1;
         case TEvBlobStorage::EvControllerProposeGroupKey:              return 1;
         case TEvBlobStorage::EvControllerGetGroup:                     return 1;
+        case TEvBlobStorage::EvControllerGroupDecommittedNotify:       return 1;
 
         // auxiliary messages that are not usually urgent (also includes RW transactions in TConfigRequest and UpdateDiskStatus)
         case TEvBlobStorage::EvControllerGroupReconfigureWipe:         return 2;

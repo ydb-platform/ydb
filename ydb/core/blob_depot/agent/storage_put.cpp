@@ -26,7 +26,7 @@ namespace NKikimr::NBlobDepot {
 
                 // zero step -- for decommission blobs just issue put immediately
                 if (msg.Decommission) {
-                    IssuePuts();
+                    return IssuePuts();
                 }
 
                 // first step -- check blocks

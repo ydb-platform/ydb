@@ -1857,6 +1857,7 @@ public:
             hFunc(TEvBlobStorage::TEvControllerScrubQueryStartQuantum, Handle);
             hFunc(TEvBlobStorage::TEvControllerScrubQuantumFinished, Handle);
             hFunc(TEvBlobStorage::TEvControllerScrubReportQuantumInProgress, Handle);
+            hFunc(TEvBlobStorage::TEvControllerGroupDecommittedNotify, Handle);
             cFunc(TEvPrivate::EvScrub, ScrubState.HandleTimer);
             cFunc(TEvPrivate::EvVSlotReadyUpdate, VSlotReadyUpdate);
         }
@@ -1900,6 +1901,7 @@ public:
             fFunc(TEvBlobStorage::EvControllerScrubQueryStartQuantum, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerScrubQuantumFinished, EnqueueIncomingEvent);
             fFunc(TEvBlobStorage::EvControllerScrubReportQuantumInProgress, EnqueueIncomingEvent);
+            fFunc(TEvBlobStorage::EvControllerGroupDecommittedNotify, EnqueueIncomingEvent);
             fFunc(TEvPrivate::EvScrub, EnqueueIncomingEvent);
             fFunc(TEvPrivate::EvVSlotReadyUpdate, EnqueueIncomingEvent);
             cFunc(TEvPrivate::EvVSlotNotReadyHistogramUpdate, VSlotNotReadyHistogramUpdate);
@@ -1992,6 +1994,8 @@ public:
     void CommitVirtualGroupUpdates(TConfigState& state);
 
     void StartVirtualGroupSetupMachine(TGroupInfo *group);
+
+    void Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // VSLOT READINESS EVALUATION

@@ -442,4 +442,67 @@ namespace NKikimr::NBsController {
         group->VirtualGroupSetupMachineId = RegisterWithSameMailbox(new TVirtualGroupSetupMachine(this, *group));
     }
 
+    void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev) {
+        class TTxDecommitGroup : public TTransactionBase<TBlobStorageController> {
+            TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr Ev;
+            std::optional<TConfigState> State;
+            NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
+            TString ErrorReason;
+
+        public:
+            TTxDecommitGroup(TBlobStorageController *controller, TEvBlobStorage::TEvControllerGroupDecommittedNotify::TPtr ev)
+                : TTransactionBase(controller)
+                , Ev(ev)
+            {}
+
+//            TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_DROP_DONOR; }
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
+                State->CheckConsistency();
+                Action(*State);
+                State->CheckConsistency();
+                TString error;
+                if (State->Changed() && !Self->CommitConfigUpdates(*State, false, false, txc, &error)) {
+                    State->Rollback();
+                    State.reset();
+                }
+                return true;
+            }
+
+            void Action(TConfigState& state) {
+                const ui32 groupId = Ev->Get()->Record.GetGroupId();
+                TGroupInfo *group = state.Groups.FindForUpdate(groupId);
+                if (!group) {
+                    std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group not found");
+                    return;
+                } else if (group->DecommitStatus == NKikimrBlobStorage::TGroupDecommitStatus::DONE) {
+                    Status = NKikimrProto::ALREADY;
+                } else if (group->DecommitStatus != NKikimrBlobStorage::TGroupDecommitStatus::IN_PROGRESS) {
+                    std::tie(Status, ErrorReason) = std::make_tuple(NKikimrProto::ERROR, "group is not being decommitted");
+                } else {
+                    for (const TVSlotInfo *vslot : group->VDisksInGroup) {
+                        state.DestroyVSlot(vslot->VSlotId);
+                    }
+                    group->VDisksInGroup.clear();
+                    group->DecommitStatus = NKikimrBlobStorage::TGroupDecommitStatus::DONE;
+                    group->ContentChanged = true;
+                }
+            }
+
+            void Complete(const TActorContext&) override {
+                if (State) {
+                    State->ApplyConfigUpdates();
+                }
+                auto ev = std::make_unique<TEvBlobStorage::TEvControllerGroupDecommittedResponse>(Status);
+                if (ErrorReason) {
+                    ev->Record.SetErrorReason(ErrorReason);
+                }
+                Self->Send(Ev->Sender, ev.release(), 0, Ev->Cookie);
+            }
+        };
+
+        Execute(new TTxDecommitGroup(this, ev));
+    }
+
 } // NKikimr::NBsController

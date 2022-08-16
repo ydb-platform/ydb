@@ -524,6 +524,24 @@ namespace NKikimr {
         }
     };
 
+    struct TEvBlobStorage::TEvControllerGroupDecommittedNotify : TEventPB<TEvControllerGroupDecommittedNotify,
+            NKikimrBlobStorage::TEvControllerGroupDecommittedNotify, EvControllerGroupDecommittedNotify> {
+        TEvControllerGroupDecommittedNotify() = default;
+
+        TEvControllerGroupDecommittedNotify(ui32 groupId) {
+            Record.SetGroupId(groupId);
+        }
+    };
+
+    struct TEvBlobStorage::TEvControllerGroupDecommittedResponse : TEventPB<TEvControllerGroupDecommittedResponse,
+            NKikimrBlobStorage::TEvControllerGroupDecommittedResponse, EvControllerGroupDecommittedResponse> {
+        TEvControllerGroupDecommittedResponse() = default;
+
+        TEvControllerGroupDecommittedResponse(NKikimrProto::EReplyStatus status) {
+            Record.SetStatus(status);
+        }
+    };
+
     struct TEvNodeWardenQueryGroupInfo : TEventPB<TEvNodeWardenQueryGroupInfo, NKikimrBlobStorage::TEvNodeWardenQueryGroupInfo,
             TEvBlobStorage::EvNodeWardenQueryGroupInfo> {
         TEvNodeWardenQueryGroupInfo() = default;

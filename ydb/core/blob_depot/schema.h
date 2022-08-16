@@ -11,6 +11,7 @@ namespace NKikimr::NBlobDepot {
         BarriersFinished = 2,
         BlobsFinished = 3,
         BlobsCopied = 4,
+        Done = 5,
     };
 
     struct Schema : NIceDb::Schema {

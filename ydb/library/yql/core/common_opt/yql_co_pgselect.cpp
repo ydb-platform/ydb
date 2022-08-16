@@ -689,6 +689,38 @@ TExprNode::TPtr BuildFilter(TPositionHandle pos, const TExprNode::TPtr& list, co
         .Build();
 }
 
+TExprNode::TPtr NormalizeColumnOrder(const TExprNode::TPtr& node, const TColumnOrder& sourceColumnOrder,
+    const TColumnOrder& targetColumnOrder, TExprContext& ctx) {
+    if (sourceColumnOrder == targetColumnOrder) {
+        return node;
+    }
+
+    YQL_ENSURE(sourceColumnOrder.size() == targetColumnOrder.size());
+    return ctx.Builder(node->Pos())
+        .Callable("OrderedMap")
+            .Add(0, node)
+            .Lambda(1)
+                .Param("row")
+                .Callable("AsStruct")
+                .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
+                    for (size_t i = 0; i < sourceColumnOrder.size(); ++i) {
+                        parent
+                            .List(i)
+                                .Atom(0, targetColumnOrder[i])
+                                .Callable(1, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, sourceColumnOrder[i])
+                                .Seal()
+                            .Seal();
+                    }
+                    return parent;
+                })
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TColumnOrder>& columnOrders,
     TExprNode::TListType children, TExprContext& ctx, TOptimizeContext& optCtx) {
     auto targetColumnOrder = optCtx.Types->LookupColumnOrder(node);
@@ -697,34 +729,7 @@ TExprNode::TPtr ExpandPositionalUnionAll(const TExprNode& node, const TVector<TC
     for (ui32 childIndex = 0; childIndex < children.size(); ++childIndex) {
         const auto& childColumnOrder = columnOrders[childIndex];
         auto& child = children[childIndex];
-        if (childColumnOrder == *targetColumnOrder) {
-            continue;
-        }
-
-        YQL_ENSURE(childColumnOrder.size() == targetColumnOrder->size());
-        child = ctx.Builder(child->Pos())
-            .Callable("OrderedMap")
-                .Add(0, child)
-                .Lambda(1)
-                    .Param("row")
-                    .Callable("AsStruct")
-                    .Do([&](TExprNodeBuilder &parent) -> TExprNodeBuilder & {
-                        for (size_t i = 0; i < childColumnOrder.size(); ++i) {
-                            parent
-                                .List(i)
-                                    .Atom(0, child->Pos(), (*targetColumnOrder)[i])
-                                    .Callable(1, "Member")
-                                        .Arg(0, "row")
-                                        .Atom(1, childColumnOrder[i])
-                                    .Seal()
-                                .Seal();
-                        }
-                        return parent;
-                    })
-                    .Seal()
-                .Seal()
-            .Seal()
-            .Build();
+        child = NormalizeColumnOrder(child, childColumnOrder, *targetColumnOrder, ctx);
     }
 
     auto res = ctx.NewCallable(node.Pos(), "UnionAll", std::move(children));
@@ -2479,6 +2484,217 @@ TExprNode::TPtr JoinOuter(TPositionHandle pos, TExprNode::TPtr list,
     return list;
 }
 
+TExprNode::TPtr CombineSetItems(TPositionHandle pos, const TExprNode::TPtr& left, const TExprNode::TPtr& right, const TStringBuf& op, TExprContext& ctx) {
+    if (op == "union_all") {
+        return ctx.NewCallable(pos, "UnionAll", { left, right });
+    }
+
+    auto leftSide = ctx.Builder(pos)
+        .Callable("OrderedMap")
+            .Add(0, left)
+            .Lambda(1)
+                .Param("row")
+                .Callable("AddMember")
+                    .Callable(0, "AddMember")
+                        .Arg(0, "row")
+                        .Atom(1, "_yql_count_right")
+                        .Callable(2, "Null")
+                        .Seal()
+                    .Seal()
+                    .Atom(1, "_yql_count_left")
+                    .Callable(2, "Uint32")
+                        .Atom(0, "1")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto rightSide = ctx.Builder(pos)
+        .Callable("OrderedMap")
+            .Add(0, right)
+            .Lambda(1)
+                .Param("row")
+                .Callable("AddMember")
+                    .Callable(0, "AddMember")
+                        .Arg(0, "row")
+                        .Atom(1, "_yql_count_right")
+                        .Callable(2, "Uint32")
+                            .Atom(0, "1")
+                        .Seal()
+                    .Seal()
+                    .Atom(1, "_yql_count_left")
+                    .Callable(2, "Null")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+
+    auto both = ctx.NewCallable(pos, "UnionAll", { leftSide, rightSide });
+    auto aggregated = ctx.Builder(pos)
+        .Callable("CountedAggregateAll")
+            .Add(0, both)
+            .List(1)
+                .Atom(0, "_yql_count_left")
+                .Atom(1, "_yql_count_right")
+            .Seal()
+        .Seal()
+        .Build();
+
+    TExprNode::TPtr ret;
+    auto zero = ctx.Builder(pos)
+        .Callable("Uint64")
+            .Atom(0, "0")
+        .Seal()
+        .Build();
+
+    if (!op.EndsWith("_all")) {
+        if (op.StartsWith("union")) {
+            ret = ctx.Builder(pos)
+                .Callable("OrderedFilter")
+                    .Add(0, aggregated)
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("Or")
+                            .Callable(0, ">")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_left")
+                                .Seal()
+                                .Add(1, zero)
+                            .Seal()
+                            .Callable(1, ">")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_right")
+                                .Seal()
+                                .Add(1, zero)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        } else if (op.StartsWith("intersect")) {
+            ret = ctx.Builder(pos)
+                .Callable("OrderedFilter")
+                    .Add(0, aggregated)
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("And")
+                            .Callable(0, ">")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_left")
+                                .Seal()
+                                .Add(1, zero)
+                            .Seal()
+                            .Callable(1, ">")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_right")
+                                .Seal()
+                                .Add(1, zero)
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        } else {
+            YQL_ENSURE(op.StartsWith("except"));
+            ret = ctx.Builder(pos)
+                .Callable("OrderedFilter")
+                    .Add(0, aggregated)
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable(0, ">")
+                            .Callable(0, "Member")
+                                .Arg(0, "row")
+                                .Atom(1, "_yql_count_left")
+                            .Seal()
+                            .Callable(1, "Member")
+                                .Arg(0, "row")
+                                .Atom(1, "_yql_count_right")
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+    } else {
+        YQL_ENSURE(!op.StartsWith("union"));
+        if (op.StartsWith("intersect")) {
+            ret = ctx.Builder(pos)
+                .Callable("OrderedFlatMap")
+                    .Add(0, aggregated)
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("Replicate")
+                            .Arg(0, "row")
+                            .Callable(1, "Min")
+                                .Callable(0, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_left")
+                                .Seal()
+                                .Callable(1, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_right")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        } else {
+            YQL_ENSURE(op.StartsWith("except"));
+            ret = ctx.Builder(pos)
+                .Callable("OrderedFlatMap")
+                    .Add(0, aggregated)
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("Replicate")
+                            .Arg(0, "row")
+                            .Callable(1, "-")
+                                .Callable(0, "Max")
+                                    .Callable(0, "Member")
+                                        .Arg(0, "row")
+                                        .Atom(1, "_yql_count_left")
+                                    .Seal()
+                                    .Callable(1, "Member")
+                                        .Arg(0, "row")
+                                        .Atom(1, "_yql_count_right")
+                                    .Seal()
+                                .Seal()
+                                .Callable(1, "Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, "_yql_count_right")
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+            }
+    }
+
+    ret = ctx.Builder(pos)
+        .Callable("OrderedMap")
+            .Add(0, ret)
+            .Lambda(1)
+                .Param("row")
+                .Callable("RemoveMembers")
+                    .Arg(0, "row")
+                    .List(1)
+                        .Atom(0, "_yql_count_left")
+                        .Atom(1, "_yql_count_right")
+                    .Seal()
+                .Seal()
+            .Seal()
+        .Seal()
+        .Build();
+    return ret;
+}
+
 TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx,
     TMaybe<ui32> subLinkId, const TExprNode::TListType& outerInputs, const TVector<TString>& outerInputAliases) {
     auto order = optCtx.Types->LookupColumnOrder(*node);
@@ -2489,6 +2705,9 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     }
 
     auto setItems = GetSetting(node->Head(), "set_items");
+    auto setOps = GetSetting(node->Head(), "set_ops");
+    YQL_ENSURE(setItems);
+    YQL_ENSURE(setOps);
     const bool onlyOneSetItem = (setItems->Tail().ChildrenSize() == 1);
 
     TExprNode::TListType setItemNodes;
@@ -2642,7 +2861,42 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
     if (onlyOneSetItem == 1) {
         list = setItemNodes.front();
     } else {
-        list = ExpandPositionalUnionAll(*node, columnOrders, setItemNodes, ctx, optCtx);
+        bool hasNonUnionAll = false;
+        for (const auto& x : setOps->Tail().Children()) {
+            if (x->Content() != "push" && x->Content() != "union_all") {
+                hasNonUnionAll = true;
+                break;
+            }
+        }
+
+        if (hasNonUnionAll) {
+            TExprNode::TListType stack;
+            auto targetColumnOrder = optCtx.Types->LookupColumnOrder(*node);
+            YQL_ENSURE(targetColumnOrder);
+
+            ui32 inputIndex = 0;
+            for (const auto& x : setOps->Tail().Children()) {
+                if (x->Content() == "push") {
+                    YQL_ENSURE(inputIndex < setItemNodes.size());
+                    stack.push_back(NormalizeColumnOrder(setItemNodes[inputIndex], columnOrders[inputIndex], *targetColumnOrder, ctx));
+                    ++inputIndex;
+                    continue;
+                }
+
+                YQL_ENSURE(stack.size() >= 2);
+                auto left = stack[stack.size() - 2];
+                auto right = stack[stack.size() - 1];
+                stack.pop_back();
+                stack.pop_back();
+                auto combined = CombineSetItems(node->Pos(), left, right, x->Content(), ctx);
+                stack.push_back(combined);
+            }
+
+            YQL_ENSURE(stack.size() == 1);
+            list = KeepColumnOrder(stack.front(), *node, ctx, *optCtx.Types);
+        } else {
+            list = ExpandPositionalUnionAll(*node, columnOrders, setItemNodes, ctx, optCtx);
+        }
     }
 
     auto finalSort = GetSetting(node->Head(), "sort");

@@ -4858,6 +4858,86 @@ namespace {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus CountedAggregateAllWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsEmptyList(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        bool isStream;
+        if (!EnsureSeqType(input->Head(), ctx.Expr, &isStream)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto inputItemType = isStream
+            ? input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()
+            : input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+
+        if (!EnsureStructType(input->Head().Pos(), *inputItemType, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        THashSet<TStringBuf> countedColumns;
+        auto inputStructType = inputItemType->Cast<TStructExprType>();
+        if (!EnsureTuple(input->Tail(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (auto child : input->Tail().Children()) {
+            if (!EnsureAtom(*child, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (!inputStructType->FindItem(child->Content())) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Unknown counted member: " << child->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            if (countedColumns.contains(child->Content())) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Duplicated counted member: " << child->Content()));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            countedColumns.insert(child->Content());
+        }
+
+        TVector<const TItemExprType*> retItems;
+        for (auto& item : inputStructType->GetItems()) {
+            auto columnName = item->GetName();
+            auto columnType = item->GetItemType();
+            if (countedColumns.contains(columnName)) {
+                if (!EnsureComputableType(input->Pos(), *columnType, ctx.Expr)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                retItems.push_back(ctx.Expr.MakeType<TItemExprType>(columnName, ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64)));
+                continue;
+            }
+
+            if (!columnType->IsHashable() || !columnType->IsEquatable()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Expected hashable and equatable type for key column: " << columnName << ", but got: " << *columnType));
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            retItems.push_back(item);
+        }
+
+        auto retStruct = ctx.Expr.MakeType<TStructExprType>(retItems);
+        if (isStream) {
+            input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(retStruct));
+        } else {
+            input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(retStruct));
+        }
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus AggApplyWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
         Y_UNUSED(output);
         if (!EnsureArgsCount(*input, 3, ctx.Expr)) {

@@ -3192,7 +3192,10 @@ IGraphTransformer::TStatus PgSelectWrapper(const TExprNode::TPtr& input, TExprNo
                             return IGraphTransformer::TStatus::Error;
                         }
 
-                        if (child->Content() != "push" && child->Content() != "union_all") {
+                        if (child->Content() != "push" && child->Content() != "union_all" &&
+                            child->Content() != "union" && child->Content() != "except_all" &&
+                            child->Content() != "except" && child->Content() != "intersect_all" &&
+                            child->Content() != "intersect") {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()),
                                 TStringBuilder() << "Unexpected operation: " << child->Content()));
                             return IGraphTransformer::TStatus::Error;

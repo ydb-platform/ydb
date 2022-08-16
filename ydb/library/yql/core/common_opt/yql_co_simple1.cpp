@@ -6273,6 +6273,51 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         return KeepColumnOrder(res, *node, ctx, *optCtx.Types);
     };
 
+    map["CountedAggregateAll"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        YQL_CLOG(DEBUG, Core) << "Expand " << node->Content();
+        auto itemType = GetItemType(*node->Head().GetTypeAnn());
+        auto inputTypeNode = ExpandType(node->Pos(), *itemType, ctx);
+        THashSet<TStringBuf> countedColumns;
+        for (const auto& child : node->Tail().Children()) {
+            countedColumns.insert(child->Content());
+        }
+
+        TExprNode::TListType keys;
+        TExprNode::TListType payloads;
+        for (auto i : itemType->Cast<TStructExprType>()->GetItems()) {
+            if (!countedColumns.contains(i->GetName())) {
+                keys.push_back(ctx.NewAtom(node->Pos(), i->GetName()));
+            } else {
+                payloads.push_back(ctx.Builder(node->Pos())
+                    .List()
+                        .Atom(0, i->GetName())
+                        .Callable(1, "AggApply")
+                            .Atom(0, "count")
+                            .Add(1, inputTypeNode)
+                            .Lambda(2)
+                                .Param("row")
+                                .Callable("Member")
+                                    .Arg(0, "row")
+                                    .Atom(1, i->GetName())
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                    .Build());
+            }
+        }
+
+        auto emptyTuple = ctx.NewList(node->Pos(), {});
+        auto res = ctx.NewCallable(node->Pos(), "Aggregate", {
+            node->HeadPtr(),
+            ctx.NewList(node->Pos(), std::move(keys)),
+            ctx.NewList(node->Pos(), std::move(payloads)),
+            emptyTuple
+        });
+
+        return KeepColumnOrder(res, *node, ctx, *optCtx.Types);
+    };
+
     map["Mux"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         if (node->Head().IsList()) {
             TExprNodeList children = node->Head().ChildrenList();

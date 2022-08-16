@@ -935,7 +935,7 @@ private:
 
         void* freeMem = nullptr;
         void* freeMem2 = nullptr;
-        Y_DEFER{
+        Y_DEFER {
             if (freeMem) {
                 pfree(freeMem);
             }
@@ -1640,6 +1640,13 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
         outFuncId = NPg::LookupProc("array_out", { 0 }).ProcId;
     }
 
+    char* str = nullptr;
+    Y_DEFER {
+        if (str) {
+            pfree(str);
+        }
+    };
+
     PG_TRY();
     {
         FmgrInfo finfo;
@@ -1658,11 +1665,8 @@ TString PgValueToNativeText(const NUdf::TUnboxedValuePod& value, ui32 pgTypeId) 
         callInfo->args[0] = { typeInfo.PassByValue ?
             ScalarDatumFromPod(value) :
             PointerDatumFromPod(value), false };
-        auto str = (char*)finfo.fn_addr(callInfo);
+        str = (char*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
-        Y_DEFER{
-            pfree(str);
-        };
 
         return TString(str);
     }
@@ -1684,7 +1688,7 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
 
     const bool oldNeedCanonizeFp = NeedCanonizeFp;
     NeedCanonizeFp = needCanonizeFp;
-    Y_DEFER{
+    Y_DEFER {
         NeedCanonizeFp = oldNeedCanonizeFp;
     };
 
@@ -1694,6 +1698,13 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
     if (typeInfo.TypeId == typeInfo.ArrayTypeId) {
         sendFuncId = NPg::LookupProc("array_send", { 0 }).ProcId;
     }
+
+    text* x = nullptr;
+    Y_DEFER {
+        if (x) {
+            pfree(x);
+        }
+    };
 
     PG_TRY();
     {
@@ -1714,11 +1725,8 @@ void PgValueToNativeBinaryImpl(const NUdf::TUnboxedValuePod& value, ui32 pgTypeI
             ScalarDatumFromPod(value) :
             PointerDatumFromPod(value), false };
 
-        auto x = (text*)finfo.fn_addr(callInfo);
+        x = (text*)finfo.fn_addr(callInfo);
         Y_ENSURE(!callInfo->isnull);
-        Y_DEFER{
-            pfree(x);
-        };
 
         auto s = GetVarBuf(x);
         ui32 len = s.Size();

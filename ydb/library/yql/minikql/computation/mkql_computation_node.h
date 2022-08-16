@@ -266,7 +266,7 @@ using TStreamEmitter = std::function<void(NUdf::TUnboxedValue&&)>;
 struct TPatternWithEnv;
 
 struct TComputationPatternOpts {
-    TComputationPatternOpts(const std::shared_ptr<TInjectedAlloc>& cacheAlloc, const std::shared_ptr<TTypeEnvironment>& cacheEnv)
+    TComputationPatternOpts(std::shared_ptr<TInjectedAlloc> cacheAlloc, std::shared_ptr<TTypeEnvironment> cacheEnv)
         : CacheAlloc(std::move(cacheAlloc))
         , CacheTypeEnv(std::move(cacheEnv))
         , AllocState(CacheAlloc->InjectedState())

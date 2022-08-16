@@ -140,6 +140,21 @@ TString TContext::MakeName(const TString& name) {
     return str;
 }
 
+void TContext::PushCurrentBlocks(TBlocks* blocks) {
+    YQL_ENSURE(blocks);
+    CurrentBlocks.push_back(blocks);
+}
+
+void TContext::PopCurrentBlocks() {
+    YQL_ENSURE(!CurrentBlocks.empty());
+    CurrentBlocks.pop_back();
+}
+
+TBlocks& TContext::GetCurrentBlocks() const {
+    YQL_ENSURE(!CurrentBlocks.empty());
+    return *CurrentBlocks.back();
+}
+
 IOutputStream& TContext::Error(NYql::TIssueCode code) {
     return Error(Pos(), code);
 }

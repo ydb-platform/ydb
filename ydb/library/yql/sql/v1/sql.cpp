@@ -31,6 +31,7 @@
 
 #include <util/charset/wide.h>
 #include <util/generic/array_ref.h>
+#include <util/generic/scope.h>
 #include <util/generic/set.h>
 #include <util/generic/ylimits.h>
 #include <util/string/ascii.h>
@@ -4866,7 +4867,12 @@ TMaybe<TExprOrIdent> TSqlExpression::InAtomExpr(const TRule_in_atom_expr& node, 
                 return {};
             }
             Ctx.IncrementMonCounter("sql_features", "InSubquery");
-            result.Expr = BuildSelectResult(pos, std::move(source), false, Mode == NSQLTranslation::ESqlMode::SUBQUERY, Ctx.Scoped);
+            const auto alias = Ctx.MakeName("subquerynode");
+            const auto ref = Ctx.MakeName("subquery");
+            auto& blocks = Ctx.GetCurrentBlocks();
+            blocks.push_back(BuildSubquery(std::move(source), alias, Mode == NSQLTranslation::ESqlMode::SUBQUERY, -1, Ctx.Scoped));
+            blocks.back()->SetLabel(ref);
+            result.Expr = BuildSubqueryRef(blocks.back(), ref, -1);
             break;
         }
         case TRule_in_atom_expr::kAltInAtomExpr8: {
@@ -10160,6 +10166,10 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
 
     const auto& query = ast.GetRule_sql_query();
     TVector<TNodePtr> blocks;
+    Ctx.PushCurrentBlocks(&blocks);
+    Y_DEFER {
+        Ctx.PopCurrentBlocks();
+    };
     if (query.Alt_case() == TRule_sql_query::kAltSqlQuery1) {
         const auto& statements = query.GetAlt_sql_query1().GetRule_sql_stmt_list1();
         if (!Statement(blocks, statements.GetRule_sql_stmt2().GetRule_sql_stmt_core2())) {
@@ -10196,6 +10206,10 @@ TNodePtr TSqlQuery::Build(const TSQLv1ParserAST& ast) {
 
 bool TSqlTranslation::DefineActionOrSubqueryBody(TSqlQuery& query, TBlocks& blocks, const TRule_define_action_or_subquery_body& body) {
     if (body.HasBlock2()) {
+        Ctx.PushCurrentBlocks(&blocks);
+        Y_DEFER {
+            Ctx.PopCurrentBlocks();
+        };
         if (!query.Statement(blocks, body.GetBlock2().GetRule_sql_stmt_core1())) {
             return false;
         }

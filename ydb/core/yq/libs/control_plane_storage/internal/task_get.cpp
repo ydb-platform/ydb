@@ -173,6 +173,9 @@ TDuration ExtractLimit(const TTask& task) {
         case YandexQuery::Limits::TimeoutCase::kExecutionDeadline: {
             auto now = TInstant::Now();
             auto deadline = NProtoInterop::CastFromProto(limits.execution_deadline());
+            if (!deadline) {
+                break;
+            }
             if (deadline <= now) {
                 userExecutionLimit = TDuration::MilliSeconds(1);
             } else {

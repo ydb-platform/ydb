@@ -6,8 +6,33 @@
 # original buildsystem will not be accepted.
 
 
-if (APPLE)
-  include(CMakeLists.darwin.txt)
-elseif (UNIX AND NOT APPLE)
-  include(CMakeLists.linux.txt)
-endif()
+
+add_library(providers-s3-compressors)
+target_compile_options(providers-s3-compressors PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+target_include_directories(providers-s3-compressors PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/base/pcg-random
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/udfs/common/clickhouse/client/src
+)
+target_link_libraries(providers-s3-compressors PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-fmt
+  libs-poco-Util
+  libs-brotli-dec
+  contrib-libs-libbz2
+  contrib-libs-lz4
+  contrib-libs-lzma
+  contrib-libs-zstd
+)
+target_sources(providers-s3-compressors PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/brotli.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/bzip2.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/gz.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/factory.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/lz4io.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/zstd.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/s3/compressors/xz.cpp
+)

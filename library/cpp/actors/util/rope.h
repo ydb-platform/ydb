@@ -272,7 +272,7 @@ class TRope {
 
         template<typename T>
         TChunk(T&& backend, const IRopeChunkBackend::TData& data)
-            : Backend(std::move(backend))
+            : Backend(std::forward<T>(backend))
             , Begin(std::get<0>(data))
             , End(Begin + std::get<1>(data))
         {

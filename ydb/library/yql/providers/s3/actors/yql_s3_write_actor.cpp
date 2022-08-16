@@ -310,7 +310,12 @@ public:
         , MemoryLimit(memoryLimit)
         , MaxFileSize(maxFileSize)
         , Compression(compression)
-    {}
+    {
+        if (!RandomProvider) {
+            DefaultRandomProvider = CreateDefaultRandomProvider();
+            RandomProvider = DefaultRandomProvider.Get();
+        }
+    }
 
     void Bootstrap() {
         Become(&TS3WriteActor::StateFunc);
@@ -343,11 +348,8 @@ private:
     }
 
     TString MakeSuffix() const {
-        if (RandomProvider) {
-            const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
-            return Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
-        }
-        return "";
+        const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
+        return Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
     }
 
     STRICT_STFUNC(StateFunc,
@@ -397,7 +399,8 @@ private:
 
     const IHTTPGateway::TPtr Gateway;
     const NYdb::TCredentialsProviderPtr CredProvider;
-    IRandomProvider *const RandomProvider;
+    IRandomProvider * RandomProvider;
+    TIntrusivePtr<IRandomProvider> DefaultRandomProvider;
 
     const ui64 OutputIndex;
     IDqComputeActorAsyncOutput::ICallbacks *const Callbacks;

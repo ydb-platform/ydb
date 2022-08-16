@@ -322,7 +322,7 @@ const TStructExprType* GetDqJoinResultType(TPositionHandle pos, const TStructExp
         for (const auto& it : type) {
             for (const auto& it2 : it.second) {
                 auto memberName = FullColumnName(it.first, it2.first);
-                if (makeOptional && it2.second->GetKind() != ETypeAnnotationKind::Optional) {
+                if (makeOptional && !it2.second->IsOptionalOrNull()) {
                     result->emplace_back(ctx.MakeType<TItemExprType>(memberName, ctx.MakeType<TOptionalExprType>(it2.second)));
                 } else {
                     result->emplace_back(ctx.MakeType<TItemExprType>(memberName, it2.second));

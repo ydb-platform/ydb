@@ -1328,13 +1328,12 @@ message TEvControllerNodeReport {
         WIPED = 2;
         DESTROYED = 3;
         OPERATION_ERROR = 4;
-        DROP_DONOR = 5;
+        reserved 5;
     }
     message TVDiskReport {
         optional NKikimrBlobStorage.TVSlotId VSlotId = 1;
         optional NKikimrBlobStorage.TVDiskID VDiskId = 2;
         optional EVDiskPhase Phase = 3;
-        optional NKikimrBlobStorage.TVDiskID OtherVDiskId = 4;
     }
 
     optional uint32 NodeId = 1;

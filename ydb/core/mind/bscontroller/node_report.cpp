@@ -25,8 +25,6 @@ public:
         State.emplace(*Self, Self->HostRecords, TActivationContext::Now());
         State->CheckConsistency();
 
-        std::vector<TVSlotId> droppedDonorVSlotIds;
-
         NIceDb::TNiceDb db(txc.DB);
         const auto& record = Event->Get()->Record;
 
@@ -71,18 +69,6 @@ public:
                             break;
                         case TMood::Donor:
                             break;
-                    }
-                    break;
-
-                case NKikimrBlobStorage::TEvControllerNodeReport::DROP_DONOR:
-                    for (const auto& [donorVSlotId, donorVDiskId] : slot->Donors) {
-                        if (donorVDiskId == VDiskIDFromVDiskID(report.GetOtherVDiskId())) {
-                            if (const TVSlotInfo *vslot = State->VSlots.Find(donorVSlotId); vslot && !vslot->IsBeingDeleted()) {
-                                Y_VERIFY(vslot->Mood == TMood::Donor);
-                                State->DestroyVSlot(vslot->VSlotId);
-                            }
-                            break;
-                        }
                     }
                     break;
             }

@@ -396,7 +396,12 @@ void EncodeValue(TType* type, const NUdf::TUnboxedValue& value, TVector<ui8>& ou
 
     case TType::EKind::Pg: {
         auto pgType = static_cast<TPgType*>(type);
-        EncodePresortPGValue(pgType, value, output);
+        auto hasValue = (bool)value;
+        EncodeBool<false>(output, hasValue);
+        if (hasValue) {
+            EncodePresortPGValue(pgType, value, output);
+        }
+
         break;
     }
 
@@ -422,6 +427,11 @@ NUdf::TUnboxedValue DecodeImpl(TType* type, TStringBuf& input, const THolderFact
     }
     case TType::EKind::Pg: {
         auto pgType = static_cast<TPgType*>(type);
+        auto hasValue = DecodeBool<false>(input);
+        if (!hasValue) {
+            return NUdf::TUnboxedValue();
+        }
+
         return DecodePresortPGValue(pgType, input, buffer);
     }
 

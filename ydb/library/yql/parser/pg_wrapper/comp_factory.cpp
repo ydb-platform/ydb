@@ -858,7 +858,7 @@ public:
             };
 
             bool* nulls = (bool*)MKQLAllocWithSize(nitems);
-            Y_DEFER{
+            Y_DEFER {
                 MKQLFreeWithSize(nulls, nitems);
             };
 
@@ -924,7 +924,7 @@ private:
         NullableDatum argDatum = { datum, false };
         if (ConvertArgToCString) {
             argDatum.value = (Datum)MakeCString(GetVarBuf((const text*)argDatum.value));
-            Y_DEFER{
+            Y_DEFER {
                 pfree((void*)argDatum.value);
             };
         }

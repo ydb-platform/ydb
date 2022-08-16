@@ -307,6 +307,11 @@ bool TDatabase::HasOpenTx(ui32 table, ui64 txId) const
     return Require(table)->HasOpenTx(txId);
 }
 
+bool TDatabase::HasTxData(ui32 table, ui64 txId) const
+{
+    return Require(table)->HasTxData(txId);
+}
+
 bool TDatabase::HasCommittedTx(ui32 table, ui64 txId) const
 {
     return Require(table)->HasCommittedTx(txId);

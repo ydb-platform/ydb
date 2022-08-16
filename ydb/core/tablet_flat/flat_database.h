@@ -118,6 +118,7 @@ public:
      * Returns true when table has an open transaction that is not committed or removed yet
      */
     bool HasOpenTx(ui32 table, ui64 txId) const;
+    bool HasTxData(ui32 table, ui64 txId) const;
     bool HasCommittedTx(ui32 table, ui64 txId) const;
     bool HasRemovedTx(ui32 table, ui64 txId) const;
 

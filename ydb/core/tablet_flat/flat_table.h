@@ -163,6 +163,7 @@ public:
      * Returns true when table has an open transaction that is not committed or removed yet
      */
     bool HasOpenTx(ui64 txId) const;
+    bool HasTxData(ui64 txId) const;
     bool HasCommittedTx(ui64 txId) const;
     bool HasRemovedTx(ui64 txId) const;
 
@@ -315,14 +316,7 @@ private:
     void RemoveStat(const TPartView& partView);
 
 private:
-    struct TOpenTransaction {
-        THashSet<TIntrusiveConstPtr<TMemTable>> Mem;
-        THashSet<TIntrusiveConstPtr<TPart>> Parts;
-    };
-
-    using TOpenTransactions = THashMap<ui64, TOpenTransaction>;
-
-    TOpenTransaction& AddOpenTransaction(ui64 txId);
+    void AddTxRef(ui64 txId);
 
 private:
     TEpoch Epoch; /* Monotonic table change number, with holes */
@@ -343,19 +337,14 @@ private:
 
     TRowVersionRanges RemovedRowVersions;
 
+    THashMap<ui64, size_t> TxRefs;
     THashSet<ui64> CheckTransactions;
-    TOpenTransactions OpenTransactions;
     TTransactionMap CommittedTransactions;
     TTransactionSet RemovedTransactions;
 
 private:
-    struct TRollbackRemoveOpenTx {
+    struct TRollbackRemoveTxRef {
         ui64 TxId;
-    };
-
-    struct TRollbackRemoveOpenTxMem {
-        ui64 TxId;
-        TIntrusiveConstPtr<TMemTable> Mem;
     };
 
     struct TRollbackAddCommittedTx {
@@ -376,8 +365,7 @@ private:
     };
 
     using TRollbackOp = std::variant<
-        TRollbackRemoveOpenTx,
-        TRollbackRemoveOpenTxMem,
+        TRollbackRemoveTxRef,
         TRollbackAddCommittedTx,
         TRollbackRemoveCommittedTx,
         TRollbackAddRemovedTx,

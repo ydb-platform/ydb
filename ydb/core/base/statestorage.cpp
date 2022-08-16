@@ -203,6 +203,8 @@ static void CopyStateStorageRingInfo(
 
             const NKikimrConfig::TDomainsConfig::TStateStorage::TRing &ring = source.GetRing(iring);
             info->Rings[iring].UseRingSpecificNodeSelection = ring.GetUseRingSpecificNodeSelection();
+            info->Rings[iring].IsDisabled = ring.GetIsDisabled();
+
             if (ring.GetUseSingleNodeActorId()) {
                 Y_VERIFY(ring.NodeSize() == 1);
 
@@ -246,7 +248,13 @@ static void CopyStateStorageRingInfo(
 TIntrusivePtr<TStateStorageInfo> BuildStateStorageInfo(char (&namePrefix)[TActorId::MaxServiceIDLength], const NKikimrConfig::TDomainsConfig::TStateStorage& config) {
     TIntrusivePtr<TStateStorageInfo> info = new TStateStorageInfo();
     info->StateStorageGroup = config.GetSSId();
-
+    info->StateStorageVersion = config.GetStateStorageVersion();
+    
+    info->CompatibleVersions.reserve(config.CompatibleVersionsSize());
+    for (ui32 version : config.GetCompatibleVersions()) {
+            info->CompatibleVersions.push_back(version);
+    }
+    
     const size_t offset = FindIndex(namePrefix, char());
     Y_VERIFY(offset != NPOS && (offset + sizeof(ui32)) < TActorId::MaxServiceIDLength);
 

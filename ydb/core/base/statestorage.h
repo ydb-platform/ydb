@@ -476,6 +476,7 @@ struct TStateStorageInfo : public TThrRefBase {
     };
 
     struct TRing {
+        bool IsDisabled;
         bool UseRingSpecificNodeSelection;
         TVector<TActorId> Replicas;
 
@@ -486,6 +487,9 @@ struct TStateStorageInfo : public TThrRefBase {
     ui32 StateStorageGroup;
     ui32 NToSelect;
     TVector<TRing> Rings;
+
+    ui32 StateStorageVersion;
+    TVector<ui32> CompatibleVersions;
 
     void SelectReplicas(ui64 tabletId, TSelection *selection) const;
     TList<TActorId> SelectAllReplicas() const;

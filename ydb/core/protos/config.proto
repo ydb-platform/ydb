@@ -163,10 +163,13 @@ message TDomainsConfig {
             repeated uint32 Node = 3;
             optional bool UseSingleNodeActorId = 4;
             optional bool UseRingSpecificNodeSelection = 5;
+            optional bool IsDisabled = 6 [default = false]; // used in the intermediate reconfiguration step
         }
 
         optional uint32 SSId = 1;
         optional TRing Ring = 2;
+        optional uint32 StateStorageVersion = 3 [default = 0];
+        repeated uint32 CompatibleVersions = 4;
     }
 
     message TStoragePoolType {

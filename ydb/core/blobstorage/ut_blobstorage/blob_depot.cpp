@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
     TMersenne<ui64> mt64(0xdeadf00d);
     const ui64 BLOB_DEPOT_TABLET_ID = MakeTabletID(1, 0, 0x10000);
 
-    void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot, ui32& blobDepotGroup, ui32 nodeCount = 8, 
+    void ConfigureEnvironment(ui32 numGroups, std::unique_ptr<TEnvironmentSetup>& envPtr, std::vector<ui32>& regularGroups, ui32& blobDepot, ui32 nodeCount = 8, 
             TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3of4) {
         envPtr = std::make_unique<TEnvironmentSetup>(TEnvironmentSetup::TSettings{
             .NodeCount = nodeCount,
@@ -25,15 +25,10 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             .SetupHive = true,
         });
 
-        envPtr->CreateBoxAndPool(1, numGroups + 1);
+        envPtr->CreateBoxAndPool(1, numGroups);
         envPtr->Sim(TDuration::Seconds(20));
 
-        std::vector<ui32> allGroups = envPtr->GetGroups();
-
-        blobDepotGroup = allGroups.back();
-        allGroups.pop_back();
-
-        regularGroups = allGroups;
+        regularGroups = envPtr->GetGroups();
 
         NKikimrBlobStorage::TConfigRequest request;
         TString virtualPool = "virtual_pool";
@@ -60,10 +55,30 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
 
         auto response = envPtr->Invoke(request);
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
-
         blobDepot = response.GetStatus(1).GetGroupId(0);
 
         envPtr->Sim(TDuration::Seconds(5)); // some time for blob depot to crank up
+    }
+
+    void DecommitGroup(TEnvironmentSetup& env, ui32 groupId) {
+        TString blobDepotPool = "decommit_blob_depot_pool";
+        ui32 blobDepotPoolId = 42;
+        env.CreatePoolInBox(1, blobDepotPoolId, blobDepotPool);
+        NKikimrBlobStorage::TConfigRequest request;
+
+        auto *cmd = request.AddCommand()->MutableDecommitGroups();
+        cmd->AddGroupIds(groupId);
+        cmd->SetHiveId(env.Runtime->GetAppData()->DomainsInfo->HivesByHiveUid.begin()->second);
+        auto *prof = cmd->AddChannelProfiles();
+        prof->SetStoragePoolName(blobDepotPool);
+        prof->SetCount(2);
+        prof = cmd->AddChannelProfiles();
+        prof->SetStoragePoolName(blobDepotPool);
+        prof->SetChannelKind(NKikimrBlobDepot::TChannelKind::Data);
+        prof->SetCount(2);
+
+        auto response = env.Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
     TString DataGen(ui32 len) {
@@ -191,6 +206,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         blobs.push_back(TBlobInfo(DataGen(100), tabletId, 1, 2));
         blobs.push_back(TBlobInfo(DataGen(100), tabletId, 1, 3));
         blobs.push_back(TBlobInfo(DataGen(200), tabletId, 1, 4));
+        blobs.push_back(TBlobInfo(DataGen(200), tabletId, 2, 4, 1));
 
         VerifiedDiscover(env, 1, groupId, tabletId, 0, false, false, 0, true, blobs, state);
         VerifiedDiscover(env, 1, groupId, tabletId, 1, false, false, 0, true, blobs, state);
@@ -534,62 +550,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
     }
 
-    Y_UNIT_TEST(BasicPutAndGet) {
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-        
-        TestBasicPutAndGet(*envPtr, 1, regularGroups[0]);
-        TestBasicPutAndGet(*envPtr, 11, blobDepot);
-    }
-
-    Y_UNIT_TEST(BasicRange) {
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-        
-        TestBasicRange(*envPtr, 1, regularGroups[0]);
-        TestBasicRange(*envPtr, 100, blobDepot);
-    }
-
-    Y_UNIT_TEST(BasicDiscover) {
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-        
-        TestBasicDiscover(*envPtr, 1000, regularGroups[0]);
-        TestBasicDiscover(*envPtr, 100, blobDepot);
-    }
-
-    Y_UNIT_TEST(BasicBlock) {
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-        
-        TestBasicBlock(*envPtr, 15, regularGroups[0]);
-        TestBasicBlock(*envPtr, 100, blobDepot);
-    }
-
-    Y_UNIT_TEST(BasicCollectGarbage) {
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-        
-        TestBasicCollectGarbage(*envPtr, 15, regularGroups[0]);
-        TestBasicCollectGarbage(*envPtr, 100, blobDepot);
-    }
-
-    Y_UNIT_TEST(Random) {
+    void TestVerifiedRandom(TEnvironmentSetup& env, ui32 nodeCount, ui64 tabletId0, ui32 groupId, ui32 iterationsNum, ui32 decommitStep = 1e9) {
         enum EActions {
             ALTER = 0,
             PUT,
@@ -602,23 +563,10 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             COLLECT_GARBAGE_SOFT,
             RESTART_BLOB_DEPOT,
         };
-        std::vector<ui32> probs = { 10, 10, 3, 3, 2, 1, 1, 3, 3, 1};
+        std::vector<ui32> probs = { 10, 10, 3, 3, 2, 1, 1, 3, 3, 1 };
         TIntervals act(probs);
 
-        ui32 iterationsNum = 1000;
-        ui32 nodeCount = 8;
-
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-        TEnvironmentSetup& env = *envPtr;
-
-        ui32 groupId = blobDepot;
-        // ui32 groupId = regularGroups[0];
-
-        std::vector<ui32> tablets = {10, 11, 12};
+        std::vector<ui64> tablets = {tabletId0, tabletId0 + 1, tabletId0 + 2};
         std::vector<ui32> tabletGen = {1, 1, 1};
         std::vector<ui32> tabletStep = {1, 1, 1};
         std::vector<ui32> channels = {0, 1, 2};
@@ -635,6 +583,10 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         ui32 perGenCtr = 0;
 
         for (ui32 iteration = 0; iteration < iterationsNum; ++iteration) {
+            if (iteration == decommitStep) {
+                DecommitGroup(env, groupId);
+                continue;
+            }
             ui32 tablet = Rand(tablets.size());
             ui32 tabletId = tablets[tablet];
             ui32 channel = Rand(channels);
@@ -835,7 +787,7 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
     }
 
-    Y_UNIT_TEST(LoadPutAndRead) {
+    void TestLoadPutAndGet(TEnvironmentSetup& env, ui64 tabletId, ui32 groupId, ui32 blobsNum, ui32 maxBlobSize, ui32 readsNum, bool decommit = false) {
         enum EActions {
             GET,
             MULTIGET,
@@ -844,29 +796,13 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
             CATCH_ALL,
             RESTART_BLOB_DEPOT,
         };
-        std::vector<ui32> probs = { 5, 1, 5, 5, 1, 1};
+        std::vector<ui32> probs = { 5, 1, 5, 5, 1, 1 };
         TIntervals act(probs);
 
-        std::unique_ptr<TEnvironmentSetup> envPtr;
-        std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
-        ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
-
-        TEnvironmentSetup& env = *envPtr;
-
-        ui32 groupId = blobDepot;
-        // ui32 groupId = regularGroups[0];
-        ui64 tabletId = 1;
-        
         std::vector<TBlobInfo> blobs;
         std::map<TLogoBlobID, TBlobInfo*> mappedBlobs;
         TBSState state;
         state[tabletId];
-
-        ui32 blobsNum = 1 << 10;
-        ui32 maxBlobSize = 1 << 15;
-        ui32 readsNum = 500;
 
         TActorId edge = env.Runtime->AllocateEdgeActor(1);
 
@@ -895,6 +831,10 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
                 UNIT_FAIL("Put nonexistent blob");
             }
             VerifyTEvPutResult(res.Release(), *it->second, state);
+        }
+
+        if (decommit) {
+            DecommitGroup(env, groupId);
         }
 
         for (ui32 iteration = 0; iteration < readsNum; ++iteration) {
@@ -1028,48 +968,130 @@ Y_UNIT_TEST_SUITE(BlobDepot) {
         }
     }
 
+    Y_UNIT_TEST(BasicPutAndGet) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestBasicPutAndGet(*envPtr, 1, regularGroups[0]);
+        TestBasicPutAndGet(*envPtr, 11, blobDepot);
+    }
+
+    Y_UNIT_TEST(BasicRange) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestBasicRange(*envPtr, 1, regularGroups[0]);
+        TestBasicRange(*envPtr, 100, blobDepot);
+    }
+
+    Y_UNIT_TEST(BasicDiscover) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestBasicDiscover(*envPtr, 1000, regularGroups[0]);
+        TestBasicDiscover(*envPtr, 100, blobDepot);
+    }
+
+    Y_UNIT_TEST(BasicBlock) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestBasicBlock(*envPtr, 15, regularGroups[0]);
+        TestBasicBlock(*envPtr, 100, blobDepot);
+    }
+
+    Y_UNIT_TEST(BasicCollectGarbage) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestBasicCollectGarbage(*envPtr, 15, regularGroups[0]);
+        TestBasicCollectGarbage(*envPtr, 100, blobDepot);
+    }
+
+    Y_UNIT_TEST(VerifiedRandom) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        // TestVerifiedRandom(*envPtr, 8, 15, regularGroups[0], 1000);
+        TestVerifiedRandom(*envPtr, 8, 100, blobDepot, 1000);
+    }
+
+    Y_UNIT_TEST(LoadPutAndRead) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        // TestLoadPutAndGet(*envPtr, 100, blobDepot, 1 << 10, 1 << 15, 500);
+        TestLoadPutAndGet(*envPtr, 100, blobDepot, 1 << 10, 1 << 15, 500);
+    }
+
+    Y_UNIT_TEST(DecommitPutAndRead) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestLoadPutAndGet(*envPtr, 15, regularGroups[0], 1 << 10, 1 << 15, 500, true);
+    }
+
+    Y_UNIT_TEST(DecommitVerifiedRandom) {
+        std::unique_ptr<TEnvironmentSetup> envPtr;
+        std::vector<ui32> regularGroups;
+        ui32 blobDepot;
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        
+        TestVerifiedRandom(*envPtr, 8, 15, regularGroups[0], 1000, 499);
+    }
+
     Y_UNIT_TEST(RestoreGet) {
         std::unique_ptr<TEnvironmentSetup> envPtr;
         std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
         ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
         TEnvironmentSetup& env = *envPtr;
 
         auto vdisksRegular = env.GetGroupInfo(regularGroups[0])->GetDynamicInfo().ServiceIdForOrderNumber;
-        auto vdisksBlobDepot = env.GetGroupInfo(blobDepotGroup)->GetDynamicInfo().ServiceIdForOrderNumber;
         
         TestRestoreGet(*envPtr, 15, regularGroups[0], 10, &vdisksRegular);
-        TestRestoreGet(*envPtr, 100, blobDepot, 10, &vdisksBlobDepot);
+        // TestRestoreGet(*envPtr, 100, blobDepot, 10, &vdisksBlobDepot);
     }
 
     Y_UNIT_TEST(RestoreDiscover) {
         std::unique_ptr<TEnvironmentSetup> envPtr;
         std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
         ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
         TEnvironmentSetup& env = *envPtr;
 
         auto vdisksRegular = env.GetGroupInfo(regularGroups[0])->GetDynamicInfo().ServiceIdForOrderNumber;
-        auto vdisksBlobDepot = env.GetGroupInfo(blobDepotGroup)->GetDynamicInfo().ServiceIdForOrderNumber;
         
         TestRestoreDiscover(*envPtr, 15, regularGroups[0], 10, &vdisksRegular);
-        TestRestoreDiscover(*envPtr, 100, blobDepot, 10, &vdisksBlobDepot);
+        // TestRestoreDiscover(*envPtr, 100, blobDepot, 10, &vdisksBlobDepot);
     }
 
     Y_UNIT_TEST(RestoreRange) {
         std::unique_ptr<TEnvironmentSetup> envPtr;
         std::vector<ui32> regularGroups;
-        ui32 blobDepotGroup;
         ui32 blobDepot;
-        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, blobDepotGroup, 8, TBlobStorageGroupType::Erasure4Plus2Block);
+        ConfigureEnvironment(1, envPtr, regularGroups, blobDepot, 8, TBlobStorageGroupType::Erasure4Plus2Block);
         TEnvironmentSetup& env = *envPtr;
 
         auto vdisksRegular = env.GetGroupInfo(regularGroups[0])->GetDynamicInfo().ServiceIdForOrderNumber;
-        auto vdisksBlobDepot = env.GetGroupInfo(blobDepotGroup)->GetDynamicInfo().ServiceIdForOrderNumber;
         
         TestRestoreRange(*envPtr, 15, regularGroups[0], 5, &vdisksRegular);
-        TestRestoreRange(*envPtr, 100, blobDepot, 10, &vdisksBlobDepot);
+        // TestRestoreRange(*envPtr, 100, blobDepot, 10, &vdisksBlobDepot);
     }
 }

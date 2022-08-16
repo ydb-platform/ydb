@@ -376,6 +376,26 @@ struct TEnvironmentSetup {
         UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
     }
 
+    void CreatePoolInBox(ui32 boxId, ui32 poolId, TString poolName) {
+        NKikimrBlobStorage::TConfigRequest request;
+
+        auto *cmd = request.AddCommand()->MutableDefineStoragePool();
+        cmd->SetBoxId(boxId);
+        cmd->SetStoragePoolId(poolId);
+        cmd->SetName(poolName);
+        cmd->SetKind(poolName);
+        cmd->SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(Settings.Erasure.GetErasure()));
+        cmd->SetVDiskKind("Default");
+        cmd->SetNumGroups(1);
+        cmd->AddPDiskFilter()->AddProperty()->SetType(NKikimrBlobStorage::EPDiskType::ROT);
+        if (Settings.Encryption) {
+            cmd->SetEncryptionMode(TBlobStorageGroupInfo::EEncryptionMode::EEM_ENC_V1);
+        }
+
+        auto response = Invoke(request);
+        UNIT_ASSERT_C(response.GetSuccess(), response.GetErrorDescription());
+    }
+
     std::vector<ui32> GetGroups() {
         const TActorId& edge = Runtime->AllocateEdgeActor(Settings.ControllerNodeId, __FILE__, __LINE__);
         auto ev = std::make_unique<TEvBlobStorage::TEvControllerSelectGroups>();

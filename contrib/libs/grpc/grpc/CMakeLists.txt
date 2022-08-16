@@ -41,13 +41,14 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   contrib-libs-re2
   contrib-libs-xxhash
   ZLIB::ZLIB
+  abseil-cpp-tstring-y_absl-functional
   abseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-meta
   abseil-cpp-tstring-y_absl-status
   abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-synchronization
-  abseil-cpp-tstring-y_absl-utility
   abseil-cpp-tstring-y_absl-time
+  abseil-cpp-tstring-y_absl-utility
   library-cpp-resource
 )
 target_sources(libs-grpc-grpc PRIVATE

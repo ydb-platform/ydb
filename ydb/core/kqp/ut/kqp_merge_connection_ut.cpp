@@ -77,7 +77,7 @@ void CheckPlanForMergeCn(const TMaybe<TString>& planJson, bool hasChildSort, con
     NJson::TJsonValue plan;
     NJson::ReadJsonTree(*planJson, &plan, /* throwOnError */ true);
 
-    auto mergeCn = FindPlanNodeByKv(plan, "Node Type", "DqCnMerge");
+    auto mergeCn = FindPlanNodeByKv(plan, "Node Type", "Merge");
     UNIT_ASSERT(mergeCn.IsDefined());
 
     auto childSort = FindPlanNodeByKv(mergeCn, "Name", sortOp);
@@ -90,7 +90,7 @@ void CheckPlanForMergeCn(const TMaybe<TString>& planJson, bool hasChildSort, con
     // Check that TopSort has no Merge Connection in children
     auto topSort = FindPlanNodeByKv(plan, "Name", sortOp);
     if (topSort.IsDefined()) {
-        mergeCn = FindPlanNodeByKv(topSort, "Node Type", "DqCnMerge");
+        mergeCn = FindPlanNodeByKv(topSort, "Node Type", "Merge");
         UNIT_ASSERT(!mergeCn.IsDefined());
     }
 }

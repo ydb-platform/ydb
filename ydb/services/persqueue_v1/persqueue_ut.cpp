@@ -241,6 +241,18 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(resp.assigned().partition() == 0);
 
             assignId = resp.assigned().assign_id();
+
+            req.Clear();
+            req.mutable_start_read()->mutable_topic()->set_path("acc/topic1");
+            req.mutable_start_read()->set_cluster("dc1");
+            req.mutable_start_read()->set_partition(0);
+            req.mutable_start_read()->set_assign_id(354235); // invalid id should receive no reaction
+
+            req.mutable_start_read()->set_read_offset(10);
+            UNIT_ASSERT_C(readStream->Write(req), "write fail");
+
+            Sleep(TDuration::MilliSeconds(100));
+
             req.Clear();
             req.mutable_start_read()->mutable_topic()->set_path("acc/topic1");
             req.mutable_start_read()->set_cluster("dc1");
@@ -408,6 +420,16 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT((partition_ids == TVector<i64>{0, 1}));
 
             assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            req.Clear();
+
+            // invalid id should receive no reaction
+            req.mutable_start_partition_session_response()->set_partition_session_id(1124134);
+
+            UNIT_ASSERT_C(readStream->Write(req), "write fail");
+
+            Sleep(TDuration::MilliSeconds(100));
+
             req.Clear();
             req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
 

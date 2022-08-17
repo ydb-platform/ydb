@@ -295,15 +295,15 @@ struct TEvPQProxy {
     };
 
     struct TEvStartRead : public NActors::TEventLocal<TEvStartRead, EvStartRead> {
-        TEvStartRead(const TPartitionId& partition, ui64 readOffset, ui64 commitOffset, bool verifyReadOffset)
-            : Partition(partition)
+        TEvStartRead(ui64 id, ui64 readOffset, ui64 commitOffset, bool verifyReadOffset)
+            : AssignId(id)
             , ReadOffset(readOffset)
             , CommitOffset(commitOffset)
             , VerifyReadOffset(verifyReadOffset)
             , Generation(0)
         { }
 
-        const TPartitionId Partition;
+        const ui64 AssignId;
         ui64 ReadOffset;
         ui64 CommitOffset;
         bool VerifyReadOffset;
@@ -311,19 +311,19 @@ struct TEvPQProxy {
     };
 
     struct TEvReleased : public NActors::TEventLocal<TEvReleased, EvReleased> {
-        TEvReleased(const TPartitionId& partition)
-            : Partition(partition)
+        TEvReleased(ui64 id)
+            : AssignId(id)
         { }
 
-        const TPartitionId Partition;
+        const ui64 AssignId;
     };
 
     struct TEvGetStatus : public NActors::TEventLocal<TEvGetStatus, EvGetStatus> {
-        TEvGetStatus(const TPartitionId& partition)
-            : Partition(partition)
+        TEvGetStatus(ui64 id)
+            : AssignId(id)
         { }
 
-        const TPartitionId Partition;
+        const ui64 AssignId;
     };
 
 

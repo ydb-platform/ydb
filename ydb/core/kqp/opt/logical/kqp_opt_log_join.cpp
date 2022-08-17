@@ -386,14 +386,18 @@ TMaybeNode<TExprBase> KqpJoinToIndexLookupImpl(const TDqJoin& join, TExprContext
             .Build()
         .Done();
 
-    rightReadMatch->ExtractMembers = {}; // We already fetching only required columns
+    auto lookupColumns = read.Columns();
+    if (rightReadMatch->ExtractMembers) {
+        lookupColumns = rightReadMatch->ExtractMembers.Cast().Members();
+    }
+
     lookup = rightReadMatch->BuildProcessNodes(lookup, ctx);
 
     if (join.JoinType().Value() == "RightSemi") {
         auto arg = TCoArgument(ctx.NewArgument(join.Pos(), "row"));
         auto rightLabel = join.RightLabel().Cast<TCoAtom>().Value();
 
-        TVector<TExprBase> renames = CreateRenames(rightReadMatch->FlatMap, read.Columns(), arg, rightLabel,
+        TVector<TExprBase> renames = CreateRenames(rightReadMatch->FlatMap, lookupColumns, arg, rightLabel,
             join.Pos(), ctx);
 
         lookup = Build<TCoMap>(ctx, join.Pos())

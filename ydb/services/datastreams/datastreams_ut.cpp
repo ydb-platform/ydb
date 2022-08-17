@@ -477,6 +477,13 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                                          "put_events");
                             });
         UNIT_ASSERT_VALUES_EQUAL(putUnitsSchemaFound, 20);
+
+        NYdb::NPersQueue::TPersQueueClient pqClient(*testServer.Driver);
+        {
+            auto res = pqClient.DropTopic(streamName);
+            res.Wait();
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+        }
     }
 
     Y_UNIT_TEST(TestNonChargeableUser) {

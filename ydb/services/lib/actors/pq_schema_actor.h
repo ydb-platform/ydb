@@ -106,6 +106,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             return path;
         }
 
+        const TMaybe<TString>& GetCdcStreamName() const {
+            return CdcStreamName;
+        }
+
     protected:
         // TDerived must implement FillProposeRequest(TEvProposeTransaction&, const TActorContext& ctx, TString workingDir, TString name);
         void SendProposeRequest(const NActors::TActorContext &ctx) {
@@ -200,6 +204,11 @@ namespace NKikimr::NGRpcProxy::V1 {
                         if (static_cast<TDerived*>(this)->IsCdcStreamCompatible()) {
                             Y_VERIFY(response.ListNodeEntry->Children.size() == 1);
                             PrivateTopicName = response.ListNodeEntry->Children.at(0).Name;
+
+                            if (response.Self) {
+                                CdcStreamName = response.Self->Info.GetName();
+                            }
+
                             return SendDescribeProposeRequest(ctx);
                         }
                     }
@@ -302,6 +311,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         bool IsDead = false;
         const TString TopicPath;
         TMaybe<TString> PrivateTopicName;
+        TMaybe<TString> CdcStreamName;
     };
 
     //-----------------------------------------------------------------------------------

@@ -880,18 +880,26 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 auto ev = reader->GetEvent(true);
                 UNIT_ASSERT(ev);
 
+                TPartitionStream::TPtr pStream;
                 if (auto* data = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                    pStream = data->GetPartitionStream();
                     for (const auto& item : data->GetMessages()) {
                         const auto& record = records.at(reads++);
                         UNIT_ASSERT_VALUES_EQUAL(record, item.GetData());
                         UNIT_ASSERT_VALUES_EQUAL(CalcPartitionKey(record), item.GetPartitionKey());
                     }
                 } else if (auto* create = std::get_if<TReadSessionEvent::TCreatePartitionStreamEvent>(&*ev)) {
+                    pStream = create->GetPartitionStream();
                     create->Confirm();
                 } else if (auto* destroy = std::get_if<TReadSessionEvent::TDestroyPartitionStreamEvent>(&*ev)) {
+                    pStream = destroy->GetPartitionStream();
                     destroy->Confirm();
                 } else if (std::get_if<TSessionClosedEvent>(&*ev)) {
                     break;
+                }
+
+                if (pStream) {
+                    UNIT_ASSERT_VALUES_EQUAL(pStream->GetTopicPath(), "/Root/Table/Stream");
                 }
             }
 
@@ -1127,6 +1135,14 @@ Y_UNIT_TEST_SUITE(Cdc) {
     }
 
     // Yds specific
+    Y_UNIT_TEST(DescribeStream) {
+        TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+
+        auto res = env.GetClient().DescribeStream("/Root/Table/Stream").ExtractValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(res.GetResult().stream_description().stream_name(), "/Root/Table/Stream");
+    }
+
     Y_UNIT_TEST(UpdateStream) {
         TTestYdsEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
 

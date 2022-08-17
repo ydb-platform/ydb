@@ -100,7 +100,9 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
         return false;
     }
     topicsIter->second.FullConverter = topicsIter->second.DiscoveryConverter->UpgradeToFullConverter(
-            pqDescr.GetPQTabletConfig(), AppData(ctx)->PQConfig.GetTestDatabaseRoot()
+        pqDescr.GetPQTabletConfig(),
+        AppData(ctx)->PQConfig.GetTestDatabaseRoot(),
+        topicsIter->second.CdcStreamPath
     );
     Y_VERIFY(topicsIter->second.FullConverter->IsValid());
     return CheckTopicACL(entry, topicsIter->first, ctx);
@@ -122,7 +124,10 @@ void TReadInitAndAuthActor::HandleTopicsDescribeResponse(TEvDescribeTopicsRespon
             Y_VERIFY(entry.ListNodeEntry->Children.size() == 1);
             const auto& topic = entry.ListNodeEntry->Children.at(0);
 
+            // primary path used to re-describe
             it->second.DiscoveryConverter->SetPrimaryPath(JoinPath(ChildPath(entry.Path, topic.Name)));
+            it->second.CdcStreamPath = CanonizePath(entry.Path);
+
 //            Topics[it->second.DiscoveryConverter->GetInternalName()] = it->second;
 //            Topics.erase(it);
 

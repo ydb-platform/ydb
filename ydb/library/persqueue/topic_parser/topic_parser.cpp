@@ -244,10 +244,13 @@ void TDiscoveryConverter::BuildForFederation(const TStringBuf& databaseBuf, TStr
 }
 
 TTopicConverterPtr TDiscoveryConverter::UpgradeToFullConverter(
-        const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& ydbDatabaseRootOverride
+        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+        const TString& ydbDatabaseRootOverride,
+        const TMaybe<TString>& clientsideNameOverride
 ) {
     Y_VERIFY_S(Valid, Reason.c_str());
-    auto* res = new TTopicNameConverter(FstClass, PQPrefix, pqTabletConfig, ydbDatabaseRootOverride);
+    auto* res = new TTopicNameConverter(FstClass, PQPrefix, pqTabletConfig,
+        ydbDatabaseRootOverride, clientsideNameOverride);
     return TTopicConverterPtr(res);
 }
 
@@ -672,12 +675,16 @@ TTopicConverterPtr TTopicNameConverter::ForFederation(
 TTopicNameConverter::TTopicNameConverter(
         bool firstClass, const TString& pqPrefix,
         const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
-        const TString& ydbDatabaseRootOverride
+        const TString& ydbDatabaseRootOverride,
+        const TMaybe<TString>& clientsideNameOverride
 )
     : TDiscoveryConverter(firstClass, pqPrefix, pqTabletConfig, ydbDatabaseRootOverride)
 {
     if (Valid) {
         BuildInternals(pqTabletConfig);
+        if (clientsideNameOverride) {
+            ClientsideName = *clientsideNameOverride;
+        }
     }
 }
 

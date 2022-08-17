@@ -42,7 +42,7 @@ public:
 
 
 class TPQDescribeTopicActor : public TPQGrpcSchemaBase<TPQDescribeTopicActor, NKikimr::NGRpcService::TEvPQDescribeTopicRequest>
-                          , public TCdcStreamCompatible
+                            , public TCdcStreamCompatible
 {
 using TBase = TPQGrpcSchemaBase<TPQDescribeTopicActor, TEvPQDescribeTopicRequest>;
 

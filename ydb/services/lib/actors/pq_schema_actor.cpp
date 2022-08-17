@@ -502,8 +502,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             config->SetIdent(converter->GetLegacyProducer());
         }
 
-        config->SetTopicName(name);
-        config->SetTopicPath(topicPath);
+        //config->SetTopicName(name);
+        //config->SetTopicPath(topicPath);
 
         //Sets legacy 'logtype'.
 
@@ -797,8 +797,8 @@ namespace NKikimr::NGRpcProxy::V1 {
             config->SetIdent(converter->GetLegacyProducer());
         }
 
-        config->SetTopicName(name);
-        config->SetTopicPath(topicPath);
+//        config->SetTopicName(name);
+//        config->SetTopicPath(topicPath);
 
         //Sets legacy 'logtype'.
 

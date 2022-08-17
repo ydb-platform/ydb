@@ -3229,7 +3229,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       }
       SourceIdMaxCounts: 6000000
     }
-    TopicName: "rt3.dc1--acc--topic3"
     Version: 6
     LocalDC: true
     RequireAuthWrite: true

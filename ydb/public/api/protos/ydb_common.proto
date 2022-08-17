@@ -17,3 +17,7 @@ message CostInfo {
     // Total amount of request units (RU), consumed by the operation.
     double consumed_units = 1;
 }
+
+message QuotaExceeded {
+    bool disk = 1;
+}

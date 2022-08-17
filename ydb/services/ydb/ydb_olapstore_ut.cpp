@@ -76,7 +76,7 @@ Y_UNIT_TEST_SUITE(YdbOlapStore) {
         NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
 
-        status = annoyingClient.CreateOlapTable("/Root/OlapStore", Sprintf(R"(
+        status = annoyingClient.CreateColumnTable("/Root/OlapStore", Sprintf(R"(
             Name: "%s"
             ColumnShardCount : %d
             Sharding {

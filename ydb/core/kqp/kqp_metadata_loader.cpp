@@ -109,7 +109,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
             return ResultFromError<TResult>(ToString(entry.Status));
     }
 
-    YQL_ENSURE(entry.Kind == EKind::KindTable || entry.Kind == EKind::KindOlapTable);
+    YQL_ENSURE(entry.Kind == EKind::KindTable || entry.Kind == EKind::KindColumnTable);
 
     TTableMetadataResult result;
     result.SetSuccess();
@@ -121,7 +121,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
     tableMeta->SchemaVersion = entry.TableId.SchemaVersion;
 
     if (!tableMeta->SysView.empty()) {
-        if (entry.Kind == EKind::KindOlapTable) {
+        if (entry.Kind == EKind::KindColumnTable) {
             // NOTE: OLAP sys views for stats are themselves represented by OLAP tables
             tableMeta->Kind = NYql::EKikimrTableKind::Olap;
         } else {
@@ -133,7 +133,7 @@ TTableMetadataResult GetLoadTableMetadataResult(const NSchemeCache::TSchemeCache
                 tableMeta->Kind = NYql::EKikimrTableKind::Datashard;
                 break;
 
-            case EKind::KindOlapTable:
+            case EKind::KindColumnTable:
                 tableMeta->Kind = NYql::EKikimrTableKind::Olap;
                 break;
 

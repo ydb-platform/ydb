@@ -234,7 +234,7 @@ struct TTestOlap {
         annoyingClient.SetSecurityToken("root@builtin");
         NMsgBusProxy::EResponseStatus status = annoyingClient.CreateOlapStore("/Root", tableDescr);
         UNIT_ASSERT_VALUES_EQUAL(status, NMsgBusProxy::EResponseStatus::MSTATUS_OK);
-        status = annoyingClient.CreateOlapTable("/Root", Sprintf(R"(
+        status = annoyingClient.CreateColumnTable("/Root", Sprintf(R"(
             Name: "%s/%s"
             ColumnShardCount : %d
             Sharding {

@@ -176,8 +176,8 @@ bool ConvertArrowToYdbPrimitive(const arrow::DataType& type, Ydb::Type& toType) 
 class TUploadRowsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadRowsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
-        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
+    explicit TUploadRowsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request, bool diskQuotaExceeded)
+        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
     {}
 
@@ -439,8 +439,8 @@ private:
 class TUploadColumnsRPCPublic : public NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ> {
     using TBase = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>;
 public:
-    explicit TUploadColumnsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request)
-        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()))
+    explicit TUploadColumnsRPCPublic(TAutoPtr<TEvBulkUpsertRequest> request, bool diskQuotaExceeded)
+        : TBase(GetDuration(request->GetProtoRequest()->operation_params().operation_timeout()), diskQuotaExceeded)
         , Request(request)
     {}
 
@@ -655,13 +655,15 @@ private:
 };
 
 void TGRpcRequestProxy::Handle(TEvBulkUpsertRequest::TPtr& ev, const TActorContext& ctx) {
+    bool diskQuotaExceeded = ev->Get()->GetDiskQuotaExceeded();
+
     auto* req = ev->Get()->GetProtoRequest();
     if (req->has_arrow_batch_settings()) {
-        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
+        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release(), diskQuotaExceeded));
     } else if (req->has_csv_settings()) {
-        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release()));
+        ctx.Register(new TUploadColumnsRPCPublic(ev->Release().Release(), diskQuotaExceeded));
     } else {
-        ctx.Register(new TUploadRowsRPCPublic(ev->Release().Release()));
+        ctx.Register(new TUploadRowsRPCPublic(ev->Release().Release(), diskQuotaExceeded));
     }
 }
 

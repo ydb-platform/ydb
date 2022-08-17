@@ -1467,14 +1467,14 @@ namespace Tests {
         return (NMsgBusProxy::EResponseStatus)response.GetStatus();
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent, const TString& scheme) {
+    NMsgBusProxy::EResponseStatus TClient::CreateColumnTable(const TString& parent, const TString& scheme) {
         NKikimrSchemeOp::TColumnTableDescription table;
         bool parseOk = ::google::protobuf::TextFormat::ParseFromString(scheme, &table);
         UNIT_ASSERT(parseOk);
-        return CreateOlapTable(parent, table);
+        return CreateColumnTable(parent, table);
     }
 
-    NMsgBusProxy::EResponseStatus TClient::CreateOlapTable(const TString& parent,
+    NMsgBusProxy::EResponseStatus TClient::CreateColumnTable(const TString& parent,
                                                            const NKikimrSchemeOp::TColumnTableDescription& table) {
         auto request = std::make_unique<NMsgBusProxy::TBusSchemeOperation>();
         auto* op = request->Record.MutableTransaction()->MutableModifyScheme();

@@ -81,8 +81,8 @@ private:
                 return;
             }
 
-            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindOlapTable) {
-                YQL_ENSURE(entry.OlapTableInfo || entry.OlapStoreInfo);
+            if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+                YQL_ENSURE(entry.ColumnTableInfo || entry.OlapStoreInfo);
                 // NOTE: entry.SysViewInfo might not be empty for OLAP stats virtual tables
                 table->TableKind = ETableKind::Olap;
             } else if (entry.TableId.IsSystemView()) {

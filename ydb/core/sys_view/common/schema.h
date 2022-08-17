@@ -464,7 +464,7 @@ public:
         Domain,
         SubDomain,
         OlapStore,
-        OlapTable
+        ColumnTable
     };
 
     struct TSystemViewPath {

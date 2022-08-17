@@ -166,6 +166,17 @@ public:
         CostInfo->set_consumed_units(consumed_units);
     }
 
+    void SetDiskQuotaExceeded(bool disk) override {
+        if (!QuotaExceeded) {
+            QuotaExceeded = std::make_unique<Ydb::QuotaExceeded>();
+        }
+        QuotaExceeded->set_disk(disk);
+    }
+
+    bool GetDiskQuotaExceeded() const override {
+        return QuotaExceeded ? QuotaExceeded->disk() : false;
+    }
+
     TMaybe<NRpcService::TRlPath> GetRlPath() const override {
         return Nothing();
     }
@@ -186,6 +197,7 @@ private:
     NYql::TIssueManager IssueManager;
     google::protobuf::Arena Arena;
     std::unique_ptr<Ydb::CostInfo> CostInfo;
+    std::unique_ptr<Ydb::QuotaExceeded> QuotaExceeded;
 };
 
 template<typename TRpc>

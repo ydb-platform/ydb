@@ -262,6 +262,8 @@ public:
     virtual void RaiseIssues(const NYql::TIssues& issues) = 0;
     virtual TMaybe<TString> GetTraceId() const = 0;
     virtual const TString& GetRequestName() const = 0;
+    virtual void SetDiskQuotaExceeded(bool disk) = 0;
+    virtual bool GetDiskQuotaExceeded() const = 0;
 };
 
 class TRespHookCtx : public TThrRefBase {
@@ -346,7 +348,6 @@ public:
 
     // Pass request for next processing
     virtual void Pass(const IFacilityProvider& facility) = 0;
-
 };
 
 // Request context
@@ -461,6 +462,13 @@ public:
     const TMaybe<TString> GetPeerMetaValues(const TString&) const override {
         Y_FAIL("Unimplemented");
         return TMaybe<TString>{};
+    }
+
+    void SetDiskQuotaExceeded(bool) override {
+    }
+
+    bool GetDiskQuotaExceeded() const override {
+        return false;
     }
 
     void ReplyWithRpcStatus(grpc::StatusCode, const TString&) override {
@@ -690,6 +698,13 @@ public:
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
+    void SetDiskQuotaExceeded(bool) override {
+    }
+
+    bool GetDiskQuotaExceeded() const override {
+        return false;
+    }
+
     void RefreshToken(const TString& token, const TActorContext& ctx, TActorId id) {
         NGRpcService::RefreshToken(token, GetDatabaseName().GetOrElse(""), ctx, id);
     }
@@ -885,6 +900,17 @@ public:
         return ToMaybe(Ctx_->GetPeerMetaValues(key));
     }
 
+    void SetDiskQuotaExceeded(bool disk) override {
+        if (!QuotaExceeded) {
+            QuotaExceeded = google::protobuf::Arena::CreateMessage<Ydb::QuotaExceeded>(GetArena());
+        }
+        QuotaExceeded->set_disk(disk);
+    }
+
+    bool GetDiskQuotaExceeded() const override {
+        return QuotaExceeded ? QuotaExceeded->disk() : false;
+    }
+
     bool Validate(TString&) override {
         return true;
     }
@@ -1045,6 +1071,7 @@ private:
     TString InternalToken_;
     NYql::TIssueManager IssueManager;
     Ydb::CostInfo* CostInfo = nullptr;
+    Ydb::QuotaExceeded* QuotaExceeded = nullptr;
     ui64 Ru = 0;
     TRespHook RespHook;
     TMaybe<NRpcService::TRlPath> RlPath;

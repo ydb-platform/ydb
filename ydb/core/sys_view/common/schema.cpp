@@ -40,7 +40,7 @@ public:
             if (!DomainSystemViews.contains(maybeSystemViewName) &&
                 !SubDomainSystemViews.contains(maybeSystemViewName) &&
                 !OlapStoreSystemViews.contains(maybeSystemViewName) &&
-                !OlapTableSystemViews.contains(maybeSystemViewName))
+                !ColumnTableSystemViews.contains(maybeSystemViewName))
             {
                 return false;
             }
@@ -64,8 +64,8 @@ public:
         case ETarget::OlapStore:
             view = OlapStoreSystemViews.FindPtr(viewName);
             break;
-        case ETarget::OlapTable:
-            view = OlapTableSystemViews.FindPtr(viewName);
+        case ETarget::ColumnTable:
+            view = ColumnTableSystemViews.FindPtr(viewName);
             break;
         }
         return view ? TMaybe<TSchema>(*view) : Nothing();
@@ -92,9 +92,9 @@ public:
                 result.push_back(name);
             }
             break;
-        case ETarget::OlapTable:
-            result.reserve(OlapTableSystemViews.size());
-            for (const auto& [name, _] : OlapTableSystemViews) {
+        case ETarget::ColumnTable:
+            result.reserve(ColumnTableSystemViews.size());
+            for (const auto& [name, _] : ColumnTableSystemViews) {
                 result.push_back(name);
             }
             break;
@@ -185,8 +185,8 @@ private:
     }
 
     template <typename Table>
-    void RegisterOlapTableSystemView(const TStringBuf& name) {
-        TSchemaFiller<Table>::Fill(OlapTableSystemViews[name]);
+    void RegisterColumnTableSystemView(const TStringBuf& name) {
+        TSchemaFiller<Table>::Fill(ColumnTableSystemViews[name]);
     }
 
     void RegisterSystemViews() {
@@ -215,7 +215,7 @@ private:
         RegisterSystemView<Schema::QueryMetrics>(QueryMetricsName);
 
         RegisterOlapStoreSystemView<Schema::PrimaryIndexStats>(StorePrimaryIndexStatsName);
-        RegisterOlapTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
+        RegisterColumnTableSystemView<Schema::PrimaryIndexStats>(TablePrimaryIndexStatsName);
 
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
         RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
@@ -225,7 +225,7 @@ private:
     THashMap<TString, TSchema> DomainSystemViews;
     THashMap<TString, TSchema> SubDomainSystemViews;
     THashMap<TString, TSchema> OlapStoreSystemViews;
-    THashMap<TString, TSchema> OlapTableSystemViews;
+    THashMap<TString, TSchema> ColumnTableSystemViews;
 };
 
 ISystemViewResolver* CreateSystemViewResolver() {

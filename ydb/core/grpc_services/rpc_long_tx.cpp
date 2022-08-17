@@ -365,16 +365,16 @@ protected:
             }
         }
 
-        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindOlapTable) {
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table");
+        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an column table");
         }
 
-        if (!entry.OlapTableInfo || !entry.OlapTableInfo->Description.HasSharding()
-            || !entry.OlapTableInfo->Description.HasSchema()) {
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Olap table expected");
+        if (!entry.ColumnTableInfo || !entry.ColumnTableInfo->Description.HasSharding()
+            || !entry.ColumnTableInfo->Description.HasSchema()) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Column table expected");
         }
 
-        const auto& description = entry.OlapTableInfo->Description;
+        const auto& description = entry.ColumnTableInfo->Description;
         const auto& schema = description.GetSchema();
         const auto& sharding = description.GetSharding();
 
@@ -384,7 +384,7 @@ protected:
 
         if (!schema.HasEngine() || schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_NONE ||
             (schema.GetEngine() == NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES && !sharding.HasHashSharding())) {
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Wrong olap table configuration");
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "Wrong column table configuration");
         }
 
         ui64 tableId = entry.TableId.PathId.LocalPathId;
@@ -814,13 +814,13 @@ private:
             }
         }
 
-        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindOlapTable) {
-            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an olap table");
+        if (entry.Kind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            return ReplyError(Ydb::StatusIds::SCHEME_ERROR, "The specified path is not an column table");
         }
 
-        Y_VERIFY(entry.OlapTableInfo);
-        Y_VERIFY(entry.OlapTableInfo->Description.HasSharding());
-        const auto& sharding = entry.OlapTableInfo->Description.GetSharding();
+        Y_VERIFY(entry.ColumnTableInfo);
+        Y_VERIFY(entry.ColumnTableInfo->Description.HasSharding());
+        const auto& sharding = entry.ColumnTableInfo->Description.GetSharding();
 
         TableId = entry.TableId.PathId.LocalPathId;
         for (ui64 shardId : sharding.GetColumnShards()) {

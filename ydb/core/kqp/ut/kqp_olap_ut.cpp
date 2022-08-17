@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                                      }
         )");
 
-        legacyClient.CreateOlapTable("/Root/olapStore", R"(
+        legacyClient.CreateColumnTable("/Root/olapStore", R"(
             Name: "OlapParametersTable"
             ColumnShardCount: 1
         )");

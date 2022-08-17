@@ -36,7 +36,6 @@ public:
         Y_VERIFY(pathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto streamPathId = TPathId(streamDesc.GetPathId().GetOwnerId(), streamDesc.GetPathId().GetLocalId());
-        Y_VERIFY(streamPathId.OwnerId == DataShard.GetPathOwnerId());
 
         const auto version = params.GetTableSchemaVersion();
         Y_VERIFY(version);

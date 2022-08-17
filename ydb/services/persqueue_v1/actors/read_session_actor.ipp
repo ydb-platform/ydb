@@ -661,7 +661,7 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(typename TEvReadInit::TPtr&
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         ClientPath = init.consumer();
     } else {
-        ClientPath = NPersQueue::NormalizeFullPath(NPersQueue::MakeConsumerPath(init.consumer()));
+        ClientPath = NPersQueue::StripLeadSlash(NPersQueue::MakeConsumerPath(init.consumer()));
     }
 
     TStringBuilder session;

@@ -130,12 +130,15 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
     : PQPrefix(pqNormalizedPrefix)
 {
     auto name = pqTabletConfig.GetTopicName();
-    if (name.empty()) {
-        name = pqTabletConfig.GetTopic();
-    }
-    Y_VERIFY(!name.empty());
     auto path = pqTabletConfig.GetTopicPath();
-    if (path.empty()) {
+    if (name.empty()) {
+        Y_VERIFY(!pqTabletConfig.GetTopic().empty());
+        Y_VERIFY(!path.empty());
+        TStringBuf pathBuf(path), fst, snd;
+        auto res = pathBuf.TryRSplit("/", fst, snd);
+        Y_VERIFY(res);
+        name = snd;
+    } else if (path.empty()) {
         path = name;
     }
     if (!ydbDatabaseRootOverride.empty()) {
@@ -463,9 +466,6 @@ void TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
             Account_ = "";
         }
         topicName = topic;
-    }
-    if (!modernName.empty()) {
-        modernName << topicName;
     }
     modernName << topicName;
     Y_VERIFY(!Dc.empty());

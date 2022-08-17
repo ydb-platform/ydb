@@ -104,9 +104,9 @@ void TGRpcPersQueueService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
 
         TStreamGRpcRequest::Start(this, this->GetService(), CQ, &Ydb::PersQueue::V1::PersQueueService::AsyncService::RequestMigrationStreamingRead,
                     [this](TIntrusivePtr<TStreamGRpcRequest::IContext> context) {
-                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQReadRequest(context));
+                        ActorSystem->Send(GRpcRequestProxy, new NKikimr::NGRpcService::TEvStreamPQMigrationReadRequest(context));
                     },
-                    *ActorSystem, "PersQueueService/CreateReadSession", getCounterBlock("persistent_queue", "ReadSession", true, true), nullptr
+                    *ActorSystem, "PersQueueService/CreateMigrationReadSession", getCounterBlock("persistent_queue", "MigrationReadSession", true, true), nullptr
                 );
     }
 

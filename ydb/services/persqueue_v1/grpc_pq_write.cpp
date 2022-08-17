@@ -1,5 +1,4 @@
 #include "grpc_pq_write.h"
-#include "grpc_pq_actor.h"
 
 #include <ydb/core/tx/scheme_board/cache.h>
 #include <ydb/core/base/appdata.h>
@@ -42,9 +41,6 @@ void TPQWriteService::Bootstrap(const TActorContext& ctx) {
                  new NPQ::NClusterTracker::TEvClusterTracker::TEvSubscribe);
     }
     ctx.Send(NNetClassifier::MakeNetClassifierID(), new NNetClassifier::TEvNetClassifier::TEvSubscribe);
-    ConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-            AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen(), AppData(ctx)->PQConfig.GetRoot()
-    );
     Become(&TThis::StateFunc);
 }
 
@@ -176,6 +172,7 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
     }
 
     TString localCluster = AvailableLocalCluster(ctx);
+
     if (HaveClusters && localCluster.empty()) {
         ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
         if (LocalCluster) {
@@ -187,8 +184,13 @@ void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPt
         }
         return;
     } else {
+        if (ConverterFactory == nullptr) {
+            ConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+                    AppData(ctx)->PQConfig, localCluster
+            );
+        }
         TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                ConverterFactory, HaveClusters, TVector<TString>{}, localCluster
+                ConverterFactory, TVector<TString>{}
         );
         const ui64 cookie = NextCookie();
 

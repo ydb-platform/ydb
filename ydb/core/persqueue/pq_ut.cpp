@@ -21,6 +21,7 @@
 
 
 namespace NKikimr {
+const static TString TOPIC_NAME = "rt3.dc1--topic";
 Y_UNIT_TEST_SUITE(TPQTest) {
 
 
@@ -40,7 +41,7 @@ Y_UNIT_TEST(TestGroupsBalancer) {
     ui64 ssId = 325;
     BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-    BalancerPrepare("topic", {{0,{1, 1}}, {11,{1, 1}}, {1,{1, 2}}, {2,{1, 2}}}, ssId, tc);
+    BalancerPrepare(TOPIC_NAME, {{0,{1, 1}}, {11,{1, 1}}, {1,{1, 2}}, {2,{1, 2}}}, ssId, tc);
 
     TActorId pipe = RegisterReadSession("session1", tc);
     Y_UNUSED(pipe);
@@ -88,7 +89,7 @@ Y_UNIT_TEST(TestGroupsBalancer2) {
     ui64 ssId = 325;
     BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-    BalancerPrepare("topic", {{0, {1, 1}}, {1, {1, 2}}, {2, {1, 3}}, {3, {1, 4}}}, ssId, tc);
+    BalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}}, {2, {1, 3}}, {3, {1, 4}}}, ssId, tc);
 
     TActorId pipe = RegisterReadSession("session1", tc, {1,2});
     Y_UNUSED(pipe);
@@ -116,7 +117,7 @@ Y_UNIT_TEST(TestGroupsBalancer3) {
     ui64 ssId = 325;
     BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-    BalancerPrepare("topic", {{0, {1, 1}}, {1, {1, 2}} }, ssId, tc);
+    BalancerPrepare(TOPIC_NAME, {{0, {1, 1}}, {1, {1, 2}} }, ssId, tc);
 
     TActorId pipe = RegisterReadSession("session", tc, {2});
 
@@ -296,18 +297,18 @@ Y_UNIT_TEST(TestCreateBalancer) {
         ui64 ssId = 325;
         BootFakeSchemeShard(*tc.Runtime, ssId, state);
 
-        BalancerPrepare("topic", {{1,{1,2}}}, ssId, tc);
+        BalancerPrepare(TOPIC_NAME, {{1,{1,2}}}, ssId, tc);
 
         TActorId pipe1 = RegisterReadSession("session0", tc, {1});
 
-        BalancerPrepare("topic", {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
+        BalancerPrepare(TOPIC_NAME, {{1,{1,2}}, {2,{1,3}}}, ssId, tc);
 
         tc.Runtime->Send(new IEventHandle(pipe1, tc.Edge, new TEvents::TEvPoisonPill()), 0, true); //will cause dying of pipe and first session
 
 
-//        BalancerPrepare("topic", {{2,1}}, tc); //TODO: not supported yet
-//        BalancerPrepare("topic", {{1,1}}, tc); // TODO: not supported yet
-        BalancerPrepare("topic", {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
+//        BalancerPrepare(TOPIC_NAME, {{2,1}}, tc); //TODO: not supported yet
+//        BalancerPrepare(TOPIC_NAME, {{1,1}}, tc); // TODO: not supported yet
+        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}, {2,{1, 3}}, {3,{1, 4}}}, ssId, tc);
         activeZone = false;
 
         TActorId pipe = RegisterReadSession("session1", tc);
@@ -344,7 +345,7 @@ Y_UNIT_TEST(TestDescribeBalancer) {
 
         tc.Runtime->SetScheduledLimit(50);
         tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc);
+        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
         TAutoPtr<IEventHandle> handle;
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, new TEvPersQueue::TEvDescribe(), 0, GetPipeConfigWithRetries());
         TEvPersQueue::TEvDescribeResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvDescribeResponse>(handle);
@@ -385,7 +386,7 @@ Y_UNIT_TEST(TestCheckACL) {
 
         tc.Runtime->SetScheduledLimit(600);
         tc.Runtime->SetDispatchTimeout(TDuration::MilliSeconds(100));
-        BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc);
+        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc);
 
         {
             TDispatchOptions options;
@@ -396,7 +397,7 @@ Y_UNIT_TEST(TestCheckACL) {
         TEvPersQueue::TEvCheckACLResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec = result->Record;
         UNIT_ASSERT(rec.GetAccess() == NKikimrPQ::EAccess::DENIED);
-        UNIT_ASSERT(rec.GetTopic() == "topic");
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetTopic(), TOPIC_NAME);
 
         state->ACL.AddAccess(NACLib::EAccessType::Allow, NACLib::SelectRow, "client@" BUILTIN_ACL_DOMAIN);
 
@@ -467,7 +468,7 @@ Y_UNIT_TEST(TestCheckACL) {
         request->Record.SetOperation(NKikimrPQ::EOperation::READ_OP);
         request->Record.SetToken("");
 
-        BalancerPrepare("topic", {{1,{1, 2}}}, ssId, tc, true);
+        BalancerPrepare(TOPIC_NAME, {{1,{1, 2}}}, ssId, tc, true);
         tc.Runtime->SendToPipe(tc.BalancerTabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
         result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvCheckACLResponse>(handle);
         auto& rec7 = result->Record;
@@ -504,7 +505,7 @@ void CheckLabeledCountersResponse(ui32 count, TTestContext& tc, TVector<TString>
         groups.insert(c.GetGroup());
         Cerr << "Has " << c.GetGroup() << "\n";
     }
-    UNIT_ASSERT(groups.size() == count);
+    UNIT_ASSERT_VALUES_EQUAL(groups.size(), count);
     for (auto& g : mustHave) {
         UNIT_ASSERT(groups.contains(g));
     }
@@ -537,7 +538,8 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
             tc.Runtime->DispatchEvents(options);
         }
 
-        CheckLabeledCountersResponse(8, tc, {"user/1/topic"}); //topic counters + important
+
+        CheckLabeledCountersResponse(8, tc, {NKikimr::JoinPath({"user/1", TOPIC_NAME})}); //topic counters + important
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {}, tc);
 
@@ -553,7 +555,14 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
             tc.Runtime->DispatchEvents(options);
         }
 
-        CheckLabeledCountersResponse(8, tc, {"user/0/topic"}); //topic counters + not important
+        auto MakeTopics = [&] (const TVector<TString>& users) {
+            TVector<TString> res;
+            for (const auto& u : users) {
+                res.emplace_back(NKikimr::JoinPath({u, TOPIC_NAME}));
+            }
+            return res;
+        };
+        CheckLabeledCountersResponse(8, tc, MakeTopics({"user/0"})); //topic counters + not important
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}, {"user2", true}}, tc);
 
@@ -569,7 +578,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
             tc.Runtime->DispatchEvents(options);
         }
 
-        CheckLabeledCountersResponse(11, tc, {"user/1/topic", "user2/1/topic"}); //topic counters + not important
+        CheckLabeledCountersResponse(11, tc, MakeTopics({"user/1", "user2/1"})); //topic counters + not important
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}, {"user2", false}}, tc);
 
@@ -585,7 +594,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
             tc.Runtime->DispatchEvents(options);
         }
 
-        CheckLabeledCountersResponse(12, tc, {"user/1/topic", "user2/0/topic"});
+        CheckLabeledCountersResponse(12, tc, MakeTopics({"user/1", "user2/0"}));
 
 
         PQTabletPrepare(20000000, 100 * 1024 * 1024, 0, {{"user", true}}, tc);
@@ -602,7 +611,7 @@ Y_UNIT_TEST(TestSwitchOffImportantFlag) {
             tc.Runtime->DispatchEvents(options);
         }
 
-        CheckLabeledCountersResponse(8, tc, {"user/1/topic"});
+        CheckLabeledCountersResponse(8, tc, MakeTopics({"user/1"}));
 
 
     });

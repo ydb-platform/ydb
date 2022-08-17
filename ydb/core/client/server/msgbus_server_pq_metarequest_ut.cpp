@@ -32,6 +32,8 @@ void MakeEmptyTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaR
 void MakeDuplicatedTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request);
 void MakeDuplicatedPartition(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request);
 
+const static TString topic1 = "rt3.dc1--topic1";
+const static TString topic2 = "rt3.dc1--topic2";
 // Base test class with useful helpers for constructing all you need to test pq requests.
 class TMessageBusServerPersQueueRequestTestBase: public TTestBase {
 protected:
@@ -436,6 +438,7 @@ protected:
     THashSet<ui64> PausedEventTypes;
     std::list<TAutoPtr<IEventHandle>> PausedEvents;
     THolder<TTestActorRuntime> Runtime;
+
 };
 
 // Common tests that are actual to all pq requests.
@@ -485,13 +488,13 @@ public:
         auto &descr = pqInfo->Description;
         switch (topicId) {
             case 1:
-                descr.SetName("topic1");
+                descr.SetName(topic1);
                 descr.SetBalancerTabletID(MakeTabletID(0, 0, 100));
                 descr.SetAlterVersion(42);
                 descr.SetPartitionPerTablet(1);
                 break;
             case 2:
-                descr.SetName("topic2");
+                descr.SetName(topic2);
                 descr.SetBalancerTabletID(MakeTabletID(0, 0, 200));
                 descr.SetAlterVersion(5);
                 descr.SetPartitionPerTablet(3);
@@ -499,12 +502,17 @@ public:
             default:
                 UNIT_FAIL("");
         }
+        auto* pqTabletConfig = descr.MutablePQTabletConfig();
+        pqTabletConfig->SetTopicName(descr.GetName());
+        pqTabletConfig->SetDC("dc1");
+        pqTabletConfig->SetTopicPath(NKikimr::JoinPath({"/Root/PQ", descr.GetName()}));
         for (auto i = 0u; i <  descr.GetPartitionPerTablet(); i++) {
             auto* part = descr.AddPartitions();
             part->SetPartitionId(i);
             part->SetTabletId(MakeTabletID(0, 0, topicId * 100 + 1 + i));
         }
         entry.PQGroupInfo.Reset(pqInfo);
+
         return entry;
     }
 
@@ -636,13 +644,13 @@ public:
     void HandlesPipeDisconnectionImpl(EDisconnectionMode disconnectionMode, std::function<void(EDisconnectionMode disconnectionMode)> dataValidationFunction, bool requestTheWholeTopic = false) {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, std::forward<TSchemeCacheNavigate::TResultSet>(MakeResultSet()));
 
-        PrepareBalancer("topic1", MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet("topic1", MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
 
-        PrepareBalancer("topic2", MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 201), {0});
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 202), {1});
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 203), {2});
+        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 201), {0});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 202), {1});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
 
         const ui64 tabletToDestroy = MakeTabletID(0, 0, 203);
 
@@ -737,9 +745,9 @@ public:
         persQueueRequest.SetTicket("client_id@" BUILTIN_ACL_DOMAIN);
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetTopicMetadata();
-        req.AddTopic("topic1");
+        req.AddTopic(topic1);
         if (topicsCount > 1)
-            req.AddTopic("topic2");
+            req.AddTopic(topic2);
         return persQueueRequest;
     }
 
@@ -767,34 +775,34 @@ public:
         UNIT_ASSERT_VALUES_EQUAL_C(res.TopicInfoSize(), 2, "Response: " << resp->Record);
 
         {
-            const auto& topic1 = res.GetTopicInfo(0).GetTopic() == "topic1" ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
-            UNIT_ASSERT_STRINGS_EQUAL_C(topic1.GetTopic(), "topic1", "Response: " << resp->Record);
-            UNIT_ASSERT_VALUES_EQUAL_C(topic1.GetNumPartitions(), 1, "Response: " << resp->Record);
-            UNIT_ASSERT_C(topic1.HasConfig(), "Response: " << resp->Record);
-            UNIT_ASSERT_C(topic1.GetConfig().HasVersion(), "Response: " << resp->Record);
+            const auto& topic1Cfg = res.GetTopicInfo(0).GetTopic() == topic1 ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
+            UNIT_ASSERT_STRINGS_EQUAL_C(topic1Cfg.GetTopic(), topic1, "Response: " << resp->Record);
+            UNIT_ASSERT_VALUES_EQUAL_C(topic1Cfg.GetNumPartitions(), 1, "Response: " << resp->Record);
+            UNIT_ASSERT_C(topic1Cfg.HasConfig(), "Response: " << resp->Record);
+            UNIT_ASSERT_C(topic1Cfg.GetConfig().HasVersion(), "Response: " << resp->Record);
         }
 
         {
-            const auto& topic2 = res.GetTopicInfo(0).GetTopic() == "topic2" ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
-            UNIT_ASSERT_STRINGS_EQUAL_C(topic2.GetTopic(), "topic2", "Response: " << resp->Record);
-            UNIT_ASSERT_VALUES_EQUAL_C(topic2.GetNumPartitions(), 3, "Response: " << resp->Record);
-            UNIT_ASSERT_C(topic2.HasConfig(), "Response: " << resp->Record);
-            UNIT_ASSERT_C(topic2.GetConfig().HasVersion(), "Response: " << resp->Record);
+            const auto& topic2Cfg = res.GetTopicInfo(0).GetTopic() == topic2 ? res.GetTopicInfo(0) : res.GetTopicInfo(1);
+            UNIT_ASSERT_STRINGS_EQUAL_C(topic2Cfg.GetTopic(), topic2, "Response: " << resp->Record);
+            UNIT_ASSERT_VALUES_EQUAL_C(topic2Cfg.GetNumPartitions(), 3, "Response: " << resp->Record);
+            UNIT_ASSERT_C(topic2Cfg.HasConfig(), "Response: " << resp->Record);
+            UNIT_ASSERT_C(topic2Cfg.GetConfig().HasVersion(), "Response: " << resp->Record);
         }
     }
 };
 
 void FillValidTopicRequest(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request, ui64 topicsCount = 2) {
     {
-        auto& topic1 = *request.Add();
-        topic1.SetTopic("topic1");
+        auto& topic1Cfg = *request.Add();
+        topic1Cfg.SetTopic(topic1);
     }
 
     if (topicsCount > 1){
-        auto& topic2 = *request.Add();
-        topic2.SetTopic("topic2");
-        topic2.AddPartition(1);
-        topic2.AddPartition(2);
+        auto& topic2Cfg = *request.Add();
+        topic2Cfg.SetTopic(topic2);
+        topic2Cfg.AddPartition(1);
+        topic2Cfg.AddPartition(2);
     }
 }
 
@@ -805,7 +813,7 @@ void MakeEmptyTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaR
 
 void MakeDuplicatedTopic(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request) {
     UNIT_ASSERT_UNEQUAL(request.size(), 0); // filled in
-    request.Mutable(1)->SetTopic("topic1");
+    request.Mutable(1)->SetTopic(topic1);
 }
 
 void MakeDuplicatedPartition(NProtoBuf::RepeatedPtrField<::NKikimrClient::TPersQueueMetaRequest::TTopicRequest>& request) {
@@ -863,14 +871,15 @@ public:
     }
 
     void SuccessfullyPassesResponsesFromTablets() {
-        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
-        PrepareBalancer("topic1", MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet("topic1", MakeTabletID(0, 0, 101), {0});
 
-        PrepareBalancer("topic2", MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
+        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
+
+        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
         // Don't prepare partition 0 because it is not required in request
         // Don't prepare partition 1 to ensure that response is successfull despite the tablet is down
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -884,8 +893,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionLocationSize(), 1, "Response: " << resp->Record);
             const auto& partition1 = topic1Result.GetPartitionLocation(0);
             UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 0, "Response: " << resp->Record);
@@ -894,8 +903,8 @@ public:
             UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionLocationSize(), 2, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -937,8 +946,8 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionLocationSize(), 1, "Response: " << resp->Record);
                 const auto& partition1 = topic1Result.GetPartitionLocation(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition1.GetPartition(), 0, "Response: " << resp->Record);
@@ -947,8 +956,8 @@ public:
                 UNIT_ASSERT_C(!partition1.GetHost().empty(), "Response: " << resp->Record);
             }
             {
-                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionLocationSize(), 2, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1027,13 +1036,13 @@ public:
 
     void SuccessfullyPassesResponsesFromTablets() {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
-        PrepareBalancer("topic1", MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet("topic1", MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
 
-        PrepareBalancer("topic2", MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
         // Don't prepare partition 0 because it is not required in request
         // Don't prepare partition 1 to ensure that response is successfull despite the tablet is down
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -1047,8 +1056,8 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
             UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
@@ -1056,8 +1065,8 @@ public:
             UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).HasStartOffset(), "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -1099,8 +1108,8 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
                 UNIT_ASSERT_EQUAL_C(topic1Result.GetPartitionResult(0).GetErrorCode(), NPersQueue::NErrorCode::OK, "Response: " << resp->Record);
@@ -1108,8 +1117,8 @@ public:
                 UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).HasStartOffset(), "Response: " << resp->Record);
             }
             {
-                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1189,13 +1198,13 @@ public:
     void SuccessfullyPassesResponsesFromTablets() {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
 
-        PrepareBalancer("topic1", MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet("topic1", MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
 
-        PrepareBalancer("topic2", MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
         // Don't prepare partition 0 because it is not required in request
         // Don't prepare partition 1 to ensure that response is successfull despite the tablet is down
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -1209,14 +1218,14 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -1256,8 +1265,8 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 const auto& partition = topic1Result.GetPartitionResult(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition.GetPartition(), 0, "Response: " << resp->Record);
@@ -1265,8 +1274,8 @@ public:
                 UNIT_ASSERT_C(partition.HasLastInitDurationSeconds(), "Response: " << resp->Record); // Data was passed
             }
             {
-                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+                const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 2, "Response: " << resp->Record);
 
                 // Partitions (order is not specified)
@@ -1309,9 +1318,9 @@ public:
 
         auto& req = *persQueueRequest.MutableMetaRequest()->MutableCmdGetReadSessionsInfo();
         req.SetClientId("client_id");
-        req.AddTopic("topic1");
+        req.AddTopic(topic1);
         if (topicsCount > 1)
-            req.AddTopic("topic2");
+            req.AddTopic(topic2);
         return persQueueRequest;
     }
 
@@ -1336,13 +1345,13 @@ public:
     void SuccessfullyPassesResponsesFromTablets() {
         GetMockPQMetaCache().SetAllTopicsAnswer(true, MakeResultSet());
 
-        PrepareBalancer("topic1", MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
-        PreparePQTablet("topic1", MakeTabletID(0, 0, 101), {0});
+        PrepareBalancer(topic1, MakeTabletID(0, 0, 100), {{1, MakeTabletID(0, 0, 101)}});
+        PreparePQTablet(topic1, MakeTabletID(0, 0, 101), {0});
 
-        PrepareBalancer("topic2", MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
+        PrepareBalancer(topic2, MakeTabletID(0, 0, 200), {{1, MakeTabletID(0, 0, 201)}, {2, MakeTabletID(0, 0, 202)}, {3, MakeTabletID(0, 0, 203)}});
         // Don't prepare partition 0 to test its failure processing
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 202), {1});
-        PreparePQTablet("topic2", MakeTabletID(0, 0, 203), {2});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 202), {1});
+        PreparePQTablet(topic2, MakeTabletID(0, 0, 203), {2});
 
         NKikimrClient::TPersQueueRequest req = MakeValidRequest();
         RegisterActor(req);
@@ -1356,15 +1365,15 @@ public:
         UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
         {
-            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+            const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
             UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.GetPartitionResult(0).GetPartition(), 0, "Response: " << resp->Record);
             UNIT_ASSERT_C(topic1Result.GetPartitionResult(0).GetErrorCode() == (ui32)NPersQueue::NErrorCode::INITIALIZING, "Response: " << resp->Record);
         }
         {
-            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+            const auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+            UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
             UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), 3, "Response: " << resp->Record);
 
             // Partitions (order is not specified)
@@ -1406,8 +1415,8 @@ public:
             UNIT_ASSERT_VALUES_EQUAL(perTopicResults.size(), 2);
 
             {
-                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == "topic1" ? perTopicResults.Get(0) : perTopicResults.Get(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), "topic1");
+                const auto& topic1Result = perTopicResults.Get(0).GetTopic() == topic1 ? perTopicResults.Get(0) : perTopicResults.Get(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic1Result.GetTopic(), topic1);
                 UNIT_ASSERT_VALUES_EQUAL_C(topic1Result.PartitionResultSize(), 1, "Response: " << resp->Record);
                 const auto& partition = topic1Result.GetPartitionResult(0);
                 UNIT_ASSERT_VALUES_EQUAL_C(partition.GetPartition(), 0, "Response: " << resp->Record);
@@ -1415,8 +1424,8 @@ public:
 
             }
             {
-                auto& topic2Result = perTopicResults.Get(0).GetTopic() == "topic2" ? *perTopicResults.Mutable(0) : *perTopicResults.Mutable(1);
-                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), "topic2");
+                auto& topic2Result = perTopicResults.Get(0).GetTopic() == topic2 ? *perTopicResults.Mutable(0) : *perTopicResults.Mutable(1);
+                UNIT_ASSERT_STRINGS_EQUAL(topic2Result.GetTopic(), topic2);
                 const size_t expectedPartitionsSize = 3;
                 //disconnectionMode == EDisconnectionMode::AnswerDoesNotArrive ? 2 : 3;
                 UNIT_ASSERT_VALUES_EQUAL_C(topic2Result.PartitionResultSize(), expectedPartitionsSize, "Response: " << resp->Record);

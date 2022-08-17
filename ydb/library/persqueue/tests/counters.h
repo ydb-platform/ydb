@@ -73,8 +73,8 @@ NJson::TJsonValue GetCountersLegacy(ui16 port, const TString& counters, const TS
     return SendQuery(port, queryBuilder);
 }
 
- NJson::TJsonValue GetClientCountersLegacy(ui16 port, const TString& counters, const TString& subsystem,
-                                     const TString& client, const TString& consumerPath) {
+NJson::TJsonValue GetClientCountersLegacy(ui16 port, const TString& counters, const TString& subsystem,
+                                          const TString& client, const TString& consumerPath) {
     TVector<TString> consumerPathItems = SplitString(consumerPath, "/");
     UNIT_ASSERT(consumerPathItems.size() >= 2);
     TStringBuilder queryBuilder = TStringBuilder() <<

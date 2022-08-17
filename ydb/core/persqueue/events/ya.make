@@ -16,6 +16,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/tablet
     ydb/public/api/protos
+    ydb/library/persqueue/topic_parser
 )
 
 END()

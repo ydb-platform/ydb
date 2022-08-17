@@ -88,7 +88,9 @@ protected:
     void Handle(TEvBiStreamPingRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvExperimentalStreamQueryRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvStreamPQReadRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvStreamPQMigrationReadRequest::TPtr& ev, const TActorContext& ctx);
+    // void Handle(TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvStreamTopicReadRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQReadInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQDropTopicRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
@@ -121,6 +123,10 @@ protected:
     void Handle(TEvLongTxRollbackRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLongTxWriteRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvLongTxReadRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDropTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvCreateTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvAlterTopicRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvDescribeTopicRequest::TPtr& ev, const TActorContext& ctx);
 
     TActorId DiscoveryCacheActorID;
 };

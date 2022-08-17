@@ -85,6 +85,8 @@ namespace {
             return "column-table";
         case  NScheme::ESchemeEntryType::PqGroup:
             return "pq-group";
+        case  NScheme::ESchemeEntryType::Topic:
+            return "topic";
         case  NScheme::ESchemeEntryType::SubDomain:
             return "sub-domain";
         case  NScheme::ESchemeEntryType::RtmrVolume:
@@ -183,6 +185,7 @@ int TCommandDescribe::PrintPathResponse(TDriver& driver, const NScheme::TDescrib
     case NScheme::ESchemeEntryType::Table:
         return DescribeTable(driver);
     case NScheme::ESchemeEntryType::PqGroup:
+    case NScheme::ESchemeEntryType::Topic:
         return DescribeStream(driver);
     default:
         WarnAboutTableOptions();

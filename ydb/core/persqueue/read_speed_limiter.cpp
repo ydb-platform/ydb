@@ -5,6 +5,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/persqueue/percentile_counter.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 
 #include <library/cpp/actors/core/log.h>
 
@@ -27,19 +28,19 @@ TReadSpeedLimiter::TReadSpeedLimiter(
     TActorId tabletActor,
     TActorId partitionActor,
     ui64 tabletId,
-    const TString& topicName,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
     ui32 partition,
     const TString& user,
     const TTabletCountersBase& counters
 )
-    : TabletActor(tabletActor)
-    , PartitionActor(partitionActor)
-    , TabletId(tabletId)
-    , TopicName(topicName)
-    , Partition(partition)
-    , User(user)
-    , ConsumerPath(NPersQueue::ConvertOldConsumerName(user))
-    , ReadCreditBytes(AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes())
+        : TabletActor(tabletActor)
+        , PartitionActor(partitionActor)
+        , TabletId(tabletId)
+        , TopicConverter(topicConverter)
+        , Partition(partition)
+        , User(user)
+        , ConsumerPath(NPersQueue::ConvertOldConsumerName(user))
+        , ReadCreditBytes(AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes())
 {
     Counters.Populate(counters);
 
@@ -60,10 +61,10 @@ void TReadSpeedLimiter::InitCounters(const TActorContext& ctx) {
         return;
     }
     auto counters = AppData(ctx)->Counters;
-    if (counters && TopicName.Contains("--")) {
+    if (counters) {
         QuotaWaitCounter.Reset(new TPercentileCounter(
             GetServiceCounters(counters, "pqproxy|consumerReadQuotaWait"),
-            GetLabels(TopicName),
+            NPersQueue::GetLabels(TopicConverter),
             {
                 {"Client", User},
                 {"ConsumerPath", ConsumerPath},
@@ -90,9 +91,9 @@ void TReadSpeedLimiter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContex
     for (const auto& event : Queue) {
         auto cookie = event.Event->Get()->Cookie;
         ReplyPersQueueError(
-            TabletActor, ctx, TabletId, TopicName, Partition, Counters, NKikimrServices::PQ_READ_SPEED_LIMITER,
+            TabletActor, ctx, TabletId, TopicConverter->GetClientsideName(), Partition, Counters, NKikimrServices::PQ_READ_SPEED_LIMITER,
             cookie, NPersQueue::NErrorCode::INITIALIZING,
-            TStringBuilder() << "Tablet is restarting, topic " << TopicName << " (ReadInfo) cookie " << cookie
+            TStringBuilder() << "Tablet is restarting, topic " << TopicConverter->GetClientsideName() << " (ReadInfo) cookie " << cookie
         );
     }
     Die(ctx);
@@ -184,7 +185,7 @@ void TReadSpeedLimiter::TReadSpeedLimiter::ApproveRead(TEvPQ::TEvRead::TPtr ev, 
 }
 
 TString TReadSpeedLimiter::LimiterDescription() const {
-    return TStringBuilder() << "topic=" << TopicName << ":" << Partition << " user=" << User << ": ";
+    return TStringBuilder() << "topic=" << TopicConverter->GetClientsideName() << ":" << Partition << " user=" << User << ": ";
 }
 
 }// NPQ

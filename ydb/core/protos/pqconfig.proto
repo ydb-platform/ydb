@@ -29,7 +29,7 @@ message TPQConfig {
 
     optional bool Enabled = 6 [default = true]; // Enable PQ proxies
 
-    optional uint32 MetaCacheTimeoutSec = 7 [default = 30];
+    optional uint32 MetaCacheTimeoutSec = 7 [default = 30, deprecated = true];
 
     optional uint32 MaxReadCookies = 8 [default = 100000];
 
@@ -141,10 +141,20 @@ message TPQConfig {
     optional TClientServiceType DefaultClientServiceType = 40;
     optional bool DisallowDefaultClientServiceType = 43 [default = false];
 
-    optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000];
-    optional bool MetaCacheSkipVersionCheck = 42 [default = false];
+    optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000, deprecated = true]; // DEPRECATED
+    optional bool MetaCacheSkipVersionCheck = 42 [default = false, deprecated = true]; // DEPRECATED
 
     repeated string NonChargeableUser = 44;
+    optional string LbCommunalDatabase = 45 [default = ""];
+
+    message TPQDiscoveryConfig {
+        optional uint32 CacheRefreshIntervalMilliSeconds = 1 [default = 10000];
+        optional bool CacheSkipVersionCheck = 2 [default = false];
+        optional bool LBFrontEnabled = 3 [default = true];
+        optional bool UseLbAccountAlias = 4 [default = true];
+        optional string LbUserDatabaseRoot = 5 [default = ""];
+    }
+    optional TPQDiscoveryConfig PQDiscoveryConfig = 46;
 }
 
 message TChannelProfile {
@@ -269,6 +279,7 @@ message TPQTabletConfig {
     optional string YcFolderId = 27 [default = ""];
     optional string YdbDatabaseId = 28 [default = ""];
     optional string YdbDatabasePath = 29 [default = ""];
+    optional string FederationAccount = 33 [default = ""];
 
     message TKeyComponentSchema {
         optional string Name = 1;

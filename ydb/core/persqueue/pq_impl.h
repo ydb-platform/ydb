@@ -142,7 +142,9 @@ private:
 
     TString TopicName;
     TString TopicPath;
-    bool LocalDC;
+    NPersQueue::TConverterFactoryPtr TopicConverterFactory;
+    NPersQueue::TTopicConverterPtr TopicConverter;
+    bool IsLocalDC;
     TString DCId;
     TVector<NScheme::TTypeId> KeySchema;
     NKikimrPQ::TPQTabletConfig Config;

@@ -543,7 +543,7 @@ void TWriteSession::InitImpl() {
     if (Settings.PartitionGroupId_) {
         init->set_partition_group_id(*Settings.PartitionGroupId_);
     }
-    init->set_max_supported_block_format_version(0);
+    init->set_max_supported_format_version(0);
     init->set_preferred_cluster(PreferredClusterByCDS);
 
     for (const auto& attr : Settings.Meta_.Fields) {

@@ -641,6 +641,8 @@ TVector<ISubOperationBase::TPtr> CreateNewCdcStream(TOperationId opId, const TTx
         desc.SetPartitionPerTablet(2);
 
         auto& pqConfig = *desc.MutablePQTabletConfig();
+        pqConfig.SetTopicName(streamName);
+        pqConfig.SetTopicPath(streamPath.Child("streamImpl").PathString());
         auto& partitionConfig = *pqConfig.MutablePartitionConfig();
         partitionConfig.SetLifetimeSeconds(TDuration::Days(1).Seconds());
 

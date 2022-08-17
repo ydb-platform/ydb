@@ -149,6 +149,7 @@ struct TDescribeTopicResult : public TStatus {
         TMaybe<ui32> PartitionsPerTablet_;
         TMaybe<ui32> AbcId_;
         TMaybe<TString> AbcSlug_;
+        TString FederationAccount_;
     };
 
     TDescribeTopicResult(TStatus status, const Ydb::PersQueue::V1::DescribeTopicResult& result);
@@ -244,6 +245,7 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
 
     FLUENT_SETTING_OPTIONAL(ui32, AbcId);
     FLUENT_SETTING_OPTIONAL(TString, AbcSlug);
+    FLUENT_SETTING_OPTIONAL(TString, FederationAccount);
 
     //TODO: FLUENT_SETTING_VECTOR
     FLUENT_SETTING_DEFAULT(TVector<TReadRuleSettings>, ReadRules, {});

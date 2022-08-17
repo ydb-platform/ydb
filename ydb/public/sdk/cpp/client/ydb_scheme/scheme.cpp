@@ -37,6 +37,8 @@ static ESchemeEntryType ConvertProtoEntryType(::Ydb::Scheme::Entry::Type entry) 
         return ESchemeEntryType::Sequence;
     case ::Ydb::Scheme::Entry::REPLICATION:
         return ESchemeEntryType::Replication;
+    case ::Ydb::Scheme::Entry::TOPIC:
+        return ESchemeEntryType::Topic;
     default:
         return ESchemeEntryType::Unknown;
     }

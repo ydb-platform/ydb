@@ -2,7 +2,7 @@
 
 #include "msgbus_server_persqueue.h"
 
-#include <ydb/services/persqueue_v1/grpc_pq_actor.h>
+#include <ydb/services/persqueue_v1/actors/read_session_actor.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 
@@ -107,4 +107,3 @@ public:
 
 } // namespace NMsgBusProxy
 } // namespace NKikimr
-

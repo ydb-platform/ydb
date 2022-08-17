@@ -119,9 +119,6 @@ RECURSE(
     base
     counters
     local_rpc
-    validation
-    validation/ut
-    validation/ut/protos
     ut
 )
 

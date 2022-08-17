@@ -15,6 +15,9 @@ PEERDIR(
 SRCS(
     topic_parser.h
     topic_parser.cpp
+    counters.h
+    counters.cpp
+    type_definitions.h
 )
 
 END()

@@ -7,20 +7,15 @@ OWNER(
 )
 
 SRCS(
-    grpc_pq_actor.h
-    grpc_pq_codecs.cpp
-    grpc_pq_read_actor.cpp
     grpc_pq_read.cpp
     grpc_pq_read.h
     grpc_pq_schema.cpp
     grpc_pq_schema.h
-    grpc_pq_write_actor.cpp
     grpc_pq_write.cpp
     grpc_pq_write.h
     persqueue.cpp
     persqueue.h
-    persqueue_utils.cpp
-    persqueue_utils.h
+    topic.cpp
 )
 
 PEERDIR(
@@ -43,9 +38,14 @@ PEERDIR(
     ydb/public/api/protos
     ydb/services/lib/actors
     ydb/services/lib/sharding
+    ydb/services/persqueue_v1/actors
 )
 
 END()
+
+RECURSE(
+    actors
+)
 
 RECURSE_FOR_TESTS(
     ut

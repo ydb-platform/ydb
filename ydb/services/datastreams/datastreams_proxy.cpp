@@ -12,7 +12,7 @@
 
 #include <ydb/services/lib/actors/pq_schema_actor.h>
 #include <ydb/services/lib/sharding/sharding.h>
-#include <ydb/services/persqueue_v1/persqueue_utils.h>
+#include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 
 #include <util/folder/path.h>
 
@@ -194,7 +194,8 @@ namespace NKikimr::NDataStreams::V1 {
         }
 
         TString error;
-        auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error);
+        auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error,
+                                                                      workingDir, proposal.Record.GetDatabaseName());
         modifyScheme.SetWorkingDir(workingDir);
 
         if (!error.Empty()) {
@@ -986,7 +987,7 @@ namespace NKikimr::NDataStreams::V1 {
         TString error = AddReadRuleToConfig(pqConfig, readRule, serviceTypes, ctx);
         bool hasDuplicates = false;
         if (error.Empty()) {
-            hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error);
+            hasDuplicates = CheckReadRulesConfig(*pqConfig, serviceTypes, error, ctx);
         }
 
         if (!error.Empty()) {

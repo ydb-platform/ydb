@@ -1,0 +1,73 @@
+#pragma once
+
+#include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/base/counters.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
+
+namespace NKikimr::NGRpcProxy::V1 {
+
+#ifdef PQ_LOG_PREFIX
+#undef PQ_LOG_PREFIX
+#endif
+#define PQ_LOG_PREFIX "session cookie " << Cookie << " consumer " << ClientPath << " session " << Session
+
+static const TDuration CHECK_ACL_DELAY = TDuration::Minutes(5);
+
+// moved to ydb/core/client/server/msgbus_server_persqueue.h?
+// const TString& TopicPrefix(const TActorContext& ctx);
+
+template<typename TItem0, typename... TItems>
+bool AllEqual(const TItem0& item0, const TItems&... items) {
+    return ((items == item0) && ... && true);
+}
+
+class TAclWrapper {
+public:
+    TAclWrapper(THolder<NACLib::TSecurityObject>);
+    TAclWrapper(TIntrusivePtr<TSecurityObject>);
+
+    bool CheckAccess(NACLib::EAccessRights, const NACLib::TUserToken& userToken);
+
+private:
+    THolder<NACLib::TSecurityObject> AclOldSchemeCache;
+    TIntrusivePtr<TSecurityObject> AclNewSchemeCache;
+};
+
+struct TProcessingResult {
+    Ydb::PersQueue::ErrorCode::ErrorCode ErrorCode;
+    TString Reason;
+    bool IsFatal = false;
+};
+
+TProcessingResult ProcessMetaCacheTopicResponse(const NSchemeCache::TSchemeCacheNavigate::TEntry& entry);
+
+Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const Ydb::PersQueue::ErrorCode::ErrorCode code);
+Ydb::StatusIds::StatusCode ConvertPersQueueInternalCodeToStatus(const NPersQueue::NErrorCode::EErrorCode code);
+
+Ydb::PersQueue::ErrorCode::ErrorCode ConvertOldCode(const NPersQueue::NErrorCode::EErrorCode code);
+
+// to suppress clangd false positive warning
+// remove before ship
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+static inline bool InternalErrorCode(Ydb::PersQueue::ErrorCode::ErrorCode errorCode) {
+    switch(errorCode) {
+        case Ydb::PersQueue::ErrorCode::UNKNOWN_TOPIC:
+        case Ydb::PersQueue::ErrorCode::ERROR:
+        case Ydb::PersQueue::ErrorCode::INITIALIZING:
+        case Ydb::PersQueue::ErrorCode::OVERLOAD:
+        case Ydb::PersQueue::ErrorCode::WRITE_ERROR_DISK_IS_FULL:
+            return true;
+        default:
+            return false;
+    }
+    return false;
+}
+#pragma clang diagnostic pop
+
+void FillIssue(Ydb::Issue::IssueMessage* issue, const Ydb::PersQueue::ErrorCode::ErrorCode errorCode, const TString& errorReason);
+
+} //namespace NKikimr::NGRpcProxy::V1

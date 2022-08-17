@@ -42,12 +42,13 @@ SRCS(
     ydb_scripting.proto
     ydb_status_codes.proto
     ydb_table.proto
+    ydb_topic.proto
     ydb_value.proto
     ydb_s3_internal.proto
     yq.proto
 )
 
-CPP_PROTO_PLUGIN0(validation ydb/core/grpc_services/validation)
+CPP_PROTO_PLUGIN0(validation ydb/public/lib/validation)
 
 # .pb.h are only available in C++ variant of PROTO_LIBRARY
 IF (MODULE_TAG == "CPP_PROTO")

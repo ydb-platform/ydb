@@ -7,75 +7,8 @@ namespace NKikimr {
 
 namespace NPQ {
 
-NMonitoring::TDynamicCounterPtr GetCounters(NMonitoring::TDynamicCounterPtr counters,
-                                            const TString& subsystem, const TString& topic)
-{
-    auto pos = topic.find("--");
-    Y_VERIFY(pos != TString::npos);
-
-    TString origDC = topic.substr(4, pos - 4);
-    origDC.to_title();
-    TString realTopic = topic.substr(pos + 2);
-    pos = realTopic.find("--");
-    TString producer = realTopic.substr(0, pos);
-    TString topicPath = NPersQueue::ConvertOldTopicName(realTopic);
-    TString account = topicPath.substr(0, topicPath.find("/"));
-    return GetServiceCounters(counters, "pqproxy|" + subsystem)
-        ->GetSubgroup("OriginDC", origDC)
-        ->GetSubgroup("Producer", producer)
-        ->GetSubgroup("TopicPath", topicPath)
-        ->GetSubgroup("Account", account)
-        ->GetSubgroup("Topic", realTopic);
-}
-
-NMonitoring::TDynamicCounterPtr GetCountersForStream(NMonitoring::TDynamicCounterPtr counters)
-{
-    return counters->GetSubgroup("counters", "datastreams");
-}
-
-TVector<TLabelsInfo> GetLabels(const TString& topic)
-{
-    auto pos = topic.find("--");
-    if (pos == TString::npos)
-        return {};
-    Y_VERIFY(pos != TString::npos);
-
-    TString origDC = topic.substr(4, pos - 4);
-
-    return GetLabels(origDC, topic.substr(pos + 2));
-}
-
-TVector<TLabelsInfo> GetLabels(const TString& cluster, const TString& realTopic)
-{
-    TString origDC = cluster;
-    origDC.to_title();
-    auto pos = realTopic.find("--");
-    if (pos == TString::npos)
-        return {};
-    TString producer = realTopic.substr(0, pos);
-    TString topicPath = NPersQueue::ConvertOldTopicName(realTopic);
-    TString account = topicPath.substr(0, topicPath.find("/"));
-    TVector<TLabelsInfo> res = {
-            {{{"Account", account}}, {"total"}},
-            {{{"Producer", producer}}, {"total"}},
-            {{{"Topic", realTopic}, {"TopicPath", topicPath}}, {"total", "total"}},
-            {{{"OriginDC", origDC}}, {"cluster"}}
-        };
-    return res;
-}
-
-TVector<TLabelsInfo> GetLabelsForStream(const TString& topic, const TString& cloudId,
-                                        const TString& dbId, const TString& folderId) {
-    TVector<TLabelsInfo> res = {
-            {{{"cloud", cloudId}}, {cloudId}},
-            {{{"folder", folderId}}, {folderId}},
-            {{{"database", dbId}}, {dbId}},
-            {{{"stream", topic}}, {topic}}};
-    return res;
-}
-
 TMultiCounter::TMultiCounter(NMonitoring::TDynamicCounterPtr counters,
-                             const TVector<TLabelsInfo>& labels,
+                             const TVector<NPersQueue::TPQLabelsInfo>& labels,
                              const TVector<std::pair<TString, TString>>& subgroups,
                              const TVector<TString>& counter_names,
                              bool deriv,
@@ -129,9 +62,11 @@ TMultiCounter::operator bool() {
 }
 
 
-TPercentileCounter::TPercentileCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<TLabelsInfo>& labels, const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
-                    const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring)
-{
+TPercentileCounter::TPercentileCounter(
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, const TVector<NPersQueue::TPQLabelsInfo>& labels,
+        const TVector<std::pair<TString, TString>>& subgroups, const TString& sensor,
+        const TVector<std::pair<ui64, TString>>& intervals, const bool deriv, bool expiring
+) {
     Y_VERIFY(!intervals.empty());
     Counters.reserve(intervals.size());
     Ranges.reserve(intervals.size());
@@ -166,8 +101,10 @@ void TPercentileCounter::DecFor(ui64 key, ui64 value) {
     }
 }
 
-NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPQ::TLabelsInfo> aggr, const TString name, ui32 border, TVector<ui32> durations)
-{
+NKikimr::NPQ::TPercentileCounter CreateSLIDurationCounter(
+        TIntrusivePtr<NMonitoring::TDynamicCounters> counters, TVector<NPersQueue::TPQLabelsInfo> aggr, const TString name, ui32 border,
+        TVector<ui32> durations
+) {
     bool found = false;
     for (auto it = durations.begin(); it != durations.end(); ++it) {
         if (*it == border) {

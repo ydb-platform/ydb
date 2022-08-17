@@ -31,6 +31,7 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
     pqConfig.SetRoundRobinPartitionMapping(roundrobin);
+    pqConfig.SetTopicsAreFirstClassCitizen(false);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);
@@ -130,6 +131,8 @@ struct TRequestCreatePQ {
         auto config = req->MutableConfig();
         if (CacheSize)
             config->SetCacheSize(CacheSize);
+        config->SetTopicName(Topic);
+        config->SetTopicPath(TString("/Root/PQ/") + Topic);
         config->MutablePartitionConfig()->SetLifetimeSeconds(LifetimeS);
         config->MutablePartitionConfig()->SetSourceIdLifetimeSeconds(SourceIdLifetime);
         config->MutablePartitionConfig()->SetSourceIdMaxCounts(SourceIdMaxCount);
@@ -289,13 +292,15 @@ struct TRequestReadPQ {
         ui32 partition,
         ui64 startOffset,
         ui32 count,
-        const TString& user
+        const TString& user,
+        ui64 readTimestampMs = 0
     )
         : Topic(topic)
         , Partition(partition)
         , StartOffset(startOffset)
         , Count(count)
         , User(user)
+        , ReadTimestampMs(readTimestampMs)
     {}
 
     TString Topic;
@@ -303,6 +308,7 @@ struct TRequestReadPQ {
     ui64 StartOffset;
     ui32 Count;
     TString User;
+    ui64 ReadTimestampMs;
 
     THolder<NMsgBusProxy::TBusPersQueue> GetRequest() const {
         THolder<NMsgBusProxy::TBusPersQueue> request(new NMsgBusProxy::TBusPersQueue);
@@ -313,6 +319,7 @@ struct TRequestReadPQ {
         read->SetOffset(StartOffset);
         read->SetCount(Count);
         read->SetClientId(User);
+        read->SetReadTimestampMs(ReadTimestampMs);
         return request;
     }
 };
@@ -740,6 +747,7 @@ public:
         UNIT_ASSERT(resp.TopicInfoSize() == 1);
         const auto& topicInfo = resp.GetTopicInfo(0);
         UNIT_ASSERT(topicInfo.GetTopic() == name);
+        UNIT_ASSERT(topicInfo.GetConfig().GetTopicName() == name);
         if (cacheSize) {
             UNIT_ASSERT(topicInfo.GetConfig().HasCacheSize());
             ui64 actualSize = topicInfo.GetConfig().GetCacheSize();
@@ -840,27 +848,34 @@ public:
     }
 
 
-    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true, TVector<TString> rr = {"user"}) {
+    void CreateTopicNoLegacy(const TString& name, ui32 partsCount, bool doWait = true, bool canWrite = true,
+                             const TMaybe<TString>& dc = Nothing(), TVector<TString> rr = {"user"},
+                             const TMaybe<TString>& account = Nothing(), bool expectFail = false
+    ) {
         TString path = name;
-        if (UseConfigTables) {
+        if (UseConfigTables && !path.StartsWith("/Root") && !account.Defined()) {
             path = TStringBuilder() << "/Root/PQ/" << name;
         }
 
         auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
         auto settings = NYdb::NPersQueue::TCreateTopicSettings().PartitionsCount(partsCount).ClientWriteDisabled(!canWrite);
+        settings.FederationAccount(account);
         TVector<NYdb::NPersQueue::TReadRuleSettings> rrSettings;
         for (auto &user : rr) {
             rrSettings.push_back({NYdb::NPersQueue::TReadRuleSettings{}.ConsumerName(user)});
         }
         settings.ReadRules(rrSettings);
 
-        Cerr << "===Create topic: " << path << Endl;
+        Cerr << "Create topic: " << path << Endl;
         auto res = pqClient.CreateTopic(path, settings);
         //ToDo - hack, cannot avoid legacy compat yet as PQv1 still uses RequestProcessor from core/client/server
-        if (UseConfigTables) {
-            AddTopic(name);
+        if (UseConfigTables && !expectFail) {
+            AddTopic(name, dc);
         }
-        if (doWait) {
+        if (expectFail) {
+            res.Wait();
+            UNIT_ASSERT(!res.GetValue().IsSuccess());
+        } else if (doWait) {
             res.Wait();
             Cerr << "Create topic result: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
             UNIT_ASSERT(res.GetValue().IsSuccess());
@@ -979,21 +994,6 @@ public:
             UNIT_ASSERT(TInstant::Now() - start < ::DEFAULT_DISPATCH_TIMEOUT);
         }
 
-    }
-
-    void DeleteTopicNoLegacy (const TString& name) {
-        TString path = name;
-        if (!UseConfigTables) {
-            path = TStringBuilder() << "/Root/PQ/" << name;
-        } else {
-            RemoveTopic(name); // ToDo - also legacy
-        }
-        auto settings = NYdb::NPersQueue::TDropTopicSettings();
-        auto pqClient = NYdb::NPersQueue::TPersQueueClient(*Driver);
-        auto res = pqClient.DropTopic(path, settings);
-        res.Wait();
-        Cerr << "Drop topic response: " << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << Endl;
-        return;
     }
 
     void DeleteTopic2(const TString& name, NPersQueue::NErrorCode::EErrorCode expectedStatus = NPersQueue::NErrorCode::OK, bool waitForTopicDeletion = true) {
@@ -1145,7 +1145,7 @@ public:
 
         if (expectedStatus == NMsgBusProxy::MSTATUS_OK) {
             UNIT_ASSERT(response->Record.GetPartitionResponse().HasCmdReadResult());
-            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
+            if (readCount > 0) UNIT_ASSERT_VALUES_EQUAL(response->Record.GetPartitionResponse().GetCmdReadResult().ResultSize(), readCount);
         }
 
         TReadDebugInfo info;
@@ -1165,7 +1165,7 @@ public:
 
 
     TReadDebugInfo ReadFromPQ(const TString& topic, ui32 partition, ui64 startOffset, ui32 count, ui32 readCount, const TString& ticket = "") {
-        return ReadFromPQ({topic, partition, startOffset, count, "user"}, readCount, ticket);
+        return ReadFromPQ({topic, partition, startOffset, count, "user", 0}, readCount, ticket);
     }
 
     void SetClientOffsetPQ(
@@ -1372,15 +1372,15 @@ private:
     }
 
 public:
-    void AddTopic(const TString& topic) {
-        return AddOrRemoveTopic(topic, true);
+    void AddTopic(const TString& topic, const TMaybe<TString>& dc = Nothing()) {
+        return AddOrRemoveTopic(topic, true, dc);
     }
 
     void RemoveTopic(const TString& topic) {
         return AddOrRemoveTopic(topic, false);
     }
 
-    void AddOrRemoveTopic(const TString& topic, bool add) {
+    void AddOrRemoveTopic(const TString& topic, bool add, const TMaybe<TString>& dc = Nothing()) {
         TStringBuilder query;
         query << "DECLARE $version as Int64; DECLARE $path AS Utf8; DECLARE $cluster as Utf8; ";
         if (add) {
@@ -1388,12 +1388,13 @@ public:
         } else {
             query << "DELETE FROM [/Root/PQ/Config/V2/Topics] WHERE path = $path AND dc = $cluster; ";
         }
+        TString cluster = dc.GetOrElse(NPersQueue::GetDC(topic));
         query << GetAlterTopicsVersionQuery();
         NYdb::TParamsBuilder builder;
         auto params = builder
                 .AddParam("$version").Int64(++TopicsVersion).Build()
                 .AddParam("$path").Utf8(NPersQueue::GetTopicPath(topic)).Build()
-                .AddParam("$cluster").Utf8(NPersQueue::GetDC(topic)).Build()
+                .AddParam("$cluster").Utf8(cluster).Build()
                 .Build();
 
         Cerr << "===Run query:``" << query << "`` with topic = " << NPersQueue::GetTopicPath(topic) << ", dc = " << NPersQueue::GetDC(topic) << Endl;

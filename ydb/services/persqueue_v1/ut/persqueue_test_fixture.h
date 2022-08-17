@@ -38,12 +38,11 @@ namespace NKikimr::NPersQueueTests {
             Y_UNUSED(settings);
         }
         void InitializePQ() {
-            Cerr << "===Init PQ - create server\n";
             Y_VERIFY(Server == nullptr);
             PortManager = new TPortManager();
             Server = MakeHolder<NPersQueue::TTestServer>(false, PortManager);
             Server->ServerSettings.PQConfig.SetTopicsAreFirstClassCitizen(TenantModeEnabled());
-            Server->ServerSettings.PQConfig.SetMetaCacheTimeoutSec(30);
+            Server->ServerSettings.PQConfig.MutablePQDiscoveryConfig()->SetLBFrontEnabled(true);
             AlterSettings(Server->ServerSettings);
             Server->StartServer(false);
             if (TenantModeEnabled()) {
@@ -54,15 +53,16 @@ namespace NKikimr::NPersQueueTests {
             Server->GrpcServerOptions.SetMaxMessageSize(130 * 1024 * 1024);
             EnablePQLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::PQ_WRITE_PROXY, NKikimrServices::FLAT_TX_SCHEMESHARD});
             EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO);
+            EnablePQLogs({NKikimrServices::KQP_PROXY}, NLog::EPriority::PRI_EMERG);
 
             Server->AnnoyingClient->FullInit();
             Server->AnnoyingClient->CreateConsumer("user");
             if (TenantModeEnabled()) {
-                Cerr << "=== Will create fst-class topics\n";
+                Cerr << "Will create fst-class topics\n";
                 Server->AnnoyingClient->CreateTopicNoLegacy("/Root/acc/topic1", 1);
                 Server->AnnoyingClient->CreateTopicNoLegacy("/Root/PQ/acc/topic1", 1);
             } else {
-                Cerr << "=== Will create legacy-style topics\n";
+                Cerr << "Will create legacy-style topics\n";
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--acc--topic2dc", 1);
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc2--acc--topic2dc", 1, true, false);
                 Server->AnnoyingClient->CreateTopicNoLegacy("rt3.dc1--topic1", 1);
@@ -70,6 +70,7 @@ namespace NKikimr::NPersQueueTests {
                 Server->WaitInit("topic1");
                 Sleep(TDuration::Seconds(10));
             }
+            EnablePQLogs({ NKikimrServices::KQP_PROXY }, NLog::EPriority::PRI_EMERG);
 
             InsecureChannel = grpc::CreateChannel("localhost:" + ToString(Server->GrpcPort), grpc::InsecureChannelCredentials());
             ServiceStub = Ydb::PersQueue::V1::PersQueueService::NewStub(InsecureChannel);

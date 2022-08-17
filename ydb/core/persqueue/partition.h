@@ -11,6 +11,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include "key.h"
 #include "blob.h"
@@ -101,7 +102,7 @@ private:
 
     void Handle(TEvPQ::TEvBlobResponse::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(TEvPQ::TEvChangeConfig::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx);
 
     void Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext& ctx);
 
@@ -219,7 +220,7 @@ public:
     }
 
     TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, const TActorId& blobCache,
-               const TString& topicName, const TString& topicPath, const bool localDC, TString dcId,
+               const NPersQueue::TTopicConverterPtr& topicConverter, bool isLocalDC, TString dcId,
                const NKikimrPQ::TPQTabletConfig& config, const TTabletCountersBase& counters,
                const TActorContext& ctx, bool newPartition = false);
 
@@ -262,7 +263,7 @@ private:
             HFuncTraced(TEvKeyValue::TEvResponse, HandleOnInit); //result of reads
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
-            HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
+            HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvPartitionOffsets, HandleOnInit);
             HFuncTraced(TEvPQ::TEvPartitionStatus, HandleOnInit);
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
@@ -294,7 +295,7 @@ private:
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPQ::TEvMonRequest, HandleMonitoring);
             HFuncTraced(TEvPQ::TEvGetMaxSeqNoRequest, Handle);
-            HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
+            HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
             HFuncTraced(TEvPQ::TEvGetClientOffset, Handle);
             HFuncTraced(TEvPQ::TEvUpdateWriteTimestamp, Handle);
             HFuncTraced(TEvPQ::TEvSetClientInfo, Handle);
@@ -349,7 +350,7 @@ private:
             HFuncTraced(TEvPQ::TEvPartitionStatus, Handle);
             HFuncTraced(TEvPersQueue::TEvReportPartitionError, Handle);
             HFuncTraced(TEvPQ::TEvChangeOwner, Handle);
-            HFuncTraced(TEvPQ::TEvChangeConfig, Handle);
+            HFuncTraced(TEvPQ::TEvChangePartitionConfig, Handle);
             HFuncTraced(TEvPersQueue::TEvHasDataInfo, Handle);
             HFuncTraced(TEvPQ::TEvMirrorerCounters, Handle);
             HFuncTraced(NReadSpeedLimiterEvents::TEvCounters, Handle);
@@ -415,9 +416,8 @@ private:
     ui64 TabletID;
     ui32 Partition;
     NKikimrPQ::TPQTabletConfig Config;
-    TString TopicName;
-    TString TopicPath;
-    bool LocalDC;
+    NPersQueue::TTopicConverterPtr TopicConverter;
+    bool IsLocalDC;
     TString DCId;
 
     ui32 MaxBlobSize;
@@ -594,7 +594,7 @@ private:
     std::deque<THolder<TEvPQ::TEvChangeOwner>> WaitToChangeOwner;
 
     TTabletCountersBase Counters;
-    TPartitionLabeledCounters PartitionLabeledCounters;
+    THolder<TPartitionLabeledCounters> PartitionLabeledCounters;
 
     TSubscriber Subscriber;
 

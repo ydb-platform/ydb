@@ -289,13 +289,14 @@ void TReadSession::OnClusterDiscovery(const TStatus& status, const Ydb::PersQueu
                     issues.AddIssue(TStringBuilder() << "Unexpected reply from cluster discovery. Empty endpoint for cluster "
                                     << normalizedName);
                 }
-                if (clusterSessionInfo.ClusterEndpoint && clusterSessionInfo.ClusterEndpoint != cluster.endpoint()) {
+                auto fullEndpoint = ApplyClusterEndpoint(DbDriverState->DiscoveryEndpoint, cluster.endpoint());
+		if (clusterSessionInfo.ClusterEndpoint && clusterSessionInfo.ClusterEndpoint != fullEndpoint) {
                     issues.AddIssue(TStringBuilder() << "Unexpected reply from cluster discovery. Different endpoints for one cluster name. Cluster: "
                                     << normalizedName << ". \"" << clusterSessionInfo.ClusterEndpoint << "\" vs \""
-                                    << cluster.endpoint() << "\"");
+                                    << fullEndpoint << "\"");
                 }
                 if (!clusterSessionInfo.ClusterEndpoint) {
-                    clusterSessionInfo.ClusterEndpoint = ApplyClusterEndpoint(DbDriverState->DiscoveryEndpoint, cluster.endpoint());
+                    clusterSessionInfo.ClusterEndpoint = fullEndpoint;
                 }
                 clusterSessionInfo.Topics.reserve(Settings.Topics_.size());
                 clusterSessionInfo.Topics.push_back(topicSettings);
@@ -1680,6 +1681,8 @@ TString TReadSessionEvent::TCommitAcknowledgementEvent::DebugString() const {
 
 TString TReadSessionEvent::TCreatePartitionStreamEvent::DebugString() const {
     return TStringBuilder() << "CreatePartitionStream { PartitionStreamId: " << GetPartitionStream()->GetPartitionStreamId()
+                            << " TopicPath: " << GetPartitionStream()->GetTopicPath()
+                            << " Cluster: " << GetPartitionStream()->GetCluster()
                             << " PartitionId: " << GetPartitionStream()->GetPartitionId()
                             << " CommittedOffset: " << GetCommittedOffset()
                             << " EndOffset: " << GetEndOffset()

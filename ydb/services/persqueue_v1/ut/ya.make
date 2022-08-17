@@ -25,6 +25,7 @@ ENDIF()
 SRCS(
     persqueue_ut.cpp
     persqueue_common_ut.cpp
+    persqueue_compat_ut.cpp
     test_utils.h
     pq_data_writer.h
     api_test_setup.h
@@ -42,6 +43,8 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils
     ydb/public/sdk/cpp/client/ydb_persqueue_public
     ydb/public/sdk/cpp/client/ydb_table
+    ydb/public/sdk/cpp/client/ydb_topic
+    ydb/public/sdk/cpp/client/ydb_proto
     ydb/services/persqueue_v1
 )
 

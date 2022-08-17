@@ -1,0 +1,70 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+import "ydb/public/api/protos/annotations/validation.proto";
+
+package Ydb.ValidationTest;
+
+message EmptyMessage {
+}
+
+message MessageWithoutValidators {
+    uint32 key = 1;
+    string value = 2;
+    repeated string payload = 3;
+}
+
+message MessageBasic {
+    string check_required = 1 [(required) = true];
+
+    repeated string check_size_range_1_2 = 2 [(size).range = {min: 1, max: 2}];
+    repeated string check_size_lt_2 = 3 [(size).lt = 2];
+    repeated string check_size_le_1 = 4 [(size).le = 1];
+    repeated string check_size_eq_1 = 5 [(size).eq = 1];
+    repeated string check_size_ge_1 = 6 [(size).ge = 1];
+    repeated string check_size_gt_1 = 7 [(size).gt = 1];
+
+    string check_length_range_1_3 = 8 [(length).range = {min: 1, max: 3}];
+    string check_length_lt_4 = 9 [(length).lt = 4];
+    string check_length_le_3 = 10 [(length).le = 3];
+    string check_length_eq_3 = 11 [(length).eq = 3];
+    string check_length_ge_3 = 12 [(length).ge = 3];
+    string check_length_gt_3 = 13 [(length).gt = 3];
+
+    int32 check_value_int32 = 14 [(value) = "< -1"];
+    int64 check_value_int64 = 15 [(value) = "< -5'000'000'000"];
+    uint32 check_value_uint32 = 16 [(value) = "> 1"];
+    uint64 check_value_uint64 = 17 [(value) = "> 5'000'000'000"];
+    double check_value_double = 18 [(value) = "> 1.0"];
+    float check_value_float = 19 [(value) = "< -1.0"];
+    bool check_value_bool = 20 [(value) = "== true"];
+    string check_value_string = 21 [(value) = '!= "changeme"'];
+
+    int32 check_value_range_1 = 22 [(value) = "[1; 10]"];
+    int32 check_value_range_2 = 23 [(value) = "(1; 10]"];
+    int32 check_value_range_3 = 24 [(value) = "[1; 10)"];
+    int32 check_value_range_4 = 25 [(value) = "(1; 10)"];
+}
+
+message MessageOptional {
+    optional int32 check_required = 1 [(required) = true];
+    optional string check_length = 2 [(length).range = {min: 1, max: 3}];
+    optional int32 check_value_int32 = 3 [(value) = "> 0"];
+}
+
+message MessageMap {
+    map<string, string> values = 1 [(size).gt = 0, (map_key).length.lt = 2, (length).lt = 2, (map_key).value = '!= "k"', (value) = '!= "v"'];
+}
+
+message MessageOneof {
+    uint32 key = 1;
+    string check_required = 2 [(required) = true];
+    oneof value {
+        string check_ge_1 = 3 [(length).ge = 1];
+        string check_ge_2 = 4 [(length).ge = 2];
+    }
+
+    message SomeMessage {
+        int32 some_value = 1;
+    }
+}

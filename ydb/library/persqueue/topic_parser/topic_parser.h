@@ -6,11 +6,18 @@
 #include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/protos/pqconfig.pb.h>
+
 #include <ydb/library/persqueue/topic_parser_public/topic_parser.h>
+
+
+namespace NKikimr::NMsgBusProxy::NPqMetaCacheV2 {
+    class TPersQueueMetaCacheActor;
+}
 
 namespace NPersQueue {
 
-TString GetFullTopicPath(const NActors::TActorContext& ctx, TMaybe<TString> database, const TString& topicPath);
+TString GetFullTopicPath(const NActors::TActorContext& ctx, const TMaybe<TString>& database, const TString& topicPath);
 TString ConvertNewConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
 TString ConvertOldConsumerName(const TString& consumer, const NActors::TActorContext& ctx);
 TString MakeConsumerPath(const TString& consumer);
@@ -28,354 +35,352 @@ TString MakeConsumerPath(const TString& consumer);
     if (!Valid) {                         \
         return TString();                 \
     } else {                              \
-        Y_VERIFY(!result.empty());        \
+        Y_VERIFY_S(!result.empty(), OriginalTopic.c_str());        \
         return result;                    \
     }
 
+class TTopicNameConverter;
 class TTopicNamesConverterFactory;
 
-class TTopicNameConverter {
+namespace NTests {
+    class TConverterTestWrapper;
+};
+
+class TDiscoveryConverter {
     friend class TTopicNamesConverterFactory;
+    friend class NKikimr::NMsgBusProxy::NPqMetaCacheV2::TPersQueueMetaCacheActor;
+    friend class NTests::TConverterTestWrapper;
 
-public:
-    TTopicNameConverter() = default;
-
-protected:
-    TTopicNameConverter(bool noDcMode, TStringBuf& pqNormalizedRootPrefix)
-        : NoDcMode(noDcMode)
-        , PQRootPrefix(pqNormalizedRootPrefix)
-    {}
-
-    TTopicNameConverter& ApplyToTopic(
-            const TString& topic, const TString& dc = TString(), const TString& database = TString()
-    ) {
-        OriginalTopic = topic;
-
-        TStringBuf topicNormalized = topic;
-        topicNormalized.SkipPrefix("/");
-        CHECK_SET_VALID(!topicNormalized.StartsWith("/"), "Multiple leading '/' in topic name", return *this);
-        CHECK_SET_VALID(!topicNormalized.empty(), "Empty topic name", return *this);
-
-        CHECK_SET_VALID(!topicNormalized.StartsWith("/"), "Multiple leading '/' in topic name", return *this);
-        CHECK_SET_VALID(!topicNormalized.empty(), "Empty topic name", return *this);
-        TStringBuf dbNormalized = database;
-        dbNormalized.SkipPrefix("/");
-        dbNormalized.ChopSuffix("/");
-
-        TStringBuf root;
-        if (NoDcMode || !PQRootPrefix.StartsWith(dbNormalized)) {
-            Database = database;
-            root = dbNormalized;
-        } else {
-            root = PQRootPrefix;
-        }
-        topicNormalized.SkipPrefix(root);
-        topicNormalized.SkipPrefix("/");
-        Dc = dc;
-        bool supposeLegacyMode = Database.empty() && !NoDcMode;
-        auto hasDcInName = IsLegacyTopicNameWithDc(topicNormalized);
-
-        CHECK_SET_VALID(!hasDcInName || dc.Empty(),  "May not specify DC with legacy-style topic name containing dc", return *this);
-        if (NoDcMode) {
-            CHECK_SET_VALID(!Database.empty(), "Database is mandatory in FirstClass mode", return *this);
-        } else {
-            HasDc = hasDcInName || !dc.empty();
-        }
-
-        if (hasDcInName) {
-            supposeLegacyMode = true;
-            SplitFullLegacyName(topicNormalized);
-            return *this;
-        } else if (IsLegacyTopicName(topicNormalized)) { // Also must get here if 'SplitFullLegacyName' performed
-            supposeLegacyMode = true;
-            SplitShortLegacyName(topicNormalized);
-            return *this;
-        } else {
-            SplitModernName(topicNormalized);
-
-            BuildModernNames(TString(root));
-            if (supposeLegacyMode) {
-                ClientsideName = FullLegacyName;
-                PrimaryFullPath = FullLegacyPath;
-            } else {
-                ClientsideName = ModernName;
-                PrimaryFullPath = FullModernPath;
-            }
-        }
-        return *this;
-    }
-
-public:
-    bool IsValid() const {
-        return Valid;
-    }
-
-    const TString& GetReason() {
-        return Reason;
-    }
-
-    TString GetClientsideName() {
-        CHECK_VALID_AND_RETURN(ClientsideName);
-    }
-
-    TString GetPrimaryPath() {
-        CHECK_VALID_AND_RETURN(PrimaryFullPath);
-    }
-
-    void SetPrimaryPath(const TString& path) {
-        PrimaryFullPath = path;
-    }
-
-    TString GetSecondaryPath() {
-        Y_FAIL("UNIMPLEMENTED");
-        CHECK_VALID_AND_RETURN(SecondaryFullPath);
-    }
-
-    TString GetOriginalPath() const {
-        CHECK_VALID_AND_RETURN(OriginalTopic);
-    }
-
-    TString GetShortLegacyName() const {
-        CHECK_VALID_AND_RETURN(LegacyName);
-    }
-
-    TString GetFullLegacyName() const {
-        CHECK_VALID_AND_RETURN(FullLegacyName);
-    }
-
-    TString GetFullLegacyPath() const {
-        CHECK_VALID_AND_RETURN(FullLegacyPath);
-    }
-    TString GetLegacyProducer() const {
-        CHECK_VALID_AND_RETURN(Producer);
-    }
-
-    TString GetModernName() const {
-        CHECK_VALID_AND_RETURN(ModernName);
-    }
-
-    TString GetModernPath() const {
-        CHECK_VALID_AND_RETURN(FullModernPath);
-    }
-    TString GetCluster() const {
-        return Dc;
-    }
-
-    TString GetAccount() const {
-        if (!Valid)
-            return {};
-        if (!Database.empty()) {
-            return Database;
-        }
-        TStringBuf buf(ModernName);
-        TStringBuf fst, snd;
-        auto res = buf.TrySplit("/", fst, snd);
-        if (!res) {
-            fst = buf;
-        }
-        return TString{fst};
-    }
-    TString GetTopicForSrcId() const {
-        if (!IsValid())
-            return {};
-        if (NoDcMode) {
-            return FullModernPath;
-        } else {
-            return FullLegacyName;
-        }
-    }
-
-    TString GetTopicForSrcIdHash() const {
-        if (!IsValid())
-            return {};
-        if (NoDcMode) {
-            return FullModernPath;
-        } else {
-            return LegacyName;
-        }
-    }
+    using TDiscoveryConverterPtr = std::shared_ptr<TDiscoveryConverter>;
+    using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;
 
 private:
-    bool IsLegacyTopicName(const TStringBuf& path) {
-        if (path.find("--") != TStringBuf::npos)
-            return true;
-        if (Database.empty() && !NoDcMode && path.find("/") == TStringBuf::npos)
-            return true;
-        return false;
+    void BuildForFederation(const TStringBuf& databaseBuf, TStringBuf topicPath);
+    void BuildFstClassNames();
+    void BuildFromFederationPath(const TString& rootPrefix);
+    void BuildFromShortModernName();
+
+protected:
+    TDiscoveryConverter() = default;
+    static TDiscoveryConverterPtr ForFstClass(const TString& topic, const TString& database);
+    static TDiscoveryConverterPtr ForFederation(const TString& topic, const TString& dc, const TString& localDc,
+                                                const TString& database, const TString& pqNormalizedPrefix);
+
+
+    TDiscoveryConverter(bool firstClass, const TString& pqNormalizedPrefix,
+                        const NKikimrPQ::TPQTabletConfig& pqTabletConfig, const TString& ydbDatabaseRootOverride);
+
+    void BuildFromLegacyName(const TString& rootPrefix, bool forceFullname = false);
+    bool TryParseModernMirroredPath(TStringBuf path);
+    void ParseModernPath(const TStringBuf& path);
+
+public:
+    bool IsValid() const;
+    const TString& GetReason() const;
+    const TString& GetOriginalTopic() const;
+    TTopicConverterPtr UpgradeToFullConverter(const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+                                              const TString& ydbDatabaseRootOverride);
+
+    TString GetPrintableString() const;
+
+
+    /** For first class:
+     * /database/dir/my-stream
+     *
+     * For federation (currently) - full legacy path:
+     * /Root/PQ/rt3.dc--account@dir--topic
+     * Except for topics with explicitly specified database:
+     * /user-database/dir/my-topic
+     * OR
+     * /user-database/dir/.my-topic/mirrored-from-dc
+     */
+    TString GetPrimaryPath() const;
+
+    TString GetOriginalPath() const;
+
+    /** Second path if applicable:
+     * Nothing for first class
+     * Nothing for topic with explicitly specified non-root Database
+     *
+     * Full modern path for topics requested from /Root (/Root/PQ) or in legacy style:
+     * /user-database/dir/my-topic
+     * OR
+     * /user-database/dir/.my-topic/mirrored-from-dc
+     */
+    const TMaybe<TString>& GetSecondaryPath(const TString& databasePath);
+
+    /**
+    Only for special cases.
+    */
+    void SetPrimaryPath(const TString& path) {
+        OriginalPath = PrimaryPath;
+        PrimaryPath = path;
     }
 
-    bool IsLegacyTopicNameWithDc(const TStringBuf& path) {
-        return path.StartsWith("rt3.");
-    }
+protected:
+    /** Account will be set for federation topics without database only;
+     * Generally used only for discovery purposes
+     */
+    const TMaybe<TString>& GetAccount_() const;
 
-    void SplitFullLegacyName(TStringBuf& name) {
-        // rt3.sas--accountName[@dirName]--topicName
-        FullLegacyName = name;
-        TStringBuf fst, snd;
-        name.SkipPrefix("rt3.");
-        auto res = name.TrySplit("--", fst, snd);
-        CHECK_SET_VALID(res, Sprintf("topic name %s is corrupted", OriginalTopic.c_str()), return);
-        Dc = fst;
-        LegacyName = snd;
-        FullLegacyPath = NKikimr::JoinPath({TString(PQRootPrefix), FullLegacyName});
-        SplitShortLegacyName(snd);
-    }
-
-    void SplitShortLegacyName(const TStringBuf& name) {
-        if (LegacyName.empty())
-            LegacyName = name;
-        CHECK_SET_VALID(!NoDcMode, "legacy-style topic name as first-class citizen", return);
-        TStringBuf buf, logtype;
-        TStringBuilder topicPath;
-        auto res = name.TryRSplit("--", buf, logtype);
-        if (!res) {
-            topicPath << name;
-            Producer = name;
-        } else {
-            Producer = buf;
-            while (true) {
-                TStringBuf fst, snd;
-                if (!buf.TrySplit("@", fst, snd))
-                    break;
-                topicPath << fst << "/";
-                buf = fst;
-            }
-            topicPath << buf << "/" << logtype;
-        }
-        ModernName = topicPath;
-        BuildFullLegacyName();
-        PrimaryFullPath = FullLegacyPath;
-        if (ClientsideName.empty() && !NoDcMode && !FullLegacyName.empty()) {
-            ClientsideName = FullLegacyName;
-        }
-    }
-
-    void SplitModernName(TStringBuf& name) {
-        if (ModernName.empty()) {
-            ModernName = name;
-        }
-        TStringBuf fst, snd;
-
-        auto res = name.TrySplit("/", fst, snd);
-        if (!res) {
-            LegacyName = name;
-            Producer = name;
-        } else {
-            TStringBuilder legacyName;
-            legacyName << fst;
-            while (true) {
-                name = snd;
-                res = name.TrySplit("/", fst, snd);
-                if (!res)
-                    break;
-                legacyName << "@" << fst;
-            }
-            Producer = legacyName;
-            legacyName << "--" << name;
-            LegacyName = legacyName;
-        }
-        BuildFullLegacyName();
-    }
-
-    void BuildModernNames(const TString& prefix) {
-        if (!NoDcMode && !Dc.empty()) {
-            // ToDo[migration]: build full modern name, full modern path
-        } else {
-            FullModernName = ModernName;
-            FullModernPath = NKikimr::JoinPath({prefix, FullModernName});
-        }
-    }
-    void BuildFullLegacyName() {
-        if (FullLegacyName.empty() || !Dc.empty()) {
-            TStringBuilder builder;
-            builder << "rt3." << Dc << "--" << LegacyName;
-            FullLegacyName = builder;
-        }
-        if (FullLegacyPath.empty() && !FullLegacyName.empty()) {
-            FullLegacyPath = NKikimr::JoinPath({PQRootPrefix, FullLegacyName});
-        }
-    }
+    /**
+     * Set database for topics specified via account-in-directory mode. Used for discovery purpose in metacache
+     */
+    void SetDatabase(const TString& database);
 
 
-    bool NoDcMode;
-    TString PQRootPrefix;
-
+protected:
     TString OriginalTopic;
-    TString Database;
     TString Dc;
+    bool MayUseLocalDc = true;
+    TMaybe<TString> Database;
+    TString LocalDc;
 
-    TString LegacyName;
-    TString FullLegacyName;
-    TString FullLegacyPath;
+    TString PQPrefix;
+    //TVector<TString> RootDatabases;
 
-    TString ModernName;
-    TString FullModernName;
-    TString FullModernPath;
+    TString OriginalPath;
+    TString PrimaryPath;
+    bool PendingDatabase = false;
+    TMaybe<TString> SecondaryPath;
+    TMaybe<TString> Account_;
+    TMaybe<TString> LbPath;
+    TMaybe<TString> Topic;
 
-    TString PrimaryFullPath;
-    TString SecondaryFullPath;
-    TString ClientsideName;
 
-    TString Producer;
-    TString Account;
-    bool HasDc = false;
+protected:
+    bool FstClass;
 
     bool Valid = true;
     TString Reason;
+
+    TString FullModernPath;
+    TString ModernName;
+    TString FullModernName;
+    TString ShortLegacyName;
+    TString FullLegacyName;
+    TString LegacyProducer;
+    TString LegacyLogtype;
 };
 
-using TConverterPtr = std::shared_ptr<TTopicNameConverter>;
+class TTopicNameConverter : public TDiscoveryConverter {
+    using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;
+    friend class TDiscoveryConverter;
+protected:
+    TTopicNameConverter() = default;
+    TTopicNameConverter(bool firstClass,
+                        const TString& pqPrefix,
+                        //const TVector<TString>& rootDatabases,
+                        const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+                        const TString& ydbDatabaseRootOverride);
+public:
+
+    static TTopicConverterPtr ForFirstClass(const NKikimrPQ::TPQTabletConfig& pqTabletConfig);
+
+    /** For federation only. legacyBasedApi flag used to indicate thad protocol used prefers legacy style topics
+     * (i.e. legacy and PQv0)*/
+    static TTopicConverterPtr ForFederation(const TString& pqPrefix,
+                                            //const TVector<TString>& rootDatabases,
+                                            const NKikimrPQ::TPQTabletConfig& pqTabletConfig,
+                                            const TString& ydbDatabaseRootOverride);
+
+    static TTopicConverterPtr ForFederation(const TString& pqRoot, const TString& ydbTestDatabaseRoot,
+                                            const TString& schemeName, const TString& schemeDir,
+                                            const TString& database, bool isLocal,
+                                            const TString& localDc = TString(),
+                                            const TString& federationAccount = TString());
+
+    /** Returns name for interaction client, such as locks and (maybe) sensors.
+     * rt3.dc--account@dir--topic for federation
+     * topic path relative to database for 1st class */
+    const TString& GetClientsideName() const;
+
+    /** Same as clientside name, but without dc for federation ("account@dir--topic"). */
+    const TString& GetShortClientsideName() const;
+
+//    /** Legacy name with Dc - 'rt3.dc.account--topic. Undefined for first-class */
+//    TString GetFullLegacyName() const;
+
+    /** Legacy name without Dc - 'account--topic. Undefined for first-class */
+    TString GetShortLegacyName() const;
+
+    /** Producer in legacy and PQv0. Undefined for first class */
+    const TString& GetLegacyProducer() const;
+
+    const TString& GetLegacyLogtype() const;
+
+    /** Account. Only defined for topics where it was specified upon creating (or alter) */
+    //ToDo - should verify that we'll actually have it everywhere required prior to use.
+    const TString& GetAccount() const;
+
+    /** Get logbroker logical path, 'account/dir/topic'. Generally this is not topic location path.
+     * Identical for clientside name for 1st class */
+    TString GetFederationPath() const;
+
+    /** Gets DC */
+    const TString& GetCluster() const;
+
+    /** Gets clientside name for migrated topic.
+     * `dir/topic` OR `dir/.topic/mirrored-from-dc` for mirrored topics.
+     * (No federation account).
+     * Database + ModernName compose full path for migrated topic.
+     * */
+    const TString& GetModernName() const;
+
+    /** Unique convertable name for internal purposes. Maybe uses hashing/for mappings.
+     * Single topic in any representation is supposed to have same internal name
+     * DO NOT use for business logic, such as sensors, SourceIds, etc
+     *
+     * /user-database/dir/my-topic
+     * OR
+     * /user-database/dir/.my-topic/mirrored-from-dc
+     *
+     * */
+    TString GetInternalName() const;
+
+
+    TString GetTopicForSrcId() const;
+    TString GetTopicForSrcIdHash() const;
+
+    TString GetSecondaryPath() const;
+
+    bool IsFirstClass() const;
+
+
+private:
+    void BuildInternals(const NKikimrPQ::TPQTabletConfig& config);
+
+private:
+    TString ClientsideName;
+    TString ShortClientsideName;
+    TString Account;
+    TString InternalName;
+};
+
+using TDiscoveryConverterPtr = std::shared_ptr<TDiscoveryConverter>;
+using TTopicConverterPtr = std::shared_ptr<TTopicNameConverter>;
 
 class TTopicNamesConverterFactory {
 public:
-    TTopicNamesConverterFactory(bool noDcMode, const TString& pqRootPrefix)
+    TTopicNamesConverterFactory(
+            bool noDcMode, const TString& pqRootPrefix,
+            const TString& localDc
+    )
         : NoDcMode(noDcMode)
         , PQRootPrefix(pqRootPrefix)
-        , NormalizedPrefix(PQRootPrefix)
+        , LocalDc(localDc)
     {
-        NormalizedPrefix.SkipPrefix("/");
-        NormalizedPrefix.ChopSuffix("/");
+        SetPQNormPrefix();
     }
 
-    TConverterPtr MakeTopicNameConverter(
-            const TString& topic, const TString& dc = TString(), const TString& database = TString()
-    ) {
-        auto* converter = new TTopicNameConverter(NoDcMode, NormalizedPrefix);
-        converter->ApplyToTopic(topic, dc, database);
-        return TConverterPtr(converter);
+    TTopicNamesConverterFactory(
+            const NKikimrPQ::TPQConfig& pqConfig, const TString& localDc, TMaybe<bool> isLocalDc = Nothing()
+    )
+    {
+        if (isLocalDc.Defined()) {
+            IsLocalDc = *isLocalDc;
+        } else {
+            LocalDc = localDc;
+        }
+        // The part after ' || ' is actually a hack. FirstClass citizen is expected to be explicitly set,
+        // but some tests (such as CDC) run without PQConfig at all
+        NoDcMode = pqConfig.GetTopicsAreFirstClassCitizen() || !pqConfig.GetEnabled();
+        PQRootPrefix = pqConfig.GetRoot();
+        YdbDatabasePathOverride = pqConfig.GetTestDatabaseRoot();
+        SetPQNormPrefix();
     }
+
+    TDiscoveryConverterPtr MakeDiscoveryConverter(
+            const TString& topic, TMaybe<bool> isInLocalDc, const TString& dc = TString(), const TString& database = TString()
+    ) {
+        if (NoDcMode) {
+            return TDiscoveryConverter::ForFstClass(topic, database);
+        } else {
+            TString localDc;
+            if (!IsLocalDc.Defined()) {
+                localDc = LocalDc;
+            } else if (IsLocalDc.GetRef()) {
+                localDc = dc;
+            } else {
+                localDc = dc + ".non-local"; // Just always mismatch with any DC;
+            }
+            if (isInLocalDc.Defined()) {
+                if (*isInLocalDc) {
+                    return TDiscoveryConverter::ForFederation(
+                            topic, localDc, localDc, database, NormalizedPrefix//, RootDatabases
+                    );
+                } else if (dc.empty()) {
+                    TDiscoveryConverterPtr converter;
+                    converter->Valid = false;
+                    converter->Reason = TStringBuilder() << "DC should be explicitly specified for topic " << topic << Endl;
+                    return converter;
+                }
+            }
+            return TDiscoveryConverter::ForFederation(topic, dc, localDc, database, NormalizedPrefix); //, RootDatabases);
+        }
+    }
+
+    TTopicConverterPtr MakeTopicConverter(
+            const NKikimrPQ::TPQTabletConfig& pqTabletConfig
+    ) {
+        TTopicConverterPtr converter;
+        if (NoDcMode) {
+            converter = TTopicNameConverter::ForFirstClass(pqTabletConfig);
+        } else {
+            converter = TTopicNameConverter::ForFederation(NormalizedPrefix, pqTabletConfig, YdbDatabasePathOverride);
+        }
+        return converter;
+    }
+
+    void SetLocalCluster(const TString& localCluster) { LocalDc = localCluster;}
+    TString GetLocalCluster() const { return LocalDc; }
+    bool GetNoDCMode() const { return NoDcMode; }
+
 
 private:
+    void SetPQNormPrefix() {
+        TStringBuf prefix(PQRootPrefix);
+        prefix.SkipPrefix("/");
+        prefix.ChopSuffix("/");
+        NormalizedPrefix = prefix;
+    }
+
     bool NoDcMode;
     TString PQRootPrefix;
-    TStringBuf NormalizedPrefix;
+    TString LocalDc;
+    TMaybe<bool> IsLocalDc;
+    TString NormalizedPrefix;
+    TString YdbDatabasePathOverride;
 };
 
 using TConverterFactoryPtr = std::shared_ptr<NPersQueue::TTopicNamesConverterFactory>;
-using TTopicsToConverter = THashMap<TString, TConverterPtr>;
+
+struct TTopicsToConverter {
+    THashMap<TString, TDiscoveryConverterPtr> Topics;
+    THashMap<TString, TVector<TDiscoveryConverterPtr>> ClientTopics;
+    bool IsValid = true;
+    TString Reason;
+};
 
 class TTopicsListController {
 public:
     TTopicsListController(const TConverterFactoryPtr& converterFactory,
-                          bool haveClusters, const TVector<TString>& clusters = {}, const TString& localCluster = {});
+                          const TVector<TString>& clusters = {});
 
-    void UpdateClusters(const TVector<TString>& clusters, const TString& localCluster);
+    void UpdateClusters(const TVector<TString>& clusters);
     TTopicsToConverter GetReadTopicsList(const THashSet<TString>& clientTopics, bool onlyLocal, const TString& database) const;
-    TConverterPtr GetWriteTopicConverter(const TString& clientName, const TString& database);
+    TDiscoveryConverterPtr GetWriteTopicConverter(const TString& clientName, const TString& database);
     TConverterFactoryPtr GetConverterFactory() const;
 
-    bool GetHaveClusters() const { return HaveClusters; }
-    TString GetLocalCluster() const { return LocalCluster; }
+    TString GetLocalCluster() const { return ConverterFactory->GetLocalCluster(); }
 private:
     TConverterFactoryPtr ConverterFactory;
-    bool HaveClusters;
     TVector<TString> Clusters;
-    TString LocalCluster;
 
+public:
 };
 
 TString NormalizeFullPath(const TString& fullPath);
 
 
 } // namespace NPersQueue
-

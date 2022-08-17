@@ -1,4 +1,4 @@
-#include "grpc_pq_actor.h"
+#include "actors/read_session_actor.h"
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
 #include <ydb/services/persqueue_v1/ut/persqueue_test_fixture.h>
@@ -616,7 +616,7 @@ namespace NKikimr::NPersQueueTests {
                 rr->set_version(0);
                 rr->set_important(true);
                 rr->set_supported_format(TopicSettings::FORMAT_BASE);
-                rr->add_supported_codecs(CODEC_ZSTD);
+                rr->add_supported_codecs(CODEC_GZIP);
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
                 Cerr << "ADD RR RESPONSE " << addRuleResponse << "\n";
                 UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::SUCCESS);
@@ -690,7 +690,7 @@ namespace NKikimr::NPersQueueTests {
                 rr->set_version(0);
                 rr->set_important(true);
                 rr->set_supported_format(TopicSettings::FORMAT_BASE);
-                rr->add_supported_codecs(CODEC_ZSTD);
+                rr->add_supported_codecs(CODEC_GZIP);
                 auto status = stub->AddReadRule(&grpcContext, addRuleRequest, &addRuleResponse);
                 Cerr << addRuleResponse << "\n";
                 UNIT_ASSERT(status.ok() && addRuleResponse.operation().status() == Ydb::StatusIds::SUCCESS);

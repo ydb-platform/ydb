@@ -147,6 +147,7 @@ struct TTopicInfo {
 
     NKikimrPQ::TPQTabletConfig Config;
     TIntrusiveConstPtr<TSchemeCacheNavigate::TPQGroupInfo> PQInfo;
+    NPersQueue::TDiscoveryConverterPtr Converter;
     ui32 NumParts = 0;
     THashSet<ui32> PartitionsToRequest;
 
@@ -192,7 +193,7 @@ void TPersQueueBaseRequestProcessor::Bootstrap(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::PERSQUEUE, "proxy got request " << RequestId);
 
     StartTimestamp = ctx.Now();
-    ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest(TopicPrefix(ctx)));
+    ctx.Send(PqMetaCache, new NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeAllTopicsRequest());
 
     if (ListNodes) {
         const TActorId nameserviceId = GetNameserviceActorId();
@@ -302,13 +303,7 @@ void TPersQueueBaseRequestProcessor::Handle(
                                     TStringBuilder() << "no path '" << path << "', Marker# PQ17");
     }
 
-    if (path != TopicPrefix(ctx)) {
-        return SendErrorReplyAndDie(ctx, MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC,
-                                    TStringBuilder() << "path '" << path << "' has no correct root prefix '" << TopicPrefix(ctx)
-                                    << "', Marker# PQ18");
-    }
-
-    SchemeCacheResponse = std::move(ev->Get()->Result);
+    TopicsDescription = std::move(ev->Get()->Result);
     if (ReadyToCreateChildren()) {
         if (CreateChildren(ctx)) {
             return;
@@ -317,17 +312,21 @@ void TPersQueueBaseRequestProcessor::Handle(
 }
 
 bool TPersQueueBaseRequestProcessor::ReadyToCreateChildren() const {
-    return SchemeCacheResponse && (!ListNodes || NodesInfo.get() != nullptr);
+    return TopicsDescription && (!ListNodes || NodesInfo.get() != nullptr);
 }
 
 bool TPersQueueBaseRequestProcessor::CreateChildren(const TActorContext& ctx) {
-    for (const auto& child : SchemeCacheResponse->ResultSet) {
-        if (child.Kind == TSchemeCacheNavigate::EKind::KindTopic && child.PQGroupInfo) {
-            TString name = child.PQGroupInfo->Description.GetName();
+    auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+    for (const auto& entry : TopicsDescription->ResultSet) {
+        if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
+            auto converter = factory.MakeTopicConverter(
+                    entry.PQGroupInfo->Description.GetPQTabletConfig()
+            );
+            auto name = converter->GetClientsideName();
             if (name.empty() || !TopicsToRequest.empty() && !IsIn(TopicsToRequest, name)) {
                 continue;
             }
-            ChildrenToCreate.emplace_back(new TPerTopicInfo(child));
+            ChildrenToCreate.emplace_back(new TPerTopicInfo(entry, converter));
         }
     }
     NeedChildrenCreation = true;
@@ -354,7 +353,7 @@ bool TPersQueueBaseRequestProcessor::CreateChildrenIfNeeded(const TActorContext&
     while (!ChildrenToCreate.empty()) {
         THolder<TPerTopicInfo> perTopicInfo(ChildrenToCreate.front().Release());
         ChildrenToCreate.pop_front();
-        const auto& name = perTopicInfo->TopicEntry.PQGroupInfo->Description.GetName();
+        const auto& name = perTopicInfo->Converter->GetClientsideName();
         if (name.empty()) {
             continue;
         }
@@ -882,7 +881,8 @@ public:
 
     void Handle(TEvAllTopicsDescribeResponse::TPtr& ev, const TActorContext& ctx) {
         --DescribeRequests;
-        auto& res = ev->Get()->Result;
+        auto& res = ev->Get()->Result->ResultSet;
+        auto& topics = ev->Get()->Topics;
         auto processResult = ProcessMetaCacheAllTopicsResponse(ev);
         if (processResult.IsFatal) {
             ErrorReason = processResult.Reason;
@@ -892,11 +892,17 @@ public:
         NoTopicsAtStart = TopicInfo.empty();
         bool hasTopics = !NoTopicsAtStart;
 
-        for (const auto& entry : res->ResultSet) {
+        Y_VERIFY(topics.size() == res.size());
+        auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+        for (auto i = 0u; i != res.size(); i++) {
+            auto& entry = res[i];
             if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic && entry.PQGroupInfo) {
                 auto& description = entry.PQGroupInfo->Description;
-                if (!hasTopics || TopicInfo.find(description.GetName()) != TopicInfo.end()) {
-                    auto& topicInfo = TopicInfo[description.GetName()];
+                auto converter = factory.MakeTopicConverter(
+                        entry.PQGroupInfo->Description.GetPQTabletConfig()
+                );
+                if (!hasTopics || TopicInfo.find(converter->GetClientsideName()) != TopicInfo.end()) {
+                    auto& topicInfo = TopicInfo[converter->GetClientsideName()];
                     topicInfo.BalancerTabletId = description.GetBalancerTabletID();
                     topicInfo.PQInfo = entry.PQGroupInfo;
                 }
@@ -919,7 +925,6 @@ public:
     }
 
     void ProcessMetadata(const TString& name, TTopicInfo& info, const TActorContext& ctx) {
-        //const TString& name = info.PQInfo->Description.GetName();
         if (!info.PQInfo) { //not supposed to happen anymore
             if (RequestProto.HasMetaRequest() && NoTopicsAtStart && !RequestProto.GetMetaRequest().HasCmdGetTopicMetadata()) {
                 ++TopicsAnswered;
@@ -932,8 +937,6 @@ public:
         }
 
         const auto& pqDescr = info.PQInfo->Description;
-        const TString& topic = pqDescr.GetName();
-        Y_VERIFY(topic == name, "topic '%s' path '%s'", topic.c_str(), name.c_str());
 
         bool mirrorerRequest = false;
         if (RequestProto.HasPartitionRequest()) {
@@ -970,14 +973,14 @@ public:
         if (AppData(ctx)->PQConfig.GetCheckACL() && operation && !mirrorerRequest) {
             if (*operation == NKikimrPQ::EOperation::WRITE_OP && pqDescr.GetPQTabletConfig().GetRequireAuthWrite() ||
                 *operation == NKikimrPQ::EOperation::READ_OP && pqDescr.GetPQTabletConfig().GetRequireAuthRead()) {
-                ErrorReason = Sprintf("unauthenticated access to '%s' is denied, Marker# PQ419", topic.c_str());
+                ErrorReason = Sprintf("unauthenticated access to '%s' is denied, Marker# PQ419", name.c_str());
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::ACCESS_DENIED, ctx), ctx);
             }
         }
 
         if (RequestProto.HasPartitionRequest()) {
             ui64 tabletId = 0;
-            auto it = TopicInfo.find(topic);
+            auto it = TopicInfo.find(name);
             Y_VERIFY(it != TopicInfo.end());
             Y_VERIFY(it->second.PartitionsToRequest.size() == 1);
             ui32 partition = *(it->second.PartitionsToRequest.begin());
@@ -990,7 +993,7 @@ public:
             }
 
             if (!tabletId) {
-                ErrorReason = Sprintf("no partition %u in topic '%s', Marker# PQ4", partition, topic.c_str());
+                ErrorReason = Sprintf("no partition %u in topic '%s', Marker# PQ4", partition, name.c_str());
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
             }
 
@@ -1017,8 +1020,8 @@ public:
 
             Y_VERIFY((needResolving + needAskOffset + needAskStatus + needAskFetch + metadataOnly) == 1);
             ++TopicsAnswered;
-            auto it = TopicInfo.find(topic);
-            Y_VERIFY(it != TopicInfo.end(), "topic '%s'", topic.c_str());
+            auto it = TopicInfo.find(name);
+            Y_VERIFY(it != TopicInfo.end(), "topic '%s'", name.c_str());
             it->second.Config = pqDescr.GetPQTabletConfig();
             it->second.Config.SetVersion(pqDescr.GetAlterVersion());
             it->second.NumParts = pqDescr.PartitionsSize();
@@ -1037,7 +1040,7 @@ public:
 
                 auto& tabletInfo = TabletInfo[it->second.BalancerTabletId];
                 tabletInfo.IsBalancer = true;
-                tabletInfo.Topic = topic;
+                tabletInfo.Topic = name;
 
                 NTabletPipe::TClientConfig clientConfig;
                 TActorId pipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, it->second.BalancerTabletId, clientConfig));
@@ -1059,7 +1062,7 @@ public:
                 Y_VERIFY(res);
                 if (TabletInfo.find(tabletId) == TabletInfo.end()) {
                     auto& tabletInfo = TabletInfo[tabletId];
-                    tabletInfo.Topic = topic;
+                    tabletInfo.Topic = name;
                     it->second.Tablets.push_back(tabletId);
                         // Tablet node resolution relies on opening a pipe
 
@@ -1099,7 +1102,7 @@ public:
                 }
             }
             if (!it->second.PartitionsToRequest.empty() && it->second.PartitionsToRequest.size() != it->second.PartitionToTablet.size()) {
-                ErrorReason = Sprintf("no one of requested partitions in topic '%s', Marker# PQ12", topic.c_str());
+                ErrorReason = Sprintf("no one of requested partitions in topic '%s', Marker# PQ12", name.c_str());
                 return SendReplyAndDie(CreateErrorReply(MSTATUS_ERROR, NPersQueue::NErrorCode::UNKNOWN_TOPIC, ctx), ctx);
             }
 
@@ -1318,7 +1321,7 @@ public:
             ctx.Schedule(TDuration::MilliSeconds(Min<ui32>(RequestProto.GetFetchRequest().GetWaitMs(), 30000)), new TEvPersQueue::TEvHasDataInfoResponse);
         }
 
-        auto* request = new TEvAllTopicsDescribeRequest(TopicPrefix(ctx));
+        auto* request = new TEvAllTopicsDescribeRequest();
         ctx.Send(SchemeCache, request);
         ++DescribeRequests;
 

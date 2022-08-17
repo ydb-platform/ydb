@@ -14,7 +14,8 @@ namespace NKikimr::NGRpcProxy {
         TString CloudId;
         TString DbId;
         TString FolderId;
-        NPersQueue::TConverterPtr TopicNameConverter;
+        NPersQueue::TDiscoveryConverterPtr DiscoveryConverter;
+        NPersQueue::TTopicConverterPtr FullConverter;
 
         TVector<ui32> Groups;
         TMap<ui64, ui64> Partitions;
@@ -27,13 +28,13 @@ namespace NKikimr::NGRpcProxy {
     };
 
     struct TTopicInitInfo {
-        NPersQueue::TConverterPtr TopicNameConverter;
+        NPersQueue::TTopicConverterPtr TopicNameConverter;
         ui64 TabletID;
         TString CloudId;
         TString DbId;
         TString FolderId;
     };
 
-    using TTopicTabletsPairs = TVector<TTopicInitInfo>;
+    using TTopicInitInfoMap = THashMap<TString, TTopicInitInfo>;
 
 } //    namespace NKikimr::NGRpcProxy

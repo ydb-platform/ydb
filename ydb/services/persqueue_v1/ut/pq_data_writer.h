@@ -244,7 +244,7 @@ private:
 
         req.mutable_init_request()->set_topic(topic);
         req.mutable_init_request()->set_message_group_id(SourceId_);
-        req.mutable_init_request()->set_max_supported_block_format_version(0);
+        req.mutable_init_request()->set_max_supported_format_version(0);
 
         (*req.mutable_init_request()->mutable_session_meta())["key"] = "value";
 

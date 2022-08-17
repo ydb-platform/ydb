@@ -1,0 +1,766 @@
+syntax = "proto3";
+import "ydb/public/api/protos/ydb_operation.proto";
+import "ydb/public/api/protos/ydb_scheme.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/annotations/validation.proto";
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+package Ydb.Topic;
+
+option java_package = "com.yandex.ydb.topic";
+
+option cc_enable_arenas = true;
+
+enum Codec {
+    CODEC_UNSPECIFIED = 0;
+    CODEC_RAW = 1;
+    CODEC_GZIP = 2;
+    CODEC_LZOP = 3;
+    CODEC_ZSTD = 4;
+    reserved 5 to 9999;
+    // User-defined codecs from 10000 to 19999
+    CODEC_CUSTOM = 10000;
+    reserved 20000 to max;
+}
+
+// Description of supported codecs.
+message SupportedCodecs {
+    // List of supported codecs.
+    // See enum Codec above for values.
+    repeated int32 codecs = 1 [(Ydb.value) = "[1; 19999]", (Ydb.size).le = 100];
+}
+
+// Represents range [start, end).
+// I.e. (end - 1) is the greatest of offsets, included in non-empty range.
+message OffsetsRange {
+    int64 start = 1;
+    int64 end = 2;
+}
+
+// In-session reauthentication and reauthorization, lets user increase session lifetime.
+// Client should wait for UpdateTokenResponse before sending next UpdateTokenRequest.
+message UpdateTokenRequest {
+    string token = 1;
+}
+
+message UpdateTokenResponse {
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// StreamWrite
+
+
+// Messages for bidirectional streaming rpc StreamWrite
+message StreamWriteMessage {
+    // Client-server message for write session. Contains one of:
+    //     InitRequest - handshake request.
+    //     WriteRequest - portion of data to be written.
+    //     UpdateTokenRequest - user credentials if update is needed.
+    message FromClient {
+        oneof client_message {
+            InitRequest init_request = 1;
+            WriteRequest write_request = 2;
+            UpdateTokenRequest update_token_request = 3;
+        }
+    }
+
+    // Server-client message for write session. Contains either non-success status, or one of:
+    //     InitResponse - correct handshake response.
+    //     WriteResponse - acknowledgment of storing client messages.
+    //     UpdateTokenResponse - acknowledgment of reauthentication and reauthorization.
+    message FromServer {
+        // Server status of response.
+        Ydb.StatusIds.StatusCode status = 1;
+
+        // Issues if any.
+        repeated Ydb.Issue.IssueMessage issues = 2;
+
+        oneof server_message {
+            InitResponse init_response = 3;
+            WriteResponse write_response = 4;
+            UpdateTokenResponse update_token_response = 5;
+        }
+    }
+
+    // Handshake request that must be sent to server first.
+    message InitRequest {
+        // Full path of topic to write to.
+        string path = 1;
+        // Producer identifier of client data stream.
+        // Used for message deduplication by sequence numbers.
+        string producer_id = 2;
+        // User metadata attached to this write session.
+        // Reader will get this session meta data with each message read.
+        map<string, string> write_session_meta = 3;
+        // Option for setting order on messages.
+        // If neither is set, no guarantees on ordering or partitions to write to.
+        oneof partitioning {
+            // All messages with given pair (producer_id, message_group_id) go to single partition in order of writes.
+            string message_group_id = 4;
+            // Explicit partition id to write to.
+            int64 partition_id = 5;
+        }
+        // Explicitly request for last sequential number
+        // It may be expensive, if producer wrote to many partitions before.
+        bool get_last_seq_no = 6;
+    }
+
+    // Response for handshake.
+    message InitResponse {
+        // Last persisted message's sequence number for this producer.
+        // Zero for new producer.
+        int64 last_seq_no = 1;
+        // Unique identifier of write session. Used for debug purposes.
+        string session_id = 2;
+        // Identifier of partition that is matched for this write session.
+        int64 partition_id = 3;
+
+        // Client can only use compression codecs from this set to write messages to topic.
+        // Otherwise session will be closed with BAD_REQUEST.
+        SupportedCodecs supported_codecs = 4;
+    }
+
+    // Represents portion of client messages.
+    message WriteRequest {
+        repeated MessageData messages = 1;
+
+        // Codec that is used for data compression.
+        // See enum Codec above for values.
+        int32 codec = 2;
+
+        message MessageData {
+            // Message sequence number, provided by client for deduplication.
+            // Starts at 1
+            int64 seq_no = 1;
+            // Creation timestamp
+            google.protobuf.Timestamp created_at = 2;
+            // Compressed client message body.
+            bytes data = 3;
+            // Uncompressed size of client message body.
+            int64 uncompressed_size = 4;
+            // Per-message override for respective write session settings.
+            oneof partitioning {
+                // All messages with given pair (producer_id, message_group_id) go to single partition in order of writes.
+                string message_group_id = 5;
+                // Explicit partition id to write to.
+                int64 partition_id = 6;
+            }
+        }
+    }
+
+    // Message that represents acknowledgment for sequence of client messages.
+    // This sequence is persisted together so write statistics is for messages batch.
+    message WriteResponse {
+        // Number of acks is equal to number of messages in the corresponding WriteRequests.
+        repeated WriteAck acks = 1;
+
+        // Assigned partition for all client messages inside this batch.
+        // This actual partition may differ from that returned in InitResponse
+        // or other WriteResponses in this write session.
+        int64 partition_id = 2;
+
+        // Write statistics for this sequence of client messages.
+        WriteStatistics write_statistics = 3;
+
+        // Acknowledgment for one persistently written message.
+        message WriteAck {
+            // Sequence number as in WriteRequest.
+            int64 seq_no = 1;
+
+            // Either message is written for the first time or duplicate.
+            oneof message_write_status {
+                Written written = 2;
+                Skipped skipped = 3;
+            }
+
+            message Written {
+                // Assigned partition offset.
+                int64 offset = 1;
+            }
+
+            message Skipped {
+                Reason reason = 1;
+
+                enum Reason {
+                    REASON_UNSPECIFIED = 0;
+                    REASON_ALREADY_WRITTEN = 1;
+                }
+            }
+        }
+
+        // Message with write statistics.
+        message WriteStatistics {
+            // Time spent in persisting of data. Same for each message in response.
+            google.protobuf.Duration persisting_time = 1;
+            // Time spent in queue before persisting, minimal of all messages in response.
+            google.protobuf.Duration min_queue_wait_time = 2;
+            // Time spent in queue before persisting, maximal of all messages in response.
+            google.protobuf.Duration max_queue_wait_time = 3;
+            // Time spent awaiting for partition write quota. Same for each message in response.
+            google.protobuf.Duration partition_quota_wait_time = 4;
+            // Time spent awaiting for topic write quota. Same for each message in response.
+            google.protobuf.Duration topic_quota_wait_time = 5;
+        }
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// StreamRead
+
+
+// Messages for bidirectional streaming rpc StreamRead
+message StreamReadMessage {
+    // Within a StreamRead session delivered messages are separated by partition.
+    // Reads from a single partition are represented by a partition session.
+    message PartitionSession {
+        // Identitifier of partition session. Unique inside one RPC call.
+        int64 partition_session_id = 1;
+        // Topic path of partition.
+        string path = 2;
+        // Partition identifier.
+        int64 partition_id = 3;
+    }
+
+    // Client-server message for read session. Contains one of:
+    //     InitRequest - handshake request.
+    //     ReadRequest - request for data.
+    //     CommitOffsetRequest - request for commit of some read data.
+    //     PartitionSessionStatusRequest - request for session status
+    //     UpdateTokenRequest - request to update auth token
+    //
+    //     StartPartitionSessionResponse - Response to StreamReadServerMessage.StartPartitionSessionRequest.
+    //         Client signals it is ready to get data from partition.
+    //     StopPartitionSessionResponse - Response to StreamReadServerMessage.StopPartitionSessionRequest.
+    //         Client signals it has finished working with partition. Mandatory for graceful stop, optional otherwise.
+    message FromClient {
+        oneof client_message {
+            // Client requests.
+            InitRequest init_request = 1;
+            ReadRequest read_request = 2;
+            CommitOffsetRequest commit_offset_request = 3;
+            PartitionSessionStatusRequest partition_session_status_request = 4;
+            UpdateTokenRequest update_token_request = 5;
+
+            // Responses to respective server commands.
+            StartPartitionSessionResponse start_partition_session_response = 6;
+            StopPartitionSessionResponse stop_partition_session_response = 7;
+        }
+    }
+
+    // Server-client message for read session. Contains one of:
+    //     InitResponse - handshake response from server.
+    //     ReadResponse - portion of data.
+    //     CommitOffsetResponse - acknowledgment for commit.
+    //     PartitionSessionStatusResponse - server response with partition session status.
+    //     UpdateTokenResponse - acknowledgment of token update.
+    //
+    //     StartPartitionSessionRequest - command from server to create a partition session.
+    //     StopPartitionSessionRequest - command from server to destroy a partition session.
+    message FromServer {
+        // Server status of response.
+        Ydb.StatusIds.StatusCode status = 1;
+
+        // Issues if any.
+        repeated Ydb.Issue.IssueMessage issues = 2;
+
+        oneof server_message {
+            // Responses to respective client requests.
+            InitResponse init_response = 3;
+            ReadResponse read_response = 4;
+            CommitOffsetResponse commit_offset_response = 5;
+            PartitionSessionStatusResponse partition_session_status_response = 6;
+            UpdateTokenResponse update_token_response = 7;
+
+            // Server commands.
+            StartPartitionSessionRequest start_partition_session_request = 8;
+            StopPartitionSessionRequest stop_partition_session_request = 9;
+        }
+    }
+
+    // Handshake request.
+    message InitRequest {
+        // Message that describes topic to read.
+        // Topics that will be read by this session.
+        repeated TopicReadSettings topics_read_settings = 1;
+        // Path of consumer that is used for reading by this session.
+        string consumer = 2;
+
+        message TopicReadSettings {
+            // Topic path.
+            string path = 1;
+            // Partitions that will be read by this session.
+            // If list is empty - then session will read all partitions.
+            repeated int64 partition_ids = 2;
+            // Skip all messages that has write timestamp smaller than now - max_lag.
+            // Zero means infinite lag.
+            google.protobuf.Duration max_lag = 3;
+            // Read data only after this timestamp from this topic.
+            // Read only messages with 'written_at' value greater or equal than this timestamp.
+            google.protobuf.Timestamp read_from = 4;
+        }
+    }
+
+    // Handshake response.
+    message InitResponse {
+        // Read session identifier for debug purposes.
+        string session_id = 1;
+    }
+
+    // Message that represents client readiness for receiving more data.
+    message ReadRequest {
+        // Server and client each keep track of total bytes size of all ReadResponses.
+        // When client is ready to receive N more bytes in responses (to increment possible total by N),
+        // it sends a ReadRequest with bytes_size = N.
+        // bytes_size value must be positive.
+        // So in expression 'A = (sum of bytes_size in all ReadRequests) - (sum of bytes_size in all ReadResponses)'
+        //   server will keep A (available size for responses) non-negative.
+        // But there is an exception. If server receives ReadRequest, and the first message in response exceeds A -
+        // then it will still be delivered, and A will become negative until enough additional ReadRequests.
+        //
+        // Example:
+        // 1) Let client have 200 bytes buffer. It sends ReadRequest with bytes_size = 200;
+        // 2) Server may return one ReadResponse with bytes_size = 70 and than another 80 bytes response;
+        //    now client buffer has 50 free bytes, server is free to send up to 50 bytes in responses.
+        // 3) Client processes 100 bytes from buffer, now buffer free space is 150 bytes,
+        //    so client sends ReadRequest with bytes_size = 100;
+        // 4) Server is free to send up to 50 + 100 = 150 bytes. But the next read message is too big,
+        //    and it sends 160 bytes ReadResponse.
+        // 5) Let's assume client somehow processes it, and its 200 bytes buffer is free again.
+        //    It shoud account for excess 10 bytes and send ReadRequest with bytes_size = 210.
+        int64 bytes_size = 1;
+    }
+
+    // Data read.
+    message ReadResponse {
+        // One client message representation.
+        message MessageData {
+            // Partition offset in partition that assigned for message.
+            int64 offset = 1; //unique value for clientside deduplication - Topic:Partition:Offset
+            // Sequence number that provided with message on write from client.
+            int64 seq_no = 2;
+            // Timestamp of creation of message provided on write from client.
+            google.protobuf.Timestamp created_at = 3;
+            // Compressed client message body.
+            bytes data = 5;
+            // Uncompressed size of client message body.
+            int64 uncompressed_size = 6;
+
+            // Filled if message_group_id was set on message write.
+            string message_group_id = 7;
+        }
+
+        // Representation of sequence of client messages from one write session.
+        message Batch {
+            // List of client messages.
+            repeated MessageData message_data = 1;
+
+            // Producer identifier provided by client for this batch of client messages.
+            string producer_id = 2;
+            // Client metadata attached to write session, the same for all messages in batch.
+            map<string, string> write_session_meta = 3;
+
+            // Codec that is used for data compression.
+            // See enum Codec above for values.
+            int32 codec = 4;
+
+            // Persist timestamp on server for batch.
+            google.protobuf.Timestamp written_at = 5;
+        }
+
+        // Representation of sequence of messages from one partition.
+        message PartitionData {
+            int64 partition_session_id = 1;
+
+            // Client messages, divided by write sessions.
+            repeated Batch batches = 2;
+        }
+
+        // Client messages, divided by partitions.
+        repeated PartitionData partition_data = 1;
+
+        // Total size in bytes of this response as calculated by server.
+        // See ReadRequest comment above.
+        int64 bytes_size = 2;
+    }
+
+    // Signal for server that client processed some read data.
+    message CommitOffsetRequest {
+        // Partition offsets that indicates processed data.
+        repeated PartitionCommitOffset commit_offsets = 1;
+
+        // Message that is used for describing commit.
+        message PartitionCommitOffset {
+            // Identifier of partition session with data to commit.
+            int64 partition_session_id = 1;
+            // Processed offsets ranges, repeated in case of disjoint ranges.
+            repeated OffsetsRange offsets = 2;
+        }
+    }
+
+    // Acknowledgement for commits.
+    message CommitOffsetResponse {
+        // Partitions with progress.
+        repeated PartitionCommittedOffset partitions_committed_offsets = 1;
+
+        // Per-partition commit representation.
+        message PartitionCommittedOffset {
+            // Partition session identifier.
+            int64 partition_session_id = 1;
+            // Upper bound for committed offsets.
+            int64 committed_offset = 2;
+        }
+    }
+
+    message PartitionSessionStatusRequest {
+        int64 partition_session_id = 1;
+    }
+
+    // Response for status request.
+    message PartitionSessionStatusResponse {
+        // Identifier of partition session whose status was requested.
+        int64 partition_session_id = 1;
+
+        // Partition contains messages with offsets in range [start, end).
+        OffsetsRange partition_offsets = 2;
+
+        // Each offset up to and including (committed_offset - 1) was fully processed.
+        int64 committed_offset = 3;
+
+        // Write timestamp of next message written to this partition will be no less than write_time_high_watermark.
+        google.protobuf.Timestamp write_time_high_watermark = 4;
+    }
+
+    // Command from server to create and start a partition session.
+    // Client must respond with StartPartitionSessionResponse when ready to receive data from this partition.
+    message StartPartitionSessionRequest {
+        // Partition session description.
+        PartitionSession partition_session = 1;
+
+        // Each offset up to and including (committed_offset - 1) was fully processed.
+        int64 committed_offset = 2;
+
+        // Partition contains messages with offsets in range [start, end).
+        OffsetsRange partition_offsets = 3;
+    }
+
+    // Signal for server that cient is ready to recive data for partition.
+    message StartPartitionSessionResponse {
+        // Partition session identifier of partition to start read.
+        int64 partition_session_id = 1;
+
+        // Reads in this partition session will start from offset no less than read_offset.
+        // If read_offset is set, server will check that read_offset is no less that actual committed offset.
+        // If check fails then server will send an error message (status != SUCCESS) and close stream.
+        //
+        // If read_offset is not set, no check will be made.
+        // InitRequest.max_lag and InitRequest.read_from could lead to skip of more messages.
+        // Server will return data starting from offset that is maximum of actual committed offset, read_offset (if set)
+        // and offsets calculated from InitRequest.max_lag and InitRequest.read_from.
+        // optional int64 read_offset = 2;
+        oneof maybe_read_offset {
+            int64 read_offset = 2;
+        }
+        // All messages with offset less than commit_offset are processed by client.
+        // Server will commit this position if this is not done yet.
+        // optional int64 commit_offset = 3;
+        oneof maybe_commit_offset {
+            int64 commit_offset = 3;
+        }
+    }
+
+    // Command from server to stop and destroy concrete partition session.
+    message StopPartitionSessionRequest {
+        // Identifier of partition session that is ready to be closed by server.
+        int64 partition_session_id = 1;
+
+        // Flag of graceful stop.
+        // If set, server will wait for response from client before giving this partition to other read session.
+        // Server will not send more data from this partition.
+        // Client can process all received data and wait for commit and only after send response.
+        // If False then server gives partition for other session right now.
+        // All further commits for this partition session has no effect. Server is not waiting for response.
+        bool graceful = 2;
+
+        // Upper bound for committed offsets.
+        int64 committed_offset = 3;
+    }
+
+    // Signal for server that client finished working with this partition.
+    // Must be sent only after corresponding StopPartitionSessionRequest from server.
+    // Server will give this partition to other read session only after StopPartitionSessionResponse signal.
+    message StopPartitionSessionResponse {
+        // Partition session identifier of partition session that is released by client.
+        int64 partition_session_id = 1;
+    }
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Control messages
+
+
+// Consumer description.
+message Consumer {
+    // Must have valid not empty name as a key.
+    string name = 1;
+    // Consumer may be marked as 'important'. It means messages for this consumer will never expire due to retention.
+    // User should take care that such consumer never stalls, to prevent running out of disk space.
+    // Flag that this consumer is important.
+    bool important = 2;
+    // All messages with smaller server written_at timestamp will be skipped.
+    google.protobuf.Timestamp read_from = 3;
+    reserved 4; // supported_format
+    // List of supported codecs by this consumer.
+    // supported_codecs on topic must be contained inside this list.
+    SupportedCodecs supported_codecs = 5;
+
+    // Attributes of consumer
+    map<string, string> attributes = 6;
+}
+
+// Consumer alter description.
+message AlterConsumer {
+    // Must have valid not empty name as a key.
+    string name = 1;
+    // Consumer may be marked as 'important'. It means messages for this consumer will never expire due to retention.
+    // User should take care that such consumer never stalls, to prevent running out of disk space.
+    // Flag that this consumer is important.
+    // optional bool set_important = 2;
+    oneof maybe_set_important {
+        bool set_important = 2;
+    }
+    // All messages with smaller server written_at timestamp will be skipped.
+    google.protobuf.Timestamp set_read_from = 3;
+    reserved 4; // supported_format
+    // List of supported codecs by this consumer.
+    // supported_codecs on topic must be contained inside this list.
+    SupportedCodecs set_supported_codecs = 5;
+
+    // User and server attributes of consumer. Server attributes starts from "_" and will be validated by server.
+    // Leave the value blank to drop an attribute.
+    map<string, string> alter_attributes = 6;
+}
+
+// Partitioning settings for topic.
+message PartitioningSettings {
+    // Minimum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    int64 min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    int64 partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+}
+
+// Partitioning settings for topic.
+message AlterPartitioningSettings {
+    // Minimum partition count auto merge would stop working at.
+    // Zero value means default - 1.
+    // optional int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    oneof maybe_set_min_active_partitions {
+        int64 set_min_active_partitions = 1 [(Ydb.value) = ">= 0"];
+    }
+    // Limit for total partition count, including active (open for write) and read-only partitions.
+    // Zero value means default - 100.
+    // optional int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    oneof maybe_set_partition_count_limit {
+        int64 set_partition_count_limit = 2 [(Ydb.value) = ">= 0"];
+    }
+}
+
+
+// Create topic request sent from client to server.
+message CreateTopicRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Topic path.
+    string path = 2;
+
+    // Settings for partitioning
+    PartitioningSettings partitioning_settings = 3;
+
+    // Retention settings.
+    // Currently, only one limit may be set, so other should not be set.
+    //
+    // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
+    // Default limit - 36 hours.
+    google.protobuf.Duration retention_period = 4;
+    // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
+    // Zero value means infinite limit.
+    int64 retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
+
+    reserved 6; // supported_format.
+    // List of allowed codecs for writers.
+    // Writes with codec not from this list are forbidden.
+    SupportedCodecs supported_codecs = 7;
+    // Partition write speed in bytes per second. Must be less than database limit.
+    // Zero value means default limit: 1 MB per second.
+    int64 partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
+    // Burst size for write in partition, in bytes. Must be less than database limit.
+    // Zero value means default limit: 1 MB.
+    int64 partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
+
+    // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
+    map<string, string> attributes = 10;
+
+    // List of consumers for this topic.
+    repeated Consumer consumers = 11 [(Ydb.size).le = 3000];
+}
+
+// Create topic response sent from server to client.
+// If topic is already exists then response status will be "ALREADY_EXISTS".
+message CreateTopicResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Create topic result message that will be inside CreateTopicResponse.operation.
+message CreateTopicResult {
+}
+
+
+// Describe topic request sent from client to server.
+message DescribeTopicRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Topic path.
+    string path = 2;
+}
+
+// Describe topic response sent from server to client.
+// If topic is not existed then response status will be "SCHEME_ERROR".
+message DescribeTopicResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Describe topic result message that will be inside DescribeTopicResponse.operation.
+message DescribeTopicResult {
+    // Description of scheme object.
+    Ydb.Scheme.Entry self = 1;
+
+    // Settings of topic.
+
+    // Settings for partitioning
+    PartitioningSettings partitioning_settings = 2;
+    // Partitions description.
+    repeated PartitionInfo partitions = 3;
+
+    // Retention settings.
+    // Currently, only one limit may be set, so other should not be set.
+    //
+    // How long data in partition should be stored.
+    google.protobuf.Duration retention_period = 4;
+    // How much data in partition should be stored.
+    // Zero value means infinite limit.
+    int64 retention_storage_mb = 5;
+
+    reserved 6; // supported_format.
+    // List of allowed codecs for writers.
+    // Writes with codec not from this list are forbidden.
+    SupportedCodecs supported_codecs = 7;
+    // Partition write speed in bytes per second.
+    // Zero value means default limit: 1 MB per second.
+    int64 partition_write_speed_bytes_per_second = 8;
+    // Burst size for write in partition, in bytes.
+    // Zero value means default limit: 1 MB.
+    int64 partition_write_burst_bytes = 9;
+
+    // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
+    map<string, string> attributes = 10;
+
+    // List of consumers for this topic.
+    repeated Consumer consumers = 11;
+
+    message PartitionInfo {
+        // Partition identifier.
+        int64 partition_id = 1;
+        // Is partition open for write.
+        bool active = 2;
+        // Ids of partitions which was formed when this partition was split or merged.
+        repeated int64 child_partition_ids = 3;
+        // Ids of partitions from which this partition was formed by split or merge.
+        repeated int64 parent_partition_ids = 4;
+    }
+}
+
+
+// Update existing topic request sent from client to server.
+message AlterTopicRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Topic path.
+    string path = 2;
+
+    AlterPartitioningSettings alter_partitioning_settings = 3; // partitioning_settings
+
+    // Retention settings.
+    // Currently, only one limit may be set, so other should not be set.
+    //
+    // How long data in partition should be stored. Must be greater than 0 and less than limit for this database.
+    // Default limit - 36 hours.
+    google.protobuf.Duration set_retention_period = 4;
+    // How much data in partition should be stored. Must be greater than 0 and less than limit for this database.
+    // optional int64 set_retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
+    oneof maybe_set_retention_storage_mb {
+        int64 set_retention_storage_mb = 5 [(Ydb.value) = ">= 0"];
+    }
+
+    reserved 6; // supported_format.
+    // List of allowed codecs for writers.
+    // Writes with codec not from this list are forbidden.
+    SupportedCodecs set_supported_codecs = 7;
+
+    // Partition write speed in bytes per second. Must be less than database limit. Default limit - 1 MB/s.
+    // optional int64 set_partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
+    oneof maybe_set_partition_write_speed_bytes_per_second {
+        int64 set_partition_write_speed_bytes_per_second = 8 [(Ydb.value) = ">= 0"];
+    }
+    // Burst size for write in partition, in bytes. Must be less than database limit. Default limit - 1 MB.
+    // optional int64 set_partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
+    oneof maybe_set_partition_write_burst_bytes {
+        int64 set_partition_write_burst_bytes = 9 [(Ydb.value) = ">= 0"];
+    }
+
+    // User and server attributes of topic. Server attributes starts from "_" and will be validated by server.
+    // Leave the value blank to drop an attribute.
+    map<string, string> alter_attributes = 10;
+
+    // Add consumers.
+    repeated Consumer add_consumers = 11 [(Ydb.size).le = 3000];
+    // Remove consumers (by its names)
+    repeated string drop_consumers = 12 [(Ydb.size).le = 3000];
+    // Alter consumers
+    repeated AlterConsumer alter_consumers = 13 [(Ydb.size).le = 3000];
+}
+
+// Update topic response sent from server to client.
+message AlterTopicResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Update topic result message that will be inside UpdateTopicResponse.operation.
+message AlterTopicResult {
+}
+
+
+// Drop topic request sent from client to server.
+message DropTopicRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Topic path.
+    string path = 2;
+}
+
+// Drop topic response sent from server to client.
+// If topic not exists then response status will be "SCHEME_ERROR".
+message DropTopicResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Drop topic result message that will be inside DropTopicResponse.operation.
+message DropTopicResult {
+}

@@ -13,4 +13,5 @@ RECURSE(
     ydb_cli
     yq
     yson_value
+    validation
 )

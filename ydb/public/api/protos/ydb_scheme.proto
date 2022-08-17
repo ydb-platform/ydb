@@ -58,6 +58,7 @@ message Entry {
         COLUMN_TABLE = 13;
         SEQUENCE = 15;
         REPLICATION = 16;
+        TOPIC = 17;
     }
 
     // Name of scheme entry (dir2 of /dir1/dir2)

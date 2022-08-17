@@ -137,6 +137,7 @@ struct TTestContext {
         outActiveZone = false;
         Runtime.Reset(new TTestBasicRuntime);
         Runtime->SetScheduledLimit(200);
+
         SetupLogging(*Runtime);
         SetupTabletServices(*Runtime);
         setup(*Runtime);
@@ -195,6 +196,7 @@ struct TTestContext {
         Edge = Runtime->AllocateEdgeActor();
 
         Runtime->SetScheduledEventFilter(&RequestTimeoutFilter);
+        Runtime->GetAppData(0).PQConfig.SetEnabled(true);
     }
 
 

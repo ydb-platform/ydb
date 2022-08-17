@@ -17,6 +17,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
         o << colors.WhiteColor();
         break;
     case NScheme::ESchemeEntryType::PqGroup:
+    case NScheme::ESchemeEntryType::Topic:
         o << colors.BrownColor();
         break;
     case NScheme::ESchemeEntryType::SubDomain:
@@ -31,6 +32,7 @@ void PrintSchemeEntry(IOutputStream& o, const NScheme::TSchemeEntry& entry, NCol
     case NScheme::ESchemeEntryType::CoordinationNode:
         o << colors.YellowColor();
         break;
+
     default:
         o << colors.RedColor();
     }
@@ -63,6 +65,32 @@ TString FormatTime(TInstant time) {
         return "Unknown";
     }
 };
+
+TString EntryTypeToString(NScheme::ESchemeEntryType entry) {
+    switch (entry) {
+    case NScheme::ESchemeEntryType::Directory:
+        return "dir";
+    case NScheme::ESchemeEntryType::Table:
+        return "table";
+    case NScheme::ESchemeEntryType::ColumnTable:
+        return "column-table";
+    case NScheme::ESchemeEntryType::PqGroup:
+    case NScheme::ESchemeEntryType::Topic:
+        return "topic";
+    case NScheme::ESchemeEntryType::SubDomain:
+        return "sub-domain";
+    case NScheme::ESchemeEntryType::RtmrVolume:
+        return "rtmr-volume";
+    case NScheme::ESchemeEntryType::BlockStoreVolume:
+        return "block-store-volume";
+    case NScheme::ESchemeEntryType::CoordinationNode:
+        return "coordination-node";
+    case NScheme::ESchemeEntryType::Unknown:
+    case NScheme::ESchemeEntryType::Sequence:
+    case NScheme::ESchemeEntryType::Replication:
+        return "unknown";
+    }
+}
 
 }
 }

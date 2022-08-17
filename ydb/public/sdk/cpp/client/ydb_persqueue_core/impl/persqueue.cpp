@@ -12,7 +12,7 @@
 namespace NYdb::NPersQueue {
 
 const TVector<ECodec>& GetDefaultCodecs() {
-    static const TVector<ECodec> codecs = {ECodec::RAW, ECodec::GZIP, ECodec::LZOP};
+    static const TVector<ECodec> codecs = {};
     return codecs;
 }
 
@@ -102,6 +102,8 @@ TDescribeTopicResult::TTopicSettings::TTopicSettings(const Ydb::PersQueue::V1::T
             AbcId_ = FromString<ui32>(pair.second);
         } else if (pair.first == "_abc_slug") {
             AbcSlug_ = pair.second;
+        } else if (pair.first == "_federation_account") {
+            FederationAccount_ = pair.second;
         }
     }
     for (const auto& readRule : settings.read_rules()) {

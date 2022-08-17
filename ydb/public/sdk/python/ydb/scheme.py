@@ -22,6 +22,7 @@ class SchemeEntryType(enum.IntEnum):
     COLUMN_TABLE = 13
     SEQUENCE = 15
     REPLICATION = 16
+    TOPIC = 17
 
     @staticmethod
     def is_table(entry):

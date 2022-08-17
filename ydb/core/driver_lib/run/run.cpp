@@ -97,6 +97,7 @@
 #include <ydb/services/ydb/ydb_logstore.h>
 #include <ydb/services/persqueue_cluster_discovery/grpc_service.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
+#include <ydb/services/persqueue_v1/topic.h>
 #include <ydb/services/rate_limiter/grpc_service.h>
 #include <ydb/services/discovery/grpc_service.h>
 #include <ydb/services/yq/grpc_service.h>
@@ -508,6 +509,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         names["pq"] = &hasPQ;
         bool hasPQv1 = false;
         names["pqv1"] = &hasPQv1;
+        bool hasTopic = false;
+        names["topic"] = &hasTopic;
         bool hasPQCD = false;
         names["pqcd"] = &hasPQCD;
         bool hasS3Internal = false;
@@ -670,6 +673,10 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
 
         if (hasPQv1) {
             server.AddService(new NGRpcService::V1::TGRpcPersQueueService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
+        }
+
+        if (hasPQv1 || hasTopic) {
+            server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId));
         }
 
         if (hasPQCD) {

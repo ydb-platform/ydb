@@ -3,6 +3,7 @@
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
@@ -63,55 +64,48 @@ struct TEvPqNewMetaCache {
     };
 
     struct TEvDescribeTopicsRequest : public TEventLocal<TEvDescribeTopicsRequest, EvDescribeTopicsRequest> {
-        TString PathPrefix;
-        TVector<TString> Topics;
+        TVector<NPersQueue::TDiscoveryConverterPtr> Topics;
         bool SyncVersion;
         bool ShowPrivate = false;
 
         TEvDescribeTopicsRequest() = default;
 
-        explicit TEvDescribeTopicsRequest(const TVector<TString>& topics, bool syncVersion = true, bool showPrivate = false)
-            : Topics(topics)
-            , SyncVersion(syncVersion)
-            , ShowPrivate(showPrivate)
-        {}
 
-        TEvDescribeTopicsRequest(const TVector<TString>& topics, const TString& pathPrefix, bool syncVersion = true, bool showPrivate = false)
-            : PathPrefix(pathPrefix)
-            , Topics(topics)
-            , SyncVersion(syncVersion)
-            , ShowPrivate(showPrivate)
+        explicit TEvDescribeTopicsRequest(const TVector<NPersQueue::TDiscoveryConverterPtr>& topics,
+                                          bool syncVersion = true, bool showPrivate = false)
+            : Topics(topics)
+                , SyncVersion(syncVersion)
+                , ShowPrivate(showPrivate)
         {}
     };
 
     struct TEvDescribeTopicsResponse : public TEventLocal<TEvDescribeTopicsResponse, EvDescribeTopicsResponse> {
-        TVector<TString> TopicsRequested;
+        TVector<NPersQueue::TDiscoveryConverterPtr> TopicsRequested;
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
-        explicit TEvDescribeTopicsResponse(const TVector<TString>& topics,
-                                           NSchemeCache::TSchemeCacheNavigate* result)
+        explicit TEvDescribeTopicsResponse(TVector<NPersQueue::TDiscoveryConverterPtr>&& topics,
+                                           const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
 
-            : TopicsRequested(topics)
+            : TopicsRequested(std::move(topics))
             , Result(result)
         {}
     };
 
     struct TEvDescribeAllTopicsRequest : public TEventLocal<TEvDescribeAllTopicsRequest, EvDescribeAllTopicsRequest> {
-        TString PathPrefix;
         TEvDescribeAllTopicsRequest() = default;
-        explicit TEvDescribeAllTopicsRequest(const TString& pathPrefix)
-                : PathPrefix(pathPrefix)
-        {}
     };
 
     struct TEvDescribeAllTopicsResponse : public TEventLocal<TEvDescribeAllTopicsResponse, EvDescribeAllTopicsResponse> {
         bool Success = true;
         TString Path;
+        TVector<NPersQueue::TDiscoveryConverterPtr> Topics;
         std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> Result;
-        explicit TEvDescribeAllTopicsResponse(const TString& path)
+
+        explicit TEvDescribeAllTopicsResponse() {}
+
+        TEvDescribeAllTopicsResponse(const TString& path, TVector<NPersQueue::TDiscoveryConverterPtr>&& topics,
+                                     NSchemeCache::TSchemeCacheNavigate* result)
             : Path(path)
-        {}
-        TEvDescribeAllTopicsResponse(const TString& path, const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
-            : Path(path)
+            , Topics(std::move(topics))
             , Result(result)
         {}
     };

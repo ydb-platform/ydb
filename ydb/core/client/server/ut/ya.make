@@ -22,7 +22,6 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     msgbus_server_pq_metarequest_ut.cpp
-    pq_metacache_v2_ut.cpp
 )
 
 END()

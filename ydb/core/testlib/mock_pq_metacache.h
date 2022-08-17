@@ -50,9 +50,13 @@ public:
 //            ctx.Send(ev->Sender, std::move(result));
 //        };
         auto handle = [=](TEvPqMetaCache::TEvDescribeTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-            auto* result = new NSchemeCache::TSchemeCacheNavigate();
+            auto result = std::make_shared<NSchemeCache::TSchemeCacheNavigate>();
             result->ResultSet = resultSet;
-            auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(ev->Get()->Topics, result);
+            TVector<TString> topics;
+            for (auto& res : resultSet) {
+                topics.push_back(res.Path.back());
+            }
+            auto* response = new TEvPqMetaCache::TEvDescribeTopicsResponse(std::move(ev->Get()->Topics), result);
             ctx.Send(ev->Sender, response);
         };
 
@@ -65,8 +69,9 @@ public:
     ) {
         using namespace testing;
         auto handle = [=](TEvPqMetaCache::TEvDescribeAllTopicsRequest::TPtr& ev, const TActorContext& ctx) {
-            auto* response = new TEvPqMetaCache::TEvDescribeAllTopicsResponse("/Root/PQ/");
+            auto* response = new TEvPqMetaCache::TEvDescribeAllTopicsResponse();
             response->Success = success;
+            response->Path = "/Root/PQ/";
             auto* result = new NSchemeCache::TSchemeCacheNavigate();
             result->ResultSet = resultSet;
             response->Result.reset(result);

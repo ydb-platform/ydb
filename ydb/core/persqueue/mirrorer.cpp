@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/util/yverify_stream.h>
 
@@ -13,6 +14,7 @@
 
 #include <util/string/join.h>
 
+using namespace NPersQueue;
 
 namespace NKikimr {
 namespace NPQ {
@@ -26,7 +28,7 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
 TMirrorer::TMirrorer(
     TActorId tabletActor,
     TActorId partitionActor,
-    const TString& topicName,
+    const NPersQueue::TTopicConverterPtr& topicConverter,
     ui32 partition,
     bool localDC,
     ui64 endOffset,
@@ -35,9 +37,9 @@ TMirrorer::TMirrorer(
 )
     : TabletActor(tabletActor)
     , PartitionActor(partitionActor)
-    , TopicName(topicName)
+    , TopicConverter(topicConverter)
     , Partition(partition)
-    , LocalDC(localDC)
+    , IsLocalDC(localDC)
     , EndOffset(endOffset)
     , OffsetToRead(endOffset)
     , Config(config)
@@ -52,32 +54,30 @@ void TMirrorer::Bootstrap(const TActorContext& ctx) {
     ctx.Schedule(UPDATE_COUNTERS_INTERVAL, new TEvPQ::TEvUpdateCounters);
 
     if (AppData(ctx)->Counters) {
-        if (TopicName.find("--") != TString::npos) {
-            TVector<std::pair<ui64, TString>> lagsIntervals{{100, "100ms"}, {200, "200ms"}, {500, "500ms"},
-                                                                           {1000, "1000ms"}, {2000, "2000ms"}, {5000, "5000ms"}, {10000, "10000ms"},
-                                                                           {30000, "30000ms"}, {60000, "60000ms"}, {180000,"180000ms"}, {9999999, "999999ms"}};
+        TVector<std::pair<ui64, TString>> lagsIntervals{{100, "100ms"}, {200, "200ms"}, {500, "500ms"},
+                                                                       {1000, "1000ms"}, {2000, "2000ms"}, {5000, "5000ms"}, {10000, "10000ms"},
+                                                                       {30000, "30000ms"}, {60000, "60000ms"}, {180000,"180000ms"}, {9999999, "999999ms"}};
 
-            auto counters = AppData(ctx)->Counters;
-            TString suffix = LocalDC ? "Remote" : "Internal";
-            MirrorerErrors = NKikimr::NPQ::TMultiCounter(
-                GetServiceCounters(counters, "pqproxy|writeSession"),
-                GetLabels(TopicName), {}, {"MirrorerErrors" + suffix}, true
-            );
-            MirrorerTimeLags = THolder<TPercentileCounter>(new TPercentileCounter(
-                GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
-                GetLabels(TopicName),
-                {{"sensor", "TimeLags" + suffix}},
-                "Interval", lagsIntervals, true
-            ));
-            InitTimeoutCounter = NKikimr::NPQ::TMultiCounter(
-                GetServiceCounters(counters, "pqproxy|writeSession"),
-                GetLabels(TopicName), {}, {"MirrorerInitTimeout" + suffix}, true
-            );
-            WriteTimeoutCounter = NKikimr::NPQ::TMultiCounter(
-                GetServiceCounters(counters, "pqproxy|writeSession"),
-                {}, {}, {"MirrorerWriteTimeout"}, true, "sensor", false
-            );
-        }
+        auto counters = AppData(ctx)->Counters;
+        TString suffix = IsLocalDC ? "Remote" : "Internal";
+        MirrorerErrors = NKikimr::NPQ::TMultiCounter(
+            GetServiceCounters(counters, "pqproxy|writeSession"),
+            GetLabels(TopicConverter), {}, {"MirrorerErrors" + suffix}, true
+        );
+        MirrorerTimeLags = THolder<TPercentileCounter>(new TPercentileCounter(
+            GetServiceCounters(counters, "pqproxy|mirrorWriteTimeLag"),
+            GetLabels(TopicConverter),
+            {{"sensor", "TimeLags" + suffix}},
+            "Interval", lagsIntervals, true
+        ));
+        InitTimeoutCounter = NKikimr::NPQ::TMultiCounter(
+            GetServiceCounters(counters, "pqproxy|writeSession"),
+            GetLabels(TopicConverter), {}, {"MirrorerInitTimeout" + suffix}, true
+        );
+        WriteTimeoutCounter = NKikimr::NPQ::TMultiCounter(
+            GetServiceCounters(counters, "pqproxy|writeSession"),
+            {}, {}, {"MirrorerWriteTimeout"}, true, "sensor", false
+        );
     }
 }
 
@@ -335,7 +335,8 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
     THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
     auto req = request->Record.MutablePartitionRequest();
-    req->SetTopic(TopicName);
+    //ToDo
+    req->SetTopic(TopicConverter->GetClientsideName());
     req->SetPartition(Partition);
     req->SetMessageNo(0);
     req->SetCookie(WRITE_REQUEST_COOKIE);
@@ -448,7 +449,7 @@ void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
             << " update write timestamp from original topic: " << StreamStatus->DebugString());
         THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
         auto req = request->Record.MutablePartitionRequest();
-        req->SetTopic(TopicName);
+        req->SetTopic(TopicConverter->GetClientsideName());
         req->SetPartition(Partition);
         req->SetCookie(UPDATE_WRITE_TIMESTAMP);
         req->MutableCmdUpdateWriteTimestamp()->SetWriteTimeMS(StreamStatus->GetWriteWatermark().MilliSeconds());
@@ -495,7 +496,7 @@ void TMirrorer::RecreateCredentialsProvider(const TActorContext& ctx) {
 }
 
 TString TMirrorer::MirrorerDescription() const {
-    return TStringBuilder() << "[mirrorer for " << TopicName << ':' << Partition << ']';
+    return TStringBuilder() << "[mirrorer for " << TopicConverter->GetPrintableString() << ", partition " << Partition << ']';
 }
 
 TString TMirrorer::GetCurrentState() const {

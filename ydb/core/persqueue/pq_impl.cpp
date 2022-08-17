@@ -620,11 +620,16 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     if (Config.HasCacheSize())
         cacheSize = Config.GetCacheSize();
 
-    if (TopicName.empty()) { // it's the first time
+    if (!TopicConverter) { // it's the first time
         TopicName = Config.GetTopicName();
         TopicPath = Config.GetTopicPath();
-        LocalDC = Config.GetLocalDC();
-
+        IsLocalDC = Config.GetLocalDC();
+        auto& pqConfig = AppData(ctx)->PQConfig;
+        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+                pqConfig, "", IsLocalDC
+        );
+        //ToDo [migration] - check account
+        TopicConverter = TopicConverterFactory->MakeTopicConverter(Config);
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
@@ -641,13 +646,14 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     InitializeMeteringSink(ctx);
 
     for (auto& p : Partitions) { //change config for already created partitions
-        ctx.Send(p.second.Actor, new TEvPQ::TEvChangeConfig(TopicName, Config));
+        ctx.Send(p.second.Actor, new TEvPQ::TEvChangePartitionConfig(TopicConverter, Config));
     }
     for (const auto& partition : Config.GetPartitions()) {
         const auto partitionId = partition.GetPartitionId();
         if (Partitions.find(partitionId) == Partitions.end()) {
             Partitions.emplace(partitionId, TPartitionInfo(
-                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, true)),
+                ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter, IsLocalDC,
+                                            DCId, Config, *Counters, ctx, true)),
                 GetPartitionKeyRange(partition),
                 true,
                 *Counters
@@ -732,9 +738,14 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
         }
 
         TopicName = Config.GetTopicName();
-        TopicPath = Config.GetTopicPath();
-        LocalDC = Config.GetLocalDC();
 
+        IsLocalDC = Config.GetLocalDC();
+        auto& pqConfig = AppData(ctx)->PQConfig;
+        TopicConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
+                pqConfig, "", IsLocalDC
+        );
+        TopicConverter = TopicConverterFactory->MakeTopicConverter(Config);
+        Y_VERIFY(TopicConverter->IsValid(), "%s", TopicConverter->GetReason().c_str());
         KeySchema.clear();
         KeySchema.reserve(Config.PartitionKeySchemaSize());
         for (const auto& component : Config.GetPartitionKeySchema()) {
@@ -756,7 +767,8 @@ void TPersQueue::ReadConfig(const NKikimrClient::TKeyValueResponse::TReadResult&
     for (const auto& partition : Config.GetPartitions()) { // no partitions will be created with empty config
         const auto partitionId = partition.GetPartitionId();
         Partitions.emplace(partitionId, TPartitionInfo(
-            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicName, TopicPath, LocalDC, DCId, Config, *Counters, ctx, false)),
+            ctx.Register(new TPartition(TabletID(), partitionId, ctx.SelfID, CacheActor, TopicConverter, IsLocalDC,
+                                        DCId, Config, *Counters, ctx, false)),
             GetPartitionKeyRange(partition),
             false,
             *Counters
@@ -1000,7 +1012,7 @@ void TPersQueue::Handle(TEvPQ::TEvTabletCacheCounters::TPtr& ev, const TActorCon
     CacheCounters = ev->Get()->Counters;
     SetCacheCounters(CacheCounters);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " topic '" << TopicName
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " topic '" << TopicConverter->GetClientsideName()
         << "Counters. CacheSize " << CacheCounters.CacheSizeBytes << " CachedBlobs " << CacheCounters.CacheSizeBlobs);
 }
 
@@ -1516,15 +1528,13 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
             clientDC.to_title();
             auto it = BytesWrittenFromDC.find(clientDC);
             if (it == BytesWrittenFromDC.end()) {
-                auto pos = TopicName.find("--");
-                if (pos != TString::npos) {
-                    auto labels = GetLabels(clientDC, TopicName.substr(pos + 2));
-                    if (!labels.empty()) {
-                        labels.pop_back();
-                    }
-                    it = BytesWrittenFromDC.emplace(clientDC, NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
-                                labels, {{"ClientDC", clientDC}}, {"BytesWrittenFromDC"}, true)).first;
+
+                auto labels = NPersQueue::GetLabelsForCustomCluster(TopicConverter, clientDC);
+                if (!labels.empty()) {
+                    labels.pop_back();
                 }
+                it = BytesWrittenFromDC.emplace(clientDC, NKikimr::NPQ::TMultiCounter(GetServiceCounters(counters, "pqproxy|writeSession"),
+                            labels, {{"ClientDC", clientDC}}, {"BytesWrittenFromDC"}, true)).first;
             }
             if (it != BytesWrittenFromDC.end())
                 it->second.Inc(cmd.ByteSize());
@@ -1605,10 +1615,13 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 });
                 partNo++;
                 uncompressedSize = 0;
-                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client PART message topic: " << TopicName << " partition: " << req.GetPartition()
-                                                            << " SourceId: \'" << EscapeC(msgs.back().SourceId) << "\' SeqNo: "
-                                                            << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo
-                                                            << " messageNo: " << req.GetMessageNo() << " size: " << data.size());
+                LOG_DEBUG_S(
+                        ctx, NKikimrServices::PERSQUEUE,
+                        "got client PART message topic: " << TopicConverter->GetClientsideName() << " partition: " << req.GetPartition()
+                            << " SourceId: \'" << EscapeC(msgs.back().SourceId) << "\' SeqNo: "
+                            << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo
+                            << " messageNo: " << req.GetMessageNo() << " size: " << data.size()
+                );
             }
             Y_VERIFY(partNo == totalParts);
         } else {
@@ -1620,7 +1633,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
                 cmd.GetExternalOperation()
             });
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicName <<
+        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message topic: " << TopicConverter->GetClientsideName() <<
                     " partition: " << req.GetPartition() <<
                     " SourceId: \'" << EscapeC(msgs.back().SourceId) <<
                     "\' SeqNo: " << msgs.back().SeqNo << " partNo : " << msgs.back().PartNo <<
@@ -1905,7 +1918,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
     ui32 partition = req.GetPartition();
     auto it = Partitions.find(partition);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message batch for topic " << TopicName << " partition " << partition << "\n");
+    LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "got client message batch for topic " << TopicConverter->GetClientsideName() << " partition " << partition << "\n");
 
     if (it == Partitions.end()) {
         ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::WRONG_PARTITION_NUMBER,

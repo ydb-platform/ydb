@@ -1443,7 +1443,8 @@ void TMessageBusServicesInitializer::InitializeServices(NActors::TActorSystemSet
         if (IActor *proxy = BusServer.CreateProxy()) {
             setup->LocalServices.emplace_back(NMsgBusProxy::CreateMsgBusProxyId(),
                                                          TActorSetupCmd(proxy, TMailboxType::ReadAsFilled, appData->UserPoolId));
-            TDuration pqMetaRefresh = TDuration::MilliSeconds(appData->PQConfig.GetMetaCacheRefreshIntervalMilliSeconds());
+
+            TDuration pqMetaRefresh = TDuration::MilliSeconds(appData->PQConfig.GetPQDiscoveryConfig().GetCacheRefreshIntervalMilliSeconds());
             if (appData->PQConfig.GetEnabled()) {
                 setup->LocalServices.emplace_back(
                         NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),

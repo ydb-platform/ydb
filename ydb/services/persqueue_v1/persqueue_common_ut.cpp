@@ -1,4 +1,4 @@
-#include "grpc_pq_actor.h"
+#include "actors/read_session_actor.h"
 #include <ydb/services/persqueue_v1/ut/pq_data_writer.h>
 #include <ydb/services/persqueue_v1/ut/api_test_setup.h>
 #include <ydb/services/persqueue_v1/ut/test_utils.h>
@@ -119,6 +119,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         const auto token = GenerateValidToken();
         acl.AddAccess(NACLib::EAccessType::Allow, NACLib::UpdateRow, token);
         server.ModifyTopicACL(server.GetTopic(), acl);
+        Cerr << "===Make write stream\n";
 
         MAKE_WRITE_STREAM(token);
 
@@ -132,6 +133,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
                       serverMessage);
 
         acl.ClearAccess();
+        Cerr << "===ModifyAcl\n";
         server.ModifyTopicACL(server.GetTopic(), acl);
 
         clientMessage = StreamingWriteClientMessage();
@@ -147,12 +149,15 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
         writeRequest->add_blocks_uncompressed_sizes(message.size());
         writeRequest->add_blocks_headers(TString(1, '\0'));
         writeRequest->add_blocks_data(message);
+
+        Cerr << "===Assert streaming op1\n";
         AssertSuccessfullStreamingOperation(stream->Write(clientMessage), stream, &clientMessage);
+        Cerr << "===Assert streaming op2\n";
         AssertSuccessfullStreamingOperation(stream->Read(&serverMessage), stream);
         UNIT_ASSERT_C(serverMessage.server_message_case() == StreamingWriteServerMessage::kBatchWriteResponse,
                       serverMessage);
 
-        Cerr << "Wait for session created with token with removed ACE to die";
+        Cerr << "===Wait for session created with token with removed ACE to die";
         AssertStreamingSessionDead(stream, Ydb::StatusIds::UNAUTHORIZED,
                                    Ydb::PersQueue::ErrorCode::ACCESS_DENIED);
     }
@@ -296,6 +301,7 @@ Y_UNIT_TEST_SUITE(TPersQueueCommonTest) {
     Y_UNIT_TEST(TestWriteWithRateLimiterWithBlobsRateLimit) {
         TPersQueueV1TestServerWithRateLimiter server;
         server.InitAll(NKikimrPQ::TPQConfig::TQuotingConfig::WRITTEN_BLOB_SIZE);
+        server.EnablePQLogs({NKikimrServices::PERSQUEUE}, NLog::EPriority::PRI_INFO);
         TestWriteWithRateLimiter(server);
     }
 

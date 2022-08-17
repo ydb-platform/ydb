@@ -618,7 +618,9 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvBiStreamPingRequest, PreHandle);
         HFunc(TEvExperimentalStreamQueryRequest, PreHandle);
         HFunc(TEvStreamPQWriteRequest, PreHandle);
-        HFunc(TEvStreamPQReadRequest, PreHandle);
+        HFunc(TEvStreamPQMigrationReadRequest, PreHandle);
+//        HFunc(TEvStreamTopicWriteRequest, PreHandle);
+        HFunc(TEvStreamTopicReadRequest, PreHandle);
         HFunc(TEvPQReadInfoRequest, PreHandle);
         HFunc(TEvPQDropTopicRequest, PreHandle);
         HFunc(TEvPQCreateTopicRequest, PreHandle);
@@ -650,6 +652,11 @@ void TGRpcRequestProxyImpl::StateFunc(TAutoPtr<IEventHandle>& ev, const TActorCo
         HFunc(TEvLongTxRollbackRequest, PreHandle);
         HFunc(TEvLongTxWriteRequest, PreHandle);
         HFunc(TEvLongTxReadRequest, PreHandle);
+        HFunc(TEvDropTopicRequest, PreHandle);
+        HFunc(TEvCreateTopicRequest, PreHandle);
+        HFunc(TEvAlterTopicRequest, PreHandle);
+        HFunc(TEvDescribeTopicRequest, PreHandle);
+
         HFunc(TEvProxyRuntimeEvent, PreHandle);
 
         default:

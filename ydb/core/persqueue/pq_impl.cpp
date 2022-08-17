@@ -824,33 +824,46 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
     const auto streamPath = Config.GetTopicPath();
 
     auto& pqConfig = AppData(ctx)->PQConfig;
-    if (pqConfig.HasBillingMeteringConfig() && pqConfig.GetBillingMeteringConfig().GetEnabled()) {
-        TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
-        ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
-            Config.GetPartitionConfig().GetLifetimeSeconds()};
-
-        if (Config.GetPartitionConfig().HasStorageLimitBytes()) {
-            storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
-            whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
-                                               EMeteringJson::ThroughputV1,
-                                               EMeteringJson::StorageV1};
-        }
-
-        MeteringSink.Create(ctx.Now(), {
-                .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
-                .TabletId       = ToString(TabletID()),
-                .YcCloudId      = Config.GetYcCloudId(),
-                .YcFolderId     = Config.GetYcFolderId(),
-                .YdbDatabaseId  = Config.GetYdbDatabaseId(),
-                .StreamName     = streamName,
-                .ResourceId     = streamPath,
-                .PartitionsSize = Config.PartitionsSize(),
-                .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
-                .ReservedSpace  = storageLimitBytes,
-                .ConsumersThroughput = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
-                                       Config.ReadRulesSize(),
-            }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));
+    if (!pqConfig.GetBillingMeteringConfig().GetEnabled()) {
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " disable metering"
+            << ": reason# " << "billing is not enabled in BillingMeteringConfig");
+        return;
     }
+
+    switch (Config.GetMeteringMode()) {
+    case NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS:
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " disable metering"
+            << ": reason# " << "METERING_MODE_SERVERLESS");
+        return;
+    default:
+        break;
+    }
+
+    TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
+    ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
+        Config.GetPartitionConfig().GetLifetimeSeconds()};
+
+    if (Config.GetPartitionConfig().HasStorageLimitBytes()) {
+        storageLimitBytes = Config.GetPartitionConfig().GetStorageLimitBytes();
+        whichToFlush = TSet<EMeteringJson>{EMeteringJson::PutEventsV1,
+                                           EMeteringJson::ThroughputV1,
+                                           EMeteringJson::StorageV1};
+    }
+
+    MeteringSink.Create(ctx.Now(), {
+            .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
+            .TabletId       = ToString(TabletID()),
+            .YcCloudId      = Config.GetYcCloudId(),
+            .YcFolderId     = Config.GetYcFolderId(),
+            .YdbDatabaseId  = Config.GetYdbDatabaseId(),
+            .StreamName     = streamName,
+            .ResourceId     = streamPath,
+            .PartitionsSize = Config.PartitionsSize(),
+            .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
+            .ReservedSpace  = storageLimitBytes,
+            .ConsumersThroughput = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
+                                   Config.ReadRulesSize(),
+        }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));
 }
 
 void TPersQueue::ReturnTabletState(const TActorContext& ctx, const TChangeNotification& req, NKikimrProto::EReplyStatus status)

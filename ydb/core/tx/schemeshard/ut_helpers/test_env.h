@@ -41,6 +41,7 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableSchemeTransactionsAtSchemeShard, std::nullopt);
         OPTION(std::optional<bool>, EnableOlapSchemaOperations, std::nullopt);
         OPTION(std::optional<bool>, EnableProtoSourceIdInfo, std::nullopt);
+        OPTION(std::optional<bool>, EnablePqBilling, std::nullopt);
         OPTION(std::optional<bool>, EnableBackgroundCompaction, std::nullopt);
         OPTION(std::optional<bool>, DisableStatsBatching, std::nullopt);
         OPTION(THashSet<TString>, SystemBackupSIDs, {});

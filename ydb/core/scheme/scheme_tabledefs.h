@@ -17,6 +17,11 @@ namespace NKikimr {
 
 using TSchemaVersion = ui64;
 
+enum class EColumnTypeConstraint {
+    Nullable,
+    NotNull,
+};
+
 // ident for table, must be unique in selected scope
 // for global transactions ownerid is tabletid of owning schemeshard and tableid is counter designated by schemeshard
 // SysViewInfo is not empty for system views attached to corresponding table

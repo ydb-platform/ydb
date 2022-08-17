@@ -381,7 +381,8 @@ public:
     }
 
     void BuildProgram(const NJson::TJsonValue& json, NMiniKQL::TRuntimeNode& pgmReturn, NMiniKQL::TKikimrProgramBuilder& pgmBuilder, const NSchemeCache::TSchemeCacheNavigate::TEntry& tableInfo,
-                      const TVector<const NTxProxy::TTableColumnInfo*>& keys, const THashMap<TString, const NTxProxy::TTableColumnInfo*>& columnByName, TVector<NMiniKQL::TRuntimeNode>& result) {
+                      const TVector<const NTxProxy::TTableColumnInfo*>& keys, const THashMap<TString, const NTxProxy::TTableColumnInfo*>& columnByName, THashSet<TString> notNullColumns,
+                      TVector<NMiniKQL::TRuntimeNode>& result) {
         TVector<NMiniKQL::TRuntimeNode> keyColumns;
         TVector<ui32> keyTypes;
         keyTypes.reserve(keys.size());
@@ -427,10 +428,12 @@ public:
                     const TString& column = value.GetString();
                     auto itCol = columnByName.find(column);
                     if (itCol != columnByName.end()) {
-                        columnsToRead.emplace_back(itCol->second->Name, itCol->second->Id, itCol->second->PType);
+                        auto nullConstraint = notNullColumns.contains(column) ? EColumnTypeConstraint::NotNull : EColumnTypeConstraint::Nullable;
+                        columnsToRead.emplace_back(itCol->second->Name, itCol->second->Id, itCol->second->PType, nullConstraint);
                     } else if (column == "*") {
                         for (const auto& pr : columnByName) {
-                            columnsToRead.emplace_back(pr.second->Name, pr.second->Id, pr.second->PType);
+                            auto nullConstraint = notNullColumns.contains(pr.first) ? EColumnTypeConstraint::NotNull : EColumnTypeConstraint::Nullable;
+                            columnsToRead.emplace_back(pr.second->Name, pr.second->Id, pr.second->PType, nullConstraint);
                         }
                     } else {
                         throw yexception() << "Column \"" << value.GetString() << "\" not found";
@@ -438,7 +441,8 @@ public:
                 }
             } else if (jsonSelect.IsString() && jsonSelect.GetString() == "*") {
                 for (const auto& pr : columnByName) {
-                    columnsToRead.emplace_back(pr.second->Name, pr.second->Id, pr.second->PType);
+                    auto nullConstraint = notNullColumns.contains(pr.first) ? EColumnTypeConstraint::NotNull : EColumnTypeConstraint::Nullable;
+                    columnsToRead.emplace_back(pr.second->Name, pr.second->Id, pr.second->PType, nullConstraint);
                 }
             }
             if (keyColumns.size() == keyTypes.size()) {
@@ -482,7 +486,7 @@ public:
         if (json.GetValue("Batch", &jsonBatch)) {
             const NJson::TJsonValue::TArray& array = jsonBatch.GetArray();
             for (const NJson::TJsonValue& value : array) {
-                BuildProgram(value, pgmReturn, pgmBuilder, tableInfo, keys, columnByName, result);
+                BuildProgram(value, pgmReturn, pgmBuilder, tableInfo, keys, columnByName, notNullColumns, result);
             }
             OperationHistogram = &DbOperationsCounters->RequestBatchTimeHistogram;
         }
@@ -511,7 +515,7 @@ public:
                 columnByName[itCol->second.Name] = &itCol->second;
             }
 
-            BuildProgram(JSON, pgmReturn, pgmBuilder, tableInfo, keys, columnByName, result);
+            BuildProgram(JSON, pgmReturn, pgmBuilder, tableInfo, keys, columnByName, tableInfo.NotNullColumns, result);
             if (JSON.Has("Batch")) {
                 pgmReturn = pgmBuilder.Append(pgmReturn, pgmBuilder.SetResult("Result", pgmBuilder.NewTuple(result)));
             } else {

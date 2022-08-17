@@ -67,7 +67,7 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
                         if (systemColumn != GetSystemColumns().end()) {
                             reply.Columns.insert({
                                 column,
-                                {systemColumn->second.ColumnId, -1, systemColumn->second.TypeId, 0}
+                                {systemColumn->second.ColumnId, -1, systemColumn->second.TypeId, 0, EColumnTypeConstraint::Nullable}
                             });
                             continue;
                         }
@@ -77,8 +77,9 @@ class TTableProxyActor : public TActorBootstrapped<TTableProxyActor> {
                             reply.Reason = "column '" + column + "' not exist";
                         } else {
                             const auto &col = (*x)->second;
+                            auto nullConstraint = res.NotNullColumns.contains(col.Name) ? EColumnTypeConstraint::NotNull : EColumnTypeConstraint::Nullable;
                             reply.Columns.insert(std::make_pair(column,
-                                IDbSchemeResolver::TTableResult::TColumn{col.Id, col.KeyOrder, col.PType, 0}));
+                                IDbSchemeResolver::TTableResult::TColumn{col.Id, col.KeyOrder, col.PType, 0, nullConstraint}));
                         }
                     }
                 }

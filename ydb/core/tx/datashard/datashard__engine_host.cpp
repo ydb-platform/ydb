@@ -573,8 +573,8 @@ TEngineBay::~TEngineBay() {
     }
 }
 
-void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns, const TTableRange& range,
-                              const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse)
+void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TColumn>& columns,
+    const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit, bool reverse)
 {
     TVector<TKeyDesc::TColumnOp> columnOps;
     columnOps.reserve(columns.size());
@@ -590,7 +590,7 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TCo
         "-- AddReadRange: " << DebugPrintRange(keyTypes, range, *AppData()->TypeRegistry));
 
     auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read, keyTypes, columnOps, itemsLimit,
-                                     0 /* bytesLimit */, reverse);
+        0 /* bytesLimit */, reverse);
     Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ false));
     // Info.Keys.back().IsResultPart = not a lock key? // TODO: KIKIMR-11134
     ++Info.ReadsCount;
@@ -598,10 +598,19 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TCo
 }
 
 void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
-                               const TVector<NScheme::TTypeId>& keyTypes)
+    const TVector<NScheme::TTypeId>& keyTypes, const TVector<TColumnWriteMeta>& columns)
 {
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Update,
-                                     keyTypes, TVector<TKeyDesc::TColumnOp>());
+    TVector<TKeyDesc::TColumnOp> columnOps;
+    for (const auto& writeColumn : columns) {
+        TKeyDesc::TColumnOp op;
+        op.Column = writeColumn.Column.Id;
+        op.Operation = TKeyDesc::EColumnOperation::Set;
+        op.ExpectedType = writeColumn.Column.PType;
+        op.ImmediateUpdateSize = writeColumn.MaxValueSizeBytes;
+        columnOps.emplace_back(std::move(op));
+    }
+
+    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Update, keyTypes, columnOps);
     Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ true));
     ++Info.WritesCount;
     if (!range.Point) {

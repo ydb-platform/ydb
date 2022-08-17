@@ -510,9 +510,13 @@ bool TKqpDatashardComputeContext::ReadRowImpl(const TTableId& tableId, TReadTabl
         stats.SelectRangeRows = 1;
         stats.SelectRangeBytes = rowSize;
 
-        stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
-        stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+        break;
+    }
 
+    stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
+    stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+
+    if (iterator.Last() == NTable::EReady::Data) {
         return true;
     }
 
@@ -557,9 +561,13 @@ bool TKqpDatashardComputeContext::ReadRowWideImpl(const TTableId& tableId, TRead
         stats.SelectRangeRows = 1;
         stats.SelectRangeBytes = rowSize;
 
-        stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
-        stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+        break;
+    }
 
+    stats.InvisibleRowSkips = std::exchange(iterator.Stats.InvisibleRowSkips, 0);
+    stats.SelectRangeDeletedRowSkips = std::exchange(iterator.Stats.DeletedRowSkips, 0);
+
+    if (iterator.Last() == NTable::EReady::Data) {
         return true;
     }
 

@@ -1072,6 +1072,17 @@ private:
                                 task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
                             }
 
+                            for (const auto& [name, info] : shardInfo.ColumnWrites) {
+                                auto& column = table.Columns.at(name);
+
+                                auto& taskColumnWrite = task.Meta.Writes->ColumnWrites[column.Id];
+                                taskColumnWrite.Column.Id = column.Id;
+                                taskColumnWrite.Column.Type = column.Type;
+                                taskColumnWrite.Column.Name = name;
+                                taskColumnWrite.MaxValueSizeBytes = std::max(taskColumnWrite.MaxValueSizeBytes,
+                                    info.MaxValueSizeBytes);
+                            }
+
                             ShardsWithEffects.insert(shardId);
                         }
                     }
@@ -1363,6 +1374,17 @@ private:
                 if (task.Meta.Writes) {
                     auto* protoWrites = protoTaskMeta.MutableWrites();
                     task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
+
+                    for (const auto& [_, columnWrite] : task.Meta.Writes->ColumnWrites) {
+                        auto& protoColumnWrite = *protoWrites->AddColumns();
+
+                        auto& protoColumn = *protoColumnWrite.MutableColumn();
+                        protoColumn.SetId(columnWrite.Column.Id);
+                        protoColumn.SetType(columnWrite.Column.Type);
+                        protoColumn.SetName(columnWrite.Column.Name);
+
+                        protoColumnWrite.SetMaxValueSizeBytes(columnWrite.MaxValueSizeBytes);
+                    }
                 }
 
                 taskDesc.MutableMeta()->PackFrom(protoTaskMeta);

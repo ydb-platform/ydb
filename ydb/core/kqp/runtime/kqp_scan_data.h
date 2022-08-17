@@ -43,12 +43,9 @@ public:
         TScanData(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, NYql::NDqProto::EDqStatsMode statsMode);
 
         ~TScanData() {
-            TString msg = TStringBuilder() << "Buffer in TScanData was not cleared, data is leaking: "
-                    << "Queue of UnboxedValues must be emptied under allocator using Clear method, but has " << RowBatches.size() << " elements!";
-            if (!RowBatches.empty()) {
-                LOG_CRIT_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, msg);
-            }
-            Y_VERIFY_DEBUG_S(RowBatches.empty(), msg);
+            Y_VERIFY_DEBUG_S(RowBatches.empty(), "Buffer in TScanData was not cleared, data is leaking. "
+                << "Queue of UnboxedValues must be emptied under allocator using Clear() method, but has "
+                << RowBatches.size() << " elements!");
         }
 
         const TSmallVec<TColumn>& GetColumns() const {

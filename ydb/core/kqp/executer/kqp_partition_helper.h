@@ -13,11 +13,16 @@
 namespace NKikimr::NKqp {
 
 struct TShardInfo {
+    struct TColumnWriteInfo {
+        ui32 MaxValueSizeBytes = 0;
+    };
+
     TMap<TString, NYql::NDqProto::TData> Params;
     TMap<TString, NKikimr::NMiniKQL::TType*> ParamTypes;
 
     TMaybe<TShardKeyRanges> KeyReadRanges;  // empty -> no reads
     TMaybe<TShardKeyRanges> KeyWriteRanges; // empty -> no writes
+    THashMap<TString, TColumnWriteInfo> ColumnWrites;
 
     TString ToString(const TVector<NScheme::TTypeId>& keyTypes, const NScheme::TTypeRegistry& typeRegistry) const;
 };

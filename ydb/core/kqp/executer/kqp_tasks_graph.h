@@ -109,6 +109,11 @@ struct TTaskMeta {
         TString Name;
     };
 
+    struct TColumnWrite {
+        TColumn Column;
+        ui32 MaxValueSizeBytes = 0;
+    };
+
     struct TShardReadInfo {
         TShardKeyRanges Ranges;
         TVector<TColumn> Columns;
@@ -128,6 +133,7 @@ struct TTaskMeta {
 
     struct TWriteInfo {
         TShardKeyRanges Ranges;
+        THashMap<ui32, TColumnWrite> ColumnWrites;
     };
 
     TReadInfo ReadInfo;

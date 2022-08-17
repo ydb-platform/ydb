@@ -153,19 +153,21 @@ private:
         NMiniKQL::TMemoryUsageInfo memInfo("KqpLocalExecuter");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, funcRegistry);
 
-        auto rmConfig = GetKqpResourceManager()->GetConfig();
-        ui64 limit = Request.MkqlMemoryLimit > 0
-            ? std::min(Request.MkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit())
-            : rmConfig.GetMkqlLightProgramMemoryLimit();
-        alloc.SetLimit(limit);
+        ui64 mkqlMemoryLimit = Request.MkqlMemoryLimit > 0
+            ? Request.MkqlMemoryLimit
+            : 1_GB;
 
-        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc](ui64 limit, ui64 required) {
-            if (required < 100_MB) {
-                LOG_D("Increase memory limit from " << limit << " to " << required);
+        auto rmConfig = GetKqpResourceManager()->GetConfig();
+        ui64 mkqlInitialLimit = std::min(mkqlMemoryLimit, rmConfig.GetMkqlLightProgramMemoryLimit());
+        alloc.SetLimit(mkqlInitialLimit);
+
+        // TODO: KIKIMR-15350
+        alloc.Ref().SetIncreaseMemoryLimitCallback([this, &alloc, mkqlMemoryLimit](ui64 currentLimit, ui64 required) {
+            if (required < mkqlMemoryLimit) {
+                LOG_D("Increase memory limit from " << currentLimit << " to " << required);
                 alloc.SetLimit(required);
             }
         });
-
 
         // task runner settings
         NMiniKQL::TKqpComputeContextBase computeCtx;

@@ -86,7 +86,7 @@ Typical Client API Usage Pattern:
         struct aws_socket_options sock_options = { ... };
         struct aws_socket_endpoint endpoint = { ... };
 
-        if (aws_client_bootstrap_new_tls_socket_channel(&client_bootrap, &endpoint, &sock_options, &tls_options,
+        if (aws_client_bootstrap_new_tls_socket_channel(&client_bootstrap, &endpoint, &sock_options, &tls_options,
                 your_channel_setup_callback, your_channel_shutdown_callback, your_context_data) {
             goto cleanup;
         }

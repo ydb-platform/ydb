@@ -159,7 +159,7 @@ public:
     { }
 
     TAlterAttributesBuilderImpl& Alter(const TString& key, const TString& value) {
-        AlterAttributes_[key] = value;
+        Parent_.AlterAttributes_[key] = value;
         return *this;
     }
 
@@ -175,7 +175,6 @@ public:
 
 private:
     TSettings& Parent_;
-    THashMap<TString, TString> AlterAttributes_;
 };
 
 

@@ -8,6 +8,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/grpc/server
+    library/cpp/digest/md5
     ydb/core/grpc_services
     ydb/core/mind
     ydb/library/persqueue/obfuscate

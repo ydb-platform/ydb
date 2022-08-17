@@ -28,6 +28,8 @@ RECURSE(
     client/ydb_operation
     client/ydb_persqueue_core
     client/ydb_persqueue_core/ut
+    client/ydb_topic
+    client/ydb_topic/impl
     client/ydb_extension
     client/ydb_result/ut
     client/ydb_params/ut

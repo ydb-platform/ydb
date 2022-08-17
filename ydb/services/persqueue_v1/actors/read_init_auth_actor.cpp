@@ -190,6 +190,7 @@ bool TReadInitAndAuthActor::CheckTopicACL(
                 break;
             }
         }
+        //TODO : add here checking of client-service-type password. Provide it via API-call.
         if (!found) {
             CloseSession(
                     TStringBuilder() << "no read rule provided for consumer '" << ClientPath << "' in topic '" << topic << "' in current cluster '" << LocalCluster,

@@ -10,6 +10,7 @@
 #include <ydb/core/tx/scheme_board/events.h>
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/printf.h>
@@ -806,6 +807,16 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     }; 
 
+    class TTestTopicEnv: public TTestEnv<TTestTopicEnv, NYdb::NTopic::TTopicClient> {
+    public:
+        using TTestEnv<TTestTopicEnv, NYdb::NTopic::TTopicClient>::TTestEnv;
+
+        static THolder<NYdb::NTopic::TTopicClient> MakeClient(const NYdb::TDriver& driver, const TString& database) {
+            return MakeHolder<NYdb::NTopic::TTopicClient>(driver, NYdb::NTopic::TTopicClientSettings().Database(database));
+        }
+    }; 
+
+
     TShardedTableOptions SimpleTable() {
         return TShardedTableOptions()
             .Columns({
@@ -1014,19 +1025,106 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
     };
 
-    #define Y_UNIT_TEST_TWIN(N, VAR1, VAR2)                                                                            \
+
+    struct TopicRunner {
+        static void Read(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc,
+                const TVector<TString>& queries, const TVector<TString>& records)
+        {
+            TTestTopicEnv env(tableDesc, streamDesc);
+
+            for (const auto& query : queries) {
+                ExecSQL(env.GetServer(), env.GetEdgeActor(), query);
+            }
+
+            auto& client = env.GetClient();
+
+            // add consumer
+            {
+                auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings().BeginAddConsumer("user")
+                                                                                                .EndAddConsumer()).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+
+            // get records
+            auto reader = client.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(TString("/Root/Table/Stream"))
+                .ConsumerName("user")
+            );
+
+            ui32 reads = 0;
+            while (reads < records.size()) {
+                auto ev = reader->GetEvent(true);
+                UNIT_ASSERT(ev);
+
+                NYdb::NTopic::TPartitionSession::TPtr pStream;
+                if (auto* data = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev)) {
+                    pStream = data->GetPartitionSession();
+                    for (const auto& item : data->GetMessages()) {
+                        const auto& record = records.at(reads++);
+                        UNIT_ASSERT_VALUES_EQUAL(record, item.GetData());
+                        //TODO: check here partition key
+//                        UNIT_ASSERT_VALUES_EQUAL(CalcPartitionKey(record), item.GetPartitionKey());
+                    }
+                } else if (auto* create = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev)) {
+                    pStream = create->GetPartitionSession();
+                    create->Confirm();
+                } else if (auto* destroy = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*ev)) {
+                    pStream = destroy->GetPartitionSession();
+                    destroy->Confirm();
+                } else if (std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*ev)) {
+                    break;
+                }
+
+                if (pStream) {
+                    UNIT_ASSERT_VALUES_EQUAL(pStream->GetTopicPath(), "/Root/Table/Stream");
+                }
+            }
+            // remove consumer
+            {
+                auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                    .AppendDropConsumers("user")).ExtractValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        }
+
+        static void Write(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            TTestPqEnv env(tableDesc, streamDesc);
+
+            auto session = env.GetClient().CreateSimpleBlockingWriteSession(TWriteSessionSettings()
+                .Path("/Root/Table/Stream")
+                .MessageGroupId("user")
+                .ClusterDiscoveryMode(EClusterDiscoveryMode::Off)
+            );
+
+            const bool failed = !session->Write("message-1");
+            UNIT_ASSERT(failed);
+
+            session->Close();
+        }
+
+        static void Drop(const TShardedTableOptions& tableDesc, const TCdcStream& streamDesc) {
+            TTestTopicEnv env(tableDesc, streamDesc);
+
+            auto res = env.GetClient().DropTopic("/Root/Table/Stream").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::SCHEME_ERROR);
+        }
+    };
+
+
+    #define Y_UNIT_TEST_TRIPLET(N, VAR1, VAR2, VAR3)                                                                   \
         template<typename TRunner> void N(NUnitTest::TTestContext&);                                                   \
         struct TTestRegistration##N {                                                                                  \
             TTestRegistration##N() {                                                                                   \
                 TCurrentTest::AddTest(#N "[" #VAR1 "]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<VAR1>), false); \
                 TCurrentTest::AddTest(#N "[" #VAR2 "]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<VAR2>), false); \
+                TCurrentTest::AddTest(#N "[" #VAR3 "]", static_cast<void (*)(NUnitTest::TTestContext&)>(&N<VAR3>), false); \
             }                                                                                                          \
         };                                                                                                             \
         static TTestRegistration##N testRegistration##N;                                                               \
         template<typename TRunner>                                                                                     \
         void N(NUnitTest::TTestContext&)
 
-    Y_UNIT_TEST_TWIN(KeysOnlyLog, PqRunner, YdsRunner) {
+    Y_UNIT_TEST_TRIPLET(KeysOnlyLog, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1042,7 +1140,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST_TWIN(UpdatesLog, PqRunner, YdsRunner) {
+    Y_UNIT_TEST_TRIPLET(UpdatesLog, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), Updates(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1058,7 +1156,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST_TWIN(NewAndOldImagesLog, PqRunner, YdsRunner) {
+    Y_UNIT_TEST_TRIPLET(NewAndOldImagesLog, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Read(SimpleTable(), NewAndOldImages(NKikimrSchemeOp::ECdcStreamFormatJson), {R"(
             UPSERT INTO `/Root/Table` (key, value) VALUES
             (1, 10),
@@ -1090,7 +1188,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             });
     }
 
-    Y_UNIT_TEST_TWIN(HugeKey, PqRunner, YdsRunner) {
+    Y_UNIT_TEST_TRIPLET(HugeKey, PqRunner, YdsRunner, TopicRunner) {
         const auto key = TString(512_KB, 'A');
 
         TRunner::Read(Utf8Table(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson), {Sprintf(R"(
@@ -1101,12 +1199,66 @@ Y_UNIT_TEST_SUITE(Cdc) {
         });
     }
 
-    Y_UNIT_TEST_TWIN(Write, PqRunner, YdsRunner) {
+    Y_UNIT_TEST_TRIPLET(Write, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Write(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
     }
 
-    Y_UNIT_TEST_TWIN(Drop, PqRunner, YdsRunner) {
+    Y_UNIT_TEST_TRIPLET(Drop, PqRunner, YdsRunner, TopicRunner) {
         TRunner::Drop(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+    }
+
+
+    Y_UNIT_TEST(AlterViaTopicService) {
+        TTestTopicEnv env(SimpleTable(), KeysOnly(NKikimrSchemeOp::ECdcStreamFormatJson));
+        auto& client = env.GetClient();
+
+        // try to update partitions count
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .AlterPartitioningSettings(5, 5)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+
+        // try to update retention period
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .SetRetentionPeriod(TDuration::Hours(48))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+        // try to update supported codecs
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .AppendSetSupportedCodecs(NYdb::NTopic::ECodec(5))).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+        // try to update retention storage
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .SetRetentionStorageMb(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+
+        // try to update speed
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .SetPartitionWriteSpeedBytesPerSecond(1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+
+        // try to update write burst
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .SetPartitionWriteBurstBytes(1_MB)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+
+        // try to update attributes
+        {
+            auto res = client.AlterTopic("/Root/Table/Stream", NYdb::NTopic::TAlterTopicSettings()
+                .BeginAlterAttributes().Add("key", "value").EndAlterAttributes()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+        }
+
     }
 
     // Pq specific

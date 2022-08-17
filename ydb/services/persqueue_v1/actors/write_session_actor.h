@@ -163,7 +163,6 @@ private:
     // 'SourceId' is called 'MessageGroupId' since gRPC data plane API v1
     TString SourceId; // TODO: Replace with 'MessageGroupId' everywhere
     NPQ::NSourceIdEncoding::TEncodedSourceId EncodedSourceId;
-    ui32 CompatibleHash;
 
     TString OwnerCookie;
     TString UserAgent;
@@ -238,6 +237,8 @@ private:
     TString ClientDC;
     TString SelectSourceIdQuery;
     TString UpdateSourceIdQuery;
+    TString TxId;
+    TString KqpSessionId;
     ui32 SelectSrcIdsInflight = 0;
     ui64 MaxSrcIdAccessTime = 0;
 

@@ -147,6 +147,7 @@ protected:
     THashMap<TActorId, THolder<TPerTopicInfo>> Children;
     size_t ChildrenAnswered = 0;
     std::shared_ptr<NSchemeCache::TSchemeCacheNavigate> TopicsDescription;
+    TVector<NPersQueue::TTopicConverterPtr> TopicsConverters;
 
     // Nodes info
     const bool ListNodes;

@@ -254,6 +254,7 @@ private:
             CurrentTopicsVersion = NewTopicsVersion;
             FullTopicsCacheOutdated = true;
             FullTopicsCache = nullptr;
+            CurrentTopicsFullConverters.clear();
             while (!ListTopicsWaiters.empty()) {
                 auto& waiter = ListTopicsWaiters.front();
                 ProcessDescribeAllTopics(waiter, ctx);
@@ -400,7 +401,7 @@ private:
         }
         if (FullTopicsCache && !FullTopicsCacheOutdated) {
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Respond from cache");
-            return SendDescribeAllTopicsResponse(waiter, CurrentTopics, ctx);
+            return SendDescribeAllTopicsResponse(waiter, CurrentTopicsFullConverters, ctx);
         }
         SendSchemeCacheRequest(
                 std::make_shared<TWaiter>(waiter, DbRoot, false, false, CurrentTopics, EWaiterType::DescribeAllTopics),
@@ -408,6 +409,7 @@ private:
         );
         FullTopicsCacheOutdated = false;
         FullTopicsCache = nullptr;
+        CurrentTopicsFullConverters.clear();
     }
 
     void SendSchemeCacheRequest(std::shared_ptr<TWaiter> waiter, const TActorContext& ctx) {
@@ -464,21 +466,37 @@ private:
             HaveDescribeAllTopicsInflight = false;
             for (const auto& entry : waiter->Result->ResultSet) {
                 if (!entry.PQGroupInfo) {
-                    continue;
+                    FullTopicsCacheOutdated = true;
+                    break;
                 }
 
                 const auto& desc = entry.PQGroupInfo->Description;
-                if (desc.HasBalancerTabletID() && desc.GetBalancerTabletID() != 0) {
-                    continue;
+                if (!desc.HasBalancerTabletID() || desc.GetBalancerTabletID() == 0) {
+                    FullTopicsCacheOutdated = true;
+                    break;
                 }
-                FullTopicsCacheOutdated = true;
             }
             FullTopicsCache = waiter->GetResult();
+
             CheckEntrySetHasTopicPath(FullTopicsCache.get());
+            auto factory = NPersQueue::TTopicNamesConverterFactory(AppData(ctx)->PQConfig, {});
+ 
+            for (auto& entry : FullTopicsCache->ResultSet) {
+                if (!entry.PQGroupInfo) {
+                    CurrentTopicsFullConverters.push_back(nullptr);
+                } else {
+                    auto converter = factory.MakeTopicConverter(
+                                                    entry.PQGroupInfo->Description.GetPQTabletConfig()
+                                                );
+                    CurrentTopicsFullConverters.push_back(converter);
+                }
+            }
+
+            Y_VERIFY(CurrentTopicsFullConverters.size() == FullTopicsCache->ResultSet.size());
  
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Updated topics cache with " << FullTopicsCache->ResultSet.size());
             while (!DescribeAllTopicsWaiters.empty()) {
-                SendDescribeAllTopicsResponse(DescribeAllTopicsWaiters.front()->WaiterId, waiter->Topics, ctx);
+                SendDescribeAllTopicsResponse(DescribeAllTopicsWaiters.front()->WaiterId, CurrentTopicsFullConverters, ctx);
                 DescribeAllTopicsWaiters.pop();
             }
         } else {
@@ -494,7 +512,7 @@ private:
         }
     }
 
-    void SendDescribeAllTopicsResponse(const TActorId& recipient, TVector<NPersQueue::TDiscoveryConverterPtr> topics,
+    void SendDescribeAllTopicsResponse(const TActorId& recipient, TVector<NPersQueue::TTopicConverterPtr> topics,
                                        const TActorContext& ctx, bool empty = false
     ) {
         std::shared_ptr<TSchemeCacheNavigate> scResponse;
@@ -553,6 +571,7 @@ private:
     EQueryType Type = EQueryType::ECheckVersion;
     TVector<TTopicKey> NewTopics;
     TVector<NPersQueue::TDiscoveryConverterPtr> CurrentTopics;
+    TVector<NPersQueue::TTopicConverterPtr> CurrentTopicsFullConverters;
     bool EverGotTopics = false;
     TDuration QueryRetryInterval = TDuration::Seconds(2);
     TDuration VersionCheckInterval = TDuration::Seconds(1);

@@ -4921,33 +4921,24 @@ void TPartition::CalcTopicWriteQuotaParams()
         Y_VERIFY(quotingConfig.GetTopicWriteQuotaEntityToLimit() != NKikimrPQ::TPQConfig::TQuotingConfig::UNSPECIFIED);
 
         // ToDo[migration] - double check
-        TString topicPath = Config.GetTopicPath();
-        if (topicPath.empty()) {
-            topicPath = Config.GetTopicName();
-        }
-        Y_VERIFY(!topicPath.empty());
-        TFsPath fsPath(topicPath);
-        if (fsPath.IsSubpathOf(pqConfig.GetRoot())) {
-            topicPath = fsPath.RelativePath(TFsPath(pqConfig.GetRoot())).GetPath();
-        }
+        auto topicPath = TopicConverter->GetFederationPath();
+
         // ToDo[migration] - separate quoter paths?
-        TVector<TString> topicParts = {WRITE_QUOTA_ROOT_PATH};
-        auto split = SplitPath(topicPath); // account/folder/topic // account is first element
-        if (split.size() < 2) {
+        auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
+        if (topicParts.size() < 2) {
             LOG_WARN_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
                        "tablet " << TabletID << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
             return;
         }
-        topicParts.insert(topicParts.end(), split.begin(), split.end());
-        //const TString account = topicParts[0];
         topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic
 
         TopicWriteQuotaResourcePath = JoinPath(topicParts);
         TopicWriteQuoterPath = TStringBuilder() << quotingConfig.GetQuotersDirectoryPath() << "/" << TopicConverter->GetAccount();
+
         LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::PERSQUEUE,
-                   "topicWriteQuutaResourcePath " << TopicWriteQuotaResourcePath
-                   << " topicWriteQuoterPath '" << TopicWriteQuoterPath
-                   << " account " << TopicConverter->GetAccount()
+                   "topicWriteQuutaResourcePath '" << TopicWriteQuotaResourcePath
+                   << "' topicWriteQuoterPath '" << TopicWriteQuoterPath
+                   << "' account " << TopicConverter->GetAccount()
        );
     }
 }

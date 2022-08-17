@@ -144,11 +144,15 @@ class TDeleteQueueSchemaActorV2
 {
 public:
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
+                              bool isFifo,
+                              ui32 tablesFormat,
                               const TActorId& sender,
                               const TString& requestId,
                               TIntrusivePtr<TUserCounters> userCounters);
 
     TDeleteQueueSchemaActorV2(const TQueuePath& path,
+                              bool isFifo,
+                              ui32 tablesFormat,
                               const TActorId& sender,
                               const TString& requestId,
                               TIntrusivePtr<TUserCounters> userCounters,
@@ -196,6 +200,8 @@ private:
     };
 
     const TQueuePath QueuePath_;
+    const bool IsFifo_;
+    const ui32 TablesFormat_;
     const TActorId Sender_;
     TVector<TTable> Tables_;
     TVector<int> Shards_;

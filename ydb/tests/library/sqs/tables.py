@@ -120,6 +120,23 @@ def create_settings_table(root, session):
     _create_table(root, session, '.Settings', columns, keys_count=2)
 
 
+def create_removed_queues_table(root, session):
+    columns = [
+        ('RemoveTimestamp', ydb.PrimitiveType.Uint64),
+        ('QueueIdNumber', ydb.PrimitiveType.Uint64),
+        ('Account', ydb.PrimitiveType.Utf8),
+        ('QueueName', ydb.PrimitiveType.Utf8),
+        ('FifoQueue', ydb.PrimitiveType.Bool),
+        ('Shards', ydb.PrimitiveType.Uint32),
+        ('CustomQueueName', ydb.PrimitiveType.Utf8),
+        ('FolderId', ydb.PrimitiveType.Utf8),
+        ('TablesFormat', ydb.PrimitiveType.Uint32),
+        ('StartProcessTimestamp', ydb.PrimitiveType.Uint64),
+        ('NodeProcess', ydb.PrimitiveType.Uint32),
+    ]
+    _create_table(root, session, '.RemovedQueues', columns, keys_count=2)
+
+
 def create_attibutes_table(root, session, queue_type):
     queue_keys = get_table_keys_for_queue()
     columns = queue_keys + [
@@ -285,6 +302,7 @@ def create_all_tables(root, driver, session):
     create_queues_table(root, session)
     create_events_table(root, session)
     create_settings_table(root, session)
+    create_removed_queues_table(root, session)
 
     for queue_type in [QueueType.STD, QueueType.FIFO]:
         create_sent_timestamp_idx_table(root, session, queue_type)

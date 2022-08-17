@@ -38,6 +38,7 @@ target_sources(core-ymq-base PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/probes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_attributes.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/queue_id.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/run_query.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/base/secure_protobuf_printer.cpp
 )
 generate_enum_serilization(core-ymq-base

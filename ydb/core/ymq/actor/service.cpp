@@ -5,6 +5,7 @@
 #include "executor.h"
 #include "garbage_collector.h"
 #include "local_rate_limiter_allocator.h"
+#include "monitoring.h"
 #include "params.h"
 #include "proxy_service.h"
 #include "queue_leader.h"
@@ -13,6 +14,7 @@
 #include "user_settings_reader.h"
 #include "index_events_processor.h"
 #include "node_tracker.h"
+#include "cleanup_queue_data.h"
 
 #include <ydb/public/lib/value/value.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
@@ -278,12 +280,18 @@ void TSqsService::Bootstrap() {
     YmqRootCounters_ = GetYmqPublicCounters(AppData()->Counters);
     AllocPoolCounters_ = std::make_shared<TAlignedPagePoolCounters>(AppData()->Counters, "sqs");
     AggregatedUserCounters_ = MakeIntrusive<TUserCounters>(
-            Cfg(), SqsCoreCounters_, nullptr, AllocPoolCounters_, TOTAL_COUNTER_LABEL, nullptr, true
+        Cfg(), SqsCoreCounters_, nullptr, AllocPoolCounters_, TOTAL_COUNTER_LABEL, nullptr, true
     );
     AggregatedUserCounters_->ShowDetailedCounters(TInstant::Max());
+    MonitoringCounters_ = MakeIntrusive<TMonitoringCounters>(
+        Cfg(), GetServiceCounters(AppData()->Counters, "sqs")->GetSubgroup("subsystem", "monitoring")
+    );
 
     InitSchemeCache();
     NodeTrackerActor_ = Register(new TNodeTrackerActor(SchemeCache_));
+
+    Register(new TCleanupQueueDataActor(MonitoringCounters_));
+    Register(new TMonitoringActor(MonitoringCounters_));
 
     Register(new TUserSettingsReader(AggregatedUserCounters_->GetTransactionCounters()));
     QueuesListReader_ = Register(new TQueuesListReader(AggregatedUserCounters_->GetTransactionCounters()));

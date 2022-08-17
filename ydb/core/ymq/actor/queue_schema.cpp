@@ -543,18 +543,18 @@ void TCreateQueueSchemaActorV2::Step() {
             break;
         }
         case ECreateComponentsStep::MakeQueueDir: {
-            if (TablesFormat_ == 0) {
-                CurrentCreationStep_ = ECreateComponentsStep::MakeQueueVersionDir;
-            } else {
-                CurrentCreationStep_ = ECreateComponentsStep::DescribeTableForSetSchemeShardId;
-            }
+            CurrentCreationStep_ = ECreateComponentsStep::MakeQueueVersionDir;
             break;
         }
         case ECreateComponentsStep::MakeQueueVersionDir: {
-            if (IsFifo_) {
-                CurrentCreationStep_ = ECreateComponentsStep::MakeTables;
+            if (TablesFormat_ == 0) {
+                if (IsFifo_) {
+                    CurrentCreationStep_ = ECreateComponentsStep::MakeTables;
+                } else {
+                    CurrentCreationStep_ = ECreateComponentsStep::MakeShards;
+                }
             } else {
-                CurrentCreationStep_ = ECreateComponentsStep::MakeShards;
+                CurrentCreationStep_ = ECreateComponentsStep::DescribeTableForSetSchemeShardId;
             }
             break;
         }
@@ -741,7 +741,7 @@ static const char* const CommitQueueParamsQuery = R"__(
         (let partitions             (Parameter 'PARTITIONS        (DataType 'Uint64)))
         (let masterTabletId         (Parameter 'MASTER_TABLET_ID  (DataType 'Uint64)))
         (let tablesFormat           (Parameter 'TABLES_FORMAT     (DataType 'Uint32)))
-        (let version                (Parameter 'VERSION           (DataType 'Uint64)))
+        (let queueIdNumber          (Parameter 'QUEUE_ID_NUMBER   (DataType 'Uint64)))
         (let queueIdNumberHash      (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
         (let maxSize                (Parameter 'MAX_SIZE          (DataType 'Uint64)))
         (let delay                  (Parameter 'DELAY             (DataType 'Uint64)))
@@ -850,7 +850,7 @@ static const char* const CommitQueueParamsQuery = R"__(
             '('CreatedTimestamp now)
             '('Shards shards)
             '('Partitions partitions)
-            '('Version version)
+            '('Version queueIdNumber)
             '('DlqName dlqName)
             '('MasterTabletId masterTabletId)
             '('TablesFormat tablesFormat)))
@@ -933,12 +933,12 @@ TString GetStateTableKeys(ui32 tablesFormat, bool isFifo) {
         if (isFifo) {
             return R"__(
                 '('QueueIdNumberHash queueIdNumberHash)
-                '('QueueIdNumber version)
+                '('QueueIdNumber queueIdNumber)
             )__";
         }
         return R"__(
             '('QueueIdNumberHash queueIdNumberHash)
-            '('QueueIdNumber version)
+            '('QueueIdNumber queueIdNumber)
             '('Shard shard)
         )__";
         
@@ -950,7 +950,7 @@ TString GetAttrTableKeys(ui32 tablesFormat) {
     if (tablesFormat == 1) {
         return R"__(
             '('QueueIdNumberHash queueIdNumberHash)
-            '('QueueIdNumber version)
+            '('QueueIdNumber queueIdNumber)
         )__";
     }
     return "'('State (Uint64 '0))";
@@ -998,7 +998,7 @@ void TCreateQueueSchemaActorV2::CommitNewVersion() {
         .Uint64("PARTITIONS", Request_.GetPartitions())
         .Uint64("MASTER_TABLET_ID", LeaderTabletId_)
         .Uint32("TABLES_FORMAT", TablesFormat_)
-        .Uint64("VERSION", Version_)
+        .Uint64("QUEUE_ID_NUMBER", Version_)
         .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(Version_))
         .Uint64("MAX_SIZE", *ValidatedAttributes_.MaximumMessageSize)
         .Uint64("DELAY", SecondsToMs(*ValidatedAttributes_.DelaySeconds))
@@ -1140,7 +1140,7 @@ void TCreateQueueSchemaActorV2::OnAttributesMatch(TSqsEvents::TEvExecuted::TPtr&
                 // call the special version of cleanup actor
                 RLOG_SQS_WARN("Removing redundant queue version: " << Version_ << " for queue " <<
                                     QueuePath_.GetQueuePath() << ". Shards: " << RequiredShardsCount_ << " IsFifo: " << IsFifo_);
-                Register(new TDeleteQueueSchemaActorV2(QueuePath_, SelfId(), RequestId_, UserCounters_,
+                Register(new TDeleteQueueSchemaActorV2(QueuePath_, IsFifo_, TablesFormat_, SelfId(), RequestId_, UserCounters_,
                                                            Version_, RequiredShardsCount_, IsFifo_));
             }
 
@@ -1166,18 +1166,24 @@ void TCreateQueueSchemaActorV2::PassAway() {
 }
 
 TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
+                                                     bool isFifo,
+                                                     ui32 tablesFormat,
                                                      const TActorId& sender,
                                                      const TString& requestId,
                                                      TIntrusivePtr<TUserCounters> userCounters)
     : QueuePath_(path)
+    , IsFifo_(isFifo)
+    , TablesFormat_(tablesFormat)
     , Sender_(sender)
-    , SI_(0)
+    , SI_(static_cast<ui32>(EDeleting::EraseQueueRecord))
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
 {
 }
 
 TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
+                                                     bool isFifo,
+                                                     ui32 tablesFormat,
                                                      const TActorId& sender,
                                                      const TString& requestId,
                                                      TIntrusivePtr<TUserCounters> userCounters,
@@ -1185,8 +1191,10 @@ TDeleteQueueSchemaActorV2::TDeleteQueueSchemaActorV2(const TQueuePath& path,
                                                      const ui64 advisedShardCount,
                                                      const bool advisedIsFifoFlag)
     : QueuePath_(path)
+    , IsFifo_(isFifo)
+    , TablesFormat_(tablesFormat)
     , Sender_(sender)
-    , SI_(static_cast<ui32>(EDeleting::RemoveTables))
+    , SI_(static_cast<ui32>(tablesFormat == 0 ? EDeleting::RemoveTables : EDeleting::RemoveQueueVersionDirectory))
     , RequestId_(requestId)
     , UserCounters_(std::move(userCounters))
 {
@@ -1224,12 +1232,16 @@ static TString GetVersionedQueueDir(const TString& baseQueueDir, const ui64 vers
 
 static const char* EraseQueueRecordQuery = R"__(
     (
-        (let name (Parameter 'NAME (DataType 'Utf8String)))
-        (let userName (Parameter 'USER_NAME (DataType 'Utf8String)))
-        (let now (Parameter 'NOW (DataType 'Uint64)))
+        (let name               (Parameter 'NAME (DataType 'Utf8String)))
+        (let userName           (Parameter 'USER_NAME (DataType 'Utf8String)))
+        (let now                (Parameter 'NOW (DataType 'Uint64)))
+        (let queueIdNumber      (Parameter 'QUEUE_ID_NUMBER (DataType 'Uint64)))
+        (let queueIdNumberHash  (Parameter 'QUEUE_ID_NUMBER_HASH (DataType 'Uint64)))
 
         (let queuesTable '%2$s/.Queues)
+        (let removedQueuesTable '%2$s/.RemovedQueues)
         (let eventsTable '%2$s/.Events)
+        (let stateTable '%3$s/State)
 
         (let queuesRow '(
             '('Account userName)
@@ -1246,7 +1258,8 @@ static const char* EraseQueueRecordQuery = R"__(
             'Shards
             'CustomQueueName
             'CreatedTimestamp
-            'FolderId))
+            'FolderId
+            'TablesFormat))
         (let queuesRead (SelectRow queuesTable queuesRow queuesSelect))
 
         (let currentVersion
@@ -1262,6 +1275,21 @@ static const char* EraseQueueRecordQuery = R"__(
                 (Uint64 '0)
             )
         )
+
+        (let fifoQueue
+            (Coalesce
+                (Member queuesRead 'FifoQueue)
+                (Bool 'false)
+            )
+        )
+
+        (let shards
+            (Coalesce
+                (Member queuesRead 'Shards)
+                (Uint64 '0)
+            )
+        )
+
         (let folderId
             (Coalesce
                 (Member queuesRead 'FolderId)
@@ -1275,14 +1303,37 @@ static const char* EraseQueueRecordQuery = R"__(
                 (Utf8String '"")
             )
         )
+        
+        (let tablesFormat
+            (Coalesce
+                (Member queuesRead 'TablesFormat)
+                (Uint32 '0)
+            )
+        )
+
+        (let removedQueueRow '(
+            '('RemoveTimestamp now)
+            '('QueueIdNumber currentVersion)))
+        
+        (let removedQueueUpdate '(
+            '('Account userName)
+            '('QueueName name)
+            '('FifoQueue fifoQueue)
+            '('Shards (Cast shards 'Uint32))
+            '('CustomQueueName customName)
+            '('FolderId folderId)
+            '('TablesFormat tablesFormat)))
 
         (let eventTs (Max now (Add queueCreateTs (Uint64 '2))))
 
         (let queueExists
             (Coalesce
-                (Or
-                    (Equal (Uint64 '1) (Member queuesRead 'QueueState))
-                    (Equal (Uint64 '3) (Member queuesRead 'QueueState))
+                (And
+                    (Equal currentVersion queueIdNumber)
+                    (Or
+                        (Equal (Uint64 '1) (Member queuesRead 'QueueState))
+                        (Equal (Uint64 '3) (Member queuesRead 'QueueState))
+                    )
                 )
                 (Bool 'false)))
 
@@ -1291,23 +1342,50 @@ static const char* EraseQueueRecordQuery = R"__(
             '('EventTimestamp eventTs)
             '('FolderId folderId)))
 
-        (return (AsList
-            (SetResult 'exists queueExists)
-            (SetResult 'version currentVersion)
-            (SetResult 'fields queuesRead)
-            (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
-            (If queueExists (EraseRow queuesTable queuesRow) (Void))))
+        (return (Extend
+            (AsList
+                (SetResult 'exists queueExists)
+                (SetResult 'version currentVersion)
+                (SetResult 'fields queuesRead)
+                (If queueExists (UpdateRow eventsTable eventsRow eventsUpdate) (Void))
+                (If queueExists (UpdateRow removedQueuesTable removedQueueRow removedQueueUpdate) (Void))
+                (If queueExists (EraseRow queuesTable queuesRow) (Void))
+            )
+            
+                (If queueExists
+                    (Map (ListFromRange (Uint64 '0) shards) (lambda '(shardOriginal) (block '(
+                        (let shard (Cast shardOriginal 'Uint32))
+                            
+                        (let stateRow '(%4$s))
+                        (return (EraseRow stateTable stateRow))
+                    ))))
+                    (AsList (Void))
+                )
+        ))
     )
 )__";
 
 void TDeleteQueueSchemaActorV2::NextAction() {
     switch (EDeleting(SI_)) {
         case EDeleting::EraseQueueRecord: {
-                auto ev = MakeExecuteEvent(Sprintf(EraseQueueRecordQuery, QueuePath_.GetUserPath().c_str(), Cfg().GetRoot().c_str()));
+            TString queueStateDir = QueuePath_.GetVersionedQueuePath();
+            if (TablesFormat_ == 1) {
+                queueStateDir = Join("/", Cfg().GetRoot(), IsFifo_ ? FIFO_TABLES_DIR : STD_TABLES_DIR);
+            }
+            
+            auto ev = MakeExecuteEvent(Sprintf(
+                EraseQueueRecordQuery,
+                QueuePath_.GetUserPath().c_str(),
+                Cfg().GetRoot().c_str(),
+                queueStateDir.c_str(),
+                GetStateTableKeys(TablesFormat_, IsFifo_).c_str()
+            ));
             auto* trans = ev->Record.MutableTransaction()->MutableMiniKQLTransaction();
             auto nowMs = TInstant::Now().MilliSeconds();
             TParameters(trans->MutableParams()->MutableProto())
                 .Utf8("NAME", QueuePath_.QueueName)
+                .Uint64("QUEUE_ID_NUMBER", QueuePath_.Version)
+                .Uint64("QUEUE_ID_NUMBER_HASH", GetKeysHash(QueuePath_.Version))
                 .Utf8("USER_NAME", QueuePath_.UserName)
                 .Uint64("NOW", nowMs);
 
@@ -1354,26 +1432,40 @@ void TDeleteQueueSchemaActorV2::NextAction() {
 }
 
 void TDeleteQueueSchemaActorV2::DoSuccessOperation() {
-    if (EDeleting(SI_) == EDeleting::RemoveTables) {
-        Tables_.pop_back();
+    switch (EDeleting(SI_)) {
+        case EDeleting::EraseQueueRecord: {
+            if (TablesFormat_ == 0) {
+                SI_ = ui32(EDeleting::RemoveTables);
+            } else {
+                SI_ = ui32(EDeleting::RemoveQueueVersionDirectory);
+            }
+            break;
+        }
+        case EDeleting::RemoveTables: {
+            Tables_.pop_back();
 
-        if (Tables_.empty()) {
+            if (Tables_.empty()) {
+                if (Shards_.empty()) {
+                    SI_ = ui32(Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory);
+                } else {
+                    SI_ = ui32(EDeleting::RemoveShards);
+                }
+            }
+            break;
+        }
+        case EDeleting::RemoveShards: {
+            Shards_.pop_back();
+
             if (Shards_.empty()) {
                 SI_ = ui32(Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory);
-            } else {
-                SI_ = ui32(EDeleting::RemoveShards);
             }
+            break;
         }
-    } else if (EDeleting(SI_) == EDeleting::RemoveShards) {
-        Shards_.pop_back();
-
-        if (Shards_.empty()) {
-            SI_ = ui32(Version_ ? EDeleting::RemoveQueueVersionDirectory : EDeleting::RemoveQueueDirectory);
-        }
-    } else {
-        SI_++;
-        if ((!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig()) && EDeleting(SI_) == EDeleting::DeleteQuoterResource) {
+        default: {
             SI_++;
+            if ((!Cfg().GetQuotingConfig().GetEnableQuoting() || !Cfg().GetQuotingConfig().HasKesusQuoterConfig()) && EDeleting(SI_) == EDeleting::DeleteQuoterResource) {
+                SI_++;
+            }
         }
     }
 

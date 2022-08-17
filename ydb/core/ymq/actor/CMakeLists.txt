@@ -61,6 +61,7 @@ target_sources(core-ymq-actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/cfg.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/change_visibility.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/count_queues.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/cleanup_queue_data.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/create_queue.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/create_user.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/delete_message.cpp
@@ -83,6 +84,7 @@ target_sources(core-ymq-actor PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/message_delay_stats.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/metering.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/modify_permissions.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/monitoring.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/node_tracker.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/proxy_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ymq/actor/purge.cpp

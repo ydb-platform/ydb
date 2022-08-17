@@ -997,4 +997,11 @@ void TMeteringCounters::InitCounters(const TVector<TString>& classifierLabels) {
     }
 }
 
+void TMonitoringCounters::InitCounters() {
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesLagSec, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesDone, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesRows, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+    INIT_COUNTER(MonitoringCounters, CleanupRemovedQueuesErrors, ELifetime::Persistent, EValueType::Derivative, Lazy(Config));
+}
+
 } // namespace NKikimr::NSQS

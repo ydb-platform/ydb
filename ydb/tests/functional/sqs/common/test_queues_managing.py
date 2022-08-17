@@ -95,8 +95,16 @@ class QueuesManagingTest(KikimrSqsTestBase):
         )
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_delete_queue(self, is_fifo):
-        self._init_with_params(is_fifo)
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_delete_queue(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
+
+        another_queue_std_name = self.queue_name.replace('.', '_') + '_another_std'
+        another_queue_fifo_name = self.queue_name.replace('.', '_') + '_another.fifo'
+        another_queue_std = self._create_queue_and_assert(another_queue_std_name, is_fifo=False)
+        another_queue_fifo = self._create_queue_and_assert(another_queue_fifo_name, is_fifo=True)
+        self._sqs_api.send_message(another_queue_std, 'some message for std')
+        self._sqs_api.send_message(another_queue_fifo, 'some message for fifo', group_id='group', deduplication_id='123')
 
         created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         self._sqs_api.list_queues()
@@ -111,6 +119,13 @@ class QueuesManagingTest(KikimrSqsTestBase):
         counters = self._get_sqs_counters()
         sends = self._get_counter_value(counters, send_message_labels)
         assert_that(sends, equal_to(1))
+
+        def get_queue_id_number(queue_name):
+            query = f'SELECT * FROM  `{self.sqs_root}/.Queues` WHERE Account="{self._username}" AND QueueName="{queue_name}"'
+            result = self._execute_yql_query(query)
+            return result[0].rows[0]['Version']
+
+        queue_id_number = get_queue_id_number(self.queue_name)
 
         delete_result = self._sqs_api.delete_queue(created_queue_url)
         assert_that(
@@ -137,6 +152,36 @@ class QueuesManagingTest(KikimrSqsTestBase):
                 ydb_issues.SchemeError
             )
         )
+
+        def get_rows_count(table, queue_id_number=None):
+            query = f'SELECT * FROM  `{self.sqs_root}/{table}`'
+            if queue_id_number is not None:
+                query += f' WHERE QueueIdNumber = {queue_id_number}'
+            result = self._execute_yql_query(query)
+            return len(result[0].rows)
+
+        def row_count_must_be(table, queue_id_number, count):
+            rows = get_rows_count(table, queue_id_number)
+            assert rows == count, f'in table `{table}` for queue_id_number={queue_id_number} rows {rows}, expected {count}'
+
+        queues_to_remove = None
+        for i in range(40):
+            queues_to_remove = get_rows_count('.RemovedQueues')
+            if queues_to_remove == 0:
+                break
+            time.sleep(1)
+        assert queues_to_remove == 0, f'queues to remove count {queues_to_remove}'
+
+        if tables_format == 1:
+            another_queue_id_number = get_queue_id_number(another_queue_fifo_name if is_fifo else another_queue_std_name)
+
+            common_dir = '.FIFO' if is_fifo else '.STD'
+            row_count_must_be(common_dir + '/Attributes', queue_id_number, 0)
+            row_count_must_be(common_dir + '/State', queue_id_number, 0)
+            row_count_must_be(common_dir + '/Messages', queue_id_number, 0)
+            row_count_must_be(common_dir + '/Attributes', another_queue_id_number, 1)
+            row_count_must_be(common_dir + '/State', another_queue_id_number, 1 if is_fifo else 2)
+            row_count_must_be(common_dir + '/Messages', another_queue_id_number, 1)
 
     def test_delete_queue_batch(self):
         existing_queues = self._sqs_api.list_queues()

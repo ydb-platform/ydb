@@ -39,7 +39,13 @@ private:
 
         SchemaActor_ = Register(
             new TDeleteQueueSchemaActorV2(
-                TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName()), SelfId(), RequestId_, UserCounters_)
+                TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName(), QueueVersion_.GetRef()),
+                IsFifo_.GetRef(),
+                TablesFormat_.GetRef(),
+                SelfId(),
+                RequestId_,
+                UserCounters_
+            )
         );
     }
 

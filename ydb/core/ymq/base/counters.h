@@ -827,4 +827,27 @@ private:
     const NKikimrConfig::TSqsConfig& Config;
 };
 
+// Common service monitoring counters
+struct TMonitoringCounters : public TAtomicRefCount<TMonitoringCounters> {
+    TLazyCachedCounter CleanupRemovedQueuesLagSec;
+    
+    TLazyCachedCounter CleanupRemovedQueuesDone;
+    TLazyCachedCounter CleanupRemovedQueuesRows;
+    TLazyCachedCounter CleanupRemovedQueuesErrors;
+
+    TMonitoringCounters(const NKikimrConfig::TSqsConfig& config, const TIntrusivePtr<::NMonitoring::TDynamicCounters>& monitoringCounters)
+        : MonitoringCounters(monitoringCounters)
+        , Config(config)
+    {
+        InitCounters();
+    }
+
+private:
+    void InitCounters();
+
+private:
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> MonitoringCounters;
+    const NKikimrConfig::TSqsConfig& Config;
+};
+
 } // namespace NKikimr::NSQS

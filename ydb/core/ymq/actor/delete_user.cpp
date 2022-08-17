@@ -90,12 +90,21 @@ private:
 
             for (size_t i = 0; i < queues.Size(); ++i) {
                 const TString name((TString(queues[i]["QueueName"])));
+                const ui64 version(queues[i]["Version"]);
+                const bool isFifo(queues[i]["FifoQueue"]);
+                const ui32 tablesFormat(queues[i]["TablesFormat"]);
 
                 Queues_.insert(name);
 
                 Register(
                     new TDeleteQueueSchemaActorV2(
-                        TQueuePath(Cfg().GetRoot(), Request().GetUserName(), name), SelfId(), RequestId_, UserCounters_)
+                        TQueuePath(Cfg().GetRoot(), Request().GetUserName(), name, version),
+                        isFifo,
+                        tablesFormat,
+                        SelfId(),
+                        RequestId_,
+                        UserCounters_
+                    )
                 );
             }
 

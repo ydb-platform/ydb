@@ -103,7 +103,7 @@ struct TEvPqNewMetaCache {
         explicit TEvDescribeAllTopicsResponse() {}
 
         TEvDescribeAllTopicsResponse(const TString& path, TVector<NPersQueue::TDiscoveryConverterPtr>&& topics,
-                                     NSchemeCache::TSchemeCacheNavigate* result)
+                                     const std::shared_ptr<NSchemeCache::TSchemeCacheNavigate>& result)
             : Path(path)
             , Topics(std::move(topics))
             , Result(result)

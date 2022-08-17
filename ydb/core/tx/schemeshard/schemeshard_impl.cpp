@@ -6075,7 +6075,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
     StatsBatchTimeout = TDuration::MilliSeconds(config.GetStatsBatchTimeoutMs());
     StatsMaxBatchSize = config.GetStatsMaxBatchSize();
-    StatsMaxExecuteTime = TDuration::MicroSeconds(config.GetStatsMaxExecuteMs());
+    StatsMaxExecuteTime = TDuration::MilliSeconds(config.GetStatsMaxExecuteMs());
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "StatsBatching config: StatsBatchTimeout# " << StatsBatchTimeout
                  << ", StatsMaxBatchSize# " << StatsMaxBatchSize

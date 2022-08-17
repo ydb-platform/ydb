@@ -103,7 +103,7 @@ public:
 
         if (shardIds.size() > 0) {
             LOG_D("Start resolving tablets nodes... (" << shardIds.size() << ")");
-            auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), TxId, std::move(shardIds), 0);
+            auto kqpShardsResolver = CreateKqpShardsResolver(SelfId(), TxId, std::move(shardIds));
             KqpShardsResolverId = RegisterWithSameMailbox(kqpShardsResolver);
         } else {
             Execute();

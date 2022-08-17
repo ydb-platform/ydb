@@ -592,7 +592,6 @@ public:
                                  const TForceShardSplitSettings& forceShardSplitSettings,
                                  TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge) const;
 
-    bool CheckFastSplitForPartition(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
     bool CheckSplitByLoad(const TSplitSettings& splitSettings, TShardIdx shardIdx, ui64 dataSize, ui64 rowCount) const;
 
     bool IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {

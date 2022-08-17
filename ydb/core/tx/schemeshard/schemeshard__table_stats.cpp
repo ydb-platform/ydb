@@ -376,10 +376,6 @@ bool TTxStorePartitionStats::PersistSingleStats(TTransactionContext& txc, const 
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         return true;
-    } else if (table->CheckFastSplitForPartition(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
-        dataSizeResolution = Max<ui64>(dataSize / 100, 100*1024);
-        rowCountResolution = Max<ui64>(rowCount / 100, 1000);
-        collectKeySample = true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount)) {
         collectKeySample = true;
     } else {

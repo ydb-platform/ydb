@@ -1014,5 +1014,6 @@ NSchemeShardUT_Private::TTestEnvOptions NSchemeShardUT_Private::TTestWithReboots
             .EnableAsyncIndexes(true)
             .EnableNotNullColumns(true)
             .EnableSchemeTransactionsAtSchemeShard(true)
-            .EnableProtoSourceIdInfo(true);
+            .EnableProtoSourceIdInfo(true)
+            .DisableStatsBatching(true);
 }

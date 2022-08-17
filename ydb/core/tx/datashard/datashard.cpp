@@ -601,6 +601,14 @@ void TDataShard::EnqueueChangeRecords(TVector<NMiniKQL::IChangeCollector::TChang
         return;
     }
 
+    if (OutChangeSenderSuspended) {
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Cannot enqueue change records"
+            << ": change sender suspended"
+            << ", at tablet: " << TabletID()
+            << ", records: " << JoinSeq(", ", records));
+        return;
+    }
+
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "EnqueueChangeRecords"
         << ": at tablet: " << TabletID()
         << ", records: " << JoinSeq(", ", records));
@@ -636,6 +644,8 @@ void TDataShard::CreateChangeSender(const TActorContext& ctx) {
 void TDataShard::MaybeActivateChangeSender(const TActorContext& ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Trying to activate change sender"
         << ": at tablet: " << TabletID());
+
+    OutChangeSenderSuspended = false;
 
     if (ReceiveActivationsFrom) {
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, "Cannot activate change sender"
@@ -681,6 +691,11 @@ void TDataShard::KillChangeSender(const TActorContext& ctx) {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "Change sender killed"
             << ": at tablet: " << TabletID());
     }
+}
+
+void TDataShard::SuspendChangeSender(const TActorContext& ctx) {
+    KillChangeSender(ctx);
+    OutChangeSenderSuspended = true;
 }
 
 bool TDataShard::LoadChangeRecords(NIceDb::TNiceDb& db, TVector<NMiniKQL::IChangeCollector::TChange>& records) {
@@ -1027,6 +1042,13 @@ TUserTable::TPtr TDataShard::MoveUserTable(TOperation::TPtr op, const NKikimrTxD
     RemoveUserTable(prevId);
     AddUserTable(newId, newTableInfo);
 
+    for (auto& [_, record] : ChangesQueue) {
+        if (record.TableId == prevId) {
+            record.TableId = newId;
+        }
+    }
+
+    SchemaSnapshotManager.RenameSnapshots(txc.DB, prevId, newId);
     if (newTableInfo->NeedSchemaSnapshots()) {
         AddSchemaSnapshot(newId, version, op->GetStep(), op->GetTxId(), txc, ctx);
     }

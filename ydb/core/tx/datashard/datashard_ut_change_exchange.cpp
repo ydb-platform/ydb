@@ -758,6 +758,29 @@ Y_UNIT_TEST_SUITE(Cdc) {
         }
 
     private:
+        static NKikimrPQ::TPQConfig DefaultPQConfig() {
+            NKikimrPQ::TPQConfig pqConfig;
+            pqConfig.SetEnabled(true);
+            pqConfig.SetEnableProtoSourceIdInfo(true);
+            pqConfig.SetRoundRobinPartitionMapping(true);
+            pqConfig.SetTopicsAreFirstClassCitizen(true);
+            pqConfig.SetMaxReadCookies(10);
+            pqConfig.AddClientServiceType()->SetName("data-streams");
+            pqConfig.SetCheckACL(false);
+            pqConfig.SetRequireCredentialsInNewProtocol(false);
+            pqConfig.MutableQuotingConfig()->SetEnableQuoting(false);
+            return pqConfig;
+        }
+
+        static void SetupLogging(TTestActorRuntime& runtime) {
+            runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::CHANGE_EXCHANGE, NLog::PRI_TRACE);
+            runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_READ_PROXY, NLog::PRI_DEBUG);
+            runtime.SetLogPriority(NKikimrServices::PQ_METACACHE, NLog::PRI_DEBUG);
+        }
+
+    private:
         TPortManager PortManager;
         TServer::TPtr Server;
         TActorId EdgeActor;

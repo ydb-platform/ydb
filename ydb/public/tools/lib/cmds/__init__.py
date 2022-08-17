@@ -233,16 +233,23 @@ def grpc_tls_data_path(arguments):
     return os.getenv('YDB_GRPC_TLS_DATA_PATH', default_store)
 
 
-def enable_datastreams(arguments):
-    return getattr(arguments, 'enable_datastreams', False) or os.getenv('YDB_ENABLE_DATASTREAMS') == 'true'
-
-
-def enable_pq(arguments):
-    return getattr(arguments, 'enable_pq', False) or enable_datastreams(arguments)
+def pq_client_service_types(arguments):
+    items = getattr(arguments, 'pq_client_service_types', None)
+    if not items:
+        types_str = os.getenv('YDB_PQ_CLIENT_SERVICE_TYPES')
+        if types_str:
+            items = types_str.split(',')
+    service_types = []
+    if items:
+        for item in items:
+            item = item.strip()
+            if item:
+                service_types.append(item)
+    return service_types
 
 
 def enable_pqcd(arguments):
-    return enable_pq(arguments) and (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
+    return (getattr(arguments, 'enable_pqcd', False) or os.getenv('YDB_ENABLE_PQCD') == 'true')
 
 
 def deploy(arguments):
@@ -280,8 +287,7 @@ def deploy(arguments):
         output_path=recipe.generate_data_path(),
         pdisk_store_path=pdisk_store_path,
         domain_name='local',
-        enable_pq=enable_pq(arguments),
-        enable_datastreams=enable_datastreams(arguments),
+        pq_client_service_types=pq_client_service_types(arguments),
         enable_pqcd=enable_pqcd(arguments),
         load_udfs=True,
         suppress_version_check=arguments.suppress_version_check,

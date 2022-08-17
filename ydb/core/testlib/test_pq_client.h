@@ -31,7 +31,6 @@ inline Tests::TServerSettings PQSettings(ui16 port, ui32 nodesCount = 2, bool ro
     authConfig.SetUseAccessServiceTLS(false);
     authConfig.SetUseStaff(false);
     pqConfig.SetRoundRobinPartitionMapping(roundrobin);
-    pqConfig.SetTopicsAreFirstClassCitizen(false);
 
     pqConfig.SetEnabled(true);
     pqConfig.SetMaxReadCookies(10);

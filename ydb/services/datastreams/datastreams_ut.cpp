@@ -632,6 +632,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().write_quota_kb_per_sec(), 1_KB);
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(),
                                      TDuration::Days(7).Hours());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().storage_limit_mb(), 50_GB / 1_MB);
         }
     }
 

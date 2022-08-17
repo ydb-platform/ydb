@@ -10,11 +10,13 @@ namespace NTest {
     struct TWrapDbIterImpl {
 
         TWrapDbIterImpl(TDatabase &base, ui32 table, TIntrusiveConstPtr<TRowScheme> scheme,
-                TRowVersion snapshot = TRowVersion::Max())
+                TRowVersion snapshot = TRowVersion::Max(),
+                ENext mode = ENext::All)
             : Scheme(std::move(scheme))
             , Base(base)
             , Table(table)
             , Snapshot(snapshot)
+            , Mode(mode)
         {
 
         }
@@ -68,12 +70,12 @@ namespace NTest {
 
             Iter = Base.IterateRangeGeneric<TIter>(Table, range, Scheme->Tags(), Snapshot);
 
-            return Iter->Next(ENext::All);
+            return Iter->Next(Mode);
         }
 
         EReady Next() noexcept
         {
-            return Iter->Next(ENext::All);
+            return Iter->Next(Mode);
         }
 
         const TRowState& Apply() noexcept
@@ -88,6 +90,7 @@ namespace NTest {
     private:
         const ui32 Table = Max<ui32>();
         const TRowVersion Snapshot;
+        const ENext Mode;
         TAutoPtr<TIter> Iter;
     };
 

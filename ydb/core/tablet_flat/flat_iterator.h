@@ -262,7 +262,6 @@ public:
     {
         TEraseCachingState eraseCache(this);
 
-        bool isHead = true;
         for (Ready = EReady::Data; Ready == EReady::Data; ) {
             if (Stage == EStage::Seek) {
                 Ready = Start();
@@ -273,32 +272,31 @@ public:
                 Ready = Turn();
             } else if (Stage == EStage::Snap) {
                 if (mode != ENext::Uncommitted) {
-                    ui64 skipsBefore = Stats.InvisibleRowSkips;
                     Ready = Snap();
-                    isHead = skipsBefore == Stats.InvisibleRowSkips;
+                    if (ErasedKeysCache && mode == ENext::Data &&
+                        (Stats.InvisibleRowSkips != SnapInvisibleRowSkips || Stage != EStage::Fill))
+                    {
+                        // Interrupt range when key is not at a head version, or skipped entirely
+                        eraseCache.Flush();
+                    }
                 } else {
                     Y_VERIFY_DEBUG(Active != Inactive);
                     Stage = EStage::Fill;
-                    isHead = false;
                 }
             } else if ((Ready = Apply()) != EReady::Data) {
 
-            } else if (mode == ENext::All || mode == ENext::Uncommitted || State.GetRowState() != ERowOp::Erase) {
+            } else if (mode != ENext::Data || State.GetRowState() != ERowOp::Erase) {
                 break;
             } else {
                 ++Stats.DeletedRowSkips; /* skip internal technical row states w/o data */
-                if (ErasedKeysCache) {
-                    if (isHead) {
-                        eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion());
-                    } else {
-                        eraseCache.Flush();
-                        isHead = true;
-                    }
+                if (ErasedKeysCache && Stats.InvisibleRowSkips == SnapInvisibleRowSkips) {
+                    // Try to cache erases that are at a head version
+                    eraseCache.OnEraseKey(GetKey().Cells(), GetRowVersion());
                 }
             }
         }
 
-        if (ErasedKeysCache && mode != ENext::All) {
+        if (ErasedKeysCache && mode == ENext::Data) {
             eraseCache.Flush();
         }
 
@@ -416,6 +414,7 @@ private:
     TIterators Iterators;
     TForwardIter Active;
     TForwardIter Inactive;
+    ui64 SnapInvisibleRowSkips = 0;
     ui64 DeltaTxId = 0;
     TRowVersion DeltaVersion;
     bool Delta = false;
@@ -583,6 +582,7 @@ inline EReady TTableItBase<TIteratorOps>::Start() noexcept
     }
 
     Stage = EStage::Snap;
+    SnapInvisibleRowSkips = Stats.InvisibleRowSkips;
     Inactive = Iterators.end();
     return EReady::Data;
 }

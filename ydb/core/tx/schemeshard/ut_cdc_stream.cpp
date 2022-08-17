@@ -528,4 +528,37 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         }
     }
 
+    Y_UNIT_TEST(RebootSchemeShard) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamDescription {
+              Name: "Stream"
+              Mode: ECdcStreamModeKeysOnly
+              Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        TestDropCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table"
+            StreamName: "Stream"
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
 } // TCdcStreamTests

@@ -557,6 +557,7 @@ public:
             }
         }
 
+        /*
         {
             for (auto& [id, count] : followersPerGroup) {
                 TFollowerGroup& followerGroup(*id.second);
@@ -572,6 +573,7 @@ public:
                 }
             }
         }
+        */
 
         {
             auto metricsRowset = db.Table<Schema::Metrics>().Select();

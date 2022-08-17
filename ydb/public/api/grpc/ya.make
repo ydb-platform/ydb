@@ -24,6 +24,7 @@ SRCS(
     ydb_scheme_v1.proto
     ydb_scripting_v1.proto
     ydb_table_v1.proto
+    ydb_topic_v1.proto
     yq_v1.proto
 )
 

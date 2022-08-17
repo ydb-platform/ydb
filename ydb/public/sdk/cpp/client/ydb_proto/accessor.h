@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/client/ydb_monitoring/monitoring.h>
 
 namespace NYdb {
 
@@ -38,6 +39,7 @@ public:
     static const Ydb::Table::DescribeTableResult& GetProto(const NTable::TTableDescription& tableDescription);
     static const Ydb::PersQueue::V1::DescribeTopicResult& GetProto(const NYdb::NPersQueue::TDescribeTopicResult& topicDescription);
     static const Ydb::Topic::DescribeTopicResult& GetProto(const NYdb::NTopic::TTopicDescription& topicDescription);
+    static const Ydb::Monitoring::SelfCheckResult& GetProto(const NYdb::NMonitoring::TSelfCheckResult& selfCheckResult);
 
     static NTable::TQueryStats FromProto(const Ydb::TableStats::QueryStats& queryStats);
     static NTable::TTableDescription FromProto(const Ydb::Table::CreateTableRequest& request);

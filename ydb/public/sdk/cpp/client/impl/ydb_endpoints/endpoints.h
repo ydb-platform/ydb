@@ -87,9 +87,9 @@ private:
     std::unordered_map<TStringType, TKnownEndpoint> KnownEndpoints_;
     i32 BestK_ = -1;
     std::atomic_int PessimizationRatio_ = 0;
-    NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> EndpointCountGauge_;
-    NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> PessimizationRatioGauge_;
-    NSdkStats::TAtomicCounter<NMonitoring::TIntGauge> EndpointActiveGauge_;
+    NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> EndpointCountGauge_;
+    NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> PessimizationRatioGauge_;
+    NSdkStats::TAtomicCounter<::NMonitoring::TIntGauge> EndpointActiveGauge_;
 };
 
 // Used to track object

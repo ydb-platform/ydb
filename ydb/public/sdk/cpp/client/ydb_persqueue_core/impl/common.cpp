@@ -54,6 +54,10 @@ ERetryErrorClass GetRetryErrorClassV2(EStatus status) {
     }
 }
 
+TString IssuesSingleLineString(const NYql::TIssues& issues) {
+    return SubstGlobalCopy(issues.ToString(), '\n', ' ');
+}
+
 void Cancel(NGrpc::IQueueClientContextPtr& context) {
     if (context) {
         context->Cancel();
@@ -68,26 +72,6 @@ NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIs
     }
     issues.AddIssue(std::move(issue));
     return issues;
-}
-
-size_t CalcDataSize(const TReadSessionEvent::TEvent& event) {
-    if (const TReadSessionEvent::TDataReceivedEvent* dataEvent = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&event)) {
-        size_t len = 0;
-        if (dataEvent->IsCompressedMessages()) {
-            for (const auto& msg : dataEvent->GetCompressedMessages()) {
-                len += msg.GetData().size();
-            }
-        } else {
-            for (const auto& msg : dataEvent->GetMessages()) {
-                if (!msg.HasException()) {
-                    len += msg.GetData().size();
-                }
-            }
-        }
-        return len;
-    } else {
-        return 0;
-    }
 }
 
 static TStringBuf SplitPort(TStringBuf endpoint) {

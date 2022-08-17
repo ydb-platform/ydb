@@ -3,8 +3,6 @@
 #include <library/cpp/actors/core/actorsystem.h>
 
 #include <ydb/public/api/grpc/draft/ydb_persqueue_v1.grpc.pb.h>
-#include <ydb/public/api/grpc/draft/ydb_topic_v1.grpc.pb.h>
-
 
 #include <library/cpp/grpc/server/grpc_server.h>
 

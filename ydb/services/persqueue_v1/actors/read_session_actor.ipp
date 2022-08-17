@@ -9,7 +9,7 @@
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
 
-#include <contrib/libs/protobuf_std/src/google/protobuf/util/time_util.h>
+#include <google/protobuf/util/time_util.h>
 
 #include <util/string/join.h>
 #include <util/string/strip.h>
@@ -1779,7 +1779,8 @@ void TReadSessionActor<UseMigrationProtocol>::ProcessReads(const TActorContext& 
             const auto insertResult = PartitionToReadResponse.insert(std::make_pair(it->second.Actor, formedResponse));
             Y_VERIFY(insertResult.second);
 
-            // Only from single partition
+            // TODO (ildar-khisam@): Gather data from all partitions;
+            //                       For now send messages only from single partition
             if constexpr (!UseMigrationProtocol) {
                 break;
             }

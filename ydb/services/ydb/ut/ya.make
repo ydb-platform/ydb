@@ -32,6 +32,7 @@ SRCS(
     ydb_long_tx_ut.cpp
     ydb_logstore_ut.cpp
     ydb_olapstore_ut.cpp
+    ydb_monitoring_ut.cpp
     json_udf.cpp
     re2_udf.cpp
 )
@@ -54,6 +55,7 @@ PEERDIR(
     ydb/public/sdk/cpp/client/ydb_extension
     ydb/public/sdk/cpp/client/ydb_operation
     ydb/public/sdk/cpp/client/ydb_scheme
+    ydb/public/sdk/cpp/client/ydb_monitoring
     ydb/services/ydb
 )
 

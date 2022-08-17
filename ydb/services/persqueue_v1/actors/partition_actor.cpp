@@ -9,7 +9,7 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
-#include <contrib/libs/protobuf_std/src/google/protobuf/util/time_util.h>
+#include <google/protobuf/util/time_util.h>
 
 #include <util/charset/utf8.h>
 

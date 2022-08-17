@@ -605,8 +605,8 @@ public:
 
     bool GetDrainOnDtors() const;
     TBalancingSettings GetBalancingSettings() const override;
-    bool StartStatCollecting(NMonitoring::IMetricRegistry* sensorsRegistry) override;
-    NMonitoring::TMetricRegistry* GetMetricRegistry() override;
+    bool StartStatCollecting(::NMonitoring::IMetricRegistry* sensorsRegistry) override;
+    ::NMonitoring::TMetricRegistry* GetMetricRegistry() override;
     void RegisterExtension(IExtension* extension);
     void RegisterExtensionApi(IExtensionApi* api);
     void SetDiscoveryMutator(IDiscoveryMutatorApi::TMutatorCb&& cb);
@@ -697,7 +697,7 @@ private:
 
 private:
     std::mutex ExtensionsLock_;
-    NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
+    ::NMonitoring::TMetricRegistry* MetricRegistryPtr_ = nullptr;
 
     std::unique_ptr<IThreadPool> ResponseQueue_;
 

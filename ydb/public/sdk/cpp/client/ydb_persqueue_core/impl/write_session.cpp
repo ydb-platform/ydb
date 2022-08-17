@@ -8,8 +8,8 @@
 
 
 namespace NYdb::NPersQueue {
-using NMonitoring::TDynamicCounterPtr;
-using TCounterPtr = NMonitoring::TDynamicCounters::TCounterPtr;
+using ::NMonitoring::TDynamicCounterPtr;
+using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
@@ -19,7 +19,7 @@ namespace NCompressionDetails {
 }
 
 #define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
-TWriterCounters::TWriterCounters(const TIntrusivePtr<NMonitoring::TDynamicCounters>& counters) {
+TWriterCounters::TWriterCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters) {
     Errors = counters->GetCounter("errors", true);
     CurrentSessionLifetimeMs = counters->GetCounter("currentSessionLifetimeMs", false);
     BytesWritten = counters->GetCounter("bytesWritten", true);
@@ -65,7 +65,7 @@ TWriteSession::TWriteSession(
     if (Settings.Counters_.Defined()) {
         Counters = *Settings.Counters_;
     } else {
-        Counters = MakeIntrusive<TWriterCounters>(new NMonitoring::TDynamicCounters());
+        Counters = MakeIntrusive<TWriterCounters>(new ::NMonitoring::TDynamicCounters());
     }
 
 }
@@ -1214,9 +1214,11 @@ void TWriteSession::AbortImpl() {
         Cancel(ConnectContext);
         Cancel(ConnectTimeoutContext);
         Cancel(ConnectDelayContext);
-        ///Cancel(ClientContext);
         if (Processor)
             Processor->Cancel();
+
+        Cancel(ClientContext);
+        ClientContext.reset(); // removes context from contexts set from underlying gRPC-client.
     }
 }
 

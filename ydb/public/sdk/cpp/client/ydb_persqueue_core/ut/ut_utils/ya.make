@@ -8,6 +8,8 @@ SRCS(
     test_utils.h
     test_server.h
     test_server.cpp
+    ut_utils.h
+    ut_utils.cpp
 )
 
 PEERDIR(

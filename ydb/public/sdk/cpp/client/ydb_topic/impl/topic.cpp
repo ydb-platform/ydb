@@ -1,6 +1,8 @@
 #include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_topic/impl/topic_impl.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/impl/executor.h>
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/impl/common.h>
 
 #include <ydb/library/persqueue/obfuscate/obfuscate.h>
 
@@ -49,6 +51,39 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     for (const auto& consumer : Proto_.consumers()) {
         Consumers_.emplace_back(consumer);
     }
+}
+
+TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
+    : ConsumerName_(consumer.name())
+    , Important_(consumer.important())
+    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
+{
+    for (const auto& codec : consumer.supported_codecs().codecs()) {
+        SupportedCodecs_.push_back((ECodec)codec);
+    }
+    for (const auto& pair : consumer.attributes()) {
+        Attributes_[pair.first] = pair.second;
+    }
+}
+
+const TString& TConsumer::GetConsumerName() const {
+    return ConsumerName_;
+}
+
+bool TConsumer::GetImportant() const {
+    return Important_;
+}
+
+const TInstant& TConsumer::GetReadFrom() const {
+    return ReadFrom_;
+}
+
+const TVector<ECodec>& TConsumer::GetSupportedCodecs() const {
+    return SupportedCodecs_;
+}
+
+const TMap<TString, TString>& TConsumer::GetAttributes() const {
+    return Attributes_;
 }
 
 const TPartitioningSettings& TTopicDescription::GetPartitioningSettings() const {
@@ -125,19 +160,6 @@ ui64 TPartitioningSettings::GetPartitionCountLimit() const {
     return PartitionCountLimit_;
 }
 
-TConsumer::TConsumer(const Ydb::Topic::Consumer& consumer)
-    : ConsumerName_(consumer.name())
-    , Important_(consumer.important())
-    , ReadFrom_(TInstant::Seconds(consumer.read_from().seconds()))
-{
-    for (const auto& codec : consumer.supported_codecs().codecs()) {
-        SupportedCodecs_.push_back((ECodec)codec);
-    }
-    for (const auto& pair : consumer.attributes()) {
-        Attributes_[pair.first] = pair.second;
-    }
-}
-
 TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionInfo& partitionInfo)
     : PartitionId_(partitionInfo.partition_id())
     , Active_(partitionInfo.active())
@@ -167,6 +189,36 @@ TAsyncStatus TTopicClient::DropTopic(const TString& path, const TDropTopicSettin
 
 TAsyncDescribeTopicResult TTopicClient::DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) {
     return Impl_->DescribeTopic(path, settings);
+}
+
+IRetryPolicy::TPtr IRetryPolicy::GetDefaultPolicy() {
+    static IRetryPolicy::TPtr policy = GetExponentialBackoffPolicy();
+    return policy;
+}
+
+IRetryPolicy::TPtr IRetryPolicy::GetNoRetryPolicy() {
+    return ::IRetryPolicy<EStatus>::GetNoRetryPolicy();
+}
+
+IRetryPolicy::TPtr
+IRetryPolicy::GetExponentialBackoffPolicy(TDuration minDelay, TDuration minLongRetryDelay, TDuration maxDelay,
+                                          size_t maxRetries, TDuration maxTime, double scaleFactor,
+                                          std::function<ERetryErrorClass(EStatus)> customRetryClassFunction) {
+    return ::IRetryPolicy<EStatus>::GetExponentialBackoffPolicy(
+        customRetryClassFunction ? customRetryClassFunction : NYdb::NPersQueue::GetRetryErrorClass, minDelay,
+        minLongRetryDelay, maxDelay, maxRetries, maxTime, scaleFactor);
+}
+
+IRetryPolicy::TPtr
+IRetryPolicy::GetFixedIntervalPolicy(TDuration delay, TDuration longRetryDelay, size_t maxRetries, TDuration maxTime,
+                                     std::function<ERetryErrorClass(EStatus)> customRetryClassFunction) {
+    return ::IRetryPolicy<EStatus>::GetFixedIntervalPolicy(
+        customRetryClassFunction ? customRetryClassFunction : NYdb::NPersQueue::GetRetryErrorClass, delay,
+        longRetryDelay, maxRetries, maxTime);
+}
+
+std::shared_ptr<IReadSession> TTopicClient::CreateReadSession(const TReadSessionSettings& settings) {
+    return Impl_->CreateReadSession(settings);
 }
 
 } // namespace NYdb::NTopic

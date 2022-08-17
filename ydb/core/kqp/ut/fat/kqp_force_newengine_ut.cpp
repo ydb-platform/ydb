@@ -408,7 +408,7 @@ public:
 
 private:
     std::unique_ptr<TKikimrRunner> Kikimr;
-    NMonitoring::TDynamicCounterPtr Counters;
+    ::NMonitoring::TDynamicCounterPtr Counters;
     std::unique_ptr<TKqpCounters> KqpCounters;
 };
 UNIT_TEST_SUITE_REGISTRATION(KqpForceNewEngine);

@@ -37,8 +37,8 @@ class IStatApi: public IExtensionApi {
 public:
     static IStatApi* Create(TDriver driver);
 public:
-    virtual void SetMetricRegistry(NMonitoring::IMetricRegistry* sensorsRegistry) = 0;
-    virtual void Accept(NMonitoring::IMetricConsumer* consumer) const = 0;
+    virtual void SetMetricRegistry(::NMonitoring::IMetricRegistry* sensorsRegistry) = 0;
+    virtual void Accept(::NMonitoring::IMetricConsumer* consumer) const = 0;
 };
 
 class DestroyedClientException: public yexception {};

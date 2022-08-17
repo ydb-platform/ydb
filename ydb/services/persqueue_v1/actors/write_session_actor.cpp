@@ -531,7 +531,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         TStringBuilder errorReason;
-        errorReason << "internal error in kqp Marker# PQ50 : " <<  record;
+        errorReason << "kqp error Marker# PQ50 : " <<  record;
         if (State == EState::ES_INITED) {
             LOG_WARN_S(ctx, NKikimrServices::PQ_WRITE_PROXY, errorReason);
             SourceIdUpdatesInflight--;

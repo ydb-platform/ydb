@@ -20,7 +20,37 @@ NYql::TIssues MakeIssueWithSubIssues(const TString& description, const NYql::TIs
 
 TString IssuesSingleLineString(const NYql::TIssues& issues);
 
-size_t CalcDataSize(const TReadSessionEvent::TEvent& event);
+template <typename TReadSessionEvent>
+size_t CalcDataSize(const typename TReadSessionEvent::TEvent& event) {
+    constexpr bool UseMigrationProtocol = std::is_same_v<TReadSessionEvent, NPersQueue::TReadSessionEvent>;
+
+    if (const typename TReadSessionEvent::TDataReceivedEvent* dataEvent =
+            std::get_if<typename TReadSessionEvent::TDataReceivedEvent>(&event)) {
+        size_t len = 0;
+
+        bool hasCompressedMsgs = [&dataEvent](){
+            if constexpr (UseMigrationProtocol) {
+                return dataEvent->IsCompressedMessages();
+            } else {
+                return dataEvent->HasCompressedMessages();
+            }
+        }();
+
+        if (hasCompressedMsgs) {
+            for (const auto& msg : dataEvent->GetCompressedMessages()) {
+                len += msg.GetData().size();
+            }
+        } else {
+            for (const auto& msg : dataEvent->GetMessages()) {
+                if (!msg.HasException()) {
+                    len += msg.GetData().size();
+                }
+            }
+        }
+        return len;
+    }
+    return 0;
+}
 
 template <class TMessage>
 bool IsErrorMessage(const TMessage& serverMessage) {
@@ -271,14 +301,15 @@ private:
 // - packing events for waiters;
 // - waking up waiters.
 // Thread safe.
-template <class TSettings_, class TEvent_, class TEventInfo_ = TBaseEventInfo<TEvent_>>
+template <class TSettings_, class TEvent_, class TClosedEvent_, class TExecutor_, class TEventInfo_ = TBaseEventInfo<TEvent_>>
 class TBaseSessionEventsQueue : public ISignalable {
 protected:
-    using TSelf = TBaseSessionEventsQueue<TSettings_, TEvent_, TEventInfo_>;
+    using TSelf = TBaseSessionEventsQueue<TSettings_, TEvent_, TClosedEvent_, TExecutor_, TEventInfo_>;
     using TSettings = TSettings_;
     using TEvent = TEvent_;
     using TEventInfo = TEventInfo_;
-
+    using TClosedEvent = TClosedEvent_;
+    using TExecutor = TExecutor_;
 
     // Template for visitor implementation.
     struct TBaseHandlersVisitor {
@@ -316,7 +347,7 @@ protected:
             });
         }
 
-        virtual void Post(const IExecutor::TPtr& executor, IExecutor::TFunction&& f) {
+        virtual void Post(const typename TExecutor::TPtr& executor, typename TExecutor::TFunction&& f) {
             executor->Post(std::move(f));
         }
 
@@ -379,7 +410,7 @@ protected:
     std::queue<TEventInfo> Events;
     TCondVar CondVar;
     TMutex Mutex;
-    TMaybe<TSessionClosedEvent> CloseEvent;
+    TMaybe<TClosedEvent> CloseEvent;
     std::atomic<bool> Closed = false;
 };
 

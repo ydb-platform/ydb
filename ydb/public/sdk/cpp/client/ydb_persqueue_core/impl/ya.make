@@ -9,6 +9,7 @@ SRCS(
     read_session_messages.cpp
     common.cpp
     write_session.cpp
+    read_session.h
     read_session.cpp
     persqueue.cpp
     persqueue_impl.cpp

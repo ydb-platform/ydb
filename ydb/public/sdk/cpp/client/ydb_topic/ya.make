@@ -13,6 +13,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/public/sdk/cpp/client/ydb_persqueue_public/codecs
+
     library/cpp/retry
     ydb/public/sdk/cpp/client/ydb_topic/impl
     ydb/public/sdk/cpp/client/ydb_proto
@@ -20,3 +22,7 @@ PEERDIR(
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

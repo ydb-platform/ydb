@@ -39,7 +39,6 @@ SRCS(
     basic_usage_ut.cpp
     compress_executor_ut.cpp
     retry_policy_ut.cpp
-    ut_utils.cpp
 )
 
 END()

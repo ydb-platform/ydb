@@ -393,9 +393,12 @@ bool FillBatchedData(
                     SetBatchExtraField(currentBatch, kv.GetKey(), kv.GetValue());
                 }
             }
-            if constexpr (UseMigrationProtocol) {
-                if (proto.HasIp() && IsUtf(proto.GetIp())) {
+
+            if (proto.HasIp() && IsUtf(proto.GetIp())) {
+                if constexpr (UseMigrationProtocol) {
                     currentBatch->set_ip(proto.GetIp());
+                } else {
+                    SetBatchExtraField(currentBatch, "_ip", proto.GetIp());
                 }
             }
         }

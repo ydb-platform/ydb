@@ -177,6 +177,14 @@ struct TEvPQProxy {
             , ReadTimestampMs(readTimestampMs)
         { }
 
+        explicit TEvRead(ui64 maxSize)
+            : Guid(CreateGuidAsString())
+            , MaxCount(0)
+            , MaxSize(maxSize)
+            , MaxTimeLagMs(0)
+            , ReadTimestampMs(0) {
+        }
+
         const TString Guid;
         ui64 MaxCount;
         ui64 MaxSize;

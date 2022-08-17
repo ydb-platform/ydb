@@ -289,6 +289,7 @@ private:
     ui32 MaxReadSize;
     i64 MaxTimeLagMs;
     i64 ReadTimestampMs;
+    i64 ReadSizeBudget;
 
     TString Auth;
 

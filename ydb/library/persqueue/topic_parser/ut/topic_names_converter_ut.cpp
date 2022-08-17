@@ -179,6 +179,30 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc1--account--topic");
     }
 
+    Y_UNIT_TEST(LegacyStyleDoubleName) {
+        TConverterTestWrapper wrapper(false, "/Root/PQ", "dc1");
+
+        NKikimrPQ::TPQTabletConfig pqConfig;
+        pqConfig.SetTopicName("rt3.dc1--account@account--account");
+        pqConfig.SetTopicPath("/Root/PQ/rt3.dc1--account@account--account");
+        pqConfig.SetFederationAccount("account");
+        pqConfig.SetLocalDC(true);
+        pqConfig.SetYdbDatabasePath("");
+        wrapper.SetConverter(pqConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/account/account");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetCluster(), "dc1");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcId(), "rt3.dc1--account@account--account");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetTopicForSrcIdHash(), "account@account--account");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc1--account@account--account");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "account/account");
+
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/Root/PQ/rt3.dc1--account@account--account");
+        UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc1--account@account--account");
+    }
+
+
+
     Y_UNIT_TEST(Paths) {
         TConverterTestWrapper wrapper(false, "/Root/PQ", "dc1");
         {

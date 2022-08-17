@@ -2827,7 +2827,7 @@ bool TKeyValueState::PrepareAcquireLockRequest(const TActorContext &ctx, TEvKeyV
     StoredState.SetChannelGeneration(ExecutorGeneration);
     StoredState.SetChannelStep(NextLogoBlobStep - 1);
 
-    TRequestType::EType requestType = TRequestType::ReadOnly;
+    TRequestType::EType requestType = TRequestType::ReadOnlyInline;
     intermediate.Reset(new TIntermediate(ev->Sender, ctx.SelfID,
         StoredState.GetChannelGeneration(), StoredState.GetChannelStep(), requestType));
 

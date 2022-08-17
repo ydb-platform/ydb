@@ -159,7 +159,7 @@ struct TRequestCreatePQ {
             config->AddReadFromTimestampsMs(0);
             config->AddConsumerFormatVersions(0);
             config->AddReadRuleVersions(0);
-            config->AddConsumerCodecs()->AddIds(0);
+            config->AddConsumerCodecs();
         }
 //        if (!ReadRules.empty()) {
 //            config->SetRequireAuthRead(true);

@@ -338,6 +338,7 @@ struct TSchemeCacheRequestContext : TAtomicRefCount<TSchemeCacheRequestContext>,
     ui64 WaitCounter;
     TAutoPtr<TSchemeCacheRequest> Request;
     const TInstant CreatedAt;
+    TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
 
     TSchemeCacheRequestContext(const TActorId& sender, TAutoPtr<TSchemeCacheRequest> request, const TInstant& now = TInstant::Now())
         : Sender(sender)
@@ -352,6 +353,7 @@ struct TSchemeCacheNavigateContext : TAtomicRefCount<TSchemeCacheNavigateContext
     ui64 WaitCounter;
     TAutoPtr<TSchemeCacheNavigate> Request;
     const TInstant CreatedAt;
+    TIntrusivePtr<TDomainInfo> ResolvedDomainInfo; // resolved from DatabaseName
 
     TSchemeCacheNavigateContext(const TActorId& sender, TAutoPtr<TSchemeCacheNavigate> request, const TInstant& now = TInstant::Now())
         : Sender(sender)

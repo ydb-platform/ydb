@@ -584,7 +584,7 @@ bool TColumnEngineForLogs::Load(IDbWrapper& db, const THashSet<ui64>& pathsToDro
         }
     }
 
-    UpdateOverloaded(Granules, {});
+    UpdateOverloaded(Granules);
 
     Y_VERIFY(!(LastPortion >> 63), "near to int overflow");
     Y_VERIFY(!(LastGranule >> 63), "near to int overflow");
@@ -853,8 +853,7 @@ TVector<TVector<std::pair<ui64, ui64>>> TColumnEngineForLogs::EmptyGranuleTracks
     return emptyGranules;
 }
 
-void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules,
-                                            const TChanges::TSrcGranule& splitted) {
+void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules) {
     for (auto [granule, spg] : granules) {
         if (!spg) {
             spg = Granules[granule];
@@ -876,16 +875,6 @@ void TColumnEngineForLogs::UpdateOverloaded(const THashMap<ui64, std::shared_ptr
             granules.erase(granule);
             if (granules.empty()) {
                 PathsGranulesOverloaded.erase(pathId);
-            }
-        }
-    }
-
-    if (splitted.Granule) {
-        if (PathsGranulesOverloaded.count(splitted.PathId)) {
-            auto& granules = PathsGranulesOverloaded[splitted.PathId];
-            granules.erase(splitted.Granule);
-            if (granules.empty()) {
-                PathsGranulesOverloaded.erase(splitted.PathId);
             }
         }
     }
@@ -968,15 +957,21 @@ bool TColumnEngineForLogs::ApplyChanges(IDbWrapper& db, std::shared_ptr<TColumnE
         }
     }
 
-    /// @warning Update overload info (only if tx would be applyed)
-    if (changes->IsInsert() || (changes->IsCompaction() && changes->CompactionInfo->InGranule)) {
+    // Update overloaded granules (only if tx would be applyed)
+    if (changes->IsInsert() || changes->IsCompaction() || changes->IsCleanup()) {
         THashMap<ui64, std::shared_ptr<TGranuleMeta>> granules;
-        for (auto& portionInfo : changes->AppendedPortions) {
-            granules[portionInfo.Granule()] = {};
+        if (changes->IsCleanup()) {
+            for (auto& portionInfo : changes->PortionsToDrop) {
+                granules[portionInfo.Granule()] = {};
+            }
+        } else if (changes->IsCompaction() && !changes->CompactionInfo->InGranule) {
+            granules[changes->SrcGranule.Granule] = {};
+        } else {
+            for (auto& portionInfo : changes->AppendedPortions) {
+                granules[portionInfo.Granule()] = {};
+            }
         }
-        UpdateOverloaded(granules, {});
-    } else if (changes->IsCompaction() && !changes->CompactionInfo->InGranule) {
-        UpdateOverloaded({}, changes->SrcGranule);
+        UpdateOverloaded(granules);
     }
     return true;
 }

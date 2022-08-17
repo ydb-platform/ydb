@@ -250,8 +250,7 @@ private:
 
     bool CanInsert(const TChanges& changes, const TSnapshot& commitSnap) const;
     TMap<TSnapshot, TVector<ui64>> GetOrderedPortions(ui64 granule, const TSnapshot& snapshot = TSnapshot::Max()) const;
-    void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules,
-                          const TChanges::TSrcGranule& splitted);
+    void UpdateOverloaded(const THashMap<ui64, std::shared_ptr<TGranuleMeta>>& granules);
 
     TVector<TVector<std::pair<ui64, ui64>>> EmptyGranuleTracks(ui64 pathId) const;
 };

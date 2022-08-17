@@ -150,6 +150,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
                 Y_FAIL("Unknown scheme");
             }
 
+            if (const auto region = exportSettings.region()) {
+                backupSettings.SetRegion(region);
+            }
+
             if (const auto compression = exportSettings.compression()) {
                 Y_VERIFY(FillCompression(*task.MutableCompression(), compression));
             }

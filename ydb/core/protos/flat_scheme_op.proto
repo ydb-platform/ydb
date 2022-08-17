@@ -861,6 +861,7 @@ message TS3Settings {
     optional string AccessKey = 5;
     optional string SecretKey = 6;
     optional Ydb.Export.ExportToS3Settings.StorageClass StorageClass = 7;
+    optional string Region = 12;
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

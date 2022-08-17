@@ -31,6 +31,19 @@ IActor* CreateSchemeCache(const TActorContext& ctx, TIntrusivePtr<NMonitoring::T
     return CreateSchemeBoardSchemeCache(cacheConfig.Get());
 }
 
+void CheckEntrySetHasTopicPath(auto* scNavigate) {
+    for (auto& entry : scNavigate->ResultSet) {
+        if (entry.PQGroupInfo && entry.PQGroupInfo->Description.HasPQTabletConfig()) {
+            if (entry.PQGroupInfo->Description.GetPQTabletConfig().GetTopicPath().empty()) {
+                auto* newGroupInfo = new NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo(*entry.PQGroupInfo);
+                newGroupInfo->Description.MutablePQTabletConfig()->SetTopicPath(NKikimr::JoinPath(entry.Path));
+                entry.PQGroupInfo.Reset(newGroupInfo);
+            }
+        }
+    }
+}
+
+
 class TPersQueueMetaCacheActor : public TActorBootstrapped<TPersQueueMetaCacheActor> {
     using TBase = TActorBootstrapped<TPersQueueMetaCacheActor>;
 public:
@@ -318,7 +331,7 @@ private:
             //return true;
             return SecondTryTopics.empty(); //ToDo - second try topics
         }
-        const std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
+        std::shared_ptr<TSchemeCacheNavigate>& GetResult() {
             Y_VERIFY(Result != nullptr);
             return Result;
         };
@@ -449,6 +462,8 @@ private:
                 FullTopicsCacheOutdated = true;
             }
             FullTopicsCache = waiter->GetResult();
+            CheckEntrySetHasTopicPath(FullTopicsCache.get());
+ 
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Updated topics cache with " << FullTopicsCache->ResultSet.size());
             while (DescribeAllTopicsWaiters) {
                 SendDescribeAllTopicsResponse(DescribeAllTopicsWaiters.front()->WaiterId, waiter->Topics, ctx);
@@ -459,11 +474,11 @@ private:
             Y_VERIFY(!waiterIter.IsEnd());
 
             Y_VERIFY(waiterIter->second->Topics.size() == navigate->ResultSet.size());
+            CheckEntrySetHasTopicPath(navigate.get());
             auto *response = new TEvPqNewMetaCache::TEvDescribeTopicsResponse{
                     std::move(waiter->Topics), navigate
             };
             LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "Got describe topics SC response");
-
             ctx.Send(waiter->WaiterId, response);
             DescribeTopicsWaiters.erase(waiterIter);
         }

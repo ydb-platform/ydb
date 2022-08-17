@@ -72,6 +72,9 @@ struct TEvSysView {
 
         EvInitPartitionStatsCollector,
 
+        EvCalculateStorageStatsRequest,
+        EvCalculateStorageStatsResponse,
+
         EvEnd,
     };
 

@@ -1,5 +1,8 @@
 #include "sys_view.h"
 #include "group_geometry_info.h"
+#include "storage_stats_calculator.h"
+
+#include <ydb/core/blobstorage/base/utility.h>
 
 namespace NKikimr::NBsController {
 
@@ -41,12 +44,6 @@ void FillKey(NKikimrSysView::TStoragePoolKey* key, const TBlobStorageController:
     key->SetStoragePoolId(std::get<1>(id));
 }
 
-struct TGroupDiskInfo {
-    const NKikimrBlobStorage::TPDiskMetrics *PDiskMetrics;
-    const NKikimrBlobStorage::TVDiskMetrics *VDiskMetrics;
-    ui32 ExpectedSlotCount;
-};
-
 void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vector<TGroupDiskInfo>& disks,
         TBlobStorageGroupType type) {
     ui64 allocatedSize = 0;
@@ -75,9 +72,8 @@ void CalculateGroupUsageStats(NKikimrSysView::TGroupInfo *info, const std::vecto
     info->SetAvailableSize(b < a ? a - b : 0);
 }
 
-class TSystemViewsCollector : public TActor<TSystemViewsCollector> {
+class TSystemViewsCollector : public TActorBootstrapped<TSystemViewsCollector> {
     TControllerSystemViewsState State;
-    std::optional<std::vector<NKikimrSysView::TStorageStatsEntry>> StorageStats;
     std::vector<std::pair<TPDiskId, const NKikimrSysView::TPDiskInfo*>> PDiskIndex;
     std::vector<std::pair<TVSlotId, const NKikimrSysView::TVSlotInfo*>> VSlotIndex;
     std::vector<std::pair<TGroupId, const NKikimrSysView::TGroupInfo*>> GroupIndex;
@@ -89,18 +85,26 @@ class TSystemViewsCollector : public TActor<TSystemViewsCollector> {
     std::unordered_set<std::tuple<TString>> PDiskFilterCounters;
     std::unordered_set<std::tuple<TString, TString>> ErasureCounters;
 
+    std::vector<NKikimrSysView::TStorageStatsEntry> StorageStats;
+    TActorId StorageStatsCalculatorId;
+    static constexpr TDuration StorageStatsUpdatePeriod = TDuration::Minutes(10);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::BSC_SYSTEM_VIEWS_COLLECTOR;
     }
 
     TSystemViewsCollector(NMonitoring::TDynamicCounterPtr counters)
-        : TActor(&TSystemViewsCollector::StateWork)
-        , Counters(std::move(counters))
+        : Counters(std::move(counters))
     {}
 
     ~TSystemViewsCollector() {
         Counters->RemoveSubgroup("subsystem", "storage_stats");
+    }
+
+    void Bootstrap(const TActorContext&) {
+        Become(&TThis::StateWork);
+        RunStorageStatsCalculator();
     }
 
     STRICT_STFUNC(StateWork,
@@ -110,6 +114,8 @@ public:
         hFunc(TEvSysView::TEvGetGroupsRequest, Handle);
         hFunc(TEvSysView::TEvGetStoragePoolsRequest, Handle);
         hFunc(TEvSysView::TEvGetStorageStatsRequest, Handle);
+        cFunc(NSysView::TEvSysView::EvCalculateStorageStatsRequest, RunStorageStatsCalculator);
+        hFunc(TEvCalculateStorageStatsResponse, Handle);
         cFunc(TEvents::TSystem::Poison, PassAway);
     )
 
@@ -123,7 +129,14 @@ public:
         HostRecords = std::move(msg->HostRecords);
         GroupReserveMin = msg->GroupReserveMin;
         GroupReservePart = msg->GroupReservePart;
-//        GenerateStorageStats();
+    }
+
+    void PassAway() override {
+        if (StorageStatsCalculatorId) {
+            TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, StorageStatsCalculatorId, {}, nullptr, 0));
+        }
+
+        TActorBootstrapped::PassAway();
     }
 
     template<typename TDest, typename TSrc, typename TDeleted, typename TIndex>
@@ -201,171 +214,42 @@ public:
     void Handle(TEvSysView::TEvGetStorageStatsRequest::TPtr& ev) {
         auto response = std::make_unique<TEvSysView::TEvGetStorageStatsResponse>();
         auto& r = response->Record;
-        if (StorageStats) {
-            for (const auto& item : *StorageStats) {
-                auto *e = r.AddEntries();
-                e->CopyFrom(item);
-            }
+        for (const auto& item : StorageStats) {
+            auto *e = r.AddEntries();
+            e->CopyFrom(item);
         }
         Send(ev->Sender, response.release());
     }
 
-    void GenerateStorageStats() {
-        StorageStats.emplace();
-        auto& v = *StorageStats;
-
-        using TEntityKey = std::tuple<TString, TString>; // PDiskFilter, ErasureSpecies
-        std::unordered_map<TEntityKey, size_t> entityMap;
-        std::unordered_map<TBlobStorageController::TBoxStoragePoolId, size_t> spToEntity;
-
-        for (const auto erasure : {TBlobStorageGroupType::ErasureMirror3dc, TBlobStorageGroupType::Erasure4Plus2Block}) {
-            for (const NKikimrBlobStorage::EPDiskType type : {NKikimrBlobStorage::ROT, NKikimrBlobStorage::SSD}) {
-                TBlobStorageController::TStoragePoolInfo::TPDiskFilter filter{.Type = type};
-                TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters{filter};
-                TStringStream filterData;
-                Save(&filterData, filters);
-
-                NKikimrSysView::TStorageStatsEntry e;
-                e.SetPDiskFilter(TBlobStorageController::TStoragePoolInfo::TPDiskFilter::ToString(filters));
-                e.SetErasureSpecies(TBlobStorageGroupType::ErasureSpeciesName(erasure));
-                e.SetPDiskFilterData(filterData.Str());
-                entityMap[{e.GetPDiskFilter(), e.GetErasureSpecies()}] = v.size();
-                v.push_back(std::move(e));
-            }
+    void RunStorageStatsCalculator() {
+        if (StorageStatsCalculatorId) {
+            return;
         }
 
-        for (const auto& [key, value] : State.StoragePools) {
-            TEntityKey entityKey(value.GetPDiskFilter(), value.GetErasureSpeciesV2());
-            const size_t index = entityMap.try_emplace(entityKey, v.size()).first->second;
-            if (index == v.size()) {
-                NKikimrSysView::TStorageStatsEntry entry;
-                entry.SetPDiskFilter(value.GetPDiskFilter());
-                entry.SetErasureSpecies(value.GetErasureSpeciesV2());
-                entry.SetPDiskFilterData(value.GetPDiskFilterData());
-                v.push_back(std::move(entry));
-            } else {
-                const auto& entry = v[index];
-                Y_VERIFY(entry.GetPDiskFilter() == value.GetPDiskFilter());
-                Y_VERIFY(entry.GetErasureSpecies() == value.GetErasureSpeciesV2());
-                Y_VERIFY(entry.GetPDiskFilterData() == value.GetPDiskFilterData());
-            }
-            spToEntity[key] = index;
-        }
+        auto& ctx = TActivationContext::AsActorContext();
+        auto actor = CreateStorageStatsCoroCalculator(
+            State,
+            HostRecords,
+            GroupReserveMin,
+            GroupReservePart);
 
-        for (const auto& [groupId, group] : State.Groups) {
-            const TBlobStorageController::TBoxStoragePoolId key(group.GetBoxId(), group.GetStoragePoolId());
-            if (const auto it = spToEntity.find(key); it != spToEntity.end()) {
-                auto& e = v[it->second];
-                e.SetCurrentGroupsCreated(e.GetCurrentGroupsCreated() + 1);
-                e.SetCurrentAllocatedSize(e.GetCurrentAllocatedSize() + group.GetAllocatedSize());
-                e.SetCurrentAvailableSize(e.GetCurrentAvailableSize() + group.GetAvailableSize());
-            }
-        }
+        StorageStatsCalculatorId = RunInBatchPool(ctx, actor.release());
 
+        Schedule(StorageStatsUpdatePeriod, new TEvCalculateStorageStatsRequest());
+    }
+
+    void Handle(TEvCalculateStorageStatsResponse::TPtr& ev) {
+        auto& response = *(ev->Get());
+        StorageStats = std::move(response.StorageStats);
+        UpdateStorageStatsCounters(StorageStats);
+        StorageStatsCalculatorId = TActorId();
+    }
+
+    void UpdateStorageStatsCounters(const std::vector<NKikimrSysView::TStorageStatsEntry>& storageStats) {
         auto pdiskFilterCountersToDelete = std::exchange(PDiskFilterCounters, {});
         auto erasureCountersToDelete = std::exchange(ErasureCounters, {});
 
-        using T = std::decay_t<decltype(State.PDisks)>::value_type;
-        std::unordered_map<TBlobStorageController::TBoxId, std::vector<const T*>> boxes;
-        for (const auto& kv : State.PDisks) {
-            if (kv.second.HasBoxId()) {
-                boxes[kv.second.GetBoxId()].push_back(&kv);
-            }
-        }
-
-        for (auto& entry : v) {
-            TSet<TBlobStorageController::TStoragePoolInfo::TPDiskFilter> filters;
-            TStringInput s(entry.GetPDiskFilterData());
-            Load(&s, filters);
-
-            for (const auto& [boxId, pdisks] : boxes) {
-                TBlobStorageGroupType type(TBlobStorageGroupType::ErasureSpeciesByName(entry.GetErasureSpecies()));
-                TGroupMapper mapper(TGroupGeometryInfo(type, NKikimrBlobStorage::TGroupGeometry())); // default geometry
-
-                for (const auto& kv : pdisks) {
-                    const auto& [pdiskId, pdisk] = *kv;
-                    for (const auto& filter : filters) {
-                        const auto sharedWithOs = pdisk.HasSharedWithOs() ? MakeMaybe(pdisk.GetSharedWithOs()) : Nothing();
-                        const auto readCentric = pdisk.HasReadCentric() ? MakeMaybe(pdisk.GetReadCentric()) : Nothing();
-                        if (filter.MatchPDisk(pdisk.GetCategory(), sharedWithOs, readCentric)) {
-                            const TNodeLocation& location = HostRecords->GetLocation(pdiskId.NodeId);
-                            const bool ok = mapper.RegisterPDisk({
-                                .PDiskId = pdiskId,
-                                .Location = location,
-                                .Usable = true,
-                                .NumSlots = pdisk.GetNumActiveSlots(),
-                                .MaxSlots = pdisk.GetExpectedSlotCount(),
-                                .Groups = {},
-                                .SpaceAvailable = 0,
-                                .Operational = true,
-                                .Decommitted = false,
-                            });
-                            Y_VERIFY(ok);
-                            break;
-                        }
-                    }
-                }
-
-                // calculate number of groups we can create without accounting reserve
-                TGroupMapper::TGroupDefinition group;
-                TString error;
-                std::deque<ui64> groupSizes;
-                while (mapper.AllocateGroup(groupSizes.size(), group, {}, {}, 0, false, error)) {
-                    std::vector<TGroupDiskInfo> disks;
-                    std::deque<NKikimrBlobStorage::TPDiskMetrics> pdiskMetrics;
-                    std::deque<NKikimrBlobStorage::TVDiskMetrics> vdiskMetrics;
-
-                    for (const auto& realm : group) {
-                        for (const auto& domain : realm) {
-                            for (const auto& pdiskId : domain) {
-                                if (const auto it = State.PDisks.find(pdiskId); it != State.PDisks.end()) {
-                                    const NKikimrSysView::TPDiskInfo& pdisk = it->second;
-                                    auto& pm = *pdiskMetrics.emplace(pdiskMetrics.end());
-                                    auto& vm = *vdiskMetrics.emplace(vdiskMetrics.end());
-                                    if (pdisk.HasTotalSize()) {
-                                        pm.SetTotalSize(pdisk.GetTotalSize());
-                                    }
-                                    if (pdisk.HasEnforcedDynamicSlotSize()) {
-                                        pm.SetEnforcedDynamicSlotSize(pdisk.GetEnforcedDynamicSlotSize());
-                                    }
-                                    vm.SetAllocatedSize(0);
-                                    disks.push_back({&pm, &vm, pdisk.GetExpectedSlotCount()});
-                                }
-                            }
-                        }
-                    }
-
-                    NKikimrSysView::TGroupInfo groupInfo;
-                    CalculateGroupUsageStats(&groupInfo, disks, type);
-                    groupSizes.push_back(groupInfo.GetAvailableSize());
-
-                    group.clear();
-                }
-
-                std::sort(groupSizes.begin(), groupSizes.end());
-
-                // adjust it according to reserve
-                const ui32 total = groupSizes.size() + entry.GetCurrentGroupsCreated();
-                ui32 reserve = GroupReserveMin;
-                while (reserve < groupSizes.size() && (reserve - GroupReserveMin) * 1000000 / total < GroupReservePart) {
-                    ++reserve;
-                }
-                reserve = Min<ui32>(reserve, groupSizes.size());
-
-                // cut sizes
-                while (reserve >= 2) {
-                    groupSizes.pop_front();
-                    groupSizes.pop_back();
-                }
-                if (reserve) {
-                    groupSizes.pop_front();
-                }
-
-                entry.SetAvailableGroupsToCreate(entry.GetAvailableGroupsToCreate() + groupSizes.size());
-                entry.SetAvailableSizeToCreate(entry.GetAvailableSizeToCreate() + std::accumulate(groupSizes.begin(),
-                    groupSizes.end(), ui64(0)));
-            }
-
+        for (const auto& entry : storageStats) {
             auto g = Counters->GetSubgroup("subsystem", "storage_stats");
 
             PDiskFilterCounters.emplace(entry.GetPDiskFilter());
@@ -383,12 +267,14 @@ public:
             erasureGroup->GetCounter("AvailableSizeToCreate")->Set(entry.GetAvailableSizeToCreate());
         }
 
+        // remove no longer present entries
         for (const auto& item : erasureCountersToDelete) {
             Counters
                 ->GetSubgroup("subsystem", "storage_stats")
                 ->GetSubgroup("pdiskFilter", std::get<0>(item))
                 ->RemoveSubgroup("erasureSpecies", std::get<1>(item));
         }
+
         for (const auto& item : pdiskFilterCountersToDelete) {
             Counters
                 ->GetSubgroup("subsystem", "storage_stats")

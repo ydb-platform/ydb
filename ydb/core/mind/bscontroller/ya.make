@@ -52,6 +52,7 @@ SRCS(
     stat_processor.cpp
     stat_processor.h
     storage_pool_stat.h
+    storage_stats_calculator.cpp
     sys_view.cpp
     sys_view.h
     table_merger.h

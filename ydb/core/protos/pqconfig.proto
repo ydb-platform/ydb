@@ -127,7 +127,7 @@ message TPQConfig {
 
     optional NKikimrNodeLimits.TNodeLimitsConfig.TPersQueueNodeConfig PersQueueNodeConfig = 36;
 
-    optional bool EnableProtoSourceIdInfo = 37 [default = false];
+    optional bool EnableProtoSourceIdInfo = 37 [default = true];
 
     optional string Database = 38;
 

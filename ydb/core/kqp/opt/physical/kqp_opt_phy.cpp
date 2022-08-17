@@ -40,9 +40,9 @@ public:
         AddHandler(0, &TCoPartitionsByKeys::Match, HNDL(BuildPartitionsStage));
         AddHandler(0, &TCoPartitionByKey::Match, HNDL(BuildPartitionStage));
         AddHandler(0, &TCoTopSort::Match, HNDL(BuildTopSortStage<false>));
-        AddHandler(0, &TCoTake::Match, HNDL(BuildTakeSkipStage<false>));
+        AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<false>));
         AddHandler(0, &TCoSortBase::Match, HNDL(BuildSortStage<false>));
-        AddHandler(0, &TCoTake::Match, HNDL(BuildTakeStage<false>));
+        AddHandler(0, &TCoTakeBase::Match, HNDL(BuildTakeStage<false>));
         AddHandler(0, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<false>));
         AddHandler(0, &TCoExtendBase::Match, HNDL(BuildExtendStage));
         AddHandler(0, &TDqJoin::Match, HNDL(RewriteRightJoinToLeft));
@@ -69,9 +69,9 @@ public:
         AddHandler(1, &TCoFlatMapBase::Match, HNDL(BuildFlatmapStage<true>));
         AddHandler(1, &TCoCombineByKey::Match, HNDL(PushCombineToStage<true>));
         AddHandler(1, &TCoTopSort::Match, HNDL(BuildTopSortStage<true>));
-        AddHandler(1, &TCoTake::Match, HNDL(BuildTakeSkipStage<true>));
+        AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeSkipStage<true>));
         AddHandler(1, &TCoSortBase::Match, HNDL(BuildSortStage<true>));
-        AddHandler(1, &TCoTake::Match, HNDL(BuildTakeStage<true>));
+        AddHandler(1, &TCoTakeBase::Match, HNDL(BuildTakeStage<true>));
         AddHandler(1, &TCoLength::Match, HNDL(RewriteLengthOfStageOutput<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(RewriteLeftPureJoin<true>));
         AddHandler(1, &TDqJoin::Match, HNDL(BuildJoin<true>));

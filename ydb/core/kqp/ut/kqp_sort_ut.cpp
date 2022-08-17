@@ -1229,6 +1229,34 @@ Y_UNIT_TEST_SUITE(KqpSort) {
             [[3];[301u];["Value1"]]
         ])", FormatResultSetYson(result.GetResultSet(2)));
     }
+
+    Y_UNIT_TEST_TWIN(UnionAllSortLimit, UseNewEngine) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExplainDataQuery(Q1_(R"(
+            SELECT * FROM Logs WHERE App = "nginx" AND Ts >= 2
+
+            UNION ALL
+
+            SELECT * FROM Logs WHERE App >= "kikimr-db"
+
+            ORDER BY App, Ts, Host
+            LIMIT 3;
+        )")).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        // Cerr << result.GetPlan() << Endl;
+
+        NJson::TJsonValue plan;
+        NJson::ReadJsonTree(result.GetPlan(), &plan, true);
+
+        for (auto& read : plan["tables"][0]["reads"].GetArraySafe()) {
+            UNIT_ASSERT(read.Has("limit"));
+            UNIT_ASSERT_VALUES_EQUAL(read["limit"], UseNewEngine ? "3" : "\"3\"");
+        }
+    }
 }
 
 } // namespace NKqp

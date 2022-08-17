@@ -13,6 +13,7 @@ SRCS(
     kqp_opt_log_indexes.cpp
     kqp_opt_log_ranges.cpp
     kqp_opt_log_ranges_predext.cpp
+    kqp_opt_log_sort.cpp
     kqp_opt_log_sqlin.cpp
     kqp_opt_log_sqlin_compact.cpp
     kqp_opt_log.cpp

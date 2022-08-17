@@ -1108,11 +1108,11 @@ TExprBase DqBuildSkipStage(TExprBase node, TExprContext& ctx, IOptimizationConte
 TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoTake>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoTakeBase>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    auto take = node.Cast<TCoTake>();
+    auto take = node.Cast<TCoTakeBase>();
     auto dqUnion = take.Input().Cast<TDqCnUnionAll>();
     if (!IsSingleConsumerConnection(dqUnion, parentsMap, allowStageMultiUsage)) {
         return node;
@@ -1164,11 +1164,11 @@ TExprBase DqBuildTakeStage(TExprBase node, TExprContext& ctx, IOptimizationConte
 TExprBase DqBuildTakeSkipStage(TExprBase node, TExprContext& ctx, IOptimizationContext& optCtx,
     const TParentsMap& parentsMap, bool allowStageMultiUsage)
 {
-    if (!node.Maybe<TCoTake>().Input().Maybe<TCoSkip>().Input().Maybe<TDqCnUnionAll>()) {
+    if (!node.Maybe<TCoTakeBase>().Input().Maybe<TCoSkip>().Input().Maybe<TDqCnUnionAll>()) {
         return node;
     }
 
-    auto take = node.Cast<TCoTake>();
+    auto take = node.Cast<TCoTakeBase>();
     auto skip = take.Input().Cast<TCoSkip>();
     auto dqUnion = skip.Input().Cast<TDqCnUnionAll>();
 

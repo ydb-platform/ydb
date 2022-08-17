@@ -433,13 +433,19 @@
             ]
         },
         {
-            "Name": "TCoTake",
+            "Name": "TCoTakeBase",
             "Base": "TCoCountBase",
+            "Match": {"Type": "CallableBase"},
+            "Builder": {"Generate": "None"}
+        },
+        {
+            "Name": "TCoTake",
+            "Base": "TCoTakeBase",
             "Match": {"Type": "Callable", "Name": "Take"}
         },
         {
             "Name": "TCoLimit",
-            "Base": "TCoCountBase",
+            "Base": "TCoTakeBase",
             "Match": {"Type": "Callable", "Name": "Limit"}
         },
         {

@@ -346,9 +346,11 @@ private:
     TOwnedCellVec StopKey;
     bool StopKeyInclusive = true;
 
+    using TIteratorIndex = ui32;
+
     struct TIteratorId {
         EType Type;
-        ui16 Index;
+        TIteratorIndex Index;
         TEpoch Epoch;
     };
 
@@ -380,19 +382,10 @@ private:
         const TArrayRef<const NScheme::TTypeIdOrder> Types;
     };
 
-    /**
-     * Adjust epoch into a modified range
-     *
-     * This frees epoch=-inf and epoch=+inf for special stop keys. Note that this
-     * would convert +inf into +inf, which should be safe, since epoch=+inf is
-     * normally used as an invalid epoch marker.
-     */
-    static TEpoch AdjustEpoch(TEpoch epoch) {
-        if (epoch == TEpoch::Max()) {
-            return TEpoch::Max(); // invalid epoch
-        } else {
-            return ++epoch;
-        }
+    static TIteratorIndex IteratorIndexFromSize(size_t size) {
+        TIteratorIndex index = size;
+        Y_VERIFY(index == size, "Iterator index overflow");
+        return index;
     }
 
     void Clear() {
@@ -495,7 +488,7 @@ template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 {
     if (it && it->IsValid()) {
-        TIteratorId itId = { EType::Mem, ui16(MemIters.size()), AdjustEpoch(it->MemTable->Epoch) };
+        TIteratorId itId = { EType::Mem, IteratorIndexFromSize(MemIters.size()), it->MemTable->Epoch };
 
         MemIters.PushBack(it);
         TDbTupleRef key = MemIters.back()->GetKey();
@@ -506,7 +499,7 @@ inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TMemIt> it)
 template<class TIteratorOps>
 inline void TTableItBase<TIteratorOps>::Push(TAutoPtr<TRunIt> it)
 {
-    TIteratorId itId = { EType::Run, ui16(RunIters.size()), AdjustEpoch(it->Epoch()) };
+    TIteratorId itId = { EType::Run, IteratorIndexFromSize(RunIters.size()), it->Epoch() };
 
     bool ready = it->IsValid();
 
@@ -531,7 +524,7 @@ inline void TTableItBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
     StopKey = TOwnedCellVec::Make(key);
     StopKeyInclusive = false;
 
-    TIteratorId itId = { EType::Stop, Max<ui16>(), TEpoch::Max() };
+    TIteratorId itId = { EType::Stop, Max<TIteratorIndex>(), TEpoch::Max() };
 
     AddReadyIterator(StopKey, itId);
 }
@@ -548,7 +541,7 @@ inline void TTableItBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
     StopKey = TOwnedCellVec::Make(key);
     StopKeyInclusive = true;
 
-    TIteratorId itId = { EType::Stop, Max<ui16>(), TEpoch::Min() };
+    TIteratorId itId = { EType::Stop, Max<TIteratorIndex>(), TEpoch::Min() };
 
     AddReadyIterator(StopKey, itId);
 }
@@ -628,7 +621,7 @@ inline EReady TTableItBase<TIteratorOps>::Turn() noexcept
                     case EReady::Data:
                         Active->Key = it.GetKey().Cells();
                         Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
-                        Active->IteratorId.Epoch = AdjustEpoch(it.Epoch());
+                        Active->IteratorId.Epoch = it.Epoch();
                         std::push_heap(Iterators.begin(), ++Active, Comparator);
                         break;
 
@@ -1012,7 +1005,7 @@ inline bool TTableItBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> key,
                     case EReady::Data:
                         Active->Key = it.GetKey().Cells();
                         Y_VERIFY_DEBUG(Active->Key.size() == Scheme->Keys->Types.size());
-                        Active->IteratorId.Epoch = AdjustEpoch(it.Epoch());
+                        Active->IteratorId.Epoch = it.Epoch();
                         std::push_heap(Iterators.begin(), ++Active, Comparator);
                         break;
 

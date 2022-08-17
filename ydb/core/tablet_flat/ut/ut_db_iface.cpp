@@ -997,6 +997,41 @@ Y_UNIT_TEST_SUITE(DBase) {
         me.To(52).Replay(EPlay::Redo);
     }
 
+    Y_UNIT_TEST(KIKIMR_15598_Many_MemTables) {
+        TDbExec me;
+
+        const ui32 table = 1;
+        me.To(10)
+            .Begin()
+            .Apply(*TAlter()
+                .AddTable("me_1", table)
+                .AddColumn(table, "key", 1, ETypes::Uint64, false)
+                .AddColumn(table, "val", 2, ETypes::Uint64, false, Cimple(0_u64))
+                .AddColumnToKey(table, 1))
+            .Commit();
+
+        ui64 count = 65537;
+
+        // Add 65537 rows, each in its own memtable
+        for (ui64 i = 1; i <= count; ++i) {
+            me.To(100000 + i)
+                .Begin()
+                .Put(table, *me.SchemedCookRow(table).Col(i, i))
+                .Commit();
+            // Simulate an unsuccessful compaction attempt
+            me.Snap(table);
+        }
+
+        // Check all rows exist on iteration
+        auto check = me.To(200000).IterData(table);
+        check.Seek({ }, ESeek::Lower);
+        for (ui64 i = 1; i <= count; ++i) {
+            check.To(200000 + i).Is(*me.SchemedCookRow(table).Col(i, i));
+            check.Next();
+        }
+        check.To(300000).Is(EReady::Gone);
+    }
+
 }
 
 }

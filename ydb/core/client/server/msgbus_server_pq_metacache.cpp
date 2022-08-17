@@ -485,6 +485,7 @@ private:
                 if (!entry.PQGroupInfo) {
                     CurrentTopicsFullConverters.push_back(nullptr);
                 } else {
+
                     auto converter = factory.MakeTopicConverter(
                                                     entry.PQGroupInfo->Description.GetPQTabletConfig()
                                                 );

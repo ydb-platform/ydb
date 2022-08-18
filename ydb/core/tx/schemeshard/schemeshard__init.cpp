@@ -3680,7 +3680,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->IncShardsInside();
 
             auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropeed?
-            domainInfo->AddInternalShard(shardIdx);
+            domainInfo->AddInternalShard(shardIdx, Self->IsBackupTable(pathId));
 
             switch (si.second.TabletType) {
             case ETabletType::DataShard:
@@ -3776,8 +3776,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             if (!path->IsRoot()) {
-                parent->IncAliveChildren();
-                inclusivedomainInfo->IncPathsInside();
+                const bool isBackupTable = Self->IsBackupTable(item.first);
+                parent->IncAliveChildren(1, isBackupTable);
+                inclusivedomainInfo->IncPathsInside(1, isBackupTable);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());

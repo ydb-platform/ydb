@@ -3488,6 +3488,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        // these limits should have no effect on backup tables
+        TSchemeLimits limits;
+        limits.MaxPaths = 4;
+        limits.MaxShards = 4;
+        limits.MaxChildrenInDir = 3;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
         // create src table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -3526,6 +3533,70 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/ConsistentCopyTable", true), {
             NLs::IsBackupTable(true),
         });
+
+        // negative tests
+
+        // shards limit
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 4
+        )", {NKikimrScheme::StatusResourceExhausted});
+
+        // ok
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
+        env.TestWaitNotification(runtime, txId);
+
+        // children limit
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table3"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusResourceExhausted});
+
+        // ok
+        TestCreateTable(runtime, ++txId, "/MyRoot/Dir", R"(
+            Name: "Table3"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // paths limit
+        TestCreateTable(runtime, ++txId, "/MyRoot/Dir", R"(
+            Name: "Table4"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusResourceExhausted});
+
+        // free quota
+        TestDropTable(runtime, ++txId, "/MyRoot", "Table2");
+        env.TestWaitNotification(runtime, txId);
+
+        // ok
+        TestCreateTable(runtime, ++txId, "/MyRoot/Dir", R"(
+            Name: "Table4"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // reset limits to default
+        SetSchemeshardSchemaLimits(runtime, TSchemeLimits());
 
         // cannot create new table with 'IsBackup'
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(

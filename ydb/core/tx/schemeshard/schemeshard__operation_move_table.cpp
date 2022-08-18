@@ -143,14 +143,15 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
                     const TTxState& txState,
                     TPath& srcPath)
 {
+    const auto isBackupTable = context.SS->IsBackupTable(srcPath->PathId);
+    srcPath.Parent()->DecAliveChildren(1, isBackupTable);
+    srcPath.DomainInfo()->DecPathsInside(1, isBackupTable);
+
     srcPath->SetDropped(txState.PlanStep, operationId.GetTxId());
     context.SS->PersistDropStep(db, srcPath->PathId, txState.PlanStep, operationId);
     context.SS->Tables.at(srcPath->PathId)->DetachShardsStats();
     context.SS->PersistRemoveTable(db, srcPath->PathId, context.Ctx);
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
-
-    srcPath.Parent()->DecAliveChildren();
-    srcPath.DomainInfo()->DecPathsInside();
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
 }

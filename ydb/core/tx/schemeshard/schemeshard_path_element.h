@@ -341,14 +341,16 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
 
 private:
     ui64 AliveChildrenCount = 0;
+    ui64 BackupChildrenCount = 0;
     ui64 ShardsInsideCount = 0;
     TChildrenCont Children;
 public:
     TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner);
     ui64 GetAliveChildren() const;
     void SetAliveChildren(ui64 val);
-    void IncAliveChildren(ui64 delta = 1);
-    void DecAliveChildren(ui64 delta = 1);
+    ui64 GetBackupChildren() const;
+    void IncAliveChildren(ui64 delta = 1, bool isBackup = false);
+    void DecAliveChildren(ui64 delta = 1, bool isBackup = false);
     ui64 GetShardsInside() const;
     void SetShardsInside(ui64 val);
     void IncShardsInside(ui64 delta = 1);

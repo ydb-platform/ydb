@@ -20,14 +20,28 @@ void TPathElement::SetAliveChildren(ui64 val) {
     AliveChildrenCount = val;
 }
 
-void TPathElement::IncAliveChildren(ui64 delta) {
-    Y_VERIFY(Max<ui64>() - AliveChildrenCount >= delta);
-    AliveChildrenCount += delta;
+ui64 TPathElement::GetBackupChildren() const {
+    return BackupChildrenCount;
 }
 
-void TPathElement::DecAliveChildren(ui64 delta) {
+void TPathElement::IncAliveChildren(ui64 delta, bool isBackup) {
+    Y_VERIFY(Max<ui64>() - AliveChildrenCount >= delta);
+    AliveChildrenCount += delta;
+
+    if (isBackup) {
+        Y_VERIFY(Max<ui64>() - BackupChildrenCount >= delta);
+        BackupChildrenCount += delta;
+    }
+}
+
+void TPathElement::DecAliveChildren(ui64 delta, bool isBackup) {
     Y_VERIFY(AliveChildrenCount >= delta);
     AliveChildrenCount -= delta;
+
+    if (isBackup) {
+        Y_VERIFY(BackupChildrenCount >= delta);
+        BackupChildrenCount -= delta;
+    }
 }
 
 ui64 TPathElement::GetShardsInside() const {

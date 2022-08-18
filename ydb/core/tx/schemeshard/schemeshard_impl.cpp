@@ -1234,6 +1234,16 @@ const TTableInfo* TSchemeShard::GetMainTableForIndex(TPathId indexTableId) const
     return Tables.FindPtr(grandParentId)->Get();
 }
 
+bool TSchemeShard::IsBackupTable(TPathId pathId) const {
+    auto it = Tables.find(pathId);
+    if (it == Tables.end()) {
+        return false;
+    }
+
+    Y_VERIFY(it->second);
+    return it->second->IsBackup;
+}
+
 TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, TPathElement::EPathState oldState) {
     // Do not change state if PathId is dropped. It can't become alive.
     switch (oldState) {
@@ -4316,12 +4326,14 @@ void TSchemeShard::MarkAsDroping(TPathElement::TPtr node, TTxId txId, const TAct
 }
 
 void TSchemeShard::UncountNode(TPathElement::TPtr node) {
+    const auto isBackupTable = IsBackupTable(node->PathId);
+
     if (node->IsDomainRoot()) {
-        ResolveDomainInfo(node->ParentPathId)->DecPathsInside();
+        ResolveDomainInfo(node->ParentPathId)->DecPathsInside(1, isBackupTable);
     } else {
-        ResolveDomainInfo(node)->DecPathsInside();
+        ResolveDomainInfo(node)->DecPathsInside(1, isBackupTable);
     }
-    PathsById.at(node->ParentPathId)->DecAliveChildren();
+    PathsById.at(node->ParentPathId)->DecAliveChildren(1, isBackupTable);
 
     TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(node->UserAttrs->Size());
 

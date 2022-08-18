@@ -476,6 +476,7 @@ public:
     ui64 GetAliveChildren(TPathElement::TPtr pathEl, const std::optional<TPathElement::EPathType>& type = std::nullopt) const;
 
     const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
+    bool IsBackupTable(TPathId pathId) const;
 
     TPathId ResolvePathIdForDomain(TPathId pathId) const;
     TPathId ResolvePathIdForDomain(TPathElement::TPtr pathEl) const;

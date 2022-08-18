@@ -796,8 +796,15 @@ const TPath::TChecker& TPath::TChecker::PathsLimit(ui64 delta, TPath::TChecker::
     }
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+    const auto pathsTotal = domainInfo->GetPathsInside();
+    const auto backupPaths = domainInfo->GetBackupPaths();
 
-    if (!delta || domainInfo->GetPathsInside() + delta <= domainInfo->GetSchemeLimits().MaxPaths) {
+    Y_VERIFY_S(pathsTotal >= backupPaths, "Constraint violation"
+        << ": path: " << Path.PathString()
+        << ", paths total: " << pathsTotal
+        << ", backup paths: " << backupPaths);
+
+    if (!delta || (pathsTotal - backupPaths) + delta <= domainInfo->GetSchemeLimits().MaxPaths) {
         return *this;
     }
 
@@ -805,7 +812,8 @@ const TPath::TChecker& TPath::TChecker::PathsLimit(ui64 delta, TPath::TChecker::
     Status = status;
     Explain << "paths count has reached maximum value in the domain"
             << ", paths limit for domain: " << domainInfo->GetSchemeLimits().MaxPaths
-            << ", paths count inside domain: " << domainInfo->GetPathsInside()
+            << ", paths count inside domain: " << pathsTotal
+            << ", backup paths: " << backupPaths
             << ", intention to create new paths: " << delta;
     return *this;
 }
@@ -816,11 +824,16 @@ const TPath::TChecker& TPath::TChecker::DirChildrenLimit(ui64 delta, TPath::TChe
     }
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
-
     auto parent = Path.Parent();
-    ui64 aliveChildren = parent.Base()->GetAliveChildren();
+    const auto aliveChildren = parent.Base()->GetAliveChildren();
+    const auto backupChildren = parent.Base()->GetBackupChildren();
 
-    if (!delta || aliveChildren + delta <= domainInfo->GetSchemeLimits().MaxChildrenInDir) {
+    Y_VERIFY_S(aliveChildren >= backupChildren, "Constraint violation"
+        << ": path: " << parent.PathString()
+        << ", alive children: " << aliveChildren
+        << ", backup children: " << backupChildren);
+
+    if (!delta || (aliveChildren - backupChildren) + delta <= domainInfo->GetSchemeLimits().MaxChildrenInDir) {
         return *this;
     }
 
@@ -829,6 +842,7 @@ const TPath::TChecker& TPath::TChecker::DirChildrenLimit(ui64 delta, TPath::TChe
     Explain << "children count has reached maximum value in the dir"
             << ", children limit for domain dir: " << domainInfo->GetSchemeLimits().MaxChildrenInDir
             << ", children count inside dir: " << aliveChildren
+            << ", backup children: " << backupChildren
             << ", intention to create new children: " << delta;
     return *this;
 }
@@ -839,8 +853,15 @@ const TPath::TChecker& TPath::TChecker::ShardsLimit(ui64 delta, TPath::TChecker:
     }
 
     TSubDomainInfo::TPtr domainInfo = Path.DomainInfo();
+    const auto shardsTotal = domainInfo->GetShardsInside();
+    const auto backupShards = domainInfo->GetBackupShards();
 
-    if (!delta || domainInfo->GetShardsInside() + delta <= domainInfo->GetSchemeLimits().MaxShards) {
+    Y_VERIFY_S(shardsTotal >= backupShards, "Constraint violation"
+        << ": path: " << Path.PathString()
+        << ", shards total: " << shardsTotal
+        << ", backup shards: " << backupShards);
+
+    if (!delta || (shardsTotal - backupShards) + delta <= domainInfo->GetSchemeLimits().MaxShards) {
         return *this;
     }
 
@@ -848,7 +869,8 @@ const TPath::TChecker& TPath::TChecker::ShardsLimit(ui64 delta, TPath::TChecker:
     Status = status;
     Explain << "shards count has reached maximum value in the domain"
             << ", shards limit for domain: " << domainInfo->GetSchemeLimits().MaxShards
-            << ", shards count inside domain: " << domainInfo->GetShardsInside()
+            << ", shards count inside domain: " << shardsTotal
+            << ", backup shards: " << backupShards
             << ", intention to create new shards: " << delta;
     return *this;
 }

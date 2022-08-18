@@ -1369,14 +1369,28 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         PathsInsideCount = val;
     }
 
-    void IncPathsInside(ui64 delta = 1) {
-        Y_VERIFY(Max<ui64>() - PathsInsideCount >= delta);
-        PathsInsideCount += delta;
+    ui64 GetBackupPaths() const {
+        return BackupPathsCount;
     }
 
-    void DecPathsInside(ui64 delta = 1) {
+    void IncPathsInside(ui64 delta = 1, bool isBackup = false) {
+        Y_VERIFY(Max<ui64>() - PathsInsideCount >= delta);
+        PathsInsideCount += delta;
+
+        if (isBackup) {
+            Y_VERIFY(Max<ui64>() - BackupPathsCount >= delta);
+            BackupPathsCount += delta;
+        }
+    }
+
+    void DecPathsInside(ui64 delta = 1, bool isBackup = false) {
         Y_VERIFY_S(PathsInsideCount >= delta, "PathsInsideCount: " << PathsInsideCount << " delta: " << delta);
         PathsInsideCount -= delta;
+
+        if (isBackup) {
+            Y_VERIFY_S(BackupPathsCount >= delta, "BackupPathsCount: " << BackupPathsCount << " delta: " << delta);
+            BackupPathsCount -= delta;
+        }
     }
 
     ui64 GetPQPartitionsInside() const {
@@ -1424,6 +1438,10 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     ui64 GetShardsInside() const {
         return InternalShards.size();
+    }
+
+    ui64 GetBackupShards() const {
+        return BackupShards.size();
     }
 
     void ActualizeAlterData(const THashMap<TShardIdx, TShardInfo>& allShards, TInstant now, bool isExternal, IQuotaCounters* counters) {
@@ -1600,27 +1618,34 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         return PrivateShards;
     }
 
-    void AddInternalShard(TShardIdx shardId) {
+    void AddInternalShard(TShardIdx shardId, bool isBackup = false) {
         InternalShards.insert(shardId);
+        if (isBackup) {
+            BackupShards.insert(shardId);
+        }
     }
 
     const THashSet<TShardIdx>& GetInternalShards() const {
         return InternalShards;
     }
 
-    void AddInternalShards(const TTxState& txState) {
+    void AddInternalShards(const TTxState& txState, bool isBackup = false) {
         for (auto txShard: txState.Shards) {
             if (txShard.Operation != TTxState::CreateParts) {
                 continue;
             }
-            AddInternalShard(txShard.Idx);
+            AddInternalShard(txShard.Idx, isBackup);
         }
     }
 
-    void RemoveInternalShard(TShardIdx shardIdx) {
+    void RemoveInternalShard(TShardIdx shardIdx, bool isBackup = false) {
         auto it = InternalShards.find(shardIdx);
         Y_VERIFY_S(it != InternalShards.end(), "shardIdx: " << shardIdx);
         InternalShards.erase(it);
+
+        if (isBackup) {
+            BackupShards.erase(shardIdx);
+        }
     }
 
     const THashSet<TShardIdx>& GetSequenceShards() const {
@@ -1883,9 +1908,11 @@ private:
     TSchemeQuotas SchemeQuotas;
 
     ui64 PathsInsideCount = 0;
+    ui64 BackupPathsCount = 0;
     TDiskSpaceUsage DiskSpaceUsage;
 
     THashSet<TShardIdx> InternalShards;
+    THashSet<TShardIdx> BackupShards;
     THashSet<TShardIdx> SequenceShards;
     THashSet<TShardIdx> ReplicationControllers;
 

@@ -449,7 +449,7 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
     , FolderId(config.GetYcFolderId())
     , UsersInfoStorage(
             DCId, TabletID, TopicConverter, Partition, counters, Config,
-            CloudId, DbId, FolderId
+            CloudId, DbId, config.GetYdbDatabasePath(), FolderId
     )
     , ReadingTimestamp(false)
     , SetOffsetCookie(0)
@@ -489,11 +489,11 @@ TPartition::TPartition(ui64 tabletId, ui32 partition, const TActorId& tablet, co
 
     TabletCounters.Populate(counters);
 
-    if (topicConverter->IsFirstClass()) {
-        PartitionCountersLabeled = THolder<TPartitionLabeledCounters>(nullptr);
-    } else {
-        PartitionCountersLabeled = THolder<TPartitionLabeledCounters>(new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition));
-    }
+    PartitionCountersLabeled = THolder<TPartitionLabeledCounters>(
+        new TPartitionLabeledCounters(topicConverter->GetClientsideName(), partition,
+            AppData()->PQConfig.GetTopicsAreFirstClassCitizen()
+                ? TMaybe<TString>(config.GetYdbDatabasePath())
+                : Nothing()));
 }
 
 void TPartition::HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx) {

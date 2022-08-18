@@ -1,0 +1,103 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(contrib-libs-googleapis-common-protos)
+set_property(TARGET contrib-libs-googleapis-common-protos PROPERTY
+  PROTOC_EXTRA_OUTS .grpc.pb.cc .grpc.pb.h
+)
+set_property(TARGET contrib-libs-googleapis-common-protos PROPERTY
+  PROTO_NAMESPACE contrib/libs/googleapis-common-protos
+)
+target_include_directories(contrib-libs-googleapis-common-protos PUBLIC
+  ${CMAKE_BINARY_DIR}/contrib/libs/googleapis-common-protos
+)
+target_link_libraries(contrib-libs-googleapis-common-protos PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  contrib-libs-grpc
+  contrib-libs-protobuf
+)
+target_proto_messages(contrib-libs-googleapis-common-protos PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/annotations.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/auth.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/backend.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/billing.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/client.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/config_change.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/consumer.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/context.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/control.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/distribution.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/documentation.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/endpoint.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/error_reason.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/field_behavior.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/http.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/httpbody.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/label.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/launch_stage.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/log.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/logging.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/metric.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/monitored_resource.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/monitoring.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/quota.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/resource.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/routing.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/service.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/source_info.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/system_parameter.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/usage.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/api/visibility.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/cloud/extended_operations.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/cloud/location/locations.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/gapic/metadata/gapic_metadata.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/logging/type/http_request.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/logging/type/log_severity.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/longrunning/operations.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/code.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/context/attribute_context.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/error_details.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/rpc/status.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/calendar_period.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/color.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/date.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/datetime.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/dayofweek.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/decimal.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/expr.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/fraction.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/interval.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/latlng.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/localized_text.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/money.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/month.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/phone_number.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/postal_address.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/quaternion.proto
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos/google/type/timeofday.proto
+)
+target_proto_addincls(contrib-libs-googleapis-common-protos
+  ./contrib/libs/googleapis-common-protos
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/googleapis-common-protos
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+  ${CMAKE_BINARY_DIR}
+  ${CMAKE_SOURCE_DIR}/contrib/libs/protobuf/src
+)
+target_proto_outs(contrib-libs-googleapis-common-protos
+  --cpp_out=${CMAKE_BINARY_DIR}/contrib/libs/googleapis-common-protos
+  --cpp_styleguide_out=${CMAKE_BINARY_DIR}/contrib/libs/googleapis-common-protos
+)
+target_proto_plugin(contrib-libs-googleapis-common-protos
+  grpc_cpp
+  grpc_cpp
+)

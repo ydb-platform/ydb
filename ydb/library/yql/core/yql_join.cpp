@@ -1577,7 +1577,7 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
     for (ui32 i = 0; i < predicate->ChildrenSize(); ++i) {
         TExprNode::TListType res;
         bool isPg;
-        GatherAndTerms(predicate->ChildPtr(i), res, isPg);
+        GatherAndTerms(predicate->ChildPtr(i), res, isPg, ctx);
         YQL_ENSURE(!isPg); // direct child for Or
         andParts.emplace_back(std::move(res));
     }
@@ -1647,24 +1647,26 @@ TExprNode::TPtr PreparePredicate(TExprNode::TPtr predicate, TExprContext& ctx) {
     return ret;
 }
 
-void GatherAndTermsImpl(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms) {
-    if (!predicate->IsCallable("And")) {
-        andTerms.emplace_back(predicate);
+void GatherAndTermsImpl(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, TExprContext& ctx) {
+    auto pred = PreparePredicate(predicate, ctx);
+
+    if (!pred->IsCallable("And")) {
+        andTerms.emplace_back(pred);
         return;
     }
 
-    for (ui32 i = 0; i < predicate->ChildrenSize(); ++i) {
-        GatherAndTermsImpl(predicate->ChildPtr(i), andTerms);
+    for (ui32 i = 0; i < pred->ChildrenSize(); ++i) {
+        GatherAndTermsImpl(pred->ChildPtr(i), andTerms, ctx);
     }
 }
 
-void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, bool& isPg) {
+void GatherAndTerms(const TExprNode::TPtr& predicate, TExprNode::TListType& andTerms, bool& isPg, TExprContext& ctx) {
     isPg = false;
     if (predicate->IsCallable("ToPg")) {
         isPg = true;
-        GatherAndTermsImpl(predicate->HeadPtr(), andTerms);
+        GatherAndTermsImpl(predicate->HeadPtr(), andTerms, ctx);
     } else {
-        GatherAndTermsImpl(predicate, andTerms);
+        GatherAndTermsImpl(predicate, andTerms, ctx);
     }
 }
 

@@ -623,17 +623,21 @@ public:
         return NAux::GetLabeledCounterOpts<SimpleDesc>();
     }
 
-    TProtobufTabletLabeledCounters(const TString& group, const ui64 id)
+    TProtobufTabletLabeledCounters(const TString& group, const ui64 id,
+                                   const TMaybe<TString>& databasePath = Nothing())
         : TTabletLabeledCountersBase(
               SimpleOpts()->Size, SimpleOpts()->GetNames(), SimpleOpts()->GetCounterTypes(),
-              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id)
+              SimpleOpts()->GetAggregateFuncs(), group, SimpleOpts()->GetGroupNames(), id, databasePath)
     {
         TVector<TString> groups;
-        StringSplitter(group).Split('/').SkipEmpty().Collect(&groups); //TODO: change here to "|"
+        // TODO: change here to "|"
+        if (databasePath.Defined()) {
+            StringSplitter(group).Split('|').SkipEmpty().Collect(&groups);
+        } else {
+            StringSplitter(group).Split('/').SkipEmpty().Collect(&groups);
+        }
         Y_VERIFY(SimpleOpts()->GetGroupNamesSize() == groups.size());
     }
-
-private:
 };
 
 

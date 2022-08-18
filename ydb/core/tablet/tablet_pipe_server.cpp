@@ -62,8 +62,9 @@ namespace NTabletPipe {
         }
 
         void Handle(TEvTabletPipe::TEvPush::TPtr& ev, const TActorContext& ctx) {
-            Y_VERIFY(ev->Get()->Record.GetTabletId() == TabletId);
-            const auto& record = ev->Get()->Record;
+            const auto& msg = *ev->Get();
+            const auto& record = msg.Record;
+            Y_VERIFY(record.GetTabletId() == TabletId);
             const TActorId sender = ActorIdFromProto(record.GetSender());
             LOG_DEBUG_S(ctx, NKikimrServices::PIPE_SERVER, "[" << TabletId << "]"
                 << " Push Sender# " << sender << " EventType# " << record.GetType()
@@ -72,7 +73,11 @@ namespace NTabletPipe {
                 return;
             }
 
-            auto buffer = MakeIntrusive<TEventSerializedData>(record.GetBuffer(), record.GetExtendedFormat());
+            Y_VERIFY(!msg.GetPayloadCount() || (msg.GetPayloadCount() == 1 && !record.HasBuffer()));
+            auto buffer = msg.GetPayloadCount()
+                ? MakeIntrusive<TEventSerializedData>(TRope(msg.GetPayload(0)), record.GetExtendedFormat())
+                : MakeIntrusive<TEventSerializedData>(record.GetBuffer(), record.GetExtendedFormat());
+
             auto result = std::make_unique<IEventHandle>(
                     ev->InterconnectSession,
                     record.GetType(),
@@ -106,11 +111,13 @@ namespace NTabletPipe {
             THolder<IEventHandle> result;
             if (msg->HasEvent()) {
                 result = MakeHolder<IEventHandle>(ctx.SelfID, originalSender,
-                        msg->ReleaseEvent().Release(), 0, ev->Cookie);
+                        msg->ReleaseEvent().Release(), 0, ev->Cookie, nullptr,
+                        std::move(ev->TraceId));
             } else {
                 result = MakeHolder<IEventHandle>(
                         msg->Type, 0, ctx.SelfID, originalSender,
-                        msg->ReleaseBuffer(), ev->Cookie);
+                        msg->ReleaseBuffer(), ev->Cookie, nullptr,
+                        std::move(ev->TraceId));
             }
 
             result->Rewrite(msg->Type, RecipientId);
@@ -134,12 +141,11 @@ namespace NTabletPipe {
 
             IEventHandle* result;
             if (ev->HasEvent()) {
-                result = new IEventHandle(ctx.SelfID, originalSender, ev->ReleaseBase().Release(), 0, ev->Cookie);
+                result = new IEventHandle(ctx.SelfID, originalSender, ev->ReleaseBase().Release(), 0, ev->Cookie, nullptr,
+                        std::move(ev->TraceId));
             } else {
-                result = new IEventHandle(ev->Type, 0, ctx.SelfID,
-                                          originalSender,
-                                          ev->ReleaseChainBuffer(),
-                                          ev->Cookie);
+                result = new IEventHandle(ev->Type, 0, ctx.SelfID, originalSender, ev->ReleaseChainBuffer(), ev->Cookie,
+                        nullptr, std::move(ev->TraceId));
             }
 
             result->Rewrite(ev->Type, RecipientId);

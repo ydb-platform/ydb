@@ -32,6 +32,7 @@ target_link_libraries(src-core-lib PUBLIC
   abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-synchronization
   abseil-cpp-tstring-y_absl-time
+  abseil-cpp-tstring-y_absl-types
 )
 target_sources(src-core-lib PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/grpc/src/core/ext/upb-generated/google/protobuf/any.upb.c

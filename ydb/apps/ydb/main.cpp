@@ -1,5 +1,5 @@
-#include "commands/ydb_root.h"
 #include <ydb/public/lib/ydb_cli/commands/ydb_service_topic.h>
+#include <ydb/apps/ydb/commands/ydb_cloud_root.h>
 
 TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     return TVector<NYdb::NTopic::ECodec>{
@@ -9,10 +9,9 @@ TVector<NYdb::NTopic::ECodec> NYdb::NConsoleClient::InitAllowedCodecs() {
     };
 }
 
-
 int main(int argc, char **argv) {
     try {
-        return NYdb::NConsoleClient::NewClient(argc, argv);
+        return NYdb::NConsoleClient::NewYCloudClient(argc, argv);
     }
     catch (const NYdb::NConsoleClient::TMisuseException& e) {
         Cerr << e.what() << Endl;

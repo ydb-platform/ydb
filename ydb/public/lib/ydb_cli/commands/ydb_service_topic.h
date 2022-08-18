@@ -128,7 +128,7 @@ namespace NYdb::NConsoleClient {
         ETransformBody Transform_ = ETransformBody::None;
 
         bool Commit_ = false;
-        bool DiscardAboveLimits_ = false;
+//        bool DiscardAboveLimits_ = false;
         bool Wait_ = false;
 
     private:

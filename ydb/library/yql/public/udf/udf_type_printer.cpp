@@ -1,21 +1,21 @@
 #include "udf_type_printer.h"
 #include "udf_type_inspection.h"
 
+#include <util/generic/scope.h>
+
 namespace NYql {
 namespace NUdf {
 
-namespace {
-static thread_local IOutputStream * Output_ = nullptr;
-}
-
 TTypePrinter1::TTypePrinter1(const ITypeInfoHelper1& typeHelper, const TType* type)
-    : TypeHelper1_(typeHelper), Type_(type)
+    : TypeHelper1_(typeHelper), Type_(type), Output_(nullptr)
 {}
 
 void TTypePrinter1::Out(IOutputStream &o) const {
     Output_ = &o;
+    Y_DEFER {
+        Output_ = nullptr;
+    };
     OutImpl(Type_);
-    Output_ = nullptr;
 }
 
 void TTypePrinter1::OutImpl(const TType* type) const {

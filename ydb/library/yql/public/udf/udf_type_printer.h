@@ -36,6 +36,7 @@ private:
 protected:
     const ITypeInfoHelper1& TypeHelper1_;
     const TType* Type_;
+    mutable IOutputStream* Output_;
 };
 
 #if UDF_ABI_COMPATIBILITY_VERSION_CURRENT >= UDF_ABI_COMPATIBILITY_VERSION(2, 13)

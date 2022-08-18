@@ -1783,9 +1783,15 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounte
 void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddLabeledCounters::TPtr &ev, const TActorContext &ctx) {
     TEvTabletCounters::TEvTabletAddLabeledCounters* msg = ev->Get();
-    LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR, "got labeledCounters from tablet " << msg->TabletID);
-    TabletMon->ApplyLabeledCounters(msg->TabletID, msg->TabletType, msg->LabeledCounters.Get());
+    if (msg->LabeledCounters.Get()->GetDatabasePath()) {
+        if (msg->TabletType == TTabletTypes::PersQueue) {
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_AGGREGATOR,
+                        "got labeledCounters from db" << msg->LabeledCounters.Get()->GetDatabasePath());
+        }
+        return;
+    }
 
+    TabletMon->ApplyLabeledCounters(msg->TabletID, msg->TabletType, msg->LabeledCounters.Get());
     TabletTypeOfReceivedLabeledCounters.insert(msg->TabletType);
 }
 

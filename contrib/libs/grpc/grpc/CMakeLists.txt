@@ -41,6 +41,8 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   contrib-libs-re2
   contrib-libs-xxhash
   ZLIB::ZLIB
+  abseil-cpp-tstring-y_absl-algorithm
+  abseil-cpp-tstring-y_absl-base
   abseil-cpp-tstring-y_absl-functional
   abseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-meta
@@ -48,6 +50,7 @@ target_link_libraries(libs-grpc-grpc PUBLIC
   abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-synchronization
   abseil-cpp-tstring-y_absl-time
+  abseil-cpp-tstring-y_absl-types
   abseil-cpp-tstring-y_absl-utility
   library-cpp-resource
 )

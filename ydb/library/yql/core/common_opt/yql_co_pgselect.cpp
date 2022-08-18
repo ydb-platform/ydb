@@ -1339,10 +1339,9 @@ std::tuple<TVector<ui32>, TExprNode::TListType> BuildJoinGroups(TPositionHandle 
                     current = BuildSingleInputPredicateJoin(pos, reverseJoinType, predicate, with, current, ctx);
                     continue;
                 } else if (hasLeftInput && hasRightInput) {
-                    auto newPredicate = PreparePredicate(predicate->TailPtr(), ctx);
                     TExprNode::TListType andTerms;
                     bool isPg;
-                    GatherAndTerms(std::move(newPredicate), andTerms, isPg);
+                    GatherAndTerms(predicate->TailPtr(), andTerms, isPg, ctx);
                     bool bad = false;
                     TExprNode::TListType leftColumns;
                     TExprNode::TListType rightColumns;

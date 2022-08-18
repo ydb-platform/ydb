@@ -71,6 +71,10 @@ namespace NActors {
             return result;
         }
 
+        TRope GetRope() const {
+            return TRope(Rope);
+        }
+
         TRope EraseBack(size_t count) {
             Y_VERIFY(count <= Rope.GetSize());
             TRope::TIterator iter = Rope.End();

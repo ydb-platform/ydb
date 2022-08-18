@@ -800,10 +800,9 @@ TExprNode::TPtr FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ct
             }
         }
 
-        predicate = PreparePredicate(predicate, ctx);
         TExprNode::TListType andTerms;
         bool isPg;
-        GatherAndTerms(predicate, andTerms, isPg);
+        GatherAndTerms(predicate, andTerms, isPg, ctx);
         TExprNode::TPtr ret;
         TExprNode::TPtr extraPredicate;
         auto joinSettings = equiJoin.Ref().Child(equiJoin.Ref().ChildrenSize() - 1);

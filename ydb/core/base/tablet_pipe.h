@@ -61,18 +61,24 @@ namespace NKikimr {
                 ActorIdToProto(clientId, Record.MutableClientId());
                 ActorIdToProto(serverId, Record.MutableServerId());
                 Record.SetLeader(leader);
+                Record.SetSupportsDataInPayload(true);
             }
         };
 
         struct TEvPush : public TEventPB<TEvPush, NKikimrTabletPipe::TEvPush, EvPush> {
             TEvPush() {}
 
-            TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TStringBuf& buffer, ui64 cookie, bool extendedFormat)
+            TEvPush(ui64 tabletId, ui32 type, const TActorId& sender, const TIntrusivePtr<TEventSerializedData>& buffer,
+                ui64 cookie, bool extendedFormat, bool supportsDataInPayload)
             {
                 Record.SetTabletId(tabletId);
                 Record.SetType(type);
                 ActorIdToProto(sender, Record.MutableSender());
-                Record.SetBuffer(buffer.data(), buffer.size());
+                if (supportsDataInPayload) {
+                    AddPayload(buffer->GetRope());
+                } else {
+                    Record.SetBuffer(buffer->GetString());
+                }
                 Record.SetCookie(cookie);
                 Record.SetExtendedFormat(extendedFormat);
             }
@@ -368,12 +374,12 @@ namespace NKikimr {
         // Payload will be delivered as a event to the owner of server.
         // Sender field in that event will be taken from the passed context.
         // Recipient field in that event will be filled by serverId.
-        void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie = 0);
-        void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
-        void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0);
-        void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0);
-        void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0);
-        void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0);
+        void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+        void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+        void SendData(TActorId self, TActorId clientId, IEventBase* payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+        void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+        void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase* payload, ui64 seqNo, ui64 cookie = 0, NWilson::TTraceId traceId = {});
+        void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie = 0, NWilson::TTraceId traceId = {});
 
         // Shutdown client actor.
         void ShutdownClient(const TActorContext& ctx, const TActorId& clientId);

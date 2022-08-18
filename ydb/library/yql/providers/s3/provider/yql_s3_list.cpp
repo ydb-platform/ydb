@@ -151,7 +151,7 @@ private:
                 if (const auto& root = xml.Root(); root.Name() == "Error") {
                     const auto& code = root.Node("Code", true).Value<TString>();
                     const auto& message = root.Node("Message", true).Value<TString>();
-                    ythrow yexception() << message << ", error: code: " << code;
+                    ythrow yexception() << message << ", error: code: " << code << " [" << urlStr << prefix << "]";
                 } else if (root.Name() != "ListBucketResult") {
                     ythrow yexception() << "Unexpected response '" << root.Name() << "' on discovery.";
                 } else if (

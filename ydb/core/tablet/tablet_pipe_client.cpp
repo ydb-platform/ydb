@@ -283,6 +283,7 @@ namespace NTabletPipe {
 
             ServerId = ActorIdFromProto(record.GetServerId());
             Leader = record.GetLeader();
+            SupportsDataInPayload = record.GetSupportsDataInPayload();
 
             Y_VERIFY(!ServerId || record.GetStatus() == NKikimrProto::OK);
             BLOG_D("connected with status " << record.GetStatus() << " role: " << (Leader ? "Leader" : "Follower"));
@@ -567,23 +568,7 @@ namespace NTabletPipe {
                 }
             }
 
-            THolder<TEvTabletPipe::TEvMessage> ToLocalMessage() {
-                THolder<TEvTabletPipe::TEvMessage> msg;
-
-                if (Event) {
-                    msg = MakeHolder<TEvTabletPipe::TEvMessage>(Sender, std::move(Event));
-                } else {
-                    msg = MakeHolder<TEvTabletPipe::TEvMessage>(Sender, Type, std::move(Buffer));
-                }
-
-                if (SeqNo) {
-                    msg->SetSeqNo(SeqNo);
-                }
-
-                return msg;
-            }
-
-            THolder<TEvTabletPipe::TEvPush> ToRemotePush(ui64 tabletId, ui64 cookie) {
+            THolder<TEvTabletPipe::TEvPush> ToRemotePush(ui64 tabletId, ui64 cookie, bool supportsDataInPayload) {
                 if (!Buffer) {
                     Y_VERIFY(Event, "Sending an empty event without a buffer");
                     TAllocChunkSerializer serializer;
@@ -591,10 +576,8 @@ namespace NTabletPipe {
                     Buffer = serializer.Release(Event->IsExtendedFormat());
                 }
 
-                TString s = Buffer->GetString();
-
-                auto msg = MakeHolder<TEvTabletPipe::TEvPush>(
-                    tabletId, Type, Sender, s, cookie, Buffer->IsExtendedFormat());
+                auto msg = MakeHolder<TEvTabletPipe::TEvPush>(tabletId, Type, Sender, Buffer, cookie,
+                    Buffer->IsExtendedFormat(), supportsDataInPayload);
 
                 if (SeqNo) {
                     msg->SetSeqNo(SeqNo);
@@ -612,19 +595,20 @@ namespace NTabletPipe {
                     case TEvTabletPipe::EvMessage: {
                         // Send local self -> server message without conversions
                         THolder<TEvTabletPipe::TEvMessage> msg(ev->Release<TEvTabletPipe::TEvMessage>().Release());
-                        ctx.ExecutorThread.Send(new IEventHandle(ServerId, ctx.SelfID, msg.Release(),
-                                IEventHandle::FlagTrackDelivery, ev->Cookie));
+                        ctx.ExecutorThread.Send(new IEventHandle(ServerId, SelfId(), msg.Release(),
+                                IEventHandle::FlagTrackDelivery, ev->Cookie, nullptr, std::move(ev->TraceId)));
                         break;
                     }
                     case TEvTabletPipe::EvSend: {
                         // Repackage event in a self -> sender form with an original type
                         THolder<IEventHandle> directEv;
                         if (ev->HasEvent()) {
-                            directEv = MakeHolder<IEventHandle>(ev->Sender, ctx.SelfID, ev->ReleaseBase().Release(),
-                                    IEventHandle::FlagTrackDelivery, ev->Cookie);
+                            directEv = MakeHolder<IEventHandle>(ev->Sender, SelfId(), ev->ReleaseBase().Release(),
+                                    IEventHandle::FlagTrackDelivery, ev->Cookie, nullptr, std::move(ev->TraceId));
                         } else {
                             directEv = MakeHolder<IEventHandle>(ev->Type, IEventHandle::FlagTrackDelivery,
-                                    ev->Sender, ctx.SelfID, ev->ReleaseChainBuffer(), ev->Cookie);
+                                    ev->Sender, SelfId(), ev->ReleaseChainBuffer(), ev->Cookie, nullptr,
+                                    std::move(ev->TraceId));
                         }
                         // Rewrite into EvSend and send to the server
                         directEv->Rewrite(TEvTabletPipe::EvSend, ServerId);
@@ -635,12 +619,12 @@ namespace NTabletPipe {
                         Y_UNREACHABLE();
                 }
             } else {
-                THolder<TEvTabletPipe::TEvPush> msg = TEventParts(ev).ToRemotePush(TabletId, ev->Cookie);
+                THolder<TEvTabletPipe::TEvPush> msg = TEventParts(ev).ToRemotePush(TabletId, ev->Cookie,
+                    SupportsDataInPayload);
 
                 // Send a remote self -> server message
-                SendEvent(new IEventHandle(ServerId, ctx.SelfID, msg.Release(),
-                    IEventHandle::FlagTrackDelivery, 0, nullptr
-                ), ctx);
+                SendEvent(new IEventHandle(ServerId, SelfId(), msg.Release(), IEventHandle::FlagTrackDelivery, 0,
+                    nullptr, std::move(ev->TraceId)), ctx);
             }
         }
 
@@ -688,43 +672,44 @@ namespace NTabletPipe {
         TActorId HiveClient;
         ui32 CurrentHiveForwards = 0;
         static constexpr ui32 MAX_HIVE_FORWARDS = 10;
+        bool SupportsDataInPayload = false;
     };
 
     IActor* CreateClient(const TActorId& owner, ui64 tabletId, const TClientConfig& config) {
         return new TClient(owner, tabletId, config);
     }
 
-    void SendData(TActorId self, TActorId clientId, IEventBase *payload, ui64 cookie) {
-        auto ev = new IEventHandle(clientId, self, payload, 0, cookie);
+    void SendData(TActorId self, TActorId clientId, IEventBase *payload, ui64 cookie, NWilson::TTraceId traceId) {
+        auto ev = new IEventHandle(clientId, self, payload, 0, cookie, nullptr, std::move(traceId));
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         TActivationContext::Send(ev);
     }
 
-    void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie) {
-        SendData(self, clientId, payload.Release(), cookie);
+    void SendData(TActorId self, TActorId clientId, THolder<IEventBase>&& payload, ui64 cookie, NWilson::TTraceId traceId) {
+        SendData(self, clientId, payload.Release(), cookie, std::move(traceId));
     }
 
-    void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase *payload, ui64 seqNo, ui64 cookie) {
+    void SendDataWithSeqNo(TActorId self, TActorId clientId, IEventBase *payload, ui64 seqNo, ui64 cookie, NWilson::TTraceId traceId) {
         auto event = MakeHolder<TEvTabletPipe::TEvMessage>(self, THolder<IEventBase>(payload));
         event->SetSeqNo(seqNo);
-        auto ev = MakeHolder<IEventHandle>(clientId, self, event.Release(), 0, cookie);
+        auto ev = MakeHolder<IEventHandle>(clientId, self, event.Release(), 0, cookie, nullptr, std::move(traceId));
         TActivationContext::Send(ev.Release());
     }
 
-    void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
-        auto ev = new IEventHandle(eventType, 0, clientId, self, buffer, cookie);
+    void SendData(TActorId self, TActorId clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie, NWilson::TTraceId traceId) {
+        auto ev = new IEventHandle(eventType, 0, clientId, self, buffer, cookie, nullptr, std::move(traceId));
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         TActivationContext::Send(ev);
     }
 
-    void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie) {
-        auto ev = new IEventHandle(clientId, ctx.SelfID, payload, 0, cookie);
+    void SendData(const TActorContext& ctx, const TActorId& clientId, IEventBase* payload, ui64 cookie, NWilson::TTraceId traceId) {
+        auto ev = new IEventHandle(clientId, ctx.SelfID, payload, 0, cookie, nullptr, std::move(traceId));
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         ctx.ExecutorThread.Send(ev);
     }
 
-    void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie) {
-        auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie);
+    void SendData(const TActorContext& ctx, const TActorId& clientId, ui32 eventType, TIntrusivePtr<TEventSerializedData> buffer, ui64 cookie, NWilson::TTraceId traceId) {
+        auto ev = new IEventHandle(eventType, 0, clientId, ctx.SelfID, buffer, cookie, nullptr, std::move(traceId));
         ev->Rewrite(TEvTabletPipe::EvSend, clientId);
         ctx.ExecutorThread.Send(ev);
     }

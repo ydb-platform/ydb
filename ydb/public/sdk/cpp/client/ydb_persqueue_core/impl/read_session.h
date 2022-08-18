@@ -352,7 +352,8 @@ struct TReadSessionEventInfo {
     // Event with only partition stream ref.
     // Partition stream holds all its events.
     TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> PartitionStream;
-    size_t DataCount = 0;
+    bool HasDataEvents = false;
+    size_t EventsCount = 0;
     TMaybe<TEvent> Event;
     std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> Session;
 
@@ -367,7 +368,9 @@ struct TReadSessionEventInfo {
     TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session, TEvent event);
 
     // Data event.
-    TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session);
+    TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                          std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
+                          bool hasDataEvents);
 
     bool IsEmpty() const;
     bool IsDataEvent() const;
@@ -831,7 +834,9 @@ public:
                        typename TDataDecompressionInfo<UseMigrationProtocol>::TPtr parent,
                        std::atomic<bool> &ready);
 
-    void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
+    void SignalEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                         TDeferredActions<UseMigrationProtocol>& deferred,
+                         bool isDataEvent); // Assumes that we're under lock.
 
     void SignalReadyEvents(TPartitionStreamImpl<UseMigrationProtocol>* partitionStream);
 

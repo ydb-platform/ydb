@@ -347,7 +347,7 @@ namespace NYdb::NConsoleClient {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
         }
 
-        config.Opts->AddLongOption("with-metadata-fields", description.Str())
+        config.Opts->AddLongOption("metadata-fields", description.Str())
             .Optional()
             .StoreResult(&WithMetadataFields_);
     }
@@ -380,12 +380,12 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption('c', "consumer", "Consumer name")
             .Required()
             .StoreResult(&Consumer_);
-        config.Opts->AddLongOption("offset", "Offset to start read from")
-            .Optional()
-            .StoreResult(&Offset_);
-        config.Opts->AddLongOption("partition", "Partition to read from")
-            .Optional()
-            .StoreResult(&Partition_);
+//        config.Opts->AddLongOption("offset", "Offset to start read from")
+//            .Optional()
+//            .StoreResult(&Offset_);
+//        config.Opts->AddLongOption("partition", "Partition to read from")
+//            .Optional()
+//            .StoreResult(&Partition_);
         config.Opts->AddLongOption('f', "file", "File to write data to")
             .Optional()
             .StoreResult(&File_);
@@ -411,9 +411,9 @@ namespace NYdb::NConsoleClient {
 //        config.Opts->AddLongOption("message-size-limit", "Maximum message size")
 //            .Optional()
 //            .StoreResult(&MessageSizeLimit_);
-        config.Opts->AddLongOption("discard-above-limits", "Do not print messages with size more than defined in 'message-size-limit' option")
-            .Optional()
-            .StoreResult(&DiscardAboveLimits_);
+//        config.Opts->AddLongOption("discard-above-limits", "Do not print messages with size more than defined in 'message-size-limit' option")
+//            .Optional()
+//            .StoreResult(&DiscardAboveLimits_);
         config.Opts->AddLongOption("limit", "Messages count to read")
             .Optional()
             .StoreResult(&Limit_);

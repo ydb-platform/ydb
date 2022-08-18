@@ -30,17 +30,17 @@ enum class EIndexType {
 };
 
 enum class EChangefeedMode {
-    KeysOnly,
-    Updates,
-    NewImage,
-    OldImage,
-    NewAndOldImages,
+    KeysOnly /* "KEYS_ONLY" */,
+    Updates /* "UPDATES" */,
+    NewImage /* "NEW_IMAGE" */,
+    OldImage /* "OLD_IMAGE" */,
+    NewAndOldImages /* "NEW_AND_OLD_IMAGES" */,
 
     Unknown = std::numeric_limits<int>::max()
 };
 
 enum class EChangefeedFormat {
-    Json,
+    Json /* "JSON" */,
 
     Unknown = std::numeric_limits<int>::max()
 };

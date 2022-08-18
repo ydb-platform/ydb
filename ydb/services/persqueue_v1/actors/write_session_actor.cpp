@@ -203,6 +203,8 @@ void TWriteSessionActor::Handle(IContext::TEvWriteFinished::TPtr& ev, const TAct
 
 
 void TWriteSessionActor::Die(const TActorContext& ctx) {
+    if (State == ES_DYING)
+        return;
     if (Writer)
         ctx.Send(Writer, new TEvents::TEvPoisonPill());
 
@@ -216,7 +218,24 @@ void TWriteSessionActor::Die(const TActorContext& ctx) {
 
     ctx.Send(GetPQWriteServiceActorID(), new TEvPQProxy::TEvSessionDead(Cookie));
 
+    if (State == ES_WAIT_SESSION) { // final die will be done later, on session discover
+        State = ES_DYING;
+        return;
+    }
+
+    State = ES_DYING;
+
+    TryCloseSession(ctx);
     TActorBootstrapped<TWriteSessionActor>::Die(ctx);
+}
+
+void TWriteSessionActor::TryCloseSession(const TActorContext& ctx) {
+    if (KqpSessionId) {
+        auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
+        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
+        ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+        KqpSessionId = "";
+    }
 }
 
 void TWriteSessionActor::CheckFinish(const TActorContext& ctx) {
@@ -385,7 +404,7 @@ void TWriteSessionActor::InitCheckSchema(const TActorContext& ctx, bool needWait
     }
     ctx.Send(SchemeCache, new TEvDescribeTopicsRequest({DiscoveryConverter}));
     if (needWaitSchema) {
-        State = ES_WAIT_SCHEME_2;
+        State = ES_WAIT_SCHEME;
     }
 }
 
@@ -459,6 +478,36 @@ void TWriteSessionActor::DiscoverPartition(const NActors::TActorContext& ctx) {
         ProceedPartition(partitionId, ctx);
         return;
     }
+
+    auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+    ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
+    ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release());
+
+    State = ES_WAIT_SESSION;
+}
+
+
+void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx)
+{
+    Y_VERIFY(State == ES_WAIT_SESSION || State == ES_DYING);
+    const auto& record = ev->Get()->Record;
+    KqpSessionId = record.GetResponse().GetSessionId();
+
+    if (State == ES_DYING) {
+        TryCloseSession(ctx);
+        TActorBootstrapped<TWriteSessionActor>::Die(ctx);
+        return;
+    }
+
+    if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
+        TStringBuilder errorReason;
+        errorReason << "kqp error Marker# PQ53 : " <<  record;
+        CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
+        return;
+    }
+
+    Y_VERIFY(!KqpSessionId.empty());
+
     SendSelectPartitionRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
     State = ES_WAIT_TABLE_REQUEST_1;
 }
@@ -468,10 +517,10 @@ void TWriteSessionActor::SendSelectPartitionRequest(ui32 hash, const TString& to
     auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
     ev->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
-    ev->Record.MutableRequest()->SetKeepSession(true);
     ev->Record.MutableRequest()->SetQuery(SelectSourceIdQuery);
     ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
     // fill tx settings: set commit tx flag & begin new serializable tx.
+    ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(false);
     ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     // keep compiled query in cache.
@@ -546,7 +595,6 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         auto& t = record.GetResponse().GetResults(0).GetValue().GetStruct(0);
 
         TxId = record.GetResponse().GetTxMeta().id();
-        KqpSessionId = record.GetResponse().GetSessionId();
         Y_VERIFY(!TxId.empty());
 
         if (t.ListSize() != 0) {
@@ -593,6 +641,7 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const 
         SourceIdUpdatesInflight--;
         if (!SourceIdUpdatesInflight) {
             LastSourceIdUpdate = ctx.Now();
+            TryCloseSession(ctx);
             ProceedPartition(Partition, ctx);
         }
     } else if (State == EState::ES_INITED) {
@@ -615,12 +664,14 @@ THolder<NKqp::TEvKqp::TEvQueryRequest> TWriteSessionActor::MakeUpdateSourceIdMet
     ev->Record.MutableRequest()->SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
     ev->Record.MutableRequest()->SetQuery(UpdateSourceIdQuery);
     ev->Record.MutableRequest()->SetDatabase(NKikimr::NPQ::GetDatabaseFromConfig(AppData(ctx)->PQConfig));
-    ev->Record.MutableRequest()->SetKeepSession(false);
     // fill tx settings: set commit tx flag & begin new serializable tx.
     ev->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
+    if (KqpSessionId) {
+        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
+    }
     if (TxId) {
         ev->Record.MutableRequest()->MutableTxControl()->set_tx_id(TxId);
-        ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
+        TxId = "";
     } else {
         ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
     }
@@ -663,8 +714,6 @@ void TWriteSessionActor::ProceedPartition(const ui32 partition, const TActorCont
     auto it = PartitionToTablet.find(Partition);
 
     ui64 tabletId = it != PartitionToTablet.end() ? it->second : 0;
-
-    TxId = "";
 
     if (!tabletId) {
         CloseSession(

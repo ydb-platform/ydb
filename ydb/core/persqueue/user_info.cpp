@@ -37,6 +37,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& cloudId,
     const TString& dbId,
+    const TString& dbPath,
     const TString& folderId
 )
     : DCId(std::move(dcId))
@@ -46,6 +47,7 @@ TUsersInfoStorage::TUsersInfoStorage(
     , Config(config)
     , CloudId(cloudId)
     , DbId(dbId)
+    , DbPath(dbPath)
     , FolderId(folderId)
     , CurReadRuleGeneration(0)
 {
@@ -160,12 +162,13 @@ TUserInfo& TUsersInfoStorage::Create(
         burst = Config.GetPartitionConfig().GetBurstSize() * 2;
         speed = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() * 2;
     }
+    TMaybe<TString> dbPath = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() ? TMaybe<TString>(DbPath) : Nothing();
     auto result = UsersInfo.emplace(
         std::piecewise_construct,
         std::forward_as_tuple(user),
         std::forward_as_tuple(
                 ctx, CreateReadSpeedLimiter(user), user, readRuleGeneration, important, TopicConverter, Partition,
-                session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, FolderId,
+                session, gen, step, offset, readOffsetRewindSum, DCId, readFromTimestamp, CloudId, DbId, dbPath, FolderId,
                 burst, speed
         )
     );

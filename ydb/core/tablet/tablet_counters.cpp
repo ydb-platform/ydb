@@ -246,6 +246,5 @@ IOutputStream& operator <<(IOutputStream& out, const TTabletLabeledCountersBase:
     return out;
 }
 
-
 } // end of NKikimr namespace
 

@@ -71,6 +71,7 @@ private:
 
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvProcessResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
 
         default:
             break;
@@ -87,6 +88,8 @@ private:
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr &ev, const TActorContext &ctx);
     void Handle(NKqp::TEvKqp::TEvProcessResponse::TPtr &ev, const TActorContext &ctx);
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev, const NActors::TActorContext& ctx);
+    void TryCloseSession(const TActorContext& ctx);
 
     void CheckACL(const TActorContext& ctx);
     // Requests fresh ACL from 'SchemeCache'
@@ -136,15 +139,14 @@ private:
 
     enum EState {
         ES_CREATED = 1,
-        ES_WAIT_SCHEME_1 = 2,
-        ES_WAIT_SCHEME_2 = 3,
+        ES_WAIT_SCHEME = 2,
+        ES_WAIT_SESSION = 3,
         ES_WAIT_TABLE_REQUEST_1 = 4,
         ES_WAIT_NEXT_PARTITION = 5,
         ES_WAIT_TABLE_REQUEST_2 = 6,
-        ES_WAIT_TABLE_REQUEST_3 = 7,
-        ES_WAIT_WRITER_INIT = 8,
-        ES_INITED = 9
-        //TODO: filter
+        ES_WAIT_WRITER_INIT = 7,
+        ES_INITED = 8,
+        ES_DYING = 9
     };
 
     EState State;

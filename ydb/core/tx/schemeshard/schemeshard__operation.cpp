@@ -75,11 +75,7 @@ TString GetAuditLogEntry(const TTxId& txId, const THolder<TProposeResponse>& res
     auto auditLog = TStringBuilder();
 
     auditLog << "txId: " << txId;
-    for (const auto& frag: context.AuditLogFragments) {
-        auditLog << ", ";
-        auditLog << frag.ToString();
-    }
-
+    
     auto fragPath = TPath::Resolve(context.AuditLogFragments.front().GetAnyPath(), context.SS);
     if (!fragPath.IsResolved()) {
         fragPath.RiseUntilFirstResolvedParent();
@@ -93,6 +89,11 @@ TString GetAuditLogEntry(const TTxId& txId, const THolder<TProposeResponse>& res
     auditLog << ", status: " << NKikimrScheme::EStatus_Name(response->Record.GetStatus());
     if (response->Record.HasReason()) {
         auditLog << ", reason: " << response->Record.GetReason();
+    }
+
+    for (const auto& frag: context.AuditLogFragments) {
+        auditLog << ", ";
+        auditLog << frag.ToString();
     }
 
     return auditLog;

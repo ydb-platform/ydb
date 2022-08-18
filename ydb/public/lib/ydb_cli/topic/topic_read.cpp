@@ -237,15 +237,12 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicReader::Run(IOutputStream& output) {
-        // TODO(shmel1k@): improve behavior according to documentation
-        constexpr TDuration MaxWaitTime = TDuration::Seconds(1); // TODO(shmel1k@): to consts
-
         LastMessageReceivedTs_ = TInstant::Now();
 
         bool waitForever = ReaderParams_.Wait() && (ReaderParams_.OutputFormat() == EOutputFormat::NewlineDelimited || ReaderParams_.OutputFormat() == EOutputFormat::Concatenated);
 
         while ((MessagesLeft_ > 0 || MessagesLeft_ == -1) && !IsInterrupted()) {
-            TInstant messageReceiveDeadline = LastMessageReceivedTs_ + MaxWaitTime;
+            TInstant messageReceiveDeadline = LastMessageReceivedTs_ + ReaderParams_.IdleTimeout();
             NThreading::TFuture<void> future = ReadSession_->WaitEvent();
             future.Wait(messageReceiveDeadline);
             if (!future.HasValue()) {

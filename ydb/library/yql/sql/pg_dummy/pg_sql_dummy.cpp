@@ -226,14 +226,14 @@ public:
         return NUdf::TUnboxedValue();
     }
 
-    NUdf::TUnboxedValue ConvertFromPg(NUdf::TUnboxedValue source, ui32 sourceTypeId, NUdf::TType* targetType) const override {
+    NUdf::TUnboxedValue ConvertFromPg(NUdf::TUnboxedValue source, ui32 sourceTypeId, const NUdf::TType* targetType) const override {
         Y_UNUSED(source);
         Y_UNUSED(sourceTypeId);
         Y_UNUSED(targetType);
         ythrow yexception() << "TPgDummyBuilder::ConvertFromPg does nothing";
     }
 
-    NUdf::TUnboxedValue ConvertToPg(NUdf::TUnboxedValue source, NUdf::TType* sourceType, ui32 targetTypeId) const override {
+    NUdf::TUnboxedValue ConvertToPg(NUdf::TUnboxedValue source, const NUdf::TType* sourceType, ui32 targetTypeId) const override {
         Y_UNUSED(source);
         Y_UNUSED(sourceType);
         Y_UNUSED(targetTypeId);

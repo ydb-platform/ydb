@@ -207,7 +207,14 @@ private:
     static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
         case 0U:
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
+            {
+                auto content = std::get<IHTTPGateway::TContent>(std::move(result));
+                if (content.HttpResponseCode >= 300) {
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "HTTP error code: " << content.HttpResponseCode)})));
+                } else {
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
+                }
+            }
             break;
         case 1U:
             actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(std::get<TIssues>(std::move(result)))));
@@ -431,7 +438,6 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
     const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
-    const auto authToken = credentialsProviderFactory->CreateProvider();
     const auto actor = new TS3WriteActor(
         outputIndex,
         std::move(gateway),

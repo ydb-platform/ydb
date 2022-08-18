@@ -1856,4 +1856,82 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
     Y_UNIT_TEST(SimpleDataHandlersWithGracefulReleaseWithCommit) {
         SimpleDataHandlersImpl(true, true);
     }
+
+    Y_UNIT_TEST(LOGBROKER_7702) {
+        using namespace NYdb::NPersQueue;
+
+        using TServiceEvent =
+            typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent;
+
+#define UNIT_ASSERT_CONTROL_EVENT() \
+        { \
+            using TExpectedEvent = typename TAReadSessionEvent<true>::TPartitionStreamStatusEvent; \
+\
+            size_t maxByteSize = std::numeric_limits<size_t>::max();\
+            auto event = sessionQueue.GetEventImpl(&maxByteSize);\
+\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent()));\
+        }
+
+#define UNIT_ASSERT_DATA_EVENT(count) \
+        { \
+            using TExpectedEvent = typename TAReadSessionEvent<true>::TDataReceivedEvent; \
+\
+            size_t maxByteSize = std::numeric_limits<size_t>::max(); \
+            auto event = sessionQueue.GetEventImpl(&maxByteSize); \
+\
+            UNIT_ASSERT(std::holds_alternative<TExpectedEvent>(event.GetEvent())); \
+            UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
+        }
+
+        TDeferredActions<true> actions;
+        TAReadSessionSettings<true> settings;
+        std::shared_ptr<TSingleClusterReadSessionImpl<true>> session;
+        TReadSessionEventsQueue<true> sessionQueue{settings, session};
+
+        auto stream = MakeIntrusive<TPartitionStreamImpl<true>>(1ull,
+                                                                "",
+                                                                "",
+                                                                1ull,
+                                                                1ull,
+                                                                1ull,
+                                                                0ull,
+                                                                session,
+                                                                nullptr);
+
+        TPartitionData<true> message;
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_Batch* batch =
+            message.mutable_batches()->Add();
+        Ydb::PersQueue::V1::MigrationStreamingReadServerMessage_DataBatch_MessageData* messageData =
+            batch->mutable_message_data()->Add();
+        *messageData->mutable_data() = "*";
+
+        auto data = std::make_shared<TDataDecompressionInfo<true>>(std::move(message),
+                                                                   session,
+                                                                   false,
+                                                                   0);
+
+        std::atomic<bool> ready = true;
+
+        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
+        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertDataEvent(0, 0, data, ready);
+        stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
+        stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
+        stream->InsertDataEvent(0, 0, data, ready);
+
+        stream->SignalReadyEvents(&sessionQueue,
+                                  actions);
+
+        UNIT_ASSERT_DATA_EVENT(1);
+        UNIT_ASSERT_CONTROL_EVENT();
+        UNIT_ASSERT_DATA_EVENT(2);
+        UNIT_ASSERT_CONTROL_EVENT();
+        UNIT_ASSERT_CONTROL_EVENT();
+        UNIT_ASSERT_DATA_EVENT(1);
+
+#undef UNIT_ASSERT_CONTROL_EVENT
+#undef UNIT_ASSERT_DATA_EVENT
+    }
 }

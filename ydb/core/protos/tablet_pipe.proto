@@ -20,13 +20,14 @@ message TEvConnectResult {
     optional NActorsProto.TActorId ClientId = 3;
     optional NActorsProto.TActorId ServerId = 4;
     optional bool Leader = 5 [default = true];
+    optional bool SupportsDataInPayload = 6;
 };
 
 message TEvPush {
     optional uint64 TabletId = 1;
     optional uint32 Type = 2;
     optional NActorsProto.TActorId Sender = 3;
-    optional bytes Buffer = 4;
+    optional bytes Buffer = 4; // may be unset when data is transferred in external payload
     optional uint64 Cookie = 5;
     optional bool ExtendedFormat = 6;
     optional uint64 SeqNo = 7;

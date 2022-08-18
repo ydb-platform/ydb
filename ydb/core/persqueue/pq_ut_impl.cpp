@@ -43,6 +43,7 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                 tabletConfig->SetYcCloudId(parameters.cloudId);
                 tabletConfig->SetYcFolderId(parameters.folderId);
                 tabletConfig->SetYdbDatabaseId(parameters.databaseId);
+                tabletConfig->SetYdbDatabasePath(parameters.databasePath);
                 tabletConfig->SetFederationAccount(parameters.account);
             } else {
                 tabletConfig->SetTopicName("rt3.dc1--asdfgs--topic");
@@ -74,7 +75,8 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                     tabletConfig->AddReadRules(u.first);
             }
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
-            TEvPersQueue::TEvUpdateConfigResponse* result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
+            TEvPersQueue::TEvUpdateConfigResponse* result =
+                tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
 
             UNIT_ASSERT(result);
             auto& rec = result->Record;

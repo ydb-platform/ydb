@@ -8,6 +8,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/counters_keyvalue.pb.h>
 #include <ydb/core/metering/metering.h>
+#include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <library/cpp/json/json_writer.h>
 
@@ -973,7 +974,11 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
             CounterEventsInflight[group] = new TEvTabletCounters::TInFlightCookie;
         }
 
+        const TMaybe<TString> dbPath = AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()
+            ? TMaybe<TString>(Config.GetYdbDatabasePath())
+            : Nothing();
         TAutoPtr<TTabletLabeledCountersBase> aggr(new TTabletLabeledCountersBase);
+        aggr->SetDatabasePath(dbPath);
         for (auto& p : Partitions) {
             auto it = p.second.LabeledCounters.find(group);
             if (it != p.second.LabeledCounters.end()) {
@@ -987,13 +992,12 @@ void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const 
         Y_VERIFY(aggr->HasCounters());
 
         TActorId countersAggregator = MakeTabletCountersAggregatorID(ctx.SelfID.NodeId());
+
         ctx.Send(countersAggregator,
                  new TEvTabletCounters::TEvTabletAddLabeledCounters(
-                     CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr)
-                 );
+                     CounterEventsInflight[group], TabletID(), TTabletTypes::PersQueue, aggr));
     }
 }
-
 
 void TPersQueue::Handle(TEvPQ::TEvPartitionLabeledCounters::TPtr& ev, const TActorContext& ctx)
 {

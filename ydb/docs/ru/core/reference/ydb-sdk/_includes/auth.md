@@ -49,13 +49,19 @@
 
 - Node.js
 
+  ```js
+  import { AnonymousAuthService, TokenAuthService,
+    MetadataAuthService, getSACredentialsFromJson,
+    getCredentialsFromEnv } from 'ydb-sdk';
+  ```
+
   Режим | Метод
   ----- | -----
-  Anonymous | [new 'ydb-sdk'.AnonymousAuthService()](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/anonymous-credentials)
-  Access Token | [new 'ydb-sdk'.TokenAuthService( accessToken, database )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/access-token-credentials)
-  Metadata | [new 'ydb-sdk'.MetadataAuthService( database )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/metadata-credentials)
-  Service Account Key | [new 'ydb-sdk'.getSACredentialsFromJson( saKeyFile )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/service-account-credentials)
-  Определяется по переменным окружения | [new 'ydb-sdk'.getCredentialsFromEnv( entryPoint, database, logger )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/environ)
+  Anonymous | [AnonymousAuthService()](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/anonymous-credentials)
+  Access Token | [TokenAuthService( accessToken, database )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/access-token-credentials)
+  Metadata | [MetadataAuthService( database )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/metadata-credentials)
+  Service Account Key | [getSACredentialsFromJson( saKeyFile )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/service-account-credentials)
+  Определяется по переменным окружения | [getCredentialsFromEnv( entryPoint, database, logger )](https://github.com/ydb-platform/ydb-nodejs-sdk/tree/main/examples/auth/environ)
 
 - Rust
 

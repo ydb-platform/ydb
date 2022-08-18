@@ -37,7 +37,7 @@
 Создайте топик с 2 партициями, методами сжатия `RAW` и `GZIP`, временем хранения сообщений 2 часа и путем `my-topic`:
 
 ```bash
-{{ ydb-cli }} -p db1 topic create topic create \
+{{ ydb-cli }} -p db1 topic create \
   --partitions-count 2 \
   --supported-codecs raw,gzip \
   --retention-period-hours 2 \

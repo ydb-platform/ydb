@@ -136,7 +136,7 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::SignalReadyEvents(TPar
     while (!NotReady.empty() && NotReady.front().IsReady()) {
         auto& event = NotReady.front();
 
-        queue.SignalEventImpl(&stream, deferred);
+        queue.SignalEventImpl(&stream, deferred, event.IsDataEvent());
 
         Ready.push_back(std::move(event));
         NotReady.pop_front();
@@ -1531,18 +1531,25 @@ bool TSingleClusterReadSessionImpl<UseMigrationProtocol>::TPartitionCookieMappin
 // TReadSessionEventInfo
 
 template<bool UseMigrationProtocol>
-TReadSessionEventInfo<UseMigrationProtocol>::TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session, TEvent event)
+TReadSessionEventInfo<UseMigrationProtocol>::TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                                   std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
+                                                                   TEvent event)
     : PartitionStream(std::move(partitionStream))
     , Event(std::move(event))
     , Session(std::move(session))
-{}
+{
+}
 
 template<bool UseMigrationProtocol>
-TReadSessionEventInfo<UseMigrationProtocol>::TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream, std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session)
+TReadSessionEventInfo<UseMigrationProtocol>::TReadSessionEventInfo(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                                   std::weak_ptr<IUserRetrievedEventCallback<UseMigrationProtocol>> session,
+                                                                   bool hasDataEvents)
     : PartitionStream(std::move(partitionStream))
-    , DataCount(1)
+    , HasDataEvents(hasDataEvents)
+    , EventsCount(1)
     , Session(std::move(session))
-{}
+{
+}
 
 template<bool UseMigrationProtocol>
 bool TReadSessionEventInfo<UseMigrationProtocol>::IsEmpty() const {
@@ -1624,7 +1631,9 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::PushEvent(TIntrusivePtr<TPar
 template <bool UseMigrationProtocol>
 void TReadSessionEventsQueue<UseMigrationProtocol>::SignalEventImpl(
     TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
-    TDeferredActions<UseMigrationProtocol>& deferred) {
+    TDeferredActions<UseMigrationProtocol>& deferred,
+    bool isDataEvent)
+{
     if (TParent::Closed) {
         return;
     }
@@ -1632,14 +1641,15 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::SignalEventImpl(
     auto session = partitionStream->GetSession();
 
     if (TParent::Events.empty()) {
-        TParent::Events.emplace(std::move(partitionStream), std::move(session));
+        TParent::Events.emplace(std::move(partitionStream), std::move(session), isDataEvent);
     } else {
         auto& event = TParent::Events.back();
-        if (event.IsDataEvent() &&
-            (event.PartitionStream == partitionStream)) {
-            ++event.DataCount;
+        if (event.HasDataEvents
+            && isDataEvent
+            && (event.PartitionStream == partitionStream)) {
+            ++event.EventsCount;
         } else {
-            TParent::Events.emplace(std::move(partitionStream), std::move(session));
+            TParent::Events.emplace(std::move(partitionStream), std::move(session), isDataEvent);
         }
     }
 
@@ -1675,14 +1685,14 @@ typename TAReadSessionEvent<UseMigrationProtocol>::TDataReceivedEvent TReadSessi
     auto& event = TParent::Events.front();
 
     Y_VERIFY(event.PartitionStream == stream);
-    Y_VERIFY(event.DataCount > 0);
+    Y_VERIFY(event.EventsCount > 0);
 
-    for (; (event.DataCount > 0) && (*maxByteSize > 0); --event.DataCount) {
+    for (; (event.EventsCount > 0) && (*maxByteSize > 0); --event.EventsCount) {
         stream->TopEvent().GetDataEvent().TakeData(stream, &messages, &compressedMessages, maxByteSize);
         stream->PopEvent();
     }
 
-    if (event.DataCount == 0) {
+    if (event.EventsCount == 0) {
         TParent::Events.pop();
     }
 

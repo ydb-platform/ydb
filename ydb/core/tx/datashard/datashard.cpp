@@ -3026,6 +3026,7 @@ void TDataShard::Handle(TEvents::TEvUndelivered::TPtr &ev,
         op->AddInputEvent(ev.Release());
         Pipeline.AddCandidateOp(op);
         PlanQueue.Progress(ctx);
+        return;
     }
 
     switch (ev->Get()->SourceType) {

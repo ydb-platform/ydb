@@ -338,6 +338,21 @@ namespace {
         }
     }
 
+    void PrintChangefeeds(const NTable::TTableDescription& tableDescription) {
+        const auto& changefeeds = tableDescription.GetChangefeedDescriptions();
+        if (changefeeds.empty()) {
+            return;
+        }
+
+        Cout << Endl << "Changefeeds:" << Endl;
+        for (const auto& changefeed : changefeeds) {
+            Cout << changefeed.GetName()
+                 << " Mode: " << changefeed.GetMode()
+                 << " Format: " << changefeed.GetFormat()
+                 << Endl;
+        }
+    }
+
     void PrintStorageSettings(const NTable::TTableDescription& tableDescription) {
         const NTable::TStorageSettings& settings = tableDescription.GetStorageSettings();
         const auto commitLog0 = settings.GetTabletCommitLog0();
@@ -609,6 +624,7 @@ int TCommandDescribe::PrintTableResponse(NTable::TDescribeTableResult& result) {
 void TCommandDescribe::PrintResponsePretty(const NTable::TTableDescription& tableDescription) {
     PrintColumns(tableDescription);
     PrintIndexes(tableDescription);
+    PrintChangefeeds(tableDescription);
     PrintStorageSettings(tableDescription);
     PrintColumnFamilies(tableDescription);
     PrintAttributes(tableDescription);

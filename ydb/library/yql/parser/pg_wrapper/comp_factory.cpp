@@ -2816,12 +2816,14 @@ public:
         return NUdf::TUnboxedValue();
     }
 
-    NUdf::TUnboxedValue ConvertFromPg(NUdf::TUnboxedValue source, ui32 sourceTypeId, NUdf::TType* targetType) const override {
-        return ConvertFromPgValue(source, sourceTypeId, static_cast<NKikimr::NMiniKQL::TType*>(targetType));
+    NUdf::TUnboxedValue ConvertFromPg(NUdf::TUnboxedValue source, ui32 sourceTypeId, const NUdf::TType* targetType) const override {
+        auto t = static_cast<const NKikimr::NMiniKQL::TType*>(targetType);
+        return ConvertFromPgValue(source, sourceTypeId, const_cast<NKikimr::NMiniKQL::TType*>(t));
     }
 
-    NUdf::TUnboxedValue ConvertToPg(NUdf::TUnboxedValue source, NUdf::TType* sourceType, ui32 targetTypeId) const override {
-        return ConvertToPgValue(source, static_cast<NKikimr::NMiniKQL::TType*>(sourceType), targetTypeId);
+    NUdf::TUnboxedValue ConvertToPg(NUdf::TUnboxedValue source, const NUdf::TType* sourceType, ui32 targetTypeId) const override {
+        auto t = static_cast<const NKikimr::NMiniKQL::TType*>(sourceType);
+        return ConvertToPgValue(source, const_cast<NKikimr::NMiniKQL::TType*>(t), targetTypeId);
     }
 
     NUdf::TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, NUdf::TStringRef data) const override {

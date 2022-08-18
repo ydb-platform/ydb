@@ -267,9 +267,9 @@ struct TUserInfo {
     TUserInfo(
         const TActorContext& ctx, THolder<TReadSpeedLimiterHolder> readSpeedLimiter, const TString& user,
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
-        const ui32 partition, const TString &session, ui32 gen, ui32 step, i64 offset, const ui64 readOffsetRewindSum,
-        const TString& dcId, TInstant readFromTimestamp,
-        const TString& cloudId, const TString& dbId, const TString& folderId,
+        const ui32 partition, const TString &session, ui32 gen, ui32 step, i64 offset,
+        const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
+        const TString& cloudId, const TString& dbId, const TMaybe<TString>& dbPath, const TString& folderId,
         ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000
     )
         : ReadSpeedLimiter(std::move(readSpeedLimiter))
@@ -289,13 +289,6 @@ struct TUserInfo {
         , Important(important)
         , ReadFromTimestamp(readFromTimestamp)
         , HasReadRule(false)
-        //ToDo ToReview - what to use here?
-        , LabeledCounters(
-                topicConverter->IsFirstClass() ? nullptr :
-                new TUserLabeledCounters(
-                        user + "/" +(important ? "1" : "0") + "/" + topicConverter->GetClientsideName(), partition
-                )
-        )
         , User(user)
         , ReadRuleGeneration(readRuleGeneration)
         , TopicConverter(topicConverter)
@@ -311,18 +304,25 @@ struct TUserInfo {
     {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                LabeledCounters.Reset(new TUserLabeledCounters(
+                    user + "|x|" + topicConverter->GetClientsideName(), partition, dbPath));
+
                 if (DoInternalRead) {
                     SetupStreamCounters(ctx, dcId, ToString<ui32>(partition), cloudId, dbId, folderId);
                 }
             } else {
+                LabeledCounters.Reset(new TUserLabeledCounters(
+                    user + "/" + (important ? "1" : "0") + "/" + topicConverter->GetClientsideName(),
+                    partition));
+
                 SetupTopicCounters(ctx, dcId, ToString<ui32>(partition));
             }
         }
     }
 
     void SetupStreamCounters(
-            const TActorContext& ctx, const TString& dcId, const TString& partition,
-            const TString& cloudId, const TString& dbId, const TString& folderId
+        const TActorContext& ctx, const TString& dcId, const TString& partition,
+        const TString& cloudId, const TString& dbId, const TString& folderId
     ) {
         auto subgroup = NPersQueue::GetCountersForStream(AppData(ctx)->Counters);
         auto aggregates =
@@ -489,7 +489,7 @@ class TUsersInfoStorage {
 public:
     TUsersInfoStorage(TString dcId, ui64 tabletId, const NPersQueue::TTopicConverterPtr& topicConverter, ui32 partition,
                       const TTabletCountersBase& counters, const NKikimrPQ::TPQTabletConfig& config,
-                      const TString& CloudId, const TString& DbId, const TString& FolderId);
+                      const TString& CloudId, const TString& DbId, const TString& DbPath, const TString& FolderId);
 
     void Init(TActorId tabletActor, TActorId partitionActor);
 
@@ -532,6 +532,7 @@ private:
 
     TString CloudId;
     TString DbId;
+    TString DbPath;
     TString FolderId;
     ui64 CurReadRuleGeneration;
 };

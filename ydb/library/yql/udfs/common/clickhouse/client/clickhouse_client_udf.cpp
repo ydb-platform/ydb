@@ -345,8 +345,7 @@ TUnboxedValuePod ConvertOutputValueForPgType(const NDB::IColumn* col, const TPgC
         TUnboxedValuePod ret = TUnboxedValuePod::Zero();
         Y_ENSURE(ref.size <= 8);
         memcpy(&ret, ref.data, ref.size);
-        // todo: fix ABI and remove const_cast
-        return pgBuilder.ConvertToPg(ret, const_cast<TType*>(meta.SourceDataType), meta.TypeId).Release();
+        return pgBuilder.ConvertToPg(ret, meta.SourceDataType, meta.TypeId).Release();
     }
     case EDataSlot::Utf8:
         if (!IsUtf8(std::string_view(ref))) {

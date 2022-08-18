@@ -109,10 +109,19 @@ UDF_ASSERT_TYPE_SIZE(IDateBuilder, 8);
 class IPgBuilder {
 public:
     virtual ~IPgBuilder() {}
+    // returns Null in case of text format parsing error, error message passed via 'error' arg
     virtual TUnboxedValue ValueFromText(ui32 typeId, const TStringRef& value, TStringValue& error) const = 0;
+
+    // returns Null in case of wire format parsing error, error message passed via 'error' arg
     virtual TUnboxedValue ValueFromBinary(ui32 typeId, const TStringRef& value, TStringValue& error) const = 0;
-    virtual TUnboxedValue ConvertFromPg(TUnboxedValue source, ui32 sourceTypeId, TType* targetType) const = 0;
-    virtual TUnboxedValue ConvertToPg(TUnboxedValue source, TType* sourceType, ui32 targetTypeId) const = 0;
+
+    // targetType is required for diagnostic only in debug mode
+    virtual TUnboxedValue ConvertFromPg(TUnboxedValue source, ui32 sourceTypeId, const TType* targetType) const = 0;
+
+    // sourceType is required for diagnostic only in debug mode
+    virtual TUnboxedValue ConvertToPg(TUnboxedValue source, const TType* sourceType, ui32 targetTypeId) const = 0;
+
+    // targetTypeId is required for diagnostic only in debug mode
     virtual TUnboxedValue NewString(i32 typeLen, ui32 targetTypeId, TStringRef data) const = 0;
 };
 UDF_ASSERT_TYPE_SIZE(IPgBuilder, 8);

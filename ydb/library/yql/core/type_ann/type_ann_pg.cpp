@@ -1511,7 +1511,7 @@ bool ScanColumns(TExprNode::TPtr root, TInputs& inputs, const THashSet<TString>&
                     if (pos) {
                         foundAlias = x.Alias;
                         ++matches;
-                        if (matches > 1) {
+                        if (!scanColumnsOnly && matches > 1) {
                             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(node->Pos()),
                                 TStringBuilder() << "Column reference is ambiguous: " << node->Tail().Content()));
                             isError = true;

@@ -116,7 +116,7 @@ struct TTestContext {
         return RequestTimeoutFilter(runtime, event, duration, deadline);
     }
 
-    void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone, bool isFirstClass = false, bool enableMonitoring = false) {
+    void Prepare(const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& outActiveZone, bool isFirstClass = false, bool enableMonitoring = false, bool enableDbCounters = false) {
         Y_UNUSED(dispatchName);
         outActiveZone = false;
         TTestBasicRuntime* runtime = new TTestBasicRuntime;
@@ -126,8 +126,10 @@ struct TTestContext {
         Runtime.Reset(runtime);
         Runtime->SetScheduledLimit(200);
 
+        TAppPrepare appData;
+        appData.SetEnableDbCounters(enableDbCounters);
         SetupLogging(*Runtime);
-        SetupTabletServices(*Runtime);
+        SetupTabletServices(*Runtime, &appData);
         setup(*Runtime);
         CreateTestBootstrapper(*Runtime,
             CreateTestTabletInfo(TabletId, TabletType, TErasureType::ErasureNone),
@@ -222,7 +224,8 @@ struct TTabletPreparationParameters {
     i32 storageLimitBytes{0};
     TString folderId{"somefolder"};
     TString cloudId{"somecloud"};
-    TString databaseId{"root"};
+    TString databaseId{"PQ"};
+    TString databasePath{"/Root/PQ"};
     TString account{"federationAccount"};
 };
 void PQTabletPrepare(

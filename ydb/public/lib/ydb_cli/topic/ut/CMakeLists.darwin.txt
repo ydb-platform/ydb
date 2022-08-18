@@ -9,7 +9,6 @@
 
 add_executable(ydb-public-lib-ydb_cli-topic-ut)
 target_compile_options(ydb-public-lib-ydb_cli-topic-ut PRIVATE
-  -DACTORLIB_HUGE_PB_SIZE
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 target_include_directories(ydb-public-lib-ydb_cli-topic-ut PRIVATE

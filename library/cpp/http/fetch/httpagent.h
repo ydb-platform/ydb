@@ -301,7 +301,7 @@ protected:
     const char* Method;
     size_t MethodLen;
     unsigned short HostheaderLen;
-    static const ssize_t MessageMax = 32768;
+    static const ssize_t MessageMax = 65536;
 };
 
 struct TNoTimer {

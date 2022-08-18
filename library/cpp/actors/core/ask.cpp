@@ -31,6 +31,8 @@ namespace NActors {
             {
             }
 
+            static constexpr char ActorName[] = "ASK_ACTOR";
+
         public:
             void Bootstrap() {
                 Send(Recipient_, std::move(Event_));

@@ -30,6 +30,8 @@ public:
         : Registry(std::move(registry))
     {}
 
+    static constexpr char ActorName[] = "HTTP_PROXY_ACTOR";
+
 protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {

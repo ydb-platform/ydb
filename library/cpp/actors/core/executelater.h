@@ -8,9 +8,8 @@ namespace NActors {
     template <typename TCallback>
     class TExecuteLater: public TActorBootstrapped<TExecuteLater<TCallback>> {
     public:
-        static constexpr IActor::EActivityType ActorActivityType() {
-            return IActor::ACTORLIB_COMMON;
-        }
+
+        static constexpr char ActorName[] = "AS_EXECUTE_LATER";
 
         TExecuteLater(
             TCallback&& callback,

@@ -41,6 +41,8 @@ public:
         TSocketImpl::SetNonBlock();
     }
 
+    static constexpr char ActorName[] = "IN_CONNECTION_ACTOR";
+
     void CleanupRequest(THttpIncomingRequestPtr& request) {
         if (RecycleRequests) {
             request->Clear();

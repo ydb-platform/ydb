@@ -246,6 +246,7 @@ namespace NActors {
             NAMESERVICE = 450,
             DNS_RESOLVER = 481,
             INTERCONNECT_PROXY_WRAPPER = 546,
+            ACTOR_COROUTINE = 577
         };
 
         using EActivityType = EActorActivity;

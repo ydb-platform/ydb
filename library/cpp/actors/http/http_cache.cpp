@@ -87,6 +87,8 @@ public:
         , GetCachePolicy(std::move(getCachePolicy))
     {}
 
+    static constexpr char ActorName[] = "HTTP_OUT_CACHE_ACTOR";
+
     void Bootstrap(const NActors::TActorContext&) {
         //
         Become(&THttpOutgoingCacheActor::StateWork, RefreshTimeout, new NActors::TEvents::TEvWakeup());
@@ -338,6 +340,8 @@ public:
         : HttpProxyId(httpProxyId)
         , GetCachePolicy(std::move(getCachePolicy))
     {}
+
+    static constexpr char ActorName[] = "HTTP_IN_CACHE_ACTOR";
 
     void Bootstrap(const NActors::TActorContext&) {
         //

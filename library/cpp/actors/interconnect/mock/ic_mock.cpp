@@ -110,6 +110,8 @@ namespace NActors {
                     , SessionId(sessionId)
                 {}
 
+                static constexpr char ActorName[] = "SESSION_MOCK_ACTOR";
+
                 void Terminate() {
                     for (auto&& ev : std::exchange(Queue, {})) {
                         TActivationContext::Send(ev->ForwardOnNondelivery(TEvents::TEvUndelivered::Disconnected));
@@ -271,6 +273,8 @@ namespace NActors {
                 , State(state)
                 , Common(std::move(common))
             {}
+
+            static constexpr char ActorName[] = "PROXY_MOCK_ACTOR";
 
             void Registered(TActorSystem *as, const TActorId& parent) override {
                 TActor::Registered(as, parent);

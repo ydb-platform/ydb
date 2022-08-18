@@ -173,6 +173,8 @@ namespace NActors {
             TaskQueue.Stop();
         }
 
+        static constexpr char ActorName[] = "IO_DISPATCHER_ACTOR";
+
         void Bootstrap() {
             while (NumRunningThreads < MinThreadCount) {
                 StartThread();

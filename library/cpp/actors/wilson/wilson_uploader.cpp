@@ -53,6 +53,8 @@ namespace NWilson {
                 CQ.Shutdown();
             }
 
+            static constexpr char ActorName[] = "WILSON_UPLOADER_ACTOR";
+
             void Bootstrap() {
                 Become(&TThis::StateFunc);
 

@@ -28,6 +28,8 @@ public:
 #endif
     }
 
+    static constexpr char ActorName[] = "HTTP_ACCEPTOR_ACTOR";
+
 protected:
     STFUNC(StateListening) {
         switch (ev->GetTypeRewrite()) {

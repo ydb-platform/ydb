@@ -27,6 +27,8 @@ public:
     {
     }
 
+    static constexpr char ActorName[] = "OUT_CONNECTION_ACTOR";
+
     void Die(const NActors::TActorContext& ctx) override {
         ctx.Send(Owner, new TEvHttpProxy::TEvHttpConnectionClosed(ctx.SelfID));
         TSocketImpl::Shutdown(); // to avoid errors when connection already closed

@@ -87,6 +87,7 @@ union TBasicKikimrServicesMask {
         EnableGRpcService = true;
         EnableSecurityServices = true;
         EnableYandexQuery = true;
+        EnableViewerService = true;
     }
 
     TBasicKikimrServicesMask() {

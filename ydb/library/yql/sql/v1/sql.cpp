@@ -927,6 +927,10 @@ public:
         SmartParenthesisMode = mode;
     }
 
+    void MarkAsNamed() {
+        MaybeUnnamedSmartParenOnTop = false;
+    }
+
     TMaybe<TExprOrIdent> LiteralExpr(const TRule_literal_value& node);
 private:
     struct TTrailingQuestions {
@@ -1002,6 +1006,7 @@ private:
         //  // trailing QUESTIONS are used in optional simple types (String?) and optional lambda args: ($x, $y?) -> ($x)
         //  ((double_question neq_subexpr) => double_question neq_subexpr | QUESTION+)?;
         YQL_ENSURE(tailExternal.Count == 0);
+        MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && !node.HasBlock3();
         TTrailingQuestions tail;
         if (node.HasBlock3() && node.GetBlock3().Alt_case() == TRule_neq_subexpr::TBlock3::kAlt2) {
             auto& questions = node.GetBlock3().GetAlt2();
@@ -1079,6 +1084,7 @@ private:
     TNodePtr SmartParenthesis(const TRule_smart_parenthesis& node);
 
     ESmartParenthesis SmartParenthesisMode = ESmartParenthesis::Default;
+    bool MaybeUnnamedSmartParenOnTop = true;
 
     THashMap<TString, TNodePtr> ExprShortcuts;
 };
@@ -1229,6 +1235,9 @@ TNodePtr TSqlTranslation::NamedExpr(const TRule_named_expr& node, EExpr exprMode
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::GroupBy);
     } else if (exprMode == EExpr::SqlLambdaParams) {
         expr.SetSmartParenthesisMode(TSqlExpression::ESmartParenthesis::SqlLambdaParams);
+    }
+    if (node.HasBlock2()) {
+        expr.MarkAsNamed();
     }
     TNodePtr exprNode(expr.Build(node.GetRule_expr1()));
     if (!exprNode) {
@@ -3879,9 +3888,11 @@ TNodePtr TSqlExpression::UnaryExpr(const TUnarySubExprType& node, const TTrailin
             UnexpectedQuestionToken(tail);
             return {};
         } else {
+            MaybeUnnamedSmartParenOnTop = false;
             return JsonApiExpr(node.GetAlt_unary_subexpr2().GetRule_json_api_expr1());
         }
     } else {
+        MaybeUnnamedSmartParenOnTop = false;
         if (node.Alt_case() == TRule_in_unary_subexpr::kAltInUnarySubexpr1) {
             return UnaryCasualExpr(node.GetAlt_in_unary_subexpr1().GetRule_in_unary_casual_subexpr1(), tail);
         } else if (tail.Count) {
@@ -4288,12 +4299,14 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
 
     const auto& suffix = node.GetRule_unary_subexpr_suffix2();
     const bool suffixIsEmpty = suffix.GetBlock1().empty() && !suffix.HasBlock2();
+    MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && suffixIsEmpty;
     TString name;
     TNodePtr expr;
     bool typePossible = false;
     auto& block = node.GetBlock1();
     switch (block.Alt_case()) {
         case TUnaryCasualExprRule::TBlock1::kAlt1: {
+            MaybeUnnamedSmartParenOnTop = false;
             auto& alt = block.GetAlt1();
             if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
                 name = Id(alt.GetRule_id_expr1(), *this);
@@ -4310,6 +4323,7 @@ TNodePtr TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, const
             if constexpr (std::is_same_v<TUnaryCasualExprRule, TRule_unary_casual_subexpr>) {
                 exprOrId = AtomExpr(alt.GetRule_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             } else {
+                MaybeUnnamedSmartParenOnTop = false;
                 exprOrId = InAtomExpr(alt.GetRule_in_atom_expr1(), suffixIsEmpty ? tail : TTrailingQuestions{});
             }
 
@@ -4537,6 +4551,7 @@ TNodePtr TSqlExpression::LambdaRule(const TRule_lambda& rule) {
         return SmartParenthesis(alt.GetRule_smart_parenthesis1());
     }
 
+    MaybeUnnamedSmartParenOnTop = false;
     TNodePtr parenthesis;
     {
         // we allow column reference here to postpone error and report it with better description in SqlLambdaParams
@@ -4724,6 +4739,7 @@ TMaybe<TExprOrIdent> TSqlExpression::AtomExpr(const TRule_atom_expr& node, const
         UnexpectedQuestionToken(tail);
         return {};
     }
+    MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && (node.Alt_case() == TRule_atom_expr::kAltAtomExpr3);
     TExprOrIdent result;
     switch (node.Alt_case()) {
         case TRule_atom_expr::kAltAtomExpr1:
@@ -5013,6 +5029,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
         case TRule_con_subexpr::kAltConSubexpr1:
             return UnaryExpr(node.GetAlt_con_subexpr1().GetRule_unary_subexpr1(), tail);
         case TRule_con_subexpr::kAltConSubexpr2: {
+            MaybeUnnamedSmartParenOnTop = false;
             Ctx.IncrementMonCounter("sql_features", "UnaryOperation");
             TString opName;
             auto token = node.GetAlt_con_subexpr2().GetRule_unary_op1().GetToken1();
@@ -5040,6 +5057,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_con_subexpr& node, const TTrailingQ
 
 TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQuestions& tail) {
     // xor_subexpr: eq_subexpr cond_expr?;
+    MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && !node.HasBlock2();
     TNodePtr res(SubExpr(node.GetRule_eq_subexpr1(), node.HasBlock2() ? TTrailingQuestions{} : tail));
     if (!res) {
         return {};
@@ -5332,6 +5350,8 @@ TNodePtr TSqlExpression::BinOper(const TString& opName, const TNode& node, TGetN
     if (begin == end) {
         return SubExpr(node, tail);
     }
+    // can't have top level smart_parenthesis node if any binary operation is present
+    MaybeUnnamedSmartParenOnTop = false;
     Ctx.IncrementMonCounter("sql_binary_operations", opName);
     const size_t listSize = end - begin;
     TVector<TNodePtr> nodes;
@@ -5345,6 +5365,7 @@ TNodePtr TSqlExpression::BinOper(const TString& opName, const TNode& node, TGetN
 
 template <typename TNode, typename TGetNode, typename TIter>
 TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
+    MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && (begin == end);
     TNodePtr partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
     while (begin != end) {
         Ctx.IncrementMonCounter("sql_features", "BinaryOperation");
@@ -5407,6 +5428,7 @@ TNodePtr TSqlExpression::BinOpList(const TNode& node, TGetNode getNode, TIter be
 
 template <typename TGetNode, typename TIter>
 TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
+    MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && (begin == end);
     TNodePtr partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
     while (begin != end) {
         Ctx.IncrementMonCounter("sql_features", "BinaryOperation");
@@ -5490,6 +5512,7 @@ TNodePtr TSqlExpression::BinOpList(const TRule_bit_subexpr& node, TGetNode getNo
 
 template <typename TGetNode, typename TIter>
 TNodePtr TSqlExpression::BinOpList(const TRule_eq_subexpr& node, TGetNode getNode, TIter begin, TIter end, const TTrailingQuestions& tail) {
+    MaybeUnnamedSmartParenOnTop = MaybeUnnamedSmartParenOnTop && (begin == end);
     TNodePtr partialResult = SubExpr(node, (begin == end) ? tail : TTrailingQuestions{});
     while (begin != end) {
         Ctx.IncrementMonCounter("sql_features", "BinaryOperation");
@@ -5578,6 +5601,8 @@ TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
         return {};
     }
 
+    bool topLevelGroupBy = MaybeUnnamedSmartParenOnTop && SmartParenthesisMode == ESmartParenthesis::GroupBy;
+
     bool hasAliases = false;
     bool hasUnnamed = false;
     for (const auto& expr: exprs) {
@@ -5586,7 +5611,7 @@ TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
         } else {
             hasUnnamed = true;
         }
-        if (hasAliases && hasUnnamed && SmartParenthesisMode != ESmartParenthesis::GroupBy) {
+        if (hasAliases && hasUnnamed && !topLevelGroupBy) {
             Ctx.IncrementMonCounter("sql_errors", "AnonymousStructMembers");
             Ctx.Error(pos) << "Structure does not allow anonymous members";
             return nullptr;
@@ -5595,11 +5620,11 @@ TNodePtr TSqlExpression::SmartParenthesis(const TRule_smart_parenthesis& node) {
     if (exprs.size() == 1 && hasUnnamed && !isTuple && !expectTuple) {
         return exprs.back();
     }
-    if (SmartParenthesisMode == ESmartParenthesis::GroupBy) {
-        /// \todo support nested tuple\struct
+    if (topLevelGroupBy) {
         if (isTuple) {
             Ctx.IncrementMonCounter("sql_errors", "SimpleTupleInGroupBy");
-            Ctx.Error(pos) << "Unable to use tuple in group by clause";
+            Token(node.GetBlock3().GetToken1());
+            Ctx.Error() << "Unexpected trailing comma in grouping elements list";
             return nullptr;
         }
         Ctx.IncrementMonCounter("sql_features", "ListOfNamedNode");

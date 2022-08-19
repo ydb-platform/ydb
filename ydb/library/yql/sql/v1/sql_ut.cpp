@@ -1668,6 +1668,34 @@ Y_UNIT_TEST_SUITE(SqlParsingOnly) {
         UNIT_ASSERT(SqlToYql("select * from plato.T with columns = Struct<a:Int32, b:String>;").IsOk());
         UNIT_ASSERT(SqlToYql("select * from plato.T with (format=csv_with_names, schema=(year Int32, month String, day String, a Utf8, b Uint16));").IsOk());
     }
+
+    Y_UNIT_TEST(AllowNestedTuplesInGroupBy) {
+        NYql::TAstParseResult res = SqlToYql("select count(*) from plato.Input group by 1 + (x, y, z);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Aggregate core '('\"group0\")"));
+        };
+
+        TWordCountHive elementStat({"Aggregate"});
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT(elementStat["Aggregate"] == 1);
+    }
+
+    Y_UNIT_TEST(AllowGroupByWithParens) {
+        NYql::TAstParseResult res = SqlToYql("select count(*) from plato.Input group by (x, y as alias1, z);");
+        UNIT_ASSERT(res.Root);
+
+        TVerifyLineFunc verifyLine = [&](const TString& word, const TString& line) {
+            Y_UNUSED(word);
+            UNIT_ASSERT_VALUES_UNEQUAL(TString::npos, line.find("(Aggregate core '('\"x\" '\"alias1\" '\"z\")"));
+        };
+
+        TWordCountHive elementStat({"Aggregate"});
+        VerifyProgram(res, elementStat, verifyLine);
+        UNIT_ASSERT(elementStat["Aggregate"] == 1);
+    }
 }
 
 Y_UNIT_TEST_SUITE(ExternalFunction) {
@@ -3229,7 +3257,7 @@ select FormatType($f());
 
     Y_UNIT_TEST(ErrGroupBySmartParenAsTuple) {
         ExpectFailWithError("SELECT * FROM plato.Input GROUP BY (k, v,)",
-            "<main>:1:36: Error: Unable to use tuple in group by clause\n");
+            "<main>:1:41: Error: Unexpected trailing comma in grouping elements list\n");
     }
 
     Y_UNIT_TEST(HandleNestedSmartParensInGroupBy) {

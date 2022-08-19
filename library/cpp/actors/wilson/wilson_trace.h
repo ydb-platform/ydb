@@ -187,9 +187,13 @@ namespace NWilson {
 
         TTraceId Span(ui8 verbosity) const {
             Validate();
-            return *this && TimeToLive && verbosity <= Verbosity
-                ? TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1)
-                : TTraceId();
+            if (!*this || !TimeToLive) {
+                return TTraceId();
+            } else if (verbosity <= Verbosity) {
+                return TTraceId(TraceId, GenerateSpanId(), Verbosity, TimeToLive - 1);
+            } else {
+                return TTraceId(TraceId, SpanId, Verbosity, TimeToLive - 1);
+            }
         }
 
         TTraceId Span() const { // compatibility stub

@@ -81,17 +81,21 @@ namespace NWilson {
                     : nullptr)
         {
             if (Y_UNLIKELY(*this)) {
-                if (!parentId.IsRoot()) {
-                    Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
-                }
-                Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
-                Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
+                if (verbosity <= parentId.GetVerbosity()) {
+                    if (!parentId.IsRoot()) {
+                        Data->Span.set_parent_span_id(parentId.GetSpanIdPtr(), parentId.GetSpanIdSize());
+                    }
+                    Data->Span.set_start_time_unix_nano(Data->StartTime.NanoSeconds());
+                    Data->Span.set_kind(opentelemetry::proto::trace::v1::Span::SPAN_KIND_INTERNAL);
 
-                if (name) {
-                    Name(std::move(*name));
-                }
+                    if (name) {
+                        Name(std::move(*name));
+                    }
 
-                Attribute("node_id", NActors::TActivationContext::ActorSystem()->NodeId);
+                    Attribute("node_id", NActors::TActivationContext::ActorSystem()->NodeId);
+                } else {
+                    Data->Sent = true; // ignore this span due to verbosity mismatch, still allowing child spans to be created
+                }
             }
         }
 

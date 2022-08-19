@@ -278,6 +278,7 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
         const bool subscribe = msg->Subscribe;
         const TActorId peer = ev->Sender;
         const ui64 cookie = ev->Cookie;
+        NWilson::TTraceId traceId = std::move(ev->TraceId);
 
         auto *tabletState = EnsureTablet(tablet);
         auto *clientState = EnsureClient(tabletState, tablet);
@@ -309,9 +310,9 @@ class TPipePeNodeCache : public TActor<TPipePeNodeCache> {
             }
             const ui64 seqNo = ++clientState->LastSentSeqNo;
             clientState->Peers[peer] = seqNo;
-            NTabletPipe::SendDataWithSeqNo(peer, tabletState->LastClient, msg->Ev.Release(), seqNo, cookie);
+            NTabletPipe::SendDataWithSeqNo(peer, tabletState->LastClient, msg->Ev.Release(), seqNo, cookie, std::move(traceId));
         } else {
-            NTabletPipe::SendData(peer, tabletState->LastClient, msg->Ev.Release(), cookie);
+            NTabletPipe::SendData(peer, tabletState->LastClient, msg->Ev.Release(), cookie, std::move(traceId));
         }
     }
 

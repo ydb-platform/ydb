@@ -145,13 +145,12 @@ Y_UNIT_TEST_SUITE(TRope) {
         for (size_t step = 1; step <= Text.size(); ++step) {
             TRope rope = CreateRope(Text, 10);
             TString buffer = Text;
-            auto it = rope.Begin();
             size_t remain = rope.GetSize();
             while (const size_t len = Min(step, remain)) {
                 TString data = TString::Uninitialized(len);
-                it.ExtractPlainDataAndAdvance(data.Detach(), data.size());
+                rope.ExtractFrontPlain(data.Detach(), data.size());
                 UNIT_ASSERT_VALUES_EQUAL(data, buffer.substr(0, len));
-                UNIT_ASSERT_VALUES_EQUAL(RopeToString(TRope(it, rope.End())), buffer.substr(len));
+                UNIT_ASSERT_VALUES_EQUAL(RopeToString(rope), buffer.substr(len));
                 buffer = buffer.substr(len);
                 remain -= len;
             }

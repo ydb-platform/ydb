@@ -8,7 +8,8 @@
 #include <util/system/valgrind.h>
 
 // exactly one of them must be included
-#include "rope_cont_list.h"
+#include "rope_cont_embedded_list.h"
+//#include "rope_cont_list.h"
 //#include "rope_cont_deque.h"
 
 struct IRopeChunkBackend : TThrRefBase {
@@ -114,7 +115,7 @@ class TRope {
             uintptr_t Owner = 0; // lower bits contain type of the owner
 
         public:
-            TBackend() = delete;
+            TBackend() = default;
 
             TBackend(const TBackend& other)
                 : Owner(Clone(other.Owner))
@@ -186,6 +187,10 @@ class TRope {
                         Y_FAIL();
                     }
                 });
+            }
+
+            explicit operator bool() const {
+                return Owner;
             }
 
         private:
@@ -270,6 +275,11 @@ class TRope {
 
         static constexpr struct TSlice {} Slice{};
 
+        TChunk()
+            : Begin(nullptr)
+            , End(nullptr)
+        {}
+
         template<typename T>
         TChunk(T&& backend, const IRopeChunkBackend::TData& data)
             : Backend(std::forward<T>(backend))
@@ -316,14 +326,6 @@ class TRope {
 
         size_t GetSize() const {
             return End - Begin;
-        }
-
-        static void Clear(TChunk& chunk) {
-            chunk.Begin = nullptr;
-        }
-
-        static bool IsInUse(const TChunk& chunk) {
-            return chunk.Begin != nullptr;
         }
 
         size_t GetCapacity() const {
@@ -382,6 +384,7 @@ private:
         void CheckValid() const {
 #ifndef NDEBUG
             Y_VERIFY(ValidityToken == Rope->GetValidityToken());
+            Y_VERIFY(Iter == Rope->Chain.end() || Iter->Backend);
 #endif
         }
 
@@ -688,22 +691,25 @@ public:
         }
         Size -= num;
         dest->Size += num;
-        TChunkList::iterator it, first = Chain.begin();
+
+        TChunkList::iterator first = Chain.begin();
+
+        if (num >= first->GetSize() && dest->Chain) { // see if we can glue first chunk to the destination rope
+            auto& last = dest->Chain.GetLastChunk();
+            if (last.Backend == first->Backend && last.End == first->Begin) {
+                last.End = first->End;
+                num -= first->GetSize();
+                first = Chain.Erase(first);
+            }
+        }
+
+        TChunkList::iterator it;
         for (it = first; num && num >= it->GetSize(); ++it) {
             num -= it->GetSize();
         }
-        if (it != first) {
-            if (dest->Chain) {
-                auto& last = dest->Chain.GetLastChunk();
-                if (last.Backend == first->Backend && last.End == first->Begin) {
-                    last.End = first->End;
-                    first = Chain.Erase(first); // TODO(alexvru): "it" gets invalidated here on some containers
-                }
-            }
-            dest->Chain.Splice(dest->Chain.end(), Chain, first, it);
-        }
-        if (num) {
-            auto it = Chain.begin();
+        first = dest->Chain.Splice(dest->Chain.end(), Chain, first, it);
+
+        if (num) { // still more data to extract
             if (dest->Chain) {
                 auto& last = dest->Chain.GetLastChunk();
                 if (last.Backend == first->Backend && last.End == first->Begin) {
@@ -712,8 +718,8 @@ public:
                     return;
                 }
             }
-            dest->Chain.PutToEnd(TChunk::Slice, it->Begin, it->Begin + num, *it);
-            it->Begin += num;
+            dest->Chain.PutToEnd(TChunk::Slice, first->Begin, first->Begin + num, *first);
+            first->Begin += num;
         }
     }
 
@@ -820,13 +826,14 @@ public:
         Size -= len;
         while (len) {
             auto& chunk = Chain.GetFirstChunk();
+            Y_VERIFY_DEBUG(chunk.Backend);
             const size_t num = Min(len, chunk.GetSize());
             memcpy(buffer, chunk.Begin, num);
             buffer = static_cast<char*>(buffer) + num;
             len -= num;
             chunk.Begin += num;
             if (chunk.Begin == chunk.End) {
-                Chain.Erase(Chain.begin());
+                Chain.EraseFront();
             }
         }
         InvalidateIterators();

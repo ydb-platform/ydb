@@ -6,16 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(cpp-actors-util)
-target_link_libraries(cpp-actors-util PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  cpp-deprecated-atomic
-  library-cpp-pop_count
-)
-target_sources(cpp-actors-util PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/affinity.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/should_continue.cpp
-  ${CMAKE_SOURCE_DIR}/library/cpp/actors/util/threadparkpad.cpp
-)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX AND NOT APPLE)
+  include(CMakeLists.linux.txt)
+endif()

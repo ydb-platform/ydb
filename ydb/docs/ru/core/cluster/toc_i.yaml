@@ -9,6 +9,8 @@ items:
   include: { mode: link, path: ../maintenance/embedded_monitoring/toc_p.yaml }
 - name: Системные таблицы кластера
   href: ../troubleshooting/system_views_cluster.md
+- name: Аудитные логи
+  href: audit-logs.md
 - name: Мониторинг
   items:
     - name: Настройка мониторинга локального кластера YDB

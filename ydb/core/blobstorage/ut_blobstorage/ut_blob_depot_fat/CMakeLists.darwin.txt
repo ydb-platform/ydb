@@ -7,18 +7,18 @@
 
 
 
-add_executable(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot)
-target_include_directories(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
+add_executable(blobstorage-ut_blobstorage-ut_blob_depot_fat)
+target_include_directories(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage
 )
-target_link_libraries(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PUBLIC
+target_link_libraries(blobstorage-ut_blobstorage-ut_blob_depot_fat PUBLIC
   contrib-libs-cxxsupp
   yutil
   library-cpp-cpuid_check
   cpp-testing-unittest_main
   blobstorage-ut_blobstorage-lib
 )
-target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
+target_link_options(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
   -Wl,-no_deduplicate
   -Wl,-sdk_version,10.15
   -fPIC
@@ -26,20 +26,20 @@ target_link_options(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
   -framework
   CoreFoundation
 )
-target_sources(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot PRIVATE
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot.cpp
+target_sources(blobstorage-ut_blobstorage-ut_blob_depot_fat PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_fat.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_test_functions.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/ut_blobstorage/blob_depot_event_managers.cpp
 )
 add_test(
   NAME
-  ydb-core-blobstorage-ut_blobstorage-ut_blob_depot
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
   COMMAND
-  ydb-core-blobstorage-ut_blobstorage-ut_blob_depot
+  blobstorage-ut_blobstorage-ut_blob_depot_fat
   --print-before-suite
   --print-before-test
   --fork-tests
   --print-times
   --show-fails
 )
-vcs_info(ydb-core-blobstorage-ut_blobstorage-ut_blob_depot)
+vcs_info(blobstorage-ut_blobstorage-ut_blob_depot_fat)

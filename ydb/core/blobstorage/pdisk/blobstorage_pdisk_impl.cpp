@@ -892,7 +892,7 @@ void TPDisk::SendChunkWriteError(TChunkWrite &chunkWrite, const TString &errorRe
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 void TPDisk::SendChunkReadError(const TIntrusivePtr<TChunkRead>& read, TStringStream& error, NKikimrProto::EReplyStatus status) {
-    error << " for owner# " << read->Owner << " can't read chunkIdx# " << read->ChunkIdx;
+    error << " for ownerId# " << read->Owner << " can't read chunkIdx# " << read->ChunkIdx;
     Y_VERIFY(status != NKikimrProto::OK);
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, error.Str());
 
@@ -1659,7 +1659,7 @@ void TPDisk::ForceDeleteChunk(TChunkIdx chunkIdx) {
     switch (state.CommitState) {
     case TChunkState::DATA_ON_QUARANTINE:
         LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                << " chunkIdx# " << chunkIdx << " owned by owner# "  << state.OwnerId
+                << " chunkIdx# " << chunkIdx << " owned by ownerId# "  << state.OwnerId
                 << " is released from quarantine and marked as free at ForceDeleteChunk");
         [[fallthrough]];
     case TChunkState::DATA_RESERVED:
@@ -1700,7 +1700,15 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                             " Line# %" PRIu32 " --CommitedDataChunks# %" PRIi64 " chunkIdx# %" PRIu32 " Marker# BPD84",
                             (ui32)PDiskId, (ui32)__LINE__, (i64)Mon.CommitedDataChunks->Val(), (ui32)i);
                 }
-                if (state.HasAnyOperationsInProgress()
+                if (state.CommitState == TChunkState::DATA_ON_QUARANTINE) {
+                    if (!pushedOwnerIntoQuarantine) {
+                        pushedOwnerIntoQuarantine = true;
+                        QuarantineOwners.push_back(owner);
+                        LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
+                                << " push ownerId# " << owner
+                                << " into quarantine as there is a chunk in DATA_ON_QUARANTINE");
+                    }
+                } else if (state.HasAnyOperationsInProgress()
                         || state.CommitState == TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS
                         || state.CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS
                         || state.CommitState == TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
@@ -1715,7 +1723,7 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                     }
 
                     if (state.CommitState != TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
-                            && state.CommitState != TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE) {
+                            && state.CommitState != TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS) {
                         QuarantineChunks.push_back(i);
                     }
 
@@ -1985,7 +1993,7 @@ void TPDisk::ClearQuarantineChunks() {
         for (auto delIt = it; delIt != QuarantineOwners.end(); ++delIt) {
             Keeper.RemoveOwner(*delIt);
             LOG_NOTICE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# " << PDiskId
-                    << " removed owner# " << *delIt << " from chunks Keeper through QuarantineOwners");
+                    << " removed ownerId# " << *delIt << " from chunks Keeper through QuarantineOwners");
         }
         QuarantineOwners.erase(it, QuarantineOwners.end());
         *Mon.QuarantineOwners = QuarantineOwners.size();
@@ -2309,7 +2317,7 @@ void TPDisk::PrepareLogError(TLogWrite *logWrite, TStringStream& err, NKikimrPro
         return;
     }
 
-    err << " error in TLogWrite for owner# " << logWrite->Owner << " ownerRound# " << logWrite->OwnerRound
+    err << " error in TLogWrite for ownerId# " << logWrite->Owner << " ownerRound# " << logWrite->OwnerRound
         << " lsn# " << logWrite->Lsn;
     LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, err.Str());
 
@@ -2350,7 +2358,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
     NKikimrProto::EReplyStatus errStatus = CheckOwnerAndRound(request, err);
 
     LOG_TRACE_S(*ActorSystem, NKikimrServices::BS_PDISK, "PreprocessRequest " << TypeName(*request)
-            << " from owner# " << request->Owner << " round# " << request->OwnerRound
+            << " from ownerId# " << request->Owner << " round# " << request->OwnerRound
             << " errStatus# " << errStatus);
 
     switch (request->GetType()) {

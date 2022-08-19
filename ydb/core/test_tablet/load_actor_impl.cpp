@@ -2,9 +2,11 @@
 
 namespace NKikimr::NTestShard {
 
-    TLoadActor::TLoadActor(ui64 tabletId, ui32 generation, const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings)
+    TLoadActor::TLoadActor(ui64 tabletId, ui32 generation, TActorId tablet,
+            const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings)
         : TabletId(tabletId)
         , Generation(generation)
+        , Tablet(tablet)
         , Settings(settings)
         , StateServerWriteLatency(1024)
         , WriteLatency(1024)
@@ -16,6 +18,10 @@ namespace NKikimr::NTestShard {
             Settings.GetStorageServerPort()));
         Send(parentId, new TTestShard::TEvSwitchMode(TTestShard::EMode::STATE_SERVER_CONNECT));
         Become(&TThis::StateFunc);
+        if (Settings.RestartPeriodsSize()) {
+            TActivationContext::Schedule(GenerateRandomInterval(Settings.GetRestartPeriods()), new IEventHandle(
+                TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
+        }
     }
 
     void TLoadActor::PassAway() {
@@ -24,6 +30,11 @@ namespace NKikimr::NTestShard {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, ValidationActorId, SelfId(), nullptr, 0));
         }
         TActorBootstrapped::PassAway();
+    }
+
+    void TLoadActor::HandleWakeup() {
+        STLOG(PRI_NOTICE, TEST_SHARD, TS00, "voluntary restart", (TabletId, TabletId));
+        TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, Tablet, TabletActorId, nullptr, 0));
     }
 
     void TLoadActor::Action() {
@@ -37,7 +48,11 @@ namespace NKikimr::NTestShard {
                 return;
             }
         }
-        if (BytesProcessed > 2 * Settings.GetMaxDataBytes()) { // time to perform validation
+        ui64 barrier = 2 * Settings.GetMaxDataBytes();
+        if (Settings.HasValidateAfterBytes()) {
+            barrier = Settings.GetValidateAfterBytes();
+        }
+        if (BytesProcessed > barrier) { // time to perform validation
             if (WritesInFlight.empty() && DeletesInFlight.empty() && TransitionInFlight.empty()) {
                 RunValidation(false);
             }
@@ -127,7 +142,7 @@ namespace NKikimr::NTestShard {
 
     void TTestShard::StartActivities() {
         if (!ActivityActorId && Settings) {
-            ActivityActorId = Register(new TLoadActor(TabletID(), Executor()->Generation(), *Settings),
+            ActivityActorId = Register(new TLoadActor(TabletID(), Executor()->Generation(), Tablet(), *Settings),
                 TMailboxType::ReadAsFilled, AppData()->UserPoolId);
         }
     }

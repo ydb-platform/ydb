@@ -24,6 +24,7 @@ message TDqPqTopicSource {
     bool UseSsl = 7;
     bool AddBearerToToken = 8;
     string DatabaseId = 9;
+    repeated string MetadataFields = 10;
 }
 
 message TDqPqTopicSink {

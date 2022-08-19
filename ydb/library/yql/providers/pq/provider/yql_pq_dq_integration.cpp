@@ -4,14 +4,15 @@
 
 #include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/providers/common/dq/yql_dq_integration_impl.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
+#include <ydb/library/yql/utils/log/log.h>
 
 #include <util/string/builder.h>
 
@@ -72,37 +73,49 @@ public:
         if (const auto& maybePqReadTopic = TMaybeNode<TPqReadTopic>(read)) {
             const auto& pqReadTopic = maybePqReadTopic.Cast();
 
-            const auto rowType = pqReadTopic.Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()->GetItemType();
+            const auto rowType = pqReadTopic.Ref().GetTypeAnn()
+                ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
+                ->GetItemType()->Cast<TStructExprType>();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
 
-            TExprNode::TListType settings(1U,
-                ctx.Builder(pqReadTopic.Topic().Pos())
-                    .List()
-                        .Atom(0, "format", TNodeFlags::Default)
-                        .Add(1, pqReadTopic.Format().Ptr())
-                    .Seal().Build()
-            );
+            TVector<TCoNameValueTuple> settings;
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
+                .Name().Build("format")
+                .Value(pqReadTopic.Format())
+                .Done());
 
+            TVector<TCoNameValueTuple> innerSettings;
             if (pqReadTopic.Compression() != "") {
-                settings.emplace_back(
-                    ctx.Builder(pqReadTopic.Compression().Pos())
-                        .List()
-                            .Atom(0, "settings", TNodeFlags::Default)
-                            .List(1)
-                                .List(0)
-                                    .Atom(0, "compression")
-                                    .Atom(1, pqReadTopic.Compression())
-                                .Seal()
-                            .Seal()
-                        .Seal().Build()
-                );
+                innerSettings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
+                        .Name().Build("compression")
+                        .Value(pqReadTopic.Compression())
+                    .Done());
             }
+
+            if (!innerSettings.empty()) {
+                settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
+                    .Name().Build("settings")
+                    .Value<TCoNameValueTupleList>()
+                        .Add(innerSettings)
+                        .Build()
+                    .Done());
+            }
+
+            TExprNode::TListType metadataFieldsList;
+            for (auto sysColumn : AllowedPqMetaSysColumns()) {
+                metadataFieldsList.push_back(ctx.NewAtom(pqReadTopic.Pos(), sysColumn));
+            }
+
+            settings.push_back(Build<TCoNameValueTuple>(ctx, pqReadTopic.Pos())
+                .Name().Build("metadataColumns")
+                .Value(ctx.NewList(pqReadTopic.Pos(), std::move(metadataFieldsList)))
+                .Done());
 
             const auto token = "cluster:default_" + clusterName;
             auto columns = pqReadTopic.Columns().Ptr();
             if (!columns->IsList()) {
                 const auto pos = columns->Pos();
-                const auto& items = rowType->Cast<TStructExprType>()->GetItems();
+                const auto& items = rowType->GetItems();
                 TExprNode::TListType cols;
                 cols.reserve(items.size());
                 std::transform(items.cbegin(), items.cend(), std::back_inserter(cols), [&](const TItemExprType* item) { return ctx.NewAtom(pos, item->GetName()); });
@@ -120,7 +133,7 @@ public:
                     .Build()
                 .RowType(ExpandType(pqReadTopic.Pos(), *rowType, ctx))
                 .DataSource(pqReadTopic.DataSource().Cast<TCoDataSource>())
-                .Settings(ctx.NewList(pqReadTopic.Topic().Pos(), std::move(settings)))
+                .Settings(Build<TCoNameValueTupleList>(ctx, read->Pos()).Add(settings).Done())
                 .Done().Ptr();
         }
         return read;
@@ -196,6 +209,10 @@ public:
 
                 if (clusterDesc->ClusterType == NYql::TPqClusterConfig::CT_PERS_QUEUE) {
                     YQL_ENSURE(srcDesc.GetConsumerName(), "No consumer specified for PersQueue cluster");
+                }
+
+                for (const auto metadata : topic.Metadata()) {
+                    srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
                 }
 
                 protoSettings.PackFrom(srcDesc);

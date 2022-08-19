@@ -17,10 +17,11 @@ NKikimr::NMiniKQL::TRuntimeNode BuildParseCall(
     TPosition pos,
     NKikimr::NMiniKQL::TRuntimeNode input,
     TMaybe<NKikimr::NMiniKQL::TRuntimeNode> extraColumnsByPathIndex,
+    std::unordered_map<TString, ui32>&& metadataColumns,
     const std::string_view& format,
     const std::string_view& compression,
-    NKikimr::NMiniKQL::TType* inputItemType,
-    NKikimr::NMiniKQL::TType* outputItemType,
+    NKikimr::NMiniKQL::TType* inputType,
+    NKikimr::NMiniKQL::TType* parseItemType,
     NKikimr::NMiniKQL::TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx);
 

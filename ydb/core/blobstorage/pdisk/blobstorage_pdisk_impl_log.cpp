@@ -882,7 +882,9 @@ NKikimrProto::EReplyStatus TPDisk::BeforeLoggingCommitRecord(const TLogWrite &lo
                 state.CommitState = TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE;
                 break;
             default:
-                state.CommitState = TChunkState::DATA_ON_QUARANTINE;
+                Y_FAIL_S("PDiskID# " << PDiskId << " can't delete chunkIdx# " << chunkIdx
+                    << " request ownerId# " << logWrite.Owner
+                    << " with operations in progress as it is in unexpected CommitState# " << state.ToString());
                 break;
             }
             QuarantineChunks.push_back(chunkIdx);
@@ -1007,7 +1009,6 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
     TChunkState &state = ChunkState[chunkIdx];
     switch (state.CommitState) {
     // Chunk will be freed in TPDisk::ForceDeleteChunk() and may be released already
-    case TChunkState::FREE:
     case TChunkState::DATA_ON_QUARANTINE:
         break;
     case TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS:
@@ -1035,7 +1036,7 @@ void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
         break;
     default:
         Y_FAIL_S("PDiskID# " << PDiskId << " can't delete chunkIdx# " << chunkIdx
-                << " requesting ownerId# " << owner 
+                << " requesting ownerId# " << owner
                 << " as it is in unexpected CommitState# " << state.ToString());
     }
 }

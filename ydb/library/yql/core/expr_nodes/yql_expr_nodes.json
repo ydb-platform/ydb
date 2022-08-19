@@ -1777,6 +1777,16 @@
             "Match": {"Type": "Callable", "Name": "TableRecord"}
         },
         {
+            "Name": "TCoWriteTime",
+            "Base": "TCoTablePropBase",
+            "Match": {"Type": "Callable", "Name": "WriteTime"}
+        },
+        {
+            "Name": "TCoOffset",
+            "Base": "TCoTablePropBase",
+            "Match": {"Type": "Callable", "Name": "Offset"}
+        },
+        {
             "Name": "TCoIsKeySwitch",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "IsKeySwitch"},

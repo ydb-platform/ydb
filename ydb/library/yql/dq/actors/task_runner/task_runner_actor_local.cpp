@@ -262,6 +262,10 @@ private:
 
         auto channelId = ev->Get()->ChannelId;
         auto channel = TaskRunner->GetOutputChannel(channelId);
+        if (ev->Get()->WasFinished) {
+            channel->Finish();
+            LOG_I("output channel with id [" << channelId << "] finished prematurely");
+        }
         int maxChunks = std::numeric_limits<int>::max();
         auto wasFinished = ev->Get()->WasFinished;
         bool changed = false;

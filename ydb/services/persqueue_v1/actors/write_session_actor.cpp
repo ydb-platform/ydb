@@ -499,9 +499,12 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev
         return;
     }
 
+    State = ES_WAIT_TABLE_REQUEST_1;
+
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         TStringBuilder errorReason;
         errorReason << "kqp error Marker# PQ53 : " <<  record;
+
         CloseSession(errorReason, PersQueue::ErrorCode::ERROR, ctx);
         return;
     }
@@ -509,7 +512,6 @@ void TWriteSessionActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr &ev
     Y_VERIFY(!KqpSessionId.empty());
 
     SendSelectPartitionRequest(EncodedSourceId.Hash, FullConverter->GetClientsideName(), ctx);
-    State = ES_WAIT_TABLE_REQUEST_1;
 }
 
 void TWriteSessionActor::SendSelectPartitionRequest(ui32 hash, const TString& topic, const NActors::TActorContext& ctx) {

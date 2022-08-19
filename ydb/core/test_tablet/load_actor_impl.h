@@ -11,6 +11,7 @@ namespace NKikimr::NTestShard {
     class TLoadActor : public TActorBootstrapped<TLoadActor> {
         const ui64 TabletId;
         const ui32 Generation;
+        const TActorId Tablet;
         TActorId TabletActorId;
         const NKikimrClient::TTestShardControlRequest::TCmdInitialize Settings;
 
@@ -40,9 +41,11 @@ namespace NKikimr::NTestShard {
         };
 
     public:
-        TLoadActor(ui64 tabletId, ui32 generation, const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings);
+        TLoadActor(ui64 tabletId, ui32 generation, const TActorId tablet,
+            const NKikimrClient::TTestShardControlRequest::TCmdInitialize& settings);
         void Bootstrap(const TActorId& parentId);
         void PassAway() override;
+        void HandleWakeup();
         void Action();
         void Handle(TEvStateServerStatus::TPtr ev);
 
@@ -53,6 +56,7 @@ namespace NKikimr::NTestShard {
             hFunc(TEvStateServerWriteResult, Handle);
             hFunc(TEvValidationFinished, Handle);
             cFunc(TEvents::TSystem::Poison, PassAway);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         )
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

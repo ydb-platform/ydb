@@ -265,11 +265,13 @@ private:
 
     void PeerFinished(ui64 channelId) override {
         // no TaskRunner => no outputChannel.Channel, nothing to Finish
+        CA_LOG_I("Peer finished, channel: " << channelId);
         TOutputChannelInfo* outputChannel = OutputChannelsMap.FindPtr(channelId);
         YQL_ENSURE(outputChannel, "task: " << Task.GetId() << ", output channelId: " << channelId);
 
         outputChannel->Finished = true;
-        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvPush>(channelId, /* finish = */ true, /* askFreeSpace = */ false, /* pauseAfterPush = */ false, /* isOut = */ true), 0, Cookie);  // finish channel
+        ProcessOutputsState.Inflight++;
+        Send(TaskRunnerActorId, MakeHolder<NTaskRunnerActor::TEvPop>(channelId, /* wasFinished = */ true, 0));  // finish channel
         DoExecute();
     }
 

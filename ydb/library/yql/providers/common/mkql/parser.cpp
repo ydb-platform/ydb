@@ -101,35 +101,70 @@ TString ResolveUDFNameByCompression(std::string_view input) {
     }
     THROW yexception() << "Invalid compression: " << input;
 }
+
+TRuntimeNode WrapWithDecompress(
+    TRuntimeNode input,
+    const TType* inputItemType,
+    const std::string_view& compression,
+    NCommon::TMkqlBuildContext& ctx)
+{
+    // If input has one field, this field is data
+    if (!inputItemType->IsTuple()) {
+        return ctx.ProgramBuilder.Map(input, [&ctx, &compression](TRuntimeNode item) {
+            return ctx.ProgramBuilder.Apply(
+                ctx.ProgramBuilder.Udf(std::string("Decompress.") += ResolveUDFNameByCompression(compression)),
+                {item});
+        });
+    }
+
+    // If input has multiple fields, decompress only "data" field.
+    const auto* inputItemTuple = static_cast<const TTupleType*>(inputItemType);
+    return ctx.ProgramBuilder.Map(input, [&](TRuntimeNode item) {
+        const auto dataMember = ctx.ProgramBuilder.Nth(item, 0);
+        const auto decompress = ctx.ProgramBuilder.Apply(
+            ctx.ProgramBuilder.Udf(std::string("Decompress.") += ResolveUDFNameByCompression(compression)),
+            {dataMember});
+
+        std::vector<TRuntimeNode> res;
+        res.emplace_back(decompress);
+        for (auto i = 1U; i < inputItemTuple->GetElementsCount(); i++) {
+            res.emplace_back(ctx.ProgramBuilder.Nth(item, i));
+        }
+
+        return ctx.ProgramBuilder.NewTuple(res);
+    });
+}
 } // namespace
 
 TRuntimeNode BuildParseCall(
     TPosition pos,
     TRuntimeNode input,
     TMaybe<TRuntimeNode> extraColumnsByPathIndex,
+    std::unordered_map<TString, ui32>&& metadataColumns,
     const std::string_view& format,
     const std::string_view& compression,
     TType* inputType,
-    TType* outputItemType,
+    TType* parseItemType,
     TType* finalItemType,
     NCommon::TMkqlBuildContext& ctx)
 {
+    const auto* inputItemType = static_cast<TStreamType*>(inputType)->GetItemType();
+    const auto* parseItemStructType = static_cast<TStructType*>(parseItemType);
+    const auto* finalItemStructType = static_cast<TStructType*>(finalItemType);
+
     if (!compression.empty()) {
-        input = ctx.ProgramBuilder.Map(input, [&ctx, &compression](TRuntimeNode item) {
-            return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf(std::string("Decompress.") += ResolveUDFNameByCompression(compression)), {item});
-        });
+        input = WrapWithDecompress(input, inputItemType, compression, ctx);
     }
 
-    const auto structType = static_cast<const TStructType*>(outputItemType);
     if (format == "raw") {
-        MKQL_ENSURE(1U >= structType->GetMembersCount(), "Expected at most one column.");
         auto parseLambda = [&](TRuntimeNode item) {
-            if (structType->GetMembersCount() == 0) {
-                return ctx.ProgramBuilder.NewStruct(outputItemType, {});
+            if (parseItemStructType->GetMembersCount() == 0) {
+                return ctx.ProgramBuilder.NewStruct(parseItemType, {});
             }
 
             bool isOptional;
-            const auto schemeType = UnpackOptionalData(structType->GetMemberType(0U), isOptional)->GetSchemeType();
+            const auto schemeType = UnpackOptionalData(
+                parseItemStructType->GetMemberType(0U), isOptional)->GetSchemeType();
 
             TRuntimeNode converted;
             if (NUdf::TDataType<const char*>::Id == schemeType) {
@@ -140,37 +175,62 @@ TRuntimeNode BuildParseCall(
                                          ctx.ProgramBuilder.StrictFromString(item, type);
             }
 
-            return ctx.ProgramBuilder.NewStruct(outputItemType, {{structType->GetMemberName(0), converted }});
+            return ctx.ProgramBuilder.NewStruct(parseItemType, {{parseItemStructType->GetMemberName(0), converted }});
         };
 
         input = ctx.ProgramBuilder.Map(ctx.ProgramBuilder.ToFlow(input),
             [&](TRuntimeNode item) {
-                if (extraColumnsByPathIndex) {
+                std::vector<TRuntimeNode> res;
+
+                if (extraColumnsByPathIndex || !metadataColumns.empty()) {
                     auto data = ctx.ProgramBuilder.Nth(item, 0);
-                    auto pathInd = ctx.ProgramBuilder.Nth(item, 1);
-                    return ctx.ProgramBuilder.NewTuple({ parseLambda(data), pathInd });
+                    TMaybe<TRuntimeNode> pathInd;
+                    res.emplace_back(parseLambda(data));
+                    if (extraColumnsByPathIndex) {
+                        res.emplace_back(ctx.ProgramBuilder.Nth(item, res.size()));
+                    }
+                    for (auto i = 0U; i < metadataColumns.size(); i++) {
+                        res.emplace_back(ctx.ProgramBuilder.Nth(item, res.size()));
+                    }
+                    return ctx.ProgramBuilder.NewTuple(res);
                 }
                 return parseLambda(item);
             }
         );
     } else if (format == "json_list") {
         auto parseToListLambda = [&](TRuntimeNode blob) {
-            const auto json = ctx.ProgramBuilder.StrictFromString(blob, ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
-            const auto dom = ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ParseJson"), {json});
-            const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}), ctx.ProgramBuilder.NewStructType({}), ctx.ProgramBuilder.NewListType(outputItemType)});
-            return ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType), {dom});
+            const auto json = ctx.ProgramBuilder.StrictFromString(
+                blob,
+                ctx.ProgramBuilder.NewDataType(NUdf::TDataType<NUdf::TJson>::Id));
+            const auto dom = ctx.ProgramBuilder.Apply(
+                ctx.ProgramBuilder.Udf("Yson2.ParseJson"),
+                {json});
+            const auto userType = ctx.ProgramBuilder.NewTupleType({
+                ctx.ProgramBuilder.NewTupleType({dom.GetStaticType()}),
+                ctx.ProgramBuilder.NewStructType({}),
+                ctx.ProgramBuilder.NewListType(parseItemType)});
+            return ctx.ProgramBuilder.Apply(
+                ctx.ProgramBuilder.Udf("Yson2.ConvertTo", {}, userType),
+                {dom});
         };
 
         input = ctx.ProgramBuilder.FlatMap(ctx.ProgramBuilder.ToFlow(input),
             [&](TRuntimeNode blob) {
                 TRuntimeNode parsedList;
-                if (extraColumnsByPathIndex) {
+                if (extraColumnsByPathIndex || !metadataColumns.empty()) {
                     auto data = ctx.ProgramBuilder.Nth(blob, 0);
-                    auto pathInd = ctx.ProgramBuilder.Nth(blob, 1);
 
                     parsedList = ctx.ProgramBuilder.Map(parseToListLambda(data),
                         [&](TRuntimeNode item) {
-                            return ctx.ProgramBuilder.NewTuple({ item, pathInd });
+                            std::vector<TRuntimeNode> res;
+                            res.emplace_back(item);
+                            if (extraColumnsByPathIndex) {
+                                res.emplace_back(ctx.ProgramBuilder.Nth(blob, res.size()));
+                            }
+                            for (auto i = 0U; i < metadataColumns.size(); i++) {
+                                res.emplace_back(ctx.ProgramBuilder.Nth(blob, res.size()));
+                            }
+                            return ctx.ProgramBuilder.NewTuple(res);
                         }
                     );
                 } else {
@@ -179,51 +239,66 @@ TRuntimeNode BuildParseCall(
                 return parsedList;
             });
     } else {
-        TType* userOutputType = outputItemType;
-        TType* inputDataType = static_cast<TStreamType*>(inputType)->GetItemType();
-        if (extraColumnsByPathIndex) {
-            userOutputType = ctx.ProgramBuilder.NewTupleType({ userOutputType, ctx.ProgramBuilder.NewDataType(NUdf::EDataSlot::Uint64)});
-            inputDataType = static_cast<TTupleType*>(inputDataType)->GetElementType(0);
+        TType* userOutputType = parseItemType;
+        const TType* inputDataType = inputItemType;
+
+        if (extraColumnsByPathIndex || !metadataColumns.empty()) {
+            const auto* inputItemTuple = static_cast<const TTupleType*>(inputItemType);
+
+            std::vector<TType*> tupleItems;
+            tupleItems.reserve(inputItemTuple->GetElementsCount());
+
+            tupleItems.emplace_back(userOutputType);
+            for (auto i = 1U; i < inputItemTuple->GetElementsCount(); i++) {
+                tupleItems.emplace_back(inputItemTuple->GetElementType(i));
+            }
+
+            userOutputType = ctx.ProgramBuilder.NewTupleType(tupleItems);
+            inputDataType = inputItemTuple->GetElementType(0);
         }
-        const auto userType = ctx.ProgramBuilder.NewTupleType({ctx.ProgramBuilder.NewTupleType({inputType}), ctx.ProgramBuilder.NewStructType({}), userOutputType});
+
+        const auto userType = ctx.ProgramBuilder.NewTupleType({
+            ctx.ProgramBuilder.NewTupleType({inputType}),
+            ctx.ProgramBuilder.NewStructType({}),
+            userOutputType});
         input = TType::EKind::Resource == inputDataType->GetKind() ?
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseBlocks", {}, userType), {input})):
             ctx.ProgramBuilder.ToFlow(ctx.ProgramBuilder.Apply(ctx.ProgramBuilder.Udf("ClickHouseClient.ParseFormat", {}, userType, format), {input}));
     }
 
-    const auto finalStructType = static_cast<const TStructType*>(finalItemType);
-    if (extraColumnsByPathIndex) {
-        return ctx.ProgramBuilder.ExpandMap(input,
-            [&](TRuntimeNode item) {
-                // find extra columns by path index and combine them with parsed output
-                auto data = ctx.ProgramBuilder.Nth(item, 0);
-                auto pathInd = ctx.ProgramBuilder.Nth(item, 1);
-
-                auto extra = ctx.ProgramBuilder.Lookup(ctx.ProgramBuilder.ToIndexDict(*extraColumnsByPathIndex), pathInd);
-                extra = ctx.ProgramBuilder.Unwrap(extra,
-                    ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>("Failed to lookup path index"),
-                    pos.File, pos.Row, pos.Column);
-
-                TRuntimeNode::TList fields;
-                fields.reserve(finalStructType->GetMembersCount());
-                for (ui32 i = 0; i < finalStructType->GetMembersCount(); ++i) {
-                    TStringBuf name = finalStructType->GetMemberName(i);
-                    const bool inData = structType->FindMemberIndex(name).Defined();
-                    fields.push_back(ctx.ProgramBuilder.Member(inData ? data : extra, name));
-                }
-                return fields;
-            }
-        );
-    }
-
     return ctx.ProgramBuilder.ExpandMap(input,
         [&](TRuntimeNode item) {
+            auto parsedData = (extraColumnsByPathIndex || !metadataColumns.empty())
+                ? ctx.ProgramBuilder.Nth(item, 0)
+                : item;
+
+            TMaybe<TRuntimeNode> extra;
+            if (extraColumnsByPathIndex) {
+                auto pathInd = ctx.ProgramBuilder.Nth(item, 1);
+                auto extraNode = ctx.ProgramBuilder.Lookup(ctx.ProgramBuilder.ToIndexDict(*extraColumnsByPathIndex), pathInd);
+                extra = ctx.ProgramBuilder.Unwrap(extraNode,
+                    ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>("Failed to lookup path index"),
+                    pos.File, pos.Row, pos.Column);
+            }
+
             TRuntimeNode::TList fields;
-            fields.reserve(finalStructType->GetMembersCount());
-            auto j = 0U;
-            std::generate_n(std::back_inserter(fields), finalStructType->GetMembersCount(), [&](){ return ctx.ProgramBuilder.Member(item, finalStructType->GetMemberName(j++)); });
+            fields.reserve(finalItemStructType->GetMembersCount());
+
+            for (ui32 i = 0; i < finalItemStructType->GetMembersCount(); ++i) {
+                TStringBuf name = finalItemStructType->GetMemberName(i);
+                const auto metadataIter = metadataColumns.find(TString(name));
+                if (metadataIter != metadataColumns.end()) {
+                    fields.push_back(ctx.ProgramBuilder.Nth(item, metadataIter->second));
+                } else if (parseItemStructType->FindMemberIndex(name).Defined()) {
+                    fields.push_back(ctx.ProgramBuilder.Member(parsedData, name));
+                } else {
+                    MKQL_ENSURE(extra, "Column " << name << " wasn't found");
+                    fields.push_back(ctx.ProgramBuilder.Member(*extra, name));
+                }
+            }
             return fields;
-        });
+        }
+    );
 }
 
 TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWideWrap& wrapper, NCommon::TMkqlBuildContext& ctx) {
@@ -233,25 +308,57 @@ TMaybe<TRuntimeNode> TryWrapWithParser(const TDqSourceWideWrap& wrapper, NCommon
     }
 
     const auto input = MkqlBuildExpr(wrapper.Input().Ref(), ctx);
-    const auto inputItemType = NCommon::BuildType(wrapper.Input().Ref(), *wrapper.Input().Ref().GetTypeAnn(), ctx.ProgramBuilder);
+    const auto inputType = NCommon::BuildType(
+        wrapper.Input().Ref(),
+        *wrapper.Input().Ref().GetTypeAnn(),
+        ctx.ProgramBuilder);
 
     const TStructExprType* rowType = wrapper.RowType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
     const TStructExprType* parsedType = rowType;
 
     TMaybe<TRuntimeNode> extraColumns;
+    const TStructExprType* extraType = nullptr;
     if (auto extraColumnsSetting = GetSetting(wrapper.Settings().Cast().Ref(), "extraColumns")) {
         extraColumns = MkqlBuildExpr(extraColumnsSetting->Tail(), ctx);
-        const TStructExprType* extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
-        auto parsedItems = rowType->GetItems();
-        EraseIf(parsedItems, [extraType](const auto& item) { return extraType->FindItem(item->GetName()); });
-        parsedType = ctx.ExprCtx.MakeType<TStructExprType>(parsedItems);
+        extraType = extraColumnsSetting->Tail().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     }
 
-    const auto outputItemType = NCommon::BuildType(wrapper.RowType().Ref(), *parsedType, ctx.ProgramBuilder);
-    const auto finalItemType = NCommon::BuildType(wrapper.RowType().Ref(), *rowType, ctx.ProgramBuilder);
+    std::unordered_map<TString, ui32> metadataColumns;
+    if (auto metadataSetting = GetSetting(wrapper.Settings().Cast().Ref(), "metadataColumns")) {
+        for (auto i = 0U; i < metadataSetting->Tail().ChildrenSize(); i++) {
+            const auto name = TCoAtom(metadataSetting->Tail().Child(i)).StringValue();
+            metadataColumns.emplace(name, i + (extraColumns ? 2 : 1));
+        }
+    }
+
+    auto parsedItems = rowType->GetItems();
+    EraseIf(parsedItems, [extraType, &metadataColumns](const auto& item) {
+        return extraType && extraType->FindItem(item->GetName()) || metadataColumns.contains(TString(item->GetName()));
+    });
+    parsedType = ctx.ExprCtx.MakeType<TStructExprType>(parsedItems);
+
+    const auto parseItemType = NCommon::BuildType(
+        wrapper.RowType().Ref(),
+        *parsedType,
+        ctx.ProgramBuilder);
+    const auto finalItemType = NCommon::BuildType(
+        wrapper.RowType().Ref(),
+        *rowType,
+        ctx.ProgramBuilder);
+
     const auto& settings = GetSettings(wrapper.Settings().Cast().Ref());
     TPosition pos = ctx.ExprCtx.GetPosition(wrapper.Pos());
-    return BuildParseCall(pos, input, extraColumns, format.Content() + settings.front(), settings.back(), inputItemType, outputItemType, finalItemType, ctx);
+    return BuildParseCall(
+        pos,
+        input,
+        extraColumns,
+        std::move(metadataColumns),
+        format.Content() + settings.front(),
+        settings.back(),
+        inputType,
+        parseItemType,
+        finalItemType,
+        ctx);
 }
 
 }

@@ -70,7 +70,6 @@ public:
                 return TStatus::Error;
             }
 
-            meta.RawFormat = (meta.RowSpec == nullptr);
             if (!meta.RowSpec) {
                 meta.RowSpec = ExpandType(meta.Pos, *itemType, ctx);
             }

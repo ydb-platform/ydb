@@ -365,6 +365,7 @@ protected:
     void ProcessOutputsImpl(ERunStatus status) {
         ProcessOutputsState.LastRunStatus = status;
 
+        CA_LOG_D("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight );
         if (ProcessOutputsState.Inflight == 0) {
             ProcessOutputsState = TProcessOutputsState();
         }
@@ -1500,10 +1501,12 @@ protected:
             return;
         }
 
+        CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
             PollAsyncInput(source, inputIndex);
         }
 
+        CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
             PollAsyncInput(transform, inputIndex);
         }

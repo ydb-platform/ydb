@@ -14,7 +14,9 @@ target_compile_options(providers-pq-common PRIVATE
 target_link_libraries(providers-pq-common PUBLIC
   contrib-libs-cxxsupp
   yutil
+  yql-public-types
 )
 target_sources(providers-pq-common PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/common/pq_meta_fields.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/common/yql_names.cpp
 )

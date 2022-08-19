@@ -25,6 +25,7 @@ target_link_libraries(providers-pq-async_io PUBLIC
   providers-pq-proto
 )
 target_sources(providers-pq-async_io PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_read_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/dq_pq_write_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/pq/async_io/probes.cpp

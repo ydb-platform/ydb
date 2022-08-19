@@ -12,23 +12,29 @@ using namespace NYql::NNodes;
 
 namespace {
 
-TVector<TCoArgument> PrepareArgumentsReplacement(const TCoArguments& args, const TVector<TDqConnection>& newInputs,
+TVector<TCoArgument> PrepareArgumentsReplacement(const TExprBase& node, const TVector<TDqConnection>& newInputs,
     TExprContext& ctx, TNodeOnNodeOwnedMap& replaceMap)
 {
     TVector<TCoArgument> newArgs;
-    newArgs.reserve(args.Size() + newInputs.size());
     replaceMap.clear();
 
-    for (size_t i = 0; i < args.Size(); ++i) {
-        TCoArgument newArg{ctx.NewArgument(args.Pos(), TStringBuilder()
-            << "_dq_replace_arg_" << i)};
-        replaceMap[args.Arg(i).Raw()] = newArg.Ptr();
-        newArgs.emplace_back(newArg);
+    if (auto maybeArgs = node.Maybe<TCoArguments>()) {
+        auto args = maybeArgs.Cast();
+
+        newArgs.reserve(args.Size() + newInputs.size());
+        for (size_t i = 0; i < args.Size(); ++i) {
+            TCoArgument newArg{ctx.NewArgument(node.Pos(), TStringBuilder()
+                << "_dq_replace_arg_" << i)};
+            replaceMap[args.Arg(i).Raw()] = newArg.Ptr();
+            newArgs.emplace_back(newArg);
+        }
+    } else {
+        newArgs.reserve(newInputs.size());
     }
 
     for (size_t i = 0; i < newInputs.size(); ++i) {
-        TCoArgument newArg{ctx.NewArgument(args.Pos(), TStringBuilder()
-            << "_dq_replace_input_arg_" << args.Size() + i)};
+        TCoArgument newArg{ctx.NewArgument(node.Pos(), TStringBuilder()
+            << "_dq_replace_input_arg_" << newArgs.size())};
         replaceMap[newInputs[i].Raw()] = newArg.Ptr();
         newArgs.emplace_back(newArg);
     }
@@ -196,6 +202,101 @@ TExprBase DqPushMembersFilterToStage(TExprBase node, TExprContext& ctx, IOptimiz
     return result.Cast();
 }
 
+TMaybeNode<TDqStage> DqPushFlatMapInnerConnectionsToStageInput(TCoFlatMapBase& flatmap,
+    TExprNode::TListType&& innerConnections, TExprContext& ctx)
+{
+    TVector<TDqConnection> inputs;
+    TNodeOnNodeOwnedMap replaceMap;
+
+    // prepare inputs (inner connections + flatmap input)
+    inputs.reserve(innerConnections.size() + 1);
+    inputs.push_back(flatmap.Input().Cast<TDqConnection>());
+    for (auto& cn : innerConnections) {
+        if (!TMaybeNode<TDqCnUnionAll>(cn).IsValid() && !TMaybeNode<TDqCnMerge>(cn).IsValid()) {
+            return {};
+        }
+
+        inputs.push_back(TDqConnection(cn));
+    }
+
+    auto args = PrepareArgumentsReplacement(flatmap.Input(), inputs, ctx, replaceMap);
+    auto newFlatMap = ctx.ReplaceNodes(flatmap.Ptr(), replaceMap);
+
+    auto buildDqBroadcastCn = [&ctx](auto& cn) {
+        auto collectStage = Build<TDqStage>(ctx, cn.Pos())
+            .Inputs()
+                .Add(cn)
+                .Build()
+            .Program()
+                .Args({"stream"})
+                .Body("stream")
+                .Build()
+            .Settings(TDqStageSettings().BuildNode(ctx, cn.Pos()))
+            .Done();
+
+        return Build<TDqCnBroadcast>(ctx, cn.Pos())
+            .Output()
+                .Stage(collectStage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+    };
+
+    TVector<TExprBase> stageInputs;
+    stageInputs.reserve(inputs.size());
+    auto mapCn = Build<TDqCnMap>(ctx, flatmap.Input().Pos())
+        .Output(inputs[0].Output())
+        .Done();
+    stageInputs.emplace_back(std::move(mapCn));
+
+    // gather all elements from stream inputs (skip flatmap input)
+    for (ui32 inputId = 1; inputId < inputs.size(); ++inputId) {
+        auto argAsList = ctx.NewArgument(inputs[inputId].Pos(), TStringBuilder() << "_dq_list_arg" << inputId);
+        auto stageInput = buildDqBroadcastCn(inputs[inputId]);
+
+        auto condenseInput = Build<TCoCondense>(ctx, stageInput.Pos())
+            .Input(args[inputId])
+            .State<TCoList>()
+                .ListType<TCoTypeOf>()
+                    .Value(stageInput)
+                    .Build()
+                .Build()
+            .SwitchHandler()
+                .Args({"item", "state"})
+                .Body(MakeBool<false>(stageInput.Pos(), ctx))
+                .Build()
+            .UpdateHandler()
+                .Args({"item", "state"})
+                .Body<TCoAppend>()
+                    .List("state")
+                    .Item("item")
+                    .Build()
+                .Build()
+            .Done().Ptr();
+
+        newFlatMap = Build<TCoFlatMap>(ctx, stageInput.Pos())
+             .Input(condenseInput)
+             .Lambda()
+                .Args({argAsList})
+                .Body(ctx.ReplaceNode(std::move(newFlatMap), args[inputId].Ref(), argAsList))
+                .Build()
+             .Done().Ptr();
+
+        stageInputs.emplace_back(std::move(stageInput));
+    }
+
+    return Build<TDqStage>(ctx, flatmap.Pos())
+        .Inputs()
+            .Add(std::move(stageInputs))
+            .Build()
+        .Program()
+            .Args(args)
+            .Body(newFlatMap)
+            .Build()
+        .Settings(TDqStageSettings().BuildNode(ctx, flatmap.Pos()))
+        .Done();
+}
+
 } // namespace
 
 TMaybeNode<TDqStage> DqPushLambdaToStage(const TDqStage& stage, const TCoAtom& outputIndex, TCoLambda& lambda,
@@ -350,41 +451,56 @@ TExprBase DqBuildFlatmapStage(TExprBase node, TExprContext& ctx, IOptimizationCo
         return node;
     }
 
-    if (!IsDqPureExpr(flatmap.Lambda())) {
-        return node;
-    }
+    auto filter = [](const TExprNode::TPtr& node) {
+        return !TMaybeNode<TDqPhyPrecompute>(node).IsValid();
+    };
 
-    if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
-        return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
-    }
+    auto predicate = [](const TExprNode::TPtr& node) {
+        return TMaybeNode<TDqSource>(node).IsValid() ||
+               TMaybeNode<TDqConnection>(node).IsValid();
+    };
 
-    auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
-        .Lambda()
-            .Param("stream")
-            .Callable(flatmap.Ref().Content())
-                .Arg(0, "stream")
-                .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
-            .Seal()
-        .Seal().Build());
+    auto innerConnections = FindNodes(flatmap.Lambda().Body().Ptr(), filter, predicate);
 
-    auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
-    if (pushResult) {
-        return pushResult.Cast();
-    }
+    TMaybeNode<TDqStage> flatmapStage;
+    if (!innerConnections.empty()) {
+        flatmapStage = DqPushFlatMapInnerConnectionsToStageInput(flatmap, std::move(innerConnections), ctx);
+        if (!flatmapStage) {
+            return node;
+        }
+    } else {
+        if (auto connToPushableStage = DqBuildPushableStage(dqUnion, ctx)) {
+            return TExprBase(ctx.ChangeChild(*node.Raw(), TCoFlatMapBase::idx_Input, std::move(connToPushableStage)));
+        }
 
-    auto flatmapStage = Build<TDqStage>(ctx, flatmap.Pos())
-        .Inputs()
-            .Add<TDqCnMap>()
-                .Output(dqUnion.Output())
+        auto lambda = TCoLambda(ctx.Builder(flatmap.Lambda().Pos())
+            .Lambda()
+                .Param("stream")
+                .Callable(flatmap.Ref().Content())
+                    .Arg(0, "stream")
+                    .Add(1, ctx.DeepCopyLambda(flatmap.Lambda().Ref()))
+                .Seal()
+            .Seal().Build());
+
+        auto pushResult = DqPushLambdaToStageUnionAll(dqUnion, lambda, {}, ctx, optCtx);
+        if (pushResult) {
+            return pushResult.Cast();
+        }
+
+        flatmapStage = Build<TDqStage>(ctx, flatmap.Pos())
+            .Inputs()
+                .Add<TDqCnMap>()
+                    .Output(dqUnion.Output())
+                    .Build()
                 .Build()
-            .Build()
-        .Program(lambda)
-        .Settings(TDqStageSettings().BuildNode(ctx, flatmap.Pos()))
-        .Done();
+            .Program(lambda)
+            .Settings(TDqStageSettings().BuildNode(ctx, flatmap.Pos()))
+            .Done();
+    }
 
     return Build<TDqCnUnionAll>(ctx, node.Pos())
         .Output()
-            .Stage(flatmapStage)
+            .Stage(flatmapStage.Cast())
             .Index().Build("0")
             .Build()
         .Done();

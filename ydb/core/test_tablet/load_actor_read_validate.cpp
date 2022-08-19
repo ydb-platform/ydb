@@ -221,7 +221,7 @@ namespace NKikimr::NTestShard {
             auto& record = ev->Get()->Record;
             const NKikimrKeyValue::Statuses::ReplyStatus status = record.status();
 
-            if (status != NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) {
+            if (status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) {
                 STLOG(PRI_ERROR, TEST_SHARD, TS19, "CmdRangeRead failed", (TabletId, TabletId), (Status, status),
                     (ErrorReason, record.msg()));
                 return IssueNextReadRangeQuery();

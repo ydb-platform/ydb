@@ -5,6 +5,7 @@
 
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 
 #include <ydb/library/yql/utils/log/log.h>
@@ -26,6 +27,7 @@ public:
         AddHandler({TPqReadTopic::CallableName()}, Hndl(&TSelf::HandleReadTopic));
         AddHandler({TPqTopic::CallableName()}, Hndl(&TSelf::HandleTopic));
         AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TSelf::HandleDqTopicSource));
+        AddHandler({TCoWriteTime::CallableName(), TCoOffset::CallableName()}, Hndl(&TSelf::HandleMetadata));
     }
 
     TStatus HandleConfigure(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -45,29 +47,41 @@ public:
         return TStatus::Ok;
     }
 
-    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprBase input, TExprContext& ctx, TVector<TString>& columnOrder) {
-        auto schema = topic.Ref().GetTypeAnn();
+    const TTypeAnnotationNode* GetReadTopicSchema(TPqTopic topic, TMaybeNode<TCoAtomList> columns, TExprContext& ctx, TVector<TString>& columnOrder) {
+        TVector<const TItemExprType*> items;
+        items.reserve((columns ? columns.Cast().Ref().ChildrenSize() : 0) + topic.Metadata().Size());
+
+        const auto* itemSchema = topic.Ref().GetTypeAnn()->Cast<TListExprType>()
+            ->GetItemType()->Cast<TStructExprType>();
+
+        std::unordered_set<TString> addedFields;
         if (columns) {
-            TVector<const TItemExprType*> items;
-            items.reserve(columns.Cast().Ref().ChildrenSize());
             columnOrder.reserve(items.capacity());
 
-            auto itemSchema = topic.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
             for (auto c : columns.Cast().Ref().ChildrenList()) {
                 if (!EnsureAtom(*c, ctx)) {
                     return nullptr;
                 }
                 auto index = itemSchema->FindItem(c->Content());
                 if (!index) {
-                    ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder() << "Unable to find column: " << c->Content()));
+                    ctx.AddError(TIssue(ctx.GetPosition(topic.Pos()), TStringBuilder() << "Unable to find column: " << c->Content()));
                     return nullptr;
                 }
                 columnOrder.push_back(TString(c->Content()));
                 items.push_back(itemSchema->GetItems()[*index]);
+                addedFields.emplace(c->Content());
             }
-            schema = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items));
         }
-        return schema;
+
+        for (auto c : itemSchema->GetItems()) {
+            if (addedFields.contains(TString(c->GetName()))) {
+                continue;
+            }
+
+            items.push_back(c);
+        }
+
+        return ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(items));
     }
 
     TStatus HandleReadTopic(TExprBase input, TExprContext& ctx) {
@@ -99,7 +113,7 @@ public:
         }
 
         TVector<TString> columnOrder;
-        auto schema = GetReadTopicSchema(topic, read.Columns().Maybe<TCoAtomList>(), input, ctx, columnOrder);
+        auto schema = GetReadTopicSchema(topic, read.Columns().Maybe<TCoAtomList>(), ctx, columnOrder);
         if (!schema) {
             return TStatus::Error;
         }
@@ -131,7 +145,23 @@ public:
             return TStatus::Error;
         }
 
-        input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+        if (topic.Metadata().Empty()) {
+            input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TDataExprType>(EDataSlot::String)));
+            return TStatus::Ok;
+        }
+
+        TTypeAnnotationNode::TListType tupleItems;
+        tupleItems.reserve(topic.Metadata().Size() + 1);
+
+        tupleItems.emplace_back(ctx.MakeType<TDataExprType>(EDataSlot::String));
+        for (const auto metadataField : topic.Metadata()) {
+            const auto metadataSysColumn = metadataField.Value().Maybe<TCoAtom>().Cast().StringValue();
+            const auto* descriptor = FindPqMetaFieldDescriptorBySysColumn(metadataSysColumn);
+            Y_ENSURE(descriptor);
+            tupleItems.emplace_back(ctx.MakeType<TDataExprType>(descriptor->Type));
+        }
+
+        input.Ptr()->SetTypeAnn(ctx.MakeType<TStreamExprType>(ctx.MakeType<TTupleExprType>(tupleItems)));
         return TStatus::Ok;
     }
 
@@ -141,7 +171,72 @@ public:
         }
 
         TPqTopic topic(input);
-        input->SetTypeAnn(ctx.MakeType<TListExprType>(topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()));
+        TVector<const TItemExprType*> outputItems;
+
+        auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
+        for (const auto& rowSchemaItem : rowSchema->GetItems()) {
+            outputItems.push_back(rowSchemaItem);
+        }
+
+        for (auto nameValue : topic.Metadata()) {
+            const auto metadataSysColumn = nameValue.Value().Maybe<TCoAtom>().Cast().StringValue();
+            const auto* descriptor = FindPqMetaFieldDescriptorBySysColumn(metadataSysColumn);
+            Y_ENSURE(descriptor);
+            outputItems.emplace_back(ctx.MakeType<TItemExprType>(descriptor->SysColumn, ctx.MakeType<TDataExprType>(descriptor->Type)));
+        }
+
+        const auto* itemType = ctx.MakeType<TStructExprType>(outputItems);
+        input->SetTypeAnn(ctx.MakeType<TListExprType>(itemType));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleMetadata(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        const auto* descriptor = FindPqMetaFieldDescriptorByCallable(TString(input->Content()));
+
+        if (!EnsureDependsOn(input->Head(), ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto depOn = input->Head().HeadPtr();
+        if (!EnsureStructType(*depOn, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (depOn->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+            auto structType = depOn->GetTypeAnn()->Cast<TStructExprType>();
+            if (auto pos = structType->FindItem(descriptor->SysColumn)) {
+                bool isOptional = false;
+                const TDataExprType* dataType = nullptr;
+                if (!EnsureDataOrOptionalOfData(depOn->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                if (!EnsureSpecificDataType(depOn->Pos(), *dataType, descriptor->Type, ctx)) {
+                    return IGraphTransformer::TStatus::Error;
+                }
+
+                output = ctx.Builder(input->Pos())
+                    .Callable("Member")
+                        .Add(0, depOn)
+                        .Atom(1, descriptor->SysColumn, TNodeFlags::Default)
+                    .Seal()
+                    .Build();
+
+                if (isOptional) {
+                    output = ctx.Builder(input->Pos())
+                        .Callable("Coalesce")
+                            .Add(0, output)
+                            .Callable(1, "String")
+                                .Atom(0, "0", TNodeFlags::Default)
+                            .Seal()
+                        .Seal()
+                        .Build();
+                }
+                return IGraphTransformer::TStatus::Repeat;
+            }
+        }
+
+        input->SetTypeAnn(ctx.MakeType<TDataExprType>(descriptor->Type));
         return TStatus::Ok;
     }
 

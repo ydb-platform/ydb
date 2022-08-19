@@ -3329,6 +3329,24 @@ Y_UNIT_TEST_SUITE(KqpNewEngine) {
         )").ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+
+    Y_UNIT_TEST(PushFlatmapInnerConnectionsToStageInput) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            --!syntax_v1
+            PRAGMA kikimr.UseNewEngine = "true";
+            $subquery = SELECT Key FROM `/Root/KeyValue`;
+            $subquery2 = SELECT Amount FROM `/Root/Test`;
+
+            SELECT * FROM `/Root/EightShard`
+            WHERE Key IN $subquery OR Key == 101 OR Key IN $subquery2;
+        )", TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];[101u];["Value1"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 }
 
 } // namespace NKikimr::NKqp

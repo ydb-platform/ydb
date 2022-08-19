@@ -5,13 +5,14 @@
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/opt/dq_opt.h>
+#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
+#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
+#include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
 #include <ydb/library/yql/providers/pq/expr_nodes/yql_pq_expr_nodes.h>
-#include <ydb/library/yql/providers/common/config/yql_configuration_transformer.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider.h>
-#include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
-#include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
-#include <ydb/library/yql/providers/common/transform/yql_lazy_init.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 
@@ -102,13 +103,21 @@ public:
             return nullptr;
         }
 
+        TVector<TCoNameValueTuple> sourceMetadata;
+        for (auto sysColumn : AllowedPqMetaSysColumns()) {
+            sourceMetadata.push_back(Build<TCoNameValueTuple>(ctx, read.Pos())
+                .Name().Build("system")
+                .Value<TCoAtom>().Build(sysColumn)
+                .Done());
+        }
+
         auto topicNode = Build<TPqTopic>(ctx, read.Pos())
             .Cluster().Value(cluster).Build()
             .Database().Value(State_->Configuration->GetDatabaseForTopic(cluster)).Build()
             .Path().Value(topicKeyParser.GetTopicPath()).Build()
             .RowSpec(topicMeta->RowSpec)
             .Props(BuildTopicPropsList(*topicMeta, read.Pos(), ctx))
-            .Metadata().Build()
+            .Metadata().Add(sourceMetadata).Build()
             .Done();
 
         auto builder = Build<TPqReadTopic>(ctx, read.Pos())

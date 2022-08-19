@@ -7,11 +7,13 @@
 #include <ydb/library/yql/dq/common/dq_common.h>
 #include <ydb/library/yql/dq/proto/dq_checkpoint.pb.h>
 
-#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/minikql/comp_nodes/mkql_saveload.h>
 #include <ydb/library/yql/minikql/mkql_alloc.h>
 #include <ydb/library/yql/minikql/mkql_string_util.h>
+#include <ydb/library/yql/providers/pq/async_io/dq_pq_meta_extractor.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
+#include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/utils/yql_panic.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h>
@@ -114,7 +116,11 @@ public:
         , StartingMessageTimestamp(TInstant::MilliSeconds(TInstant::Now().MilliSeconds())) // this field is serialized as milliseconds, so drop microseconds part to be consistent with storage
         , ComputeActorId(computeActorId)
     {
-        Y_UNUSED(HolderFactory);
+        MetadataFields.reserve(SourceParams.MetadataFieldsSize());
+        TPqMetaExtractor fieldsExtractor;
+        for (const auto& fieldName : SourceParams.GetMetadataFields()) {
+            MetadataFields.emplace_back(fieldName, fieldsExtractor.FindExtractorLambda(fieldName));
+        }
     }
 
     NYdb::NPersQueue::TPersQueueClientSettings GetPersQueueClientSettings() const {
@@ -316,7 +322,20 @@ private:
                     continue;
                 }
 
-                Batch.emplace_back(NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size())));
+                NUdf::TUnboxedValuePod item;
+                if (Self.MetadataFields.empty()) {
+                    item = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+                } else {
+                    NUdf::TUnboxedValue* itemPtr;
+                    item = Self.HolderFactory.CreateDirectArrayHolder(Self.MetadataFields.size() + 1, itemPtr);
+                    *(itemPtr++) = NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.Data(), data.Size()));
+
+                    for (const auto& [name, extractor] : Self.MetadataFields) {
+                        *(itemPtr++) = extractor(message);
+                    }
+                }
+
+                Batch.emplace_back(item);
                 UsedSpace += data.Size();
             }
             Self.UpdateStateWithNewReadData(event);
@@ -373,6 +392,7 @@ private:
     std::queue<std::pair<ui64, NYdb::NPersQueue::TDeferredCommit>> DeferredCommits;
     NYdb::NPersQueue::TDeferredCommit CurrentDeferredCommit;
     bool SubscribedOnEvent = false;
+    std::vector<std::tuple<TString, TPqMetaExtractor::TPqMetaExtractorLambda>> MetadataFields;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(

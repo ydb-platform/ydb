@@ -78,8 +78,13 @@ struct IDqComputeActorAsyncInput {
     virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0; // Apply side effects related to this checkpoint.
     virtual void LoadState(const NDqProto::TSourceState& state) = 0;
 
-    virtual void PassAway() = 0; // The same signature as IActor::PassAway()
+    // The same signature as IActor::PassAway().
+    // It is guaranted that this method will be called with bound MKQL allocator.
+    // So, it is the right place to destroy all internal UnboxedValues.
+    virtual void PassAway() = 0;
 
+    // Do not destroy UnboxedValues inside destructor!!!
+    // It is called from actor system thread, and MKQL allocator is not bound in this case.
     virtual ~IDqComputeActorAsyncInput() = default;
 };
 

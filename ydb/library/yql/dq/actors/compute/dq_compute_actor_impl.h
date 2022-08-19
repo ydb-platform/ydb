@@ -498,51 +498,55 @@ protected:
             Checkpoints->Receive(handle, NActors::TActivationContext::AsActorContext());
         }
 
-        for (auto& [_, source] : SourcesMap) {
-            if (source.Actor) {
-                source.AsyncInput->PassAway();
-            }
-        }
-
-        for (auto& [_, transform] : InputTransformsMap) {
-            if (transform.Actor) {
-                transform.AsyncInput->PassAway();
-            }
-        }
-
-        for (auto& [_, sink] : SinksMap) {
-            if (sink.Actor) {
-                sink.AsyncOutput->PassAway();
-            }
-        }
-
-        for (auto& [_, transform] : OutputTransformsMap) {
-            if (transform.Actor) {
-                transform.AsyncOutput->PassAway();
-            }
-        }
-
-        for (auto& [_, outputChannel] : OutputChannelsMap) {
-            if (outputChannel.Channel) {
-                outputChannel.Channel->Terminate();
-            }
-        }
-
-        if (RuntimeSettings.TerminateHandler) {
-            RuntimeSettings.TerminateHandler(success, issues);
-        }
-
         {
-            // free MKQL memory then destroy TaskRunner and Allocator
-            if (auto guard = MaybeBindAllocator()) {
+            auto guard = MaybeBindAllocator(); // Source/Sink could destroy mkql values inside PassAway, which requires allocator to be bound
+
+            for (auto& [_, source] : SourcesMap) {
+                if (source.Actor) {
+                    source.AsyncInput->PassAway();
+                }
+            }
+
+            for (auto& [_, transform] : InputTransformsMap) {
+                if (transform.Actor) {
+                    transform.AsyncInput->PassAway();
+                }
+            }
+
+            for (auto& [_, sink] : SinksMap) {
+                if (sink.Actor) {
+                    sink.AsyncOutput->PassAway();
+                }
+            }
+
+            for (auto& [_, transform] : OutputTransformsMap) {
+                if (transform.Actor) {
+                    transform.AsyncOutput->PassAway();
+                }
+            }
+
+            for (auto& [_, outputChannel] : OutputChannelsMap) {
+                if (outputChannel.Channel) {
+                    outputChannel.Channel->Terminate();
+                }
+            }
+
+            if (RuntimeSettings.TerminateHandler) {
+                RuntimeSettings.TerminateHandler(success, issues);
+            }
+
+            {
+                if (guard) {
+                    // free MKQL memory then destroy TaskRunner and Allocator
 #define CLEANUP(what) decltype(what) what##_; what.swap(what##_);
-                CLEANUP(InputChannelsMap);
-                CLEANUP(SourcesMap);
-                CLEANUP(InputTransformsMap);
-                CLEANUP(OutputChannelsMap);
-                CLEANUP(SinksMap);
-                CLEANUP(OutputTransformsMap);
+                    CLEANUP(InputChannelsMap);
+                    CLEANUP(SourcesMap);
+                    CLEANUP(InputTransformsMap);
+                    CLEANUP(OutputChannelsMap);
+                    CLEANUP(SinksMap);
+                    CLEANUP(OutputTransformsMap);
 #undef CLEANUP
+                }
             }
         }
 

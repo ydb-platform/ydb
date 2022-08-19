@@ -221,6 +221,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        ContainerCache.Clear();
         TActorBootstrapped<TS3ReadActor>::PassAway();
     }
 
@@ -570,6 +571,7 @@ private:
 
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
+        ContainerCache.Clear();
         TActorBootstrapped<TS3StreamReadActor>::PassAway();
     }
 

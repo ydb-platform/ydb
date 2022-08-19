@@ -19,6 +19,20 @@ static NProtoBuf::Timestamp MillisecToProtoTimeStamp(ui64 ms) {
     return timestamp;
 }
 
+template <typename TStoragePoolHolder>
+using TAddStoragePoolFunc = Ydb::Table::StoragePool* (TStoragePoolHolder::*)();
+
+template <typename TStoragePoolHolder>
+static void FillStoragePool(TStoragePoolHolder* out, TAddStoragePoolFunc<TStoragePoolHolder> func,
+        const NKikimrSchemeOp::TStorageSettings& in)
+{
+    if (in.GetAllowOtherKinds()) {
+        return;
+    }
+
+    std::invoke(func, out)->set_media(in.GetPreferredPoolKind());
+}
+
 template <typename TYdbProto>
 void FillColumnDescriptionImpl(TYdbProto& out,
         NKikimrMiniKQL::TType& splitKeyType, const NKikimrSchemeOp::TTableDescription& in) {
@@ -469,14 +483,16 @@ void FillStorageSettingsImpl(TYdbProto& out,
             settings->set_store_external_blobs(Ydb::FeatureFlag::DISABLED);
 
             if (family.HasStorageConfig()) {
+                using StorageSettings = Ydb::Table::StorageSettings;
+
                 if (family.GetStorageConfig().HasSysLog()) {
-                    settings->mutable_tablet_commit_log0()->set_media(family.GetStorageConfig().GetSysLog().GetPreferredPoolKind());
+                    FillStoragePool(settings, &StorageSettings::mutable_tablet_commit_log0, family.GetStorageConfig().GetSysLog());
                 }
                 if (family.GetStorageConfig().HasLog()) {
-                    settings->mutable_tablet_commit_log1()->set_media(family.GetStorageConfig().GetLog().GetPreferredPoolKind());
+                    FillStoragePool(settings, &StorageSettings::mutable_tablet_commit_log1, family.GetStorageConfig().GetLog());
                 }
                 if (family.GetStorageConfig().HasExternal()) {
-                    settings->mutable_external()->set_media(family.GetStorageConfig().GetExternal().GetPreferredPoolKind());
+                    FillStoragePool(settings, &StorageSettings::mutable_external, family.GetStorageConfig().GetExternal());
                 }
 
                 const ui32 externalThreshold = family.GetStorageConfig().GetExternalThreshold();
@@ -545,7 +561,7 @@ void FillColumnFamiliesImpl(TYdbProto& out,
         }
 
         if (family.HasStorageConfig() && family.GetStorageConfig().HasData()) {
-            r->mutable_data()->set_media(family.GetStorageConfig().GetData().GetPreferredPoolKind());
+            FillStoragePool(r, &Ydb::Table::ColumnFamily::mutable_data, family.GetStorageConfig().GetData());
         }
 
         if (family.HasColumnCodec()) {

@@ -34,12 +34,11 @@ struct TListRequest {
     TString Token;
     TString Url;
     TString Pattern;
-    TString UserPath;
     TVector<IPathGenerator::TColumnWithValue> ColumnValues;
 };
 
 bool operator<(const TListRequest& a, const TListRequest& b) {
-    return std::tie(a.Token, a.Url, a.Pattern, a.UserPath) < std::tie(b.Token, b.Url, b.Pattern, b.UserPath);
+    return std::tie(a.Token, a.Url, a.Pattern) < std::tie(b.Token, b.Url, b.Pattern);
 }
 
 using TPendingRequests = TMap<TListRequest, NThreading::TFuture<IS3Lister::TListResult>>;
@@ -146,10 +145,10 @@ public:
                 }
 
                 const auto& listEntries = std::get<IS3Lister::TListEntries>(listResult);
-                if (listEntries.empty() && !generatedColumnsConfig && !req.UserPath.EndsWith("/")) {
+                if (listEntries.empty() && !IS3Lister::HasWildcards(req.Pattern)) {
                     // request to list particular files that are missing
                     ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
-                        TStringBuilder() << "Object " << req.UserPath << " doesn't exist."));
+                        TStringBuilder() << "Object " << req.Pattern << " doesn't exist."));
                     return TStatus::Error;
                 }
 
@@ -379,7 +378,6 @@ private:
             TListRequest req;
             req.Token = tokenStr;
             req.Url = url;
-            req.UserPath = path;
 
             if (partitionedBy.empty()) {
                 if (path.EndsWith("/")) {
@@ -394,6 +392,7 @@ private:
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
+                const TString pathNoTrailingSlash = path.substr(0, path.EndsWith("/") ? path.size() - 1 : path.size());
                 if (!config.Generator) {
                     // Hive-style partitioning
                     TString generated;
@@ -401,13 +400,13 @@ private:
                         generated += "/" + col + "=*";
                     }
                     generated += "/*";
-                    req.Pattern = path + generated;
+                    req.Pattern = pathNoTrailingSlash + generated;
                     reqs.push_back(req);
                 } else {
                     for (auto& rule : config.Generator->GetRules()) {
                         YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
                         req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
-                        req.Pattern = path + rule.Path + "/*";
+                        req.Pattern = pathNoTrailingSlash + rule.Path + "/*";
                         reqs.push_back(req);
                     }
                 }

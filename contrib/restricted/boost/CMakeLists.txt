@@ -55,6 +55,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-preprocessor
   restricted-boost-proto
   restricted-boost-qvm
+  restricted-boost-random
   restricted-boost-range
   restricted-boost-rational
   restricted-boost-smart_ptr

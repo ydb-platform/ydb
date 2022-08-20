@@ -27,7 +27,7 @@
 #if BOOST_VERSION >= 103500
 # include <boost/fusion/include/for_each.hpp>
 #else
-#error # include <boost/spirit/fusion/algorithm/for_each.hpp>
+# error #include <boost/spirit/fusion/algorithm/for_each.hpp>
 #endif
 
 #include <boost/xpressive/detail/detail_fwd.hpp>

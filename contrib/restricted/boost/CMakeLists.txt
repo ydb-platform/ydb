@@ -72,4 +72,5 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-variant
   restricted-boost-vmd
   restricted-boost-winapi
+  restricted-boost-xpressive
 )

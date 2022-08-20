@@ -421,7 +421,7 @@ struct tracking_ptr
     }
 
     // NOTE: this does *not* do tracking. Can't provide a non-throwing swap that tracks references
-    void swap(tracking_ptr<element_type> &that) // noexcept
+    void swap(tracking_ptr<element_type> &that) // throw()
     {
         this->impl_.swap(that.impl_);
     }

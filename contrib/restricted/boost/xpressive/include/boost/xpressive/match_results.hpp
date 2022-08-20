@@ -102,7 +102,7 @@ struct results_extras
 //
 struct char_overflow_handler_
 {
-    void operator ()(numeric::range_check_result result) const //
+    void operator ()(numeric::range_check_result result) const // throw(regex_error)
     {
         if(numeric::cInRange != result)
         {
@@ -654,7 +654,7 @@ public:
     /// \post *this contains the sequence of matched sub-expressions that were in that,
     /// that contains the sequence of matched sub-expressions that were in *this.
     /// \throw nothrow
-    void swap(match_results<BidiIter> &that) // noexcept
+    void swap(match_results<BidiIter> &that) // throw()
     {
         using std::swap;
         swap(this->regex_id_, that.regex_id_);

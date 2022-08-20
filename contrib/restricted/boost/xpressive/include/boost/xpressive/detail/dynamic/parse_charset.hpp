@@ -51,7 +51,7 @@ struct escape_value
 //
 struct char_overflow_handler
 {
-    void operator ()(numeric::range_check_result result) const //
+    void operator ()(numeric::range_check_result result) const // throw(regex_error)
     {
         if(numeric::cInRange != result)
         {

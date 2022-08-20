@@ -17,29 +17,29 @@
 # if BOOST_VERSION >= 103500
 #  include <boost/fusion/include/cons.hpp> // Boost 1.35+ has Fusion2
 # else
-#error #  include <boost/spirit/fusion/sequence/cons.hpp> // Fusion1
+#  error #include <boost/spirit/fusion/sequence/cons.hpp> // Fusion1
 # endif
 
 #else
 
 // For earlier versions of Boost, put the definition of cons here
-#error # include <boost/call_traits.hpp>
-#error # include <boost/mpl/if.hpp>
-#error # include <boost/mpl/eval_if.hpp>
-#error # include <boost/mpl/identity.hpp>
-#error # include <boost/type_traits/is_const.hpp>
-#error # include <boost/type_traits/add_const.hpp>
-#error # include <boost/type_traits/add_reference.hpp>
-#error # include <boost/spirit/fusion/detail/config.hpp>
-#error # include <boost/spirit/fusion/detail/access.hpp>
-#error # include <boost/spirit/fusion/iterator/next.hpp>
-#error # include <boost/spirit/fusion/iterator/equal_to.hpp>
-#error # include <boost/spirit/fusion/iterator/as_fusion_iterator.hpp>
-#error # include <boost/spirit/fusion/iterator/detail/iterator_base.hpp>
-#error # include <boost/spirit/fusion/sequence/begin.hpp>
-#error # include <boost/spirit/fusion/sequence/end.hpp>
-#error # include <boost/spirit/fusion/sequence/as_fusion_sequence.hpp>
-#error # include <boost/spirit/fusion/sequence/detail/sequence_base.hpp>
+# include <boost/call_traits.hpp>
+# include <boost/mpl/if.hpp>
+# include <boost/mpl/eval_if.hpp>
+# include <boost/mpl/identity.hpp>
+# include <boost/type_traits/is_const.hpp>
+# include <boost/type_traits/add_const.hpp>
+# include <boost/type_traits/add_reference.hpp>
+# error #include <boost/spirit/fusion/detail/config.hpp>
+# error #include <boost/spirit/fusion/detail/access.hpp>
+# error #include <boost/spirit/fusion/iterator/next.hpp>
+# error #include <boost/spirit/fusion/iterator/equal_to.hpp>
+# error #include <boost/spirit/fusion/iterator/as_fusion_iterator.hpp>
+# error #include <boost/spirit/fusion/iterator/detail/iterator_base.hpp>
+# error #include <boost/spirit/fusion/sequence/begin.hpp>
+# error #include <boost/spirit/fusion/sequence/end.hpp>
+# error #include <boost/spirit/fusion/sequence/as_fusion_sequence.hpp>
+# error #include <boost/spirit/fusion/sequence/detail/sequence_base.hpp>
 
 namespace boost { namespace fusion
 {

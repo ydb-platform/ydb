@@ -104,7 +104,7 @@ namespace boost { namespace xpressive { namespace detail
                 pop_front();
         }
 
-        void swap(list &that) // noexcept
+        void swap(list &that) // throw()
         {
             list temp;
             temp.splice(temp.begin(), that);  // move that to temp

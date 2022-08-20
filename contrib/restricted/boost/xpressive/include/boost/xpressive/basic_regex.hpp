@@ -158,7 +158,7 @@ public:
     ///             enclosing regular expression. It is done this way to ensure
     ///             that swap() cannot throw.
     /// \throw      nothrow
-    void swap(basic_regex<BidiIter> &that) // noexcept
+    void swap(basic_regex<BidiIter> &that) // throw()
     {
         proto::value(*this).swap(proto::value(that));
     }
@@ -285,7 +285,7 @@ template<typename BidiIter> regex_constants::syntax_option_type const basic_rege
 ///             that swap() cannot throw.
 /// \throw      nothrow
 template<typename BidiIter>
-inline void swap(basic_regex<BidiIter> &left, basic_regex<BidiIter> &right) // noexcept
+inline void swap(basic_regex<BidiIter> &left, basic_regex<BidiIter> &right) // throw()
 {
     left.swap(right);
 }

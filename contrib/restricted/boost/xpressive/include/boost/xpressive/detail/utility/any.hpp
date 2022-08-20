@@ -17,18 +17,18 @@
 # if BOOST_VERSION >= 103500
 #  include <boost/fusion/include/any.hpp> // Boost 1.35+ has Fusion2
 # else
-#error #  include <boost/spirit/fusion/algorithm/any.hpp> // Fusion1
+#  error #include <boost/spirit/fusion/algorithm/any.hpp> // Fusion1
 # endif
 
 #else
 
-#error # include <boost/spirit/fusion/sequence/begin.hpp>
-#error # include <boost/spirit/fusion/sequence/end.hpp>
-#error # include <boost/spirit/fusion/iterator/equal_to.hpp>
-#error # include <boost/mpl/bool.hpp>
-#error # include <boost/spirit/fusion/iterator/equal_to.hpp>
-#error # include <boost/spirit/fusion/iterator/next.hpp>
-#error # include <boost/spirit/fusion/iterator/deref.hpp>
+# error #include <boost/spirit/fusion/sequence/begin.hpp>
+# error #include <boost/spirit/fusion/sequence/end.hpp>
+# error #include <boost/spirit/fusion/iterator/equal_to.hpp>
+# include <boost/mpl/bool.hpp>
+# error #include <boost/spirit/fusion/iterator/equal_to.hpp>
+# error #include <boost/spirit/fusion/iterator/next.hpp>
+# error #include <boost/spirit/fusion/iterator/deref.hpp>
 
 namespace boost { namespace fusion
 {

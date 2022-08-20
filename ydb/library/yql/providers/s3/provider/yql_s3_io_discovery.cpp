@@ -110,30 +110,12 @@ public:
         genColumnsByNode.swap(GenColumnsByNode_);
 
         TNodeOnNodeOwnedMap replaces;
-        size_t count = 0;
-        size_t totalSize = 0;
         for (auto& [node, requests] : requestsByNode) {
             const TS3Read read(node);
             const auto& object = read.Arg(2).Ref();
             YQL_ENSURE(object.IsCallable("MrTableConcat"));
             size_t readSize = 0;
             TExprNode::TListType pathNodes;
-
-            TString formatName;
-            {
-                const auto& settings = *read.Ref().Child(4);
-                auto format = GetSetting(settings, "format");
-                if (format && format->ChildrenSize() >= 2) {
-                    formatName = format->Child(1)->Content();
-                }
-            }
-            auto fileSizeLimit = State_->Configuration->FileSizeLimit;
-            if (formatName) {
-                auto it = State_->Configuration->FormatSizeLimits.find(formatName);
-                if (it != State_->Configuration->FormatSizeLimits.end() && fileSizeLimit > it->second) {
-                    fileSizeLimit = it->second;
-                }
-            }
 
             struct TExtraColumnValue {
                 TString Name;
@@ -172,12 +154,6 @@ public:
                 }
 
                 for (auto& entry : listEntries) {
-                    if (entry.Size > fileSizeLimit) {
-                        ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
-                            TStringBuilder() << "Size of object " << entry.Path << " = " << entry.Size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
-                        return TStatus::Error;
-                    }
-
                     TMaybe<TVector<TExtraColumnValue>> extraValues;
                     if (generatedColumnsConfig) {
                         extraValues = TVector<TExtraColumnValue>{};
@@ -205,12 +181,10 @@ public:
 
                     auto& pathList = pathsByExtraValues[extraValues];
                     pathList.emplace_back(entry.Path, entry.Size);
-                    ++count;
                     readSize += entry.Size;
                 }
 
                 YQL_CLOG(INFO, ProviderS3) << "Object " << req.Pattern << " has " << listEntries.size() << " items with total size " << readSize;
-                totalSize += readSize;
             }
 
             for (const auto& [extraValues, pathList] : pathsByExtraValues) {
@@ -315,18 +289,6 @@ public:
                     .Object(std::move(s3Object))
                     .RowType(std::move(userSchema.front()))
                 .Done().Ptr());
-        }
-
-        const auto maxFiles = State_->Configuration->MaxFilesPerQuery;
-        if (count > maxFiles) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " << count << ", but limit is " << maxFiles));
-            return TStatus::Error;
-        }
-
-        const auto maxSize = State_->Configuration->MaxReadSizePerQuery;
-        if (totalSize > maxSize) {
-            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too large objects to read: " << totalSize << ", but limit is " << maxSize));
-            return TStatus::Error;
         }
 
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));

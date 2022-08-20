@@ -173,6 +173,87 @@ public:
 #undef HNDL
     }
 
+    TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
+        auto status = TOptimizeTransformerBase::DoTransform(input, output, ctx);
+        if (status != TStatus::Ok) {
+            return status;
+        }
+
+        // check read limits after pruning
+        bool hasErr = false;
+        size_t count = 0;
+        size_t totalSize = 0;
+        VisitExpr(input, [&] (const TExprNode::TPtr& n) {
+            TExprBase node(n);
+            if (auto maybeSource = node.Maybe<TDqSourceWrap>()) {
+                const TDqSourceWrap dqSource = node.Cast<TDqSourceWrap>();
+                if (dqSource.DataSource().Category() == S3ProviderName) {
+                    const auto& maybeS3SourceSettings = dqSource.Input().Maybe<TS3SourceSettingsBase>();
+                    if (maybeS3SourceSettings && dqSource.Settings()) {
+                        TString formatName;
+                        {
+                            auto format = GetSetting(dqSource.Settings().Ref(), "format");
+                            if (format) {
+                                formatName = format->Child(1)->Content();
+                            }
+                        }
+                        auto fileSizeLimit = State_->Configuration->FileSizeLimit;
+                        if (formatName) {
+                            auto it = State_->Configuration->FormatSizeLimits.find(formatName);
+                            if (it != State_->Configuration->FormatSizeLimits.end() && fileSizeLimit > it->second) {
+                                fileSizeLimit = it->second;
+                            }
+                        }
+
+                        for (const TS3Path& batch : maybeS3SourceSettings.Cast().Paths()) {
+                            TStringBuf packed = batch.Data().Literal().Value();
+                            bool isTextEncoded = FromString<bool>(batch.IsText().Literal().Value());
+
+                            TPathList paths;
+                            UnpackPathsList(packed, isTextEncoded, paths);
+
+                            for (auto& entry : paths) {
+                                const TString path = std::get<0>(entry);
+                                const size_t size = std::get<1>(entry);
+                                if (size > fileSizeLimit) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(batch.Pos()),
+                                        TStringBuilder() << "Size of object " << path << " = " << size << " and exceeds limit = " << fileSizeLimit << " specified for format " << formatName));
+                                    hasErr = true;
+                                    return false;
+                                }
+                                totalSize += size;
+                                ++count;
+                            }
+                        }
+                        return false;
+                    }
+                }
+            }
+            return !hasErr;
+        });
+
+        if (hasErr) {
+            return TStatus::Error;
+        }
+
+        const auto maxFiles = State_->Configuration->MaxFilesPerQuery;
+        if (count > maxFiles) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too many objects to read: " << count << ", but limit is " << maxFiles));
+            return TStatus::Error;
+        }
+
+        const auto maxSize = State_->Configuration->MaxReadSizePerQuery;
+        if (totalSize > maxSize) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Too large objects to read: " << totalSize << ", but limit is " << maxSize));
+            return TStatus::Error;
+        }
+
+        if (count > 0) {
+            YQL_CLOG(INFO, ProviderS3) << "Will read from S3 " << count << " files with total size " << totalSize << " bytes";
+        }
+        return TStatus::Ok;
+    }
+
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
         const auto& maybeRead = node.Cast<TCoLeft>().Input().Maybe<TS3ReadObject>();
         if (!maybeRead) {

@@ -1,0 +1,42 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+
+add_library(restricted-boost-program_options)
+target_include_directories(restricted-boost-program_options PUBLIC
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/include
+)
+target_link_libraries(restricted-boost-program_options PUBLIC
+  contrib-libs-cxxsupp
+  yutil
+  restricted-boost-any
+  restricted-boost-config
+  restricted-boost-core
+  restricted-boost-detail
+  restricted-boost-function
+  restricted-boost-iterator
+  restricted-boost-lexical_cast
+  restricted-boost-smart_ptr
+  restricted-boost-static_assert
+  restricted-boost-throw_exception
+  restricted-boost-tokenizer
+  restricted-boost-type_traits
+)
+target_sources(restricted-boost-program_options PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/cmdline.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/config_file.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/convert.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/options_description.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/parsers.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/positional_options.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/split.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/utf8_codecvt_facet.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/value_semantic.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/variables_map.cpp
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/src/winmain.cpp
+)

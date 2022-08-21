@@ -6546,6 +6546,22 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["PgOr"] = std::bind(&ExpandPgOr, _1, _2);
     map["PgNot"] = std::bind(&ExpandPgNot, _1, _2);
 
+    map["Ensure"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+        TCoEnsure self(node);
+        TMaybeNode<TCoBool> pred;
+        if (self.Predicate().Maybe<TCoJust>()) {
+            pred = self.Predicate().Maybe<TCoJust>().Cast().Input().Maybe<TCoBool>();
+        } else {
+            pred = self.Predicate().Maybe<TCoBool>();
+        }
+
+        if (pred && FromString<bool>(pred.Cast().Literal().Value())) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " with literal True";
+            return self.Value().Ptr();
+        }
+        return node;
+    };
+
     // will be applied to any callable after all above
     map[""] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
         YQL_ENSURE(node->IsCallable());

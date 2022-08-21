@@ -134,6 +134,40 @@ Y_UNIT_TEST_SUITE(ResultFormatter) {
         UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
     }
 
+    Y_UNIT_TEST(StructTypeNameAsString) {
+        Ydb::ResultSet rs;
+        {
+            auto& column = *rs.add_columns();
+            column.set_name("column0");
+            auto& struct_type = *column.mutable_type()->mutable_struct_type();
+            auto& m1 = *struct_type.add_members();
+            auto& m2 = *struct_type.add_members();
+
+            m1.set_name("k1");
+            m1.mutable_type()->set_type_id(Ydb::Type::INT32);
+
+            m2.set_name("k2");
+            m2.mutable_type()->set_type_id(Ydb::Type::INT64);
+        }
+        {
+            auto& value = *rs.add_rows();
+            auto& cell = *value.add_items();
+            cell.add_items()->set_int32_value(31337); // k1
+            cell.add_items()->set_int64_value(113370); // k2
+        }
+
+        NJson::TJsonValue root;
+        FormatResultSet(root, rs, true);
+
+        TStringStream stream;
+        NJson::WriteJson(&stream, &root);
+
+        //Cerr << stream.Str() << Endl;
+        TString expected = R"___({"data":[{"column0":["31337","113370"]}],"columns":[{"name":"column0","type":"Struct<'k1':Int32,'k2':Int64>"}]})___";
+
+        UNIT_ASSERT_VALUES_EQUAL(stream.Str(), expected);
+    }
+
     Y_UNIT_TEST(Void) {
         Ydb::ResultSet rs;
         {

@@ -10,7 +10,7 @@
 
 namespace NYq {
 
-void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet);
+void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet, bool typeNameAsString = false);
 TString FormatSchema(const YandexQuery::Schema& schema);
 
 } // namespace NYq

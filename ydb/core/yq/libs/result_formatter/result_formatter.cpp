@@ -6,6 +6,7 @@
 #include <ydb/library/yql/providers/common/codec/yql_codec.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 #include <ydb/library/yql/ast/yql_expr.h>
+#include <ydb/library/yql/ast/yql_type_string.h>
 #include <ydb/library/yql/minikql/mkql_node.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node_holders.h>
 
@@ -305,7 +306,8 @@ TTypePair FormatColumnType(
     NJson::TJsonValue& root,
     const NYdb::TType& type,
     NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
-    NYql::TExprContext& ctx)
+    NYql::TExprContext& ctx,
+    bool typeNameAsString)
 {
     TTypePair result;
     NYdb::TTypeParser parser(type);
@@ -319,9 +321,10 @@ TTypePair FormatColumnType(
         return result;
     }
 
-    //NJson::ReadJsonTree(
-    //    NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteTypeToYson(result.MiniKQLType)),
-    //    &root);
+    if (typeNameAsString) {
+        root = NYql::FormatType(result.TypeAnnotation);
+        return result;
+    }
 
     NJson::ReadJsonTree(
         NJson2Yson::ConvertYson2Json(NYql::NCommon::WriteTypeToYson(result.TypeAnnotation)),
@@ -382,7 +385,7 @@ TString FormatSchema(const YandexQuery::Schema& schema)
     return NYql::NCommon::WriteTypeToYson(MakeStructType(typedColumns, ctx), NYson::EYsonFormat::Text);
 }
 
-void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)
+void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet, bool typeNameAsString)
 {
     NYql::TExprContext ctx;
     NKikimr::NMiniKQL::TScopedAlloc alloc;
@@ -390,7 +393,6 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)
 
     TMemoryUsageInfo memInfo("BuildYdbResultSet");
     THolderFactory holderFactory(alloc.Ref(), memInfo);
-
 
     NJson::TJsonValue& columns = root["columns"];
     const auto& columnsMeta = resultSet.GetColumnsMeta();
@@ -402,7 +404,7 @@ void FormatResultSet(NJson::TJsonValue& root, const NYdb::TResultSet& resultSet)
     for (const NYdb::TColumn& columnMeta : columnsMeta) {
         NJson::TJsonValue& column = columns.AppendValue(NJson::TJsonValue());
         column["name"] = columnMeta.Name;
-        columnTypes[i++] = FormatColumnType(column["type"], columnMeta.Type, typeEnv, ctx);
+        columnTypes[i++] = FormatColumnType(column["type"], columnMeta.Type, typeEnv, ctx, typeNameAsString);
     }
 
     NJson::TJsonValue& data = root["data"];

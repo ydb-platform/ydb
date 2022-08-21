@@ -352,6 +352,7 @@ private:
         hFunc(TEvents::TEvRaiseTransientIssues, Handle);
         hFunc(NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse, Handle);
         hFunc(TEvDqStats, Handle);
+        hFunc(NMon::TEvHttpInfo, Handle);
     )
 
     STRICT_STFUNC(FinishStateFunc,
@@ -1731,6 +1732,13 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr&) {
         Fail("TRunActor::OnUndelivered");
+    }
+
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+        TStringStream html;
+        html << "<h2>RunActor</h2>";
+        html << "<p>QueryId: <b>" << Params.QueryId << "</b></p>";
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
     }
 
     TString FindTokenByName(const TString& tokenName) const {

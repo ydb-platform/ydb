@@ -9,6 +9,9 @@
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/interop/cast.h>
+
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/ast/yql_expr.h>
@@ -166,6 +169,14 @@ public:
     }
 
     void Bootstrap() {
+
+        NActors::TMon* mon = NKikimr::AppData()->Mon;
+        if (mon) {
+            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("fq", "Federated Query");
+            mon->RegisterActorPage(actorsMonPage, "fetcher", "Pending Fetcher", false,
+                TActivationContext::ActorSystem(), SelfId());
+        }
+        
         Become(&TPendingFetcher::StateFunc);
         DatabaseResolver = Register(CreateDatabaseResolver(MakeYqlAnalyticsHttpProxyId(), CredentialsFactory));
         Send(SelfId(), new NActors::TEvents::TEvWakeup());
@@ -223,6 +234,39 @@ private:
         }
     }
 
+    void Handle(NMon::TEvHttpInfo::TPtr& ev) {
+        const auto& params = ev->Get()->Request.GetParams();
+        if (params.Has("query")) {
+            TString queryId = params.Get("query");
+
+            auto it = CountersMap.find(queryId);
+            if (it != CountersMap.end()) {
+                auto runActorId = it->second.RunActorId;
+                if (RunActorMap.find(runActorId) != RunActorMap.end()) {
+                    TActivationContext::Send(ev->Forward(runActorId));
+                    return;
+                }
+            }
+        }
+
+        TStringStream html;
+        html << "<table class='table simple-table1 table-hover table-condensed'>";
+        html << "<thead><tr>";
+        html << "<th>Query ID</th>";
+        html << "<th>Query Name</th>";
+        html << "</tr></thead><tbody>";
+        for (const auto& pr : RunActorMap) {
+            const auto& runActorInfo = pr.second;
+            html << "<tr>";
+            html << "<td><a href='fetcher?query=" << runActorInfo.QueryId << "'>" << runActorInfo.QueryId << "</a></td>";
+            html << "<td>" << runActorInfo.QueryName << "</td>";
+            html << "</tr>";
+        }
+        html << "</tbody></table>";
+
+        Send(ev->Sender, new NMon::TEvHttpInfoRes(html.Str()));
+    }
+
     void HandlePoisonTaken(NActors::TEvents::TEvPoisonTaken::TPtr& ev) {
         auto runActorId = ev->Sender;
 
@@ -231,7 +275,7 @@ private:
             LOG_W("Unknown RunActor " << runActorId << " destroyed");
             return;
         }
-        auto queryId = itA->second;
+        auto queryId = itA->second.QueryId;
         RunActorMap.erase(itA);
 
         auto itC = CountersMap.find(queryId);
@@ -355,7 +399,7 @@ private:
 
         auto runActorId = Register(CreateRunActor(SelfId(), queryCounters, std::move(params)));
 
-        RunActorMap[runActorId] = queryId;
+        RunActorMap[runActorId] = TRunActorInfo { .QueryId = queryId, .QueryName = task.query_name() };
         if (!task.automatic()) {
             CountersMap[queryId] = { rootCountersParent, publicCountersParent, runActorId };
         }
@@ -367,6 +411,7 @@ private:
         hFunc(TEvInternalService::TEvGetTaskResponse, Handle)
         hFunc(NActors::TEvents::TEvPoisonTaken, HandlePoisonTaken)
         hFunc(TEvPrivate::TEvCleanupCounters, HandleCleanupCounters)
+        hFunc(NMon::TEvHttpInfo, Handle);
     );
 
     NYq::TYqSharedResources::TPtr YqSharedResources;
@@ -408,8 +453,13 @@ private:
         TActorId RunActorId;
     };
 
+    struct TRunActorInfo {
+        TString QueryId;
+        TString QueryName;
+    };
+
     TMap<TString, TQueryCountersInfo> CountersMap;
-    TMap<TActorId, TString> RunActorMap;
+    TMap<TActorId, TRunActorInfo> RunActorMap;
     TString TenantName;
     TActorId InternalServiceId;
 };

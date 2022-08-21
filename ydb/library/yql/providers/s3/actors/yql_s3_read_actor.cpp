@@ -370,13 +370,19 @@ private:
     }
 
     void Run() final try {
-        TReadBufferFromStream buffer(this);
-        const auto decompress(MakeDecompressor(buffer, ReadSpec->Compression));
-        YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
-        NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
 
-        while (auto block = stream.read())
-            Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
+        TIssue exceptIssue;
+        try {
+            TReadBufferFromStream buffer(this);
+            const auto decompress(MakeDecompressor(buffer, ReadSpec->Compression));
+            YQL_ENSURE(ReadSpec->Compression.empty() == !decompress, "Unsupported " << ReadSpec->Compression << " compression.");
+            NDB::InputStreamFromInputFormat stream(NDB::FormatFactory::instance().getInputFormat(ReadSpec->Format, decompress ? *decompress : buffer, NDB::Block(ReadSpec->Columns), nullptr, 1_MB, ReadSpec->Settings));
+
+            while (auto block = stream.read())
+                Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
+        } catch (const std::exception& err) {
+            exceptIssue.Message = TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what();
+        }
 
         WaitFinish();
 
@@ -398,6 +404,10 @@ private:
                 str << ErrorText;
 
             Issues.AddIssues({TIssue(str)});
+        }
+
+        if (exceptIssue.Message) {
+            Issues.AddIssue(exceptIssue);
         }
 
         if (Issues)

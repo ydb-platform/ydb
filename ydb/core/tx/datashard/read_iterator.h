@@ -151,9 +151,6 @@ public:
     // where in Request->Keys we have key prefix (here we have properly extended one).
     TVector<TSerializedCellVec> Keys;
 
-    // same as Keys above, but for Request->Ranges.To
-    TVector<TSerializedCellVec> FromKeys;
-
     // State itself //
 
     TQuota Quota;

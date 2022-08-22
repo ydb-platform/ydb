@@ -196,6 +196,20 @@ std::vector<TRawTypeValue> ToRawTypeValue(
     return result;
 }
 
+TSerializedCellVec ExtendWithNulls(
+    const TSerializedCellVec& cells,
+    size_t columnCount)
+{
+    TVector<TCell> extendedCells;
+    extendedCells.reserve(columnCount);
+    for (const auto& cell: cells.GetCells()) {
+        extendedCells.emplace_back(cell);
+    }
+
+    extendedCells.resize(columnCount, TCell());
+    return TSerializedCellVec(TSerializedCellVec::Serialize(extendedCells));
+}
+
 ui64 ResetRowStats(NTable::TIteratorStats& stats)
 {
     return std::exchange(stats.DeletedRowSkips, 0UL) +
@@ -249,8 +263,7 @@ public:
     EReadStatus ReadRange(
         TTransactionContext& txc,
         const TActorContext& ctx,
-        const TSerializedTableRange& range,
-        size_t index)
+        const TSerializedTableRange& range)
     {
         bool fromInclusive;
         TSerializedCellVec keyFromCells;
@@ -259,11 +272,7 @@ public:
             keyFromCells = TSerializedCellVec(State.LastProcessedKey);
         } else {
             fromInclusive = range.FromInclusive;
-            if (index < State.Request->Ranges.size() && range.From.GetCells().size() != TableInfo.KeyColumnCount) {
-                keyFromCells = State.FromKeys[index];
-            } else {
-                keyFromCells = TSerializedCellVec(range.From);
-            }
+            keyFromCells = range.From;
         }
         const auto keyFrom = ToRawTypeValue(keyFromCells, TableInfo, fromInclusive);
 
@@ -315,7 +324,7 @@ public:
             range.To = keyCells;
             range.ToInclusive = true;
             range.FromInclusive = true;
-            return ReadRange(txc, ctx, range, State.Request->Ranges.size());
+            return ReadRange(txc, ctx, range);
         }
 
         if (ColumnTypes.empty()) {
@@ -360,7 +369,7 @@ public:
                 return true;
 
             const auto& range = State.Request->Ranges[FirstUnprocessedQuery];
-            auto status = ReadRange(txc, ctx, range, FirstUnprocessedQuery);
+            auto status = ReadRange(txc, ctx, range);
             switch (status) {
             case EReadStatus::Done:
                 continue;
@@ -884,26 +893,17 @@ public:
             // inf on the right.
             // We really do weird transformations here, not sure if we can do better though
             for (size_t i = 0; i < Request->Ranges.size(); ++i) {
-                const auto& key = Request->Ranges[i].From;
-                if (key.GetCells().size() == TableInfo.KeyColumnCount)
-                    continue;
+                auto& range = Request->Ranges[i];
+                auto& keyFrom = range.From;
+                auto& keyTo = Request->Ranges[i].To;
 
-                if (state.FromKeys.size() != Request->Ranges.size()) {
-                    state.FromKeys.resize(Request->Ranges.size());
+                if (range.FromInclusive && keyFrom.GetCells().size() != TableInfo.KeyColumnCount) {
+                    keyFrom = ExtendWithNulls(keyFrom, TableInfo.KeyColumnCount);
                 }
 
-                // we can safely use cells referencing original Request->Keys[x],
-                // because request will live until the end
-                TVector<TCell> extendedCells;
-                extendedCells.reserve(TableInfo.KeyColumnCount);
-                for (const auto& cell: key.GetCells()) {
-                    extendedCells.emplace_back(cell);
+                if (!range.ToInclusive && keyTo.GetCells().size() != TableInfo.KeyColumnCount) {
+                    keyTo = ExtendWithNulls(keyTo, TableInfo.KeyColumnCount);
                 }
-                // extend with nulls
-                extendedCells.resize(TableInfo.KeyColumnCount, TCell());
-
-                // most evil part: serialize and then parse...
-                state.FromKeys[i] = TSerializedCellVec(TSerializedCellVec::Serialize(extendedCells));
             }
 
             // TODO: remove later, when we sure that key prefix is properly
@@ -921,16 +921,7 @@ public:
 
                 // we can safely use cells referencing original Request->Keys[x],
                 // because request will live until the end
-                TVector<TCell> extendedCells;
-                extendedCells.reserve(TableInfo.KeyColumnCount);
-                for (const auto& cell: key.GetCells()) {
-                    extendedCells.emplace_back(cell);
-                }
-                // extend with nulls
-                extendedCells.resize(TableInfo.KeyColumnCount, TCell());
-
-                // most evil part: serialize and then parse...
-                state.Keys[i] = TSerializedCellVec(TSerializedCellVec::Serialize(extendedCells));
+                state.Keys[i] = ExtendWithNulls(key, TableInfo.KeyColumnCount);
             }
 
             userTableInfo->Stats.AccessTime = TAppData::TimeProvider->Now();
@@ -1231,8 +1222,6 @@ private:
             // since no keys, then we must have ranges (has been checked initially)
             for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
                 TTableRange range = state.Request->Ranges[i].ToTableRange();
-                if (range.From.size() != TableInfo.KeyColumnCount)
-                    range.From = state.FromKeys[i].GetCells();
 
                 auto desc = MakeHolder<TKeyDesc>(
                     tableId,
@@ -1287,8 +1276,6 @@ private:
             // since no keys, then we must have ranges (has been checked initially)
             for (size_t i = 0; i < state.Request->Ranges.size(); ++i) {
                 auto range = state.Request->Ranges[i].ToTableRange();
-                if (range.From.size() != TableInfo.KeyColumnCount)
-                    range.From = state.FromKeys[i].GetCells();
                 TRangeKey rangeKey = locker.MakeRange(tableId, range);
                 lock = locker.AddRangeLock(lockTxId, lockNodeId, rangeKey, state.ReadVersion);
             }

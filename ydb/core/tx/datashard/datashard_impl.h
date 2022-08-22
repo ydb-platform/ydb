@@ -185,7 +185,6 @@ class TDataShard
     class TTxInitiateStatsUpdate;
     class TTxCheckInReadSets;
     class TTxRemoveOldInReadSets;
-    class TTxRead;
     class TTxReadContinue;
     class TTxReadColumns;
     class TTxGetInfo;
@@ -212,6 +211,9 @@ class TDataShard
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
     class TTxEraseRows;
+
+    class TTxReadViaPipeline;
+    class TReadOperation;
 
     ITransaction *CreateTxMonitoring(TDataShard *self,
                                      NMon::TEvRemoteHttpInfo::TPtr ev);
@@ -1182,6 +1184,10 @@ public:
     ui64 ImmediateInFly() const { return Pipeline.ImmediateInFly(); }
     ui64 TxWaiting() const { return Pipeline.WaitingTxs() + Pipeline.WaitingReadIterators(); }
 
+    // note that not part of ImmediateInFly() to not block scheme ops:
+    // we rather abort iterator if scheme changes between iterations
+    ui64 ReadIteratorsInFly() const { return ReadIterators.size();}
+
     inline TRowVersion LastCompleteTxVersion() const {
         auto order = Pipeline.GetLastCompleteTx();
         return TRowVersion(order.Step, order.TxId);
@@ -1509,8 +1515,17 @@ public:
     ui64 GetMaxObservedStep() const;
     void SendImmediateWriteResult(
             const TRowVersion& version, const TActorId& target, IEventBase* event, ui64 cookie = 0);
-    void SendImmediateReadResult(TMonotonic readTime, const TActorId& target, IEventBase* event, ui64 cookie = 0);
-    void SendImmediateReadResult(const TActorId& target, IEventBase* event, ui64 cookie = 0);
+    void SendImmediateReadResult(
+        TMonotonic readTime,
+        const TActorId& target,
+        IEventBase* event,
+        ui64 cookie = 0,
+        const TActorId& sessionId = {});
+    void SendImmediateReadResult(
+        const TActorId& target,
+        IEventBase* event,
+        ui64 cookie = 0,
+        const TActorId& sessionId = {});
     void SendAfterMediatorStepActivate(ui64 mediatorStep);
 
     void CheckMediatorStateRestored();

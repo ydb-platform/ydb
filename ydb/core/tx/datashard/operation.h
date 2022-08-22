@@ -105,6 +105,7 @@ enum class EOperationKind : ui32 {
 
     // Values [100, inf) are used for internal kinds.
     DirectTx = 101,
+    ReadTx = 102,
 };
 
 class TBasicOpInfo {
@@ -149,6 +150,7 @@ public:
     EOperationKind GetKind() const { return Kind; }
 
     bool IsDataTx() const { return Kind == EOperationKind::DataTx; }
+    bool IsReadTx() const { return Kind == EOperationKind::ReadTx; }
     bool IsDirectTx() const { return Kind == EOperationKind::DirectTx; }
     bool IsSchemeTx() const { return Kind == EOperationKind::SchemeTx; }
     bool IsReadTable() const { return Kind == EOperationKind::ReadTable; }

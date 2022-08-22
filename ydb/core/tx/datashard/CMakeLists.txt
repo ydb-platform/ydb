@@ -75,6 +75,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_commit_writes_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_data_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_distributed_erase_tx_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_read_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_scheme_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/check_snapshot_tx_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/complete_data_tx_unit.cpp
@@ -186,6 +187,7 @@ target_sources(core-tx-datashard PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_kqp_data_tx_in_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/prepare_scheme_tx_in_rs_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/protect_scheme_echoes_unit.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_op_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/read_table_scan_unit.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/tx/datashard/receive_snapshot_unit.cpp

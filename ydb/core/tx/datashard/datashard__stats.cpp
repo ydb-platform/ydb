@@ -466,6 +466,7 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
                     << "% is higher than threshold of " << (i64)CpuUsageReportThreshlodPercent
                     << "% in-flight Tx: " << TxInFly()
                     << " immediate Tx: " << ImmediateInFly()
+                    << " readIterators: " << ReadIteratorsInFly()
                     << " at datashard: " << TabletID()
                     << " table: " << names);
     }

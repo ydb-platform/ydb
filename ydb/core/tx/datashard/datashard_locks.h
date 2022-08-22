@@ -302,7 +302,7 @@ public:
     TLockInfo::TPtr AddShardLock(ui64 lockTxId, ui32 lockNodeId, const THashSet<TPathId>& affectedTables, const TRowVersion& at);
     TLockInfo::TPtr AddPointLock(ui64 lockTxId, ui32 lockNodeId, const TPointKey& key, const TRowVersion& at);
     TLockInfo::TPtr AddRangeLock(ui64 lockTxId, ui32 lockNodeId, const TRangeKey& key, const TRowVersion& at);
-    TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at, bool brokenIsOK = false) const;
+    TLockInfo::TPtr GetLock(ui64 lockTxId, const TRowVersion& at) const;
 
     ui64 LocksCount() const { return Locks.size(); }
     ui64 BrokenLocksCount() const { return BrokenLocks.size() + BrokenCandidates.size(); }

@@ -1641,36 +1641,54 @@ void TDataShard::SendImmediateWriteResult(
     }
 }
 
-void TDataShard::SendImmediateReadResult(TMonotonic readTime, const TActorId& target, IEventBase* event, ui64 cookie) {
+void TDataShard::SendImmediateReadResult(
+    TMonotonic readTime,
+    const TActorId& target,
+    IEventBase* event,
+    ui64 cookie,
+    const TActorId& sessionId)
+{
     if (IsFollower() || !ReadOnlyLeaseEnabled()) {
         // We just send possibly stale result (old behavior)
-        Send(target, event, 0, cookie);
+        if (!sessionId) {
+            Send(target, event, 0, cookie);
+        } else {
+            SendViaSession(sessionId, target, SelfId(), event);
+        }
         return;
     }
 
     struct TSendState : public TThrRefBase {
-        TActorId Target;
-        THolder<IEventBase> Event;
-        ui64 Cookie;
+        THolder<IEventHandle> Ev;
 
-        TSendState(const TActorId& target, IEventBase* event, ui64 cookie)
-            : Target(target)
-            , Event(event)
-            , Cookie(cookie)
-        { }
+        TSendState(const TActorId& sessionId, const TActorId& target, const TActorId& src, IEventBase* event, ui64 cookie)
+        {
+            const ui32 flags = 0;
+            Ev = MakeHolder<IEventHandle>(target, src, event, flags, cookie);
+
+            if (sessionId) {
+                Ev->Rewrite(TEvInterconnect::EvForward, sessionId);
+            }
+        }
     };
 
     if (!readTime) {
         readTime = AppData()->MonotonicTimeProvider->Now();
     }
 
-    Executor()->ConfirmReadOnlyLease(readTime, [this, state = MakeIntrusive<TSendState>(target, event, cookie)] {
-        Send(state->Target, state->Event.Release(), 0, state->Cookie);
+    Executor()->ConfirmReadOnlyLease(readTime,
+        [state = MakeIntrusive<TSendState>(sessionId, target, SelfId(), event, cookie)] {
+            TActivationContext::Send(state->Ev.Release());
     });
 }
 
-void TDataShard::SendImmediateReadResult(const TActorId& target, IEventBase* event, ui64 cookie) {
-    SendImmediateReadResult(TMonotonic::Zero(), target, event, cookie);
+void TDataShard::SendImmediateReadResult(
+    const TActorId& target,
+    IEventBase* event,
+    ui64 cookie,
+    const TActorId& sessionId)
+{
+    SendImmediateReadResult(TMonotonic::Zero(), target, event, cookie, sessionId);
 }
 
 void TDataShard::SendAfterMediatorStepActivate(ui64 mediatorStep) {
@@ -1931,7 +1949,9 @@ bool TDataShard::CheckDataTxReject(const TString& opDescr,
             rejectReasons.push_back("decided to reject due to given RejectProbability");
     }
 
-    size_t totalInFly = (TxInFly() + ImmediateInFly() + MediatorStateWaitingMsgs.size() + ProposeQueue.Size() + TxWaiting());
+    size_t totalInFly =
+        ReadIteratorsInFly() + TxInFly() + ImmediateInFly() + MediatorStateWaitingMsgs.size()
+            + ProposeQueue.Size() + TxWaiting();
     if (totalInFly > GetMaxTxInFly()) {
         reject = true;
         rejectReasons.push_back("MaxTxInFly was exceeded");

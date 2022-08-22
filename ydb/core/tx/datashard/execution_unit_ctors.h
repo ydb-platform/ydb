@@ -63,6 +63,8 @@ THolder<TExecutionUnit> CreateMoveTableUnit(TDataShard &dataShard, TPipeline &pi
 THolder<TExecutionUnit> CreateCreateCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateAlterCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
 THolder<TExecutionUnit> CreateDropCdcStreamUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateCheckReadUnit(TDataShard &dataShard, TPipeline &pipeline);
+THolder<TExecutionUnit> CreateReadUnit(TDataShard &dataShard, TPipeline &pipeline);
 
 } // namespace NDataShard
 } // namespace NKikimr

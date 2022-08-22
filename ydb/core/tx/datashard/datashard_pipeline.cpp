@@ -1603,7 +1603,9 @@ void TPipeline::MaybeActivateWaitingSchemeOps(const TActorContext& ctx) const {
 
 bool TPipeline::AddWaitingTxOp(TEvDataShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {
     // check in-flight limit
-    size_t totalInFly = (Self->TxInFly() + Self->ImmediateInFly() + Self->ProposeQueue.Size() + WaitingDataTxOps.size());
+    size_t totalInFly =
+        Self->ReadIteratorsInFly() + Self->TxInFly() + Self->ImmediateInFly()
+            + Self->ProposeQueue.Size() + WaitingDataTxOps.size();
     if (totalInFly > Self->GetMaxTxInFly())
         return false; // let tx to be rejected
 

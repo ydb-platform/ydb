@@ -144,11 +144,11 @@ TLockInfo::TPtr TLockLocker::AddRangeLock(ui64 lockId, ui32 lockNodeId, const TR
     return lock;
 }
 
-TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at, bool brokenIsOK) const {
+TLockInfo::TPtr TLockLocker::GetLock(ui64 lockTxId, const TRowVersion& at) const {
     auto it = Locks.find(lockTxId);
     if (it != Locks.end()) {
         TLockInfo::TPtr lock = it->second;
-        if (!lock->IsBroken(at) || brokenIsOK)
+        if (!lock->IsBroken(at))
             return lock;
     }
     return nullptr;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "datashard.h"
+#include "datashard_locks.h"
 
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/tablet_flat/flat_row_eggs.h>
@@ -131,6 +132,7 @@ public:
     std::vector<NTable::TTag> Columns;
     TRowVersion ReadVersion = TRowVersion::Max();
     ui64 LockTxId = 0;
+    TLockInfo::TPtr Lock;
     bool ReportedLockBroken = false;
 
     // note that will be always overwritten by values from request
@@ -144,6 +146,13 @@ public:
     bool Reverse = false;
 
     std::shared_ptr<TEvDataShard::TEvRead> Request;
+
+    // parallel to Request->Keys, but real data only in indices,
+    // where in Request->Keys we have key prefix (here we have properly extended one).
+    TVector<TSerializedCellVec> Keys;
+
+    // same as Keys above, but for Request->Ranges.To
+    TVector<TSerializedCellVec> FromKeys;
 
     // State itself //
 

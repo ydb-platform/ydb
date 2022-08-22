@@ -126,6 +126,10 @@ THolder<TExecutionUnit> CreateExecutionUnit(EExecutionUnitKind kind,
         return CreateDropCdcStreamUnit(dataShard, pipeline);
     case EExecutionUnitKind::MoveIndex:
         return CreateMoveIndexUnit(dataShard, pipeline);
+    case EExecutionUnitKind::CheckRead:
+        return CreateCheckReadUnit(dataShard, pipeline);
+    case EExecutionUnitKind::ExecuteRead:
+        return CreateReadUnit(dataShard, pipeline);
     default:
         Y_FAIL_S("Unexpected execution kind " << kind << " (" << (ui32)kind << ")");
     }

@@ -268,7 +268,8 @@ void Init(
             httpGateway,
             std::move(pqCmConnections),
             clientCounters,
-            tenant
+            tenant,
+            appData->Mon
             );
 
         actorRegistrator(MakePendingFetcherId(nodeId), fetcher);

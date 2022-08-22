@@ -10,7 +10,6 @@
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/protos/services.pb.h>
 
@@ -134,7 +133,8 @@ public:
         IHTTPGateway::TPtr s3Gateway,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
         const ::NMonitoring::TDynamicCounterPtr& clientCounters,
-        const TString& tenantName
+        const TString& tenantName,
+        NActors::TMon* monitoring
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -156,6 +156,7 @@ public:
         , ClientCounters(clientCounters)
         , TenantName(tenantName)
         , InternalServiceId(MakeInternalServiceActorId())
+        , Monitoring(monitoring)
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -170,11 +171,9 @@ public:
 
     void Bootstrap() {
 
-        NActors::TMon* mon = NKikimr::AppData()->Mon;
-        if (mon) {
-            NMonitoring::TIndexMonPage* actorsMonPage = mon->RegisterIndexPage("fq", "Federated Query");
-            mon->RegisterActorPage(actorsMonPage, "fetcher", "Pending Fetcher", false,
-                TActivationContext::ActorSystem(), SelfId());
+        if (Monitoring) {
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq", "Federated Query"), 
+                "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
         }
         
         Become(&TPendingFetcher::StateFunc);
@@ -462,6 +461,7 @@ private:
     TMap<TActorId, TRunActorInfo> RunActorMap;
     TString TenantName;
     TActorId InternalServiceId;
+    NActors::TMon* Monitoring;
 };
 
 
@@ -483,7 +483,8 @@ NActors::IActor* CreatePendingFetcher(
     IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
-    const TString& tenantName)
+    const TString& tenantName,
+    NActors::TMon* monitoring)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -503,7 +504,8 @@ NActors::IActor* CreatePendingFetcher(
         s3Gateway,
         std::move(pqCmConnections),
         clientCounters,
-        tenantName);
+        tenantName,
+        monitoring);
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

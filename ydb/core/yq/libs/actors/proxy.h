@@ -3,6 +3,8 @@
 #include "run_actor_params.h"
 #include <util/datetime/base.h>
 
+#include <ydb/core/mon/mon.h>
+
 #include <ydb/core/yq/libs/events/events.h>
 #include <ydb/core/yq/libs/private_client/private_client.h>
 #include <ydb/core/yq/libs/shared_resources/db_pool.h>
@@ -51,7 +53,8 @@ NActors::IActor* CreatePendingFetcher(
     NYql::IHTTPGateway::TPtr s3Gateway,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
     const ::NMonitoring::TDynamicCounterPtr& clientCounters,
-    const TString& tenantName
+    const TString& tenantName,
+    NActors::TMon* monitoring
     );
 
 NActors::IActor* CreateRunActor(

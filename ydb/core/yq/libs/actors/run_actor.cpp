@@ -1750,7 +1750,7 @@ private:
                 html << "<td>";
                 if (EvaluationInProgress) html << "EVAL";
                 else html << DqGraphIndex << " of " << DqGraphParams.size();
-                html << "<td>";
+                html << "</td>";
                 html << "<td>" << ExecuterId << "</td>";
                 html << "<td>" << ControlId << "</td>";
                 html << "<td>" << CheckpointCoordinatorId << "</td>";

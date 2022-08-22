@@ -8,6 +8,9 @@
 
 
 add_library(restricted-boost-container)
+target_compile_options(restricted-boost-container PRIVATE
+  -Wno-everything
+)
 target_include_directories(restricted-boost-container PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/include
 )
@@ -31,15 +34,4 @@ target_sources(restricted-boost-container PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/pool_resource.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/synchronized_pool_resource.cpp
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/unsynchronized_pool_resource.cpp
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/container/src/alloc_lib.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -Wno-deprecated-declarations
-  -Wno-incompatible-pointer-types
-  -Wno-macro-redefined
-  -Wno-null-pointer-arithmetic
 )

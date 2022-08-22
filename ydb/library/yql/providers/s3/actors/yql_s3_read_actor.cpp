@@ -67,6 +67,7 @@ struct TEvPrivate {
         EvBegin = EventSpaceBegin(TEvents::ES_PRIVATE),
 
         EvReadResult = EvBegin,
+        EvDataPart,
         EvReadStarted,
         EvReadFinished,
         EvReadError,
@@ -85,7 +86,7 @@ struct TEvPrivate {
         const size_t PathIndex;
     };
 
-    struct TEvDataPart : public TEventLocal<TEvDataPart, EvReadResult> {
+    struct TEvDataPart : public TEventLocal<TEvDataPart, EvDataPart> {
         TEvDataPart(IHTTPGateway::TCountedContent&& data) : Result(std::move(data)) {}
         IHTTPGateway::TCountedContent Result;
     };
@@ -421,8 +422,9 @@ private:
         return;
     }
 
-    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle>) final {
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue("Unexpected event")}, true));
+    void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) final {
+        TString message = Sprintf("Unexpected message type 0x%08" PRIx32, ev->GetTypeRewrite());
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}, true));
     }
 private:
     const ui64 InputIndex;

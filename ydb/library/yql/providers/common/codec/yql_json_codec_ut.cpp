@@ -404,7 +404,7 @@ Y_UNIT_TEST_SUITE(DeserializeDict) {
 
 
 Y_UNIT_TEST_SUITE(SerializeOptional) {
-    Y_UNIT_TEST(JustOptional) {
+    Y_UNIT_TEST(OptionalOfList) {
         TTestContext ctx;
         NUdf::TUnboxedValue* items;
         auto value = ctx.HolderFactory.CreateDirectArrayHolder(3, items).MakeOptional();
@@ -428,13 +428,12 @@ Y_UNIT_TEST_SUITE(SerializeOptional) {
 
     Y_UNIT_TEST(NothingOptional) {
         TTestContext ctx;
-        auto value = NUdf::TUnboxedValuePod().MakeOptional();
-        auto elementType = TListType::Create(TDataType::Create(NUdf::TDataType<ui8>::Id, ctx.TypeEnv), ctx.TypeEnv);
+        auto value = NUdf::TUnboxedValuePod();
+        auto elementType = TDataType::Create(NUdf::TDataType<ui8>::Id, ctx.TypeEnv);
         auto type = TOptionalType::Create(elementType, ctx.TypeEnv);
         auto json = WriteValueToFuncJsonStr(value, type);
         UNIT_ASSERT_VALUES_EQUAL(json, "[]");
     }
-
 
     Y_UNIT_TEST(SeveralOptionals) {
         TTestContext ctx;
@@ -443,7 +442,7 @@ Y_UNIT_TEST_SUITE(SerializeOptional) {
         type = TOptionalType::Create(type, ctx.TypeEnv);
         type = TOptionalType::Create(type, ctx.TypeEnv);
 
-        auto value1 = NUdf::TUnboxedValuePod().MakeOptional().MakeOptional().MakeOptional();
+        auto value1 = NUdf::TUnboxedValuePod().MakeOptional().MakeOptional();
         auto json1 = WriteValueToFuncJsonStr(value1, type);
         UNIT_ASSERT_VALUES_EQUAL(json1, "[[[]]]");
 

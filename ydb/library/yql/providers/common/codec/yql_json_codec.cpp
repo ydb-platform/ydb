@@ -246,7 +246,7 @@ void WriteValueToJson(TJsonWriter& writer, const NKikimr::NUdf::TUnboxedValuePod
     case TType::EKind::Optional:
     {
         writer.OpenArray();
-        if (value.GetOptionalValue()) {
+        if (value) {
             auto optionalType = AS_TYPE(TOptionalType, type);
             WriteValueToJson(writer, value.GetOptionalValue(), optionalType->GetItemType(), convertPolicy);
         }

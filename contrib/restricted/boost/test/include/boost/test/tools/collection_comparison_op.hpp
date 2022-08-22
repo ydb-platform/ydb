@@ -12,10 +12,6 @@
 #ifndef BOOST_TEST_TOOLS_COLLECTION_COMPARISON_OP_HPP_050815GER
 #define BOOST_TEST_TOOLS_COLLECTION_COMPARISON_OP_HPP_050815GER
 
-#if defined(__GNUC__)
-    #pragma GCC system_header
-#endif
-
 // Boost.Test
 #include <boost/test/tools/assertion.hpp>
 

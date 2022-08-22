@@ -15,10 +15,6 @@
 #ifndef BOOST_TEST_TOOLS_OLD_IMPL_HPP_012705GER
 #define BOOST_TEST_TOOLS_OLD_IMPL_HPP_012705GER
 
-#if defined(__GNUC__)
-    #pragma GCC system_header
-#endif
-
 // Boost.Test
 #include <boost/test/unit_test_log.hpp>
 #include <boost/test/tools/assertion_result.hpp>
@@ -108,7 +104,10 @@ BOOST_PP_REPEAT( BOOST_TEST_MAX_PREDICATE_ARITY, IMPL_FRWD, _ )
 template <class Left, class Right>
 inline assertion_result equal_impl( Left const& left, Right const& right )
 {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
     return left == right;
+#pragma GCC diagnostic pop
 }
 
 //____________________________________________________________________________//
@@ -162,6 +161,8 @@ struct ne_impl {
 
 //____________________________________________________________________________//
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
 struct lt_impl {
     template <class Left, class Right>
     assertion_result operator()( Left const& left, Right const& right )
@@ -199,6 +200,7 @@ struct ge_impl {
         return left >= right;
     }
 };
+#pragma GCC diagnostic pop
 
 //____________________________________________________________________________//
 
@@ -210,7 +212,10 @@ struct equal_coll_impl {
         std::size_t         pos = 0;
 
         for( ; left_begin != left_end && right_begin != right_end; ++left_begin, ++right_begin, ++pos ) {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wsign-compare"
             if( *left_begin != *right_begin ) {
+#pragma GCC diagnostic pop
                 pr = false;
                 pr.message() << "\nMismatch at position " << pos << ": "
                   << ::boost::test_tools::tt_detail::print_helper(*left_begin)

@@ -83,7 +83,8 @@ bool DataHasOnly(const TVector<TString>& blobs, const TString& srtSchema, std::p
     return true;
 }
 
-bool CheckIntValue(const TVector<TString>& blobs, const TString& srcSchema, const TString& colName, 
+template <typename TArrowType>
+bool CheckIntValue(const TVector<TString>& blobs, const TString& srcSchema, const TString& colName,
                    const TVector<int>& expectedVals) {
     auto schema = NArrow::DeserializeSchema(srcSchema);
     for (auto& blob : blobs) {
@@ -92,12 +93,12 @@ bool CheckIntValue(const TVector<TString>& blobs, const TString& srcSchema, cons
 
         std::shared_ptr<arrow::Array> array = batch->GetColumnByName(colName);
         UNIT_ASSERT(array);
-        auto& val = dynamic_cast<const arrow::NumericArray<arrow::Int64Type>&>(*array);
+        auto& val = dynamic_cast<const arrow::NumericArray<TArrowType>&>(*array);
 
-        UNIT_ASSERT(val.length() == (int)expectedVals.size());
+        UNIT_ASSERT_VALUES_EQUAL(val.length(), (int)expectedVals.size());
         for (int i = 0; i < val.length(); ++i) {
             int value = val.Value(i);
-            UNIT_ASSERT(value == expectedVals[i]);
+            UNIT_ASSERT_VALUES_EQUAL(value, expectedVals[i]);
         }
     }
     return true;
@@ -941,17 +942,8 @@ NKikimrSSA::TProgram MakeSelectAggregates(TAggAssignment::EAggregateFunction agg
     return ssa;
 }
 
-// SELECT some(timestamp) FROM t WHERE level = 1
-//
-// FIXME:
-// NotImplemented: Function any has no kernel matching input types (array[timestamp[us]])
-// NotImplemented: Function any has no kernel matching input types (array[string])
-// NotImplemented: Function any has no kernel matching input types (array[int32])
-// NotImplemented: Function min_max has no kernel matching input types (array[timestamp[us]])
-// NotImplemented: Function min_max has no kernel matching input types (array[string])
-//
-NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(TAggAssignment::EAggregateFunction aggId = TAggAssignment::AGG_ANY,
-                                          std::vector<ui32> columnIds = {1, 5})
+// SELECT min(level), max(level), some(level), count(timestamp) FROM t WHERE level = 1
+NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(std::vector<ui32> columnIds = {1, 5})
 {
     NKikimrSSA::TProgram ssa;
     ui32 tmpColumnId = 100;
@@ -978,12 +970,33 @@ NKikimrSSA::TProgram MakeSelectAggregatesWithFilter(TAggAssignment::EAggregateFu
     auto* l4_agg1 = groupBy->AddAggregates();
     l4_agg1->MutableColumn()->SetId(tmpColumnId + 2);
     auto* l4_agg1_f = l4_agg1->MutableFunction();
-    l4_agg1_f->SetId(aggId);
-    l4_agg1_f->AddArguments()->SetId(columnIds[0]);
+    l4_agg1_f->SetId(TAggAssignment::AGG_MIN);
+    l4_agg1_f->AddArguments()->SetId(columnIds[1]);
+    //
+    auto* l4_agg2 = groupBy->AddAggregates();
+    l4_agg2->MutableColumn()->SetId(tmpColumnId + 3);
+    auto* l4_agg2_f = l4_agg2->MutableFunction();
+    l4_agg2_f->SetId(TAggAssignment::AGG_MAX);
+    l4_agg2_f->AddArguments()->SetId(columnIds[1]);
+#if 0
+    auto* l4_agg3 = groupBy->AddAggregates();
+    l4_agg3->MutableColumn()->SetId(tmpColumnId + 4);
+    auto* l4_agg3_f = l4_agg3->MutableFunction();
+    l4_agg3_f->SetId(TAggAssignment::AGG_ANY);
+    l4_agg3_f->AddArguments()->SetId(columnIds[1]);
+#endif
+    auto* l4_agg4 = groupBy->AddAggregates();
+    l4_agg4->MutableColumn()->SetId(tmpColumnId + 5);
+    auto* l4_agg4_f = l4_agg4->MutableFunction();
+    l4_agg4_f->SetId(TAggAssignment::AGG_COUNT);
+    l4_agg4_f->AddArguments()->SetId(columnIds[0]);
 
     auto* line5 = ssa.AddCommand();
     auto* proj = line5->MutableProjection();
     proj->AddColumns()->SetId(tmpColumnId + 2);
+    proj->AddColumns()->SetId(tmpColumnId + 3);
+    //proj->AddColumns()->SetId(tmpColumnId + 4);
+    proj->AddColumns()->SetId(tmpColumnId + 5);
     return ssa;
 }
 
@@ -1168,15 +1181,14 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
     }
 
     {
-        NKikimrSSA::TProgram ssa = MakeSelectAggregatesWithFilter(TAggAssignment::AGG_COUNT);
+        NKikimrSSA::TProgram ssa = MakeSelectAggregatesWithFilter();
         TString serialized;
         UNIT_ASSERT(ssa.SerializeToString(&serialized));
         NKikimrSSA::TOlapProgram program;
         program.SetProgram(serialized);
 
-        // TODO: Uncomment to run this test!
-        // programs.push_back("");
-        // UNIT_ASSERT(program.SerializeToString(&programs.back()));
+        programs.push_back("");
+        UNIT_ASSERT(program.SerializeToString(&programs.back()));
     }
 
     ui32 i = 0;
@@ -1211,8 +1223,11 @@ void TestReadAggregate(const TVector<std::pair<TString, TTypeId>>& ydbSchema = T
 
             switch (i) {
                 case 2:
-                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"102"}, 1));
-                    UNIT_ASSERT(CheckIntValue(readData, schema, "102", {1}));
+                    UNIT_ASSERT(CheckColumns(readData[0], meta, {"102", "103", /*"104",*/ "105"}, 1));
+                    UNIT_ASSERT(CheckIntValue<arrow::Int32Type>(readData, schema, "102", {1}));
+                    UNIT_ASSERT(CheckIntValue<arrow::Int32Type>(readData, schema, "103", {1}));
+                    //UNIT_ASSERT(CheckIntValue<arrow::Int32Type>(readData, schema, "104", {1}));
+                    UNIT_ASSERT(CheckIntValue<arrow::Int64Type>(readData, schema, "105", {1}));
                     break;
                 default:
                     UNIT_ASSERT(CheckColumns(readData[0], meta, {"100", "101"}, 1));

@@ -1450,9 +1450,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationAndFilterPushdownOnSameCols) {
-        // remove this return when Filter and Aggregation pushdown will be fixed on columnshard
-        return;
-
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1493,9 +1490,9 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(AggregationAndFilterPushdownOnDiffCols) {
-        // remove this return when Filter and Aggregation pushdown will be fixed on columnshard
+        // _LIBCPP_ASSERT '__n < size()' failed https://paste.yandex-team.ru/11497970
         return;
-        
+
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);

@@ -430,21 +430,31 @@ void TProgramStep::ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const {
 
     if (bits.size()) {
         auto filter = NArrow::MakeFilter(bits);
-        std::unordered_set<std::string_view> projSet;
-        for (auto& str: Projection) {
-            projSet.insert(str);
+
+        std::unordered_set<std::string_view> neededColumns;
+        bool allColumns = Projection.empty() && GroupBy.empty();
+        if (!GroupBy.empty()) {
+            for (auto& aggregate : GroupBy) {
+                for (auto& arg : aggregate.GetArguments()) {
+                    neededColumns.insert(arg);
+                }
+            }
+        } else if (!Projection.empty()) {
+            for (auto& str : Projection) {
+                neededColumns.insert(str);
+            }
         }
+
         for (int64_t i = 0; i < batch->fields->num_fields(); ++i) {
-            //only array filtering, scalar cannot be filtered
-            auto& cur_field_name = batch->fields->field(i)->name();
-            bool is_proj = (Projection.empty() || projSet.contains(cur_field_name));
-            if (batch->datums[i].is_array() && is_proj) {
+            bool needed = (allColumns || neededColumns.contains(batch->fields->field(i)->name()));
+            if (batch->datums[i].is_array() && needed) {
                 auto res = arrow::compute::Filter(batch->datums[i].make_array(), filter);
                 Y_VERIFY_S(res.ok(), res.status().message());
                 Y_VERIFY((*res).kind() == batch->datums[i].kind());
                 batch->datums[i] = *res;
             }
         }
+
         int newRows = 0;
         for (int64_t i = 0; i < filter->length(); ++i) {
             newRows += filter->Value(i);

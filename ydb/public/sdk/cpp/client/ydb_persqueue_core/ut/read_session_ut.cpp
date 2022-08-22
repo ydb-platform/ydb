@@ -1884,7 +1884,6 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
             UNIT_ASSERT_VALUES_EQUAL(std::get<TExpectedEvent>(event.GetEvent()).GetMessagesCount(), count); \
         }
 
-        TDeferredActions<true> actions;
         TAReadSessionSettings<true> settings;
         std::shared_ptr<TSingleClusterReadSessionImpl<true>> session;
         TReadSessionEventsQueue<true> sessionQueue{settings, session};
@@ -1920,6 +1919,8 @@ Y_UNIT_TEST_SUITE(ReadSessionImplTest) {
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertEvent(TServiceEvent{stream, 0, 0, 0, {}});
         stream->InsertDataEvent(0, 0, data, ready);
+
+        TDeferredActions<true> actions;
 
         stream->SignalReadyEvents(&sessionQueue,
                                   actions);

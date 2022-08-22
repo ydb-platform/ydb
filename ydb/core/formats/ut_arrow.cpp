@@ -427,8 +427,8 @@ std::shared_ptr<arrow::Table> MakeTable1000() {
 }
 
 std::shared_ptr<arrow::Table> Shuffle(std::shared_ptr<arrow::Table> table) {
-    TVector<ui64> shuffle(1000);
-    for (ui32 i = 0; i < 1000; ++i) {
+    std::vector<arrow::UInt64Builder::value_type> shuffle(1000);
+    for (int i = 0; i < 1000; ++i) {
         shuffle[i] = i;
     }
     ShuffleRange(shuffle);

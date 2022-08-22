@@ -976,7 +976,9 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         attributes = self._sqs_api.get_queue_attributes(queue_url, ['MaximumMessageSize'])
         assert_that(int(attributes['MaximumMessageSize']), equal_to(256 * 1024))
 
-    def test_queue_attributes_batch(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_queue_attributes_batch(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         # Create > 10 queues to check that private commands for UI will work
         queue_urls = [self._create_queue_and_assert("{}-{}".format(self.queue_name, i)) for i in range(10)]
         created_queue_url2 = self._create_queue_and_assert(self.queue_name + '1.fifo', is_fifo=True)

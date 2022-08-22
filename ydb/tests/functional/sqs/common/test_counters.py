@@ -6,7 +6,7 @@ import time
 import pytest
 from hamcrest import assert_that, equal_to, none, not_, greater_than, raises
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, TABLES_FORMAT_PARAMS
 
 
 class TestSqsCountersFeatures(KikimrSqsTestBase):
@@ -26,7 +26,9 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
         self._execute_yql_query('UPSERT INTO `{}` (State, ShowDetailedCountersDeadline) VALUES (0, {})'
                                 .format(attributes_path, deadline))
 
-    def test_creates_counter(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_creates_counter(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         queue_url = self._create_queue_and_assert(self.queue_name)
         self._sqs_api.get_queue_attributes(queue_url)  # Ensure that counters structure is initialized.
 
@@ -117,7 +119,9 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
             assert_that(counter, equal_to(0))
             break
 
-    def test_removes_user_counters_after_user_deletion(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_removes_user_counters_after_user_deletion(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._sqs_api.list_queues()  # init user's structure in server
         counter_labels = {
             'subsystem': 'core',
@@ -202,7 +206,9 @@ class TestSqsCountersFeatures(KikimrSqsTestBase):
                 assert_that(queue_counter, not_(none()))
             break
 
-    def test_updates_status_code_counters_when_parsing_errors_occur(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_updates_status_code_counters_when_parsing_errors_occur(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._sqs_api.list_queues()  # init user's structure in server
         counter_labels = {
             'subsystem': 'core',
@@ -238,7 +244,9 @@ class TestSqsCountersExportDelay(KikimrSqsTestBase):
         config_generator.yaml_config['sqs_config']['queue_counters_export_delay_ms'] = 2000
         return config_generator
 
-    def test_export_delay(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_export_delay(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         counter_labels = {
             'subsystem': 'core',
             'user': self._username,

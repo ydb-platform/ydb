@@ -1,12 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+import pytest
 from hamcrest import assert_that, not_none, has_item, is_not
 
 from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, get_test_with_sqs_installation_by_path, get_test_with_sqs_tenant_installation
+from ydb.tests.library.sqs.test_base import TABLES_FORMAT_PARAMS
 
 
 class AccountActionsTest(KikimrSqsTestBase):
-    def test_manage_account(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_manage_account(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         user_name = 'pupkin'
         create_user_result = self._sqs_api.create_user(user_name)
         assert_that(

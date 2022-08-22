@@ -50,7 +50,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         if is_fifo:
             assert_that(created_attributes.get('ContentBasedDeduplication'), 'true')
 
-    def test_create_fifo_queue_wo_postfix(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_fifo_queue_wo_postfix(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         def call_create():
             self.called = True
             self._sqs_api.create_queue(self.queue_name, is_fifo=True)
@@ -63,7 +65,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
             )
         )
 
-    def test_create_queue_generates_event(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_queue_generates_event(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         pytest.skip("Outdated")
         self._create_queue_and_assert(self.queue_name, is_fifo=False)
         table_path = '{}/.Queues'.format(self.sqs_root)
@@ -72,7 +76,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         table_path = '{}/.Events'.format(self.sqs_root)
         assert_that(self._get_table_lines_count(table_path), equal_to(1))
 
-    def test_remove_queue_generates_event(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_remove_queue_generates_event(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         pytest.skip("Outdated")
         queue_url = self._create_queue_and_assert(self.queue_name)
         table_path = '{}/.Events'.format(self.sqs_root)
@@ -82,7 +88,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         self._sqs_api.delete_queue(queue_url)
         assert_that(self._get_table_lines_count(table_path), greater_than(lines_count))
 
-    def test_create_queue_with_invalid_name(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_create_queue_with_invalid_name(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         def call_create():
             self._sqs_api.create_queue('invalid_queue_name!')
 
@@ -165,7 +173,7 @@ class QueuesManagingTest(KikimrSqsTestBase):
             assert rows == count, f'in table `{table}` for queue_id_number={queue_id_number} rows {rows}, expected {count}'
 
         queues_to_remove = None
-        for i in range(40):
+        for i in range(90):
             queues_to_remove = get_rows_count('.RemovedQueues')
             if queues_to_remove == 0:
                 break
@@ -183,7 +191,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
             row_count_must_be(common_dir + '/State', another_queue_id_number, 1 if is_fifo else 2)
             row_count_must_be(common_dir + '/Messages', another_queue_id_number, 1)
 
-    def test_delete_queue_batch(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_delete_queue_batch(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         existing_queues = self._sqs_api.list_queues()
         assert_that(
             existing_queues, empty()
@@ -249,7 +259,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         message_ids = self._send_messages(created_queue_url, 1, self._msg_body_template, is_fifo=is_fifo, group_id=group_id)
         self._read_messages_and_assert(created_queue_url, 1, matcher=ReadResponseMatcher().with_message_ids(message_ids))
 
-    def test_purge_queue_batch(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_purge_queue_batch(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         created_queue_url1 = self._create_queue_and_assert(self.queue_name)
         created_queue_url2 = self._create_queue_and_assert(self.queue_name + '1')
         created_queue_url3 = to_bytes(created_queue_url2) + to_bytes('_nonexistent_queue_url')
@@ -315,7 +327,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
             created_queue_url, 10, ReadResponseMatcher().with_message_ids([msg_id, ])
         )
 
-    def test_ya_count_queues(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_ya_count_queues(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         assert_that(self._sqs_api.private_count_queues(), equal_to('0'))
         q_url = self._create_queue_and_assert('new_q')
         self._create_queue_and_assert('new_q_2')
@@ -328,7 +342,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         time.sleep(2.1)
         assert_that(self._sqs_api.private_count_queues(), equal_to('1'))
 
-    def test_queues_count_over_limit(self):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_queues_count_over_limit(self, tables_format):
+        self._init_with_params(tables_format=tables_format)
         urls = []
         for i in range(10):
             urls.append(self._create_queue_and_assert('queue_{}'.format(i), shards=1, retries=1))

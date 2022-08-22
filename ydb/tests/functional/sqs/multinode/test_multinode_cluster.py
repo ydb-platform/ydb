@@ -11,7 +11,7 @@ from ydb.tests.library.common.types import Erasure
 
 from ydb.tests.library.sqs.matchers import ReadResponseMatcher
 
-from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, STOP_NODE_PARAMS, IS_FIFO_PARAMS
+from ydb.tests.library.sqs.test_base import KikimrSqsTestBase, STOP_NODE_PARAMS, IS_FIFO_PARAMS, TABLES_FORMAT_PARAMS
 
 
 class TestSqsMultinodeCluster(KikimrSqsTestBase):
@@ -26,9 +26,9 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
         return config_generator
 
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
-    def test_sqs_writes_through_proxy_on_each_node(self, is_fifo):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_sqs_writes_through_proxy_on_each_node(self, is_fifo, tables_format):
+        self._init_with_params(is_fifo, tables_format)
         self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         message_ids = []
         for i in range(self.cluster_nodes_count * 3):
@@ -59,8 +59,7 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
     @pytest.mark.parametrize(**IS_FIFO_PARAMS)
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
     def test_has_messages_counters(self, is_fifo, stop_node):
-        if is_fifo:
-            self.queue_name = self.queue_name + '.fifo'
+        self._init_with_params(is_fifo)
         self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo)
         node_index = self._get_queue_master_node_index()
         logging.debug('Master node for queue "{}" is {}'.format(self.queue_name, node_index))
@@ -144,7 +143,9 @@ class TestSqsMultinodeCluster(KikimrSqsTestBase):
         check_master_node_counters(new_node_index)
 
     @pytest.mark.parametrize(**STOP_NODE_PARAMS)
-    def test_reassign_master(self, stop_node):
+    @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
+    def test_reassign_master(self, stop_node, tables_format):
+        self._init_with_params(tables_format=tables_format)
         self._create_queue_and_assert(self.queue_name)
         node_index = self._get_queue_master_node_index()
         proxy_node_index = self._other_node(node_index)

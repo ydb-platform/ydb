@@ -163,6 +163,9 @@ class KikimrSqsTestBase(object):
         cls.sqs_port = cls.sqs_ports[0]
         cls.server_fqdn = get_fqdn()
 
+    def _before_test_start(self):
+        pass
+
     def setup_method(self, method=None):
         logging.debug('Test started: {}'.format(str(method.__name__)))
         logging.debug("Kikimr logs dir: {}".format(self.cluster.slots[1].cwd if self.slot_count else self.cluster.nodes[1].cwd))
@@ -180,11 +183,18 @@ class KikimrSqsTestBase(object):
         grpc_port = self.cluster.slots[1].grpc_port if self.slot_count else self.cluster.nodes[1].grpc_port
         self._sqs_server_opts = ['-s', 'localhost', '-p', str(grpc_port)]
         test_name = str(method.__name__)[5:]
-        self._username = 'U_' + test_name
-        self.queue_name = 'Q_{}_{}'.format(test_name, str(uuid.uuid1()))
-        max_queue_name_length = 80 - len('.fifo')
-        if len(self.queue_name) > max_queue_name_length:
-            self.queue_name = self.queue_name[:max_queue_name_length]
+
+        def create_unique_name(user=False):
+            max_length = 80 - (0 if user else len('.fifo'))
+            name = '{subject}_{test}_{uid}'.format(
+                subject=('U' if user else 'Q'),
+                test=test_name[:60],
+                uid=uuid.uuid1()
+            )
+            return name[:max_length]
+
+        self._username = create_unique_name(user=True)
+        self.queue_name = create_unique_name()
         self._msg_body_template = self._username + '-{}'
         self._setup_user(self._username)
         self._sqs_apis = []
@@ -220,6 +230,8 @@ class KikimrSqsTestBase(object):
         self.read_result = []
 
         self.seq_no = 0
+
+        self._before_test_start()
 
     def teardown_method(self, method=None):
         self.check_no_queues_table(self._username)

@@ -2513,11 +2513,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
         state.ConsumeSeqNo(30, 200); // seqno2
         state.ConsumeSeqNo(40, 300); // seqno3
 
+        UNIT_ASSERT_VALUES_EQUAL(state.LastAckSeqNo, 0UL);
         UNIT_ASSERT_VALUES_EQUAL(state.SeqNo, 3UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Rows, 20UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 400UL);
 
         state.UpQuota(2, 200, 1000);
+        UNIT_ASSERT_VALUES_EQUAL(state.LastAckSeqNo, 2UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Rows, 160UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 700UL);
 
@@ -2527,13 +2529,29 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
         state.ConsumeSeqNo(2000, 2000); // seqno7
 
         state.UpQuota(4, 5000, 5000);
+        UNIT_ASSERT_VALUES_EQUAL(state.SeqNo, 7UL);
+        UNIT_ASSERT_VALUES_EQUAL(state.LastAckSeqNo, 4UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Rows, 2970UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 2750);
+        UNIT_ASSERT(state.State == NDataShard::TReadIteratorState::EState::Executing);
 
         state.UpQuota(5, 100, 100);
+        UNIT_ASSERT_VALUES_EQUAL(state.LastAckSeqNo, 5UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Rows, 0UL);
         UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 0UL);
         UNIT_ASSERT(state.State == NDataShard::TReadIteratorState::EState::Exhausted);
+
+        state.UpQuota(6, 10, 10);
+        UNIT_ASSERT_VALUES_EQUAL(state.LastAckSeqNo, 6UL);
+        UNIT_ASSERT_VALUES_EQUAL(state.Quota.Rows, 0UL);
+        UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 0UL);
+        UNIT_ASSERT(state.State == NDataShard::TReadIteratorState::EState::Exhausted);
+
+        state.UpQuota(7, 11, 131729);
+        UNIT_ASSERT_VALUES_EQUAL(state.LastAckSeqNo, 7UL);
+        UNIT_ASSERT_VALUES_EQUAL(state.Quota.Rows, 11);
+        UNIT_ASSERT_VALUES_EQUAL(state.Quota.Bytes, 131729);
+        UNIT_ASSERT(state.State == NDataShard::TReadIteratorState::EState::Executing);
     }
 };
 

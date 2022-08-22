@@ -1922,8 +1922,6 @@ void TDataShard::Handle(TEvDataShard::TEvReadAck::TPtr& ev, const TActorContext&
         return;
     }
 
-    state.LastAckSeqNo = record.GetSeqNo();
-
     bool wasExhausted = state.IsExhausted();
     state.UpQuota(
         record.GetSeqNo(),

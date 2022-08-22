@@ -452,61 +452,7 @@ TString TModuleResolver::SubstParameters(const TString& str) {
         return str;
     }
 
-    size_t pos = 0;
-    try {
-        TStringBuilder res;
-        bool insideBrackets = false;
-        TStringBuilder paramBuilder;
-        for (char c : str) {
-            if (c == '{') {
-                if (insideBrackets) {
-                    throw yexception() << "Unpexpected {";
-                }
-
-                insideBrackets = true;
-                continue;
-            }
-
-            if (c == '}') {
-                if (!insideBrackets) {
-                    throw yexception() << "Unexpected }";
-                }
-
-                insideBrackets = false;
-                TString param = paramBuilder;
-                paramBuilder.clear();
-                const auto& map = Parameters->AsMap();
-                auto it = map.find(param);
-                if (it == map.end()) {
-                    throw yexception() << "No such parameter: '" << param << "'";
-                }
-
-                const auto& value = it->second["Data"];
-                if (!value.IsString()) {
-                    throw yexception() << "Parameter value must be a string";
-                }
-
-                res << value.AsString();
-                continue;
-            }
-
-            if (insideBrackets) {
-                paramBuilder << c;
-            } else {
-                res << c;
-            }
-
-            ++pos;
-        }
-
-        if (insideBrackets) {
-            throw yexception() << "Missing }";
-        }
-
-        return res;
-    } catch (yexception& e) {
-        throw yexception() << "Failed to substitute parameters into url: " << str << ", reason:" << e.what() << ", position: " << pos;
-    }
+    return ::NYql::SubstParameters(str, Parameters, nullptr);
 }
 
 } // namespace NYql

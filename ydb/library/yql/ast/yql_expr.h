@@ -12,6 +12,8 @@
 #include <ydb/library/yql/public/issue/yql_issue_manager.h>
 #include <ydb/library/yql/public/udf/udf_data_type.h>
 
+#include <library/cpp/yson/node/node.h>
+
 #include <library/cpp/string_utils/levenshtein_diff/levenshtein_diff.h>
 #include <library/cpp/enumbitset/enumbitset.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -23,6 +25,7 @@
 #include <util/generic/cast.h>
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
+#include <util/generic/set.h>
 #include <util/generic/bt_exception.h>
 #include <util/generic/algorithm.h>
 #include <util/digest/murmur.h>
@@ -2621,6 +2624,8 @@ TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, const TCo
 TAstParseResult ConvertToAst(const TExprNode& root, TExprContext& ctx, ui32 annotationFlags, bool refAtoms);
 
 TExprNode::TListType GetLambdaBody(const TExprNode& lambda);
+
+TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TSet<TString>* usedNames);
 
 } // namespace NYql
 

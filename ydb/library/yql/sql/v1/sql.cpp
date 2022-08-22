@@ -9574,6 +9574,15 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
                     Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
                     return{};
                 }
+
+                TSet<TString> names;
+                SubstParameters(*file, Nothing(), &names);
+                for (const auto& name : names) {
+                    auto namedNode = GetNamedNode(name);
+                    if (!namedNode) {
+                        return{};
+                    }
+                }
             }
 
             Ctx.Libraries[alias]=file;

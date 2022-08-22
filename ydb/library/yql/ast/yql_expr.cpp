@@ -3,6 +3,7 @@
 #include "yql_gc_nodes.h"
 
 #include <ydb/library/yql/utils/utf8.h>
+#include <ydb/library/yql/core/issue/yql_issue.h>
 
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
@@ -114,6 +115,12 @@ namespace {
 
         void AddError(const TAstNode& node, const TString& message) {
             Expr.AddError(TIssue(node.GetPosition(), message));
+        }
+
+        void AddInfo(const TAstNode& node, const TString& message) {
+            auto issue = TIssue(node.GetPosition(), message);
+            issue.SetCode(TIssuesIds::INFO, TSeverityIds::S_INFO);
+            Expr.AddError(issue);
         }
 
         TExprNode::TPtr&& ProcessNode(const TAstNode& node, TExprNode::TPtr&& exprNode) {
@@ -1057,7 +1064,7 @@ namespace {
         return true;
     }
 
-    bool CompileDeclare(const TAstNode& node, TContext& ctx) {
+    bool CompileDeclare(const TAstNode& node, TContext& ctx, bool checkOnly) {
         if (node.GetChildrenCount() != 3) {
             ctx.AddError(node, "Expected list of size 3");
             return false;
@@ -1090,9 +1097,25 @@ namespace {
                 std::move(typeExpr.front())
             }));
 
-        if (!ctx.Frames.back().Bindings.emplace(nameStr, TExprNode::TListType{std::move(parameterExpr)}).second) {
-            ctx.AddError(node, TStringBuilder() << "Declare statement hides previously defined name: "
-                << nameStr);
+        bool error = false;
+        if (checkOnly) {
+            auto it = ctx.Frames.back().Bindings.find(nameStr);
+            if (it == ctx.Frames.back().Bindings.end()) {
+                ctx.AddError(*name, TStringBuilder() << "Missing parameter: " << nameStr);
+                return false;
+            }
+
+            if (it->second.size() != 1 || !it->second.front()->IsCallable("Parameter")) {
+                error = true;
+            }
+        } else {
+            if (!ctx.Frames.back().Bindings.emplace(nameStr, TExprNode::TListType{ std::move(parameterExpr) }).second) {
+                error = true;
+            }
+        }
+
+        if (error) {
+            ctx.AddError(node, TStringBuilder() << "Declare statement hides previously defined name: " << nameStr);
             return false;
         }
 
@@ -1122,9 +1145,32 @@ namespace {
             url = file->GetContent();
         }
 
+        if (url) {
+            auto world = ctx.FindBinding("world");
+            if (!world.empty()) {
+                TSet<TString> names;
+                SubstParameters(url, Nothing(), &names);
+                for (const auto& name : names) {
+                    auto nameRef = ctx.FindBinding(name);
+                    if (nameRef.empty()) {
+                        ctx.AddError(node, TStringBuilder() << "Name not found: " << name);
+                        return false;
+                    }
+
+                    TExprNode::TListType args = world;
+                    args.insert(args.end(), nameRef.begin(), nameRef.end());
+                    auto newWorld = TExprNode::TListType{ ctx.Expr.NewCallable(node.GetPosition(), "Left!", {
+                        ctx.Expr.NewCallable(node.GetPosition(), "Cons!", std::move(args)) })};
+
+                    ctx.Frames.back().Bindings["world"] = newWorld;
+                    world = newWorld;
+                }
+            }
+        }
+
         if (!ctx.ModuleResolver) {
-            ctx.AddError(*name, "Module resolver isn't available");
-            return false;
+            ctx.AddInfo(*name, "Module resolver isn't available");
+            return true;
         }
 
         if (url) {
@@ -1196,6 +1242,9 @@ namespace {
                 } else if (firstChild->GetContent() == TStringBuf("set_package_version")) {
                     if (!CompileSetPackageVersion(*node, ctx))
                         return {};
+                } else if (firstChild->GetContent() == TStringBuf("declare")) {
+                    if (!CompileDeclare(*node, ctx, false))
+                        return {};
                 }
             }
 
@@ -1247,8 +1296,10 @@ namespace {
                     return {};
                 }
 
-                if (!CompileDeclare(*node, ctx))
+                if (!CompileDeclare(*node, ctx, true))
                     return {};
+
+                continue;
             } else if (firstChild->GetContent() == TStringBuf("library")) {
                 if (!topLevel) {
                     ctx.AddError(*firstChild, "Library statements are only allowed on top level block");
@@ -3252,6 +3303,73 @@ void CheckCounts(const TExprNode& root) {
     CalculateReferences(root, refCounts);
     TNodeSet visited;
     CheckReferences(root, refCounts, visited);
+}
+
+TString SubstParameters(const TString& str, const TMaybe<NYT::TNode>& params, TSet<TString>* usedNames) {
+    size_t pos = 0;
+    try {
+        TStringBuilder res;
+        bool insideBrackets = false;
+        TStringBuilder paramBuilder;
+        for (char c : str) {
+            if (c == '{') {
+                if (insideBrackets) {
+                    throw yexception() << "Unpexpected {";
+                }
+
+                insideBrackets = true;
+                continue;
+            }
+
+            if (c == '}') {
+                if (!insideBrackets) {
+                    throw yexception() << "Unexpected }";
+                }
+
+                insideBrackets = false;
+                TString param = paramBuilder;
+                paramBuilder.clear();
+                if (usedNames) {
+                    usedNames->insert(param);
+                }
+
+                if (params) {
+                    const auto& map = params->AsMap();
+                    auto it = map.find(param);
+                    if (it == map.end()) {
+                        throw yexception() << "No such parameter: '" << param << "'";
+                    }
+
+                    const auto& value = it->second["Data"];
+                    if (!value.IsString()) {
+                        throw yexception() << "Parameter value must be a string";
+                    }
+
+                    res << value.AsString();
+                }
+
+                continue;
+            }
+
+            if (insideBrackets) {
+                paramBuilder << c;
+            }
+            else {
+                res << c;
+            }
+
+            ++pos;
+        }
+
+        if (insideBrackets) {
+            throw yexception() << "Missing }";
+        }
+
+        return res;
+    }
+    catch (yexception& e) {
+        throw yexception() << "Failed to substitute parameters into url: " << str << ", reason:" << e.what() << ", position: " << pos;
+    }
 }
 
 } // namespace NYql

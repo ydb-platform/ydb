@@ -420,7 +420,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     return FillParseResult(SqlToYql(SourceCode_, settings, &warningRules), &warningRules);
 }
 
-bool TProgram::Compile(const TString& username) {
+bool TProgram::Compile(const TString& username, bool skipLibraries) {
     YQL_PROFILE_FUNC(TRACE);
 
     Y_ENSURE(AstRoot_, "Program not parsed yet");
@@ -432,7 +432,7 @@ bool TProgram::Compile(const TString& username) {
         return false;
     }
     TypeCtx_->IsReadOnly = true;
-    if (Modules_.get()) {
+    if (!skipLibraries && Modules_.get()) {
         auto libs = UserDataStorage_->GetLibraries();
         for (auto lib : libs) {
             if (!Modules_->AddFromFile(lib, *ExprCtx_, SyntaxVersion_, 0)) {
@@ -441,7 +441,7 @@ bool TProgram::Compile(const TString& username) {
         }
     }
 
-    if (!CompileExpr(*AstRoot_, ExprRoot_, *ExprCtx_, Modules_.get(), 0, SyntaxVersion_)) {
+    if (!CompileExpr(*AstRoot_, ExprRoot_, *ExprCtx_, skipLibraries ? nullptr : Modules_.get(), 0, SyntaxVersion_)) {
         return false;
     }
 

@@ -18,6 +18,7 @@ target_link_libraries(library-yql-ast PUBLIC
   library-cpp-enumbitset
   cpp-string_utils-levenshtein_diff
   library-cpp-yson
+  cpp-yson-node
   yql-public-udf
   library-yql-utils
   yql-core-issue

@@ -101,7 +101,7 @@ public:
     bool ParseSql();
     bool ParseSql(const NSQLTranslation::TTranslationSettings& settings);
 
-    bool Compile(const TString& username);
+    bool Compile(const TString& username, bool skipLibraries = false);
 
     TStatus Discover(const TString& username);
 

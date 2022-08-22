@@ -43,6 +43,8 @@ namespace NSQLTranslation {
         using TPtr = TIntrusivePtr<ISqlFeaturePolicy>;
 
         static TPtr MakeAlwaysDisallow();
+
+        static TPtr MakeAlwaysAllow();
     };
 
     struct TTableBindingSettings {

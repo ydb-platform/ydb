@@ -436,6 +436,7 @@ message TDqGatewayConfig {
     optional uint32 WithHiddenPercentage = 5 [default = 0];
     repeated TDefaultAutoByHourPercentage WithHiddenByHour = 6;
     repeated string NoWithHiddenForUsers = 7;
+    repeated string WithHiddenForUsers = 8;
 }
 
 /////////////////////////////// Yql Core ///////////////////////////////

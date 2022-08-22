@@ -21,11 +21,23 @@ namespace {
             return false;
         }
     };
+
+    class TAlwaysAllowPolicy : public ISqlFeaturePolicy {
+    public:
+        TAlwaysAllowPolicy() = default;
+        bool Allow() const override {
+            return true;
+        }
+    };
 }
 
 namespace NSQLTranslation {
     ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::MakeAlwaysDisallow() {
         return new TAlwaysDiallowPolicy;
+    }
+
+    ISqlFeaturePolicy::TPtr ISqlFeaturePolicy::MakeAlwaysAllow() {
+        return new TAlwaysAllowPolicy;
     }
 
     TTranslationSettings::TTranslationSettings()

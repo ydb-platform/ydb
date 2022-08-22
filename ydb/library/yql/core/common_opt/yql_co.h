@@ -72,7 +72,7 @@ struct TOptimizeContext {
 
 using TCallableOptimizerExt = std::function<TExprNode::TPtr (const TExprNode::TPtr&, TExprContext&, TOptimizeContext&)>;
 using TCallableOptimizerMap = std::unordered_map<std::string_view, TCallableOptimizerExt>;
-using TFinalizingOptimizerExt = std::function<void (const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>;
+using TFinalizingOptimizerExt = std::function<bool (const TExprNode::TPtr&, TNodeOnNodeOwnedMap&, TExprContext&, TOptimizeContext&)>;
 using TFinalizingOptimizerMap = std::unordered_map<std::string_view, TFinalizingOptimizerExt>;
 
 struct TCoCallableRules {

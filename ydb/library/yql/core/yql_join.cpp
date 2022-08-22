@@ -1725,4 +1725,32 @@ bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPt
     return false;
 }
 
+void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
+    const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
+    const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields) {
+    usedFields.clear();
+
+    if (!HaveFieldsSubset(expr, row, usedFields, parentsMap, false)) {
+        const auto inputStructType = RemoveOptionalType(row.GetTypeAnn())->Cast<TStructExprType>();
+        for (const auto& i : inputStructType->GetItems()) {
+            usedFields.insert(i->GetName());
+        }
+    }
+
+    for (auto x : usedFields) {
+        // rename used fields
+        if (auto renamed = backRenameMap.FindPtr(x)) {
+            x = *renamed;
+        }
+
+        TStringBuf part1;
+        TStringBuf part2;
+        SplitTableName(x, part1, part2);
+        inputs.insert(*labels.FindInputIndex(part1));
+        if (inputs.size() == labels.Inputs.size()) {
+            break;
+        }
+    }
+}
+
 } // namespace NYql

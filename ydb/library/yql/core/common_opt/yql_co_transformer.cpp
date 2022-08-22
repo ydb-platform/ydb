@@ -141,20 +141,29 @@ IGraphTransformer::TStatus TCommonOptTransformer::DoTransform(const TExprNode::T
     optCtx.ParentsMap = &parentsMap;
 
     TNodeOnNodeOwnedMap toOptimize;
+    bool isError = false;
     VisitExpr(input,
-        [&toOptimize](const TExprNode::TPtr&) {
-            return toOptimize.empty();
+        [&toOptimize, &isError](const TExprNode::TPtr&) {
+            return toOptimize.empty() && !isError;
         },
-        [&callables, &toOptimize, &ctx, &optCtx](const TExprNode::TPtr& node) {
+        [&callables, &toOptimize, &ctx, &optCtx, &isError](const TExprNode::TPtr& node) {
+            if (isError) {
+                return false;
+            }
+
             if (toOptimize.empty()) {
                 const auto rule = callables.find(node->Content());
                 if (callables.cend() != rule) {
-                    (rule->second)(node, toOptimize, ctx, optCtx);
+                    isError = isError || !(rule->second)(node, toOptimize, ctx, optCtx);
                 }
             }
-            return toOptimize.empty();
+            return toOptimize.empty() && !isError;
         }
     );
+
+    if (isError) {
+        return IGraphTransformer::TStatus::Error;
+    }
 
     if (!toOptimize.empty()) {
         TOptimizeExprSettings settings(TypeCtx);

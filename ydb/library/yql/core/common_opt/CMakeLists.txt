@@ -20,6 +20,7 @@ target_link_libraries(yql-core-common_opt PUBLIC
 )
 target_sources(yql-core-common_opt PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_extr_members.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_flatmap_over_join.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_finalizers.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_flow1.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/core/common_opt/yql_co_flow2.cpp

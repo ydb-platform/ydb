@@ -149,4 +149,9 @@ TExprNode::TPtr FuseAndTerms(TPositionHandle position, const TExprNode::TListTyp
 
 bool IsEquality(TExprNode::TPtr predicate, TExprNode::TPtr& left, TExprNode::TPtr& right);
 
+void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
+    const TParentsMap& parentsMap, const THashMap<TString, TString>& backRenameMap,
+    const TJoinLabels& labels, TSet<ui32>& inputs, TSet<TStringBuf>& usedFields);
+
+
 }

@@ -118,17 +118,22 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
         return node;
     }
 
-    if (!node.Maybe<TCoCombineByKey>().Input().Maybe<TKqpReadOlapTableRanges>()) {
+    if (!node.Maybe<TCoCombineByKey>()) {
         return node;
     }
 
     auto combineKey = node.Cast<TCoCombineByKey>();
-    auto read = combineKey.Input().Cast<TKqpReadOlapTableRanges>();
+    auto maybeRead = combineKey.Input().Maybe<TKqpReadOlapTableRanges>();
+    if (!maybeRead) {
+        maybeRead = combineKey.Input().Maybe<TCoExtractMembers>().Input().Maybe<TKqpReadOlapTableRanges>();
+    }
 
-    if (read.Process().Body().Raw() != read.Process().Args().Arg(0).Raw()) {
+    if (!maybeRead) {
         return node;
     }
 
+    auto read = maybeRead.Cast();
+    
     auto keySelectorBody = combineKey.KeySelectorLambda().Cast<TCoLambda>().Body();
     if (!ContainsSimpleColumnOnly(keySelectorBody, combineKey) && !ContainsConstOnly(keySelectorBody)) {
         return node;
@@ -189,21 +194,23 @@ TExprBase KqpPushOlapAggregate(TExprBase node, TExprContext& ctx, const TKqpOpti
     }
 
     auto olapAgg = Build<TKqpOlapAgg>(ctx, node.Pos())
-        .Input(read.Process().Body())
+        .Input(read.Process().Args().Arg(0))
         .Aggregates(std::move(aggs.Done()))
         .KeyColumns(std::move(aggKeyCols.Done()))
         .Done();
     
-    auto newProcessLambda = Build<TCoLambda>(ctx, node.Pos())
+    auto olapAggLambda = Build<TCoLambda>(ctx, node.Pos())
         .Args({"row"})
         .Body<TExprApplier>()
             .Apply(olapAgg)
             .With(read.Process().Args().Arg(0), "row")
             .Build()
         .Done();
-    
-    YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(newProcessLambda, ctx);
 
+    auto newProcessLambda = ctx.FuseLambdas(olapAggLambda.Ref(), read.Process().Ref());
+
+    YQL_CLOG(INFO, ProviderKqp) << "Pushed OLAP lambda: " << KqpExprToPrettyString(*newProcessLambda, ctx);
+    
     auto newRead = Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
         .Table(read.Table())
         .Ranges(read.Ranges())

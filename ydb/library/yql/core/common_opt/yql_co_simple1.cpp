@@ -153,6 +153,13 @@ TExprNode::TPtr KeepConstraints(TExprNode::TPtr node, const TExprNode& src, TExp
     return res;
 }
 
+TExprNode::TPtr MakeEmptyCollectionWithConstraintsFrom(const TExprNode& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    auto res = ctx.NewCallable(node.Pos(), GetEmptyCollectionName(node.GetTypeAnn()),
+        { ExpandType(node.Pos(), *node.GetTypeAnn(), ctx) });
+    res = KeepConstraints(res, node, ctx);
+    return KeepColumnOrder(res, node, ctx, *optCtx.Types);
+}
+
 template<typename TInt>
 bool ConstIntAggregate(const TExprNode::TChildrenType& values, std::function<TInt(TInt, TInt)> aggFunc,
     TInt& result)
@@ -3830,29 +3837,55 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
     map["FlatListIf"] = std::bind(&OptimizeFlatContainerIf<true>, _1, _2);
     map["FlatOptionalIf"] = std::bind(&OptimizeFlatContainerIf<false>, _1, _2);
 
-    map["Skip"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext& /*optCtx*/) {
+    map["Skip"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Head().IsCallable("List")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return node->HeadPtr();
+        }
         if (node->Tail().IsCallable("Uint64")) {
             const auto value = FromString<ui64>(node->Tail().Head().Content());
             if (!value) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content();
                 return node->HeadPtr();
+            } else if (value == std::numeric_limits<ui64>::max()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content();
+                return MakeEmptyCollectionWithConstraintsFrom(*node, ctx, optCtx);
+            } else if (node->Head().IsCallable("AsList")) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content()
+                                      << " over " << node->Head().Content();
+                if (node->Head().ChildrenSize() > value) {
+                    auto children = node->Head().ChildrenList();
+                    children.erase(children.begin(), children.begin() + value);
+                    return ctx.ChangeChildren(node->Head(), std::move(children));
+                }
+                return MakeEmptyCollectionWithConstraintsFrom(*node, ctx, optCtx);
             }
         }
 
         return node;
     };
 
-    map["Take"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    map["Take"] = map["Limit"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (node->Head().IsCallable("List")) {
+            YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
+            return node->HeadPtr();
+        }
         if (node->Tail().IsCallable("Uint64")) {
             const auto value = FromString<ui64>(node->Tail().Head().Content());
             if (!value) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content();
-                auto res = ctx.NewCallable(node->Tail().Pos(), GetEmptyCollectionName(node->GetTypeAnn()), {ExpandType(node->Pos(), *node->GetTypeAnn(), ctx)});
-                res = KeepConstraints(res, *node, ctx);
-                return KeepColumnOrder(res, *node, ctx, *optCtx.Types);
+                return MakeEmptyCollectionWithConstraintsFrom(*node, ctx, optCtx);
             } else if (value == std::numeric_limits<ui64>::max()) {
                 YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content();
                 return node->HeadPtr();
+            } else if (node->Head().IsCallable("AsList")) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " with " << node->Tail().Content() << " '" << node->Tail().Head().Content() << " over " << node->Head().Content();
+                if (node->Head().ChildrenSize() <= value) {
+                    return node->HeadPtr();
+                }
+                auto children = node->Head().ChildrenList();
+                children.resize(value);
+                return ctx.ChangeChildren(node->Head(), std::move(children));
             }
         }
 

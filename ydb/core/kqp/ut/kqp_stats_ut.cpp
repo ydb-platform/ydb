@@ -356,7 +356,7 @@ Y_UNIT_TEST_TWIN(StatsProfile, UseSessionActor) {
     auto node1 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-TableFullScan");
     UNIT_ASSERT_EQUAL(node1.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 2);
 
-    auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate-Limit");
+    auto node2 = FindPlanNodeByKv(plan, "Node Type", "Aggregate");
     UNIT_ASSERT_EQUAL(node2.GetMap().at("Stats").GetMapSafe().at("ComputeNodes").GetArraySafe().size(), 1);
 }
 

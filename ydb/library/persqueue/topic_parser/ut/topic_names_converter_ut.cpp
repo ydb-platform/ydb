@@ -229,15 +229,16 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
             NKikimrPQ::TPQTabletConfig pqConfig;
             pqConfig.SetTopicName("rt3.dc2--account@path--topic");
             pqConfig.SetLocalDC(false);
-            pqConfig.SetTopicPath("/lb/account-database/path/.topic/mirrored-from-dc2");
+            pqConfig.SetTopicPath("/lb/account-database/path/topic-mirrored-from-dc2");
             pqConfig.SetFederationAccount("account");
             pqConfig.SetYdbDatabasePath("/lb/account-database");
 
             wrapper.SetConverter(pqConfig);
 
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/account-database/path/.topic/mirrored-from-dc2");
+            UNIT_ASSERT_C(wrapper.TopicConverter->IsValid(), wrapper.TopicConverter->GetReason());
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetPrimaryPath(), "/lb/account-database/path/topic-mirrored-from-dc2");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetSecondaryPath(), "/Root/PQ/rt3.dc2--account@path--topic");
-            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/.topic/mirrored-from-dc2");
+            UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetModernName(), "path/topic-mirrored-from-dc2");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetClientsideName(), "rt3.dc2--account@path--topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "account/path/topic");
             UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "rt3.dc2--account@path--topic");
@@ -327,14 +328,14 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
         UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/LbCommunal/account/topic");
 
         converter = TTopicNameConverter::ForFederation(
-                "/Root/PQ", "", "mirrored-from-sas", "/LbCommunal/account/dir/.topic", "/LbCommunal/account", false, "", "account"
+                "/Root/PQ", "", "topic-mirrored-from-sas", "/LbCommunal/account/dir", "/LbCommunal/account", false, "", "account"
         );
         UNIT_ASSERT_C(converter->IsValid(), converter->GetReason());
         UNIT_ASSERT_VALUES_EQUAL(converter->GetAccount(), "account");
         UNIT_ASSERT_VALUES_EQUAL(converter->GetCluster(), "sas");
         UNIT_ASSERT_VALUES_EQUAL(converter->GetLegacyProducer(), "account@dir");
         UNIT_ASSERT_VALUES_EQUAL(converter->GetLegacyLogtype(), "topic");
-        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/LbCommunal/account/dir/.topic/mirrored-from-sas");
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetPrimaryPath(), "/LbCommunal/account/dir/topic-mirrored-from-sas");
     }
 
     Y_UNIT_TEST(BadModernTopics) {
@@ -354,7 +355,12 @@ Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {
         UNIT_ASSERT(!converter->IsValid());
 
         converter = TTopicNameConverter::ForFederation(
-                "", "", "mirrored-from-sas", "/LbCommunal/account/.topic", "/LbCommunal/account", true, "sas", "account"
+                "", "", "topic-mirrored-from-sas", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account"
+        );
+        UNIT_ASSERT(!converter->IsValid());
+
+        converter = TTopicNameConverter::ForFederation(
+                "", "", "topic-mirrored-from-", "/LbCommunal/account", "/LbCommunal/account", true, "sas", "account"
         );
         UNIT_ASSERT(!converter->IsValid());
 

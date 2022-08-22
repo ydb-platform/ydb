@@ -39,7 +39,7 @@ public:
         );
 
         Server->AnnoyingClient->CreateTopicNoLegacy(
-                "/Root/LbCommunal/account/.topic2/mirrored-from-dc2", 1, true, false, {}, {}, "account"
+                "/Root/LbCommunal/account/topic2-mirrored-from-dc2", 1, true, false, {}, {}, "account"
         );
         Server->AnnoyingClient->CreateConsumer("test-consumer");
         InitPQLib();
@@ -148,6 +148,7 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
     Y_UNIT_TEST(BadTopics) {
         TPQv1CompatTestBase testServer;
         testServer.CreateTopic("/Root/PQ/some-topic", "", true, true);
+        testServer.CreateTopic("/Root/PQ/some-topic-mirrored-from-dc2", "", false, true);
         testServer.CreateTopic("/Root/PQ/.some-topic/mirrored-from-dc2", "", false, true);
 
         //Bad dc
@@ -162,19 +163,22 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
 
         // Local topic with client write disabled
         testServer.CreateTopic("/Root/LbCommunal/some-topic", "account", false, true);
-        // Non-local topic with client write disabled
+        // Non-local topic with client write enabled
+        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc2", "account", true, true);
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/mirrored-from-dc2", "account", true, true);
         // No account
         testServer.CreateTopic("/Root/LbCommunal/some-topic", "", true, true);
         // Mirrored-from local
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/mirrored-from-dc1", "account", false, true);
+        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc1", "account", false, true);
         // Bad mirrored names
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/some-topic", "account", false, true);
         // Mirrored-from non-existing
         testServer.CreateTopic("/Root/LbCommunal/.some-topic/mirrored-from-dc777", "account", false, true);
+        testServer.CreateTopic("/Root/LbCommunal/some-topic-mirrored-from-dc777", "account", false, true);
 
         // Just to verify it even creates anything at all
-        testServer.CreateTopic("/Root/LbCommunal/.some-topic/mirrored-from-dc2", "account", false, false);
+        testServer.CreateTopic("/Root/LbCommunal/account/some-topic-mirrored-from-dc2", "account", false, false);
 
     }
 }

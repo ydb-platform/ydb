@@ -54,7 +54,6 @@ TString NormalizeFullPath(const TString& fullPath) {
     }
 }
 
-
 TString GetFullTopicPath(const NActors::TActorContext& ctx, const TMaybe<TString>& database, const TString& topicPath) {
     if (NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         return FullPath(database, topicPath);
@@ -149,8 +148,11 @@ TDiscoveryConverter::TDiscoveryConverter(bool firstClass,
             res_ = pathBuf.SkipPrefix("/");
             TStringBuf acc, rest;
             res_ = pathBuf.TrySplit("/", acc, rest);
-            Y_VERIFY(res_);
+            if (res_) {
             Database = NKikimr::JoinPath({TString(dbRoot), TString(acc)});
+            } else {
+                Database = TString(dbRoot);
+            }
         }
     }
     if (!Database.Defined()) {
@@ -293,32 +295,21 @@ void TDiscoveryConverter::BuildFromFederationPath(const TString& rootPrefix) {
 }
 
 bool TDiscoveryConverter::TryParseModernMirroredPath(TStringBuf path) {
-    if (!path.Contains(".") || !path.Contains("/mirrored-from-")) {
+    if (!path.Contains("-mirrored-from-")) {
+        CHECK_SET_VALID(!path.Contains("mirrored-from"), "Federation topics cannot contain 'mirrored-from' in name unless this is a mirrored topic", return false); 
         return false;
     }
     TStringBuf fst, snd;
-    auto res = path.TryRSplit("/", fst, snd);
-    CHECK_SET_VALID(res, "Malformed mirrored topic path - expected to end with '/mirrored-from-<cluster>'", return false);
-    CHECK_SET_VALID(!snd.empty(), "Malformed mirrored topic path - expected to end with '/mirrored-from-<cluster>",
+    auto res = path.TryRSplit("-mirrored-from-", fst, snd);
+    CHECK_SET_VALID(res, "Malformed mirrored topic path - expected to end with '-mirrored-from-<cluster>'", return false);
+    CHECK_SET_VALID(!snd.empty(), "Malformed mirrored topic path - expected to end with valid cluster name",
                     return false);
-    res = snd.SkipPrefix("mirrored-from-");
-    CHECK_SET_VALID(res, "Malformed mirrored topic path - invalid '/mirrored-from-<cluster>; part" , return false);
     CHECK_SET_VALID(Dc.empty() || Dc == "unknown" || Dc == snd,
                     "Bad mirrored topic path - cluster in name mismatches with cluster provided",
                     return false);
     Dc = snd;
     FullModernName = path;
-    path = fst;
-    res = path.TryRSplit("/", fst, snd);
-    if (res) {
-        res = snd.SkipPrefix(".");
-        CHECK_SET_VALID(res, "Malformed mirrored topic path - topic name is expected to start with '.'", return false);
-        ModernName = NKikimr::JoinPath({TString(fst), TString(snd)});
-    } else {
-        res = path.SkipPrefix(".");
-        CHECK_SET_VALID(res, "Malformed mirrored topic path - topic name is expected to start with '.'", return false);
-        ModernName = path;
-    }
+    ModernName = fst;
     if (Account_.Defined()) {
         BuildFromShortModernName();
     }
@@ -330,14 +321,14 @@ void TDiscoveryConverter::ParseModernPath(const TStringBuf& path) {
     // So only convention supported is 'account/dir/topic' and account in path matches LB account;
     TStringBuilder pathAfterAccount;
 
-    // Path after account would contain 'dir/topic' OR dir/.topic/mirrored-from-..
+    // Path after account would contain 'dir/topic' OR dir/topic-mirrored-from-...
     if (!Dc.empty() && !LocalDc.empty() && Dc != LocalDc) {
         TStringBuf directories, topicName;
         auto res = path.TrySplit("/", directories, topicName);
         if (res) {
-            pathAfterAccount << directories << "/." << topicName << "/mirrored-from-" << Dc;
+            pathAfterAccount << directories << "/" << topicName << "-mirrored-from-" << Dc;
         } else {
-            pathAfterAccount << "." << path << "/mirrored-from-" << Dc;
+            pathAfterAccount << path << "-mirrored-from-" << Dc;
         }
     } else {
         pathAfterAccount << path;
@@ -473,7 +464,7 @@ void TDiscoveryConverter::BuildFromLegacyName(const TString& rootPrefix, bool fo
     Y_VERIFY(!Dc.empty());
     bool isMirrored = (!LocalDc.empty() && Dc != LocalDc);
     if (isMirrored) {
-        fullModernName << "." << topicName << "/mirrored-from-" << Dc;
+        fullModernName << topicName << "-mirrored-from-" << Dc;
     } else {
         fullModernName << topicName;
     }

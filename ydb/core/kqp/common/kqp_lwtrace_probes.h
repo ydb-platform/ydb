@@ -89,13 +89,13 @@ struct TQueryAction {
     PROBE(KqpDataExecuterFinalize, GROUPS("KQP"), \
         TYPES(ui64, ui64, ui64, ui64), \
         NAMES("TxId", "lastCompletedShard", "ResultRows", "resultSize")) \
-    PROBE(KqpDataExecuterReplyErrorAndDie, GROUPS("KQP"), \
+    PROBE(KqpScanExecuterStartExecute, GROUPS("KQP"), \
         TYPES(ui64), \
         NAMES("TxId")) \
-    PROBE(KqpScanExecutorReplyErrorAndDie, GROUPS("KQP"), \
-        TYPES(ui64), \
-        NAMES("TxId")) \
-    PROBE(KqpScanExecutorFinalize, GROUPS("KQP"), \
+    PROBE(KqpScanExecuterStartTasksAndTxs, GROUPS("KQP"), \
+        TYPES(ui64, ui64, ui64), \
+        NAMES("TxId", "tasksSize", "scansSize")) \
+    PROBE(KqpScanExecuterFinalize, GROUPS("KQP"), \
         TYPES(ui64, ui64, TString, ui64), \
         NAMES("TxId", "lastCompletedTask", "lastCompletedComputeActor", "ResultsSize")) \
     PROBE(KqpLiteralExecuterReplyErrorAndDie, GROUPS("KQP"), \

@@ -631,6 +631,7 @@ private:
     }
 
     void Execute() {
+        LWTRACK(KqpScanExecuterStartExecute, ResponseEv->Orbit, TxId);
         auto& funcRegistry = *AppData()->FunctionRegistry;
         NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
@@ -822,6 +823,7 @@ private:
     }
 
     void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) {
+        LWTRACK(KqpScanExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), scanTasks.size());
         LOG_D("Execute scan tx, computeTasks: " << computeTasks.size() << ", scanTasks: " << scanTasks.size());
         for (const auto& [_, tasks]: scanTasks) {
             for (const auto& task : tasks) {
@@ -873,7 +875,7 @@ private:
             }
         }
 
-        LWTRACK(KqpScanExecutorFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, Results.size());
+        LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, Results.size());
 
         LOG_D("Sending response to: " << Target);
         Send(Target, ResponseEv.release());

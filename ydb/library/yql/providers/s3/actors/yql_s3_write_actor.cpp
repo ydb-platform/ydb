@@ -70,6 +70,10 @@ struct TEvPrivate {
 using namespace NKikimr::NMiniKQL;
 
 class TS3FileWriteActor : public TActorBootstrapped<TS3FileWriteActor> {
+
+    friend class TS3WriteActor;
+    using TActorBootstrapped<TS3FileWriteActor>::PassAway;
+
 public:
     TS3FileWriteActor(
         IHTTPGateway::TPtr gateway,
@@ -239,11 +243,6 @@ private:
             CommitUploadedParts();
     }
 
-    // IActor & IDqComputeActorAsyncOutput
-    void PassAway() override { // Is called from Compute Actor
-        TActorBootstrapped<TS3FileWriteActor>::PassAway();
-    }
-
     void StartUploadParts() {
         while (auto part = Parts->Pop()) {
             const auto size = part.size();
@@ -389,6 +388,7 @@ private:
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& result) {
         if (const auto it = FileWriteActors.find(result->Get()->Key); FileWriteActors.cend() != it) {
             if (const auto ft = std::find_if(it->second.cbegin(), it->second.cend(), [&](TS3FileWriteActor* actor){ return result->Get()->Url == actor->GetUrl(); }); it->second.cend() != ft) {
+                (*ft)->PassAway();
                 it->second.erase(ft);
                 if (it->second.empty())
                     FileWriteActors.erase(it);
@@ -401,6 +401,14 @@ private:
 
     // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
+
+        for (const auto& p : FileWriteActors) {
+            for (const auto& fileWriter : p.second) {
+                fileWriter->PassAway();
+            }
+        }
+        FileWriteActors.clear();
+
         TActorBootstrapped<TS3WriteActor>::PassAway();
     }
 

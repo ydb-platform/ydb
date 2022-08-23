@@ -127,8 +127,13 @@ enum transform_scope { scope_next = 0, scope_rest = 1 };
 //
 template<typename OutputIterator, typename Char>
 struct case_converting_iterator
-  : std::iterator<std::output_iterator_tag, Char, void, void, case_converting_iterator<OutputIterator, Char> >
 {
+    typedef std::output_iterator_tag iterator_category;
+    typedef Char value_type;
+    typedef void difference_type;
+    typedef void pointer;
+    typedef case_converting_iterator<OutputIterator, Char> reference;
+
     case_converting_iterator(OutputIterator const &out, traits<Char> const *tr)
       : out_(out)
       , traits_(tr)
@@ -206,8 +211,13 @@ inline bool set_transform(Iterator &, transform_op, transform_scope)
 //
 template<typename Char>
 struct noop_output_iterator
-  : std::iterator<std::output_iterator_tag, Char, void, void, noop_output_iterator<Char> >
 {
+    typedef std::output_iterator_tag iterator_category;
+    typedef Char value_type;
+    typedef void difference_type;
+    typedef void pointer;
+    typedef noop_output_iterator<Char> reference;
+
     noop_output_iterator &operator ++()
     {
         return *this;

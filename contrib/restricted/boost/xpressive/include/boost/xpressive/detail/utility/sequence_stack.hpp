@@ -15,6 +15,7 @@
 # pragma warning(disable : 4127) // conditional expression constant
 #endif
 
+#include <cstddef>
 #include <algorithm>
 #include <functional>
 
@@ -210,21 +211,19 @@ public:
 
     T *push_sequence(std::size_t count, T const &t)
     {
+        // Check to see if we have overflowed this buffer
+        std::size_t size_left = static_cast< std::size_t >(this->end_ - this->curr_);
+        if (size_left < count)
+        {
+            // allocate a new block and return a ptr to the new memory
+            return this->grow_(count, t);
+        }
+
         // This is the ptr to return
         T *ptr = this->curr_;
 
         // Advance the high-water mark
         this->curr_ += count;
-
-        // Check to see if we have overflowed this buffer
-        if(std::less<void*>()(this->end_, this->curr_))
-        {
-            // oops, back this out.
-            this->curr_ = ptr;
-
-            // allocate a new block and return a ptr to the new memory
-            return this->grow_(count, t);
-        }
 
         return ptr;
     }

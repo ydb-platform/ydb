@@ -38,8 +38,8 @@
 // Config logic taken from boost/regex/config.hpp
 #ifndef BOOST_XPRESSIVE_HAS_MS_STACK_GUARD
 # if (defined(_WIN32) || defined(_WIN64) || defined(_WINCE))                    \
-     && !defined(__GNUC__)                                                      \
-     && !(defined(__BORLANDC__) && (__BORLANDC__ >= 0x600))                     \
+     && !(defined(__GNUC__) || defined(__BORLANDC__) && defined(__clang__))     \
+     && !(defined(BOOST_BORLANDC) && (BOOST_BORLANDC >= 0x600))                 \
      && !(defined(__MWERKS__) && (__MWERKS__ <= 0x3003))
 #  define BOOST_XPRESSIVE_HAS_MS_STACK_GUARD 1
 # else

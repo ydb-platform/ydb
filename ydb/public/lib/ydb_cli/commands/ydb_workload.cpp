@@ -1,6 +1,7 @@
 #include "ydb_workload.h"
 
 #include "stock_workload.h"
+#include "kv_workload.h"
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
@@ -34,6 +35,7 @@ TCommandWorkload::TCommandWorkload()
     : TClientCommandTree("workload", {}, "YDB workload service")
 {
     AddCommand(std::make_unique<TCommandStock>());
+    AddCommand(std::make_unique<TCommandKv>());
 }
 
 TWorkloadCommand::TWorkloadCommand(const TString& name, const std::initializer_list<TString>& aliases, const TString& description)

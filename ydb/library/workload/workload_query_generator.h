@@ -25,6 +25,10 @@ struct TQueryInfo {
 
 using TQueryInfoList = std::list<TQueryInfo>;
 
+struct TWorkloadParams {
+    std::string DbPath;
+};
+
 class IWorkloadQueryGenerator {
 public:
     virtual ~IWorkloadQueryGenerator() {}
@@ -34,10 +38,20 @@ public:
     virtual std::string GetCleanDDLQueries() const = 0;
 
     virtual TQueryInfoList GetWorkload(int type) = 0;
-};
 
-struct TWorkloadParams {
-    std::string DbPath;
+    virtual TWorkloadParams* GetParams() = 0;
+
+protected:
+    static bool validateDbPath(const std::string& path) {
+        for (size_t i = 0; i < path.size(); ++i) {
+            char c = path[i];
+            if (!std::isalnum(c) && c != '/' && c != '_' && c != '-') {
+                return false;
+            }
+        }
+        return true;
+    }
+
 };
 
 } // namespace NYdbWorkload

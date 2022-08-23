@@ -8,6 +8,7 @@ namespace NYdbWorkload {
 
 enum class EWorkload {
     STOCK,
+    KV,
 };
 
 class TWorkloadFactory {

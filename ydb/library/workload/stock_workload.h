@@ -37,6 +37,8 @@ public:
 
     TQueryInfoList GetWorkload(int type) override;
 
+    TStockWorkloadParams* GetParams() override;
+
     enum class EType {
         InsertRandomOrder,
         SubmitRandomOrder,
@@ -64,16 +66,6 @@ private:
     TProductsQuantity GenerateOrder(unsigned int productCountInOrder, int quantity);
 
     TStockWorkloadGenerator(const TStockWorkloadParams* params);
-
-    static bool validateDbPath(const std::string& path) {
-        for (size_t i = 0; i < path.size(); ++i) {
-            char c = path[i];
-            if (!std::isalnum(c) && c != '/' && c != '_' && c != '-') {
-                return false;
-            }
-        }
-        return true;
-    }
 
     TQueryInfo FillStockData() const;
 

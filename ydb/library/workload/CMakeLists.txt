@@ -15,5 +15,6 @@ target_link_libraries(ydb-library-workload PUBLIC
 )
 target_sources(ydb-library-workload PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/workload/stock_workload.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/library/workload/kv_workload.cpp
   ${CMAKE_SOURCE_DIR}/ydb/library/workload/workload_factory.cpp
 )

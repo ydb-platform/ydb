@@ -15,6 +15,7 @@
 
 #include <ydb/library/workload/workload_factory.h>
 #include <ydb/library/workload/stock_workload.h>
+#include <ydb/library/workload/kv_workload.h>
 
 #include <ydb/public/lib/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/client/ydb_params/params.h>
@@ -218,7 +219,7 @@ private:
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
 
-        request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection_Mode::QueryStatsCollection_Mode_STATS_COLLECTION_FULL);
+        request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection_Mode::QueryStatsCollection_Mode_STATS_COLLECTION_BASIC);
 
         NKikimrMiniKQL::TParams params;
         ConvertYdbParamsToMiniKQLParams(query_params, params);
@@ -348,6 +349,7 @@ public:
         NYdbWorkload::TWorkloadFactory factory;
 
         if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kStock) {
+            WorkloadClass = NYdbWorkload::EWorkload::STOCK;
             NYdbWorkload::TStockWorkloadParams params;
             params.PartitionsByLoad = cmd.GetStock().GetPartitionsByLoad();
             params.OrderCount = cmd.GetStock().GetOrderCount();
@@ -357,6 +359,15 @@ public:
             params.DbPath = WorkingDir;
             params.MinPartitions = UniformPartitionsCount;
             WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::STOCK, &params);
+        } else if (cmd.Workload_case() == NKikimrBlobStorage::TEvTestLoadRequest_TKqpLoadStart::WorkloadCase::kKv) {
+            WorkloadClass = NYdbWorkload::EWorkload::KV;
+            NYdbWorkload::TKvWorkloadParams params;
+            params.InitRowCount = cmd.GetKv().GetInitRowCount();
+            params.PartitionsByLoad = cmd.GetKv().GetPartitionsByLoad();
+            params.MaxFirstKey = cmd.GetKv().GetMaxFirstKey();
+            params.MinPartitions = UniformPartitionsCount;
+            params.DbPath = WorkingDir;
+            WorkloadQueryGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
         } else {
             return;
         }
@@ -379,6 +390,26 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " TKqpWriterTestLoadActor Bootstrap called");
         Become(&TKqpWriterTestLoadActor::StateStart);
         
+        if (WorkloadClass == NYdbWorkload::EWorkload::STOCK) {
+            NYdbWorkload::TStockWorkloadParams* params = static_cast<NYdbWorkload::TStockWorkloadParams*>(WorkloadQueryGen->GetParams());
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload STOCK, Params: {"
+                << "PartitionsByLoad: " << params->PartitionsByLoad << " "
+                << "OrderCount: " << params->OrderCount << " "
+                << "ProductCount: " << params->ProductCount << " "
+                << "Quantity: " << params->Quantity << " "
+                << "Limit: " << params->Limit << " "
+                << "DbPath: " << params->DbPath << " "
+                << "MinPartitions: " << params->MinPartitions);
+        } else if (WorkloadClass == NYdbWorkload::EWorkload::KV) {
+            NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGen->GetParams());
+            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload KV, Params: {"
+                << "InitRowCount: " << params->InitRowCount << " "
+                << "PartitionsByLoad: " << params->PartitionsByLoad << " "
+                << "MaxFirstKey: " << params->MaxFirstKey << " "
+                << "MinPartitions: " << params->MinPartitions << " "
+                << "DbPath: " << params->DbPath);
+        }
+
         LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
         ctx.Schedule(TDuration::Seconds(DurationSeconds * 2), new TEvents::TEvPoisonPill);
 
@@ -573,7 +604,7 @@ private:
         auto q = std::move(InitData.front());
         InitData.pop_front();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << Tag 
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag 
             << " Creating request for init query, need to exec: " << InitData.size() + 1);
 
         TString query_text = TString(q.Query);
@@ -581,7 +612,7 @@ private:
 
         auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << Tag << " using session: " << TableSession);
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " using session: " << TableSession);
 
         request->Record.MutableRequest()->SetSessionId(TableSession);
         request->Record.MutableRequest()->SetKeepSession(true);
@@ -595,14 +626,14 @@ private:
         request->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
         request->Record.MutableRequest()->MutableTxControl()->set_commit_tx(true);
 
-        request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection_Mode::QueryStatsCollection_Mode_STATS_COLLECTION_FULL);
+        request->Record.MutableRequest()->SetCollectStats(Ydb::Table::QueryStatsCollection_Mode::QueryStatsCollection_Mode_STATS_COLLECTION_BASIC);
 
         NKikimrMiniKQL::TParams params;
         ConvertYdbParamsToMiniKQLParams(query_params, params);
         request->Record.MutableRequest()->MutableParameters()->Swap(&params);
     
         auto kqp_proxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << Tag
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
             << " sending init query to proxy: " + kqp_proxy.ToString());
 
         ctx.Send(kqp_proxy, request.Release());
@@ -734,6 +765,7 @@ private:
     ui64 UniformPartitionsCount;
     bool DeleteTableOnFinish;
     ui32 NumOfSessions;
+    NYdbWorkload::EWorkload WorkloadClass;
 
     NYdbWorkload::TQueryInfoList InitData;
 

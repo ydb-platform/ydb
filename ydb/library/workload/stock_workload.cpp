@@ -31,6 +31,10 @@ TStockWorkloadGenerator::TStockWorkloadGenerator(const TStockWorkloadParams* par
     Gen.seed(Now().MicroSeconds());
 }
 
+TStockWorkloadParams* TStockWorkloadGenerator::GetParams() {
+    return &Params;
+}
+
 std::string TStockWorkloadGenerator::GetDDLQueries() const {
     std::string StockPartitionsDdl = "";
     std::string OrdersPartitionsDdl = "WITH (READ_REPLICAS_SETTINGS = \"per_az:1\")";

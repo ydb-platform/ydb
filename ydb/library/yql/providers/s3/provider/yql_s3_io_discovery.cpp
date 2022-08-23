@@ -10,6 +10,7 @@
 #include <ydb/library/yql/utils/url_builder.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/join.h>
 
 namespace NYql {
 
@@ -293,6 +294,26 @@ public:
         return RemapExpr(input, output, replaces, ctx, TOptimizeExprSettings(nullptr));
     }
 private:
+    static bool ValidateProjection(TPositionHandle pos, const TPathGeneratorPtr& generator, const TVector<TString>& partitionedBy, TExprContext& ctx) {
+        const TSet<TString> partitionedBySet(partitionedBy.begin(), partitionedBy.end());
+        TSet<TString> projectionSet;
+        const auto& config = generator->GetConfig();
+        if (!config.Enabled) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), "Projection is configured but not enabled"));
+            return false;
+        }
+        for (auto& rule : config.Rules) {
+            projectionSet.insert(rule.Name);
+        }
+
+        if (projectionSet != partitionedBySet) {
+            ctx.AddError(TIssue(ctx.GetPosition(pos), TStringBuilder() << "Column set in partitioned_by doesn't match column set in projection: {"
+                << JoinSeq(",", partitionedBySet) << "} != {" << JoinSeq(",", projectionSet) << "}"));
+            return false;
+        }
+        return true;
+    }
+
     bool LaunchListsForNode(const TS3Read& read, TVector<NThreading::TFuture<IS3Lister::TListResult>>& futures, TExprContext& ctx) {
         const auto& settings = *read.Ref().Child(4);
 
@@ -328,6 +349,7 @@ private:
         }
 
         TString projection;
+        TPositionHandle projectionPos;
         if (auto projectionSetting = GetSetting(settings, "projection")) {
             if (!EnsureTupleSize(*projectionSetting, 2, ctx)) {
                 return false;
@@ -347,6 +369,7 @@ private:
                 return false;
             }
             projection = projectionSetting->Tail().Content();
+            projectionPos = projectionSetting->Tail().Pos();
         }
 
         TVector<TString> paths;
@@ -367,6 +390,9 @@ private:
             config.SchemaTypeNode = schema->ChildPtr(1);
             if (!projection.empty()) {
                 config.Generator = CreatePathGenerator(projection, partitionedBy);
+                if (!ValidateProjection(projectionPos, config.Generator, partitionedBy, ctx)) {
+                    return false;
+                }
             }
             GenColumnsByNode_[read.Raw()] = config;
         }

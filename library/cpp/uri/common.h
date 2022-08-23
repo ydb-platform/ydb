@@ -475,7 +475,6 @@ namespace NUri {
             ProcessedDirty = 1,
 
             ProcessedMalformed = 2,
-            ProcessedTooMany = 3,
         };
     };
 

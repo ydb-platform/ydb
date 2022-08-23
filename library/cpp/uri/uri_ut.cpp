@@ -960,7 +960,7 @@ namespace NUri {
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?"), "http://ya.ru/?");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?some=value"), "http://ya.ru/?some=value");
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b=1&a=2"), "http://ya.ru/?a=2&b=1");
-            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b=1&a=2&a=3"), "http://ya.ru/?a=3&a=2&b=1");
+            UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?b=1&a=2&a=3"), "http://ya.ru/?a=2&a=3&b=1");
 
             UNIT_ASSERT_STRINGS_EQUAL(SortQargs("http://ya.ru/?aaa=3&b=b&a=1&aa=2"), "http://ya.ru/?a=1&aa=2&aaa=3&b=b");
 

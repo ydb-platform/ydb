@@ -2368,21 +2368,42 @@ TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& lambda, const TExprNode::TP
         .Build();
 }
 
-void BuildExtraSortColumns(const TExprNode::TPtr& extraSortColumns, size_t aggIndexBegin, size_t aggIndexEnd, TVector<TString>& list) {
+void BuildExtraSortColumns(bool hasAggregation, const TExprNode::TPtr& groupBy, const TExprNode::TPtr& extraSortColumns, size_t aggIndexBegin, size_t aggIndexEnd, TVector<TString>& list) {
     if (extraSortColumns) {
+        TVector<TString> extra;
         for (const auto& x : extraSortColumns->Tail().Children()) {
             for (const auto& y : x->Children()) {
-                list.push_back(TString(y->Content()));
+                extra.push_back(TString(y->Content()));
             }
         }
-    } 
+
+        if (!hasAggregation) {
+            // all extra columns
+            list.insert(list.end(), extra.begin(), extra.end());
+        } else if (groupBy) {
+            // keep only keys
+            THashSet<TString> keys;
+            for (const auto& group : groupBy->Tail().Children()) {
+                const auto& lambda = group->Tail();
+                YQL_ENSURE(lambda.IsLambda());
+                YQL_ENSURE(lambda.Tail().IsCallable("Member"));
+                keys.insert(TString(lambda.Tail().Tail().Content()));
+            }
+
+            for (const auto& x : extra) {
+                if (keys.contains(x)) {
+                    list.push_back(x);
+                }
+            }
+        }
+    }
 
     for (auto aggIndex = aggIndexBegin; aggIndex < aggIndexEnd; ++aggIndex) {
         list.push_back("_yql_agg_" + ToString(aggIndex));
     }
 }
 
-TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& lambda, const TExprNode::TPtr& extraSortColumns,
+TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& lambda, bool hasAggregation, const TExprNode::TPtr& groupBy, const TExprNode::TPtr& extraSortColumns,
     size_t aggIndexBegin, size_t aggIndexEnd, TExprContext& ctx) {
     return ctx.Builder(lambda->Pos())
         .Lambda()
@@ -2399,7 +2420,7 @@ TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& lambda, const TExprNo
                     .Callable(1, "AsStruct")
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
                             TVector<TString> list;
-                            BuildExtraSortColumns(extraSortColumns, aggIndexBegin, aggIndexEnd, list);
+                            BuildExtraSortColumns(hasAggregation, groupBy, extraSortColumns, aggIndexBegin, aggIndexEnd, list);
                             for (ui32 i = 0; i < list.size(); ++i) {
                                 TStringBuf from = list[i];
                                 from.SkipPrefix("_yql_extra_");
@@ -2421,7 +2442,7 @@ TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& lambda, const TExprNo
         .Build();
 }
 
-TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, const TExprNode::TPtr& extraSortColumns,
+TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, bool hasAggregation, const TExprNode::TPtr& groupBy, const TExprNode::TPtr& extraSortColumns,
     size_t aggIndexBegin, size_t aggIndexEnd, const TVector<TString>& sublinkColumns, TExprContext& ctx) {
     return ctx.Builder(list->Pos())
         .Callable("OrderedMap")
@@ -2433,7 +2454,7 @@ TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, const TExprN
                     .List(1)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
                             TVector<TString> list;
-                            BuildExtraSortColumns(extraSortColumns, aggIndexBegin, aggIndexEnd, list);
+                            BuildExtraSortColumns(hasAggregation, groupBy, extraSortColumns, aggIndexBegin, aggIndexEnd, list);
                             list.insert(list.end(), sublinkColumns.begin(), sublinkColumns.end());
                             for (ui32 i = 0; i < list.size(); ++i) {
                                 parent.Atom(i, list[i]);
@@ -2835,7 +2856,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             bool hasExtraSortColumns = (extraSortColumns || (aggsSizeBeforeSort < aggs.size()));
             if (hasExtraSortColumns) {
                 YQL_ENSURE(!distinctAll && !distinctOn);
-                projectionLambda = AddExtraSortColumns(projectionLambda, extraSortColumns, aggsSizeBeforeSort, aggs.size(), ctx);
+                projectionLambda = AddExtraSortColumns(projectionLambda, (!aggs.empty() || groupBy), groupBy, extraSortColumns, aggsSizeBeforeSort, aggs.size(), ctx);
             }
 
             list = ctx.Builder(node->Pos())
@@ -2867,7 +2888,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             if (hasExtraSortColumns) {
-                list = RemoveExtraSortColumns(list, extraSortColumns, aggsSizeBeforeSort, aggs.size(), sublinkColumns, ctx);
+                list = RemoveExtraSortColumns(list, (!aggs.empty() || groupBy), groupBy, extraSortColumns, aggsSizeBeforeSort, aggs.size(), sublinkColumns, ctx);
             }
         }
 

@@ -842,7 +842,7 @@ public:
          m_sign = false;
       }
    }
-   BOOST_MP_FORCEINLINE void resize(unsigned /*new_size*/, unsigned min_size)
+   BOOST_MP_FORCEINLINE void resize(unsigned /* new_size */, unsigned min_size)
    {
       detail::verify_new_size(2, min_size, checked_type());
    }

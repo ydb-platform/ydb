@@ -172,7 +172,7 @@ public:
     void Bootstrap() {
 
         if (Monitoring) {
-            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq", "Federated Query"), 
+            Monitoring->RegisterActorPage(Monitoring->RegisterIndexPage("fq_diag", "Federated Query diagnostics"), 
                 "fetcher", "Pending Fetcher", false, TActivationContext::ActorSystem(), SelfId());
         }
         

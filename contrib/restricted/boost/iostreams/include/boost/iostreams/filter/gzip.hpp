@@ -49,10 +49,6 @@
 # pragma warning(disable:4309)    // Truncation of constant value.
 #endif
 
-#ifdef __GNUC__
-#pragma GCC system_header
-#endif
-
 #ifdef BOOST_NO_STDC_NAMESPACE
 namespace std { using ::time_t; }
 #endif

@@ -136,6 +136,8 @@ struct basic_mapped_file_params
         : base_type(other), path(other.path)
         { }
 
+    basic_mapped_file_params& operator=(const basic_mapped_file_params& other) = default;
+
     // Templated copy constructor
     template<typename PathT>
     basic_mapped_file_params(const basic_mapped_file_params<PathT>& other)

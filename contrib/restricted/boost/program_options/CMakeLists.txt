@@ -8,12 +8,14 @@
 
 
 add_library(restricted-boost-program_options)
+target_compile_options(restricted-boost-program_options PRIVATE
+  -Wno-everything
+)
 target_include_directories(restricted-boost-program_options PUBLIC
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/program_options/include
 )
 target_link_libraries(restricted-boost-program_options PUBLIC
   contrib-libs-cxxsupp
-  yutil
   restricted-boost-any
   restricted-boost-config
   restricted-boost-core

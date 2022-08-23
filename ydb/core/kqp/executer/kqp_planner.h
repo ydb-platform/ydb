@@ -52,6 +52,7 @@ private:
 
     THolder<TEvKqpNode::TEvStartKqpTasksRequest> PrepareKqpNodeRequest(const TVector<ui64>& taskIds);
     void AddScansToKqpNodeRequest(THolder<TEvKqpNode::TEvStartKqpTasksRequest>& ev, ui64 nodeId);
+    void AddSnapshotInfoToTaskInputs(NYql::NDqProto::TDqTask& task);
 
     ui32 CalcSendMessageFlagsForNode(ui32 nodeId);
 

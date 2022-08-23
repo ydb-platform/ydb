@@ -31,6 +31,7 @@ static inline void DumpAppliedRule(const TString& name, const NYql::TExprNode::T
 }
 
 bool IsKqpPureLambda(const NYql::NNodes::TCoLambda& lambda);
+bool IsKqpPureInputs(const NYql::NNodes::TExprList& inputs);
 
 const NYql::TKikimrTableDescription& GetTableData(const NYql::TKikimrTablesData& tablesData,
     TStringBuf cluster, TStringBuf table);

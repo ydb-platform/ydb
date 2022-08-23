@@ -429,6 +429,8 @@ private:
         THolder<TEvDataShard::TEvRead> request(new TEvDataShard::TEvRead());
         auto& record = request->Record;
 
+        YQL_ENSURE(Snapshot.IsValid());
+
         record.MutableSnapshot()->SetStep(Snapshot.Step);
         record.MutableSnapshot()->SetTxId(Snapshot.TxId);
 

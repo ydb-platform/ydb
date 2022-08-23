@@ -62,6 +62,16 @@ bool IsKqpPureLambda(const TCoLambda& lambda) {
     });
 }
 
+bool IsKqpPureInputs(const TExprList& inputs) {
+    return !FindNode(inputs.Ptr(), [](const TExprNode::TPtr& node) {
+        if (TMaybeNode<TKqpCnStreamLookup>(node)) {
+            return true;
+        }
+
+        return false;
+    });
+}
+
 bool IsKqpEffectsStage(const TDqStageBase& stage) {
     return stage.Program().Body().Maybe<TKqpEffects>().IsValid();
 }

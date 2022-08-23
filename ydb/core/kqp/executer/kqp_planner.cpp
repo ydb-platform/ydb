@@ -246,6 +246,7 @@ THolder<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::PrepareKqpNodeRequest(
                 if (DisableLlvmForUdfStages && taskDesc.GetProgram().GetSettings().GetHasUdf()) {
                     withLLVM = false;
                 }
+                AddSnapshotInfoToTaskInputs(taskDesc);
                 ev->Record.AddTasks()->Swap(&taskDesc);
             }
         }
@@ -255,6 +256,7 @@ THolder<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::PrepareKqpNodeRequest(
                 if (DisableLlvmForUdfStages && taskDesc.GetProgram().GetSettings().GetHasUdf()) {
                     withLLVM = false;
                 }
+                AddSnapshotInfoToTaskInputs(taskDesc);
                 ev->Record.AddTasks()->Swap(&taskDesc);
             }
         }
@@ -301,6 +303,7 @@ void TKqpPlanner::AddScansToKqpNodeRequest(THolder<TEvKqpNode::TEvStartKqpTasksR
             if (DisableLlvmForUdfStages && task.GetProgram().GetSettings().GetHasUdf()) {
                 withLLVM = false;
             }
+            AddSnapshotInfoToTaskInputs(task);
             ev->Record.AddTasks()->Swap(&task);
         }
         ScanTasks.erase(nodeId);
@@ -317,6 +320,31 @@ ui32 TKqpPlanner::CalcSendMessageFlagsForNode(ui32 nodeId) {
         flags |= IEventHandle::FlagSubscribeOnSession;
     }
     return flags;
+}
+
+void TKqpPlanner::AddSnapshotInfoToTaskInputs(NYql::NDqProto::TDqTask& task) {
+    YQL_ENSURE(Snapshot.IsValid());
+
+    for (auto& input : *task.MutableInputs()) {
+        if (input.HasTransform()) {
+            auto transform = input.MutableTransform();
+            YQL_ENSURE(transform->GetType() == "StreamLookupInputTransformer",
+                "Unexpected input transform type: " << transform->GetType());
+
+            const google::protobuf::Any& settingsAny = transform->GetSettings();
+            YQL_ENSURE(settingsAny.Is<NKikimrKqp::TKqpStreamLookupSettings>(), "Expected settings type: "
+                << NKikimrKqp::TKqpStreamLookupSettings::descriptor()->full_name()
+                << " , but got: " << settingsAny.type_url());
+
+            NKikimrKqp::TKqpStreamLookupSettings settings;
+            YQL_ENSURE(settingsAny.UnpackTo(&settings), "Failed to unpack settings");
+
+            settings.MutableSnapshot()->SetStep(Snapshot.Step);
+            settings.MutableSnapshot()->SetTxId(Snapshot.TxId);
+
+            transform->MutableSettings()->PackFrom(settings);
+        }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

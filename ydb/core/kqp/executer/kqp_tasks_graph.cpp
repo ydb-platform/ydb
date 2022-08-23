@@ -197,15 +197,11 @@ void BuildShuffleShardChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 
 void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInfo, ui32 inputIndex,
     const TStageInfo& inputStageInfo, ui32 outputIndex, const TKqpTableKeys& tableKeys,
-    const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, const IKqpGateway::TKqpSnapshot& snapshot,
-    bool enableSpilling, const TChannelLogFunc& logFunc) {
+    const NKqpProto::TKqpPhyCnStreamLookup& streamLookup, bool enableSpilling, const TChannelLogFunc& logFunc) {
     YQL_ENSURE(stageInfo.Tasks.size() == inputStageInfo.Tasks.size());
-    YQL_ENSURE(snapshot.IsValid());
 
     NKikimrKqp::TKqpStreamLookupSettings settings;
     settings.MutableTable()->CopyFrom(streamLookup.GetTable());
-    settings.MutableSnapshot()->SetStep(snapshot.Step);
-    settings.MutableSnapshot()->SetTxId(snapshot.TxId);
 
     auto table = tableKeys.GetTable(MakeTableId(streamLookup.GetTable()));
     for (const auto& keyColumn : streamLookup.GetKeyColumns()) {
@@ -250,7 +246,7 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
 }
 
 void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tableKeys, const TStageInfo& stageInfo,
-    ui64 txId, bool enableSpilling, const IKqpGateway::TKqpSnapshot& snapshot)
+    ui64 txId, bool enableSpilling)
 {
     auto& stage = GetStage(stageInfo);
 
@@ -312,7 +308,7 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, const TKqpTableKeys& tabl
             }
             case NKqpProto::TKqpPhyConnection::kStreamLookup: {
                 BuildStreamLookupChannels(tasksGraph, stageInfo, inputIdx, inputStageInfo, outputIdx, tableKeys,
-                    input.GetStreamLookup(), snapshot, enableSpilling, log);
+                    input.GetStreamLookup(), enableSpilling, log);
                 break;
             }
 

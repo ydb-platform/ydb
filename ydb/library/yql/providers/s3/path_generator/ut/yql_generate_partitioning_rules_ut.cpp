@@ -198,7 +198,47 @@ Y_UNIT_TEST_SUITE(TGenerateTests) {
         UNIT_ASSERT_VALUES_EQUAL(rules[1].ColumnValues.size(), 2);
     }
 
+    Y_UNIT_TEST(ProjectionFormatWithEmptySubstitution) {
+        auto generator = CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.dt.type" : "date",
+                "projection.dt.min" : "2012-01-01",
+                "projection.dt.max" : "2012-02-01",
+                "projection.dt.interval" : "1",
+                "projection.dt.format" : "asdf asdf 444",
+                "projection.dt.unit" : "YEARS",
+                "storage.location.template" : "yellow_tripdata_${dt}-01.csv"
+            }
+        )", {"dt"});
 
+        auto rules = generator->GetRules();
+        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "yellow_tripdata_asdf asdf 444-01.csv");
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 1);
+    }
+
+    Y_UNIT_TEST(ProjectionFormatWithStrangeSubstitution) {
+        auto generator = CreatePathGenerator(R"(
+            {
+                "projection.enabled" : true,
+                "projection.dt.type" : "date",
+                "projection.dt.min" : "2012-01-01",
+                "projection.dt.max" : "2014-01-01",
+                "projection.dt.interval" : "1",
+                "projection.dt.format" : "asdf%0 asdf%Y%0 444",
+                "projection.dt.unit" : "YEARS",
+                "storage.location.template" : "yellow_tripdata_${dt}-01.csv"
+            }
+        )", {"dt"});
+
+        auto rules = generator->GetRules();
+        UNIT_ASSERT_VALUES_EQUAL(rules.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].Path, "yellow_tripdata_asdf%0 asdf2012%0 444-01.csv");
+        UNIT_ASSERT_VALUES_EQUAL(rules[0].ColumnValues.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(rules[1].Path, "yellow_tripdata_asdf%0 asdf2013%0 444-01.csv");
+        UNIT_ASSERT_VALUES_EQUAL(rules[1].ColumnValues.size(), 1);
+    }
 }
 
 }

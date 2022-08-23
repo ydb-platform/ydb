@@ -22,9 +22,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonConfig(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonConfig(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void Bootstrap(const TActorContext& ctx) {

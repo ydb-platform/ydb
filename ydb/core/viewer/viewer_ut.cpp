@@ -1,8 +1,10 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/actors/interconnect/interconnect.h>
+#include <library/cpp/json/json_reader.h>
 #include <util/stream/null.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include "json_handlers.h"
 #include "json_tabletinfo.h"
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
@@ -84,5 +86,28 @@ Y_UNIT_TEST_SUITE(Viewer) {
         UNIT_ASSERT_LT(timer.Passed(), 10);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.PDiskStateInfoSize(), 100000);
         Ctest << "Data has merged" << Endl;
+    }
+
+    template <typename T>
+    void TestSwagger() {
+        T h;
+        h.Init();
+
+        TStringStream json;
+        json << "{";
+        h.PrintForSwagger(json);
+        json << "}";
+
+        NJson::TJsonReaderConfig jsonCfg;
+        jsonCfg.DontValidateUtf8 = true;
+        jsonCfg.AllowComments = false;
+
+        ValidateJsonThrow(json.Str(), jsonCfg);
+    }
+
+    Y_UNIT_TEST(Swagger) {
+        TestSwagger<TViewerJsonHandlers>();
+        TestSwagger<TVDiskJsonHandlers>();
+        TestSwagger<TFQJsonHandlers>();
     }
 }

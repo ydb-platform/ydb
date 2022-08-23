@@ -28,9 +28,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonHealthCheck(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonHealthCheck(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void Bootstrap() {

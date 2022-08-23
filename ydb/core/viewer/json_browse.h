@@ -70,9 +70,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonBrowse(IViewer *viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonBrowse(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void ParsePath(const TString& path, const TActorContext& ctx) {

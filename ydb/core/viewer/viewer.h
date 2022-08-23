@@ -145,40 +145,32 @@ static const char HTTPOKJSON[] = "HTTP/1.1 200 Ok\r\nAccess-Control-Allow-Origin
 static const char HTTPOKTEXT[] = "HTTP/1.1 200 Ok\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: Close\r\n\r\n";
 static const char HTTPFORBIDDENJSON[] = "HTTP/1.1 403 Forbidden\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=utf-8\r\nConnection: Close\r\n\r\n";
 static const char HTTPGATEWAYTIMEOUT[] = "HTTP/1.1 504 Gateway Time-out\r\nConnection: Close\r\n\r\nGateway Time-out\r\n";
-static const char HTTPBADREQUEST[] = "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\nBad Request\r\n";
-static const char HTTPBADREQUEST_HEADERS[] = "HTTP/1.1 400 Bad Request\r\nConnection: Close\r\n\r\n";
+static const char HTTPBADREQUEST[] = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: Close\r\n\r\nBad Request\r\n";
+static const char HTTPBADREQUEST_HEADERS[] = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: Close\r\n\r\n";
+static const char HTTPBADREQUESTJSON[] = "HTTP/1.1 400 Bad Request\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: application/json; charset=utf-8\r\nConnection: Close\r\n\r\n";
+static const char HTTPUNAUTHORIZEDTEXT[] = "HTTP/1.1 401 Unauthorized \r\nAccess-Control-Allow-Origin: *\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: Close\r\n\r\n";
+
+template <typename ValueType, typename OutputIteratorType>
+void GenericSplitIds(TStringBuf source, char delim, OutputIteratorType it) {
+    for (TStringBuf value = source.NextTok(delim); !value.empty(); value = source.NextTok(delim)) {
+        const auto newValue = (value == ".") ? ValueType() : FromStringWithDefault<ValueType>(value, ValueType());
+        *(it++) = newValue;
+    }
+}
 
 template <typename ValueType>
 void SplitIds(TStringBuf source, char delim, TVector<ValueType>& values) {
-    for (TStringBuf value = source.NextTok(delim); !value.empty(); value = source.NextTok(delim)) {
-        if (value == ".") {
-            values.emplace_back(ValueType());
-        } else {
-            values.emplace_back(FromStringWithDefault<ValueType>(value, ValueType()));
-        }
-    }
+    GenericSplitIds<ValueType>(source, delim, std::back_inserter(values));
 }
 
 template <typename ValueType>
 void SplitIds(TStringBuf source, char delim, std::vector<ValueType>& values) {
-    for (TStringBuf value = source.NextTok(delim); !value.empty(); value = source.NextTok(delim)) {
-        if (value == ".") {
-            values.emplace_back(ValueType());
-        } else {
-            values.emplace_back(FromStringWithDefault<ValueType>(value, ValueType()));
-        }
-    }
+    GenericSplitIds<ValueType>(source, delim, std::back_inserter(values));
 }
 
 template <typename ValueType>
 void SplitIds(TStringBuf source, char delim, std::unordered_set<ValueType>& values) {
-    for (TStringBuf value = source.NextTok(delim); !value.empty(); value = source.NextTok(delim)) {
-        if (value == ".") {
-            values.emplace(ValueType());
-        } else {
-            values.emplace(FromStringWithDefault<ValueType>(value, ValueType()));
-        }
-    }
+    GenericSplitIds<ValueType>(source, delim, std::inserter(values, values.end()));
 }
 
 TString GetHTTPOKJSON();

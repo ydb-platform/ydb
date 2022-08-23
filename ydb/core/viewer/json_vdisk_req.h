@@ -66,10 +66,10 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonVDiskRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonVDiskRequest(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Initiator(ev->Sender)
-        , Event(ev)
+        , Initiator(request.Event->Sender)
+        , Event(request.Event)
     {}
 
     virtual void Bootstrap() {

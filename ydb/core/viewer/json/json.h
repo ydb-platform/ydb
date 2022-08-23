@@ -8,12 +8,14 @@ struct TJsonSettings {
     using TMapperKey = const ::google::protobuf::FieldDescriptor*;
     using TMapperValue = std::function<void(IOutputStream&, const ::google::protobuf::Message&, const TJsonSettings&)>;
     using TNameGenerator = std::function<TString(const google::protobuf::FieldDescriptor&)>;
+    using TEnumValueFilter = std::function<bool(const TString& value)>;
     bool UI64AsString = true; // JavaScript could not handle large numbers (bigger than 2^53)
     bool EnumAsNumbers = true;
     bool EmptyRepeated = false;
     TString NaN = "null";
     std::unordered_map<TMapperKey, TMapperValue> FieldRemapper;
-    TNameGenerator NameGenerator = {};
+    TNameGenerator NameGenerator;
+    TEnumValueFilter EnumValueFilter;
 };
 
 class TProtoToJson {

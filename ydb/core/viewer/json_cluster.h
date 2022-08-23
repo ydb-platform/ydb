@@ -40,12 +40,12 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonCluster(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonCluster(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Initiator(ev->Sender)
+        , Initiator(request.Event->Sender)
         , Requested(0)
         , Received(0)
-        , Event(ev)
+        , Event(request.Event)
     {
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), true);

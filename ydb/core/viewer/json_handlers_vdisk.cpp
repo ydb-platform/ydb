@@ -8,8 +8,8 @@ namespace NKikimr::NViewer {
 
 template <>
 void TVDiskJsonHandlers::Init() {
-    JsonHandlers["vdisk/json/vdiskstat"] = new TJsonHandler<TJsonVDiskStat>;
-    JsonHandlers["vdisk/json/getblob"] = new TJsonHandler<TJsonGetBlob>;
+    Router.RegisterGetHandler("/vdisk/json/vdiskstat", std::make_shared<TJsonHandler<TJsonVDiskStat>>());
+    Router.RegisterGetHandler("/vdisk/json/getblob", std::make_shared<TJsonHandler<TJsonGetBlob>>());
 }
 
 }

@@ -39,36 +39,38 @@ namespace NKikimr::NViewer {
 
 template <>
 void TViewerJsonHandlers::Init() {
-    JsonHandlers["/json/nodelist"] = new TJsonHandler<TJsonNodeList>;
-    JsonHandlers["/json/nodeinfo"] = new TJsonHandler<TJsonNodeInfo>;
-    JsonHandlers["/json/vdiskinfo"] = new TJsonHandler<TJsonVDiskInfo>;
-    JsonHandlers["/json/pdiskinfo"] = new TJsonHandler<TJsonPDiskInfo>;
-    JsonHandlers["/json/describe"] = new TJsonHandler<TJsonDescribe>;
-    JsonHandlers["/json/hotkeys"] = new TJsonHandler<TJsonHotkeys>;
-    JsonHandlers["/json/sysinfo"] = new TJsonHandler<TJsonSysInfo>;
-    JsonHandlers["/json/tabletinfo"] = new TJsonHandler<TJsonTabletInfo>;
-    JsonHandlers["/json/hiveinfo"] = new TJsonHandler<TJsonHiveInfo>;
-    JsonHandlers["/json/bsgroupinfo"] = new TJsonHandler<TJsonBSGroupInfo>;
-    JsonHandlers["/json/bscontrollerinfo"] = new TJsonHandler<TJsonBSControllerInfo>;
-    JsonHandlers["/json/config"] = new TJsonHandler<TJsonConfig>;
-    JsonHandlers["/json/counters"] = new TJsonHandler<TJsonCounters>;
-    JsonHandlers["/json/topicinfo"] = new TJsonHandler<TJsonTopicInfo>;
-    JsonHandlers["/json/pqconsumerinfo"] = new TJsonHandler<TJsonPQConsumerInfo>();
-    JsonHandlers["/json/tabletcounters"] = new TJsonHandler<TJsonTabletCounters>;
-    JsonHandlers["/json/storage"] = new TJsonHandler<TJsonStorage>;
-    JsonHandlers["/json/metainfo"] = new TJsonHandler<TJsonMetaInfo>;
-    JsonHandlers["/json/browse"] = new TJsonHandler<TJsonBrowse>;
-    JsonHandlers["/json/cluster"] = new TJsonHandler<TJsonCluster>;
-    JsonHandlers["/json/content"] = new TJsonHandler<TJsonContent>;
-    JsonHandlers["/json/labeledcounters"] = new TJsonHandler<TJsonLabeledCounters>;
-    JsonHandlers["/json/tenants"] = new TJsonHandler<TJsonTenants>;
-    JsonHandlers["/json/hivestats"] = new TJsonHandler<TJsonHiveStats>;
-    JsonHandlers["/json/tenantinfo"] = new TJsonHandler<TJsonTenantInfo>;
-    JsonHandlers["/json/whoami"] = new TJsonHandler<TJsonWhoAmI>;
-    JsonHandlers["/json/query"] = new TJsonHandler<TJsonQuery>;
-    JsonHandlers["/json/netinfo"] = new TJsonHandler<TJsonNetInfo>;
-    JsonHandlers["/json/compute"] = new TJsonHandler<TJsonCompute>;
-    JsonHandlers["/json/healthcheck"] = new TJsonHandler<TJsonHealthCheck>;
-    JsonHandlers["/json/nodes"] = new TJsonHandler<TJsonNodes>;
-    JsonHandlers["/json/acl"] = new TJsonHandler<TJsonACL>;
-}}
+    Router.RegisterGetHandler("/json/nodelist", std::make_shared<TJsonHandler<TJsonNodeList>>());
+    Router.RegisterGetHandler("/json/nodeinfo", std::make_shared<TJsonHandler<TJsonNodeInfo>>());
+    Router.RegisterGetHandler("/json/vdiskinfo", std::make_shared<TJsonHandler<TJsonVDiskInfo>>());
+    Router.RegisterGetHandler("/json/pdiskinfo", std::make_shared<TJsonHandler<TJsonPDiskInfo>>());
+    Router.RegisterGetHandler("/json/describe", std::make_shared<TJsonHandler<TJsonDescribe>>());
+    Router.RegisterGetHandler("/json/hotkeys", std::make_shared<TJsonHandler<TJsonHotkeys>>());
+    Router.RegisterGetHandler("/json/sysinfo", std::make_shared<TJsonHandler<TJsonSysInfo>>());
+    Router.RegisterGetHandler("/json/tabletinfo", std::make_shared<TJsonHandler<TJsonTabletInfo>>());
+    Router.RegisterGetHandler("/json/hiveinfo", std::make_shared<TJsonHandler<TJsonHiveInfo>>());
+    Router.RegisterGetHandler("/json/bsgroupinfo", std::make_shared<TJsonHandler<TJsonBSGroupInfo>>());
+    Router.RegisterGetHandler("/json/bscontrollerinfo", std::make_shared<TJsonHandler<TJsonBSControllerInfo>>());
+    Router.RegisterGetHandler("/json/config", std::make_shared<TJsonHandler<TJsonConfig>>());
+    Router.RegisterGetHandler("/json/counters", std::make_shared<TJsonHandler<TJsonCounters>>());
+    Router.RegisterGetHandler("/json/topicinfo", std::make_shared<TJsonHandler<TJsonTopicInfo>>());
+    Router.RegisterGetHandler("/json/pqconsumerinfo", std::make_shared<TJsonHandler<TJsonPQConsumerInfo>>());
+    Router.RegisterGetHandler("/json/tabletcounters", std::make_shared<TJsonHandler<TJsonTabletCounters>>());
+    Router.RegisterGetHandler("/json/storage", std::make_shared<TJsonHandler<TJsonStorage>>());
+    Router.RegisterGetHandler("/json/metainfo", std::make_shared<TJsonHandler<TJsonMetaInfo>>());
+    Router.RegisterGetHandler("/json/browse", std::make_shared<TJsonHandler<TJsonBrowse>>());
+    Router.RegisterGetHandler("/json/cluster", std::make_shared<TJsonHandler<TJsonCluster>>());
+    Router.RegisterGetHandler("/json/content", std::make_shared<TJsonHandler<TJsonContent>>());
+    Router.RegisterGetHandler("/json/labeledcounters", std::make_shared<TJsonHandler<TJsonLabeledCounters>>());
+    Router.RegisterGetHandler("/json/tenants", std::make_shared<TJsonHandler<TJsonTenants>>());
+    Router.RegisterGetHandler("/json/hivestats", std::make_shared<TJsonHandler<TJsonHiveStats>>());
+    Router.RegisterGetHandler("/json/tenantinfo", std::make_shared<TJsonHandler<TJsonTenantInfo>>());
+    Router.RegisterGetHandler("/json/whoami", std::make_shared<TJsonHandler<TJsonWhoAmI>>());
+    Router.RegisterGetHandler("/json/query", std::make_shared<TJsonHandler<TJsonQuery>>());
+    Router.RegisterGetHandler("/json/netinfo", std::make_shared<TJsonHandler<TJsonNetInfo>>());
+    Router.RegisterGetHandler("/json/compute", std::make_shared<TJsonHandler<TJsonCompute>>());
+    Router.RegisterGetHandler("/json/healthcheck", std::make_shared<TJsonHandler<TJsonHealthCheck>>());
+    Router.RegisterGetHandler("/json/nodes", std::make_shared<TJsonHandler<TJsonNodes>>());
+    Router.RegisterGetHandler("/json/acl", std::make_shared<TJsonHandler<TJsonACL>>());
+}
+
+}

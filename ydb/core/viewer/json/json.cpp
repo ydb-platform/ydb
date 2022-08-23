@@ -4,7 +4,14 @@
 #include <util/string/printf.h>
 #include <util/charset/utf8.h>
 #include <util/stream/str.h>
+#include <google/protobuf/duration.pb.h>
+#include <google/protobuf/timestamp.pb.h>
+#include <google/protobuf/util/time_util.h>
 #include "json.h"
+
+#ifdef GetMessage
+#undef GetMessage
+#endif
 
 void TProtoToJson::EscapeJsonString(IOutputStream& os, const TString& s) {
     const char* b = s.begin();
@@ -59,6 +66,22 @@ void TProtoToJson::ProtoToJson(IOutputStream& to, const ::google::protobuf::Enum
 }
 
 void TProtoToJson::ProtoToJson(IOutputStream& to, const ::google::protobuf::Message& protoFrom, const TJsonSettings& jsonSettings) {
+    if (protoFrom.GetTypeName() == google::protobuf::Timestamp::descriptor()->full_name()) {
+        auto& ts = static_cast<const google::protobuf::Timestamp&>(protoFrom);
+        to << '"';
+        if (ts.seconds() || ts.nanos()) {
+            to << google::protobuf::util::TimeUtil::ToString(ts);
+        }
+        to << '"';
+        return;
+    }
+
+    if (protoFrom.GetTypeName() == google::protobuf::Duration::descriptor()->full_name()) {
+        auto& d = static_cast<const google::protobuf::Duration&>(protoFrom);
+        to << '"' << google::protobuf::util::TimeUtil::ToString(d) << '"';
+        return;
+    }
+
     to << '{';
     ProtoToJsonInline(to, protoFrom, jsonSettings);
     to << '}';
@@ -423,54 +446,103 @@ void TProtoToJson::ProtoToJsonSchema(IOutputStream& to, const TJsonSettings& jso
             to << "\":";
             to << "{\"type\":\"oneOf\"}";
         }
+        char fieldSeparator = oneofFields ? ',' : ' ';
         for (int idx = 0; idx < fields; ++idx) {
             const FieldDescriptor* fieldDescriptor = descriptor->field(idx);
-            if (idx != 0 || oneofFields != 0) {
-                to << ',';
-            }
-            to << '"';
             TString name;
             if (jsonSettings.NameGenerator) {
                 name = jsonSettings.NameGenerator(*fieldDescriptor);
             } else {
                 name = fieldDescriptor->name();
             }
+            to << fieldSeparator;
+            fieldSeparator = ',';
+
+            to << '"';
             EscapeJsonString(to, name);
             to << "\":";
             if (fieldDescriptor->is_repeated()) {
                 to << "{\"type\":\"array\",\"items\":";
             }
             if (fieldDescriptor->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE) {
-                if (descriptors.insert(descriptor).second) {
+                if (fieldDescriptor->message_type()->full_name() == google::protobuf::Timestamp::descriptor()->full_name()) {
+                    to << "{\"type\":\"string\",\"format\":\"date-time\"}";
+                } else if (fieldDescriptor->message_type()->full_name() == google::protobuf::Duration::descriptor()->full_name()) {
+                    to << "{\"type\":\"string\", \"example\":\"3600s\"}";
+                } else if (descriptors.insert(descriptor).second) {
                     ProtoToJsonSchema(to, jsonSettings, fieldDescriptor->message_type(), descriptors);
+                    descriptors.erase(descriptor);
                 } else {
                     to << "{}";
                 }
             } else {
-                to << "{\"type\":\"";
+                to << "{";
+                TString type;
+                TString format;
                 switch (fieldDescriptor->cpp_type()) {
                 case FieldDescriptor::CPPTYPE_INT32:
+                    type = "integer";
+                    format = "int32";
+                    break;
                 case FieldDescriptor::CPPTYPE_UINT32:
-                case FieldDescriptor::CPPTYPE_ENUM:
-                    to << "integer";
+                    type = "integer";
+                    format = "uint32";
+                    break;
+                case FieldDescriptor::CPPTYPE_INT64:
+                    type = "string"; // because of JS compatibility (JavaScript could not handle large numbers (bigger than 2^53))
+                    format = "int64";
+                    break;
+                case FieldDescriptor::CPPTYPE_UINT64:
+                    type = "string"; // because of JS compatibility (JavaScript could not handle large numbers (bigger than 2^53))
+                    format = "uint64";
                     break;
                 case FieldDescriptor::CPPTYPE_STRING:
-                case FieldDescriptor::CPPTYPE_INT64:
-                case FieldDescriptor::CPPTYPE_UINT64:
-                    to << "string"; // because of JS compatibility (JavaScript could not handle large numbers (bigger than 2^53))
+                case FieldDescriptor::CPPTYPE_ENUM:
+                    type = "string"; // because of JS compatibility (JavaScript could not handle large numbers (bigger than 2^53))
                     break;
                 case FieldDescriptor::CPPTYPE_FLOAT:
+                    type = "number";
+                    format = "float";
+                    break;
                 case FieldDescriptor::CPPTYPE_DOUBLE:
-                    to << "number";
+                    type = "number";
+                    format = "double";
                     break;
                 case FieldDescriptor::CPPTYPE_BOOL:
-                    to << "boolean";
+                    type = "boolean";
                     break;
                 case FieldDescriptor::CPPTYPE_MESSAGE:
-                    to << "object";
+                    type = "object";
                     break;
-                };
-                to << '"';
+                }
+
+                to << "\"type\":\"" << type << "\"";
+                if (format) {
+                    to << ", \"format\":\"" << format << "\"";
+                }
+                if (fieldDescriptor->cpp_type() == FieldDescriptor::CPPTYPE_ENUM) {
+                    to << ", \"enum\": [";
+                    auto enumDescriptor = fieldDescriptor->enum_type();
+                    auto valueCount = enumDescriptor->value_count();
+                    auto sep = ' ';
+                    TString defaultValue;
+                    for (int i = 0; i < valueCount; ++i) {
+                        auto enumValueDescriptor = enumDescriptor->value(i);
+                        if (jsonSettings.EnumValueFilter && !jsonSettings.EnumValueFilter(enumValueDescriptor->name())) {
+                            continue;
+                        }
+                        to << sep;
+                        sep = ',';
+                        to << "\"" << enumValueDescriptor->name() << "\"";
+                        if (!defaultValue) {
+                            defaultValue = enumValueDescriptor->name();
+                        }
+                    }
+                    to << "]";
+                    if (defaultValue) {
+                        to << ", \"default\": \"" << defaultValue << "\"";
+                    }
+                }
                 to << '}';
             }
             if (fieldDescriptor->is_repeated()) {

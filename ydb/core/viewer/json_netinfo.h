@@ -44,9 +44,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonNetInfo(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonNetInfo(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void Bootstrap() {

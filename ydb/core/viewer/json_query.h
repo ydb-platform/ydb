@@ -40,10 +40,10 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonQuery(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonQuery(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Initiator(ev->Sender)
-        , Event(ev)
+        , Initiator(request.Event->Sender)
+        , Event(request.Event)
     {}
 
     STATEFN(StateWork) {

@@ -147,7 +147,7 @@ public:
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
                     "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n"
                     "Content-Type: " + type + "\r\n"
                     "Connection: Keep-Alive\r\n\r\n";
         Result.SetValue(MakeHolder<NMon::TEvHttpInfoRes>(response, 0, NMon::IEvHttpInfoRes::EContentType::Custom));
@@ -170,7 +170,7 @@ public:
         response << "Access-Control-Allow-Origin: " << origin << "\r\n";
         response << "Access-Control-Allow-Credentials: true\r\n";
         response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
-        response << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
         response << "Content-Type: text/html\r\n";
         response << "Content-Length: " << body.Size() << "\r\n";
         response << "\r\n";

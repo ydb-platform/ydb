@@ -27,9 +27,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonACL(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonACL(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void FillParams(NKikimrSchemeOp::TDescribePath* record, const TCgiParameters& params) {

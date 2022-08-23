@@ -66,10 +66,10 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonWhiteboardRequest(IViewer* viewer, NMon::TEvHttpInfo::TPtr& ev)
+    TJsonWhiteboardRequest(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Initiator(ev->Sender)
-        , Event(ev)
+        , Initiator(request.Event->Sender)
+        , Event(request.Event)
     {}
 
     THolder<RequestType> BuildRequest(TNodeId nodeId) {

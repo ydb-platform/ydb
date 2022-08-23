@@ -30,9 +30,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonTenants(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonTenants(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void Bootstrap() {

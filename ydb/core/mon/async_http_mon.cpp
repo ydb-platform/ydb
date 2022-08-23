@@ -90,6 +90,9 @@ public:
         if (Request->Method == "PUT") {
             return HTTP_METHOD_PUT;
         }
+        if (Request->Method == "DELETE") {
+            return HTTP_METHOD_DELETE;
+        }
         return HTTP_METHOD_UNDEFINED;
     }
 
@@ -224,7 +227,7 @@ public:
                     "Access-Control-Allow-Origin: " << origin << "\r\n"
                     "Access-Control-Allow-Credentials: true\r\n"
                     "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n"
-                    "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n"
+                    "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n"
                     "Content-Type: " + type + "\r\n"
                     "Connection: keep-alive\r\n\r\n";
         ReplyWith(request->CreateResponseString(response));
@@ -249,7 +252,7 @@ public:
         response << "Access-Control-Allow-Origin: " << origin << "\r\n";
         response << "Access-Control-Allow-Credentials: true\r\n";
         response << "Access-Control-Allow-Headers: Content-Type,Authorization,Origin,Accept\r\n";
-        response << "Access-Control-Allow-Methods: OPTIONS, GET, POST\r\n";
+        response << "Access-Control-Allow-Methods: OPTIONS, GET, POST, PUT, DELETE\r\n";
         response << "Content-Type: text/html\r\n";
         response << "Content-Length: " << body.Size() << "\r\n";
         response << "\r\n";

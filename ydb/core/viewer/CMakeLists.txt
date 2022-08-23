@@ -18,11 +18,13 @@ target_link_libraries(ydb-core-viewer PUBLIC
   cpp-actors-core
   library-cpp-archive
   cpp-mime-types
+  cpp-protobuf-json
   ydb-core-base
   core-blobstorage-base
   blobstorage-vdisk-common
   core-client-server
   ydb-core-health_check
+  ydb-core-grpc_services
   ydb-core-node_whiteboard
   ydb-core-protos
   ydb-core-scheme
@@ -30,11 +32,16 @@ target_link_libraries(ydb-core-viewer PUBLIC
   ydb-core-util
   core-viewer-json
   core-viewer-protos
+  yq-libs-result_formatter
   library-persqueue-topic_parser
   api-protos
   lib-deprecated-kicli
+  public-lib-json_value
 )
 target_sources(ydb-core-viewer PRIVATE
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/http_router.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/grpc_request_context_wrapper.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_fq.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_vdisk.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/json_handlers_viewer.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/viewer/viewer.cpp
@@ -54,11 +61,13 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   cpp-actors-core
   library-cpp-archive
   cpp-mime-types
+  cpp-protobuf-json
   ydb-core-base
   core-blobstorage-base
   blobstorage-vdisk-common
   core-client-server
   ydb-core-health_check
+  ydb-core-grpc_services
   ydb-core-node_whiteboard
   ydb-core-protos
   ydb-core-scheme
@@ -66,9 +75,11 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   ydb-core-util
   core-viewer-json
   core-viewer-protos
+  yq-libs-result_formatter
   library-persqueue-topic_parser
   api-protos
   lib-deprecated-kicli
+  public-lib-json_value
 )
 target_sources(ydb-core-viewer.global PRIVATE
   ${CMAKE_BINARY_DIR}/ydb/core/viewer/1cdc663173c623f6a008fb99b02498f1.cpp

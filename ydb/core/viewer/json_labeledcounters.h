@@ -33,9 +33,9 @@ public:
         return NKikimrServices::TActivity::VIEWER_HANDLER;
     }
 
-    TJsonLabeledCounters(IViewer* viewer, NMon::TEvHttpInfo::TPtr &ev)
+    TJsonLabeledCounters(IViewer* viewer, const TRequest& request)
         : Viewer(viewer)
-        , Event(ev)
+        , Event(request.Event)
     {}
 
     void Bootstrap(const TActorContext& ctx) {

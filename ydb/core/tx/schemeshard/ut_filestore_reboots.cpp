@@ -212,8 +212,8 @@ Y_UNIT_TEST_SUITE(TFileStoreWithReboots) {
 
             InitAlterFileStoreConfig(vc);
             AsyncAlterFileStore(runtime, ++t.TxId, "/MyRoot", vdescr.DebugString());
-
-            TestDropFileStore(runtime, ++t.TxId, "/MyRoot", "FS", {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
+            
+            t.TestEnv->ReliablePropose(runtime, DropFileStoreRequest(++t.TxId, "/MyRoot", "FS"), {NKikimrScheme::StatusMultipleModifications, NKikimrScheme::StatusAccepted});
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             t.TestEnv->TestWaitNotification(runtime, t.TxId - 1); // wait Alter

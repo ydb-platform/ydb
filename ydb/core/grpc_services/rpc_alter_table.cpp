@@ -412,6 +412,7 @@ private:
         if (status == Ydb::StatusIds::SUCCESS) {
             if (GetOperationMode() == Ydb::Operations::OperationParams::SYNC) {
                 CreateSSOpSubscriber(SchemeshardId, TxId, DatabaseName, TOpType::BuildIndex, std::move(Request_), ctx);
+                Die(ctx);
             } else {
                 auto op = response.GetIndexBuild();
                 Ydb::Operations::Operation operation;

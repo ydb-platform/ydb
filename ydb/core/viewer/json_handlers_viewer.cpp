@@ -65,12 +65,14 @@ void TViewerJsonHandlers::Init() {
     Router.RegisterGetHandler("/json/hivestats", std::make_shared<TJsonHandler<TJsonHiveStats>>());
     Router.RegisterGetHandler("/json/tenantinfo", std::make_shared<TJsonHandler<TJsonTenantInfo>>());
     Router.RegisterGetHandler("/json/whoami", std::make_shared<TJsonHandler<TJsonWhoAmI>>());
-    Router.RegisterGetHandler("/json/query", std::make_shared<TJsonHandler<TJsonQuery>>());
     Router.RegisterGetHandler("/json/netinfo", std::make_shared<TJsonHandler<TJsonNetInfo>>());
     Router.RegisterGetHandler("/json/compute", std::make_shared<TJsonHandler<TJsonCompute>>());
     Router.RegisterGetHandler("/json/healthcheck", std::make_shared<TJsonHandler<TJsonHealthCheck>>());
     Router.RegisterGetHandler("/json/nodes", std::make_shared<TJsonHandler<TJsonNodes>>());
     Router.RegisterGetHandler("/json/acl", std::make_shared<TJsonHandler<TJsonACL>>());
+
+    Router.RegisterHandler(HTTP_METHOD_GET, "/json/query", std::make_shared<TJsonHandler<TJsonQuery>>());
+    Router.RegisterHandler(HTTP_METHOD_POST, "/json/query", std::make_shared<TJsonHandler<TJsonQuery>>());
 }
 
 }

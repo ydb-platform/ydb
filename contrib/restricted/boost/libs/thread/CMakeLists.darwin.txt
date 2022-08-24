@@ -35,6 +35,7 @@ target_link_libraries(boost-libs-thread PUBLIC
   contrib-restricted-boost
   restricted-boost-atomic
   restricted-boost-container
+  restricted-boost-date_time
   restricted-boost-exception
   restricted-boost-chrono
   restricted-boost-system

@@ -13,12 +13,12 @@ using namespace NYql::NNodes;
 
 namespace NYql::NDq {
 
-TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+TExprBase DqRewriteAggregate(TExprBase node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool compactForDistinct) {
     if (!node.Maybe<TCoAggregate>()) {
         return node;
     }
 
-    auto result = ExpandAggregate(true, node.Ptr(), ctx, typesCtx);
+    auto result = ExpandAggregate(true, node.Ptr(), ctx, typesCtx, false, compactForDistinct);
     YQL_ENSURE(result);
 
     return TExprBase(result);
@@ -278,8 +278,8 @@ NNodes::TExprBase DqSqlInDropCompact(NNodes::TExprBase node, TExprContext& ctx) 
     }
     if (HasSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact")) {
         return TExprBase(ctx.ChangeChild(
-            maybeSqlIn.Cast().Ref(), 
-            TCoSqlIn::idx_Options, 
+            maybeSqlIn.Cast().Ref(),
+            TCoSqlIn::idx_Options,
             RemoveSetting(maybeSqlIn.Cast().Options().Ref(), "isCompact", ctx)));
     }
     return node;

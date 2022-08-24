@@ -34,7 +34,7 @@ TExprNode::TPtr ExpandAggApply(const TExprNode::TPtr& node, TExprContext& ctx, T
 
 }
 
-TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool forceCompact) {
+TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx, bool forceCompact, bool compactForDistinct) {
     auto list = node->HeadPtr();
     auto keyColumns = node->ChildPtr(1);
     auto aggregatedColumns = node->Child(2);
@@ -74,7 +74,9 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
     TExprNode::TPtr sortKey = voidNode;
     TExprNode::TPtr sortOrder = voidNode;
 
-    bool effectiveCompact = forceCompact || HasSetting(*settings, "compact");
+    const bool haveDistinct = AnyOf(aggregatedColumns->ChildrenList(),
+        [](const auto& child) { return child->ChildrenSize() == 3; });
+    bool effectiveCompact = (haveDistinct && compactForDistinct) || forceCompact || HasSetting(*settings, "compact");
     for (const auto& trait : traits) {
         auto mergeLambda = trait->Child(5);
         if (mergeLambda->Tail().IsCallable("Void")) {
@@ -113,9 +115,6 @@ TExprNode::TPtr ExpandAggregate(bool allowPickle, const TExprNode::TPtr& node, T
         TExprNodeList keyColumnsList = keyColumns->ChildrenList();
         EraseIf(keyColumnsList, [&](const auto& key) { return sessionOutputColumn == key->Content(); });
         keyColumns = ctx.NewList(keyColumns->Pos(), std::move(keyColumnsList));
-
-        const bool haveDistinct = AnyOf(aggregatedColumns->ChildrenList(),
-            [](const auto& child) { return child->ChildrenSize() == 3; });
 
         TExprNode::TPtr sessionSortTraits;
         ExtractSessionWindowParams(node->Pos(), sessionSetting->Child(1)->ChildPtr(1), sessionKey, sessionKeyType, sessionParamsType, sessionSortTraits,

@@ -83,7 +83,7 @@ protected:
             if (hopSetting) {
                 return RewriteAsHoppingWindow(node, ctx, input.Cast()).Cast();
             } else {
-                return DqRewriteAggregate(node, ctx, TypesCtx);
+                return DqRewriteAggregate(node, ctx, TypesCtx, true);
             }
         }
         return node;

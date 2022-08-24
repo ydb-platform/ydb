@@ -108,7 +108,7 @@ FederatedQueryHttp::GetQueryResult::ComputeStatus RemapQueryStatus(YandexQuery::
 
     case YandexQuery::QueryMeta::ABORTED_BY_USER:
         [[fallthrough]];
-    case YandexQuery::QueryMeta::ABORTING_BY_SYSTEM:
+    case YandexQuery::QueryMeta::ABORTED_BY_SYSTEM:
         [[fallthrough]];
     case YandexQuery::QueryMeta::FAILED:
         return FederatedQueryHttp::GetQueryResult::FAILED;
@@ -186,10 +186,24 @@ void FqPackToJson(TStringStream& json, const T& httpResult, const TJsonSettings&
 void FqPackToJson(TStringStream& json, const FederatedQueryHttp::GetResultDataResult& httpResult, const TJsonSettings&) {
     auto resultSet = NYdb::TResultSet(httpResult.result_set());
     NJson::TJsonValue v;
-    NYq::FormatResultSet(v, resultSet, true);
+    NYq::FormatResultSet(v, resultSet, true, true);
     NJson::TJsonWriterConfig jsonWriterConfig;
     jsonWriterConfig.WriteNanAsString = true;
     NJson::WriteJson(&json, &v, jsonWriterConfig);
+}
+
+template <typename T>
+void SetIdempotencyKey(T& dst, const TString& key) {
+    Y_UNUSED(dst);
+    Y_UNUSED(key);
+
+    if constexpr (
+        std::is_same<T, YandexQuery::CreateQueryRequest>::value ||
+        std::is_same<T, YandexQuery::ControlQueryRequest>::value ||
+        std::is_same<T, YandexQuery::DeleteQueryRequest>::value)
+    {
+        dst.set_idempotency_key(key);
+    }
 }
 
 template <typename GrpcProtoRequestType, typename HttpProtoRequestType, typename GrpcProtoResultType, typename HttpProtoResultType, typename GrpcProtoResponseType>
@@ -259,6 +273,8 @@ public:
                 SetProtoMessageField(request, name, value);
             }
             FqConvert(request, grpcRequest);
+            SetIdempotencyKey(grpcRequest, TString(httpRequest.GetHeader("idempotency-key")));
+
             return true;
         } catch (const std::exception& e) {
             ReplyError(ctx, TStringBuilder() << "Error in parsing: " << e.what() << ", original text: " << GetEvent()->Get()->Request.GetPostContent());
@@ -333,7 +349,7 @@ template <typename ProtoType>
 void ProtoToPublicJsonSchema(IOutputStream& to) {
     TJsonSettings settings;
     settings.EnumAsNumbers = false;
-    settings.EmptyRepeated = false;
+    settings.EmptyRepeated = true;
     settings.EnumValueFilter = [](const TString& value) {
         return !value.EndsWith("UNSPECIFIED");
     };

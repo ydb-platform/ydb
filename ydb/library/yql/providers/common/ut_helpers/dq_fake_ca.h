@@ -77,8 +77,8 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
             Parent.AsyncInputPromises.NewAsyncInputDataArrived = NThreading::NewPromise();
         }
 
-        void OnAsyncInputError(ui64, const TIssues& issues, bool isFatal) {
-            Y_UNUSED(isFatal);
+        void OnAsyncInputError(ui64, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) {
+            Y_UNUSED(fatalCode);
             Parent.AsyncInputPromises.FatalError.SetValue(issues);
             Parent.AsyncInputPromises.FatalError = NThreading::NewPromise<TIssues>();
         }
@@ -94,8 +94,8 @@ class TFakeActor : public NActors::TActor<TFakeActor> {
             Parent.AsyncOutputPromises.ResumeExecution = NThreading::NewPromise();
         };
 
-        void OnAsyncOutputError(ui64, const TIssues& issues, bool isFatal) override {
-            Y_UNUSED(isFatal);
+        void OnAsyncOutputError(ui64, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override {
+            Y_UNUSED(fatalCode);
             Parent.AsyncOutputPromises.Issue.SetValue(issues);
             Parent.AsyncOutputPromises.Issue = NThreading::NewPromise<TIssues>();
         };
@@ -150,7 +150,7 @@ private:
     }
 
     void Handle(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
-        AsyncInputEvents.OnAsyncInputError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+        AsyncInputEvents.OnAsyncInputError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->FatalCode);
     }
 
 public:

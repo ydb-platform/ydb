@@ -382,7 +382,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
-        Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Error, true);
+        Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
 
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& result) {

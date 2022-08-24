@@ -110,7 +110,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, true));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
     // IActor & IDqComputeActorAsyncInput

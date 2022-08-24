@@ -276,7 +276,7 @@ private:
             if (issues) {
                 WriteSession->Close(TDuration::Zero());
                 WriteSession.reset();
-                Callbacks->OnAsyncOutputError(OutputIndex, *issues, true);
+                Callbacks->OnAsyncOutputError(OutputIndex, *issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
                 break;
             }
 
@@ -312,7 +312,7 @@ private:
     void Fail(TString message) {
         TIssues issues;
         issues.AddIssue(message);
-        Callbacks->OnAsyncOutputError(OutputIndex, issues, true);
+        Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
 
     struct TPQEventProcessor {

@@ -662,7 +662,11 @@ private:
     }
     void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
         Y_UNUSED(ev->Get()->InputIndex);
-        SendFailure(MakeHolder<TEvDqFailure>(ev->Get()->IsFatal ? NYql::NDqProto::StatusIds::UNSPECIFIED : NYql::NDqProto::StatusIds::INTERNAL_ERROR, ev->Get()->Issues.ToString()));
+        auto fatalCode = ev->Get()->FatalCode;
+        if (fatalCode != NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+        }
+        SendFailure(MakeHolder<TEvDqFailure>(fatalCode, ev->Get()->Issues.ToString()));
     }
     void OnAsyncInputPushFinished(TEvAsyncInputPushFinished::TPtr& ev, const TActorContext& ctx) {
         auto index = ev->Get()->Index;
@@ -676,9 +680,12 @@ private:
         Send(SelfId(), new TEvContinueRun());
     }
 
-    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
+    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override {
         Y_UNUSED(outputIndex);
-        SendFailure(MakeHolder<TEvDqFailure>(isFatal ? NYql::NDqProto::StatusIds::UNSPECIFIED : NYql::NDqProto::StatusIds::INTERNAL_ERROR, issues.ToString()));
+        if (fatalCode != NYql::NDqProto::StatusIds::UNSPECIFIED) {
+            fatalCode = NYql::NDqProto::StatusIds::INTERNAL_ERROR;
+        }
+        SendFailure(MakeHolder<TEvDqFailure>(fatalCode, issues.ToString()));
     }
 
     void OnAsyncOutputFinished(ui64 outputIndex) override {

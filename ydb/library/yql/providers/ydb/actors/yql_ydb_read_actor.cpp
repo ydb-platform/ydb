@@ -191,7 +191,7 @@ private:
             RequestsDone = true;
             while(!Blocks.empty())
                 Blocks.pop();
-            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, res.GetIssues(), true));
+            Send(ComputeActorId, new TEvAsyncInputError(InputIndex, res.GetIssues(), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         } else {
             WakeUpTime = TMonotonic::Now() + Min(TDuration::Seconds(3), TDuration::MilliSeconds(0x30U * (1U << ++Retried)));
             ActorSystem->Schedule(WakeUpTime, new IEventHandle(SelfId(), TActorId(), new TEvPrivate::TEvRetryTime));

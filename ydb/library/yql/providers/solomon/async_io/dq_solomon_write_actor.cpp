@@ -273,7 +273,7 @@ private:
             TIssues issues { TIssue(errorBuilder) };
             SINK_LOG_W("Got " << (res->IsTerminal ? "terminal " : "") << "error response[" << ev->Cookie << "] from solomon: " << issues.ToOneLineString());
 
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal);
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, res->IsTerminal ? NYql::NDqProto::StatusIds::EXTERNAL_ERROR : NYql::NDqProto::StatusIds::UNSPECIFIED);
             return;
         }
 
@@ -316,7 +316,7 @@ private:
             SendingBuffer.emplace(TMetricsToSend { std::move(data), metricsCount });
         } catch (const yexception& e) {
             TIssues issues { TIssue(TStringBuilder() << "Error while encoding solomon metrics: " << e.what()) };
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, true);
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
         }
 
         metricsCount = 0;
@@ -419,7 +419,7 @@ private:
         if (!parser.Parse(TString(response.Response->Body), &res)) {
             TIssues issues { TIssue(TStringBuilder() << "Invalid monitoring response: " << response.Response->GetObfuscatedData()) };
             SINK_LOG_E("Failed to parse response[" << cookie << "] from solomon: " << issues.ToOneLineString());
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, true);
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
         Y_VERIFY(res.size() == 2);
@@ -428,7 +428,7 @@ private:
         if (ptr == InflightBuffer.end()) {
             SINK_LOG_E("Solomon response[" << cookie << "] was not found in inflight");
             TIssues issues { TIssue(TStringBuilder() << "Internal error in monitoring writer") };
-            Callbacks->OnAsyncOutputError(OutputIndex, issues, true);
+            Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             return;
         }
 
@@ -437,7 +437,7 @@ private:
         if (writtenMetricsCount != ptr->second.MetricsCount) {
             // TODO: YQ-340
             // TIssues issues { TIssue(TStringBuilder() << ToString(ptr->second.MetricsCount - writtenMetricsCount) << " metrics were not written: " << res[1]) };
-            // Callbacks->OnAsyncOutputError(OutputIndex, issues, true);
+            // Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
             // return;
             SINK_LOG_W("Some metrics were not written. MetricsCount=" << ptr->second.MetricsCount << " writtenMetricsCount=" << writtenMetricsCount << " Solomon response: " << response.Response->GetObfuscatedData());
         }

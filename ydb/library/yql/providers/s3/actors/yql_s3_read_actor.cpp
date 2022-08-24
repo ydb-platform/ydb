@@ -217,7 +217,7 @@ private:
 
     void Handle(TEvPrivate::TEvReadError::TPtr& result) {
         ++IsDoneCounter;
-        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, true));
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 
     // IActor & IDqComputeActorAsyncInput
@@ -412,19 +412,19 @@ private:
         }
 
         if (Issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(Issues), true));
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(Issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         else
             Send(ParentActorId, new TEvPrivate::TEvReadFinished);
     } catch (const TDtorException&) {
         return RetryStuff->Cancel();
     } catch (const std::exception& err) {
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, true));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
         return;
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) final {
         TString message = Sprintf("Unexpected message type 0x%08" PRIx32, ev->GetTypeRewrite());
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}, true));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
     }
 private:
     const ui64 InputIndex;

@@ -55,8 +55,8 @@ namespace NDq {
 constexpr ui32 IssuesBufferSize = 16;
 
 struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
-    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) override final {
-        OnSinkError(outputIndex, issues, isFatal);
+    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
+        OnSinkError(outputIndex, issues, fatalCode);
     }
 
     void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
@@ -67,14 +67,14 @@ struct TSinkCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
         OnSinkFinished(outputIndex);
     }
 
-    virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
+    virtual void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
     virtual void OnSinkStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnSinkFinished(ui64 outputIndex) = 0;
 };
 
 struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks {
-    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) override final {
-        OnOutputTransformError(outputIndex, issues, isFatal);
+    void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override final {
+        OnOutputTransformError(outputIndex, issues, fatalCode);
     }
 
     void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) override final {
@@ -85,7 +85,7 @@ struct TOutputTransformCallbacks : public IDqComputeActorAsyncOutput::ICallbacks
         OnTransformFinished(outputIndex);
     }
 
-    virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
+    virtual void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
     virtual void OnTransformStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;
     virtual void OnTransformFinished(ui64 outputIndex) = 0;
 };
@@ -1523,52 +1523,52 @@ protected:
 
     void OnAsyncInputError(const IDqComputeActorAsyncInput::TEvAsyncInputError::TPtr& ev) {
         if (SourcesMap.FindPtr(ev->Get()->InputIndex)) {
-            OnSourceError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+            OnSourceError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->FatalCode);
         } else if (InputTransformsMap.FindPtr(ev->Get()->InputIndex)) {
-            OnInputTransformError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->IsFatal);
+            OnInputTransformError(ev->Get()->InputIndex, ev->Get()->Issues, ev->Get()->FatalCode);
         } else {
             YQL_ENSURE(false, "Unexpected input index: " << ev->Get()->InputIndex);
         }
     }
 
-    void OnSourceError(ui64 inputIndex, const TIssues& issues, bool isFatal) {
-        if (!isFatal) {
+    void OnSourceError(ui64 inputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) {
+        if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
             SourcesMap.at(inputIndex).IssuesBuffer.Push(issues);
             return;
         }
 
         CA_LOG_E("Source[" << inputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
+        InternalError(fatalCode, issues);
     }
 
-    void OnInputTransformError(ui64 inputIndex, const TIssues& issues, bool isFatal) {
-        if (!isFatal) {
+    void OnInputTransformError(ui64 inputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) {
+        if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
             InputTransformsMap.at(inputIndex).IssuesBuffer.Push(issues);
             return;
         }
 
         CA_LOG_E("InputTransform[" << inputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
+        InternalError(fatalCode, issues);
     }
 
-    void OnSinkError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
-        if (!isFatal) {
+    void OnSinkError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override {
+        if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
             SinksMap.at(outputIndex).IssuesBuffer.Push(issues);
             return;
         }
 
         CA_LOG_E("Sink[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
+        InternalError(fatalCode, issues);
     }
 
-    void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, bool isFatal) override {
-        if (!isFatal) {
+    void OnOutputTransformError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) override {
+        if (fatalCode == NYql::NDqProto::StatusIds::UNSPECIFIED) {
             OutputTransformsMap.at(outputIndex).IssuesBuffer.Push(issues);
             return;
         }
 
         CA_LOG_E("OutputTransform[" << outputIndex << "] fatal error: " << issues.ToOneLineString());
-        InternalError(NYql::NDqProto::StatusIds::EXTERNAL_ERROR, issues);
+        InternalError(fatalCode, issues);
     }
 
     bool AllAsyncOutputsFinished() const {

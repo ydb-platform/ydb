@@ -55,15 +55,15 @@ struct IDqComputeActorAsyncInput {
     };
 
     struct TEvAsyncInputError : public NActors::TEventLocal<TEvAsyncInputError, TDqComputeEvents::EvAsyncInputError> {
-        TEvAsyncInputError(ui64 inputIndex, const TIssues& issues, bool isFatal)
+        TEvAsyncInputError(ui64 inputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode)
             : InputIndex(inputIndex)
             , Issues(issues)
-            , IsFatal(isFatal)
+            , FatalCode(fatalCode)
         {}
 
         const ui64 InputIndex;
         const TIssues Issues;
-        const bool IsFatal;
+        const NYql::NDqProto::StatusIds::StatusCode FatalCode;
     };
 
     virtual ui64 GetInputIndex() const = 0;
@@ -110,7 +110,7 @@ struct IDqComputeActorAsyncInput {
 struct IDqComputeActorAsyncOutput {
     struct ICallbacks { // Compute actor
         virtual void ResumeExecution() = 0;
-        virtual void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, bool isFatal) = 0;
+        virtual void OnAsyncOutputError(ui64 outputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode) = 0;
 
         // Checkpointing
         virtual void OnAsyncOutputStateSaved(NDqProto::TSinkState&& state, ui64 outputIndex, const NDqProto::TCheckpoint& checkpoint) = 0;

@@ -59,10 +59,11 @@ namespace NKikimr::NBlobDepot {
                         continue;
                     }
 
-                    if (!CheckKeyAgainstBarrier(key, value)) {
+                    TString error;
+                    if (!CheckKeyAgainstBarrier(key, value, &error)) {
                         responseItem->SetStatus(NKikimrProto::ERROR);
                         responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString()
-                            << " is being put beyond the barrier");
+                            << " is being put beyond the barrier: " << error);
                         continue;
                     }
 
@@ -96,11 +97,23 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            bool CheckKeyAgainstBarrier(const TData::TKey& key, const NKikimrBlobDepot::TValue& value) {
+            bool CheckKeyAgainstBarrier(const TData::TKey& key, const NKikimrBlobDepot::TValue& value,
+                    TString *error) {
                 const auto& v = key.AsVariant();
-                const auto *id = std::get_if<TLogoBlobID>(&v);
-                return !id || Self->BarrierServer->CheckBlobForBarrier(*id) ||
-                    value.GetKeepState() == NKikimrBlobDepot::EKeepState::Keep;
+                if (const auto *id = std::get_if<TLogoBlobID>(&v)) {
+                    bool underSoft, underHard;
+                    Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
+                    if (underHard) {
+                        *error = TStringBuilder() << "under barrier# " << Self->BarrierServer->ToStringBarrier(
+                            id->TabletID(), id->Channel(), true);
+                        return false;
+                    } else if (underSoft && value.GetKeepState() != NKikimrBlobDepot::EKeepState::Keep) {
+                        *error = TStringBuilder() << "under barrier# " << Self->BarrierServer->ToStringBarrier(
+                            id->TabletID(), id->Channel(), false);
+                        return false;
+                    }
+                }
+                return true;
             }
 
             void Complete(const TActorContext&) override {

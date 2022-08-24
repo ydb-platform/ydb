@@ -33,9 +33,51 @@ namespace NKikimr::NBlobDepot {
         Y_FAIL();
     }
 
+    void TBlobDepotAgent::HandleQueryWatchdog(TAutoPtr<IEventHandle> ev) {
+        for (auto [first, last] = QueryIdToQuery.equal_range(ev->Cookie); first != last; ++first) {
+            first->second->CheckQueryExecutionTime();
+        }
+    }
+
+    TBlobDepotAgent::TQuery::TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
+        : TRequestSender(agent)
+        , Event(std::move(event))
+        , QueryId(RandomNumber<ui64>())
+        , StartTime(TActivationContext::Monotonic())
+    {
+        Agent.QueryIdToQuery.emplace(QueryId, this);
+        TActivationContext::Schedule(WatchdogDuration, new IEventHandle(TEvPrivate::EvQueryWatchdog, 0,
+            Agent.SelfId(), {}, nullptr, QueryId));
+    }
+
+    TBlobDepotAgent::TQuery::~TQuery() {
+        if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
+            STLOG(PRI_WARN, BLOB_DEPOT_AGENT, BDA00, "query execution took too much time",
+                (VirtualGroupId, Agent.VirtualGroupId), (QueryId, QueryId), (Duration, duration));
+        }
+
+        for (auto [first, last] = Agent.QueryIdToQuery.equal_range(QueryId); first != last; ++first) {
+            if (first->first == QueryId && first->second == this) {
+                Agent.QueryIdToQuery.erase(first);
+                return;
+            }
+        }
+        Y_FAIL();
+    }
+
+    void TBlobDepotAgent::TQuery::CheckQueryExecutionTime() {
+        if (TDuration duration(TActivationContext::Monotonic() - StartTime); duration >= WatchdogDuration) {
+            STLOG(PRI_WARN, BLOB_DEPOT_AGENT, BDA23, "query is still executing", (VirtualGroupId, Agent.VirtualGroupId),
+                (QueryId, QueryId), (Duration, duration));
+            TActivationContext::Schedule(WatchdogDuration, new IEventHandle(TEvPrivate::EvQueryWatchdog, 0,
+                Agent.SelfId(), {}, nullptr, QueryId));
+        }
+    }
+
     void TBlobDepotAgent::TQuery::EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason) {
         STLOG(PRI_INFO, BLOB_DEPOT_AGENT, BDA14, "query ends with error", (VirtualGroupId, Agent.VirtualGroupId),
-            (QueryId, QueryId), (Status, status), (ErrorReason, errorReason));
+            (QueryId, QueryId), (Status, status), (ErrorReason, errorReason),
+            (Duration, TActivationContext::Monotonic() - StartTime));
 
         std::unique_ptr<IEventBase> response;
         switch (Event->GetTypeRewrite()) {
@@ -54,7 +96,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::TQuery::EndWithSuccess(std::unique_ptr<IEventBase> response) {
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA15, "query ends with success", (VirtualGroupId, Agent.VirtualGroupId),
-            (QueryId, QueryId), (Response, response->ToString()));
+            (QueryId, QueryId), (Response, response->ToString()), (Duration, TActivationContext::Monotonic() - StartTime));
         Agent.SelfId().Send(Event->Sender, response.release(), 0, Event->Cookie);
         delete this;
     }

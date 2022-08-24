@@ -234,6 +234,11 @@ namespace NKikimr::NBlobDepot {
                     }
                 }
             });
+            if (value.OriginalBlobId) {
+                auto *out = item.AddValueChain();
+                out->SetGroupId(Self->Config.GetDecommitGroupId());
+                LogoBlobIDFromLogoBlobID(*value.OriginalBlobId, out->MutableBlobId());
+            }
             if (value.Meta) {
                 item.SetMeta(value.Meta.data(), value.Meta.size());
             }

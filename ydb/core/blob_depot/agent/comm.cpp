@@ -111,8 +111,10 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TBlobDepotAgent::OnDisconnect() {
-        for (auto& [id, request] : std::exchange(TabletRequestInFlight, {})) {
+        while (TabletRequestInFlight) {
+            auto [id, request] = std::move(*TabletRequestInFlight.begin());
             request.Sender->OnRequestComplete(id, TTabletDisconnected{});
+            TabletRequestInFlight.erase(id);
         }
 
         for (auto& [_, kind] : ChannelKinds) {

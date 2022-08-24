@@ -235,11 +235,6 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    bool TBlobDepot::TBarrierServer::CheckBlobForBarrier(TLogoBlobID id) const {
-        const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
-        return it == Barriers.end() || TGenStep(id) > Max(it->second.Soft, it->second.Hard);
-    }
-
     void TBlobDepot::TBarrierServer::GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const {
         const auto it = Barriers.find(std::make_tuple(id.TabletID(), id.Channel()));
         const TGenStep genStep(id);

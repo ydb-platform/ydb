@@ -82,6 +82,13 @@ namespace NKikimr::NBlobDepot {
         ui64 TabletId = Max<ui64>();
         TActorId PipeId;
 
+    private:
+        struct TEvPrivate {
+            enum {
+                EvQueryWatchdog = EventSpaceBegin(TEvents::ES_PRIVATE),
+            };
+        };
+
     public:
         TBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId);
         ~TBlobDepotAgent();
@@ -111,6 +118,8 @@ namespace NKikimr::NBlobDepot {
 
             ENUMERATE_INCOMING_EVENTS(FORWARD_STORAGE_PROXY)
             hFunc(TEvBlobStorage::TEvBunchOfEvents, Handle);
+
+            fFunc(TEvPrivate::EvQueryWatchdog, HandleQueryWatchdog);
         );
 #undef FORWARD_STORAGE_PROXY
 
@@ -215,15 +224,15 @@ namespace NKikimr::NBlobDepot {
         protected:
             std::unique_ptr<IEventHandle> Event; // original query event
             const ui64 QueryId;
+            const TMonotonic StartTime;
+
+            static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
         public:
-            TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event)
-                : TRequestSender(agent)
-                , Event(std::move(event))
-                , QueryId(RandomNumber<ui64>())
-            {}
+            TQuery(TBlobDepotAgent& agent, std::unique_ptr<IEventHandle> event);
+            virtual ~TQuery();
 
-            virtual ~TQuery() = default;
+            void CheckQueryExecutionTime();
 
             void EndWithError(NKikimrProto::EReplyStatus status, const TString& errorReason);
             void EndWithSuccess(std::unique_ptr<IEventBase> response);
@@ -243,7 +252,9 @@ namespace NKikimr::NBlobDepot {
 
         std::deque<std::unique_ptr<IEventHandle>> PendingEventQ;
         TIntrusiveListWithAutoDelete<TQuery, TQuery::TDeleter, TExecutingQueries> ExecutingQueries;
+        THashMultiMap<ui64, TQuery*> QueryIdToQuery;
 
+        void HandleQueryWatchdog(TAutoPtr<IEventHandle> ev);
         void HandleStorageProxy(TAutoPtr<IEventHandle> ev);
         void Handle(TEvBlobStorage::TEvBunchOfEvents::TPtr ev);
         TQuery *CreateQuery(TAutoPtr<IEventHandle> ev);

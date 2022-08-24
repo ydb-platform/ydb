@@ -29,9 +29,18 @@ namespace NKikimr::NBlobDepot {
         void AddBarrierOnLoad(ui64 tabletId, ui8 channel, TGenStep softGenCtr, TGenStep soft, TGenStep hardGenCtr, TGenStep hard);
         void AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier, NTabletFlatExecutor::TTransactionContext& txc);
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
-        bool CheckBlobForBarrier(TLogoBlobID id) const;
         void GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const;
         void OnDataLoaded();
+
+        TString ToStringBarrier(ui64 tabletId, ui8 channel, bool hard) const {
+            if (const auto it = Barriers.find(std::make_tuple(tabletId, channel)); it == Barriers.end()) {
+                return "<none>";
+            } else if (auto& b = it->second; hard) {
+                return TStringBuilder() << "hard{" << b.HardGenCtr.ToString() << "=>" << b.Hard.ToString() << "}";
+            } else {
+                return TStringBuilder() << "soft{" << b.SoftGenCtr.ToString() << "=>" << b.Soft.ToString() << "}";
+            }
+        }
 
         template<typename TCallback>
         void Enumerate(TCallback&& callback) {

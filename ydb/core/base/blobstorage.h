@@ -2047,8 +2047,8 @@ struct TEvBlobStorage {
 
     struct TEvAssimilateResult : TEventLocal<TEvAssimilateResult, EvAssimilateResult> {
         struct TBlock {
-            ui64 TabletId;
-            ui32 BlockedGeneration;
+            ui64 TabletId = 0;
+            ui32 BlockedGeneration = 0;
 
             TString ToString() const {
                 TStringStream str;
@@ -2063,10 +2063,10 @@ struct TEvBlobStorage {
 
         struct TBarrier {
             struct TValue {
-                ui32 RecordGeneration;
-                ui32 PerGenerationCounter;
-                ui32 CollectGeneration;
-                ui32 CollectStep;
+                ui32 RecordGeneration = 0;
+                ui32 PerGenerationCounter = 0;
+                ui32 CollectGeneration = 0;
+                ui32 CollectStep = 0;
 
                 void Output(IOutputStream& s) const {
                     if (RecordGeneration || PerGenerationCounter || CollectGeneration || CollectGeneration) {
@@ -2076,8 +2076,8 @@ struct TEvBlobStorage {
                 }
             };
 
-            ui64 TabletId;
-            ui8 Channel;
+            ui64 TabletId = 0;
+            ui8 Channel = 0;
             TValue Soft;
             TValue Hard;
 
@@ -2098,8 +2098,8 @@ struct TEvBlobStorage {
 
         struct TBlob {
             TLogoBlobID Id;
-            bool Keep;
-            bool DoNotKeep;
+            bool Keep = false;
+            bool DoNotKeep = false;
 
             TString ToString() const {
                 TStringStream str;

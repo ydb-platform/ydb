@@ -78,7 +78,7 @@ struct TKesusTablet::TTxSemaphoreRelease : public TTxBase {
                 });
                 ReplyOk();
                 Self->DoDeleteSessionSemaphore(db, semaphore, waiter, Events);
-                session->WaitingSemaphores.erase(sessionId);
+                session->WaitingSemaphores.erase(semaphoreId);
                 return true;
             }
         }

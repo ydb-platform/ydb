@@ -44,3 +44,19 @@ message TRecursiveType {
     string login = 2 [(Ydb.sensitive) = true];
     repeated TRecursiveType types = 3;
 }
+
+message TInnerObject2 {
+    repeated string a = 1;
+}
+
+message TInnerObject {
+    map<string, string> inner_map = 1;
+    uint64 value = 2;
+    TInnerObject2 inner = 3;
+}
+
+message TBigObject {
+    map<string, string> map = 1;
+    repeated string list = 2;
+    TInnerObject object = 3;
+}

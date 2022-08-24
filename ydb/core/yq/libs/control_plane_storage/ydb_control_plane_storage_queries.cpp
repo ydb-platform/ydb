@@ -275,11 +275,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
         }
 
         if (query.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query data is not placed in the table. Please shorten your request";
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
         if (queryInternal.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query internal data is not placed in the table. Please reduce the number of connections and bindings";
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << queryInternal.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         response->second.After.ConstructInPlace().CopyFrom(query);
@@ -604,6 +604,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
         if (internal.plan_compressed().data()) { // todo: remove this if after migration
             TCompressor compressor(internal.plan_compressed().method());
             result.mutable_query()->mutable_plan()->set_json(compressor.Decompress(internal.plan_compressed().data()));
+            if (result.query().ByteSizeLong() > GRPC_MESSAGE_SIZE_LIMIT) {
+                if (result.query().plan().json().size() > 1000) {
+                    // modifing plan this way should definitely reduce query msg size
+                    result.mutable_query()->mutable_plan()->set_json(TStringBuilder() << "Message is too big: " << result.query().ByteSizeLong() << " bytes, dropping plan of size " << result.query().plan().json().size() << " bytes");
+                }
+            }
         }
         if (!permissions.Check(TPermissions::VIEW_AST)) {
             result.mutable_query()->clear_ast();
@@ -923,11 +929,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
         }
 
         if (query.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query data is not placed in the table. Please shorten your request";
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Incoming request exceeded the size limit: " << query.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() <<  ". Please shorten your request";
         }
 
         if (internal.ByteSizeLong() > Config.Proto.GetMaxRequestSize()) {
-            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Internal data is not placed in the table. Please reduce the number of connections and bindings";
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "The size of all connections and bindings in the project exceeded the limit: " << internal.ByteSizeLong() << " of " << Config.Proto.GetMaxRequestSize() << ". Please reduce the number of connections and bindings";
         }
 
         YandexQuery::Job job;

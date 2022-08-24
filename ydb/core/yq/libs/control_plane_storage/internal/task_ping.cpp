@@ -3,6 +3,7 @@
 #include <util/datetime/base.h>
 
 #include <ydb/core/yq/libs/db_schema/db_schema.h>
+#include <ydb/library/protobuf_printer/size_printer.h>
 
 #include <google/protobuf/util/time_util.h>
 
@@ -21,8 +22,8 @@ bool IsFinishedStatus(YandexQuery::QueryMeta::ComputeStatus status) {
 
 std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParams>(const TVector<NYdb::TResultSet>&)>> ConstructHardPingTask(
     const Fq::Private::PingTaskRequest& request, std::shared_ptr<Fq::Private::PingTaskResult> response,
-    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl, const THashMap<ui64, TRetryPolicyItem>& retryPolicies,
-    ::NMonitoring::TDynamicCounterPtr rootCounters) {
+    const TString& tablePathPrefix, const TDuration& automaticQueriesTtl, const TDuration& taskLeaseTtl,
+    const THashMap<ui64, TRetryPolicyItem>& retryPolicies, ::NMonitoring::TDynamicCounterPtr rootCounters, uint64_t maxRequestSize) {
 
     auto scope = request.scope();
     auto query_id = request.query_id().value();
@@ -269,6 +270,18 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
             internal.set_dq_graph_index(request.dq_graph_index());
         }
 
+        if (job.ByteSizeLong() > maxRequestSize) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Job proto exceeded the size limit: " << job.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(job).ToString();
+        }
+
+        if (query.ByteSizeLong() > maxRequestSize) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "Query proto exceeded the size limit: " << query.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(query).ToString();
+        }
+
+        if (internal.ByteSizeLong() > maxRequestSize) {
+            ythrow TControlPlaneStorageException(TIssuesIds::BAD_REQUEST) << "QueryInternal proto exceeded the size limit: " << internal.ByteSizeLong() << " of " << maxRequestSize << " " << TSizeFormatPrinter(internal).ToString();
+        }
+
         TSqlQueryBuilder writeQueryBuilder(tablePathPrefix, "HardPingTask(write)");
         writeQueryBuilder.AddString("tenant", request.tenant());
         writeQueryBuilder.AddString("scope", request.scope());
@@ -447,7 +460,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     if (request.status())
         Counters.GetFinalStatusCounters(cloudId, scope)->IncByStatus(request.status());
     auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
-        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies, Counters.Counters) :
+        ConstructHardPingTask(request, response, YdbConnection->TablePathPrefix, Config.AutomaticQueriesTtl, Config.TaskLeaseTtl, Config.RetryPolicies, Counters.Counters, Config.Proto.GetMaxRequestSize()) :
         ConstructSoftPingTask(request, response, YdbConnection->TablePathPrefix, Config.TaskLeaseTtl);
     auto readQuery = std::get<0>(pingTaskParams); // Use std::get for win compiler
     auto readParams = std::get<1>(pingTaskParams);

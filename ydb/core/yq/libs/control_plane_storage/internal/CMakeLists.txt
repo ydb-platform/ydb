@@ -29,6 +29,7 @@ target_link_libraries(libs-control_plane_storage-internal PUBLIC
   ydb-library-security
   cpp-client-ydb_scheme
   cpp-client-ydb_value
+  ydb-library-protobuf_printer
   yql-public-issue
 )
 target_sources(libs-control_plane_storage-internal PRIVATE

@@ -188,18 +188,41 @@ public:
                             .Seal().Build()
                     );
                 }
+                auto readSettings = s3ReadObject.Object().Settings().Cast().Ptr();
 
-                return Build<TDqSourceWrap>(ctx, read->Pos())
+                int expectedSizeIndex = -1;
+                for (size_t childInd = 0; childInd < readSettings->ChildrenSize(); ++childInd) {
+                    if (readSettings->Child(childInd)->Head().Content() == "readmaxbytes") {
+                        expectedSizeIndex = childInd;
+                        break;
+                    }
+                }
+
+                if (expectedSizeIndex != -1) {
+                    return Build<TDqSourceWrap>(ctx, read->Pos())
                     .Input<TS3SourceSettings>()
                         .Paths(s3ReadObject.Object().Paths())
                         .Token<TCoSecureParam>()
                             .Name().Build(token)
                             .Build()
+                        .ExpectedSize(readSettings->Child(expectedSizeIndex)->TailPtr())
                         .Build()
                     .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
                     .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
                     .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
                     .Done().Ptr();
+                }
+                return Build<TDqSourceWrap>(ctx, read->Pos())
+                .Input<TS3SourceSettings>()
+                    .Paths(s3ReadObject.Object().Paths())
+                    .Token<TCoSecureParam>()
+                        .Name().Build(token)
+                        .Build()
+                    .Build()
+                .RowType(ExpandType(s3ReadObject.Pos(), *rowType, ctx))
+                .DataSource(s3ReadObject.DataSource().Cast<TCoDataSource>())
+                .Settings(ctx.NewList(s3ReadObject.Object().Pos(), std::move(settings)))
+                .Done().Ptr();
             }
         }
         return read;
@@ -239,6 +262,12 @@ public:
                     for (auto i = 0U; i < settings.Ref().ChildrenSize(); ++i) {
                         srcDesc.MutableSettings()->insert({TString(settings.Ref().Child(i)->Head().Content()), TString(settings.Ref().Child(i)->Tail().IsAtom() ? settings.Ref().Child(i)->Tail().Content() : settings.Ref().Child(i)->Tail().Head().Content())});
                     }
+                }
+            } else if (const auto maySourceSettings = source.Settings().Maybe<TS3SourceSettings>()){
+                const auto sourceSettings = maySourceSettings.Cast();
+                auto expectedSize = sourceSettings.ExpectedSize();
+                if (expectedSize.IsValid()) {
+                    srcDesc.MutableSettings()->insert({"expectedSize", expectedSize.Cast().StringValue()});
                 }
             }
 

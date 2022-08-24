@@ -95,7 +95,7 @@ public:
     }
 
     TStatus HandleS3SourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 2U, ctx)) {
+        if (!EnsureMinArgsCount(*input, 2U, ctx)) {
             return TStatus::Error;
         }
 
@@ -250,17 +250,20 @@ public:
             return TStatus::Error;
         }
 
+        auto format = input->Child(TS3Object::idx_Format)->Content();
+
         if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) ||
-            !NCommon::ValidateFormat(input->Child(TS3Object::idx_Format)->Content(), ctx))
+            !NCommon::ValidateFormat(format, ctx))
         {
             return TStatus::Error;
         }
+
 
         if (input->ChildrenSize() > TS3Object::idx_Settings) {
             bool haveProjection = false;
             bool havePartitionedBy = false;
             auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
-                if ((name == "compression" || name == "projection" || name == "data.interval.unit") && setting.ChildrenSize() != 2) {
+                if ((name == "compression" || name == "projection" || name == "data.interval.unit" || name == "readmaxbytes") && setting.ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()),
                         TStringBuilder() << "Expected single value setting for " << name << ", but got " << setting.ChildrenSize() - 1));
                     return false;
@@ -324,6 +327,24 @@ public:
                     return NCommon::ValidateIntervalUnit(unit, ctx);
                 }
 
+                if (name == "readmaxbytes") {
+                    auto& value = setting.Tail();
+                    if (format != "raw") {
+                        ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "read_max_bytes can only be used with raw format"));
+                        return false;
+                    }
+                    if (!value.IsAtom()) {
+                        if (!EnsureStringOrUtf8Type(value, ctx)) {
+                            return false;
+                        }
+                        if (!value.IsCallable({"String", "Utf8"})) {
+                            ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), "read_max_bytes must be literal value"));
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+
                 YQL_ENSURE(name == "projection");
                 haveProjection = true;
                 if (!EnsureAtom(setting.Tail(), ctx)) {
@@ -338,7 +359,7 @@ public:
                 return true;
             };
             if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings),
-                                     { "compression", "partitionedby", "projection", "data.interval.unit" }, validator, ctx))
+                                     { "compression", "partitionedby", "projection", "data.interval.unit", "readmaxbytes" }, validator, ctx))
             {
                 return TStatus::Error;
             }

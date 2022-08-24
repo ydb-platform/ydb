@@ -128,7 +128,8 @@ public:
         TPathList&& paths,
         bool addPathIndex,
         ui64 startPathIndex,
-        const NActors::TActorId& computeActorId
+        const NActors::TActorId& computeActorId,
+        ui64 expectedSize
     )   : Gateway(std::move(gateway))
         , HolderFactory(holderFactory)
         , InputIndex(inputIndex)
@@ -139,6 +140,7 @@ public:
         , Paths(std::move(paths))
         , AddPathIndex(addPathIndex)
         , StartPathIndex(startPathIndex)
+        , ExpectedSize(expectedSize)
     {}
 
     void Bootstrap() {
@@ -146,7 +148,7 @@ public:
         for (size_t pathInd = 0; pathInd < Paths.size(); ++pathInd) {
             const TPath& path = Paths[pathInd];
             Gateway->Download(Url + std::get<TString>(path),
-                Headers, std::get<size_t>(path),
+                Headers, std::min(std::get<size_t>(path), ExpectedSize),
                 std::bind(&TS3ReadActor::OnDownloadFinished, ActorSystem, SelfId(), std::placeholders::_1, pathInd + StartPathIndex), {}, GetS3RetryPolicy());
         };
     }
@@ -247,6 +249,7 @@ private:
     const TPathList Paths;
     const bool AddPathIndex;
     const ui64 StartPathIndex;
+    const ui64 ExpectedSize;
 
     std::queue<std::tuple<IHTTPGateway::TContent, ui64>> Blocks;
 };
@@ -257,6 +260,7 @@ struct TReadSpec {
     NDB::ColumnsWithTypeAndName Columns;
     NDB::FormatSettings Settings;
     TString Format, Compression;
+    ui64 ExpectedSize = 0;
 };
 
 struct TRetryStuff {
@@ -778,9 +782,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
         const auto readSpec = std::make_shared<TReadSpec>();
         readSpec->Columns.resize(structType->GetMembersCount());
         for (ui32 i = 0U; i < structType->GetMembersCount(); ++i) {
-            auto& colsumn = readSpec->Columns[i];
-            colsumn.type = MetaToClickHouse(structType->GetMemberType(i), intervalUnit);
-            colsumn.name = structType->GetMemberName(i);
+            auto& column = readSpec->Columns[i];
+            column.type = MetaToClickHouse(structType->GetMemberType(i), intervalUnit);
+            column.name = structType->GetMemberName(i);
         }
         readSpec->Format = params.GetFormat();
 
@@ -808,8 +812,12 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateS3ReadActor(
                                                   std::move(paths), addPathIndex, startPathIndex, readSpec, computeActorId);
         return {actor, actor};
     } else {
+        ui64 expectedSize = std::numeric_limits<ui64>::max();
+        if (const auto it = settings.find("expectedSize"); settings.cend() != it)
+            expectedSize = FromString<ui64>(it->second);
+
         const auto actor = new TS3ReadActor(inputIndex, std::move(gateway), holderFactory, params.GetUrl(), authToken,
-                                            std::move(paths), addPathIndex, startPathIndex, computeActorId);
+                                            std::move(paths), addPathIndex, startPathIndex, computeActorId, expectedSize);
         return {actor, actor};
     }
 }

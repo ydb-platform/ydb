@@ -51,7 +51,10 @@
         {
             "Name": "TS3SourceSettings",
             "Base": "TS3SourceSettingsBase",
-            "Match": {"Type": "Callable", "Name": "S3SourceSettings"}
+            "Match": {"Type": "Callable", "Name": "S3SourceSettings"},
+            "Children": [
+                {"Index": 2, "Name": "ExpectedSize", "Type": "TCoAtom", "Optional": true}
+            ]
         },
         {
             "Name": "TS3ParseSettings",

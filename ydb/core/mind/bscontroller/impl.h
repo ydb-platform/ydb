@@ -81,7 +81,7 @@ public:
     class TGroupFitter;
     class TSelfHealActor;
 
-    using TVSlotReadyTimestampQ = std::list<std::pair<TInstant, TVSlotInfo*>>;
+    using TVSlotReadyTimestampQ = std::list<std::pair<TMonotonic, TVSlotInfo*>>;
 
     class TVSlotInfo : public TIndirectReferable<TVSlotInfo> {
     public:
@@ -120,28 +120,33 @@ public:
     private:
         TVSlotReadyTimestampQ& VSlotReadyTimestampQ;
         TVSlotReadyTimestampQ::iterator VSlotReadyTimestampIter;
-        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
 
         // VDisk will be considered READY during this period after reporting its READY state
         static constexpr TDuration ReadyStablePeriod = TDuration::Seconds(15);
 
     public:
+        NKikimrBlobStorage::EVDiskStatus Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
         bool IsReady = false;
 
     public:
-        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TInstant now) {
+        void SetStatus(NKikimrBlobStorage::EVDiskStatus status, TMonotonic now) {
             if (status != Status) {
                 Status = status;
                 IsReady = false;
                 if (status == NKikimrBlobStorage::EVDiskStatus::READY) {
-                    const TInstant readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
-                    Y_VERIFY(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
-                    Y_VERIFY(Group);
-                    VSlotReadyTimestampIter = VSlotReadyTimestampQ.emplace(VSlotReadyTimestampQ.end(), readyAfter, this);
+                    PutInVSlotReadyTimestampQ(now);
                 } else {
                     DropFromVSlotReadyTimestampQ();
                 }
             }
+        }
+
+        void PutInVSlotReadyTimestampQ(TMonotonic now) {
+            const TMonotonic readyAfter = now + ReadyStablePeriod; // vdisk will be treated as READY one shortly, but not now
+            Y_VERIFY(VSlotReadyTimestampIter == TVSlotReadyTimestampQ::iterator());
+            Y_VERIFY(Group);
+            Y_VERIFY_DEBUG(VSlotReadyTimestampQ.empty() || VSlotReadyTimestampQ.back().first <= readyAfter);
+            VSlotReadyTimestampIter = VSlotReadyTimestampQ.emplace(VSlotReadyTimestampQ.end(), readyAfter, this);
         }
 
         void DropFromVSlotReadyTimestampQ() {
@@ -155,8 +160,8 @@ public:
             VSlotReadyTimestampIter = {};
         }
 
-        NKikimrBlobStorage::EVDiskStatus GetStatus() const {
-            return Status;
+        bool IsInVSlotReadyTimestampQ() const {
+            return VSlotReadyTimestampIter != TVSlotReadyTimestampQ::iterator();
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2009,7 +2014,7 @@ public:
         Y_VERIFY(VSlotReadyUpdateScheduled);
         VSlotReadyUpdateScheduled = false;
 
-        const TInstant now = TActivationContext::Now();
+        const TMonotonic now = TActivationContext::Monotonic();
         THashSet<TGroupInfo*> groups;
         for (auto it = VSlotReadyTimestampQ.begin(); it != VSlotReadyTimestampQ.end() && it->first <= now;
                 it = VSlotReadyTimestampQ.erase(it)) {

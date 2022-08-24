@@ -479,6 +479,7 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
     }
 
     const TInstant now = TActivationContext::Now();
+    const TMonotonic mono = TActivationContext::Monotonic();
     std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
     for (auto it = PDisks.lower_bound(TPDiskId::MinForNode(nodeId)); it != PDisks.end() && it->first.NodeId == nodeId; ++it) {
         it->second->UpdateOperational(false);
@@ -493,9 +494,9 @@ void TBlobStorageController::OnWardenDisconnected(TNodeId nodeId) {
                 lastSeenReadyQ.emplace_back(it->second->VSlotId, now);
                 NotReadyVSlotIds.insert(it->second->VSlotId);
             }
-            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, now);
+            it->second->SetStatus(NKikimrBlobStorage::EVDiskStatus::ERROR, mono);
             const_cast<TGroupInfo*>(group)->CalculateGroupStatus();
-            sh->VDiskStatusUpdate.emplace_back(it->second->GetVDiskId(), it->second->GetStatus());
+            sh->VDiskStatusUpdate.emplace_back(it->second->GetVDiskId(), it->second->Status);
             ScrubState.UpdateVDiskState(&*it->second);
         }
     }

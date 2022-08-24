@@ -639,7 +639,7 @@ namespace NKikimr::NBsController {
                     slot->PDisk->ShouldBeSettledBySelfHeal(),
                     slot->PDisk->BadInTermsOfSelfHeal(),
                     slot->PDisk->Decommitted(),
-                    slot->GetStatus(),
+                    slot->Status,
                 };
             }
         }
@@ -649,6 +649,7 @@ namespace NKikimr::NBsController {
             const google::protobuf::RepeatedPtrField<NKikimrBlobStorage::TVDiskStatus>& s) {
         THashSet<TGroupInfo*> groups, status;
         const TInstant now = TActivationContext::Now();
+        const TMonotonic mono = TActivationContext::Monotonic();
         std::vector<std::pair<TVSlotId, TInstant>> lastSeenReadyQ;
 
         std::unique_ptr<TEvPrivate::TEvDropDonor> dropDonorEv;
@@ -662,7 +663,7 @@ namespace NKikimr::NBsController {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    slot->SetStatus(m.GetStatus(), now);
+                    slot->SetStatus(m.GetStatus(), mono);
                     if (slot->IsReady != wasReady) {
                         ScrubState.UpdateVDiskState(slot);
                         if (wasReady) {
@@ -671,14 +672,13 @@ namespace NKikimr::NBsController {
                             NotReadyVSlotIds.insert(slot->VSlotId);
                         }
                     }
-                    ScheduleVSlotReadyUpdate();
                     status.insert(const_cast<TGroupInfo*>(group));
                     ev->VDiskStatusUpdate.emplace_back(vdiskId, m.GetStatus());
                     if (!was && slot->IsOperational() && !group->SeenOperational) {
                         groups.insert(const_cast<TGroupInfo*>(group));
                     }
                 }
-                if (slot->GetStatus() == NKikimrBlobStorage::EVDiskStatus::READY) {
+                if (slot->Status == NKikimrBlobStorage::EVDiskStatus::READY) {
                     // we can release donor slots without further notice then the VDisk is completely replicated; we
                     // intentionally use GetStatus() here instead of IsReady() to prevent waiting
                     for (const auto& [donorVSlotId, donorVDiskId] : slot->Donors) {
@@ -722,6 +722,8 @@ namespace NKikimr::NBsController {
         for (TGroupInfo *group : status) {
             group->CalculateGroupStatus();
         }
+
+        ScheduleVSlotReadyUpdate();
     }
 
     void TBlobStorageController::UpdateSelfHealCounters() {

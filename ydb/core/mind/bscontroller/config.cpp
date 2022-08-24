@@ -391,14 +391,18 @@ namespace NKikimr::NBsController {
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
 
-            // remove deleted vslots from VSlotReadyTimestampQ
+            // add updated and remove deleted vslots from VSlotReadyTimestampQ
+            const TMonotonic now = TActivationContext::Monotonic();
             for (auto&& [base, overlay] : state.VSlots.Diff()) {
                 if (!overlay->second || !overlay->second->Group) { // deleted one
-                    base->second->DropFromVSlotReadyTimestampQ();
-                    if (overlay->second) {
-                        overlay->second->ResetVSlotReadyTimestampIter();
-                    }
+                    (overlay->second ? overlay->second : base->second)->DropFromVSlotReadyTimestampQ();
                     NotReadyVSlotIds.erase(overlay->first);
+                } else if (overlay->second->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
+                    overlay->second->DropFromVSlotReadyTimestampQ();
+                } else if (!base || base->second->Status != NKikimrBlobStorage::EVDiskStatus::READY) {
+                    overlay->second->PutInVSlotReadyTimestampQ(now);
+                } else {
+                    Y_VERIFY_DEBUG(overlay->second->IsReady || overlay->second->IsInVSlotReadyTimestampQ());
                 }
             }
 
@@ -406,6 +410,9 @@ namespace NKikimr::NBsController {
 
             state.CheckConsistency();
             state.Commit();
+            ValidateInternalState();
+
+            ScheduleVSlotReadyUpdate();
 
             return true;
         }
@@ -838,7 +845,7 @@ namespace NKikimr::NBsController {
             pb->SetAllocatedSize(vslot.Metrics.GetAllocatedSize());
             pb->MutableVDiskMetrics()->CopyFrom(vslot.Metrics);
             pb->MutableVDiskMetrics()->ClearVDiskId();
-            pb->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.GetStatus()));
+            pb->SetStatus(NKikimrBlobStorage::EVDiskStatus_Name(vslot.Status));
             for (const auto& [vslotId, vdiskId] : vslot.Donors) {
                 auto *item = pb->AddDonors();
                 Serialize(item->MutableVSlotId(), vslotId);

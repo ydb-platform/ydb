@@ -53,6 +53,7 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-parameter
   restricted-boost-phoenix
   restricted-boost-polygon
+  restricted-boost-pool
   restricted-boost-predef
   restricted-boost-preprocessor
   restricted-boost-proto

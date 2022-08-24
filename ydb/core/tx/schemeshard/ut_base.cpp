@@ -3488,6 +3488,18 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
+        // used to sanity check at the end of the test
+        THashSet<ui64> deletedShardIdxs;
+        runtime.SetObserverFunc([&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvHive::EvDeleteTabletReply) {
+                for (const ui64 shardIdx : ev->Get<TEvHive::TEvDeleteTabletReply>()->Record.GetShardLocalIdx()) {
+                    deletedShardIdxs.insert(shardIdx);
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
         // these limits should have no effect on backup tables
         TSchemeLimits limits;
         limits.MaxPaths = 4;
@@ -3644,6 +3656,36 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             IsBackup: false
             DropColumns { Name: "value" }
         )", {NKikimrScheme::StatusInvalidParameter});
+
+        // sanity check
+
+        // drop all tables
+        TVector<ui64> dropTxIds;
+        for (const auto& table : {"Table", "CopyTable", "ConsistentCopyTable"}) {
+            TestDropTable(runtime, dropTxIds.emplace_back(++txId), "/MyRoot", table);
+        }
+        for (const auto& table : {"Table3", "Table4"}) {
+            TestDropTable(runtime, dropTxIds.emplace_back(++txId), "/MyRoot/Dir", table);
+        }
+        // Table2 has already been dropped
+        env.TestWaitNotification(runtime, dropTxIds);
+
+        if (deletedShardIdxs.size() != 6) { // 6 tables with one shard each
+            TDispatchOptions opts;
+            opts.FinalEvents.emplace_back([&deletedShardIdxs](IEventHandle&) {
+                return deletedShardIdxs.size() == 6;
+            });
+            runtime.DispatchEvents(opts);
+        }
+
+        // ok
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32"}
+            Columns { Name: "value" Type: "Utf8"}
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
     }
 
     Y_UNIT_TEST(AlterTableAndConcurrentSplit) { //+

@@ -1638,14 +1638,11 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         }
     }
 
-    void RemoveInternalShard(TShardIdx shardIdx, bool isBackup = false) {
+    void RemoveInternalShard(TShardIdx shardIdx) {
         auto it = InternalShards.find(shardIdx);
         Y_VERIFY_S(it != InternalShards.end(), "shardIdx: " << shardIdx);
         InternalShards.erase(it);
-
-        if (isBackup) {
-            BackupShards.erase(shardIdx);
-        }
+        BackupShards.erase(shardIdx);
     }
 
     const THashSet<TShardIdx>& GetSequenceShards() const {

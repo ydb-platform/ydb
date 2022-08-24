@@ -64,7 +64,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> EnableStrip;
     NCommon::TConfSetting<bool, false> EnableComputeActor;
     NCommon::TConfSetting<TString, false> ComputeActorType;
-    NCommon::TConfSetting<bool, false> EnablePorto; // Will be renamed to _EnablePorto
+    NCommon::TConfSetting<bool, false> _EnablePorto;
     NCommon::TConfSetting<ui64, false> _PortoMemoryLimit;
     NCommon::TConfSetting<bool, false> EnableFullResultWrite;
     NCommon::TConfSetting<bool, false> _OneGraphPerQuery;
@@ -104,7 +104,7 @@ struct TDqSettings {
         SAVE_SETTING(_AllResultsBytesLimit);
         SAVE_SETTING(_RowsLimitPerWrite);
         SAVE_SETTING(EnableComputeActor);
-        SAVE_SETTING(EnablePorto);
+        SAVE_SETTING(_EnablePorto);
         SAVE_SETTING(_PortoMemoryLimit);
         SAVE_SETTING(EnableFullResultWrite);
         SAVE_SETTING(_FallbackOnRuntimeErrors);

@@ -1799,7 +1799,7 @@ private:
         try {
             conf->Dispatch(settings);
         } catch (...) { /* ignore unknown settings */ }
-        portoSettings.Enable = EnablePorto && conf->EnablePorto.Get().GetOrElse(TDqSettings::TDefault::EnablePorto);
+        portoSettings.Enable = EnablePorto && conf->_EnablePorto.Get().GetOrElse(TDqSettings::TDefault::EnablePorto);
         portoSettings.MemoryLimit = conf->_PortoMemoryLimit.Get();
         if (portoSettings.Enable) {
             YQL_CLOG(DEBUG, ProviderDq) << "Porto enabled";

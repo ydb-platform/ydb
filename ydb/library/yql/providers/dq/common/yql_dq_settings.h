@@ -27,6 +27,7 @@ struct TDqSettings {
         static constexpr ui64 ChannelBufferSize = 2000_MB;
         static constexpr ui64 OutputChunkMaxSize = 4_MB;
         static constexpr ui64 ChunkSizeLimit = 128_MB;
+        static constexpr bool EnableDqReplicate = false;
     };
 
     using TPtr = std::shared_ptr<TDqSettings>;
@@ -69,6 +70,7 @@ struct TDqSettings {
     NCommon::TConfSetting<bool, false> _OneGraphPerQuery;
     NCommon::TConfSetting<TString, false> _FallbackOnRuntimeErrors;
     NCommon::TConfSetting<bool, false> _EnablePrecompute;
+    NCommon::TConfSetting<bool, false> EnableDqReplicate;
 
     NCommon::TConfSetting<TString, false> WorkerFilter;
 

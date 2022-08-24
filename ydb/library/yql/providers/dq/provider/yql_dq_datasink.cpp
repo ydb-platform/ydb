@@ -30,7 +30,10 @@ public:
         , LogOptTransformer([state] () { return CreateDqsLogOptTransformer(state->TypeCtx, state->Settings); })
         , PhyOptTransformer([state] () { return CreateDqsPhyOptTransformer(/*TODO*/nullptr, state->Settings); })
         , PhysicalFinalizingTransformer([] () { return CreateDqsFinalizingOptTransformer(); })
-        , TypeAnnotationTransformer([state] () { return CreateDqsDataSinkTypeAnnotationTransformer(state->TypeCtx); })
+        , TypeAnnotationTransformer([state] () {
+            return CreateDqsDataSinkTypeAnnotationTransformer(
+                state->TypeCtx, state->Settings->EnableDqReplicate.Get().GetOrElse(TDqSettings::TDefault::EnableDqReplicate));
+        })
         , RecaptureTransformer([state] () { return CreateDqsRecaptureTransformer(state); })
     { }
 

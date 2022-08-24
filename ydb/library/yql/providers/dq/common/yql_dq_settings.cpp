@@ -47,6 +47,7 @@ TDqConfiguration::TDqConfiguration() {
     REGISTER_SETTING(*this, _FallbackOnRuntimeErrors);
     REGISTER_SETTING(*this, WorkerFilter);
     REGISTER_SETTING(*this, _EnablePrecompute);
+    REGISTER_SETTING(*this, EnableDqReplicate);
 }
 
 } // namespace NYql

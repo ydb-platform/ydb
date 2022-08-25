@@ -776,7 +776,8 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 }
 
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
-        const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error)
+        const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
+        Ydb::StatusIds::StatusCode& status, TString& error)
 {
     auto& tableDesc = *out.MutableCreateTable();
 
@@ -785,6 +786,10 @@ bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
     }
 
     tableDesc.MutableKeyColumnNames()->CopyFrom(in.primary_key());
+
+    if (!profiles.ApplyTableProfile(in.profile(), tableDesc, status, error)) {
+        return false;
+    }
 
     TColumnFamilyManager families(tableDesc.MutablePartitionConfig());
     if (in.has_storage_settings() && !families.ApplyStorageSettings(in.storage_settings(), &status, &error)) {

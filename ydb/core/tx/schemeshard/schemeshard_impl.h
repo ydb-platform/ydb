@@ -44,6 +44,7 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/util/pb.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 
 #include <ydb/core/blockstore/core/blockstore.h>
 #include <ydb/core/filestore/core/filestore.h>
@@ -135,6 +136,10 @@ public:
     static const TSchemeLimits DefaultLimits;
 
     TIntrusivePtr<TChannelProfiles> ChannelProfiles;
+
+    TTableProfiles TableProfiles;
+    bool TableProfilesLoaded = false;
+    THashSet<std::pair<ui64, ui32>> TableProfilesWaiters;
 
     TControlWrapper AllowConditionalEraseOperations;
     TControlWrapper AllowServerlessStorageBilling;
@@ -404,6 +409,8 @@ public:
         TString& errStr) const;
 
     void StartStopCompactionQueues();
+
+    void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
 
     bool ApplyStorageConfig(const TStoragePools& storagePools,
                             const NKikimrSchemeOp::TStorageConfig& storageConfig,
@@ -944,6 +951,7 @@ public:
 
     void Handle(TEvTxProcessing::TEvPlanStep::TPtr &ev, const TActorContext &ctx);
 
+    void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev, const TActorContext& ctx);
 
@@ -1071,7 +1079,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxForgetImport(TEvImport::TEvForgetImportRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxListImports(TEvImport::TEvListImportsRequest::TPtr& ev);
 
-    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id);
+    NTabletFlatExecutor::ITransaction* CreateTxProgressImport(ui64 id, const TMaybe<ui32>& itemIdx = Nothing());
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvPrivate::TEvImportSchemeReady::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxProgressImport(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);

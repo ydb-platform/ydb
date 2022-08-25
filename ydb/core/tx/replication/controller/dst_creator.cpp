@@ -57,9 +57,10 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
         Ydb::Table::CreateTableRequest scheme;
         result.GetTableDescription().SerializeTo(scheme);
 
+        TTableProfiles profiles; // TODO: load
         Ydb::StatusIds::StatusCode status;
         TString error;
-        if (!FillTableDescription(TxBody, scheme, status, error)) {
+        if (!FillTableDescription(TxBody, scheme, profiles, status, error)) {
             return Error(NKikimrScheme::StatusSchemeError, error);
         }
 

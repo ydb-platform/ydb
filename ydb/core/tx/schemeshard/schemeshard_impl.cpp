@@ -3905,6 +3905,7 @@ void TSchemeShard::StateInit(STFUNC_SIG) {
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvPoisonPill, Handle);
+        HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         //console configs
         HFuncTraced(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
@@ -3920,6 +3921,7 @@ void TSchemeShard::StateConfigure(STFUNC_SIG) {
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvPoisonPill, Handle);
+        HFuncTraced(TEvents::TEvUndelivered, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitTenantSchemeShard, Handle);
@@ -3960,6 +3962,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
     TRACE_EVENT(NKikimrServices::FLAT_TX_SCHEMESHARD);
     switch (ev->GetTypeRewrite()) {
         HFuncTraced(TEvents::TEvPoisonPill, Handle);
+        HFuncTraced(TEvents::TEvUndelivered, Handle);
         HFuncTraced(TEvSchemeShard::TEvInitRootShard, Handle);
 
         HFuncTraced(TEvSchemeShard::TEvMeasureSelfResponseTime, SelfPinger->Handle);
@@ -6098,7 +6101,20 @@ void TSchemeShard::SubscribeConsoleConfigs(const TActorContext &ctx) {
             (ui32)NKikimrConsole::TConfigItem::FeatureFlagsItem,
             (ui32)NKikimrConsole::TConfigItem::CompactionConfigItem,
             (ui32)NKikimrConsole::TConfigItem::SchemeShardConfigItem,
-        }));
+            (ui32)NKikimrConsole::TConfigItem::TableProfilesConfigItem,
+        }),
+        IEventHandle::FlagTrackDelivery
+    );
+}
+
+void TSchemeShard::Handle(TEvents::TEvUndelivered::TPtr&, const TActorContext& ctx) {
+    LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Cannot subscribe to console configs");
+    TableProfilesLoaded = true;
+
+    auto waiters = std::move(TableProfilesWaiters);
+    for (const auto& [importId, itemIdx] : waiters) {
+        Execute(CreateTxProgressImport(importId, itemIdx), ctx);
+    }
 }
 
 void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfig, const TActorContext& ctx) {
@@ -6115,6 +6131,16 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         const auto& schemeShardConfig = appConfig.GetSchemeShardConfig();
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
+    }
+
+    if (appConfig.HasTableProfilesConfig()) {
+        TableProfiles.Load(appConfig.GetTableProfilesConfig());
+        TableProfilesLoaded = true;
+
+        auto waiters = std::move(TableProfilesWaiters);
+        for (const auto& [importId, itemIdx] : waiters) {
+            Execute(CreateTxProgressImport(importId, itemIdx), ctx);
+        }
     }
 
     if (IsShemeShardConfigured()) {

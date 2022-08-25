@@ -1,5 +1,7 @@
 #pragma once
 
+#include "table_profiles.h"
+
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
@@ -84,6 +86,7 @@ void FillReadReplicasSettings(Ydb::Table::CreateTableRequest& out,
 
 // in
 bool FillTableDescription(NKikimrSchemeOp::TModifyScheme& out,
-    const Ydb::Table::CreateTableRequest& in, Ydb::StatusIds::StatusCode& status, TString& error);
+    const Ydb::Table::CreateTableRequest& in, const TTableProfiles& profiles,
+    Ydb::StatusIds::StatusCode& status, TString& error);
 
 } // namespace NKikimr

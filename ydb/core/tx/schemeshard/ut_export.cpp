@@ -294,7 +294,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
             }
         )"};
 
-        const TString request = Sprintf(R"(
+        Run(runtime, env, tables, Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -303,9 +303,7 @@ Y_UNIT_TEST_SUITE(TExportToS3Tests) {
                 destination_prefix: ""
               }
             }
-        )", port);
-
-        Run(runtime, env, tables, request);
+        )", port));
 
         UNIT_ASSERT_NO_DIFF(scheme, R"(columns {
   name: "key"

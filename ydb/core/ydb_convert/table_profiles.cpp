@@ -1,14 +1,11 @@
 #include "table_profiles.h"
+#include "table_description.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/ydb_convert/table_description.h>
-#include <ydb/core/ydb_convert/ydb_convert.h>
 
 #include <util/string/printf.h>
 
 namespace NKikimr {
-namespace NGRpcService {
 
 TTableProfiles::TTableProfiles()
 {
@@ -459,5 +456,4 @@ bool TTableProfiles::ApplyCompactionPolicy(const TString &name,
 }
 
 
-} // namespace NGRpcService
 } // namespace NKikimr

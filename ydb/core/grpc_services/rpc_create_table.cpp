@@ -3,7 +3,6 @@
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
-#include "table_profiles.h"
 #include "table_settings.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -11,6 +10,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 
 namespace NKikimr {
 namespace NGRpcService {

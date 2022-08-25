@@ -4,11 +4,11 @@
 #include "rpc_calls.h"
 #include "rpc_scheme_base.h"
 #include "rpc_common.h"
-#include "table_profiles.h"
 #include "service_table.h"
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/protos/console_config.pb.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 
 namespace NKikimr {
 namespace NGRpcService {

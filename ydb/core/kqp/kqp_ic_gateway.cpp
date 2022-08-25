@@ -14,12 +14,13 @@
 #include <ydb/core/kqp/executer/kqp_executer.h>
 #include <ydb/core/kqp/rm/kqp_snapshot_manager.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
+#include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
-#include <ydb/core/grpc_services/table_profiles.h>
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/ydb_convert/column_families.h>
+#include <ydb/core/ydb_convert/table_profiles.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/lib/base/msgbus_status.h>
@@ -1146,7 +1147,7 @@ public:
                         return;
                     }
 
-                    NGRpcService::TTableProfiles profiles;
+                    TTableProfiles profiles;
                     profiles.Load(configResult.Config->GetTableProfilesConfig());
 
                     auto ev = MakeHolder<TRequest>();
@@ -2630,7 +2631,7 @@ private:
     }
 
     static bool FillCreateTableDesc(NYql::TKikimrTableMetadataPtr metadata,
-        NKikimrSchemeOp::TTableDescription& tableDesc, const NGRpcService::TTableProfiles& profiles,
+        NKikimrSchemeOp::TTableDescription& tableDesc, const TTableProfiles& profiles,
         Ydb::StatusIds::StatusCode& code, TString& error, TList<TString>& warnings)
     {
         Ydb::Table::CreateTableRequest createTableProto;

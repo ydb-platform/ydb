@@ -31,5 +31,6 @@ target_sources(ydb-core-ydb_convert PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/compression.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_settings.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_description.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/table_profiles.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/ydb_convert/ydb_convert.cpp
 )

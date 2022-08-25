@@ -254,6 +254,7 @@ namespace NKikimr {
             void ExecuteStep(const NKikimrBlobStorage::TMigrateToSerial& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TAllocateVirtualGroup& cmd, TStatus& status);
             void ExecuteStep(const NKikimrBlobStorage::TDecommitGroups& cmd, TStatus& status);
+            void ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& status);
         };
 
     } // NBsController

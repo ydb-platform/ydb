@@ -557,4 +557,27 @@ namespace NKikimr::NBsController {
         DestroyVSlot(vslotId);
     }
 
+
+    void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TWipeVDisk& cmd, TStatus& /*status*/) {
+        // first, find matching vslot
+        const TVSlotId& vslotId = cmd.GetVSlotId();
+        TVSlotInfo *vslot = VSlots.FindForUpdate(vslotId);
+        if (!vslot) {
+            throw TExVSlotNotFound(vslotId);
+        }
+
+        // second, validate vdisk id
+        const TVDiskID& vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());
+        if (vslot->GetVDiskId() != vdiskId) {
+            throw TExVDiskIdIncorrect(vdiskId, vslotId);
+        }
+
+        TGroupInfo *group = Groups.FindForUpdate(vslot->GroupId);
+        vslot->Mood = TMood::Wipe;
+        vslot->Status = NKikimrBlobStorage::EVDiskStatus::INIT_PENDING;
+        vslot->IsReady = false;
+        group->MoodChanged = true;
+        group->CalculateGroupStatus();
+    }
+
 } // NKikimr::NBsController

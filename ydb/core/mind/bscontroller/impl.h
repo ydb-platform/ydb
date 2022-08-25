@@ -516,6 +516,7 @@ public:
         TBoxStoragePoolId StoragePoolId;
         mutable TStorageStatusFlags StatusFlags;
         bool ContentChanged = false;
+        bool MoodChanged = false;
 
         TActorId VirtualGroupSetupMachineId;
 
@@ -2141,4 +2142,3 @@ public:
 
 } //NBsController
 } // NKikimr
-

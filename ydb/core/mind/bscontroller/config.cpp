@@ -148,6 +148,10 @@ namespace NKikimr::NBsController {
                         }
                         break;
 
+                    case TMood::Wipe:
+                        item.SetDoWipe(true);
+                        break;
+
                     default:
                         Y_FAIL();
                 }
@@ -176,9 +180,9 @@ namespace NKikimr::NBsController {
                 if (!prev.IsBeingDeleted() && cur.IsBeingDeleted()) {
                     // the slot has started deletion during this update
                     AddVSlotToProtobuf(vslotId, prev, TMood::Delete);
-                } else if (prev.Mood != TMood::Donor && cur.Mood == TMood::Donor) {
-                    // the slot has became a donor
-                    AddVSlotToProtobuf(vslotId, cur, TMood::Donor);
+                } else if (prev.Mood != cur.Mood) {
+                    // the slot mood has changed
+                    AddVSlotToProtobuf(vslotId, cur, static_cast<TMood::EValue>(cur.Mood));
                 } else if (prev.GroupGeneration != cur.GroupGeneration) {
                     // the slot generation has changed
                     AddVSlotToProtobuf(vslotId, cur, TMood::Normal);
@@ -287,12 +291,16 @@ namespace NKikimr::NBsController {
             // check that group modification would not degrade failure model
             if (!suppressFailModelChecking) {
                 for (auto&& [base, overlay] : state.Groups.Diff()) {
-                    if (overlay->second && base && base->second->Generation != overlay->second->Generation) {
+                    if (!overlay->second || !base) {
+                        continue;
+                    }
+                    auto& group = overlay->second;
+                    if (base->second->Generation != group->Generation || group->MoodChanged) {
                         // process only groups with changed content; create topology for group
-                        auto& topology = *overlay->second->Topology;
+                        auto& topology = *group->Topology;
                         // fill in vector of failed disks (that are not fully operational)
                         TBlobStorageGroupInfo::TGroupVDisks failed(&topology);
-                        for (const TVSlotInfo *slot : overlay->second->VDisksInGroup) {
+                        for (const TVSlotInfo *slot : group->VDisksInGroup) {
                             if (!slot->IsReady) {
                                 failed |= {&topology, slot->GetShortVDiskId()};
                             }
@@ -669,6 +677,7 @@ namespace NKikimr::NBsController {
             for (const auto& slot : VDisksInGroup) {
                 slot.Mutable().Group = this;
             }
+            MoodChanged = false;
         }
 
         void TBlobStorageController::Serialize(NKikimrBlobStorage::TDefineHostConfig *pb, const THostConfigId &id,

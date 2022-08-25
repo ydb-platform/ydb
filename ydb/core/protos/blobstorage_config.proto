@@ -400,6 +400,11 @@ message TDropDonorDisk {
     NKikimrBlobStorage.TVDiskID VDiskId = 2;
 }
 
+message TWipeVDisk {
+    NKikimrBlobStorage.TVSlotId VSlotId = 1;
+    NKikimrBlobStorage.TVDiskID VDiskId = 2;
+}
+
 message TSetScrubPeriodicity {
     uint32 ScrubPeriodicity = 1; // in seconds; 0 = disable
 }
@@ -506,6 +511,7 @@ message TConfigRequest {
             TUpdateSettings UpdateSettings = 38;
             TAllocateVirtualGroup AllocateVirtualGroup = 39;
             TDecommitGroups DecommitGroups = 40;
+            TWipeVDisk WipeVDisk = 41;
 
             // commands intended for internal use
             TReassignGroupDisk ReassignGroupDisk = 19;
@@ -693,6 +699,7 @@ message TConfigResponse {
         repeated TMoveCommand MoveCommand = 10;
         repeated TPDiskStat PDiskStat = 11;
         repeated TReassignedItem ReassignedItem = 14;
+        repeated TWipeVDisk WipeVDisk = 17;
         TDeclareIntent Intent = 15;
         bool Already = 16;
     }

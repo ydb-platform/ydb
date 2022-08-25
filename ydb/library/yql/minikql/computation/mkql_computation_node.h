@@ -61,10 +61,23 @@ struct TComputationOptsFull: public TComputationOpts {
     const NUdf::ISecureParamsProvider* SecureParamsProvider;
 };
 
+struct TWideFieldsInitInfo {
+    ui32 MutablesIndex = 0;
+    ui32 WideFieldsIndex = 0;
+    ui32 Count = 0;
+};
+
 struct TComputationMutables {
     ui32 CurValueIndex = 0U;
     std::vector<ui32> SerializableValues; // Indices of values that need to be saved in IComputationGraph::SaveGraphState() and restored in IComputationGraph::LoadGraphState().
     ui32 CurWideFieldsIndex = 0U;
+    std::vector<TWideFieldsInitInfo> WideFieldInitialize;
+
+    void DeferWideFieldsInit(ui32 count) {
+        WideFieldInitialize.push_back({CurValueIndex, CurWideFieldsIndex, count});
+        CurValueIndex += count;
+        CurWideFieldsIndex += count;
+    }
 
     ui32 IncrementWideFieldsIndex(ui32 addend) {
         auto cur = CurWideFieldsIndex;

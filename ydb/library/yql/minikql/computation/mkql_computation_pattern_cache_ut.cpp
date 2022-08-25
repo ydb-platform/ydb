@@ -382,12 +382,60 @@ TRuntimeNode CreateSqueezeToSortedDict(TProgramBuilder& pb, size_t vecSize, TCal
     );
 }
 
+TRuntimeNode CreateMapJoin(TProgramBuilder& pb, size_t vecSize, TCallable *list = nullptr) {
+    TTimer t(TString(__func__) + ": ");
+    auto flow = CreateFlow(pb, vecSize, list);
+
+    const auto tupleType = pb.NewTupleType({
+        pb.NewDataType(NUdf::TDataType<ui32>::Id),
+        pb.NewDataType(NUdf::TDataType<ui64>::Id)
+    });
+
+    const auto list1 = pb.Map(flow, [&] (TRuntimeNode item) {
+        return pb.NewTuple({pb.Mod(item, pb.NewDataLiteral<ui64>(1000)), pb.NewDataLiteral<ui32>(1)});
+    });
+
+    const auto list2 = pb.NewList(tupleType, {
+        pb.NewTuple({pb.NewDataLiteral<ui32>(1), pb.NewDataLiteral<ui64>(3 * 1000)}),
+        pb.NewTuple({pb.NewDataLiteral<ui32>(2), pb.NewDataLiteral<ui64>(4 * 1000)}),
+        pb.NewTuple({pb.NewDataLiteral<ui32>(3), pb.NewDataLiteral<ui64>(5 * 1000)}),
+    });
+
+    const auto dict = pb.ToSortedDict(list2, false,
+        [&](TRuntimeNode item) {
+            return pb.Nth(item, 0);
+        },
+        [&](TRuntimeNode item) {
+            return pb.NewTuple({pb.Nth(item, 1U)});
+    });
+
+    const auto resultType = pb.NewFlowType(pb.NewTupleType({
+        pb.NewDataType(NUdf::TDataType<char*>::Id),
+        pb.NewDataType(NUdf::TDataType<char*>::Id),
+    }));
+
+    return pb.Map(
+            pb.NarrowMap(pb.MapJoinCore(
+                pb.ExpandMap(list1, [&] (TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0), pb.Nth(item, 1)}; }),
+                dict,
+                EJoinKind::Inner,
+                {0U},
+                {1U, 0U},
+                {0U, 1U},
+                resultType
+            ),
+            [&](TRuntimeNode::TList items) { return pb.NewTuple(items); }
+        ),
+        [&](TRuntimeNode item) { return pb.Nth(item, 1); }
+    );
+}
+
 Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
     template<class T>
     void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'000) {
         TTimer t("total: ");
         const ui32 cacheSize = 10;
-        const ui32 inFlight = 3;
+        const ui32 inFlight = 7;
         TComputationPatternLRUCache cache(cacheSize);
 
         auto functionRegistry = CreateFunctionRegistry(CreateBuiltinRegistry())->Clone();
@@ -508,6 +556,10 @@ Y_UNIT_TEST_SUITE(ComputationGraphDataRace) {
 
     Y_UNIT_TEST_QUAD(SqueezeToSortedDict, WithPayload, UseLLVM) {
         ParallelProgTest(CreateSqueezeToSortedDict<WithPayload>, UseLLVM, 125014500, 1000);
+    }
+
+    Y_UNIT_TEST_TWIN(MapJoin, UseLLVM) {
+        ParallelProgTest(CreateMapJoin, UseLLVM, 120000, 10'000);
     }
 }
 

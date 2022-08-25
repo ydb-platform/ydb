@@ -17,9 +17,9 @@ template<bool IsTuple>
 class TWideMapJoinBase {
 protected:
     TWideMapJoinBase(TComputationMutables& mutables, std::vector<TFunctionDescriptor>&& leftKeyConverters,
-        TDictType* dictType, std::vector<EValueRepresentation>&& outputRepresentations, std::vector<ui32>&& leftKeyColumns,
-        std::vector<ui32>&& leftRenames, std::vector<ui32>&& rightRenames,
-        IComputationWideFlowNode* flow, IComputationNode* dict, ui32 inputWidth)
+            TDictType* dictType, std::vector<EValueRepresentation>&& outputRepresentations, std::vector<ui32>&& leftKeyColumns,
+            std::vector<ui32>&& leftRenames, std::vector<ui32>&& rightRenames,
+            IComputationWideFlowNode* flow, IComputationNode* dict, ui32 inputWidth)
         : LeftKeyConverters(std::move(leftKeyConverters))
         , DictType(dictType)
         , OutputRepresentations(std::move(outputRepresentations))
@@ -30,9 +30,12 @@ protected:
         , Flow(flow)
         , Dict(dict)
         , KeyTuple(mutables)
-        , Inputs(UsedInputs.size())
-        , Fields(MakeFields(inputWidth))
-    {}
+        , InputsIndex(mutables.CurValueIndex)
+        , WideFieldsIndex(mutables.CurWideFieldsIndex)
+    {
+        mutables.DeferWideFieldsInit(UsedInputs.size());
+    }
+
 #ifndef MKQL_DISABLE_CODEGEN
     Value* GenMakeKeysTuple(Value* keysPtr, const ICodegeneratorInlineWideNode::TGettersList& getters, const TCodegenContext& ctx, BasicBlock*& block) const {
         auto& context = ctx.Codegen->GetContext();
@@ -165,14 +168,14 @@ protected:
         return {{placeholder, stub}};
     }
 #endif
-    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx) const {
+    NUdf::TUnboxedValue MakeKeysTuple(TComputationContext& ctx, NUdf::TUnboxedValue** fields) const {
         if constexpr (IsTuple) {
             NUdf::TUnboxedValue* items = nullptr;
             const auto keys = KeyTuple.NewArray(ctx, LeftKeyColumns.size(), items);
             if (!LeftKeyColumns.empty()) {
                 Y_VERIFY(items);
                 for (auto i = 0U; i < LeftKeyColumns.size(); ++i) {
-                    const auto value = Fields[LeftKeyColumns[i]];
+                    const auto value = fields[LeftKeyColumns[i]];
                     const auto converter = LeftKeyConverters[i].Function;
                     if (!(*items++ = converter ? converter(value) : *value))
                         return NUdf::TUnboxedValuePod();
@@ -181,18 +184,18 @@ protected:
 
             return keys;
         } else {
-            const auto value = Fields[LeftKeyColumns.front()];
+            const auto value = fields[LeftKeyColumns.front()];
             const auto converter = LeftKeyConverters.front().Function;
             return converter ? converter(value) : *value;
         }
     }
 
-    void FillLeftStruct(NUdf::TUnboxedValue*const* output) const {
+    void FillLeftStruct(NUdf::TUnboxedValue*const* output, NUdf::TUnboxedValue** fields) const {
         for (auto i = 0U; i < LeftRenames.size(); ++i) {
             const auto prevIndex = LeftRenames[i];
             const auto newIndex = LeftRenames[++i];
             if (const auto out = output[newIndex])
-                *out = *Fields[prevIndex];
+                *out = *fields[prevIndex];
         }
     }
 
@@ -229,14 +232,6 @@ protected:
         return unique;
     }
 
-    std::vector<NUdf::TUnboxedValue*> MakeFields(ui32 width) const {
-        std::vector<NUdf::TUnboxedValue*> fields(width, nullptr);
-        auto it = Inputs.begin();
-        for (const auto idx : UsedInputs)
-            fields[idx] = &*it++;
-        return fields;
-    }
-
     const std::vector<TFunctionDescriptor> LeftKeyConverters;
     TDictType* const DictType;
     const std::vector<EValueRepresentation> OutputRepresentations;
@@ -249,8 +244,8 @@ protected:
 
     const TContainerCacheOnContext KeyTuple;
 
-    mutable std::vector<NUdf::TUnboxedValue> Inputs;
-    const std::vector<NUdf::TUnboxedValue*> Fields;
+    ui32 InputsIndex;
+    ui32 WideFieldsIndex;
 };
 
 template<bool WithoutRight, bool RightRequired, bool IsTuple>
@@ -267,12 +262,14 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& lookup, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        auto** fields = ctx.WideFields.data() + this->WideFieldsIndex;
+
         const auto dict = this->Dict->GetValue(ctx);
         do {
-            if (const auto res = this->Flow->FetchValues(ctx, this->Fields.data()); EFetchResult::One != res)
+            if (const auto res = this->Flow->FetchValues(ctx, fields); EFetchResult::One != res)
                 return res;
 
-            const auto keys = this->MakeKeysTuple(ctx);
+            const auto keys = this->MakeKeysTuple(ctx, fields);
 
             if constexpr (WithoutRight) {
                 if ((keys && dict.Contains(keys)) == RightRequired)
@@ -281,14 +278,14 @@ public:
                     continue;
             } else if (keys) {
                 if (lookup = dict.Lookup(keys)) {
-                    this->FillLeftStruct(output);
+                    this->FillLeftStruct(output, fields);
                     this->FillRightStruct(lookup, output);
                     return EFetchResult::One;
                 }
             }
         } while (RightRequired || WithoutRight);
 
-        this->FillLeftStruct(output);
+        this->FillLeftStruct(output, fields);
         this->NullRightStruct(output);
         return EFetchResult::One;
     }
@@ -426,10 +423,12 @@ public:
     {}
 
     EFetchResult DoCalculate(NUdf::TUnboxedValue& iter, NUdf::TUnboxedValue& item, TComputationContext& ctx, NUdf::TUnboxedValue*const* output) const {
+        auto** fields = ctx.WideFields.data() + this->WideFieldsIndex;
+
         for (auto iterator = std::move(iter);;) {
             if (iterator.HasValue()) {
                 if (iterator.Next(item)) {
-                    this->FillLeftStruct(output);
+                    this->FillLeftStruct(output, fields);
                     this->FillRightStruct(item, output);
                     iter = std::move(iterator);
                     return EFetchResult::One;
@@ -437,10 +436,10 @@ public:
             }
 
             for (const auto& dict = this->Dict->GetValue(ctx);;) {
-                if (const auto res = this->Flow->FetchValues(ctx, this->Fields.data()); EFetchResult::One != res)
+                if (const auto res = this->Flow->FetchValues(ctx, fields); EFetchResult::One != res)
                     return res;
 
-                if (const auto keys = this->MakeKeysTuple(ctx)) {
+                if (const auto keys = this->MakeKeysTuple(ctx, fields)) {
                     if (const auto lookup = dict.Lookup(keys)) {
                         iterator = lookup.GetListIterator();
                         break;
@@ -448,7 +447,7 @@ public:
                 }
 
                 if constexpr (!RightRequired) {
-                    this->FillLeftStruct(output);
+                    this->FillLeftStruct(output, fields);
                     this->NullRightStruct(output);
                     return EFetchResult::One;
                 }

@@ -363,7 +363,8 @@ Variant {
         TestConvertTypeToYdb(input, expected);
         TestConvertTypeFromYdb(expected, input);
     }
-}
+
+} // ConvertMiniKQLTypeToYdbTypeTest
 
 Y_UNIT_TEST_SUITE(ConvertMiniKQLValueToYdbValueTest) {
     Y_UNIT_TEST(Void) {
@@ -703,7 +704,7 @@ variant_index: 1
         TestConvertValueToYdb(inputType, inputValue, expected);
     }
 
-}
+} // ConvertMiniKQLValueToYdbValueTest
 
 Y_UNIT_TEST_SUITE(ConvertYdbValueToMiniKQLValueTest) {
     Y_UNIT_TEST(Void) {
@@ -1016,7 +1017,6 @@ variant_index: 3435973836
         UNIT_ASSERT_EXCEPTION(TestConvertValueFromYdb(inputType, inputValue, expected), yexception);
     }
 
-
-}
+} // ConvertYdbValueToMiniKQLValueTest
 
 } // namespace NKikimr

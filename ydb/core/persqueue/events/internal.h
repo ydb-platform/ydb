@@ -85,7 +85,6 @@ struct TEvPQ {
         EvBlobResponse,
         EvInitComplete,
         EvChangeOwner,
-        EvChangeConfig,
         EvChangePartitionConfig,
         EvChangeCacheConfig,
         EvPartitionCounters,
@@ -441,16 +440,6 @@ struct TEvPQ {
         bool LastRequest;
     };
 
-
-    struct TEvChangeConfig : public TEventLocal<TEvChangeConfig, EvChangeConfig> {
-        TEvChangeConfig(const TString& topicName, const NKikimrPQ::TPQTabletConfig& config)
-        : TopicName(topicName)
-        , Config(config)
-        {}
-
-        TString TopicName;
-        NKikimrPQ::TPQTabletConfig Config;
-    };
     struct TEvChangePartitionConfig : public TEventLocal<TEvChangePartitionConfig, EvChangePartitionConfig> {
         TEvChangePartitionConfig(const NPersQueue::TTopicConverterPtr& topicConverter, const NKikimrPQ::TPQTabletConfig& config)
             : TopicConverter(topicConverter)

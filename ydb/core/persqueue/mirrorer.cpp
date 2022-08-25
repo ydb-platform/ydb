@@ -307,7 +307,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
     DoProcessNextReaderEvent(ctx, true);  // LOGBROKER-7430
 }
 
-void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangeConfig::TPtr& ev, const TActorContext& ctx) {
+void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, const TActorContext& ctx) {
     bool equalConfigs = google::protobuf::util::MessageDifferencer::Equals(
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()

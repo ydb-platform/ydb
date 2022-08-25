@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TTablesWithReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            AsyncRmDir(runtime, ++t.TxId, "/MyRoot", "Victim");
+            t.TestEnv->ReliablePropose(runtime, RmDirRequest(++t.TxId, "/MyRoot", "Victim"));
             AsyncRmDir(runtime, ++t.TxId, "/MyRoot", "Victim");
 
             t.TestEnv->TestWaitNotification(runtime, {t.TxId-1, t.TxId});

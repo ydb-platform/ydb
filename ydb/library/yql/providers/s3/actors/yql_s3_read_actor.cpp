@@ -361,16 +361,24 @@ private:
         if (InputFinished)
             return;
 
-        const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadError, TEvPrivate::TEvReadFinished>();
-        InputFinished = true;
-        switch (const auto etype = ev->GetTypeRewrite()) {
-            case TEvPrivate::TEvReadFinished::EventType:
-                break;
-            case TEvPrivate::TEvReadError::EventType:
-                Issues = std::move(ev->Get<TEvPrivate::TEvReadError>()->Error);
-                break;
-            default:
-                break;
+        while (true) {
+            const auto ev = WaitForSpecificEvent<TEvPrivate::TEvReadError, TEvPrivate::TEvDataPart, TEvPrivate::TEvReadFinished>();
+            const auto etype = ev->GetTypeRewrite();
+            if (etype == TEvPrivate::TEvDataPart::EventType) {
+                // just ignore all data parts event to drain event queue
+                continue;
+            }
+            switch (etype) {
+                case TEvPrivate::TEvReadFinished::EventType:
+                    break;
+                case TEvPrivate::TEvReadError::EventType:
+                    Issues = std::move(ev->Get<TEvPrivate::TEvReadError>()->Error);
+                    break;
+                default:
+                    break;
+            }
+            InputFinished = true;
+            return;
         }
     }
 

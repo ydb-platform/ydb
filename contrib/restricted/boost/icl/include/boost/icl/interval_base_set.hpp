@@ -437,7 +437,7 @@ inline void interval_base_set<SubType,DomainT,Compare,Interval,Alloc>
     if(!icl::is_empty(lead_gap))
         //           [lead_gap--- . . .
         // [prior_)           [-- it_ ...
-        this->_set.insert(it_, lead_gap);
+        this->_set.insert(cyclic_prior(*this, it_), lead_gap);
 
     // . . . --------- . . . addend interval
     //      [-- it_ --)      has a common part with the first overval

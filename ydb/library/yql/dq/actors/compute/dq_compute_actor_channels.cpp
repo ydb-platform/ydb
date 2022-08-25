@@ -9,6 +9,8 @@
     LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define LOG_I(s) \
     LOG_INFO_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
+#define LOG_N(s) \
+    LOG_NOTICE_S(*NActors::TlsActivationContext,  NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define LOG_E(s) \
     LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::KQP_COMPUTE, "TxId: " << TxId << ", task: " << TaskId << ". " << s)
 #define LOG_C(s) \
@@ -316,12 +318,6 @@ void TDqComputeActorChannels::HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
     auto sourceType = ev->Get()->SourceType;
     auto reason = ev->Get()->Reason;
 
-    if (!RetryOnUndelivery) {
-        auto message = TStringBuilder() << "Handle undelivered event: " << sourceType << ", cookie: " << ev->Cookie
-            << ", reason: " << reason;
-        return RuntimeError(message);
-    }
-
     if (sourceType == TEvDqCompute::TEvChannelData::EventType) {
         return HandleUndeliveredEvChannelData(ev->Cookie, reason);
     }
@@ -330,8 +326,17 @@ void TDqComputeActorChannels::HandleWork(TEvents::TEvUndelivered::TPtr& ev) {
         return HandleUndeliveredEvChannelDataAck(ev->Cookie, reason);
     }
 
-    LOG_E("Handle undelivered event: " << sourceType << ", cookie: " << ev->Cookie << ", reason: " << reason
-        << ", ignore it");
+    if (sourceType == TEvDq::TEvAbortExecution::EventType) {
+        LOG_N("Ignoring undelivered event: " << sourceType << ", cookie: " << ev->Cookie << ", reason: " << reason);
+        return;
+    }
+
+    auto message = TStringBuilder() << "Undelivered event: " << sourceType
+        << ", cookie: " << ev->Cookie
+        << ", reason: " << reason;
+
+    LOG_E(message);
+    return InternalError(message);
 }
 
 void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -386,31 +391,35 @@ void TDqComputeActorChannels::HandleWork(TEvInterconnect::TEvNodeDisconnected::T
 }
 
 void TDqComputeActorChannels::HandleUndeliveredEvChannelData(ui64 channelId, TEvents::TEvUndelivered::EReason reason) {
-    LOG_E("Handle undelivered event: TEvChannelData, channelId: " << channelId << ", reason: " << reason);
-
     TOutputChannelState& outputChannel = OutCh(channelId);
 
     if (outputChannel.Finished && outputChannel.EarlyFinish && !SupportCheckpoints) {
-        LOG_E("Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
+        LOG_I("Ignore undelivered TEvChannelData event due to early finish, channelId: " << channelId);
         outputChannel.InFlight.clear();
         Cbs->ResumeExecution();
         return;
     }
 
+    LOG_N("Handle undelivered event: TEvChannelData, channelId: " << channelId << ", reason: " << reason);
+
     if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-        return RuntimeError("unknown output channel actor");
+        return RuntimeError("Output channel actor is unavailable");
     }
 
     if (outputChannel.InFlight.empty()) {
         return;
     }
 
+    if (!RetryOnUndelivery) {
+        auto message = TStringBuilder() << "Failed to deliver output channel data, channelId: "
+            << channelId << ", reason: " << reason;
+        return RuntimeError(message);
+    }
+
     ScheduleRetryForChannel<TOutputChannelState, TEvDqCompute::TEvRetryChannelData>(outputChannel, Now());
 }
 
 void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, TEvents::TEvUndelivered::EReason reason) {
-    LOG_E("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason);
-
     TInputChannelState& inputChannel = InCh(channelId);
     inputChannel.PollRequest.reset();
 
@@ -422,12 +431,20 @@ void TDqComputeActorChannels::HandleUndeliveredEvChannelDataAck(ui64 channelId, 
         return;
     }
 
+    LOG_N("Handle undelivered event: TEvChannelDataAck, channelId: " << channelId << ", reason: " << reason);
+
     if (reason == TEvents::TEvUndelivered::ReasonActorUnknown) {
-        return RuntimeError("unknown input channel actor");
+        return RuntimeError("Input channel actor is unavailable");
     }
 
     if (inputChannel.InFlight.empty()) {
         return;
+    }
+
+    if (!RetryOnUndelivery) {
+        auto message = TStringBuilder() << "Failed to deliver input channel ack, channelId: "
+            << channelId << ", reason: " << reason;
+        return RuntimeError(message);
     }
 
     ScheduleRetryForChannel<TInputChannelState, TEvDqCompute::TEvRetryChannelDataAck>(inputChannel, Now());

@@ -13,7 +13,6 @@ target_link_libraries(library-cpp-uri PUBLIC
   contrib-libs-cxxsupp
   yutil
   IDN::IDN
-  $CONAN_OPTS_SEM
   library-cpp-charset
 )
 target_sources(library-cpp-uri PRIVATE

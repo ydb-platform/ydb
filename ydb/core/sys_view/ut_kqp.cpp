@@ -846,7 +846,7 @@ Y_UNIT_TEST_SUITE(SystemView) {
                 UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::SUCCESS);
                 Cerr << "SUCCESS" << Endl;
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::GENERIC_ERROR);
+                UNIT_ASSERT_VALUES_EQUAL(streamPart.GetStatus(), EStatus::OVERLOADED);
                 Cerr << "FAIL " << streamPart.GetIssues().ToString() << Endl;
             }
         }

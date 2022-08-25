@@ -461,7 +461,7 @@ private:
                     if (er.GetKind() == NKikimrTxDataShard::TError::PROGRAM_ERROR) {
                         auto issue = YqlIssue({}, TIssuesIds::KIKIMR_PRECONDITION_FAILED);
                         issue.AddSubIssue(new TIssue(TStringBuilder() << "Data shard error: [PROGRAM_ERROR] " << er.GetReason()));
-                        return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, issue);
+                        return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, issue);
                     }
                 }
                 auto issue = YqlIssue({}, TIssuesIds::DEFAULT_ERROR, "Error executing transaction (ExecError): Execution failed");
@@ -475,7 +475,7 @@ private:
                         return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
                     }
                     if (er.GetKind() == NKikimrTxDataShard::TError::SCHEME_ERROR) {
-                        return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, er.GetReason()));
+                        return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, er.GetReason()));
                     }
                 }
                 auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);

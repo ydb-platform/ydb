@@ -312,11 +312,11 @@ public:
         YQL_ENSURE(queryRequest.HasAction());
         auto action = queryRequest.GetAction();
 
-        LWTRACK(KqpSessionQueryRequest, 
-            QueryState->Orbit, 
+        LWTRACK(KqpSessionQueryRequest,
+            QueryState->Orbit,
             queryRequest.GetDatabase(),
             queryRequest.HasType() ? queryRequest.GetType() : NKikimrKqp::QUERY_TYPE_UNDEFINED,
-            action, 
+            action,
             queryRequest.GetQuery());
         LOG_D(requestInfo << "Received request,"
             << " selfId : " << SelfId()
@@ -425,9 +425,9 @@ public:
         }
 
         auto compileRequestActor = CreateKqpCompileRequestActor(SelfId(), QueryState->UserToken, uid,
-            std::move(query), keepInCache, compileDeadline, Settings.DbCounters, 
+            std::move(query), keepInCache, compileDeadline, Settings.DbCounters,
             QueryState ? std::move(QueryState->Orbit) : NLWTrace::TOrbit());
-        
+
         TlsActivationContext->ExecutorThread.RegisterActor(compileRequestActor);
 
         Become(&TKqpSessionActor::CompileState);
@@ -987,11 +987,11 @@ public:
             request.AcquireLocksTxId = txCtx.Locks.GetLockTxId();
         }
 
-        LWTRACK(KqpSessionPhyQueryProposeTx, 
-            QueryState->Orbit, 
-            QueryState->CurrentTx, 
+        LWTRACK(KqpSessionPhyQueryProposeTx,
+            QueryState->Orbit,
+            QueryState->CurrentTx,
             request.Transactions.size(),
-            request.Locks.size(), 
+            request.Locks.size(),
             request.AcquireLocksTxId.Defined());
         SendToExecuter(std::move(request));
         return false;
@@ -1004,7 +1004,7 @@ public:
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
                 (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
                 RequestCounters);
-        
+
         ExecuterId = TlsActivationContext->ExecutorThread.RegisterActor(executerActor);
         LOG_D("Created new KQP executer: " << ExecuterId);
 
@@ -1079,7 +1079,7 @@ public:
                 issues.back().AddSubIssue(MakeIntrusive<TIssue>(i));
             }
 
-            ReplyQueryError(requestInfo, GetYdbStatus(issues), "", MessageFromIssues(issues));
+            ReplyQueryError(requestInfo, response->GetStatus(), "", MessageFromIssues(issues));
             return;
         }
 
@@ -1628,7 +1628,7 @@ public:
         if (QueryState) {
             LWTRACK(KqpSessionSendRollback, QueryState->Orbit, QueryState->CurrentTx);
         }
-        
+
         auto request = PreparePhysicalRequest(nullptr);
 
         request.EraseLocks = true;

@@ -193,11 +193,11 @@ public:
                     BaseStateFuncBody(ev, ctx);
             }
         } catch (const TMemoryLimitExceededException& e) {
-            InternalError(TIssuesIds::KIKIMR_PRECONDITION_FAILED, TStringBuilder()
-                << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
-                << ", host: " << HostName() << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
+            InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Mkql memory limit exceeded, limit: " << GetMkqlMemoryLimit()
+                    << ", host: " << HostName() << ", canAllocateExtraMemory: " << CanAllocateExtraMemory);
         } catch (const yexception& e) {
-            InternalError(TIssuesIds::DEFAULT_ERROR, e.what());
+            InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, TIssuesIds::DEFAULT_ERROR, e.what());
         }
 
         ReportEventElapsedTime();
@@ -434,7 +434,7 @@ private:
             return;
 
         CA_LOG_W("Got EvScanError scan state: " << EShardStateToString(state->State)
-            << " status: " << Ydb::StatusIds_StatusCode_Name(status)
+            << ", status: " << Ydb::StatusIds_StatusCode_Name(status)
             << ", reason: " << issues.ToString()
             << ", tablet id: " << state->TabletId);
 
@@ -502,8 +502,9 @@ private:
         if (request->ErrorCount > 0) {
             CA_LOG_E("Resolve request failed for table '" << ScanData->TablePath << "', ErrorCount# " << request->ErrorCount);
 
+            auto statusCode = NDqProto::StatusIds::UNAVAILABLE;
+            auto issueCode = TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
             TString error;
-            TIssuesIds::EIssueCode issueCode = TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
 
             for (const auto& x : request->ResultSet) {
                 if ((ui32)x.Status < (ui32) NSchemeCache::TSchemeCacheRequest::EStatus::OkScheme) {
@@ -512,14 +513,17 @@ private:
 
                     switch (x.Status) {
                         case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
+                            statusCode = NDqProto::StatusIds::SCHEME_ERROR;
                             issueCode = TIssuesIds::KIKIMR_SCHEME_ERROR;
                             error = TStringBuilder() << "Table '" << ScanData->TablePath << "' not exists.";
                             break;
                         case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError:
+                        statusCode = NDqProto::StatusIds::ABORTED;
                             issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Table '" << ScanData->TablePath << "' scheme changed.";
                             break;
                         default:
+                            statusCode = NDqProto::StatusIds::SCHEME_ERROR;
                             issueCode = TIssuesIds::KIKIMR_SCHEME_ERROR;
                             error = TStringBuilder() << "Unresolved table '" << ScanData->TablePath << "'. Status: " << x.Status;
                             break;
@@ -527,7 +531,7 @@ private:
                 }
             }
 
-            return InternalError(issueCode, error);
+            return InternalError(statusCode, issueCode, error);
         }
 
         auto keyDesc = std::move(request->ResultSet[0].KeyDescription);
@@ -535,7 +539,7 @@ private:
         if (keyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << ScanData->TablePath << "'";
             CA_LOG_E(error);
-            InternalError(TIssuesIds::KIKIMR_SCHEME_ERROR, error);
+            InternalError(NDqProto::StatusIds::SCHEME_ERROR, TIssuesIds::KIKIMR_SCHEME_ERROR, error);
             return;
         }
 
@@ -635,7 +639,8 @@ private:
                 if (shard.State == EShardState::Running && ev->Sender == shard.ActorId) {
                     CA_LOG_E("TEvScanDataAck lost while running scan, terminate execution. DataShard actor: "
                         << shard.ActorId);
-                    InternalError(TIssuesIds::DEFAULT_ERROR, "Delivery problem: EvScanDataAck lost.");
+                    InternalError(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR,
+                        "Delivery problem: EvScanDataAck lost.");
                 } else {
                     CA_LOG_D("Skip lost TEvScanDataAck to " << ev->Sender << ", active scan actor: " << shard.ActorId);
                 }
@@ -651,7 +656,8 @@ private:
         TrackingNodes.erase(nodeId);
         for(auto& [tabletId, state] : InFlightShards) {
             if (state.ActorId && state.ActorId.NodeId() == nodeId) {
-                InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Connection with node " << nodeId << " lost.");
+                InternalError(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::DEFAULT_ERROR,
+                    TStringBuilder() << "Connection with node " << nodeId << " lost.");
             }
         }
     }
@@ -764,8 +770,8 @@ private:
         if (state->TotalRetries >= MAX_TOTAL_SHARD_RETRIES) {
             CA_LOG_E("TKqpScanComputeActor: broken pipe with tablet " << state->TabletId
                 << ", retries limit exceeded (" << state->TotalRetries << ")");
-            return InternalError(TIssuesIds::DEFAULT_ERROR, TStringBuilder()
-                << "Retries limit with shard " << state->TabletId << " exceeded.");
+            return InternalError(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder() << "Retries limit with shard " << state->TabletId << " exceeded.");
         }
 
         // note: it might be possible that shard is already removed after successful split/merge operation and cannot be found
@@ -856,8 +862,8 @@ private:
 
     void ResolveShard(TShardState* state) {
         if (state->ResolveAttempt >= MAX_SHARD_RESOLVES) {
-            InternalError(TIssuesIds::KIKIMR_SCHEME_ERROR, TStringBuilder()
-                << "Table '" << ScanData->TablePath << "' resolve limit exceeded");
+            InternalError(NDqProto::StatusIds::UNAVAILABLE, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
+                TStringBuilder() << "Table '" << ScanData->TablePath << "' resolve limit exceeded");
             return;
         }
 

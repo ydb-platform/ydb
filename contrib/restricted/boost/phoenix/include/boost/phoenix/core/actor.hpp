@@ -226,6 +226,9 @@ namespace boost { namespace phoenix
 #endif
 
         BOOST_DELETED_FUNCTION(actor& operator=(actor const&))
+        actor(const actor& other) = default;
+        actor(const expr_type& proto_expr): proto_expr_(proto_expr) {};
+        actor() {};
     };
 }}
 

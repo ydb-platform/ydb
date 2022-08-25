@@ -24,6 +24,8 @@ struct TVaryingHash {
         : Underlying(underlying)
     {}
 
+    TVaryingHash& operator=(const TVaryingHash& other) = default;
+
     size_t operator()(const T& elem) const {
         return VaryingHash(Underlying(elem));
     }

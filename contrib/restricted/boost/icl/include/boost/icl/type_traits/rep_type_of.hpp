@@ -13,6 +13,7 @@ Copyright (c) 2008-2009: Joachim Faulhaber
 #include <boost/mpl/or.hpp>
 #include <boost/mpl/and.hpp>
 #include <boost/mpl/not.hpp>
+#include <boost/type_traits/is_same.hpp>
 #include <boost/icl/type_traits/no_type.hpp>
 
 namespace boost{ namespace icl
@@ -24,7 +25,7 @@ namespace boost{ namespace icl
 
     //--------------------------------------------------------------------------
     template <class Type>
-    struct has_rep_type 
+    struct has_rep_type
       : mpl::bool_<detail::has_rep<Type>::value>
     {};
 
@@ -33,14 +34,14 @@ namespace boost{ namespace icl
       : mpl::bool_<detail::has_rep<Type>::value>
     {
         typedef represents type;
-        BOOST_STATIC_CONSTANT(bool, 
+        BOOST_STATIC_CONSTANT(bool,
             value = (mpl::and_< has_rep_type<Type>
-                              , is_same<typename Type::rep, Rep> >::value)
+                              , boost::is_same<typename Type::rep, Rep> >::value)
             );
     };
 
     //--------------------------------------------------------------------------
-    template <class Type, bool has_rep> 
+    template <class Type, bool has_rep>
     struct get_rep_type;
 
     template <class Type>
@@ -56,15 +57,13 @@ namespace boost{ namespace icl
     };
 
     //--------------------------------------------------------------------------
-    template<class Type> 
+    template<class Type>
     struct rep_type_of
-    { 
-        typedef typename 
+    {
+        typedef typename
             get_rep_type<Type, has_rep_type<Type>::value>::type type;
     };
 
 }} // namespace boost icl
 
 #endif
-
-

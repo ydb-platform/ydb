@@ -8,6 +8,7 @@ Copyright (c) 2010-2010: Joachim Faulhaber
 #ifndef BOOST_ICL_CONCEPT_INTERVAL_ASSOCIATOR_HPP_JOFA_100920
 #define BOOST_ICL_CONCEPT_INTERVAL_ASSOCIATOR_HPP_JOFA_100920
 
+#include <boost/range/iterator_range.hpp>
 #include <boost/icl/type_traits/domain_type_of.hpp>
 #include <boost/icl/type_traits/interval_type_of.hpp>
 #include <boost/icl/type_traits/is_combinable.hpp>
@@ -1159,6 +1160,30 @@ typename Type::element_const_iterator>::type
 elements_end(const Type& object)
 { 
     return typename Type::element_const_iterator(object.end());
+}
+
+template<class Type>
+typename enable_if
+<mpl::and_< is_interval_container<Type>
+          , mpl::not_<is_continuous_interval<typename Type::interval_type> > >,
+iterator_range<typename Type::element_iterator> >::type
+elements(Type& object)
+{
+    return
+    make_iterator_range( typename Type::element_iterator(object.begin())
+                       , typename Type::element_iterator(object.end())  );
+}
+
+template<class Type>
+typename enable_if
+<mpl::and_< is_interval_container<Type>
+          , mpl::not_<is_continuous_interval<typename Type::interval_type> > >,
+iterator_range<typename Type::element_const_iterator> >::type
+elements(Type const& object)
+{
+    return
+    make_iterator_range( typename Type::element_const_iterator(object.begin())
+                       , typename Type::element_const_iterator(object.end())  );
 }
 
 //--------------------------------------------------------------------------

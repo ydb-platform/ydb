@@ -11,7 +11,7 @@ Copyright (c) 1999-2006: Cortex Software GmbH, Kantstrasse 57, Berlin
 #define BOOST_ICL_VALUE_SIZE_HPP_JOFA_081004
 
 namespace boost{ namespace icl
-{    
+{
 
 template <typename Type>
 Type abs(Type val) { return val < 0 ? -val : val; }
@@ -33,13 +33,13 @@ struct value_size
 };
 
 
-template<> inline std::size_t value_size<int>::apply(const int& value) 
+template<> inline std::size_t value_size<int>::apply(const int& value)
 { return abs(value); }
 
-template<> inline std::size_t value_size<double>::apply(const double& value) 
+template<> inline std::size_t value_size<double>::apply(const double& value)
 { return static_cast<int>(abs(value)); }
 
-template <typename Type> 
+template <typename Type>
 inline std::size_t value_size<Type>::apply(const Type& value)
 { return icl::iterative_size(value); }
 
@@ -48,5 +48,3 @@ inline std::size_t value_size<Type>::apply(const Type& value)
 }} // namespace boost icl
 
 #endif
-
-

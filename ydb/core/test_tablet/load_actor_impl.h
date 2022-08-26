@@ -34,9 +34,11 @@ namespace NKikimr::NTestShard {
 
         struct TEvValidationFinished : TEventLocal<TEvValidationFinished, EvValidationFinished> {
             std::unordered_map<TString, TKeyInfo> Keys;
+            bool InitialCheck;
 
-            TEvValidationFinished(std::unordered_map<TString, TKeyInfo> keys)
+            TEvValidationFinished(std::unordered_map<TString, TKeyInfo> keys, bool initialCheck)
                 : Keys(std::move(keys))
+                , InitialCheck(initialCheck)
             {}
         };
 

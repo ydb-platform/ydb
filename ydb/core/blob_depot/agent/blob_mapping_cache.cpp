@@ -10,13 +10,13 @@ namespace NKikimr::NBlobDepot {
             if (inserted) {
                 entry.Key = it->first;
             }
-            entry.Values.emplace(item.GetValueChain());
+            entry.Values = item.GetValueChain();
             Queue.PushBack(&entry);
 
             entry.ResolveInFlight = false;
 
             for (TQueryWaitingForKey& item : std::exchange(entry.QueriesWaitingForKey, {})) {
-                Agent.OnRequestComplete(item.Id, TKeyResolved{&entry.Values.value()}, Agent.OtherRequestInFlight);
+                Agent.OnRequestComplete(item.Id, TKeyResolved{&entry.Values}, Agent.OtherRequestInFlight);
             }
         }
     }
@@ -28,8 +28,8 @@ namespace NKikimr::NBlobDepot {
         if (inserted) {
             entry.Key = it->first;
         }
-        if (entry.Values) {
-            return &entry.Values.value();
+        if (!entry.Values.empty()) {
+            return &entry.Values;
         }
         if (!entry.ResolveInFlight) {
             entry.ResolveInFlight = true;
@@ -39,6 +39,12 @@ namespace NKikimr::NBlobDepot {
             item->SetBeginningKey(it->first);
             item->SetEndingKey(it->first);
             item->SetIncludeEnding(true);
+
+            if (Agent.VirtualGroupId) {
+                const auto& id = TLogoBlobID::FromBinary(it->first);
+                item->SetTabletId(id.TabletID());
+            }
+
             Agent.Issue(std::move(msg), this, nullptr);
         }
 

@@ -55,6 +55,8 @@ namespace NKikimr::NBlobDepot {
                 item->SetIncludeEnding(true);
                 item->SetMaxKeys(1);
                 item->SetReverse(true);
+                item->SetTabletId(TabletId);
+                item->SetMustRestoreFirst(true);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
             }

@@ -40,6 +40,9 @@ namespace NKikimr::NBlobDepot {
         };
         std::vector<TReadItem> items;
 
+        const ui64 offsetOnEntry = offset;
+        const ui64 sizeOnEntry = size;
+
         for (const auto& value : values) {
             const ui32 groupId = value.GetGroupId();
             const auto blobId = LogoBlobIDFromLogoBlobID(value.GetBlobId());
@@ -48,6 +51,8 @@ namespace NKikimr::NBlobDepot {
 
             if (end <= begin || blobId.BlobSize() < end) {
                 *error = "incorrect SubrangeBegin/SubrangeEnd pair";
+                STLOG(PRI_CRIT, BLOB_DEPOT_AGENT, BDA24, *error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
+                    (Values, FormatList(values)));
                 return false;
             }
 
@@ -78,6 +83,8 @@ namespace NKikimr::NBlobDepot {
 
         if (size) {
             *error = "incorrect offset/size provided";
+            STLOG(PRI_ERROR, BLOB_DEPOT_AGENT, BDA25, *error, (VirtualGroupId, VirtualGroupId), (TabletId, TabletId),
+                (Offset, offsetOnEntry), (Size, sizeOnEntry), (Values, FormatList(values)));
             return false;
         }
 

@@ -23,6 +23,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
     const bool MustRestoreFirst;
     const bool IsIndexOnly;
     const ui32 ForceBlockedGeneration;
+    const bool Decommission;
     TInstant StartTime;
 
     TAutoPtr<TEvBlobStorage::TEvRangeResult> Reply;
@@ -320,6 +321,7 @@ class TBlobStorageGroupRangeRequest : public TBlobStorageGroupRequestActor<TBlob
         auto ev = std::make_unique<TEvBlobStorage::TEvRange>(TabletId, From, To, MustRestoreFirst, Deadline, IsIndexOnly,
             ForceBlockedGeneration);
         ev->RestartCounter = counter;
+        ev->Decommission = Decommission;
         return ev;
     }
 
@@ -351,6 +353,7 @@ public:
         , MustRestoreFirst(ev->MustRestoreFirst)
         , IsIndexOnly(ev->IsIndexOnly)
         , ForceBlockedGeneration(ev->ForceBlockedGeneration)
+        , Decommission(ev->Decommission)
         , StartTime(now)
         , FailedDisks(&Info->GetTopology())
     {}

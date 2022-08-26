@@ -99,9 +99,8 @@ namespace NKikimr::NBlobDepot {
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 NIceDb::TNiceDb db(txc.DB);
 
-                const bool done = Ev->Blocks.empty() && Ev->Barriers.empty() && Ev->Blobs.empty();
-                const bool blocksFinished = Ev->Blocks.empty() || !Ev->Barriers.empty() || !Ev->Blobs.empty() || done;
-                const bool barriersFinished = Ev->Barriers.empty() || !Ev->Blobs.empty() || done;
+                bool blocksFinished = false;
+                bool barriersFinished = false;
 
                 if (const auto& blocks = Ev->Blocks; !blocks.empty()) {
                     Self->SkipBlocksUpTo = blocks.back().TabletId;
@@ -120,13 +119,16 @@ namespace NKikimr::NBlobDepot {
                 for (const auto& barrier : Ev->Barriers) {
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT32, "assimilated barrier", (Id, Self->Self->GetLogId()), (Barrier, barrier));
                     Self->Self->BarrierServer->AddBarrierOnDecommit(barrier, txc);
+                    blocksFinished = true; // there will be no blocks for sure
                 }
                 for (const auto& blob : Ev->Blobs) {
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT33, "assimilated blob", (Id, Self->Self->GetLogId()), (Blob, blob));
                     Self->Self->Data->AddDataOnDecommit(blob, txc);
+                    blocksFinished = barriersFinished = true; // no blocks and no more barriers
                 }
 
                 auto& decommitState = Self->Self->DecommitState;
+                const auto decommitStateOnEntry = decommitState;
                 if (blocksFinished && decommitState < EDecommitState::BlocksFinished) {
                     decommitState = EDecommitState::BlocksFinished;
                     UnblockRegisterActorQ = true;
@@ -134,6 +136,7 @@ namespace NKikimr::NBlobDepot {
                 if (barriersFinished && decommitState < EDecommitState::BarriersFinished) {
                     decommitState = EDecommitState::BarriersFinished;
                 }
+                const bool done = Ev->Blocks.empty() && Ev->Barriers.empty() && Ev->Blobs.empty();
                 if (done && decommitState < EDecommitState::BlobsFinished) {
                     decommitState = EDecommitState::BlobsFinished;
                 }
@@ -142,6 +145,24 @@ namespace NKikimr::NBlobDepot {
                     NIceDb::TUpdate<Schema::Config::DecommitState>(decommitState),
                     NIceDb::TUpdate<Schema::Config::AssimilatorState>(Self->SerializeAssimilatorState())
                 );
+
+                auto toString = [](EDecommitState state) {
+                    switch (state) {
+                        case EDecommitState::Default: return "Default";
+                        case EDecommitState::BlocksFinished: return "BlocksFinished";
+                        case EDecommitState::BarriersFinished: return "BarriersFinished";
+                        case EDecommitState::BlobsFinished: return "BlobsFinished";
+                        case EDecommitState::BlobsCopied: return "BlobsCopied";
+                        case EDecommitState::Done: return "Done";
+                    }
+                };
+                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT47, "decommit state change", (Id, Self->Self->GetLogId()),
+                    (From, toString(decommitStateOnEntry)), (To, toString(decommitState)),
+                    (UnblockRegisterActorQ, UnblockRegisterActorQ));
+
+                if (!Ev->Blobs.empty()) {
+                    Self->Self->Data->LastAssimilatedBlobId = Ev->Blobs.back().Id;
+                }
 
                 return true;
             }
@@ -292,21 +313,21 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvTabletPipe::TEvClientConnected::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTxx, "received TEvClientConnected", (Id, Self->GetLogId()), (Status, msg.Status));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT39, "received TEvClientConnected", (Id, Self->GetLogId()), (Status, msg.Status));
         if (msg.Status != NKikimrProto::OK) {
             CreatePipe();
         }
     }
 
     void TAssimilator::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr /*ev*/) {
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTxx, "received TEvClientDestroyed", (Id, Self->GetLogId()));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT40, "received TEvClientDestroyed", (Id, Self->GetLogId()));
         CreatePipe();
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvControllerGroupDecommittedResponse::TPtr ev) {
         auto& msg = *ev->Get();
         const NKikimrProto::EReplyStatus status = msg.Record.GetStatus();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDTxx, "received TEvControllerGroupDecommittedResponse", (Id, Self->GetLogId()),
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT41, "received TEvControllerGroupDecommittedResponse", (Id, Self->GetLogId()),
             (Status, status));
         if (status == NKikimrProto::OK) {
             class TTxFinishDecommission : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {

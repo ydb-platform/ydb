@@ -238,6 +238,22 @@ namespace NKikimr::NBlobDepot {
                 , Public(false)
                 , Unconfirmed(false)
             {}
+
+            TString ToString() const {
+                TStringStream s;
+                Output(s);
+                return s.Str();
+            }
+
+            void Output(IOutputStream& s) const {
+                s << "{Meta# '" << EscapeC(Meta) << "'"
+                    << " ValueChain# " << FormatList(ValueChain)
+                    << " KeepState# " << NKikimrBlobDepot::EKeepState_Name(KeepState)
+                    << " Public# " << (Public ? "true" : "false")
+                    << " Unconfirmed# " << (Unconfirmed ? "true" : "false")
+                    << " OriginalBlobId# " << (OriginalBlobId ? OriginalBlobId->ToString() : "<none>")
+                    << "}";
+            }
         };
 
         enum EScanFlags : ui32 {
@@ -286,9 +302,19 @@ namespace NKikimr::NBlobDepot {
         THashMap<std::tuple<ui64, ui8, ui32>, TRecordsPerChannelGroup> RecordsPerChannelGroup;
         TIntrusiveList<TRecordsPerChannelGroup, TRecordWithTrash> RecordsWithTrash;
         std::optional<TKey> LastLoadedKey; // keys are being loaded in ascending order
-        std::optional<TKey> LastAssimilatedKey;
+        std::optional<TLogoBlobID> LastAssimilatedBlobId;
+
+        friend class TGroupAssimilator;
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrash; // being committed, but not yet confirmed
+
+        struct TResolveDecommitContext {
+            TEvBlobDepot::TEvResolve::TPtr Ev; // original resolve request
+            ui32 NumRangesInFlight = 0;
+            bool Errors = false;
+        };
+        ui64 LastRangeId = 0;
+        THashMap<ui64, TResolveDecommitContext> ResolveDecommitContexts;
 
         class TTxIssueGC;
         class TTxConfirmGC;
@@ -382,6 +408,7 @@ namespace NKikimr::NBlobDepot {
         bool IsLoaded() const { return Loaded; }
 
         void Handle(TEvBlobDepot::TEvResolve::TPtr ev);
+        void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev);
 
     private:
         void ExecuteIssueGC(ui8 channel, ui32 groupId, TGenStep issuedGenStep,

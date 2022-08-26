@@ -243,6 +243,11 @@ namespace NKikimr::NBlobDepot {
                 item.SetMeta(value.Meta.data(), value.Meta.size());
             }
 
+            if (!item.ValueChainSize()) {
+                STLOG(PRI_WARN, BLOB_DEPOT, BDT48, "empty ValueChain on Resolve", (Id, Self->GetLogId()),
+                    (Key, key), (Value, value), (Item, item), (Sender, Request->Sender), (Cookie, Request->Cookie));
+            }
+
             size_t itemSize = item.ByteSizeLong();
             if (Outbox.empty() || lastResponseSize + itemSize > EventMaxByteSize) {
                 if (!Outbox.empty()) {
@@ -262,22 +267,121 @@ namespace NKikimr::NBlobDepot {
 
     void TData::Handle(TEvBlobDepot::TEvResolve::TPtr ev) {
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT21, "TEvResolve", (Id, Self->GetLogId()), (Msg, ev->Get()->ToString()),
-            (Sender, ev->Sender), (Cookie, ev->Cookie));
+            (Sender, ev->Sender), (Cookie, ev->Cookie), (LastAssimilatedBlobId, LastAssimilatedBlobId));
 
         if (Self->Config.HasDecommitGroupId() && Self->DecommitState <= EDecommitState::BlobsFinished) {
-            for (const auto& item : ev->Get()->Record.GetItems()) {
-                std::optional<TKey> end = item.HasEndingKey()
-                    ? std::make_optional(TKey::FromBinaryKey(item.GetEndingKey(), Self->Config))
-                    : std::nullopt;
+            std::vector<std::tuple<ui64, bool, TLogoBlobID, TLogoBlobID>> queries;
 
-                if (!end || !LastAssimilatedKey || *LastAssimilatedKey < *end) {
-                    // see if we have to query BS for this range and to apply items here
-                    Y_VERIFY_DEBUG(false, "going to return corrupt data");
+            for (const auto& item : ev->Get()->Record.GetItems()) {
+                if (!item.HasTabletId()) {
+                   STLOG(PRI_CRIT, BLOB_DEPOT, BDT42, "incorrect request", (Id, Self->GetLogId()), (Item, item));
+                   auto [response, record] = TEvBlobDepot::MakeResponseFor(*ev, Self->SelfId(), NKikimrProto::ERROR,
+                        "incorrect request");
+                   TActivationContext::Send(response.release());
+                   return;
                 }
+
+                const ui64 tabletId = item.GetTabletId();
+                if (LastAssimilatedBlobId && tabletId < LastAssimilatedBlobId->TabletID()) {
+                    continue; // fast path
+                }
+
+                TLogoBlobID minId(tabletId, 0, 0, 0, 0, 0);
+                TLogoBlobID maxId(tabletId, Max<ui32>(), Max<ui32>(), TLogoBlobID::MaxChannel, TLogoBlobID::MaxBlobSize,
+                    TLogoBlobID::MaxCookie, TLogoBlobID::MaxPartId, TLogoBlobID::MaxCrcMode);
+
+                if (item.HasBeginningKey()) {
+                    minId = TKey::FromBinaryKey(item.GetBeginningKey(), Self->Config).GetBlobId();
+                }
+                if (item.HasEndingKey()) {
+                    maxId = TKey::FromBinaryKey(item.GetEndingKey(), Self->Config).GetBlobId();
+                }
+
+                Y_VERIFY_DEBUG(minId.TabletID() == tabletId);
+                Y_VERIFY_DEBUG(maxId.TabletID() == tabletId);
+
+                if (!LastAssimilatedBlobId || *LastAssimilatedBlobId < maxId) {
+                    if (LastAssimilatedBlobId && minId < *LastAssimilatedBlobId) {
+                        minId = *LastAssimilatedBlobId;
+                    }
+                    if (minId == maxId) {
+                        const auto it = Data.find(TKey(minId));
+                        if (it != Data.end() && !it->second.ValueChain.empty() || it->second.OriginalBlobId) {
+                            continue; // fast path for extreme queries
+                        }
+                    }
+                    queries.emplace_back(tabletId, item.GetMustRestoreFirst(), minId, maxId);
+                }
+            }
+
+            if (!queries.empty()) {
+                const ui64 id = ++LastRangeId;
+                for (const auto& [tabletId, mustRestoreFirst, minId, maxId] : queries) {
+                    auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, minId, maxId, mustRestoreFirst,
+                        TInstant::Max(), true);
+                    ev->Decommission = true;
+
+                    const auto& tabletId_ = tabletId;
+                    const auto& minId_ = minId;
+                    const auto& maxId_ = maxId;
+                    const auto& mustRestoreFirst_ = mustRestoreFirst;
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT46, "going to TEvRange", (Id, Self->GetLogId()), (TabletId, tabletId_),
+                        (MinId, minId_), (MaxId, maxId_), (MustRestoreFirst, mustRestoreFirst_));
+                    SendToBSProxy(Self->SelfId(), Self->Config.GetDecommitGroupId(), ev.release(), id);
+                }
+                ResolveDecommitContexts[id] = {ev, (ui32)queries.size()};
+                return;
             }
         }
 
         Self->Execute(std::make_unique<TTxResolve>(Self, ev));
+    }
+
+    void TData::Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
+        class TTxCommitRange : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            TEvBlobStorage::TEvRangeResult::TPtr Ev;
+
+        public:
+            TTxCommitRange(TBlobDepot *self, TEvBlobStorage::TEvRangeResult::TPtr ev)
+                : TTransactionBase(self)
+                , Ev(ev)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                if (Ev->Get()->Status == NKikimrProto::OK) {
+                    for (const auto& response : Ev->Get()->Responses) {
+                        Self->Data->AddDataOnDecommit({
+                            .Id = response.Id,
+                            .Keep = response.Keep,
+                            .DoNotKeep = response.DoNotKeep
+                        }, txc);
+                    }
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                auto& contexts = Self->Data->ResolveDecommitContexts;
+                if (const auto it = contexts.find(Ev->Cookie); it != contexts.end()) {
+                    TResolveDecommitContext& context = it->second;
+                    if (Ev->Get()->Status != NKikimrProto::OK) {
+                        context.Errors = true;
+                    }
+                    if (!--context.NumRangesInFlight) {
+                        if (context.Errors) {
+                           auto [response, record] = TEvBlobDepot::MakeResponseFor(*context.Ev, Self->SelfId(),
+                                NKikimrProto::ERROR, "errors in range queries");
+                           TActivationContext::Send(response.release());
+                        } else {
+                            Self->Execute(std::make_unique<TTxResolve>(Self, context.Ev));
+                        }
+                    }
+                    contexts.erase(it);
+                }
+            }
+        };
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT50, "TEvRangeResult", (Id, Self->GetLogId()), (Msg, *ev->Get()));
+        Self->Execute(std::make_unique<TTxCommitRange>(Self, ev));
     }
 
 } // NKikimr::NBlobDepot

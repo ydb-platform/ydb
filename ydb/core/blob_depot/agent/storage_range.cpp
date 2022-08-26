@@ -22,6 +22,17 @@ namespace NKikimr::NBlobDepot {
 
             void Initiate() override {
                 auto& msg = *Event->Get<TEvBlobStorage::TEvRange>();
+
+                if (msg.Decommission) {
+                    Y_VERIFY(Agent.ProxyId);
+                    STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA26, "forwarding TEvRange", (VirtualGroupId, Agent.VirtualGroupId),
+                        (TabletId, Agent.TabletId), (Msg, msg), (ProxyId, Agent.ProxyId));
+                    const bool sent = TActivationContext::Send(Event->Forward(Agent.ProxyId));
+                    Y_VERIFY(sent);
+                    delete this;
+                    return;
+                }
+
                 Response = std::make_unique<TEvBlobStorage::TEvRangeResult>(NKikimrProto::OK, msg.From, msg.To,
                     Agent.VirtualGroupId);
 
@@ -45,6 +56,8 @@ namespace NKikimr::NBlobDepot {
                 item->SetEndingKey(to);
                 item->SetIncludeEnding(true);
                 item->SetReverse(reverse);
+                item->SetTabletId(msg.TabletId);
+                item->SetMustRestoreFirst(msg.MustRestoreFirst);
 
                 Agent.Issue(std::move(resolve), this, nullptr);
                 ++ResolvesInFlight;

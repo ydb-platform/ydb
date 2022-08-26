@@ -507,6 +507,9 @@ message TQueryResult {
     optional uint64 Ingress = 8;
 
     repeated uint32 Parts = 9; // part id's (>0) residing on this disk; returned only through index range queries
+
+    optional bool Keep = 10;
+    optional bool DoNotKeep = 11;
 }
 
 message TEvVGetResult {

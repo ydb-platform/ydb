@@ -348,7 +348,7 @@ namespace NKikimr::NTestShard {
                         Y_VERIFY(info.ConfirmedState == info.PendingState);
                         Y_VERIFY(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED);
                     }
-                    Send(ParentId, new TEvValidationFinished(std::move(Keys)));
+                    Send(ParentId, new TEvValidationFinished(std::move(Keys), InitialCheck));
                     PassAway();
                 }
             }
@@ -595,6 +595,11 @@ namespace NKikimr::NTestShard {
             BytesOfData += info.Len;
         }
         Action();
+
+        if (Settings.RestartPeriodsSize() && ev->Get()->InitialCheck) {
+            TActivationContext::Schedule(GenerateRandomInterval(Settings.GetRestartPeriods()), new IEventHandle(
+                TEvents::TSystem::Wakeup, 0, SelfId(), {}, nullptr, 0));
+        }
     }
 
 } // NKikimr::NTestShard

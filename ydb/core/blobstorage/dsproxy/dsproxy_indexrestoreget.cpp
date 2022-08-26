@@ -31,6 +31,8 @@ class TBlobStorageGroupIndexRestoreGetRequest
 
     std::unique_ptr<TEvBlobStorage::TEvGetResult> PendingResult;
 
+    THashMap<TLogoBlobID, std::pair<bool, bool>> KeepFlags;
+
     void ReplyAndDie(NKikimrProto::EReplyStatus status) {
         A_LOG_DEBUG_S("DSPI14", "ReplyAndDie"
             << " Reply with status# " << NKikimrProto::EReplyStatus_Name(status)
@@ -117,6 +119,9 @@ class TBlobStorageGroupIndexRestoreGetRequest
             const ui32 queryIdx = result.GetCookie();
             Y_VERIFY(queryIdx < QuerySize && blobId == Queries[queryIdx].Id);
             BlobStatus[queryIdx].UpdateFromResponseData(result, vdisk, Info.Get());
+            auto& [keep, doNotKeep] = KeepFlags[blobId];
+            keep |= result.GetKeep();
+            doNotKeep |= result.GetDoNotKeep();
         }
 
         if (!VGetsInFlight) {
@@ -134,6 +139,10 @@ class TBlobStorageGroupIndexRestoreGetRequest
             auto &q = Queries[idx];
             auto &a = PendingResult->Responses[idx];
             a.Id = q.Id;
+
+            const auto it = KeepFlags.find(q.Id);
+            Y_VERIFY(it != KeepFlags.end());
+            std::tie(a.Keep, a.DoNotKeep) = it->second;
 
             A_LOG_DEBUG_S("DSPI11", "OnEnoughVGetResults Id# " << q.Id << " BlobStatus# " << DumpBlobStatus(idx));
 

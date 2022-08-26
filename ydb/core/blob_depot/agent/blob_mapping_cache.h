@@ -20,7 +20,7 @@ namespace NKikimr::NBlobDepot {
 
         struct TCachedKeyItem : TIntrusiveListItem<TCachedKeyItem> {
             TStringBuf Key;
-            std::optional<TResolvedValueChain> Values;
+            TResolvedValueChain Values;
             bool ResolveInFlight = false;
             std::list<TQueryWaitingForKey> QueriesWaitingForKey;
         };

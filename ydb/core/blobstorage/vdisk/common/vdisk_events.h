@@ -1285,7 +1285,8 @@ namespace NKikimr {
         }
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, ui64 sh,
-                       const char *data, size_t size, const ui64 *cookie = nullptr, const ui64 *ingress = nullptr) {
+                       const char *data, size_t size, const ui64 *cookie = nullptr, const ui64 *ingress = nullptr,
+                       bool keep = false, bool doNotKeep = false) {
             IncrementSize(size);
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);
@@ -1303,10 +1304,18 @@ namespace NKikimr {
             }
             if (ingress)
                 r->SetIngress(*ingress);
+            if (keep) {
+                r->SetKeep(true);
+            }
+            if (doNotKeep) {
+                r->SetDoNotKeep(true);
+            }
+            Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
         }
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, const ui64 *cookie = nullptr,
-                       const ui64 *ingress = nullptr, const NMatrix::TVectorType *local = nullptr) {
+                       const ui64 *ingress = nullptr, const NMatrix::TVectorType *local = nullptr, bool keep = false,
+                       bool doNotKeep = false) {
             NKikimrBlobStorage::TQueryResult *r = Record.AddResult();
             r->SetStatus(status);
             LogoBlobIDFromLogoBlobID(logoBlobId, r->MutableBlobID());
@@ -1319,6 +1328,13 @@ namespace NKikimr {
                     r->AddParts(i + 1);
                 }
             }
+            if (keep) {
+                r->SetKeep(true);
+            }
+            if (doNotKeep) {
+                r->SetDoNotKeep(true);
+            }
+            Y_VERIFY_DEBUG(keep + doNotKeep <= 1);
         }
 
         TString ToString() const override {

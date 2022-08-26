@@ -32,19 +32,23 @@ namespace NKikimr::NBlobDepot {
 
     void TData::AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
             NTabletFlatExecutor::TTransactionContext& txc) {
+        TKey key(blob.Id);
+
         bool underSoft, underHard;
         Self->BarrierServer->GetBlobBarrierRelation(blob.Id, &underSoft, &underHard);
-        if (underHard || (underSoft && !blob.Keep)) {
-            return; // we can skip this blob as it is already being collected
-        }
-
-        TKey key(blob.Id);
 
         // calculate keep state for this blob
         const auto it = Data.find(key);
         const NKikimrBlobDepot::EKeepState keepState = Max(it != Data.end() ? it->second.KeepState : NKikimrBlobDepot::EKeepState::Default,
             blob.DoNotKeep ? NKikimrBlobDepot::EKeepState::DoNotKeep :
             blob.Keep      ? NKikimrBlobDepot::EKeepState::Keep : NKikimrBlobDepot::EKeepState::Default);
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT49, "AddDataOnDecommit", (Id, Self->GetLogId()), (Blob, blob),
+            (UnderHard, underHard), (UnderSoft, underSoft), (KeepState, keepState));
+
+        if (underHard || (underSoft && keepState != NKikimrBlobDepot::EKeepState::Keep)) {
+            return; // we can skip this blob as it is already being collected
+        }
 
         NKikimrBlobDepot::TValue value;
         value.SetKeepState(keepState);
@@ -59,7 +63,6 @@ namespace NKikimr::NBlobDepot {
         db.Table<Schema::Data>().Key(key.MakeBinaryKey()).Update<Schema::Data::Value>(valueData);
 
         PutKey(key, TValue(std::move(value)));
-        LastAssimilatedKey = key;
     }
 
     void TData::AddTrashOnLoad(TLogoBlobID id) {
@@ -91,9 +94,7 @@ namespace NKikimr::NBlobDepot {
             referencedBytes += id.BlobSize();
         });
 
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (Id, Self->GetLogId()), (Key, key),
-            (ValueChain.size, data.ValueChain.size()), (ReferencedBytes, referencedBytes),
-            (KeepState, NKikimrBlobDepot::EKeepState_Name(data.KeepState)));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT10, "PutKey", (Id, Self->GetLogId()), (Key, key), (Value, data));
 
         const auto [it, inserted] = Data.try_emplace(std::move(key), std::move(data));
         if (!inserted) {
@@ -102,6 +103,9 @@ namespace NKikimr::NBlobDepot {
     }
 
     std::optional<TString> TData::UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState) {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT51, "UpdateKeepState", (Id, Self->GetLogId()), (Key, key),
+            (KeepState, keepState));
+
         const auto [it, inserted] = Data.try_emplace(std::move(key), TValue(keepState));
         if (!inserted) {
             if (keepState <= it->second.KeepState) {

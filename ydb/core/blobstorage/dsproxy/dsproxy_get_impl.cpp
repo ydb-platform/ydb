@@ -40,6 +40,8 @@ void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReas
             const TBlobState &blobState = Blackboard.GetState(query.Id);
             outResponse.Id = query.Id;
             outResponse.PartMap = blobState.PartMap;
+            outResponse.Keep = blobState.Keep;
+            outResponse.DoNotKeep = blobState.DoNotKeep;
             if (blobState.WholeSituation == TBlobState::ESituation::Absent) {
                 bool okay = true;
 

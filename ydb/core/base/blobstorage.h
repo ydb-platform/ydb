@@ -1147,6 +1147,8 @@ struct TEvBlobStorage {
             ui32 RequestedSize;
             TString Buffer;
             TVector<TPartMapItem> PartMap;
+            bool Keep = false;
+            bool DoNotKeep = false;
 
             TResponse()
                 : Status(NKikimrProto::UNKNOWN)
@@ -1687,6 +1689,7 @@ struct TEvBlobStorage {
         bool IsIndexOnly;
         ui32 ForceBlockedGeneration;
         ui32 RestartCounter = 0;
+        bool Decommission = false;
 
         TEvRange(ui64 tabletId, const TLogoBlobID &from, const TLogoBlobID &to, const bool mustRestoreFirst,
                 TInstant deadline, bool isIndexOnly = false, ui32 forceBlockedGeneration = 0)
@@ -1729,6 +1732,8 @@ struct TEvBlobStorage {
         struct TResponse {
             TLogoBlobID Id;
             TString Buffer;
+            bool Keep = false;
+            bool DoNotKeep = false;
 
             TResponse()
             {}

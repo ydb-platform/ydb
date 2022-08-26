@@ -130,7 +130,12 @@ namespace NKikimr {
                 ui64 *pingr = (ShowInternals ? &ingr : nullptr);
                 Y_VERIFY(logoBlobId.PartId() == 0); // Index-only response must contain a single record for the blob
                 const NMatrix::TVectorType local = ingress.LocalParts(QueryCtx->HullCtx->VCtx->Top->GType);
-                Result->AddResult(NKikimrProto::OK, logoBlobId, CookiePtr, pingr, &local);
+
+                const int mode = ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));
+                const bool keep = (mode & CollectModeKeep) && !(mode & CollectModeDoNotKeep);
+                const bool doNotKeep = mode & CollectModeDoNotKeep;
+
+                Result->AddResult(NKikimrProto::OK, logoBlobId, CookiePtr, pingr, &local, keep, doNotKeep);
                 --Counter;
                 ResultSize.AddLogoBlobIndex();
             }

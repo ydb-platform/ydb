@@ -217,7 +217,7 @@ public:
             if (replyStatus == NKikimrProto::OK) {
                 // TODO(cthulhu): Verify shift and response size, and cookie
                 R_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddResponseData(blobId, orderNumber, resultShift, resultBuffer);
+                Blackboard.AddResponseData(blobId, orderNumber, resultShift, resultBuffer, result.GetKeep(), result.GetDoNotKeep());
             } else if (replyStatus == NKikimrProto::NODATA) {
                 R_LOG_DEBUG_SX(logCtx, "BPG59", "Got# NODATA orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
@@ -231,7 +231,7 @@ public:
             } else if (replyStatus == NKikimrProto::NOT_YET) {
                 R_LOG_DEBUG_SX(logCtx, "BPG67", "Got# NOT_YET orderNumber# " << orderNumber
                         << " vDiskId# " << vdisk.ToString());
-                Blackboard.AddNotYetResponse(blobId, orderNumber);
+                Blackboard.AddNotYetResponse(blobId, orderNumber, result.GetKeep(), result.GetDoNotKeep());
             } else {
                 Y_VERIFY(false, "Unexpected reply status# %s", NKikimrProto::EReplyStatus_Name(replyStatus).data());
             }

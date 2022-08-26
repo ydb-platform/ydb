@@ -128,7 +128,12 @@ namespace NKikimr {
                     // Add result
                     ui64 ingressRaw = ingress.Raw();
                     ui64 *pingr = (ShowInternals ? &ingressRaw : nullptr);
-                    Result->AddResult(status, query->LogoBlobID, cookiePtr, pingr);
+
+                    const int mode = ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));
+                    const bool keep = (mode & CollectModeKeep) && !(mode & CollectModeDoNotKeep);
+                    const bool doNotKeep = mode & CollectModeDoNotKeep;
+
+                    Result->AddResult(status, query->LogoBlobID, cookiePtr, pingr, nullptr, keep, doNotKeep);
                     Merger.Clear();
                 }
             }
@@ -194,6 +199,10 @@ namespace NKikimr {
                 ui64 ingr = it->Ingress.Raw();
                 ui64 *pingr = (ShowInternals ? &ingr : nullptr);
 
+                const int mode = it->Ingress.GetCollectMode(TIngress::IngressMode(QueryCtx->HullCtx->VCtx->Top->GType));
+                const bool keep = (mode & CollectModeKeep) && !(mode & CollectModeDoNotKeep);
+                const bool doNotKeep = mode & CollectModeDoNotKeep;
+
                 NReadBatcher::TDataItem::EType t = it->GetType();
                 switch (t) {
                     case NReadBatcher::TDataItem::ET_CLEAN:
@@ -210,7 +219,8 @@ namespace NKikimr {
                     case NReadBatcher::TDataItem::ET_NOT_YET:
                         // put NOT_YET
                         Y_VERIFY(it->Id.PartId() > 0);
-                        Result->AddResult(NKikimrProto::NOT_YET, it->Id, query->Shift, nullptr, query->Size, cookiePtr, pingr);
+                        Result->AddResult(NKikimrProto::NOT_YET, it->Id, query->Shift, nullptr, query->Size, cookiePtr,
+                            pingr, keep, doNotKeep);
                         break;
                     case NReadBatcher::TDataItem::ET_SETDISK:
                     case NReadBatcher::TDataItem::ET_SETMEM:
@@ -224,19 +234,23 @@ namespace NKikimr {
                             ui64 Size;
                             const ui64 *CookiePtr;
                             const ui64 *IngrPtr;
+                            const bool Keep;
+                            const bool DoNotKeep;
                             bool Success = true;
                             void operator()(NReadBatcher::TReadError) {
-                                Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, nullptr, Size, CookiePtr, IngrPtr);
+                                Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, nullptr, Size, CookiePtr, IngrPtr,
+                                    Keep, DoNotKeep);
                                 Success = false;
                             }
                             void operator()(const char *data, size_t size) const {
-                                Result->AddResult(NKikimrProto::OK, Id, Shift, data, size, CookiePtr, IngrPtr);
+                                Result->AddResult(NKikimrProto::OK, Id, Shift, data, size, CookiePtr, IngrPtr, Keep,
+                                    DoNotKeep);
                             }
                             void operator()(const TRope& data) const {
                                 const TString s = data.ConvertToString();
                                 (*this)(s.data(), s.size());
                             }
-                        } processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr};
+                        } processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep, doNotKeep};
                         rit.GetData(processor);
                         if (!processor.Success) {
                             NMatrix::TVectorType& v = neededParts[it->Id.FullID()];

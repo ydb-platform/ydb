@@ -188,6 +188,8 @@ message TEvResolve {
         optional bool ReturnOwners = 7 [default = false];
         optional bool Reverse = 8 [default = false]; // reverse output
         optional uint64 Cookie = 9; // request cookie to match response item
+        optional fixed64 TabletId = 10; // used in virtual group mode to resolve keys of specific tablet
+        optional bool MustRestoreFirst = 11;
     }
 
     repeated TItem Items = 1;

@@ -12,6 +12,24 @@
 #include "json_vdiskinfo.h"
 #include "json_pdiskinfo.h"
 
+template<>
+struct std::hash<NKikimrBlobStorage::TVSlotId> {
+    std::size_t operator()(const NKikimrBlobStorage::TVSlotId& vSlotId) const {
+        return std::hash<ui32>()(vSlotId.GetNodeId())
+            ^ (std::hash<ui32>()(vSlotId.GetPDiskId()) << 1)
+            ^ (std::hash<ui32>()(vSlotId.GetVSlotId()) << 2);
+    }
+};
+
+template<>
+struct std::equal_to<NKikimrBlobStorage::TVSlotId> {
+    bool operator()(const NKikimrBlobStorage::TVSlotId& lhs, const NKikimrBlobStorage::TVSlotId& rhs) const {
+        return lhs.GetNodeId() == rhs.GetNodeId()
+            && lhs.GetPDiskId() == rhs.GetPDiskId()
+            && lhs.GetVSlotId() == rhs.GetVSlotId();
+    }
+};
+
 namespace NKikimr {
 namespace NViewer {
 
@@ -51,6 +69,7 @@ class TJsonStorage : public TViewerPipeClient<TJsonStorage> {
     std::unordered_set<TNodeId> NodeIds;
     bool NeedGroups = true;
     bool NeedDisks = true;
+    bool NeedDonors = true;
 
     enum class EWith {
         Everything,
@@ -85,6 +104,7 @@ public:
         Sort(FilterGroupIds);
         NeedGroups = FromStringWithDefault<bool>(params.Get("need_groups"), true);
         NeedDisks = FromStringWithDefault<bool>(params.Get("need_disks"), NeedGroups);
+        NeedDonors = FromStringWithDefault<bool>(params.Get("need_donors"), NeedDonors);
         NeedGroups = Max(NeedGroups, NeedDisks);
         if (params.Get("with") == "missing") {
             With = EWith::MissingDisks;
@@ -328,6 +348,7 @@ public:
     TMap<TString, const NKikimrWhiteboard::TBSGroupStateInfo&> BSGroupIndex;
     TMap<TString, NKikimrHive::THiveStorageGroupStats> BSGroupHiveIndex;
     TMap<NKikimrBlobStorage::TVDiskID, const NKikimrWhiteboard::TVDiskStateInfo&> VDisksIndex;
+    std::unordered_map<NKikimrBlobStorage::TVSlotId, const NKikimrWhiteboard::TVDiskStateInfo&> VSlotsIndex;
     TMap<std::pair<ui32, ui32>, const NKikimrWhiteboard::TPDiskStateInfo&> PDisksIndex;
     TMap<TString, TString> BSGroupOverall;
     THashSet<TString> BSGroupWithMissingDisks;
@@ -391,6 +412,34 @@ public:
         }
     }
 
+    void RemapDonors(IOutputStream& json,
+                     const ::google::protobuf::Message& protoFrom,
+                     const TJsonSettings& jsonSettings) {
+        const auto& info = static_cast<const NKikimrWhiteboard::TVDiskStateInfo&>(protoFrom);
+        const auto& donors = info.GetDonors();
+        if (donors.empty()) {
+            return;
+        }
+        json << "\"Donors\":[";
+        for (auto id = donors.begin(); id != donors.end(); ++id) {
+            if (id != donors.begin()) {
+                json << ',';
+            }
+            const NKikimrBlobStorage::TVSlotId& vSlotId = *id;
+            auto ie = VSlotsIndex.find(vSlotId);
+            if (ie != VSlotsIndex.end()) {
+                json << '{';
+                TProtoToJson::ProtoToJsonInline(json, ie->second, jsonSettings);
+                json << '}';
+            } else {
+                json << "{";
+                TProtoToJson::ProtoToJson(json, vSlotId, jsonSettings);
+                json << "}";
+            }
+        }
+        json << ']';
+    }
+
     void RemapPDisk(IOutputStream& json,
                     const ::google::protobuf::Message& protoFrom,
                     const TJsonSettings& jsonSettings) {
@@ -429,6 +478,13 @@ public:
             element.ClearStoragePoolName();
             VDisksOverall.emplace(key, overall);
             VDisksIndex.emplace(key, element);
+            if (NeedDonors) {
+                NKikimrBlobStorage::TVSlotId slotId;
+                slotId.SetNodeId(element.GetNodeId());
+                slotId.SetPDiskId(element.GetPDiskId());
+                slotId.SetVSlotId(element.GetVDiskSlotId());
+                VSlotsIndex.emplace(std::move(slotId), element);
+            }
         }
         for (auto& element : *TWhiteboardInfo<TEvWhiteboard::TEvBSGroupStateResponse>::GetElementsField(MergedBSGroupInfo.Get())) {
             auto state = GetBSGroupOverallState(element, VDisksIndex, PDisksIndex);
@@ -581,6 +637,15 @@ public:
                     const TJsonSettings& jsonSettings) -> void {
                 RemapPDisk(json, protoFrom, jsonSettings);
             };
+            if (NeedDonors) {
+                field = NKikimrWhiteboard::TVDiskStateInfo::descriptor()->FindFieldByName("Donors");
+                JsonSettings.FieldRemapper[field] = [this](
+                        IOutputStream& json,
+                        const ::google::protobuf::Message& protoFrom,
+                        const TJsonSettings& jsonSettings) -> void {
+                    RemapDonors(json, protoFrom, jsonSettings);
+                };
+            }
         }
         StorageInfo.SetTotalGroups(totalGroups);
         StorageInfo.SetFoundGroups(foundGroups);

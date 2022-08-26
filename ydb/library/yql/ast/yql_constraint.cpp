@@ -268,17 +268,22 @@ const TSortedConstraintNode* TSortedConstraintNode::MakeCommon(const TVector<con
         return nullptr;
     }
 
-    const auto sort = constraints.front()->GetConstraint<TSortedConstraintNode>();
-    if (constraints.size() == 1 || !sort) {
-        return sort;
+    if (constraints.size() == 1) {
+        return constraints.front()->GetConstraint<TSortedConstraintNode>();
     }
 
-    auto commonPrefixLength = sort->GetContent().size();
-    for (size_t i = 1; i < constraints.size() && commonPrefixLength > 0; ++i) {
+    size_t commonPrefixLength = 0;
+    const TSortedConstraintNode* sort = nullptr;
+    for (size_t i = 0; i < constraints.size(); ++i) {
         if (const auto nextSort = constraints[i]->GetConstraint<TSortedConstraintNode>()) {
-            commonPrefixLength = std::min(commonPrefixLength, nextSort->GetCommonPrefixLength(*sort));
+            if (sort) {
+                commonPrefixLength = std::min(commonPrefixLength, nextSort->GetCommonPrefixLength(*sort));
+            } else {
+                sort = nextSort;
+                commonPrefixLength = sort->GetContent().size();
+            }
         } else if (!constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
-            commonPrefixLength = 0;
+            return nullptr;
         }
     }
     if (commonPrefixLength) {
@@ -638,40 +643,47 @@ const TPassthroughConstraintNode* TPassthroughConstraintNode::MakeCommon(const T
         return nullptr;
     }
 
-    auto part = constraints.front()->GetConstraint<TPassthroughConstraintNode>();
-    if (constraints.size() == 1 || !part) {
-        return part;
+    if (constraints.size() == 1) {
+        return constraints.front()->GetConstraint<TPassthroughConstraintNode>();
     }
 
-    auto mapping = part->GetColumnMapping();
-    if (const auto self = mapping.find(nullptr); mapping.cend() != self)
-        mapping.emplace(part, std::move(mapping.extract(self).mapped()));
-
-    for (size_t i = 1; i < constraints.size() && !mapping.empty(); ++i) {
-        part = constraints[i]->GetConstraint<TPassthroughConstraintNode>();
+    bool first = true;
+    TPassthroughConstraintNode::TMapType mapping;
+    for (size_t i = 0; i < constraints.size(); ++i) {
+        auto part = constraints[i]->GetConstraint<TPassthroughConstraintNode>();
         if (!part) {
             if (constraints[i]->GetConstraint<TEmptyConstraintNode>()) {
                 continue;
             }
             return nullptr;
         }
-
-        for (const auto& nextMapping : part->GetColumnMapping()) {
-            if (const auto it = mapping.find(nextMapping.first ? nextMapping.first : part); mapping.cend() != it) {
-                TPassthroughConstraintNode::TPartType result;
-                std::set_intersection(
-                    it->second.cbegin(), it->second.cend(),
-                    nextMapping.second.cbegin(), nextMapping.second.cend(),
-                    std::back_inserter(result),
-                    [] (const TPassthroughConstraintNode::TPartType::value_type& c1, const TPassthroughConstraintNode::TPartType::value_type& c2) {
-                        return c1 < c2;
-                    }
-                );
-                if (result.empty())
-                    mapping.erase(it);
-                else
-                    it->second = std::move(result);
+        if (first) {
+            mapping = part->GetColumnMapping();
+            if (const auto self = mapping.find(nullptr); mapping.cend() != self) {
+                mapping.emplace(part, std::move(mapping.extract(self).mapped()));
             }
+            first = false;
+        } else {
+            for (const auto& nextMapping : part->GetColumnMapping()) {
+                if (const auto it = mapping.find(nextMapping.first ? nextMapping.first : part); mapping.cend() != it) {
+                    TPassthroughConstraintNode::TPartType result;
+                    std::set_intersection(
+                        it->second.cbegin(), it->second.cend(),
+                        nextMapping.second.cbegin(), nextMapping.second.cend(),
+                        std::back_inserter(result),
+                        [] (const TPassthroughConstraintNode::TPartType::value_type& c1, const TPassthroughConstraintNode::TPartType::value_type& c2) {
+                            return c1 < c2;
+                        }
+                    );
+                    if (result.empty())
+                        mapping.erase(it);
+                    else
+                        it->second = std::move(result);
+                }
+            }
+        }
+        if (mapping.empty()) {
+            break;
         }
     }
 

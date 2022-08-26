@@ -43,7 +43,7 @@ public:
     {
         if( id != 0 )
         {
-#if defined(_MSC_VER) && defined(_CPPLIB_VER) && _MSC_VER >= 1900 && _MSC_VER < 2000
+#if defined(_MSC_VER) && defined(_CPPLIB_VER) && _MSC_VER >= 1900 && _MSC_VER < 2000 && !defined(_LIBCPP_VERSION)
 
             // Poking into the protected _Addr member of std::error_category
             // is not a particularly good programming practice, but what can

@@ -28,7 +28,7 @@ target_link_libraries(contrib-restricted-thrift PUBLIC
   ZLIB::ZLIB
   contrib-restricted-boost
   restricted-boost-system
-  boost-libs-thread
+  restricted-boost-thread
 )
 target_sources(contrib-restricted-thrift PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/thrift/thrift/TApplicationException.cpp

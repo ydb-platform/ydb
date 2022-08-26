@@ -10,6 +10,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/client/minikql_compile/db_key_resolver.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
@@ -133,7 +134,7 @@ public:
 
     TKqpDataExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
         TKqpRequestCounters::TPtr counters)
-        : TBase(std::move(request), database, userToken, counters)
+        : TBase(std::move(request), database, userToken, counters, TWilsonKqp::DataExecuter, "DataExecuter")
     {
         YQL_ENSURE(Request.IsolationLevel != NKikimrKqp::ISOLATION_LEVEL_UNDEFINED);
 
@@ -179,6 +180,10 @@ public:
             Counters->TxProxyMon->ResolveKeySetWrongRequest->Inc();
             ReplyErrorAndDie(reply.Status, reply.Issues);
             return;
+        }
+
+        if (ExecuterTableResolveSpan) {
+            ExecuterTableResolveSpan.End();
         }
 
         Execute();
@@ -503,6 +508,11 @@ private:
 
         LOG_D("All shards prepared, become ExecuteState.");
         Become(&TKqpDataExecuter::ExecuteState);
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.End();
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
+        }
+
         ExecutePlanned();
     }
 
@@ -1231,7 +1241,11 @@ private:
                 ImmediateTx ? NTxDataShard::TTxFlags::Immediate : 0);
         }
 
-        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(ev, shardId, true));
+        auto traceId = ExecuterSpan.GetTraceId();
+
+        LOG_D("ExecuteDatashardTransaction traceId.verbosity: " << std::to_string(traceId.GetVerbosity()));
+
+        Send(MakePipePeNodeCacheID(UseFollowers), new TEvPipeCache::TEvForward(ev, shardId, true), 0, 0, std::move(traceId));
 
         auto result = ShardStates.emplace(shardId, std::move(shardState));
         YQL_ENSURE(result.second);
@@ -1263,7 +1277,7 @@ private:
             return false;
         };
 
-        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), nullptr, nullptr, settings, limits);
+        auto computeActor = CreateKqpComputeActor(SelfId(), TxId, std::move(taskDesc), nullptr, nullptr, settings, limits, ExecuterSpan.GetTraceId());
         auto computeActorId = Register(computeActor);
         task.ComputeActorId = computeActorId;
 
@@ -1274,6 +1288,7 @@ private:
     }
 
     void Execute() {
+        NWilson::TSpan prepareTasksSpan(TWilsonKqp::DataExecuterPrepateTasks, ExecuterStateSpan.GetTraceId(), "PrepateTasks", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartExecute, ResponseEv->Orbit, TxId);
         RequestControls.Reqister(TlsActivationContext->AsActorContext());
 
@@ -1513,9 +1528,17 @@ private:
 
             LOG_T("Create temporary mvcc snapshot, ebcome WaitSnapshotState");
             Become(&TKqpDataExecuter::WaitSnapshotState);
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.End();
+                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterWaitSnapshotState, ExecuterSpan.GetTraceId(), "WaitSnapshotState", NWilson::EFlags::AUTO_END);
+            }
+
             return;
         }
 
+        if (prepareTasksSpan) {
+            prepareTasksSpan.End();
+        }
         ContinueExecute(computeTasks, datashardTxs);
     }
 
@@ -1579,9 +1602,17 @@ private:
         if (ImmediateTx) {
             LOG_T("Immediate tx, become ExecuteState");
             Become(&TKqpDataExecuter::ExecuteState);
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.End();
+                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
+            }
         } else {
             LOG_T("Not immediate tx, become PrepareState");
             Become(&TKqpDataExecuter::PrepareState);
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.End();
+                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::DataExecuterPrepareState, ExecuterSpan.GetTraceId(), "PrepareState", NWilson::EFlags::AUTO_END);
+            }
         }
     }
 
@@ -1647,6 +1678,7 @@ private:
             LockHandle = TLockHandle(TxId, TActivationContext::ActorSystem());
         }
 
+        NWilson::TSpan sendTasksSpan(TWilsonKqp::DataExecuterSendTasksAndTxs, ExecuterStateSpan.GetTraceId(), "SendTasksAndTxs", NWilson::EFlags::AUTO_END);
         LWTRACK(KqpDataExecuterStartTasksAndTxs, ResponseEv->Orbit, TxId, computeTasks.size(), datashardTxs.size());
 
         // first, start compute tasks
@@ -1703,6 +1735,10 @@ private:
             }
 
             ExecuteDatashardTransaction(shardId, shardTx, lockTxId);
+        }
+
+        if (sendTasksSpan) {
+            sendTasksSpan.End();
         }
 
         LOG_I("Total tasks: " << TasksGraph.GetTasks().size()
@@ -1773,6 +1809,15 @@ private:
         }
 
         LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, response.GetResult().ResultsSize(), response.ByteSize());
+        
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.End();
+            ExecuterStateSpan = {};
+        }
+        
+        if (ExecuterSpan) {
+            ExecuterSpan.EndOk();
+        }
 
         LOG_D("Sending response to: " << Target << ", results: " << Results.size());
         Send(Target, ResponseEv.release());

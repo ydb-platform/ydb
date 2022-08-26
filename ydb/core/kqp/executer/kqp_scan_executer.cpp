@@ -44,7 +44,7 @@ public:
 
     TKqpScanExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TString& database,
         const TMaybe<TString>& userToken, TKqpRequestCounters::TPtr counters)
-        : TBase(std::move(request), database, userToken, counters)
+        : TBase(std::move(request), database, userToken, counters, TWilsonKqp::ScanExecuter, "ScanExecuter")
     {
         YQL_ENSURE(Request.Transactions.size() == 1);
         YQL_ENSURE(Request.Locks.empty());
@@ -99,6 +99,10 @@ public:
                     shardIds.insert(partition.ShardId);
                 }
             }
+        }
+
+        if (ExecuterTableResolveSpan) {
+            ExecuterTableResolveSpan.End();
         }
 
         if (shardIds.size() > 0) {
@@ -636,6 +640,8 @@ private:
         NMiniKQL::TScopedAlloc alloc(TAlignedPagePoolCounters(), funcRegistry.SupportsSizedAllocators());
         NMiniKQL::TTypeEnvironment typeEnv(alloc);
 
+        NWilson::TSpan prepareTasksSpan(TWilsonKqp::ScanExecuterPrepareTasks, ExecuterStateSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
+
         NMiniKQL::TMemoryUsageInfo memInfo("PrepareTasks");
         NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo, &funcRegistry);
 
@@ -812,6 +818,10 @@ private:
             return;
         }
 
+        if (prepareTasksSpan) {
+            prepareTasksSpan.End();
+        }
+
         LOG_D("Total tasks: " << TasksGraph.GetTasks().size() << ", readonly: true"
             << ", " << nScanTasks << " scan tasks on " << scanTasks.size() << " nodes"
             << ", totalShardScans: " << nShardScans << ", execType: Scan"
@@ -820,6 +830,11 @@ private:
         ExecuteScanTx(std::move(computeTasks), std::move(scanTasks));
 
         Become(&TKqpScanExecuter::ExecuteState);
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.End();
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ScanExecuterExecuteState, ExecuterSpan.GetTraceId(), "ExecuteState", NWilson::EFlags::AUTO_END);
+        }
+
     }
 
     void ExecuteScanTx(TVector<NYql::NDqProto::TDqTask>&& computeTasks, THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks) {
@@ -838,7 +853,7 @@ private:
         auto planner = CreateKqpPlanner(TxId, SelfId(), std::move(computeTasks),
             std::move(scanTasks), Request.Snapshot,
             Database, UserToken, Deadline.GetOrElse(TInstant::Zero()), Request.StatsMode,
-            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath);
+            Request.DisableLlvmForUdfStages, Request.LlvmEnabled, AppData()->EnableKqpSpilling, Request.RlPath, ExecuterSpan.GetTraceId());
         RegisterWithSameMailbox(planner);
     }
 
@@ -876,6 +891,10 @@ private:
         }
 
         LWTRACK(KqpScanExecuterFinalize, ResponseEv->Orbit, TxId, LastTaskId, LastComputeActorId, Results.size());
+
+        if (ExecuterSpan) {
+            ExecuterSpan.EndOk();
+        }
 
         LOG_D("Sending response to: " << Target);
         Send(Target, ResponseEv.release());

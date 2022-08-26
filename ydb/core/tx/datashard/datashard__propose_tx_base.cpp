@@ -3,6 +3,7 @@
 #include "operation.h"
 
 #include <ydb/core/util/pb.h>
+#include <ydb/core/base/wilson.h>
 
 namespace NKikimr {
 namespace NDataShard {
@@ -18,6 +19,7 @@ TDataShard::TTxProposeTransactionBase::TTxProposeTransactionBase(TDataShard *sel
     , Kind(static_cast<EOperationKind>(Ev->Get()->GetTxKind()))
     , TxId(Ev->Get()->GetTxId())
     , Acked(!delayed)
+    , ProposeTransactionSpan(TWilsonKqp::ProposeTransaction, std::move(Ev->TraceId), "ProposeTransaction", NWilson::EFlags::AUTO_END)
 {
 }
 
@@ -66,6 +68,10 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
 
             TActorId target = Op ? Op->GetTarget() : Ev->Get()->GetSource();
             ui64 cookie = Op ? Op->GetCookie() : Ev->Cookie;
+
+            if (ProposeTransactionSpan) {
+                ProposeTransactionSpan.EndOk();
+            }
             ctx.Send(target, result.Release(), 0, cookie);
 
             return true;
@@ -84,6 +90,10 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
             // Unsuccessful operation parse.
             if (op->IsAborted()) {
                 Y_VERIFY(op->Result());
+
+                if (ProposeTransactionSpan) {
+                    ProposeTransactionSpan.EndError("Unsuccessful operation parse");
+                }
                 ctx.Send(op->GetTarget(), op->Result().Release());
                 return true;
             }
@@ -158,6 +168,10 @@ void TDataShard::TTxProposeTransactionBase::Complete(const TActorContext &ctx) {
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
                 "TTxProposeTransactionBase::Complete at " << Self->TabletID());
 
+    if (ProposeTransactionSpan) {
+        ProposeTransactionSpan.End();
+    }
+    
     if (Op) {
         Y_VERIFY(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {

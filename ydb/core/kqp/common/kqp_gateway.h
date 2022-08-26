@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/tx/long_tx_service/public/lock_handle.h>
 
+#include <library/cpp/actors/wilson/wilson_trace.h>
 #include <library/cpp/actors/core/actorid.h>
 #include <library/cpp/lwtrace/shuttle.h>
 
@@ -128,6 +129,7 @@ public:
         bool NeedTxId = true;
 
         NLWTrace::TOrbit Orbit;
+        NWilson::TTraceId TraceId;
     };
 
     struct TExecPhysicalResult : public TGenericResult {

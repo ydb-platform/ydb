@@ -9,6 +9,8 @@
 #include <ydb/core/kqp/prepare/kqp_query_plan.h>
 #include <ydb/library/yql/minikql/computation/mkql_computation_node.h>
 
+#include <ydb/core/base/wilson.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -66,6 +68,7 @@ public:
     TKqpLiteralExecuter(IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters)
         : Request(std::move(request))
         , Counters(counters)
+        , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
         ResponseEv->Orbit = std::move(Request.Orbit);
@@ -109,6 +112,7 @@ private:
     }
 
     void Handle(TEvKqpExecuter::TEvTxRequest::TPtr& ev) {
+        NWilson::TSpan prepareTasksSpan(TWilsonKqp::LiteralExecuterPrepareTasks, LiteralExecuterSpan.GetTraceId(), "PrepareTasks", NWilson::EFlags::AUTO_END);
         if (Stats) {
             Stats->StartTs = TInstant::Now();
         }
@@ -171,6 +175,12 @@ private:
             }
         });
 
+        if (prepareTasksSpan) {
+            prepareTasksSpan.EndOk();
+        }
+
+        NWilson::TSpan runTasksSpan(TWilsonKqp::LiteralExecuterRunTasks, LiteralExecuterSpan.GetTraceId(), "RunTasks", NWilson::EFlags::AUTO_END);
+
         // task runner settings
         NMiniKQL::TKqpComputeContextBase computeCtx;
         TDqTaskRunnerContext context = CreateTaskRunnerContext(&computeCtx, &alloc, &typeEnv);
@@ -188,6 +198,10 @@ private:
             if (TerminateIfTimeout()) {
                 return;
             }
+        }
+
+        if (runTasksSpan) {
+            runTasksSpan.End();
         }
 
         Finalize(context, holderFactory);
@@ -349,6 +363,10 @@ private:
 
         LWTRACK(KqpLiteralExecuterFinalize, ResponseEv->Orbit, TxId);
 
+        if (LiteralExecuterSpan) {
+            LiteralExecuterSpan.EndOk();
+        }
+
         LOG_D("Sending response to: " << Target << ", results: " << Results.size());
         Send(Target, ResponseEv.release());
     }
@@ -413,6 +431,10 @@ private:
 
         LWTRACK(KqpLiteralExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
 
+        if (LiteralExecuterSpan) {
+            LiteralExecuterSpan.EndError(response.DebugString());
+        }
+
         Send(Target, ResponseEv.release());
         PassAway();
     }
@@ -438,6 +460,7 @@ private:
     TVector<TIntrusivePtr<IDqTaskRunner>> TaskRunners;
     std::unordered_map<ui64, ui32> TaskId2StageId;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    NWilson::TSpan LiteralExecuterSpan;
 };
 
 } // anonymous namespace

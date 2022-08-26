@@ -3,6 +3,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/client/minikql_compile/mkql_compile_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/host/kqp_host.h>
@@ -10,6 +11,7 @@
 #include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -46,7 +48,7 @@ public:
     TKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
         const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
         TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
-        TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)
+        TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine, NWilson::TTraceId traceId)
         : Owner(owner)
         , ModuleResolverState(moduleResolverState)
         , Counters(counters)
@@ -57,6 +59,7 @@ public:
         , Config(MakeIntrusive<TKikimrConfiguration>())
         , CompilationTimeout(TDuration::MilliSeconds(serviceConfig.GetCompileTimeoutMs()))
         , RecompileWithNewEngine(recompileWithNewEngine)
+        , CompileActorSpan(TWilsonKqp::CompileActor, std::move(traceId), "CompileActor")
     {
         Config->Init(kqpSettings->DefaultSettings.GetDefaultSettings(), Query.Cluster, kqpSettings->Settings, false);
 
@@ -73,6 +76,10 @@ public:
         StartTime = TInstant::Now();
 
         Counters->ReportCompileStart(DbCounters);
+
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "traceId: verbosity = "
+            << std::to_string(CompileActorSpan.GetTraceId().GetVerbosity()) << ", trace_id = "
+            << std::to_string(CompileActorSpan.GetTraceId().GetTraceId()));
 
         LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPILE_ACTOR, "Start compilation"
             << ", self: " << ctx.SelfID
@@ -214,6 +221,10 @@ private:
         ctx.Send(Owner, responseEv.Release());
 
         Counters->ReportCompileFinish(DbCounters);
+
+        if (CompileActorSpan) {
+            CompileActorSpan.End();
+        }
 
         Die(ctx);
     }
@@ -390,6 +401,8 @@ private:
     TIntrusivePtr<IKqpHost::IAsyncQueryResult> AsyncCompileResult;
     std::shared_ptr<TKqpCompileResult> KqpCompileResult;
     std::optional<TString> ReplayMessage;
+
+    NWilson::TSpan CompileActorSpan;
 };
 
 void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConfig& serviceConfig) {
@@ -405,10 +418,10 @@ void ApplyServiceConfig(TKikimrConfiguration& kqpConfig, const TTableServiceConf
 IActor* CreateKqpCompileActor(const TActorId& owner, const TKqpSettings::TConstPtr& kqpSettings,
     const TTableServiceConfig& serviceConfig, TIntrusivePtr<TModuleResolverState> moduleResolverState,
     TIntrusivePtr<TKqpCounters> counters, const TString& uid, const TKqpQueryId& query, const TString& userToken,
-    TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine)
+    TKqpDbCountersPtr dbCounters, bool recompileWithNewEngine, NWilson::TTraceId traceId)
 {
     return new TKqpCompileActor(owner, kqpSettings, serviceConfig, moduleResolverState, counters, uid,
-        std::move(query), userToken, dbCounters, recompileWithNewEngine);
+        std::move(query), userToken, dbCounters, recompileWithNewEngine, std::move(traceId));
 }
 
 } // namespace NKqp

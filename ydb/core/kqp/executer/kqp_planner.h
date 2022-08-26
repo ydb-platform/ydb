@@ -6,6 +6,7 @@
 #include <ydb/core/kqp/rm/kqp_rm.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
@@ -35,7 +36,7 @@ public:
         THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
         const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
         const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages,
-        bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath);
+        bool enableLlvm, bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TTraceId traceId);
 
     void Bootstrap(const TActorContext& ctx);
 
@@ -71,12 +72,13 @@ private:
     const bool WithSpilling;
     const TMaybe<NKikimrKqp::TRlPath> RlPath;
     THashSet<ui32> TrackingNodes;
+    NWilson::TSpan KqpPlannerSpan;
 };
 
 IActor* CreateKqpPlanner(ui64 txId, const TActorId& executer, TVector<NYql::NDqProto::TDqTask>&& tasks,
     THashMap<ui64, TVector<NYql::NDqProto::TDqTask>>&& scanTasks, const IKqpGateway::TKqpSnapshot& snapshot,
     const TString& database, const TMaybe<TString>& userToken, TInstant deadline,
     const Ydb::Table::QueryStatsCollection::Mode& statsMode, bool disableLlvmForUdfStages, bool enableLlvm,
-    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath);
+    bool withSpilling, const TMaybe<NKikimrKqp::TRlPath>& rlPath, NWilson::TTraceId traceId = {});
 
 } // namespace NKikimr::NKqp

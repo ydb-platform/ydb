@@ -10,6 +10,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/base/kikimr_issue.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/kqp/executer/kqp_tasks_graph.h>
@@ -26,6 +27,7 @@
 #include <ydb/library/yql/public/issue/yql_issue_message.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 #include <library/cpp/actors/core/hfunc.h>
 #include <library/cpp/actors/core/log.h>
 
@@ -81,11 +83,12 @@ template <class TDerived, EExecType ExecType>
 class TKqpExecuterBase : public TActorBootstrapped<TDerived> {
 public:
     TKqpExecuterBase(IKqpGateway::TExecPhysicalRequest&& request, const TString& database, const TMaybe<TString>& userToken,
-        TKqpRequestCounters::TPtr counters)
+        TKqpRequestCounters::TPtr counters, ui64 spanVerbosity = 0, TString spanName = "no_name")
         : Request(std::move(request))
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
+        , ExecuterSpan(spanVerbosity, std::move(Request.TraceId), spanName)
     {
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>();
         ResponseEv->Orbit = std::move(Request.Orbit);
@@ -104,6 +107,7 @@ public:
 
         LOG_T("Bootstrap done, become ReadyState");
         this->Become(&TKqpExecuterBase::ReadyState);
+        ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterReadyState, ExecuterSpan.GetTraceId(), "ReadyState", NWilson::EFlags::AUTO_END);
     }
 
     void ReportEventElapsedTime() {
@@ -166,6 +170,13 @@ protected:
 
         LOG_T("Got request, become WaitResolveState");
         this->Become(&TDerived::WaitResolveState);
+        if (ExecuterStateSpan) {
+            ExecuterStateSpan.End();
+            ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterWaitResolveState, ExecuterSpan.GetTraceId(), "WaitResolveState", NWilson::EFlags::AUTO_END);
+        }
+
+        ExecuterTableResolveSpan = NWilson::TSpan(TWilsonKqp::ExecuterTableResolve, ExecuterStateSpan.GetTraceId(), "ExecuterTableResolve", NWilson::EFlags::AUTO_END);
+
         StartResolveTime = now;
 
         if (Stats) {
@@ -184,6 +195,11 @@ protected:
             InternalError(issues);
         } else if (statusCode == Ydb::StatusIds::TIMEOUT) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
+            
+            if (ExecuterSpan) {
+                ExecuterSpan.EndError("timeout");
+            }
+
             this->Send(Target, abortEv.Release());
 
             TerminateComputeActors(Ydb::StatusIds::TIMEOUT, "timeout");
@@ -199,10 +215,20 @@ protected:
 
         if (cancel) {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, "Request timeout exceeded");
+            
+            if (ExecuterSpan) {
+                ExecuterSpan.EndError("timeout");
+            }
+
             this->Send(Target, abortEv.Release());
             CancelAtActor = {};
         } else {
             auto abortEv = MakeHolder<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::TIMEOUT, "Request timeout exceeded");
+            
+            if (ExecuterSpan) {
+                ExecuterSpan.EndError("timeout");
+            }
+
             this->Send(Target, abortEv.Release());
             DeadlineActor = {};
         }
@@ -605,6 +631,10 @@ protected:
 
         LWTRACK(KqpBaseExecuterReplyErrorAndDie, ResponseEv->Orbit, TxId);
 
+        if (ExecuterSpan) {
+            ExecuterSpan.EndError(response.DebugString());
+        }
+
         this->Send(Target, ResponseEv.release());
         this->PassAway();
     }
@@ -638,6 +668,10 @@ protected:
             this->Send(this->SelfId(), new TEvents::TEvPoison);
             LOG_T("Terminate, become ZombieState");
             this->Become(&TKqpExecuterBase::ZombieState);
+            if (ExecuterStateSpan) {
+                ExecuterStateSpan.End();
+                ExecuterStateSpan = NWilson::TSpan(TWilsonKqp::ExecuterZombieState, ExecuterSpan.GetTraceId(), "ZombieState", NWilson::EFlags::AUTO_END);
+            }
         } else {
             IActor::PassAway();
         }
@@ -686,6 +720,9 @@ protected:
     TInstant LastResourceUsageUpdate;
 
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    NWilson::TSpan ExecuterSpan;
+    NWilson::TSpan ExecuterStateSpan;
+    NWilson::TSpan ExecuterTableResolveSpan;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

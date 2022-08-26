@@ -19,6 +19,7 @@ target_link_libraries(ydb-core-kqp PUBLIC
   cpp-actors-helpers
   cpp-digest-md5
   cpp-string_utils-base64
+  cpp-actors-wilson
   ydb-core-actorlib_impl
   ydb-core-base
   core-client-minikql_compile
@@ -72,6 +73,7 @@ target_link_libraries(ydb-core-kqp.global PUBLIC
   cpp-actors-helpers
   cpp-digest-md5
   cpp-string_utils-base64
+  cpp-actors-wilson
   ydb-core-actorlib_impl
   ydb-core-base
   core-client-minikql_compile

@@ -8,6 +8,7 @@
 #include "dq_compute_memory_quota.h"
 
 #include <ydb/core/base/kikimr_issue.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
@@ -20,6 +21,7 @@
 #include <ydb/library/yql/dq/actors/dq.h>
 
 #include <library/cpp/actors/core/interconnect.h>
+#include <library/cpp/actors/wilson/wilson_span.h>
 
 #include <util/generic/size_literals.h>
 #include <util/string/join.h>
@@ -169,7 +171,8 @@ protected:
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         bool ownMemoryQuota = true, bool passExceptions = false,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr)
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
+        NWilson::TTraceId traceId = {})
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(std::move(task))
@@ -183,6 +186,7 @@ protected:
         , MemoryQuota(ownMemoryQuota ? InitMemoryQuota() : nullptr)
         , Running(!Task.GetCreateSuspended())
         , PassExceptions(passExceptions)
+        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
@@ -195,7 +199,8 @@ protected:
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr)
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr, 
+        NWilson::TTraceId traceId = {})
         : ExecuterId(executerId)
         , TxId(txId)
         , Task(task)
@@ -207,6 +212,7 @@ protected:
         , State(Task.GetCreateSuspended() ? NDqProto::COMPUTE_STATE_UNKNOWN : NDqProto::COMPUTE_STATE_EXECUTING)
         , MemoryQuota(InitMemoryQuota())
         , Running(!Task.GetCreateSuspended())
+        , ComputeActorSpan(NKikimr::TWilsonKqp::ComputeActor, std::move(traceId), "ComputeActor")
     {
         if (RuntimeSettings.StatsMode >= NDqProto::DQ_STATS_MODE_BASIC) {
             BasicStats = std::make_unique<TBasicStats>();
@@ -570,6 +576,10 @@ protected:
             FillStats(record.MutableStats(), /* last */ true);
         }
         IssuesToMessage(issues, record.MutableIssues());
+
+        if (ComputeActorSpan) {
+            ComputeActorSpan.End();
+        }
 
         this->Send(ExecuterId, execEv.Release());
 
@@ -1023,6 +1033,14 @@ protected:
                     << "Timeout event from compute actor " << this->SelfId()
                     << ", TxId: " << TxId << ", task: " << Task.GetId());
 
+                if (ComputeActorSpan) {
+                    ComputeActorSpan.EndError(
+                        TStringBuilder()
+                            << "Timeout event from compute actor " << this->SelfId()
+                            << ", TxId: " << TxId << ", task: " << Task.GetId()
+                    );
+                }
+
                 this->Send(ExecuterId, abortEv.Release());
 
                 TerminateSources("timeout exceeded", false);
@@ -1115,6 +1133,11 @@ protected:
         this->TerminateSources(issues, success);
 
         if (ev->Sender != ExecuterId) {
+            
+            if (ComputeActorSpan) {
+                ComputeActorSpan.End();
+            }
+
             NActors::TActivationContext::Send(ev->Forward(ExecuterId));
         }
 
@@ -1777,6 +1800,10 @@ protected:
         CA_LOG_D("Send stats to executor actor " << ExecuterId << " TaskId: " << Task.GetId()
             << " Stats: " << dbgPrintStats());
 
+        if (ComputeActorSpan) {
+            ComputeActorSpan.End();
+        }
+        
         this->Send(ExecuterId, evState.release(), NActors::IEventHandle::FlagTrackDelivery);
 
         LastSendStatsTime = now;
@@ -1825,6 +1852,7 @@ private:
     bool Running = true;
     TInstant LastSendStatsTime;
     bool PassExceptions = false;
+    NWilson::TSpan ComputeActorSpan;
 protected:
     bool MonCountersProvided = false;
     ::NMonitoring::TDynamicCounters::TCounterPtr MkqlMemoryUsage;

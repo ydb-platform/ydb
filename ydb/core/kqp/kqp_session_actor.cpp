@@ -16,6 +16,7 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
+#include <ydb/core/base/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -28,6 +29,9 @@
 
 #include <util/string/printf.h>
 #include <util/string/escape.h>
+
+#include <library/cpp/actors/wilson/wilson_span.h>
+#include <library/cpp/actors/wilson/wilson_trace.h>
 
 LWTRACE_USING(KQP_PROVIDER);
 
@@ -83,6 +87,7 @@ struct TKqpQueryState {
     TString UserToken;
 
     NLWTrace::TOrbit Orbit;
+    NWilson::TSpan KqpSessionSpan;
 
     TString TxId; // User tx
     bool Commit = false;
@@ -312,6 +317,10 @@ public:
         YQL_ENSURE(queryRequest.HasAction());
         auto action = queryRequest.GetAction();
 
+        auto id = NWilson::TTraceId::NewTraceId(TWilsonKqp::KqpSession, Max<ui32>());
+        LOG_I("Wilson Tracing started, id: " + std::to_string(id.GetTraceId()));
+        QueryState->KqpSessionSpan = NWilson::TSpan(TWilsonKqp::KqpSession, std::move(id), "Session.query." + NKikimrKqp::EQueryAction_Name(action), NWilson::EFlags::AUTO_END);
+
         LWTRACK(KqpSessionQueryRequest,
             QueryState->Orbit,
             queryRequest.GetDatabase(),
@@ -426,7 +435,8 @@ public:
 
         auto compileRequestActor = CreateKqpCompileRequestActor(SelfId(), QueryState->UserToken, uid,
             std::move(query), keepInCache, compileDeadline, Settings.DbCounters,
-            QueryState ? std::move(QueryState->Orbit) : NLWTrace::TOrbit());
+            QueryState ? std::move(QueryState->Orbit) : NLWTrace::TOrbit(),
+            QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId());
 
         TlsActivationContext->ExecutorThread.RegisterActor(compileRequestActor);
 
@@ -1001,6 +1011,9 @@ public:
         if (QueryState) {
             request.Orbit = std::move(QueryState->Orbit);
         }
+        request.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();
+        LOG_D("Sending to Executer TraceId: " << request.TraceId.GetTraceId() << " " << request.TraceId.GetSpanIdSize());
+
         auto executerActor = CreateKqpExecuter(std::move(request), Settings.Database,
                 (QueryState && QueryState->UserToken) ? TMaybe<TString>(QueryState->UserToken) : Nothing(),
                 RequestCounters);
@@ -1488,8 +1501,14 @@ public:
         }
 
         if (status == Ydb::StatusIds::SUCCESS) {
+            if (QueryState && QueryState->KqpSessionSpan) {
+                QueryState->KqpSessionSpan.EndOk();
+            }
             LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
         } else {
+            if (QueryState && QueryState->KqpSessionSpan) {
+                QueryState->KqpSessionSpan.EndError(response.DebugString());
+            }
             LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
         }
         Send(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
@@ -1947,6 +1966,7 @@ private:
     TActorId IdleTimerActorId;
     ui32 IdleTimerId = 0;
     std::optional<TSessionShutdownState> ShutdownState;
+
 };
 
 } // namespace

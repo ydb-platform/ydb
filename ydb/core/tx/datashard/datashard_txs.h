@@ -4,6 +4,8 @@
 #include "datashard_impl.h"
 #include "execution_unit_kind.h"
 
+#include <library/cpp/actors/wilson/wilson_span.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -106,6 +108,7 @@ protected:
     TInstant CommitStart;
     bool Acked;
     bool Rescheduled = false;
+    NWilson::TSpan ProposeTransactionSpan;
 };
 
 class TDataShard::TTxReadSet : public NTabletFlatExecutor::TTransactionBase<TDataShard> {

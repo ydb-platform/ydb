@@ -20,7 +20,7 @@ namespace NYdb::NConsoleClient {
             TMaybe<i64> limit,
             bool commit,
             bool wait,
-            EOutputFormat format,
+            EMessagingFormat format,
             TVector<ETopicMetadataField> metadataFields,
             ETransformBody transform,
             TDuration idleTimeout);
@@ -33,7 +33,7 @@ namespace NYdb::NConsoleClient {
         GETTER(bool, Commit);
         GETTER(TMaybe<i64>, Limit);
         GETTER(bool, Wait);
-        GETTER(EOutputFormat, OutputFormat);
+        GETTER(EMessagingFormat, MessagingFormat);
         GETTER(ETransformBody, Transform);
         GETTER(TDuration, IdleTimeout);
         // TODO(shmel1k@): add batching settings.
@@ -45,7 +45,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<int> FlushMessagesCount_;
         TDuration IdleTimeout_;
 
-        EOutputFormat OutputFormat_ = EOutputFormat::Default;
+        EMessagingFormat MessagingFormat_ = EMessagingFormat::SingleMessage;
         ETransformBody Transform_ = ETransformBody::None;
         TMaybe<i64> Limit_ = Nothing();
         bool Commit_ = false;

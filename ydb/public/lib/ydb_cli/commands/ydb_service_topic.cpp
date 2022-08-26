@@ -31,11 +31,11 @@ namespace NYdb::NConsoleClient {
         // TODO(shmel1k@): improve docs
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
             {ETopicMetadataField::Body, "Message data"},
-            {ETopicMetadataField::WriteTime, "Message write time. This time defines the UNIX timestamp the messages was written to server"},
-            {ETopicMetadataField::CreateTime, "Message creation time. This time defines the UNIX timestamp the message was created by client"},
-            {ETopicMetadataField::MessageGroupID, "Message group id. This identifier is used to stick to concrete partition using round-robin algorithm. All messages with the same message group id are guaranteed to be read in FIFO order"},
-            {ETopicMetadataField::Offset, "Message offset. Offset defines unique message number in his partition"},
-            {ETopicMetadataField::SeqNo, "Message sequence number, which is used for message deduplication"},
+            {ETopicMetadataField::WriteTime, "Message write time, a UNIX timestamp the message was written to server"},
+            {ETopicMetadataField::CreateTime, "Message creation time, a UNIX timestamp provided by the publishing client"},
+            {ETopicMetadataField::MessageGroupID, "Message group id. All messages with the same message group id are guaranteed to be read in FIFO order"},
+            {ETopicMetadataField::Offset, "Message offset. Offset orders messages in each partition"},
+            {ETopicMetadataField::SeqNo, "Message sequence number, used for message deduplication when publishing"},
             {ETopicMetadataField::Meta, "Message additional metadata"},
         };
 
@@ -60,8 +60,8 @@ namespace NYdb::NConsoleClient {
         };
 
         THashMap<ETransformBody, TString> TransformBodyDescriptions = {
-            {ETransformBody::None, "Do not transform body to any format"},
-            {ETransformBody::Base64, "Transform body to base64 format"},
+            {ETransformBody::None, "No conversions, binary data on the client is exactly the same as it is in the topic message."},
+            {ETransformBody::Base64, "Message on the client is a base64-encoded representation of the topic message."},
         };
 
         constexpr TDuration DefaultIdleTimeout = TDuration::Seconds(1);
@@ -336,12 +336,12 @@ namespace NYdb::NConsoleClient {
     }
 
     TCommandTopicRead::TCommandTopicRead()
-        : TYdbCommand("read", {}, "Read from topic command") {
+        : TYdbCommand("read", {}, "Read from a topic to the client filesystem or terminal") {
     }
 
     void TCommandTopicRead::AddAllowedMetadataFields(TConfig& config) {
         TStringStream description;
-        description << "Comma-separated list of message fields to print. Available fields: ";
+        description << "Comma-separated list of message fields to print in Pretty format. If not specified, all fields are printed. Available fields: ";
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         for (const auto& iter : TopicMetadataFieldsDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
@@ -354,7 +354,7 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicRead::AddAllowedTransformFormats(TConfig& config) {
         TStringStream description;
-        description << "Format to transform received body: Available \"transform\" values: ";
+        description << "Conversion between a message data in the topic and the client filesystem/terminal. Available options: ";
         NColorizer::TColors colors = NColorizer::AutoColors(Cout);
         for (const auto& iter : TransformBodyDescriptions) {
             description << "\n  " << colors.BoldColor() << iter.first << colors.OldColor() << "\n    " << iter.second;
@@ -362,22 +362,24 @@ namespace NYdb::NConsoleClient {
 
         config.Opts->AddLongOption("transform", description.Str())
             .Optional()
+            .DefaultValue("none")
             .StoreResult(&TransformStr_);
     }
 
     void TCommandTopicRead::Config(TConfig& config) {
         TYdbCommand::Config(config);
         config.Opts->SetFreeArgsNum(1);
-        SetFreeArgTitle(0, "<topic-path>", "Topic to read data");
+        SetFreeArgTitle(0, "<topic-path>", "Topic to read data from");
 
-        AddFormats(config, {
-                               EOutputFormat::Pretty,
-                               EOutputFormat::NewlineDelimited,
-                               EOutputFormat::Concatenated,
+        AddMessagingFormats(config, {
+                               EMessagingFormat::SingleMessage,
+                               EMessagingFormat::Pretty,
+                               EMessagingFormat::NewlineDelimited,
+                               EMessagingFormat::Concatenated,
                            });
 
         // TODO(shmel1k@): improve help.
-        config.Opts->AddLongOption('c', "consumer", "Consumer name")
+        config.Opts->AddLongOption('c', "consumer", "Consumer name.")
             .Required()
             .StoreResult(&Consumer_);
 //        config.Opts->AddLongOption("offset", "Offset to start read from")
@@ -386,7 +388,7 @@ namespace NYdb::NConsoleClient {
 //        config.Opts->AddLongOption("partition", "Partition to read from")
 //            .Optional()
 //            .StoreResult(&Partition_);
-        config.Opts->AddLongOption('f', "file", "File to write data to")
+        config.Opts->AddLongOption('f', "file", "File to write data to. In not specified, data is written to the standard output.")
             .Optional()
             .StoreResult(&File_);
 // NOTE(shmel1k@): temporary disabled options
@@ -399,7 +401,7 @@ namespace NYdb::NConsoleClient {
 //        config.Opts->AddLongOption("flush-messages-count", "") // TODO(shmel1k@): improve
 //            .Optional()
 //            .StoreResult(&FlushMessagesCount_);
-        config.Opts->AddLongOption("idle-timeout", "Max wait duration for new messages")
+        config.Opts->AddLongOption("idle-timeout", "Max wait duration for new messages. Topic is considered empty if no new messages arrive within this period.")
             .Optional()
             .DefaultValue(DefaultIdleTimeout)
             .StoreResult(&IdleTimeout_);
@@ -414,14 +416,17 @@ namespace NYdb::NConsoleClient {
 //        config.Opts->AddLongOption("discard-above-limits", "Do not print messages with size more than defined in 'message-size-limit' option")
 //            .Optional()
 //            .StoreResult(&DiscardAboveLimits_);
-        config.Opts->AddLongOption("limit", "Messages count to read")
+        config.Opts->AddLongOption("limit", "Limit on message count to read, 0 - unlimited. "
+                                            "If avobe 0, processing stops when either topic is empty, or the specified limit reached. "
+                                            "Must be above 0 for pretty output format."
+                                            "\nDefault is 10 for pretty format, unlimited for streaming formats.")
             .Optional()
             .StoreResult(&Limit_);
-        config.Opts->AddLongOption('w', "wait", "Wait for infinite time for first message received")
+        config.Opts->AddLongOption('w', "wait", "Wait indefinitely for a first message received. If not specified, command exits on empty topic returning no data to the output.")
             .Optional()
             .NoArgument()
             .StoreValue(&Wait_, true);
-        config.Opts->AddLongOption("timestamp", "Timestamp from which messages will be read")
+        config.Opts->AddLongOption("timestamp", "Timestamp from which messages will be read. If not specified, messages are read from the last commit point for the chosen consumer.")
             .Optional()
             .StoreResult(&Timestamp_);
 
@@ -485,7 +490,7 @@ namespace NYdb::NConsoleClient {
     void TCommandTopicRead::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
         ParseTopicName(config, 0);
-        ParseFormats();
+        ParseMessagingFormats();
         ParseMetadataFields();
         ParseTransformFormat();
     }
@@ -507,7 +512,7 @@ namespace NYdb::NConsoleClient {
 
     void TCommandTopicRead::ValidateConfig() {
         // TODO(shmel1k@): add more formats.
-        if (OutputFormat != EOutputFormat::Default && (Limit_.Defined() && (Limit_ < 0 || Limit_ > 500))) {
+        if (MessagingFormat != EMessagingFormat::SingleMessage && (Limit_.Defined() && (Limit_ < 0 || Limit_ > 500))) {
             throw TMisuseException() << "OutputFormat " << OutputFormat << " is not compatible with "
                                      << "limit equal '0' or more than '500': '" << *Limit_ << "' was given";
         }
@@ -528,7 +533,7 @@ namespace NYdb::NConsoleClient {
                                                                            Limit_,
                                                                            Commit_,
                                                                            Wait_,
-                                                                           OutputFormat,
+                                                                           MessagingFormat,
                                                                            MetadataFields_,
                                                                            Transform_,
                                                                            IdleTimeout_));
@@ -563,12 +568,11 @@ namespace NYdb::NConsoleClient {
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic to write data");
 
-        AddInputFormats(config, {
-                                    EOutputFormat::NewlineDelimited,
-                                    EOutputFormat::SingleMessage,
+        AddMessagingFormats(config, {
+                                    EMessagingFormat::NewlineDelimited,
+                                    EMessagingFormat::SingleMessage,
                                     //      EOutputFormat::JsonRawStreamConcat,
                                     //      EOutputFormat::JsonRawArray,
-                                    EOutputFormat::SingleMessage,
                                 });
         AddAllowedCodecs(config);
 
@@ -599,10 +603,10 @@ namespace NYdb::NConsoleClient {
     void TCommandTopicWrite::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
         ParseTopicName(config, 0);
-        ParseFormats();
+        ParseMessagingFormats();
         ParseCodec();
 
-        if (Delimiter_.Defined() && InputFormat != EOutputFormat::Default) {
+        if (Delimiter_.Defined() && MessagingFormat != EMessagingFormat::SingleMessage) {
             throw TMisuseException() << "Both mutually exclusive options \"delimiter\"(\"--delimiter\", \"-d\" "
                                      << "and \"input format\"(\"--input-format\") were provided.";
         }
@@ -674,7 +678,7 @@ namespace NYdb::NConsoleClient {
         {
             auto writeSession = NPersQueue::TPersQueueClient(*driver).CreateWriteSession(std::move(PrepareWriteSessionSettings()));
             auto writer = TTopicWriter(writeSession, std::move(TTopicWriterParams(
-                                                         InputFormat,
+                                                         MessagingFormat,
                                                          Delimiter_,
                                                          MessageSizeLimit_,
                                                          BatchDuration_,

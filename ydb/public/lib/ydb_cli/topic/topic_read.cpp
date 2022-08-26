@@ -12,8 +12,8 @@ namespace NYdb::NConsoleClient {
         constexpr i64 MessagesLimitDefaultPrettyFormat = 10;
         constexpr i64 MessagesLimitDefaultJsonArrayFormat = 500;
 
-        bool IsStreamingFormat(EOutputFormat format) {
-            return format == EOutputFormat::NewlineBase64 || format == EOutputFormat::NewlineDelimited || format == EOutputFormat::Concatenated;
+        bool IsStreamingFormat(EMessagingFormat format) {
+            return format == EMessagingFormat::NewlineDelimited || format == EMessagingFormat::Concatenated;
         }
     }
 
@@ -24,13 +24,13 @@ namespace NYdb::NConsoleClient {
         TMaybe<i64> limit,
         bool commit,
         bool wait,
-        EOutputFormat format,
+        EMessagingFormat format,
         TVector<ETopicMetadataField> metadataFields,
         ETransformBody transform,
         TDuration idleTimeout)
         : MetadataFields_(metadataFields)
         , IdleTimeout_(idleTimeout)
-        , OutputFormat_(format)
+        , MessagingFormat_(format)
         , Transform_(transform)
         , Limit_(limit)
         , Commit_(commit)
@@ -53,20 +53,20 @@ namespace NYdb::NConsoleClient {
         OutputTable_ = std::make_unique<TPrettyTable>(table);
 
         if (!ReaderParams_.Limit().Defined()) {
-            if (IsStreamingFormat(ReaderParams_.OutputFormat())) {
+            if (IsStreamingFormat(ReaderParams_.MessagingFormat())) {
                 MessagesLeft_ = MessagesLimitUnlimited;
             }
-            if (ReaderParams_.OutputFormat() == EOutputFormat::Pretty) {
+            if (ReaderParams_.MessagingFormat() == EMessagingFormat::Pretty) {
                 MessagesLeft_ = MessagesLimitDefaultPrettyFormat;
             }
-            if (ReaderParams_.OutputFormat() == EOutputFormat::JsonRawArray) {
+            if (ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray) {
                 MessagesLeft_ = MessagesLimitDefaultJsonArrayFormat;
             }
             return;
         }
 
         i64 limit = *(ReaderParams_.Limit());
-        if (IsStreamingFormat(ReaderParams_.OutputFormat()) && limit == 0) {
+        if (IsStreamingFormat(ReaderParams_.MessagingFormat()) && limit == 0) {
             limit = -1;
         }
         MessagesLeft_ = limit;
@@ -83,20 +83,11 @@ namespace NYdb::NConsoleClient {
 
         using TReceivedMessage = NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage;
 
-        void AddMetadataFieldToRow(TPrettyTable::TRow& row, const TReceivedMessage& message, EOutputFormat format, ETransformBody transform, ETopicMetadataField f, size_t idx) {
+        void AddMetadataFieldToRow(TPrettyTable::TRow& row, const TReceivedMessage& message, ETransformBody transform, ETopicMetadataField f, size_t idx) {
             switch (f) {
                 case ETopicMetadataField::Body:
-                    if (format == EOutputFormat::PrettyBase64) {
-                        row.Column(idx, FormatBody(message.GetData(), transform));
-                    }
-                    if (format == EOutputFormat::Pretty || format == EOutputFormat::PrettyRaw) {
-                        row.Column(idx, FormatBody(message.GetData(), transform));
-                    }
-                    if (format == EOutputFormat::PrettyUnicode) {
-                        row.Column(idx, message.GetData());
-                    }
+                    row.Column(idx, FormatBody(message.GetData(), transform));
                     break;
-
                 case ETopicMetadataField::CreateTime:
                     row.Column(idx, message.GetCreateTime());
                     break;
@@ -128,7 +119,7 @@ namespace NYdb::NConsoleClient {
             TPrettyTable::TRow& row = OutputTable_->AddRow();
             for (size_t i = 0; i < ReaderParams_.MetadataFields().size(); ++i) {
                 ETopicMetadataField f = ReaderParams_.MetadataFields()[i];
-                AddMetadataFieldToRow(row, message, ReaderParams_.OutputFormat(), ReaderParams_.Transform(), f, i);
+                AddMetadataFieldToRow(row, message, ReaderParams_.Transform(), f, i);
             }
         }
 
@@ -141,14 +132,10 @@ namespace NYdb::NConsoleClient {
     }
 
     void TTopicReader::Close(IOutputStream& output, TDuration closeTimeout) {
-        if (ReaderParams_.OutputFormat() == EOutputFormat::Pretty ||
-            ReaderParams_.OutputFormat() == EOutputFormat::PrettyBase64 ||
-            ReaderParams_.OutputFormat() == EOutputFormat::PrettyRaw) {
+        if (ReaderParams_.MessagingFormat() == EMessagingFormat::Pretty) {
             PrintMessagesInPrettyFormat(output);
         }
-        if (ReaderParams_.OutputFormat() == EOutputFormat::JsonRawArray ||
-            ReaderParams_.OutputFormat() == EOutputFormat::JsonBase64Array ||
-            ReaderParams_.OutputFormat() == EOutputFormat::JsonUnicodeArray) {
+        if (ReaderParams_.MessagingFormat() == EMessagingFormat::JsonArray) {
             PrintMessagesInJsonArrayFormat(output);
         }
         output.Flush();
@@ -159,19 +146,19 @@ namespace NYdb::NConsoleClient {
     }
 
     void TTopicReader::HandleReceivedMessage(const TReceivedMessage& message, IOutputStream& output) {
-        EOutputFormat outputFormat = ReaderParams_.OutputFormat();
-        if (outputFormat == EOutputFormat::Default || outputFormat == EOutputFormat::Concatenated) {
+        EMessagingFormat MessagingFormat = ReaderParams_.MessagingFormat();
+        if (MessagingFormat == EMessagingFormat::SingleMessage || MessagingFormat == EMessagingFormat::Concatenated) {
             output << FormatBody(message.GetData(), ReaderParams_.Transform());
             output.Flush();
             return;
         }
-        if (outputFormat == EOutputFormat::NewlineDelimited) {
+        if (MessagingFormat == EMessagingFormat::NewlineDelimited) {
             output << FormatBody(message.GetData(), ReaderParams_.Transform());
             output << "\n";
             output.Flush();
             return;
         }
-        if (outputFormat == EOutputFormat::Default) {
+        if (MessagingFormat == EMessagingFormat::SingleMessage) {
             output << FormatBody(message.GetData(), ReaderParams_.Transform());
             return;
         }
@@ -239,7 +226,7 @@ namespace NYdb::NConsoleClient {
     int TTopicReader::Run(IOutputStream& output) {
         LastMessageReceivedTs_ = TInstant::Now();
 
-        bool waitForever = ReaderParams_.Wait() && (ReaderParams_.OutputFormat() == EOutputFormat::NewlineDelimited || ReaderParams_.OutputFormat() == EOutputFormat::Concatenated);
+        bool waitForever = ReaderParams_.Wait() && (ReaderParams_.MessagingFormat() == EMessagingFormat::NewlineDelimited || ReaderParams_.MessagingFormat() == EMessagingFormat::Concatenated);
 
         while ((MessagesLeft_ > 0 || MessagesLeft_ == -1) && !IsInterrupted()) {
             TInstant messageReceiveDeadline = LastMessageReceivedTs_ + ReaderParams_.IdleTimeout();

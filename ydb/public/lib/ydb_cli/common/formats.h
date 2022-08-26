@@ -3,12 +3,10 @@
 namespace NYdb {
 namespace NConsoleClient {
 
+// EOutputFormat to be used in operations related to structured data
 enum class EOutputFormat {
     Default /* "default" */,
     Pretty /* "pretty" */,
-    PrettyRaw /* "pretty-raw" */,
-    PrettyUnicode /* "pretty-unicode" */,
-    PrettyBase64 /* "pretty-base64" */,
     Json /* "json" */,
     JsonUnicode /* "json-unicode" */,
     JsonUnicodeArray /* "json-unicode-array" */,
@@ -18,14 +16,18 @@ enum class EOutputFormat {
     ProtoJsonBase64 /* "proto-json-base64" */,
     Csv /* "csv" */,
     Tsv /* "tsv" */,
+};
+
+// EMessagingFormat to be used in both input and output when working with files/pipes in operations related to messaging 
+// This format defines rules for data transformation, framing, metadata envelope format
+enum class EMessagingFormat {
+    Pretty /* "pretty" */,
     SingleMessage /* "single-message" */,
     NewlineDelimited /* "newline-delimited" */,
-    NewlineBase64 /* "newline-base64" */,
     Concatenated /* "concatenated" */,
 
-    JsonBase64StreamConcat /* "json-base64-stream-concat" */,
-    JsonUnicodeStreamConcat /* "json-unicode-stream-concat" */,
-    JsonRawStreamConcat /* "json-raw-stream-concat" */,
+    JsonStreamConcat /* "json-stream-concat" */,
+    JsonArray /* "json-array" */,
 };
 
 }

@@ -36,7 +36,7 @@ namespace NYdb::NConsoleClient {
 
         void TestEnterMessage_OnlyDelimiters() {
             TStringStream str = TString("\n") * 6;
-            TTopicWriter wr(nullptr, TTopicWriterParams(EOutputFormat::Default, "\n", 0, Nothing(), Nothing(), Nothing()));
+            TTopicWriter wr(nullptr, TTopicWriterParams(EMessagingFormat::SingleMessage, "\n", 0, Nothing(), Nothing(), Nothing()));
             TMessages got = EnterMessageHelper(wr, str);
             AssertMessagesEqual({
                                     {
@@ -97,7 +97,7 @@ namespace NYdb::NConsoleClient {
 
         void TestEnterMessage_1KiB_Newline_Delimiter() {
             TStringStream str = TString("a") * 512 + "\n" + TString("b") * 512;
-            TTopicWriter wr(nullptr, TTopicWriterParams(EOutputFormat::Default, "\n", 0, Nothing(), Nothing(), Nothing()));
+            TTopicWriter wr(nullptr, TTopicWriterParams(EMessagingFormat::SingleMessage, "\n", 0, Nothing(), Nothing(), Nothing()));
             TMessages got = EnterMessageHelper(wr, str);
             AssertMessagesEqual({
                                     {
@@ -121,7 +121,7 @@ namespace NYdb::NConsoleClient {
 
         void TestEnterMessage_1KiB_Newline_Delimited_With_Two_Delimiters_In_A_Row() {
             TStringStream str = TString("a") * 512 + "\n\n" + TString("b") * 512;
-            TTopicWriter wr(nullptr, TTopicWriterParams(EOutputFormat::NewlineDelimited, Nothing(), 0, Nothing(), Nothing(), Nothing()));
+            TTopicWriter wr(nullptr, TTopicWriterParams(EMessagingFormat::NewlineDelimited, Nothing(), 0, Nothing(), Nothing(), Nothing()));
             TMessages got = EnterMessageHelper(wr, str);
             AssertMessagesEqual({
                                     {
@@ -165,7 +165,7 @@ namespace NYdb::NConsoleClient {
         void TestEnterMessage_ZeroSymbol_Delimited() {
             auto& s = "\0\0\0\0\n\nprivet";
             TStringStream str = TString(std::begin(s), std::end(s));
-            TTopicWriter wr(nullptr, TTopicWriterParams(EOutputFormat::Default, "\0", 0, Nothing(), Nothing(), Nothing()));
+            TTopicWriter wr(nullptr, TTopicWriterParams(EMessagingFormat::SingleMessage, "\0", 0, Nothing(), Nothing(), Nothing()));
             TMessages got = EnterMessageHelper(wr, str);
             AssertMessagesEqual({
                                     {
@@ -204,7 +204,7 @@ namespace NYdb::NConsoleClient {
 
         void TestEnterMessage_Custom_Delimiter_Delimited() {
             TStringStream str = TString("privet_vasya_kak_dela?");
-            TTopicWriter wr(nullptr, TTopicWriterParams(EOutputFormat::Default, "_", 0, Nothing(), Nothing(), Nothing()));
+            TTopicWriter wr(nullptr, TTopicWriterParams(EMessagingFormat::SingleMessage, "_", 0, Nothing(), Nothing(), Nothing()));
             TMessages got = EnterMessageHelper(wr, str);
             AssertMessagesEqual({
                                     {
@@ -237,25 +237,25 @@ namespace NYdb::NConsoleClient {
         }
 
         void TestTopicWriterParams_Format_NewlineDelimited() {
-            TTopicWriterParams p = TTopicWriterParams(EOutputFormat::NewlineDelimited, Nothing(), 0, Nothing(), Nothing(), Nothing());
-            UNIT_ASSERT_VALUES_EQUAL(p.InputFormat(), EOutputFormat::NewlineDelimited);
+            TTopicWriterParams p = TTopicWriterParams(EMessagingFormat::NewlineDelimited, Nothing(), 0, Nothing(), Nothing(), Nothing());
+            UNIT_ASSERT_VALUES_EQUAL(p.MessagingFormat(), EMessagingFormat::NewlineDelimited);
             UNIT_ASSERT_VALUES_EQUAL(p.Delimiter(), '\n');
         }
 
         void TestTopicWriterParams_Format_Concatenated() {
-            TTopicWriterParams p = TTopicWriterParams(EOutputFormat::Concatenated, Nothing(), 0, Nothing(), Nothing(), Nothing());
-            UNIT_ASSERT_VALUES_EQUAL(p.InputFormat(), EOutputFormat::Concatenated);
+            TTopicWriterParams p = TTopicWriterParams(EMessagingFormat::Concatenated, Nothing(), 0, Nothing(), Nothing(), Nothing());
+            UNIT_ASSERT_VALUES_EQUAL(p.MessagingFormat(), EMessagingFormat::Concatenated);
             UNIT_ASSERT_VALUES_EQUAL(p.Delimiter(), '\n');
         }
 
         void TestTopicWriterParams_No_Delimiter() {
-            TTopicWriterParams p = TTopicWriterParams(EOutputFormat::Default, Nothing(), 0, Nothing(), Nothing(), Nothing());
-            UNIT_ASSERT_VALUES_EQUAL(p.InputFormat(), EOutputFormat::Default);
+            TTopicWriterParams p = TTopicWriterParams(EMessagingFormat::SingleMessage, Nothing(), 0, Nothing(), Nothing(), Nothing());
+            UNIT_ASSERT_VALUES_EQUAL(p.MessagingFormat(), EMessagingFormat::SingleMessage);
             UNIT_ASSERT_VALUES_EQUAL(p.Delimiter(), Nothing());
         }
 
         void TestTopicWriterParams_InvalidDelimiter() {
-            UNIT_ASSERT_EXCEPTION(TTopicWriterParams(EOutputFormat::Default, "invalid", 0, Nothing(), Nothing(), Nothing()), yexception);
+            UNIT_ASSERT_EXCEPTION(TTopicWriterParams(EMessagingFormat::SingleMessage, "invalid", 0, Nothing(), Nothing(), Nothing()), yexception);
         }
 
     private:

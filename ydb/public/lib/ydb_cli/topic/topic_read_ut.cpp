@@ -24,7 +24,7 @@ namespace NYdb::NConsoleClient {
                     {
                         "some simple message",
                     },
-                    "", TTopicReaderSettings(Nothing(), false, false, EOutputFormat::Default, {}, ETransformBody::None, TDuration::Seconds(1)));
+                    "", TTopicReaderSettings(Nothing(), false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadTwoMessages_With_Limit_1() {
@@ -35,7 +35,7 @@ namespace NYdb::NConsoleClient {
                     {
                         "message1",
                     },
-                    "", TTopicReaderSettings(1, false, false, EOutputFormat::Default, {}, ETransformBody::None, TDuration::Seconds(1)));
+                    "", TTopicReaderSettings(1, false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadMoreMessagesThanLimit_Without_Wait_NewlineDelimited() {
@@ -51,7 +51,7 @@ namespace NYdb::NConsoleClient {
                     "message2",
                     "message3",
                 },
-                "\n", TTopicReaderSettings(limit, false, false, EOutputFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
+                "\n", TTopicReaderSettings(limit, false, false, EMessagingFormat::NewlineDelimited, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadMoreMessagesThanLimit_Without_Wait_NoDelimiter() {
@@ -64,7 +64,7 @@ namespace NYdb::NConsoleClient {
                 {
                     "message1message2message3message4",
                 },
-                "", TTopicReaderSettings(limit, false, false, EOutputFormat::Default, {}, ETransformBody::None, TDuration::Seconds(1)));
+                "", TTopicReaderSettings(limit, false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
         void TestRun_ReadMessages_Output_Base64() {
@@ -80,7 +80,7 @@ namespace NYdb::NConsoleClient {
                     "bWVzc2FnZTI=",
                     "bWVzc2FnZTM=",
                 },
-                "\n", TTopicReaderSettings(limit, false, false, EOutputFormat::NewlineDelimited, {}, ETransformBody::Base64, TDuration::Seconds(1)));
+                "\n", TTopicReaderSettings(limit, false, false, EMessagingFormat::NewlineDelimited, {}, ETransformBody::Base64, TDuration::Seconds(1)));
         }
 
         void TestRun_Read_Less_Messages_Than_Sent() {
@@ -94,7 +94,7 @@ namespace NYdb::NConsoleClient {
                 {
                     "message1message2",
                 },
-                "", TTopicReaderSettings(limit, false, false, EOutputFormat::Default, {}, ETransformBody::None, TDuration::Seconds(1)));
+                "", TTopicReaderSettings(limit, false, false, EMessagingFormat::SingleMessage, {}, ETransformBody::None, TDuration::Seconds(1)));
         }
 
     private:

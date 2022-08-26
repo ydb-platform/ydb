@@ -15,17 +15,10 @@ namespace {
         { EOutputFormat::JsonBase64, "Input in json format, binary strings are decoded with base64" },
         { EOutputFormat::Csv, "Input in csv format" },
         { EOutputFormat::Tsv, "Input in tsv format" },
-        { EOutputFormat::SingleMessage, "Input data as a single message"}, // TODO
-        { EOutputFormat::NewlineDelimited, "Input data is '\\n' delimited"}, // TODO
-//        { EOutputFormat::JsonRawStreamConcat, ""}, // TODO,
-//        { EOutputFormat::JsonRawArray, ""}, // TODO
     };
 
     THashMap<EOutputFormat, TString> FormatDescriptions = {
         { EOutputFormat::Pretty, "Human readable output" },
-        { EOutputFormat::PrettyRaw, "Human readable format with raw data printed"}, // TODO(shmel1k@): improve
-        { EOutputFormat::PrettyUnicode, "Human readable format with data printed as unicode"}, // TODO(shmel1k@): improve
-        { EOutputFormat::PrettyBase64, "Human readable format with data printed as base64 encoded"}, // TODO(shmel1k@): improve
         { EOutputFormat::Json, "Output in json format" },
         { EOutputFormat::JsonUnicode, "Output in json format, binary strings are encoded with unicode characters. "
                                       "Every row is a separate json on a separate line." },
@@ -42,13 +35,15 @@ namespace {
                                         "Every row is a separate binary data on a separate line"},
         { EOutputFormat::ProtoJsonBase64, "Output result protobuf in json format, binary strings are encoded with base64" },
         { EOutputFormat::Csv, "Output in csv format" },
-        { EOutputFormat::SingleMessage, "Output result is presented as a single message"}, // TODO(shmel1k@): improve
-        { EOutputFormat::NewlineDelimited, "Newline delimited"}, // TODO(shmel1k@): improve
-        { EOutputFormat::NewlineBase64, "Newline base64"}, // TODO(shmel1k@): improve,
-        { EOutputFormat::Concatenated, "Concatenated"}, // TODO(shmel1k@): improve,
-        { EOutputFormat::JsonBase64StreamConcat, "Concatenated base64 stream"}, // TODO(shmel1k@): improve,
-        { EOutputFormat::JsonUnicodeStreamConcat, "Concatenated unicode stream"}, // TODO(shmel1k@): improve,
-        { EOutputFormat::JsonRawStreamConcat, "Concated raw stream"}, // TODO(shmel1k@): improve
+    };
+
+    THashMap<EMessagingFormat, TString> MessagingFormatDescriptions = {
+        { EMessagingFormat::Pretty, "Human readable output with metadata." },
+        { EMessagingFormat::SingleMessage, "Single message."}, // TODO(shmel1k@): improve
+        { EMessagingFormat::NewlineDelimited, "Newline delimited stream of messages."}, // TODO(shmel1k@): improve
+        { EMessagingFormat::Concatenated, "Concatenated output stream of messages."}, // TODO(shmel1k@): improve,
+        { EMessagingFormat::JsonStreamConcat, "Concatenated Json stream of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
+        { EMessagingFormat::JsonArray, "Json array of envelopes with metadata and messages in the ""body"" attribute." }, // TODO(shmel1k@): improve,
     };
 }
 
@@ -114,6 +109,23 @@ void TCommandWithFormat::AddFormats(TClientCommand::TConfig& config, const TVect
     AllowedFormats = allowedFormats;
 }
 
+void TCommandWithFormat::AddMessagingFormats(TClientCommand::TConfig& config, const TVector<EMessagingFormat>& allowedFormats) {
+    TStringStream description;
+    description << "Client-side format. Available options: ";
+    NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+    for (const auto& format : allowedFormats) {
+        auto findResult = MessagingFormatDescriptions.find(format);
+        Y_VERIFY(findResult != MessagingFormatDescriptions.end(),
+            "Couldn't find description for %s output format", (TStringBuilder() << format).c_str());
+        description << "\n  " << colors.BoldColor() << format << colors.OldColor()
+            << "\n    " << findResult->second;
+    }
+    config.Opts->AddLongOption("format", description.Str())
+        .DefaultValue( "single-message" )
+        .RequiredArgument("STRING").StoreResult(&MessagingFormat);
+    AllowedMessagingFormats = allowedFormats;
+}
+
 void TCommandWithFormat::ParseFormats() {
     if (InputFormat != EOutputFormat::Default
             && std::find(AllowedInputFormats.begin(), AllowedInputFormats.end(), InputFormat) == AllowedInputFormats.end()) {
@@ -128,6 +140,14 @@ void TCommandWithFormat::ParseFormats() {
         throw TMisuseException() << "Output format " << OutputFormat << " is not available for this command";
     }
 }
+
+void TCommandWithFormat::ParseMessagingFormats() {
+    if (MessagingFormat != EMessagingFormat::SingleMessage
+            && std::find(AllowedMessagingFormats.begin(), AllowedMessagingFormats.end(), MessagingFormat) == AllowedMessagingFormats.end()) {
+        throw TMisuseException() << "Messaging format " << MessagingFormat << " is not available for this command";
+    }
+}
+
 
 void TQueryPlanPrinter::Print(const TString& plan) {
     switch (Format) {

@@ -13,15 +13,15 @@ namespace NYdb::NConsoleClient {
     TTopicWriterParams::TTopicWriterParams() {
     }
 
-    TTopicWriterParams::TTopicWriterParams(EOutputFormat inputFormat, TMaybe<TString> delimiter,
+    TTopicWriterParams::TTopicWriterParams(EMessagingFormat inputFormat, TMaybe<TString> delimiter,
                                            ui64 messageSizeLimit, TMaybe<TDuration> batchDuration,
                                            TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount)
-        : InputFormat_(inputFormat)
+        : MessagingFormat_(inputFormat)
         , BatchDuration_(batchDuration)
         , BatchSize_(batchSize)
         , BatchMessagesCount_(batchMessagesCount)
         , MessageSizeLimit_(messageSizeLimit) {
-        if (inputFormat == EOutputFormat::NewlineDelimited || inputFormat == EOutputFormat::Concatenated) {
+        if (inputFormat == EMessagingFormat::NewlineDelimited || inputFormat == EMessagingFormat::Concatenated) {
             Delimiter_ = TMaybe<char>('\n');
         }
         if (delimiter.Defined()) {

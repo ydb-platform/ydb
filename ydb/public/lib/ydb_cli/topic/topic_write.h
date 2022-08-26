@@ -14,7 +14,7 @@ namespace NYdb::NConsoleClient {
     class TTopicWriterParams {
     public:
         TTopicWriterParams();
-        TTopicWriterParams(EOutputFormat inputFormat, TMaybe<TString> delimiter,
+        TTopicWriterParams(EMessagingFormat inputFormat, TMaybe<TString> delimiter,
                            ui64 messageSizeLimit, TMaybe<TDuration> batchDuration,
                            TMaybe<ui64> batchSize, TMaybe<ui64> batchMessagesCount);
         TTopicWriterParams(const TTopicWriterParams&) = default;
@@ -25,12 +25,12 @@ namespace NYdb::NConsoleClient {
         GETTER(TMaybe<ui64>, BatchSize);
         GETTER(TMaybe<ui64>, BatchMessagesCount);
         GETTER(ui64, MessageSizeLimit);
-        GETTER(EOutputFormat, InputFormat);
+        GETTER(EMessagingFormat, MessagingFormat);
 
     private:
         TMaybe<TString> File_;
         TMaybe<char> Delimiter_;
-        EOutputFormat InputFormat_ = EOutputFormat::Default;
+        EMessagingFormat MessagingFormat_ = EMessagingFormat::SingleMessage;
 
         // TODO(shmel1k@): move to 'TWithBatchingCommand' or something like that.
         TMaybe<TDuration> BatchDuration_;

@@ -10999,6 +10999,20 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus AssumeStrictWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        Y_UNUSED(output);
+        if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureComputable(input->Head(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     TSyncFunctionsMap::TSyncFunctionsMap() {
         Functions["Data"] = &DataWrapper;
         Functions["DataOrOptionalData"] = &DataWrapper;
@@ -11162,6 +11176,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AssumeSorted"] = &SortWrapper;
         Functions["AssumeUnique"] = &AssumeUniqueWrapper;
         Functions["AssumeAllMembersNullableAtOnce"] = &AssumeAllMembersNullableAtOnceWrapper;
+        Functions["AssumeStrict"] = &AssumeStrictWrapper;
         Functions["Top"] = &TopWrapper;
         Functions["TopSort"] = &TopWrapper;
         Functions["KeepTop"] = &KeepTopWrapper;

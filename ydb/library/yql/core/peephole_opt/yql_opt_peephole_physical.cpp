@@ -2070,7 +2070,7 @@ TExprNode::TPtr OptimizeMultiMap(const TExprNode::TPtr& node, TExprContext& ctx)
     return node;
 }
 
-TExprNode::TPtr LikelyExclude(const TExprNode::TPtr& node, TExprContext&) {
+TExprNode::TPtr ReplaceWithFirstArg(const TExprNode::TPtr& node, TExprContext&) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Exclude " << node->Content();
     return node->HeadPtr();
 }
@@ -5872,7 +5872,8 @@ struct TPeepHoleRules {
     static constexpr std::initializer_list<TPeepHoleOptimizerMap::value_type> FinalStageRulesInit = {
         {"Take", &OptimizeTake<EnableNewOptimizers>},
         {"Skip", &OptimizeSkip},
-        {"Likely", &LikelyExclude},
+        {"Likely", &ReplaceWithFirstArg},
+        {"AssumeStrict", &ReplaceWithFirstArg},
         {"GroupByKey", &PeepHoleConvertGroupBySingleKey},
         {"PartitionByKey", &PeepHolePlainKeyForPartitionByKey},
         {"ExtractMembers", &PeepHoleExpandExtractItems},

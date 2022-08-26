@@ -807,12 +807,12 @@ TExprNode::TPtr RemoveOptionalReduceOverData(const TExprNode::TPtr& node, TExprC
 }
 
 TExprNode::TPtr PropagateCoalesceWithConstIntoLogicalOps(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (node->Head().IsCallable("Likely")) {
+    if (node->Head().IsCallable({"Likely", "AssumeStrict"})) {
         const auto value = FromString<bool>(node->Child(1)->Head().Content());
         if (!value) {
             YQL_CLOG(DEBUG, Core) << "PropagateCoalesceWithConst over " << node->Head().Content() << " (false)";
             auto ret = ctx.Builder(node->Pos())
-                .Callable("Likely")
+                .Callable(node->Head().Content())
                     .Callable(0, "Coalesce")
                         .Add(0, node->Head().HeadPtr())
                         .Add(1, node->ChildPtr(1))

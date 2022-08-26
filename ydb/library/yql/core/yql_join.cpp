@@ -1040,6 +1040,48 @@ std::pair<bool, bool> IsRequiredSide(const TExprNode::TPtr& joinTree, const TJoi
     return{ false, false };
 }
 
+TMaybe<bool> IsFilteredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex) {
+    auto joinType = joinTree->Child(0)->Content();
+    auto left = joinTree->ChildPtr(1);
+    auto right = joinTree->ChildPtr(2);
+
+    TMaybe<bool> isLeftFiltered;
+    if (!left->IsAtom()) {
+        isLeftFiltered = IsFilteredSide(left, labels, inputIndex);
+    } else {
+        auto table = left->Content();
+        if (*labels.FindInputIndex(table) == inputIndex) {
+            if (joinType == "Inner" || joinType == "LeftOnly" || joinType == "LeftSemi") {
+                isLeftFiltered = true;
+            } else if (joinType != "RightOnly" && joinType != "RightSemi") {
+                isLeftFiltered = false;
+            }
+        }
+    }
+
+    TMaybe<bool> isRightFiltered;
+    if (!right->IsAtom()) {
+        isRightFiltered = IsFilteredSide(right, labels, inputIndex);
+    } else {
+        auto table = right->Content();
+        if (*labels.FindInputIndex(table) == inputIndex) {
+            if (joinType == "Inner" || joinType == "RightOnly" || joinType == "RightSemi") {
+                isRightFiltered = true;
+            } else if (joinType != "LeftOnly" && joinType != "LeftSemi") {
+                isRightFiltered = false;
+            }
+        }
+    }
+
+    YQL_ENSURE(!(isLeftFiltered.Defined() && isRightFiltered.Defined()));
+
+    if (!isLeftFiltered.Defined() && !isRightFiltered.Defined()) {
+        return {};
+    }
+
+    return isLeftFiltered.Defined() ? isLeftFiltered : isRightFiltered;
+}
+
 void AppendEquiJoinRenameMap(TPositionHandle pos, const TMap<TStringBuf, TVector<TStringBuf>>& newRenameMap,
     TExprNode::TListType& joinSettingNodes, TExprContext& ctx) {
     for (auto& x : newRenameMap) {

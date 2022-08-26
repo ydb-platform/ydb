@@ -1,6 +1,7 @@
 #include "yql_flatmap_over_join.h"
 #include "yql_co.h"
 
+#include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_join.h>
 #include <ydb/library/yql/core/yql_opt_utils.h>
 
@@ -117,11 +118,39 @@ void GatherOptionalKeyColumns(TExprNode::TPtr joinTree, const TJoinLabels& label
     }
 }
 
+bool IsRequiredAndFilteredSide(const TExprNode::TPtr& joinTree, const TJoinLabels& labels, ui32 inputIndex) {
+    TMaybe<bool> isFiltered = IsFilteredSide(joinTree, labels, inputIndex);
+    return isFiltered.Defined() && *isFiltered;
+}
+
 TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoin, TExprNode::TPtr predicate,
     const TSet<TStringBuf>& usedFields, TExprNode::TPtr args, const TJoinLabels& labels,
-    ui32 firstCandidate, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool ordered, TExprContext& ctx) {
+    ui32 firstCandidate, const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool ordered, TExprContext& ctx)
+{
     auto inputsCount = equiJoin->ChildrenSize() - 2;
     auto joinTree = equiJoin->Child(inputsCount);
+
+    if (!IsRequiredSide(joinTree, labels, firstCandidate).first) {
+        return equiJoin;
+    }
+
+    // TODO: derive from constraints
+    bool isStrict = true;
+    if (IsRequiredAndFilteredSide(joinTree, labels, firstCandidate)) {
+        VisitExpr(*predicate, [&](const TExprNode& node) {
+            if (node.IsCallable("AssumeStrict")) {
+                return false;
+            }
+            if (node.IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
+                isStrict = false;
+            }
+            return isStrict;
+        });
+        if (!isStrict) {
+            return equiJoin;
+        }
+    }
+
     TMap<TString, TSet<TString>> aliases;
     GatherKeyAliases(joinTree, aliases, labels);
     MakeTransitiveClosure(aliases);
@@ -162,14 +191,14 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         }
     }
 
-    if (!IsRequiredSide(joinTree, labels, firstCandidate).first) {
-        return equiJoin;
-    }
-
     auto ret = ctx.ShallowCopy(*equiJoin);
     for (auto& inputIndex : candidates) {
         auto x = IsRequiredSide(joinTree, labels, inputIndex);
         if (!x.first) {
+            continue;
+        }
+
+        if (!isStrict && IsRequiredAndFilteredSide(joinTree, labels, inputIndex)) {
             continue;
         }
 
@@ -556,7 +585,7 @@ TExprNode::TPtr DecayCrossJoinIntoInner(TExprNode::TPtr equiJoin, const TExprNod
     return ctx.ChangeChild(*equiJoin, inputsCount, std::move(newJoinTree));
 }
 
-}
+} // namespace
 
 TExprBase FlatMapOverEquiJoin(const TCoFlatMapBase& node, TExprContext& ctx, const TParentsMap& parentsMap, bool multiUsage) {
     auto equiJoin = node.Input();

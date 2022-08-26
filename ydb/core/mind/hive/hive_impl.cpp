@@ -2462,12 +2462,18 @@ void THive::RequestFreeSequence() {
         size_t sequenceIndex = Sequencer.NextFreeSequenceIndex();
         size_t sequenceSize = GetRequestSequenceSize();
 
+        if (PendingCreateTablets.size() > sequenceSize) {
+            size_t newSequenceSize = ((PendingCreateTablets.size() / sequenceSize) + 1) * sequenceSize;
+            BLOG_W("Increasing sequence size from " << sequenceSize << " to " << newSequenceSize << " due to PendingCreateTablets.size() == " << PendingCreateTablets.size());
+            sequenceSize = newSequenceSize;
+        }
+
         BLOG_D("Requesting free sequence #" << sequenceIndex << " of " << sequenceSize << " from root hive");
         SendToRootHivePipe(new TEvHive::TEvRequestTabletIdSequence(TabletID(), sequenceIndex, sequenceSize));
         RequestingSequenceNow = true;
         RequestingSequenceIndex = sequenceIndex;
     } else {
-        BLOG_ERROR("We run out of tablet ids");
+        BLOG_ERROR("We ran out of tablet ids");
     }
 }
 

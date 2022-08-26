@@ -96,7 +96,7 @@ public:
             Gateway->Upload(Url, MakeHeader(), Parts->Pop(), std::bind(&TS3FileWriteActor::OnUploadFinish, ActorSystem, SelfId(), ParentId, Key, Url, std::placeholders::_1), true, GetS3RetryPolicy());
         } else {
             Become(&TS3FileWriteActor::InitialStateFunc);
-            Gateway->Upload(Url + "?uploads", MakeHeader(), "", std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
+            Gateway->Upload(Url + "?uploads", MakeHeader(), 0, std::bind(&TS3FileWriteActor::OnUploadsCreated, ActorSystem, SelfId(), ParentId, std::placeholders::_1), false, GetS3RetryPolicy());
         }
     }
 
@@ -114,6 +114,9 @@ public:
 
     void Finish() {
         Parts->Seal();
+        if (!UploadId.empty())
+            StartUploadParts();
+
         if (!InFlight && Parts->Empty())
             CommitUploadedParts();
     }
@@ -401,7 +404,6 @@ private:
 
     // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
-
         for (const auto& p : FileWriteActors) {
             for (const auto& fileWriter : p.second) {
                 fileWriter->PassAway();

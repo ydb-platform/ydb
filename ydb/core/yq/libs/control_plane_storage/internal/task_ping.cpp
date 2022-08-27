@@ -128,21 +128,30 @@ std::tuple<TString, TParams, const std::function<std::pair<TString, NYdb::TParam
                 // failing query is throttled for backoff period
                 backoff = policy.BackoffPeriod * retryLimiter.RetryRate;
                 owner = "";
+                if (!transientIssues) {
+                    transientIssues.ConstructInPlace();
+                }
+                TStringBuilder builder;
+                builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code())
+                    << " and will be restarted (RetryCount: " << retryLimiter.RetryCount << ")"
+                    << " at " << Now();
+                transientIssues->AddIssue(NYql::TIssue(builder));
             } else {
                 // failure query should be processed instantly
                 queryStatus = YandexQuery::QueryMeta::FAILING;
                 backoff = TDuration::Zero();
-                // all transient issues became final
-                if (transientIssues) {
-                    if (issues) {
-                        issues->AddIssues(*transientIssues);
-                        transientIssues.Clear();
-                    } else {
-                        issues.Swap(transientIssues);
-                    }
+                if (!issues) {
+                    issues.ConstructInPlace();
                 }
+                TStringBuilder builder;
+                builder << "Query failed with code " << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code());
+                if (policy.RetryCount) {
+                    builder << " (failure rate " << retryLimiter.RetryRate << " exceeds limit of "  << policy.RetryCount << ")";
+                }
+                builder << " at " << Now();
+                issues->AddIssue(NYql::TIssue(builder));
             }
-            CPS_LOG_AS_T(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
+            CPS_LOG_AS_D(*actorSystem, "PingTaskRequest (resign): " << (!policyFound ? " DEFAULT POLICY" : "") << (owner ? " FAILURE " : " ") << NYql::NDqProto::StatusIds_StatusCode_Name(request.status_code()) << " " << retryLimiter.RetryCount << " " << retryLimiter.RetryCounterUpdatedAt << " " << backoff);
         }
 
         if (queryStatus) {

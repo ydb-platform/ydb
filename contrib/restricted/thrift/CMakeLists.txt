@@ -28,6 +28,7 @@ target_link_libraries(contrib-restricted-thrift PUBLIC
   ZLIB::ZLIB
   contrib-restricted-boost
   restricted-boost-interprocess
+  restricted-boost-locale
   restricted-boost-system
   restricted-boost-thread
 )

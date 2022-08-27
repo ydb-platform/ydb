@@ -3301,8 +3301,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
         return BuildUdf(ctx, pos, nameSpace, name, makeUdfArgs());
     } else if (scriptType != NKikimr::NMiniKQL::EScriptType::Unknown) {
-        auto scriptName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
-        return new TScriptUdf(pos, TString(scriptName), name, args);
+        auto scriptName = NKikimr::NMiniKQL::IsCustomPython(scriptType) ? nameSpace : TString(NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType));
+        return new TScriptUdf(pos, scriptName, name, args);
     } else if (ns.empty()) {
         if (auto simpleType = LookupSimpleType(normalizedName, ctx.FlexibleTypes, /* isPgType = */ false)) {
             const auto type = *simpleType;

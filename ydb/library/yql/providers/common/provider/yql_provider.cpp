@@ -507,7 +507,7 @@ bool FillUsedFilesImpl(
         }
 
         auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
-        if (node.IsCallable("ScriptUdf")) {
+        if (node.IsCallable("ScriptUdf") && !NKikimr::NMiniKQL::IsCustomPython(scriptType)) {
             moduleName = NKikimr::NMiniKQL::ScriptTypeAsStr(NKikimr::NMiniKQL::CanonizeScriptType(scriptType));
         }
 

@@ -2153,7 +2153,7 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto funcType = BuildType(*typeNode, *typeNode->GetTypeAnn(), ctx.ProgramBuilder);
         const auto script = MkqlBuildExpr(*node.Child(3), ctx);
         const auto pos = ctx.ExprCtx.GetPosition(node.Pos());
-        return ctx.ProgramBuilder.ScriptUdf(scriptType, funcName, funcType, script,
+        return ctx.ProgramBuilder.ScriptUdf(node.Head().Content(), funcName, funcType, script,
             pos.File, pos.Row, pos.Column);
     });
 

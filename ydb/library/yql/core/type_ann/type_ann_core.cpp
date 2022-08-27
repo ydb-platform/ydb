@@ -7101,8 +7101,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         }
 
         scriptType = NKikimr::NMiniKQL::CanonizeScriptType(scriptType);
-        auto canonizedModuleName = NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         bool isCustomPython = NKikimr::NMiniKQL::IsCustomPython(scriptType);
+        auto canonizedModuleName = isCustomPython ? moduleName : NKikimr::NMiniKQL::ScriptTypeAsStr(scriptType);
         bool foundModule = false;
 
         // resolve script udf from external resources (files / urls)

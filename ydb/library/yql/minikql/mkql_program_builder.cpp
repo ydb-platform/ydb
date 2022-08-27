@@ -70,10 +70,11 @@ void EnsureScriptSpecificTypes(
         const TTypeEnvironment& env)
 {
     switch (scriptType) {
+        case EScriptType::Lua:
+            return TLuaTypeChecker().Walk(funcType, env);
         case EScriptType::Python:
         case EScriptType::Python2:
         case EScriptType::Python3:
-        case EScriptType::Lua:
         case EScriptType::ArcPython:
         case EScriptType::ArcPython2:
         case EScriptType::ArcPython3:
@@ -243,8 +244,8 @@ std::string_view ScriptTypeAsStr(EScriptType type) {
 EScriptType ScriptTypeFromStr(std::string_view str) {
     TString lowerStr = TString(str);
     lowerStr.to_lower();
-#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName) \
-    if (lowerStr == #lowerName) return EScriptType::name;
+#define MKQL_SCRIPT_TYPE_FROM_STR(name, value, lowerName, allowSuffix) \
+    if ((allowSuffix && lowerStr.StartsWith(#lowerName)) || lowerStr == #lowerName) return EScriptType::name;
 
     MKQL_SCRIPT_TYPES(MKQL_SCRIPT_TYPE_FROM_STR)
 #undef MKQL_SCRIPT_TYPE_FROM_STR
@@ -3817,19 +3818,21 @@ TRuntimeNode TProgramBuilder::TypedUdf(
 }
 
 TRuntimeNode TProgramBuilder::ScriptUdf(
-        EScriptType scriptType,
-        const std::string_view& funcName,
-        TType* funcType,
-        TRuntimeNode script,
-        const std::string_view& file,
-        ui32 row,
-        ui32 column)
+    const std::string_view& moduleName,
+    const std::string_view& funcName,
+    TType* funcType,
+    TRuntimeNode script,
+    const std::string_view& file,
+    ui32 row,
+    ui32 column)
 {
     MKQL_ENSURE(funcType, "UDF callable type must not be empty");
     MKQL_ENSURE(funcType->IsCallable(), "type must be callable");
+    auto scriptType = NKikimr::NMiniKQL::ScriptTypeFromStr(moduleName);
+    MKQL_ENSURE(scriptType != EScriptType::Unknown, "unknown script type '" << moduleName << "'");
     EnsureScriptSpecificTypes(scriptType, static_cast<TCallableType*>(funcType), Env);
 
-    auto scriptTypeStr = ScriptTypeAsStr(CanonizeScriptType(scriptType));
+    auto scriptTypeStr = IsCustomPython(scriptType) ? moduleName : ScriptTypeAsStr(CanonizeScriptType(scriptType));
 
     TStringBuilder name;
     name.reserve(scriptTypeStr.size() + funcName.size() + 1);

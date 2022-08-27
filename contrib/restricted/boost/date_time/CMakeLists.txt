@@ -7,14 +7,11 @@
 
 
 
-add_library(restricted-boost-date_time)
-target_compile_options(restricted-boost-date_time PRIVATE
-  -Wno-everything
-)
-target_include_directories(restricted-boost-date_time PUBLIC
+add_library(restricted-boost-date_time INTERFACE)
+target_include_directories(restricted-boost-date_time INTERFACE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/date_time/include
 )
-target_link_libraries(restricted-boost-date_time PUBLIC
+target_link_libraries(restricted-boost-date_time INTERFACE
   contrib-libs-cxxsupp
   restricted-boost-algorithm
   restricted-boost-assert
@@ -32,9 +29,4 @@ target_link_libraries(restricted-boost-date_time PUBLIC
   restricted-boost-type_traits
   restricted-boost-utility
   restricted-boost-winapi
-)
-target_sources(restricted-boost-date_time PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/date_time/src/gregorian/date_generators.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/date_time/src/gregorian/greg_month.cpp
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/boost/date_time/src/gregorian/greg_weekday.cpp
 )

@@ -27,6 +27,7 @@ target_link_libraries(contrib-restricted-thrift PUBLIC
   OpenSSL::OpenSSL
   ZLIB::ZLIB
   contrib-restricted-boost
+  restricted-boost-interprocess
   restricted-boost-system
   restricted-boost-thread
 )

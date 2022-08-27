@@ -40,7 +40,6 @@ target_link_libraries(contrib-restricted-boost INTERFACE
   restricted-boost-iterator
   restricted-boost-lambda
   restricted-boost-lexical_cast
-  restricted-boost-lockfree
   restricted-boost-math
   restricted-boost-move
   restricted-boost-mp11

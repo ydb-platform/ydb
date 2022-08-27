@@ -132,6 +132,9 @@ bool ExtractParametersMetaAsYson(const TExprNode::TPtr& input, TTypeAnnotationCo
 IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExprNode::TPtr& output,
     TTypeAnnotationContext& types, TExprContext& ctx, const IFunctionRegistry& functionRegistry) {
     output = input;
+    if (ctx.Step.IsDone(TExprStep::Params)) {
+        return IGraphTransformer::TStatus::Ok;
+    }
 
     THashMap<TStringBuf, const TTypeAnnotationNode*> paramTypes;
     if (!ExtractParameterTypes(input, types, ctx, paramTypes)) {
@@ -169,6 +172,7 @@ IGraphTransformer::TStatus EvaluateParameters(const TExprNode::TPtr& input, TExp
         return status;
     }
 
+    ctx.Step.Done(TExprStep::Params);
     return IGraphTransformer::TStatus::Ok;
 }
 

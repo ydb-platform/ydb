@@ -2082,6 +2082,7 @@ public:
 
 struct TExprStep {
     enum ELevel {
+        Params,
         ExpandApplyForLambdas,
         ValidateProviders,
         Configure,
@@ -2117,7 +2118,7 @@ struct TExprStep {
     }
 
 private:
-    TEnumBitSet<ELevel, ExpandApplyForLambdas, LastLevel> Steps_;
+    TEnumBitSet<ELevel, Params, LastLevel> Steps_;
 };
 
 template <typename T>

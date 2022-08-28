@@ -1308,6 +1308,7 @@ private:
         apply("EnableComputeActor", "1");
         apply("ComputeActorType", "async");
         apply("_EnablePrecompute", "0"); // TODO: enable together with removing TEmptyGateway
+        apply("EnableDqReplicate", "1");
 
         switch (Params.QueryType) {
         case YandexQuery::QueryContent::STREAMING: {

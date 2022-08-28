@@ -557,12 +557,12 @@ private:
                     curl_easy_getinfo(easy->GetHandle(), CURLINFO_RESPONSE_CODE, &httpResponseCode);
 
                 if (auto buffer = std::dynamic_pointer_cast<TEasyCurlBuffer>(easy)) {
+                    AllocatedSize -= buffer->GetExpectedSize();
                     if (const auto& nextRetryDelay = buffer->GetNextRetryDelay(httpResponseCode)) {
                         buffer->Reset();
                         Delayed.emplace(nextRetryDelay->ToDeadLine(), std::move(buffer));
                         easy.reset();
                     }
-                    AllocatedSize -= buffer->GetExpectedSize();
                 }
                 Allocated.erase(it);
             }

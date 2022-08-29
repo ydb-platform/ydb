@@ -11,11 +11,6 @@ HTTP/2.
 
 An HPACK encoder and decoder are available as a public API.
 
-An experimental high level C++ library is also available.
-
-We have Python bindings of this library, but we do not have full
-code coverage yet.
-
 Development Status
 ------------------
 
@@ -106,12 +101,14 @@ To mitigate heap fragmentation in long running server programs
      Alpine Linux currently does not support malloc replacement
      due to musl limitations. See details in issue `#762 <https://github.com/nghttp2/nghttp2/issues/762>`_.
 
-libnghttp2_asio C++ library requires the following packages:
+libnghttp2_asio C++ library (deprecated, has moved to
+https://github.com/nghttp2/nghttp2-asio) requires the following
+packages:
 
 * libboost-dev >= 1.54.0
 * libboost-thread-dev >= 1.54.0
 
-The Python bindings require the following packages:
+The Python bindings (deprecated) require the following packages:
 
 * cython >= 0.19
 * python >= 3.8
@@ -151,11 +148,11 @@ To enable the experimental HTTP/3 support for h2load and nghttpx, the
 following libraries are required:
 
 * `OpenSSL with QUIC support
-  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1p+quic>`_; or
+  <https://github.com/quictls/openssl/tree/OpenSSL_1_1_1q+quic>`_; or
   `BoringSSL <https://boringssl.googlesource.com/boringssl/>`_ (commit
-  27ffcc6e19bbafddf1b59ec0bc6df2904de7eb2c)
-* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 0.6.0
-* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 0.4.0
+  a6d321b11fa80496b7c8ae6405468c212d4f5c87)
+* `ngtcp2 <https://github.com/ngtcp2/ngtcp2>`_ >= 0.8.0
+* `nghttp3 <https://github.com/ngtcp2/nghttp3>`_ >= 0.7.0
 
 Use ``--enable-http3`` configure option to enable HTTP/3 feature for
 h2load and nghttpx.
@@ -170,7 +167,7 @@ Use ``--with-libbpf`` configure option to build eBPF program.
 libelf-dev is needed to build libbpf.
 
 For Ubuntu 20.04, you can build libbpf from `the source code
-<https://github.com/libbpf/libbpf/releases/tag/v0.8.0>`_.  nghttpx
+<https://github.com/libbpf/libbpf/releases/tag/v0.8.1>`_.  nghttpx
 requires eBPF program for reloading its configuration and hot swapping
 its executable.
 
@@ -355,7 +352,7 @@ Build custom OpenSSL:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b OpenSSL_1_1_1p+quic https://github.com/quictls/openssl
+   $ git clone --depth 1 -b OpenSSL_1_1_1q+quic https://github.com/quictls/openssl
    $ cd openssl
    $ ./config --prefix=$PWD/build --openssldir=/etc/ssl
    $ make -j$(nproc)
@@ -366,7 +363,7 @@ Build nghttp3:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.5.0 https://github.com/ngtcp2/nghttp3
+   $ git clone --depth 1 -b v0.7.0 https://github.com/ngtcp2/nghttp3
    $ cd nghttp3
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only
@@ -378,7 +375,7 @@ Build ngtcp2:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.6.0 https://github.com/ngtcp2/ngtcp2
+   $ git clone --depth 1 -b v0.8.0 https://github.com/ngtcp2/ngtcp2
    $ cd ngtcp2
    $ autoreconf -i
    $ ./configure --prefix=$PWD/build --enable-lib-only \
@@ -392,7 +389,7 @@ from source:
 
 .. code-block:: text
 
-   $ git clone --depth 1 -b v0.8.0 https://github.com/libbpf/libbpf
+   $ git clone --depth 1 -b v0.8.1 https://github.com/libbpf/libbpf
    $ cd libbpf
    $ PREFIX=$PWD/build make -C src install
    $ cd ..
@@ -1434,6 +1431,9 @@ corresponding header set was processed.  The format is the same as
 libnghttp2_asio: High level HTTP/2 C++ library
 ----------------------------------------------
 
+libnghttp2_asio has been deprecated, and moved to
+https://github.com/nghttp2/nghttp2-asio.
+
 libnghttp2_asio is C++ library built on top of libnghttp2 and provides
 high level abstraction API to build HTTP/2 applications.  It depends
 on the Boost::ASIO library and OpenSSL.  Currently libnghttp2_asio
@@ -1530,6 +1530,8 @@ For more details, see the documentation of libnghttp2_asio.
 
 Python bindings
 ---------------
+
+Python bindings have been deprecated.
 
 The ``python`` directory contains nghttp2 Python bindings.  The
 bindings currently provide HPACK compressor and decompressor classes

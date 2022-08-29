@@ -73,22 +73,9 @@ static int64_t parse_uint(const uint8_t *s, size_t len) {
   return n;
 }
 
-static int lws(const uint8_t *s, size_t n) {
-  size_t i;
-  for (i = 0; i < n; ++i) {
-    if (s[i] != ' ' && s[i] != '\t') {
-      return 0;
-    }
-  }
-  return 1;
-}
-
 static int check_pseudo_header(nghttp2_stream *stream, const nghttp2_hd_nv *nv,
                                uint32_t flag) {
-  if (stream->http_flags & flag) {
-    return 0;
-  }
-  if (lws(nv->value->base, nv->value->len)) {
+  if ((stream->http_flags & flag) || nv->value->len == 0) {
     return 0;
   }
   stream->http_flags = stream->http_flags | flag;
@@ -392,14 +379,14 @@ int nghttp2_http_on_header(nghttp2_session *session, nghttp2_stream *stream,
     if (session->server || frame->hd.type == NGHTTP2_PUSH_PROMISE) {
       rv = nghttp2_check_authority(nv->value->base, nv->value->len);
     } else {
-      rv = nghttp2_check_header_value(nv->value->base, nv->value->len);
+      rv = nghttp2_check_header_value_rfc9113(nv->value->base, nv->value->len);
     }
     break;
   case NGHTTP2_TOKEN__SCHEME:
     rv = check_scheme(nv->value->base, nv->value->len);
     break;
   default:
-    rv = nghttp2_check_header_value(nv->value->base, nv->value->len);
+    rv = nghttp2_check_header_value_rfc9113(nv->value->base, nv->value->len);
   }
 
   if (rv == 0) {

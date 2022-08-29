@@ -2,7 +2,6 @@
 from hamcrest import assert_that, equal_to, raises, contains_string
 
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
-import pytest
 import ydb
 
 
@@ -42,21 +41,17 @@ class TestTransactionIsolation(object):
         return table, session
 
     @staticmethod
-    def _prepare_engine(new_engine):
-        if new_engine:
-            return 'pragma kikimr.UseNewEngine = "true";'
-        else:
-            return 'pragma kikimr.UseNewEngine = "false";'
+    def _prepare_engine():
+        return 'pragma kikimr.UseNewEngine = "true";'
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_write_cycles_g0(self, new_engine):
+    def test_prevents_write_cycles_g0(self):
         """Write Cycles (G0), locking updated rows"""
         table_name, session = self._prepare("test_prevents_write_cycles_g0")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} upsert into {} (id, value) values (1, 11)'.format(prefix, table_name))
         t2.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name))
@@ -99,14 +94,13 @@ class TestTransactionIsolation(object):
                 )
             )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_aborted_reads_g1a(self, new_engine):
+    def test_prevents_aborted_reads_g1a(self):
         table_name, session = self._prepare("test_prevents_aborted_reads_g1a")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} update {} set value = 101 where id = 1;'.format(prefix, table_name))
         result_rows = t2.execute('{} select id, value from {} order by id;'.format(prefix, table_name))
@@ -134,14 +128,13 @@ class TestTransactionIsolation(object):
         )
         t2.commit()
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_intermediate_reads_g1b(self, new_engine):
+    def test_prevents_intermediate_reads_g1b(self):
         table_name, session = self._prepare("test_prevents_intermediate_reads_g1b")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} select * from {} where id=1'.format(prefix, table_name))
         t1.execute('{} upsert into {} (id, value) values (1, 101);'.format(prefix, table_name))
@@ -171,14 +164,13 @@ class TestTransactionIsolation(object):
         )
         t2.commit()
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_isolation_mailing_list_example(self, new_engine):
+    def test_isolation_mailing_list_example(self):
         table_name, session = self._prepare("test_isolation_mailing_list_example")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute(session.prepare('{} upsert into {} (id, value) values (1, 3);'.format(prefix, table_name)), commit_tx=True)
 
@@ -208,15 +200,14 @@ class TestTransactionIsolation(object):
                 )
             )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_prevents_observed_transaction_vanishes_otv(self, new_engine):
+    def test_prevents_observed_transaction_vanishes_otv(self):
         table_name, session = self._prepare("test_prevents_observed_transaction_vanishes_otv")
 
         t1 = session.transaction()
         t2 = session.transaction()
         t3 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} select * from {} where id=1 or id=2;'.format(prefix, table_name))
         t1.execute('{} upsert into {} (id, value) values (1, 11);'.format(prefix, table_name))
@@ -269,14 +260,13 @@ class TestTransactionIsolation(object):
         )
         t3.commit()
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_does_not_prevent_predicate_many_preceders_pmp(self, new_engine):
+    def test_does_not_prevent_predicate_many_preceders_pmp(self):
         table_name, session = self._prepare("test_does_not_prevent_predicate_many_preceders_pmp")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select id from {} where value = 30;'.format(prefix, table_name))
         assert_that(result_rows[0].rows, equal_to([]))
@@ -292,14 +282,13 @@ class TestTransactionIsolation(object):
         else:
             assert_that(result_rows[0].rows, equal_to([]))
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_lost_update_p4(self, new_engine):
+    def test_lost_update_p4(self):
         table_name, session = self._prepare("test_lost_update_p4")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select id from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -331,14 +320,13 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_lost_update_on_value_p4(self, new_engine):
+    def test_lost_update_on_value_p4(self):
         table_name, session = self._prepare("test_lost_update_on_value_p4")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -375,14 +363,13 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_lost_update_on_value_with_upsert_p4(self, new_engine):
+    def test_lost_update_on_value_with_upsert_p4(self):
         table_name, session = self._prepare("test_lost_update_on_value_with_upsert_p4")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select id, value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -417,14 +404,13 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_read_skew_g_single(self, new_engine):
+    def test_read_skew_g_single(self):
         table_name, session = self._prepare("test_read_skew_g_single")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -469,14 +455,13 @@ class TestTransactionIsolation(object):
                 )
             )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_read_skew_g_single_predicate_deps(self, new_engine):
+    def test_read_skew_g_single_predicate_deps(self):
         table_name, session = self._prepare("test_read_skew_g_single_predicate_deps")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} select value from {} where value % 5 = 0;'.format(prefix, table_name))
         t2.execute('{} update {} set value = 12 where value = 10;'.format(prefix, table_name))
@@ -491,14 +476,13 @@ class TestTransactionIsolation(object):
         else:
             assert_that(result_rows[0].rows, equal_to([]))
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_read_skew_g_single_write_predicate(self, new_engine):
+    def test_read_skew_g_single_write_predicate(self):
         table_name, session = self._prepare("test_read_skew_g_single_write_predicate")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select value from {} where id = 1;'.format(prefix, table_name))
         assert_that(
@@ -526,14 +510,13 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_write_skew_g2_item(self, new_engine):
+    def test_write_skew_g2_item(self):
         table_name, session = self._prepare("test_write_skew_g2_item")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name))
         t2.execute('{} select value from {} where id in (1,2);'.format(prefix, table_name))
@@ -552,14 +535,13 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_anti_dependency_cycles_g2(self, new_engine):
+    def test_anti_dependency_cycles_g2(self):
         table_name, session = self._prepare("test_anti_dependency_cycles_g2")
 
         t1 = session.transaction()
         t2 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         t1.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
         t2.execute('{} select value from {} where value % 3 = 0;'.format(prefix, table_name))
@@ -580,15 +562,14 @@ class TestTransactionIsolation(object):
             )
         )
 
-    @pytest.mark.parametrize('new_engine', [True, False])
-    def test_anti_dependency_cycles_g2_two_edges(self, new_engine):
+    def test_anti_dependency_cycles_g2_two_edges(self):
         table_name, session = self._prepare("test_anti_dependency_cycles_g2_two_edges")
 
         t1 = session.transaction()
         t2 = session.transaction()
         t3 = session.transaction()
 
-        prefix = self._prepare_engine(new_engine)
+        prefix = self._prepare_engine()
 
         result_rows = t1.execute('{} select id, value from {};'.format(prefix, table_name))
         assert_that(

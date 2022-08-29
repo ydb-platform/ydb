@@ -906,5 +906,7 @@ message TActivity {
         PQ_META_CACHE = 575;
         BS_GROUP_ASSIMILATE = 576;
         ACTOR_COROUTINE = 577;
+        LB_CM_ABC_ACTOR = 578;
+        LB_CM_FOLDER_ACTOR = 579;
     };
 };

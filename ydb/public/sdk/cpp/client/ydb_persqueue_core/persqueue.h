@@ -124,6 +124,7 @@ struct TDescribeTopicResult : public TStatus {
         GETTER(TMaybe<ui32>, PartitionsPerTablet);
         GETTER(TMaybe<ui32>, AbcId);
         GETTER(TMaybe<TString>, AbcSlug);
+        GETTER(TMaybe<TString>, FederationAccount);
 
         const TVector<TReadRule>& ReadRules() const {
             return ReadRules_;
@@ -270,7 +271,7 @@ struct TTopicSettings : public TOperationRequestSettings<TDerived> {
         PartitionsPerTablet_ = settings.PartitionsPerTablet();
         AbcId_ = settings.AbcId();
         AbcSlug_ = settings.AbcSlug();
-
+        FederationAccount_ = settings.FederationAccount();
         ReadRules_.clear();
         for (const auto& readRule : settings.ReadRules()) {
             ReadRules_.push_back({});

@@ -118,6 +118,12 @@ public:
         PrimaryPath = path;
     }
 
+    // Only for control plane
+    const TString& GetFullModernName() const {
+        Y_VERIFY(!FullModernName.empty());
+        return FullModernName;
+    }
+
 protected:
     /** Account will be set for federation topics without database only;
      * Generally used only for discovery purposes

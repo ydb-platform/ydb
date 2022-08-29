@@ -585,7 +585,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         pqDescr->SetTotalGroupCount(settings.partitions_count());
 
-        auto config = pqDescr->MutablePQTabletConfig();
+        auto* config = pqDescr->MutablePQTabletConfig();
 
         config->SetRequireAuthWrite(true);
         config->SetRequireAuthRead(true);

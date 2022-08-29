@@ -51,6 +51,10 @@
 
 {% include [x](_includes/basic/ensure.md) %}
 
+{% include [x](_includes/basic/assume_strict.md) %}
+
+{% include [x](_includes/basic/likely.md) %}
+
 {% if feature_codegen %}
 
   {% include [x](_includes/basic/evaluate_expr_atom.md) %}

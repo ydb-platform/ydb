@@ -1,6 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <util/stream/null.h>
+#include <util/datetime/cputimer.h>
 #include "hive_impl.h"
 #include "balancer.h"
 
@@ -32,7 +33,7 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
         hiveStorage->TabletType = TTabletTypes::Hive;
         THive hive(hiveStorage.Get(), TActorId());
         std::unordered_map<ui64, TLeaderTabletInfo> tablets;
-        THPTimer timer;
+        TProfileTimer timer;
 
         for (ui64 i = 0; i < NUM_TABLETS; ++i) {
             TLeaderTabletInfo& tablet = tablets.emplace(std::piecewise_construct, std::tuple<TTabletId>(i), std::tuple<TTabletId, THive&>(i, hive)).first->second;
@@ -40,12 +41,15 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             bootQueue.AddToBootQueue(tablet);
         }
 
-        double passed = timer.Passed();
+        double passed = timer.Get().SecondsFloat();
         Ctest << "Create = " << passed << Endl;
 #ifndef SANITIZER_TYPE
-        UNIT_ASSERT(passed < 5);
+#ifndef NDEBUG
+        UNIT_ASSERT(passed < 3);
+#else
+        UNIT_ASSERT(passed < 1);
 #endif
-
+#endif
         timer.Reset();
 
         double maxP = 100;
@@ -60,13 +64,13 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
             }
         }
 
-        passed = timer.Passed();
+        passed = timer.Get().SecondsFloat();
         Ctest << "Process = " << passed << Endl;
 #ifndef SANITIZER_TYPE
 #ifndef NDEBUG
         UNIT_ASSERT(passed < 10);
 #else
-        UNIT_ASSERT(passed < 2);
+        UNIT_ASSERT(passed < 1);
 #endif
 #endif
 
@@ -74,15 +78,19 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
 
         bootQueue.MoveFromWaitQueueToBootQueue();
 
-        passed = timer.Passed();
+        passed = timer.Get().SecondsFloat();
         Ctest << "Move = " << passed << Endl;
 #ifndef SANITIZER_TYPE
-        UNIT_ASSERT(passed < 0.5);
+#ifndef NDEBUG
+        UNIT_ASSERT(passed < 2);
+#else
+        UNIT_ASSERT(passed < 0.1);
+#endif
 #endif
     }
 
     Y_UNIT_TEST(BalancerSpeedAndDistribution) {
-        static constexpr ui64 NUM_TABLETS = 100000;
+        static constexpr ui64 NUM_TABLETS = 1000000;
         static constexpr ui64 NUM_BUCKETS = 16;
 
         auto CheckSpeedAndDistribution = [](
@@ -94,15 +102,19 @@ Y_UNIT_TEST_SUITE(THiveImplTest) {
                 tablets.emplace_back(&tab);
             }
 
-            THPTimer timer;
+            TProfileTimer timer;
 
             func(tablets);
 
-            double passed = timer.Passed();
+            double passed = timer.Get().SecondsFloat();
 
             Ctest << "Time=" << passed << Endl;
 #ifndef SANITIZER_TYPE
-            UNIT_ASSERT(passed < 0.2);
+#ifndef NDEBUG
+            UNIT_ASSERT(passed < 1);
+#else
+            UNIT_ASSERT(passed < 0.4);
+#endif
 #endif
             std::vector<double> buckets(NUM_BUCKETS, 0);
             size_t revs = 0;

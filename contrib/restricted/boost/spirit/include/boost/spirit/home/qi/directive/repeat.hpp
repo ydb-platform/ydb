@@ -93,6 +93,7 @@ namespace boost { namespace spirit { namespace qi
 
         // silence MSVC warning C4512: assignment operator could not be generated
         BOOST_DELETED_FUNCTION(exact_iterator& operator= (exact_iterator const&));
+        exact_iterator(const exact_iterator&) = default;
     };
 
     template <typename T>

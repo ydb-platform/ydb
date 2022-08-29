@@ -173,6 +173,14 @@ TPartitionInfo::TPartitionInfo(const Ydb::Topic::DescribeTopicResult::PartitionI
     }
 }
 
+bool TPartitionInfo::GetActive() const {
+    return Active_;
+}
+
+ui64 TPartitionInfo::GetPartitionId() const {
+    return PartitionId_;
+}
+
 
 TAsyncStatus TTopicClient::CreateTopic(const TString& path, const TCreateTopicSettings& settings) {
     return Impl_->CreateTopic(path, settings);

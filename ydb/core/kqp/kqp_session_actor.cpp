@@ -1273,6 +1273,14 @@ public:
         }
     }
 
+    template<class TEvRecord>
+    void AddTrailingInfo(TEvRecord& record) {
+        if (ShutdownState) {
+            LOG_D("Session ["  << SessionId  << "] is closing, set trailing metadata to request session shutdown");
+            record.SetWorkerIsClosing(true);
+        }
+    }
+
     void FillTxInfo(NKikimrKqp::TQueryResponse* response) {
         YQL_ENSURE(QueryState);
         if (QueryState->Commit) {
@@ -1458,7 +1466,7 @@ public:
 
         auto response = TEvKqp::TEvProcessResponse::Error(ydbStatus, message);
 
-        //AddTrailingInfo(response->Record);
+        AddTrailingInfo(response->Record);
         Send(sender, response.Release(), 0, proxyRequestId);
     }
 
@@ -1495,6 +1503,8 @@ public:
         auto& record = QueryResponse->Record.GetRef();
         auto& response = *record.MutableResponse();
         const auto& status = record.GetYdbStatus();
+
+        AddTrailingInfo(record);
 
         if (QueryState->KeepSession) {
             response.SetSessionId(SessionId);

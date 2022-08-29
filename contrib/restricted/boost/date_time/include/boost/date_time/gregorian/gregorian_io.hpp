@@ -21,10 +21,6 @@
 #include <boost/date_time/gregorian/gregorian_types.hpp>
 #include <boost/date_time/gregorian/conversion.hpp> // to_tm will be needed in the facets
 
-#include <util/system/compiler.h>
-Y_PRAGMA_DIAGNOSTIC_PUSH
-Y_PRAGMA_NO_WSHADOW
-
 namespace boost {
 namespace gregorian {
 
@@ -784,7 +780,5 @@ namespace gregorian {
 
   
 } } // namespaces
-
-Y_PRAGMA_DIAGNOSTIC_POP
 
 #endif // DATE_TIME_GREGORIAN_IO_HPP__

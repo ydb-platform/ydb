@@ -20,8 +20,6 @@
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/date_time/posix_time/conversion.hpp> // to_tm will be needed in the facets
 
-#include <util/system/compiler.h>
-
 namespace boost {
 namespace posix_time {
 
@@ -73,23 +71,10 @@ namespace posix_time {
   operator>>(std::basic_istream<CharT, Traits>& is, ptime& pt)
   {
     boost::io::ios_flags_saver iflags(is);
-
-    Y_PRAGMA_DIAGNOSTIC_PUSH
-    Y_PRAGMA_NO_WSHADOW
-
     typename std::basic_istream<CharT, Traits>::sentry strm_sentry(is, false);
-
-    Y_PRAGMA_DIAGNOSTIC_POP
-
     if (strm_sentry) {
       try {
-        Y_PRAGMA_DIAGNOSTIC_PUSH
-        Y_PRAGMA_NO_WSHADOW
-
         typedef typename date_time::time_input_facet<ptime, CharT> time_input_facet_local;
-
-        Y_PRAGMA_DIAGNOSTIC_POP
-
         std::istreambuf_iterator<CharT,Traits> sit(is), str_end;
         if(std::has_facet<time_input_facet_local>(is.getloc())) {
           std::use_facet<time_input_facet_local>(is.getloc()).get(sit, str_end, is, pt);
@@ -153,23 +138,10 @@ namespace posix_time {
   operator>>(std::basic_istream<CharT, Traits>& is, time_period& tp)
   {
     boost::io::ios_flags_saver iflags(is);
-
-    Y_PRAGMA_DIAGNOSTIC_PUSH
-    Y_PRAGMA_NO_WSHADOW
-
     typename std::basic_istream<CharT, Traits>::sentry strm_sentry(is, false);
-
-    Y_PRAGMA_DIAGNOSTIC_POP
-
     if (strm_sentry) {
       try {
-        Y_PRAGMA_DIAGNOSTIC_PUSH
-        Y_PRAGMA_NO_WSHADOW
-
         typedef typename date_time::time_input_facet<ptime, CharT> time_input_facet_local;
-
-        Y_PRAGMA_DIAGNOSTIC_POP
-
         std::istreambuf_iterator<CharT,Traits> sit(is), str_end;
         if(std::has_facet<time_input_facet_local>(is.getloc())) {
           std::use_facet<time_input_facet_local>(is.getloc()).get(sit, str_end, is, tp);
@@ -230,23 +202,10 @@ namespace posix_time {
   operator>>(std::basic_istream<CharT, Traits>& is, time_duration& td)
   {
     boost::io::ios_flags_saver iflags(is);
-
-    Y_PRAGMA_DIAGNOSTIC_PUSH
-    Y_PRAGMA_NO_WSHADOW
-
     typename std::basic_istream<CharT, Traits>::sentry strm_sentry(is, false);
-
-    Y_PRAGMA_DIAGNOSTIC_POP
-
     if (strm_sentry) {
       try {
-        Y_PRAGMA_DIAGNOSTIC_PUSH
-        Y_PRAGMA_NO_WSHADOW
-
         typedef typename date_time::time_input_facet<ptime, CharT> time_input_facet_local;
-
-        Y_PRAGMA_DIAGNOSTIC_POP
-
         std::istreambuf_iterator<CharT,Traits> sit(is), str_end;
         if(std::has_facet<time_input_facet_local>(is.getloc())) {
           std::use_facet<time_input_facet_local>(is.getloc()).get(sit, str_end, is, td);

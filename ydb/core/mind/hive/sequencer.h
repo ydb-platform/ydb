@@ -114,6 +114,8 @@ protected:
     std::map<TSequence, TOwnerType> AllocatedSequences;
     std::list<TOwnerType> FreeSequences;
     size_t FreeSequencesIndex = 0;
+    size_t FreeSize_ = 0;
+    size_t AllocatedSize_ = 0;
 };
 
 // to keep ownership of sequences

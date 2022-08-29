@@ -482,6 +482,8 @@ public:
         const TOwnerIdxType::TValueType ownerIdx(OwnerId, OwnerIdx);
         BLOG_D("THive::TTxCreateTablet::Complete " << ownerIdx << " TabletId: " << TabletId << " SideEffects: " << SideEffects);
         SideEffects.Complete(ctx);
+        Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_FREE].Set(Self->Sequencer.FreeSize());
+        Self->TabletCounters->Simple()[NHive::COUNTER_SEQUENCE_ALLOCATED].Set(Self->Sequencer.AllocatedSequencesSize());
     }
 };
 

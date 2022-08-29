@@ -12,6 +12,7 @@ bool TSequenceGenerator::AddFreeSequence(TOwnerType owner, TSequencer::TSequence
     if (inserted) {
         if (!sequence.Empty()) {
             FreeSequences.emplace_back(owner);
+            FreeSize_ += sequence.Size();
         }
         ++FreeSequencesIndex;
     }
@@ -24,6 +25,7 @@ void TSequenceGenerator::AddAllocatedSequence(TOwnerType owner, TSequence sequen
     {
         auto [it, inserted] = AllocatedSequences.emplace(sequence, owner);
         Y_VERIFY(inserted);
+        AllocatedSize_ += sequence.Size();
     }
     {
         auto [it, inserted] = SequenceByOwner.emplace(owner, sequence);
@@ -64,6 +66,7 @@ TSequencer::TSequence TSequenceGenerator::AllocateSequence(TSequencer::TOwnerTyp
     if (itSequence->second.Empty()) {
         FreeSequences.pop_front();
     }
+    FreeSize_ -= result.Size();
     if (size > 1) {
         AddAllocatedSequence(owner, result);
         modified.emplace_back(owner);
@@ -100,22 +103,11 @@ TSequencer::TOwnerType TSequenceGenerator::GetOwner(TSequencer::TElementType ele
 }
 
 size_t TSequenceGenerator::FreeSize() const {
-    size_t size = 0;
-    for (const auto& owner : FreeSequences) {
-        auto itSeq = SequenceByOwner.find(owner);
-        if (itSeq != SequenceByOwner.end()) {
-            size += itSeq->second.Size();
-        }
-    }
-    return size;
+    return FreeSize_;
 }
 
 size_t TSequenceGenerator::AllocatedSequencesSize() const {
-    size_t size = 0;
-    for (const auto& [seq, owner] : AllocatedSequences) {
-        size += seq.Size();
-    }
-    return size;
+    return AllocatedSize_;
 }
 
 size_t TSequenceGenerator::AllocatedSequencesCount() const {

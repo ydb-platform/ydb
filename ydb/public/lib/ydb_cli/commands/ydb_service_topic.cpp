@@ -131,6 +131,10 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(18)
             .Optional()
             .StoreResult(&RetentionPeriodHours_);
+        config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
+            .DefaultValue(1024)
+            .Optional()
+            .StoreResult(&PartitionWriteSpeedKbps_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "New topic path");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -148,8 +152,8 @@ namespace NYdb::NConsoleClient {
 
         auto settings = NYdb::NTopic::TCreateTopicSettings();
         settings.PartitioningSettings(PartitionsCount_, PartitionsCount_);
-        settings.PartitionWriteBurstBytes(1024 * 1024);
-        settings.PartitionWriteSpeedBytesPerSecond(1024 * 1024);
+        settings.PartitionWriteBurstBytes(PartitionWriteSpeedKbps_ * 1_KB);
+        settings.PartitionWriteSpeedBytesPerSecond(PartitionWriteSpeedKbps_ * 1_KB);
         const auto codecs = GetCodecs();
         if (!codecs.empty()) {
             settings.SetSupportedCodecs(codecs);
@@ -174,6 +178,9 @@ namespace NYdb::NConsoleClient {
         config.Opts->AddLongOption("retention-period-hours", "Duration for which data in topic is stored")
             .Optional()
             .StoreResult(&RetentionPeriodHours_);
+        config.Opts->AddLongOption("partition-write-speed-kbps", "Partition write speed in kilobytes per second")
+            .Optional()
+            .StoreResult(&PartitionWriteSpeedKbps_);
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic to alter");
         AddAllowedCodecs(config, AllowedCodecs);
@@ -202,11 +209,16 @@ namespace NYdb::NConsoleClient {
             settings.SetRetentionPeriod(TDuration::Hours(*RetentionPeriodHours_));
         }
 
+        if (PartitionWriteSpeedKbps_.Defined() && describeResult.GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond() / 1_KB != *PartitionWriteSpeedKbps_) {
+            settings.SetPartitionWriteSpeedBytesPerSecond(*PartitionWriteSpeedKbps_ * 1_KB);
+            settings.SetPartitionWriteBurstBytes(*PartitionWriteSpeedKbps_ * 1_KB);
+        }
+
         return settings;
     }
 
     int TCommandTopicAlter::Run(TConfig& config) {
-        if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined()) {
+        if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined() && !PartitionWriteSpeedKbps_.Defined()) {
             return EXIT_SUCCESS;
         }
 

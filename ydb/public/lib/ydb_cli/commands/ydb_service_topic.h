@@ -40,6 +40,7 @@ namespace NYdb::NConsoleClient {
     private:
         ui64 RetentionPeriodHours_;
         ui32 PartitionsCount_;
+        ui32 PartitionWriteSpeedKbps_;
     };
 
     class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
@@ -52,6 +53,7 @@ namespace NYdb::NConsoleClient {
     private:
         TMaybe<ui64> RetentionPeriodHours_;
         TMaybe<ui32> PartitionsCount_;
+        TMaybe<ui32> PartitionWriteSpeedKbps_;
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
 

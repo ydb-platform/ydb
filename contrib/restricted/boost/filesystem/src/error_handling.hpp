@@ -24,6 +24,8 @@
 #include <boost/winapi/error_codes.hpp>
 #endif
 
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
+
 namespace boost {
 namespace filesystem {
 
@@ -86,6 +88,33 @@ typedef boost::winapi::DWORD_ err_t;
 #if !defined(STATUS_ACCESS_DENIED)
 #define STATUS_ACCESS_DENIED ((boost::winapi::NTSTATUS_)0xC0000022l)
 #endif
+#if !defined(STATUS_OBJECT_NAME_NOT_FOUND)
+#define STATUS_OBJECT_NAME_NOT_FOUND ((boost::winapi::NTSTATUS_)0xC0000034l)
+#endif
+#if !defined(STATUS_OBJECT_PATH_NOT_FOUND)
+#define STATUS_OBJECT_PATH_NOT_FOUND ((boost::winapi::NTSTATUS_)0xC000003Al)
+#endif
+#if !defined(STATUS_NOT_SUPPORTED)
+#define STATUS_NOT_SUPPORTED ((boost::winapi::NTSTATUS_)0xC00000BBl)
+#endif
+#if !defined(STATUS_BAD_NETWORK_PATH)
+#define STATUS_BAD_NETWORK_PATH ((boost::winapi::NTSTATUS_)0xC00000BEl)
+#endif
+#if !defined(STATUS_DEVICE_DOES_NOT_EXIST)
+#define STATUS_DEVICE_DOES_NOT_EXIST ((boost::winapi::NTSTATUS_)0xC00000C0l)
+#endif
+#if !defined(STATUS_BAD_NETWORK_NAME)
+#define STATUS_BAD_NETWORK_NAME ((boost::winapi::NTSTATUS_)0xC00000CCl)
+#endif
+#if !defined(STATUS_DIRECTORY_NOT_EMPTY)
+#define STATUS_DIRECTORY_NOT_EMPTY ((boost::winapi::NTSTATUS_)0xC0000101l)
+#endif
+#if !defined(STATUS_NOT_A_DIRECTORY)
+#define STATUS_NOT_A_DIRECTORY ((boost::winapi::NTSTATUS_)0xC0000103l)
+#endif
+#if !defined(STATUS_NOT_FOUND)
+#define STATUS_NOT_FOUND ((boost::winapi::NTSTATUS_)0xC0000225l)
+#endif
 
 //! Converts NTSTATUS error codes to Win32 error codes for reporting
 inline boost::winapi::DWORD_ translate_ntstatus(boost::winapi::NTSTATUS_ status)
@@ -104,11 +133,24 @@ inline boost::winapi::DWORD_ translate_ntstatus(boost::winapi::NTSTATUS_ status)
     case static_cast< boost::winapi::ULONG_ >(STATUS_NO_MORE_FILES):
         return boost::winapi::ERROR_NO_MORE_FILES_;
     case static_cast< boost::winapi::ULONG_ >(STATUS_NO_SUCH_DEVICE):
+    case static_cast< boost::winapi::ULONG_ >(STATUS_DEVICE_DOES_NOT_EXIST):
         return boost::winapi::ERROR_DEV_NOT_EXIST_;
     case static_cast< boost::winapi::ULONG_ >(STATUS_NO_SUCH_FILE):
+    case static_cast< boost::winapi::ULONG_ >(STATUS_OBJECT_NAME_NOT_FOUND):
+    case static_cast< boost::winapi::ULONG_ >(STATUS_OBJECT_PATH_NOT_FOUND):
         return boost::winapi::ERROR_FILE_NOT_FOUND_;
     case static_cast< boost::winapi::ULONG_ >(STATUS_ACCESS_DENIED):
         return boost::winapi::ERROR_ACCESS_DENIED_;
+    case static_cast< boost::winapi::ULONG_ >(STATUS_BAD_NETWORK_PATH):
+        return boost::winapi::ERROR_BAD_NETPATH_;
+    case static_cast< boost::winapi::ULONG_ >(STATUS_BAD_NETWORK_NAME):
+        return boost::winapi::ERROR_BAD_NET_NAME_;
+    case static_cast< boost::winapi::ULONG_ >(STATUS_DIRECTORY_NOT_EMPTY):
+        return boost::winapi::ERROR_DIR_NOT_EMPTY_;
+    case static_cast< boost::winapi::ULONG_ >(STATUS_NOT_A_DIRECTORY):
+        return boost::winapi::ERROR_DIRECTORY_; // The directory name is invalid
+    case static_cast< boost::winapi::ULONG_ >(STATUS_NOT_FOUND):
+        return boost::winapi::ERROR_NOT_FOUND_;
     // map "invalid info class" to "not supported" as this error likely indicates that the kernel does not support what we request
     case static_cast< boost::winapi::ULONG_ >(STATUS_INVALID_INFO_CLASS):
     default:
@@ -172,5 +214,7 @@ inline bool error(err_t error_num, path const& p1, path const& p2, system::error
 
 } // namespace filesystem
 } // namespace boost
+
+#include <boost/filesystem/detail/footer.hpp>
 
 #endif // BOOST_FILESYSTEM_SRC_ERROR_HANDLING_HPP_

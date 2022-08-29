@@ -19,6 +19,8 @@
 #include <cwchar> // std::mbstate_t
 #include <locale>
 
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
+
 namespace boost {
 namespace filesystem {
 namespace detail {
@@ -62,6 +64,8 @@ protected:
 } // namespace detail
 } // namespace filesystem
 } // namespace boost
+
+#include <boost/filesystem/detail/footer.hpp>
 
 #endif // BOOST_WINDOWS_API
 

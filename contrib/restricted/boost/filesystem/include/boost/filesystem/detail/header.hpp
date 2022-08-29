@@ -37,6 +37,8 @@
 #pragma GCC diagnostic push
 // unused parameter 'arg'
 #pragma GCC diagnostic ignored "-Wunused-parameter"
+// unused function 'foo'
+#pragma GCC diagnostic ignored "-Wunused-function"
 
 #endif
 

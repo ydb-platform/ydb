@@ -147,40 +147,40 @@ inline bool empty(T (&x)[N])
 
 // value types differ  ---------------------------------------------------------------//
 //
-//   A from_end argument of 0 is less efficient than a known end, so use only if needed
+//   A from_end argument of NULL is less efficient than a known end, so use only if needed
 
 //  with codecvt
 
 BOOST_FILESYSTEM_DECL
 void convert(const char* from,
-             const char* from_end, // 0 for null terminated MBCS
+             const char* from_end, // NULL for null terminated MBCS
              std::wstring& to, codecvt_type const& cvt);
 
 BOOST_FILESYSTEM_DECL
 void convert(const wchar_t* from,
-             const wchar_t* from_end, // 0 for null terminated MBCS
+             const wchar_t* from_end, // NULL for null terminated MBCS
              std::string& to, codecvt_type const& cvt);
 
 inline void convert(const char* from, std::wstring& to, codecvt_type const& cvt)
 {
     BOOST_ASSERT(from);
-    convert(from, 0, to, cvt);
+    convert(from, NULL, to, cvt);
 }
 
 inline void convert(const wchar_t* from, std::string& to, codecvt_type const& cvt)
 {
     BOOST_ASSERT(from);
-    convert(from, 0, to, cvt);
+    convert(from, NULL, to, cvt);
 }
 
 //  without codecvt
 
 inline void convert(const char* from,
-                    const char* from_end, // 0 for null terminated MBCS
+                    const char* from_end, // NULL for null terminated MBCS
                     std::wstring& to);
 
 inline void convert(const wchar_t* from,
-                    const wchar_t* from_end, // 0 for null terminated MBCS
+                    const wchar_t* from_end, // NULL for null terminated MBCS
                     std::string& to);
 
 inline void convert(const char* from, std::wstring& to);

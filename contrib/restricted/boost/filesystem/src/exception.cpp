@@ -19,7 +19,7 @@
 
 #include "error_handling.hpp"
 
-#include <boost/config/abi_prefix.hpp> // must be the last #include
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
 
 namespace boost {
 namespace filesystem {
@@ -185,4 +185,4 @@ void emit_error(err_t error_num, path const& p1, path const& p2, system::error_c
 } // namespace filesystem
 } // namespace boost
 
-#include <boost/config/abi_suffix.hpp> // pops abi_prefix.hpp pragmas
+#include <boost/filesystem/detail/footer.hpp>

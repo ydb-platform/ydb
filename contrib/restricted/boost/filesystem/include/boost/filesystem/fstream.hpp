@@ -15,6 +15,7 @@
 
 #include <boost/filesystem/config.hpp>
 #include <boost/filesystem/path.hpp>
+#include <cstddef>
 #include <iosfwd>
 #include <fstream>
 
@@ -71,7 +72,7 @@ public:
 public:
     basic_filebuf< charT, traits >* open(path const& p, std::ios_base::openmode mode)
     {
-        return std::basic_filebuf< charT, traits >::open(BOOST_FILESYSTEM_C_STR(p), mode) ? this : 0;
+        return std::basic_filebuf< charT, traits >::open(BOOST_FILESYSTEM_C_STR(p), mode) ? this : NULL;
     }
 };
 

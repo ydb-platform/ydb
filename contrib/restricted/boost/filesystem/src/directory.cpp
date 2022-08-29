@@ -72,6 +72,8 @@
 #include "error_handling.hpp"
 #include "private_config.hpp"
 
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
+
 //  BOOST_FILESYSTEM_STATUS_CACHE enables file_status cache in
 //  dir_itr_increment. The config tests are placed here because some of the
 //  macros being tested come from dirent.h.
@@ -376,7 +378,7 @@ error_code dir_itr_increment(dir_itr_imp& imp, fs::path& filename, fs::file_stat
     return error_code();
 }
 
-error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, unsigned int opts, fs::path& first_filename, fs::file_status&, fs::file_status&)
+error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, unsigned int opts, directory_iterator_params* params, fs::path& first_filename, fs::file_status&, fs::file_status&)
 {
     std::size_t extra_size = 0u;
 #if defined(BOOST_FILESYSTEM_USE_READDIR_R)
@@ -409,7 +411,11 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
     if ((opts & static_cast< unsigned int >(directory_options::_detail_no_follow)) != 0u)
         flags |= O_NOFOLLOW;
 
+#if defined(BOOST_FILESYSTEM_HAS_POSIX_AT_APIS)
+    int fd = ::openat(params ? params->basedir_fd : AT_FDCWD, dir.c_str(), flags);
+#else
     int fd = ::open(dir.c_str(), flags);
+#endif
     if (BOOST_UNLIKELY(fd < 0))
     {
         const int err = errno;
@@ -444,6 +450,11 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
 
     // Force initial readdir call by the caller. This will initialize the actual first filename and statuses.
     first_filename.assign(".");
+
+#if defined(BOOST_FILESYSTEM_HAS_FDOPENDIR_NOFOLLOW)
+    if (params)
+        params->iterator_fd = fd;
+#endif
 
     imp.swap(pimpl);
     return error_code();
@@ -586,7 +597,7 @@ extra_data_format g_extra_data_format = file_directory_information_format;
 
 /*!
  * \brief Extra buffer size for GetFileInformationByHandleEx-based or NtQueryDirectoryFile-based directory iterator.
- * 
+ *
  * Must be large enough to accommodate at least one FILE_DIRECTORY_INFORMATION or *_DIR_INFO struct and one filename.
  * NTFS, VFAT, exFAT support filenames up to 255 UTF-16/UCS-2 characters. ReFS supports filenames up to 32768 UTF-16 characters.
  */
@@ -599,7 +610,8 @@ inline system::error_code dir_itr_close(dir_itr_imp& imp) BOOST_NOEXCEPT
 
     if (imp.handle != NULL)
     {
-        ::CloseHandle(imp.handle);
+        if (BOOST_LIKELY(imp.close_handle))
+            ::CloseHandle(imp.handle);
         imp.handle = NULL;
     }
 
@@ -751,54 +763,76 @@ done:
     return error_code();
 }
 
-error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, unsigned int opts, fs::path& first_filename, fs::file_status& sf, fs::file_status& symlink_sf)
+error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, unsigned int opts, directory_iterator_params* params, fs::path& first_filename, fs::file_status& sf, fs::file_status& symlink_sf)
 {
     boost::intrusive_ptr< detail::dir_itr_imp > pimpl(new (dir_itr_extra_size) detail::dir_itr_imp());
     if (BOOST_UNLIKELY(!pimpl))
         return make_error_code(system::errc::not_enough_memory);
 
-    DWORD flags = FILE_FLAG_BACKUP_SEMANTICS;
-    if ((opts & static_cast< unsigned int >(directory_options::_detail_no_follow)) != 0u)
-        flags |= FILE_FLAG_OPEN_REPARSE_POINT;
-    handle_wrapper h(create_file_handle(dir, FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flags));
-    if (BOOST_UNLIKELY(h.handle == INVALID_HANDLE_VALUE))
-    {
-    return_last_error:
-        DWORD error = ::GetLastError();
-        return error_code(error, system_category());
-    }
-
     GetFileInformationByHandleEx_t* get_file_information_by_handle_ex = filesystem::detail::atomic_load_relaxed(get_file_information_by_handle_ex_api);
-    if (BOOST_LIKELY(get_file_information_by_handle_ex != NULL))
+
+    handle_wrapper h;
+    HANDLE iterator_handle;
+    bool close_handle = true;
+    if (params != NULL && params->use_handle != INVALID_HANDLE_VALUE)
     {
-        file_attribute_tag_info info;
-        BOOL res = get_file_information_by_handle_ex(h.handle, file_attribute_tag_info_class, &info, sizeof(info));
-        if (BOOST_UNLIKELY(!res))
-            goto return_last_error;
-
-        if (BOOST_UNLIKELY((info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0u))
-            return make_error_code(system::errc::not_a_directory);
-
-        if ((opts & static_cast< unsigned int >(directory_options::_detail_no_follow)) != 0u)
-        {
-            if ((info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u && is_reparse_point_tag_a_symlink(info.ReparseTag))
-                return make_error_code(system::errc::too_many_symbolic_link_levels);
-        }
+        // Operate on externally provided handle, which must be a directory handle
+        iterator_handle = params->use_handle;
+        close_handle = params->close_handle;
     }
     else
     {
-        BY_HANDLE_FILE_INFORMATION info;
-        BOOL res = ::GetFileInformationByHandle(h.handle, &info);
-        if (BOOST_UNLIKELY(!res))
-            goto return_last_error;
-
-        if (BOOST_UNLIKELY((info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0u))
-            return make_error_code(system::errc::not_a_directory);
-
+        DWORD flags = FILE_FLAG_BACKUP_SEMANTICS;
         if ((opts & static_cast< unsigned int >(directory_options::_detail_no_follow)) != 0u)
+            flags |= FILE_FLAG_OPEN_REPARSE_POINT;
+
+        iterator_handle = h.handle = create_file_handle(dir, FILE_LIST_DIRECTORY, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL, OPEN_EXISTING, flags);
+        if (BOOST_UNLIKELY(iterator_handle == INVALID_HANDLE_VALUE))
         {
-            if ((info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u && is_reparse_point_a_symlink_ioctl(h.handle))
-                return make_error_code(system::errc::too_many_symbolic_link_levels);
+        return_last_error:
+            DWORD error = ::GetLastError();
+            return error_code(error, system_category());
+        }
+
+        if (BOOST_LIKELY(get_file_information_by_handle_ex != NULL))
+        {
+            file_attribute_tag_info info;
+            BOOL res = get_file_information_by_handle_ex(iterator_handle, file_attribute_tag_info_class, &info, sizeof(info));
+            if (BOOST_UNLIKELY(!res))
+            {
+                // On FAT/exFAT filesystems requesting FILE_ATTRIBUTE_TAG_INFO returns ERROR_INVALID_PARAMETER. See the comment in symlink_status.
+                DWORD error = ::GetLastError();
+                if (error == ERROR_INVALID_PARAMETER || error == ERROR_NOT_SUPPORTED)
+                    goto use_get_file_information_by_handle;
+
+                return error_code(error, system_category());
+            }
+
+            if (BOOST_UNLIKELY((info.FileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0u))
+                return make_error_code(system::errc::not_a_directory);
+
+            if ((opts & static_cast< unsigned int >(directory_options::_detail_no_follow)) != 0u)
+            {
+                if ((info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u && is_reparse_point_tag_a_symlink(info.ReparseTag))
+                    return make_error_code(system::errc::too_many_symbolic_link_levels);
+            }
+        }
+        else
+        {
+        use_get_file_information_by_handle:
+            BY_HANDLE_FILE_INFORMATION info;
+            BOOL res = ::GetFileInformationByHandle(iterator_handle, &info);
+            if (BOOST_UNLIKELY(!res))
+                goto return_last_error;
+
+            if (BOOST_UNLIKELY((info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) == 0u))
+                return make_error_code(system::errc::not_a_directory);
+
+            if ((opts & static_cast< unsigned int >(directory_options::_detail_no_follow)) != 0u)
+            {
+                if ((info.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) != 0u && is_reparse_point_a_symlink_ioctl(h.handle))
+                    return make_error_code(system::errc::too_many_symbolic_link_levels);
+            }
         }
     }
 
@@ -807,7 +841,7 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
     {
     case file_id_extd_dir_info_format:
         {
-            if (!get_file_information_by_handle_ex(h.handle, file_id_extd_directory_restart_info_class, extra_data, dir_itr_extra_size))
+            if (!get_file_information_by_handle_ex(iterator_handle, file_id_extd_directory_restart_info_class, extra_data, dir_itr_extra_size))
             {
                 DWORD error = ::GetLastError();
 
@@ -841,7 +875,7 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
     case file_full_dir_info_format:
     fallback_to_file_full_dir_info_format:
         {
-            if (!get_file_information_by_handle_ex(h.handle, file_full_directory_restart_info_class, extra_data, dir_itr_extra_size))
+            if (!get_file_information_by_handle_ex(iterator_handle, file_full_directory_restart_info_class, extra_data, dir_itr_extra_size))
             {
                 DWORD error = ::GetLastError();
 
@@ -870,7 +904,7 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
     case file_id_both_dir_info_format:
     fallback_to_file_id_both_dir_info:
         {
-            if (!get_file_information_by_handle_ex(h.handle, file_id_both_directory_restart_info_class, extra_data, dir_itr_extra_size))
+            if (!get_file_information_by_handle_ex(iterator_handle, file_id_both_directory_restart_info_class, extra_data, dir_itr_extra_size))
             {
                 DWORD error = ::GetLastError();
 
@@ -898,7 +932,7 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
             io_status_block iosb;
             boost::winapi::NTSTATUS_ status = nt_query_directory_file
             (
-                h.handle,
+                iterator_handle,
                 NULL, // Event
                 NULL, // ApcRoutine
                 NULL, // ApcContext
@@ -933,8 +967,10 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
         break;
     }
 
-    pimpl->handle = h.handle;
+
+    pimpl->handle = iterator_handle;
     h.handle = INVALID_HANDLE_VALUE;
+    pimpl->close_handle = close_handle;
 
 done:
     imp.swap(pimpl);
@@ -947,7 +983,8 @@ inline system::error_code dir_itr_close(dir_itr_imp& imp) BOOST_NOEXCEPT
 {
     if (imp.handle != NULL)
     {
-        ::FindClose(imp.handle);
+        if (BOOST_LIKELY(imp.close_handle))
+            ::FindClose(imp.handle);
         imp.handle = NULL;
     }
 
@@ -973,7 +1010,7 @@ done:
     return error_code();
 }
 
-error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, unsigned int opts, fs::path& first_filename, fs::file_status& sf, fs::file_status& symlink_sf)
+error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::path const& dir, unsigned int opts, directory_iterator_params*, fs::path& first_filename, fs::file_status& sf, fs::file_status& symlink_sf)
 {
     boost::intrusive_ptr< detail::dir_itr_imp > pimpl(new (static_cast< std::size_t >(0u)) detail::dir_itr_imp());
     if (BOOST_UNLIKELY(!pimpl))
@@ -1000,6 +1037,8 @@ error_code dir_itr_create(boost::intrusive_ptr< detail::dir_itr_imp >& imp, fs::
 
         return error_code(error, system_category());
     }
+
+    pimpl->close_handle = true;
 
     first_filename = data.cFileName;
     set_file_statuses(data.dwFileAttributes, NULL, first_filename, sf, symlink_sf);
@@ -1039,7 +1078,7 @@ dir_itr_imp::~dir_itr_imp() BOOST_NOEXCEPT
 }
 
 BOOST_FILESYSTEM_DECL
-void directory_iterator_construct(directory_iterator& it, path const& p, unsigned int opts, system::error_code* ec)
+void directory_iterator_construct(directory_iterator& it, path const& p, unsigned int opts, directory_iterator_params* params, system::error_code* ec)
 {
     if (BOOST_UNLIKELY(p.empty()))
     {
@@ -1055,7 +1094,7 @@ void directory_iterator_construct(directory_iterator& it, path const& p, unsigne
         boost::intrusive_ptr< detail::dir_itr_imp > imp;
         path filename;
         file_status file_stat, symlink_file_stat;
-        system::error_code result = dir_itr_create(imp, p, opts, filename, file_stat, symlink_file_stat);
+        system::error_code result = dir_itr_create(imp, p, opts, params, filename, file_stat, symlink_file_stat);
 
         while (true)
         {
@@ -1169,7 +1208,7 @@ void recursive_directory_iterator_construct(recursive_directory_iterator& it, pa
         ec->clear();
 
     directory_iterator dir_it;
-    detail::directory_iterator_construct(dir_it, dir_path, opts, ec);
+    detail::directory_iterator_construct(dir_it, dir_path, opts, NULL, ec);
     if ((ec && *ec) || dir_it == directory_iterator())
         return;
 
@@ -1307,8 +1346,8 @@ inline push_directory_result recursive_directory_iterator_push_directory(detail:
 
         file_status symlink_stat;
 
-        // if we are not recursing into symlinks, we are going to have to know if the
-        // stack top is a symlink, so get symlink_status and verify no error occurred
+        // If we are not recursing into symlinks, we are going to have to know if the
+        // stack top is a symlink, so get symlink_status and verify no error occurred.
         if ((imp->m_options & static_cast< unsigned int >(directory_options::follow_directory_symlink)) == 0u ||
             (imp->m_options & static_cast< unsigned int >(directory_options::skip_dangling_symlinks)) != 0u)
         {
@@ -1452,3 +1491,5 @@ void recursive_directory_iterator_increment(recursive_directory_iterator& it, sy
 
 } // namespace filesystem
 } // namespace boost
+
+#include <boost/filesystem/detail/footer.hpp>

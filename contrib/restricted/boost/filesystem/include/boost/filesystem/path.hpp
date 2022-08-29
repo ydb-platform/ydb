@@ -209,7 +209,7 @@ public:
     template< class Source >
     path(Source const& source, typename boost::enable_if_c<
         path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value
-    >::type* = 0)
+    >::type* = NULL)
     {
         path_traits::dispatch(source, m_pathname);
     }
@@ -274,7 +274,7 @@ public:
     template< class Source >
     path(Source const& source, codecvt_type const& cvt, typename boost::enable_if_c<
         path_traits::is_pathable< typename boost::decay< Source >::type >::value && !path_detail::is_native_pathable< Source >::value
-    >::type* = 0)
+    >::type* = NULL)
     {
         path_traits::dispatch(source, m_pathname, cvt);
     }
@@ -282,7 +282,7 @@ public:
     path(const value_type* begin, const value_type* end) : m_pathname(begin, end) {}
 
     template< class InputIterator >
-    path(InputIterator begin, InputIterator end, typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator > >::type* = 0)
+    path(InputIterator begin, InputIterator end, typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator > >::type* = NULL)
     {
         if (begin != end)
         {
@@ -295,7 +295,7 @@ public:
     path(const value_type* begin, const value_type* end, codecvt_type const&) : m_pathname(begin, end) {}
 
     template< class InputIterator >
-    path(InputIterator begin, InputIterator end, codecvt_type const& cvt, typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator > >::type* = 0)
+    path(InputIterator begin, InputIterator end, codecvt_type const& cvt, typename boost::disable_if< path_detail::is_native_char_ptr< InputIterator > >::type* = NULL)
     {
         if (begin != end)
         {
@@ -1183,7 +1183,7 @@ template< typename T >
 inline typename boost::enable_if< boost::is_same< T, path >, std::size_t >::type hash_value(T const& p) BOOST_NOEXCEPT
 {
 #ifdef BOOST_WINDOWS_API
-    std::size_t seed = 0;
+    std::size_t seed = 0u;
     for (typename T::value_type const* it = p.c_str(); *it; ++it)
         hash_combine(seed, *it == L'/' ? L'\\' : *it);
     return seed;
@@ -1359,14 +1359,14 @@ inline std::wstring path::generic_string< std::wstring >(codecvt_type const& cvt
 namespace path_traits { //  without codecvt
 
 inline void convert(const char* from,
-                    const char* from_end, // 0 for null terminated MBCS
+                    const char* from_end, // NULL for null terminated MBCS
                     std::wstring& to)
 {
     convert(from, from_end, to, path::codecvt());
 }
 
 inline void convert(const wchar_t* from,
-                    const wchar_t* from_end, // 0 for null terminated MBCS
+                    const wchar_t* from_end, // NULL for null terminated MBCS
                     std::string& to)
 {
     convert(from, from_end, to, path::codecvt());
@@ -1375,13 +1375,13 @@ inline void convert(const wchar_t* from,
 inline void convert(const char* from, std::wstring& to)
 {
     BOOST_ASSERT(!!from);
-    convert(from, 0, to, path::codecvt());
+    convert(from, NULL, to, path::codecvt());
 }
 
 inline void convert(const wchar_t* from, std::string& to)
 {
     BOOST_ASSERT(!!from);
-    convert(from, 0, to, path::codecvt());
+    convert(from, NULL, to, path::codecvt());
 }
 
 } // namespace path_traits

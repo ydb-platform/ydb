@@ -40,6 +40,8 @@
 #include "atomic_tools.hpp"
 #include "private_config.hpp"
 
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
+
 namespace fs = boost::filesystem;
 
 using boost::filesystem::path;
@@ -1678,3 +1680,5 @@ BOOST_FILESYSTEM_DECL path const& dot_dot_path()
 } // namespace detail
 } // namespace filesystem
 } // namespace boost
+
+#include <boost/filesystem/detail/footer.hpp>

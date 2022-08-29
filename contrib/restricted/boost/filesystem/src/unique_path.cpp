@@ -95,6 +95,8 @@
 #include "atomic_tools.hpp"
 #include "error_handling.hpp"
 
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
+
 #if defined(BOOST_POSIX_API)
 // At least Mac OS X 10.6 and older doesn't support O_CLOEXEC
 #ifndef O_CLOEXEC
@@ -325,3 +327,5 @@ path unique_path(path const& model, system::error_code* ec)
 } // namespace detail
 } // namespace filesystem
 } // namespace boost
+
+#include <boost/filesystem/detail/footer.hpp>

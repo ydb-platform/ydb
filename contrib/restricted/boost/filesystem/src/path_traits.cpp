@@ -22,6 +22,8 @@
 #include <cwchar>  // for wcslen
 #include <cstddef>
 
+#include <boost/filesystem/detail/header.hpp> // must be the last #include
+
 namespace pt = boost::filesystem::path_traits;
 namespace fs = boost::filesystem;
 namespace bs = boost::system;
@@ -195,3 +197,5 @@ void convert(const wchar_t* from,
 } // namespace path_traits
 } // namespace filesystem
 } // namespace boost
+
+#include <boost/filesystem/detail/footer.hpp>

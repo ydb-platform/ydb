@@ -1851,7 +1851,7 @@ TFailureInjectionInitializer::TFailureInjectionInitializer(const TKikimrRunConfi
 {}
 
 void TFailureInjectionInitializer::InitializeServices(NActors::TActorSystemSetup *setup, const NKikimr::TAppData *appData) {
-    IActor *actor = CreateFailureInjectionActor();
+    IActor *actor = CreateFailureInjectionActor(Config.GetFailureInjectionConfig(), *appData);
     setup->LocalServices.emplace_back(MakeBlobStorageFailureInjectionID(NodeId),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId));
     // FIXME: correct service id

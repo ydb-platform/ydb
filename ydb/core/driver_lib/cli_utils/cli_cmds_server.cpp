@@ -458,6 +458,7 @@ protected:
         OPTION("alloc-file", AllocatorConfig);
         OPTION("yq-file", YandexQueryConfig);
         OPTION(nullptr, TracingConfig);
+        OPTION(nullptr, FailureInjectionConfig);
 
         if (!AppConfig.HasAllocatorConfig()) {
             AppConfig.MutableAllocatorConfig()->CopyFrom(*DummyAllocatorConfig());

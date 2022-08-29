@@ -1,12 +1,21 @@
 #include "failure_injection.h"
+
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/services.pb.h>
-#include <util/system/mutex.h>
-#include <util/generic/queue.h>
+
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/lwtrace/all.h>
+#include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/log.h>
+
+#include <util/generic/queue.h>
+#include <util/system/types.h>
+#include <util/system/mutex.h>
+
+#include <random>
 
 using namespace NActors;
 
@@ -117,14 +126,26 @@ namespace NKikimr {
             TVector<TString> Probes;
             TFailureInjectionManager Manager;
             bool Enabled = false;
+            bool EnableFailureInjectionTermination = false;
+            ui32 ApproximateTerminationInterval = 0;
+
+            struct TEvPrivate {
+                enum EEv {
+                    EvTerminateProcess = EventSpaceBegin(TEvents::ES_PRIVATE),
+                };
+
+                struct TEvTerminateProcess : TEventLocal<TEvTerminateProcess, EvTerminateProcess> {};
+            };
 
         public:
             static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
                 return NKikimrServices::TActivity::BS_FAILURE_INJECTION;
             }
 
-            TFailureInjectionActor()
+            TFailureInjectionActor(const NKikimrConfig::TFailureInjectionConfig& config, const NKikimr::TAppData& appData)
                 : TraceManager(*Singleton<TProbeRegistry>(), true)
+                , EnableFailureInjectionTermination(appData.FeatureFlags.GetEnableFailureInjectionTermination())
+                , ApproximateTerminationInterval(config.GetApproximateTerminationInterval())
             {}
 
             void Bootstrap(const TActorContext& /*ctx*/) {
@@ -144,6 +165,13 @@ namespace NKikimr {
 
                 TCallback callback(Probes);
                 TraceManager.ReadProbes(callback);
+
+                if (EnableFailureInjectionTermination && ApproximateTerminationInterval > 0) {
+                    std::random_device rd;
+                    std::mt19937 rng(rd());
+                    std::poisson_distribution<> poisson(ApproximateTerminationInterval);
+                    Schedule(TDuration::Seconds(poisson(rng)), new TEvPrivate::TEvTerminateProcess());
+                }
 
                 Become(&TFailureInjectionActor::StateFunc);
             }
@@ -174,14 +202,49 @@ namespace NKikimr {
                 }
             }
 
+            void TerminateProcess() {
+                if (EnableFailureInjectionTermination) {
+                    Y_FAIL("Terminating itself from TFailureInjectionActor");
+                }
+            }
+
+            void SendReplyAndTerminateProcess(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+                TStringStream str;
+
+                HTML(str) {
+                    DIV() {
+                        if (EnableFailureInjectionTermination) {
+                            str << "<h1>" << "Process is going to terminate" << "</font></h1>";
+                        } else {
+                            str << "<h1>" << "Process termination is not enabled" << "</font></h1>";
+                        }
+                    }
+                }
+
+                ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), ev->Get()->SubRequestId));
+
+                TerminateProcess();
+            }
+
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx) {
                 ctx.Send(ev->Sender, new TEvents::TEvPoisonTaken);
                 Die(ctx);
             }
 
-            void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
-                TStringStream str;
+            void HandleTermination(TEvPrivate::TEvTerminateProcess::TPtr&) {
+                TerminateProcess();
+            }
 
+            void Handle(NMon::TEvHttpInfo::TPtr& ev, const TActorContext& ctx) {
+                if (ev->Get()->Request.GetMethod() == HTTP_METHOD_POST) {
+                    if (ev->Get()->Request.GetPostParams().Has("terminate")) {
+                        SendReplyAndTerminateProcess(ev, ctx);
+                    }
+
+                    return;
+                }
+
+                TStringStream str;
                 const auto& params = ev->Get()->Request.GetParams();
                 if (params.Has("queue")) {
                     TString queue = params.Get("queue");
@@ -296,13 +359,14 @@ namespace NKikimr {
             STRICT_STFUNC(StateFunc,
                 HFunc(TEvents::TEvPoisonPill, HandlePoison)
                 HFunc(NMon::TEvHttpInfo, Handle)
+                hFunc(TEvPrivate::TEvTerminateProcess, HandleTermination);
             )
         };
 
     } // anon
 
-    IActor *CreateFailureInjectionActor() {
-        return new TFailureInjectionActor();
+    IActor *CreateFailureInjectionActor(const NKikimrConfig::TFailureInjectionConfig& config, const NKikimr::TAppData& appData) {
+        return new TFailureInjectionActor(config, appData);
     }
 
 } // NKikimr

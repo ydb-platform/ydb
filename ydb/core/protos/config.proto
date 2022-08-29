@@ -708,6 +708,8 @@ message TFeatureFlags {
     optional bool EnablePredicateExtractForDataQueries = 68 [default = false];
     optional bool EnableKqpPatternCacheLiteral = 69 [default = false];
     optional bool EnableMoveIndex = 70 [default = false];
+    // enable http handle for self termination
+    optional bool EnableFailureInjectionTermination = 71 [default = false];
 }
 
 
@@ -1529,6 +1531,11 @@ message TTracingConfig {
     optional string RootCA = 3;
 }
 
+message TFailureInjectionConfig {
+    // approximate time in seconds between self terminations
+    optional uint32 ApproximateTerminationInterval = 1 [default = 0]; // disabled by default
+}
+
 // This message is used to upload custom service configs
 // to CMS. Config name is used to identify owner and
 // data format.
@@ -1601,6 +1608,7 @@ message TAppConfig {
     optional THttpProxyConfig HttpProxyConfig = 53;
     optional TSchemeShardConfig SchemeShardConfig = 54;
     optional TTracingConfig TracingConfig = 55;
+    optional TFailureInjectionConfig FailureInjectionConfig = 56;
 
     repeated TNamedConfig NamedConfigs = 100;
     optional string ClusterYamlConfig = 101;

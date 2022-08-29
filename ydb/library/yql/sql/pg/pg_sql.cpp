@@ -152,6 +152,7 @@ public:
         bool AllowAggregates = false;
         bool AllowOver = false;
         bool AllowReturnSet = false;
+        bool AllowSubLinks = false;
         TVector<TAstNode*>* WindowItems = nullptr;
         TString Scope;
     };
@@ -457,6 +458,7 @@ public:
             if (x->whereClause) {
                 TExprSettings settings;
                 settings.AllowColumns = true;
+                settings.AllowSubLinks = true;
                 settings.Scope = "WHERE";
                 whereFilter = ParseExpr(x->whereClause, settings);
                 if (!whereFilter) {
@@ -469,17 +471,15 @@ public:
                 TVector<TAstNode*> groupByItems;
                 for (int i = 0; i < ListLength(x->groupClause); ++i) {
                     auto node = ListNodeNth(x->groupClause, i);
-                    if (NodeTag(node) != T_ColumnRef) {
-                        NodeNotImplemented(x, node);
+                    TExprSettings settings;
+                    settings.AllowColumns = true;
+                    settings.Scope = "GROUP BY";
+                    auto expr = ParseExpr(node, settings);
+                    if (!expr) {
                         return nullptr;
                     }
 
-                    auto ref = ParseColumnRef(CAST_NODE(ColumnRef, node));
-                    if (!ref) {
-                        return nullptr;
-                    }
-
-                    auto lambda = L(A("lambda"), QL(), ref);
+                    auto lambda = L(A("lambda"), QL(), expr);
                     groupByItems.push_back(L(A("PgGroup"), L(A("Void")), lambda));
                 }
 
@@ -492,6 +492,7 @@ public:
                 settings.AllowColumns = true;
                 settings.Scope = "HAVING";
                 settings.AllowAggregates = true;
+                settings.AllowSubLinks = true;
                 having = ParseExpr(x->havingClause, settings);
                 if (!having) {
                     return nullptr;
@@ -567,6 +568,7 @@ public:
                 settings.AllowColumns = true;
                 settings.AllowAggregates = true;
                 settings.AllowOver = true;
+                settings.AllowSubLinks = true;
                 settings.WindowItems = &windowItems;
                 settings.Scope = "SELECT";
                 auto x = ParseExpr(r->val, settings);
@@ -710,6 +712,7 @@ public:
             if (value->limitCount) {
                 TExprSettings settings;
                 settings.AllowColumns = false;
+                settings.AllowSubLinks = true;
                 settings.Scope = "LIMIT";
                 limit = ParseExpr(value->limitCount, settings);
                 if (!limit) {
@@ -720,6 +723,7 @@ public:
             if (value->limitOffset) {
                 TExprSettings settings;
                 settings.AllowColumns = false;
+                settings.AllowSubLinks = true;
                 settings.Scope = "OFFSET";
                 offset = ParseExpr(value->limitOffset, settings);
                 if (!offset) {
@@ -1467,6 +1471,11 @@ public:
     }
 
     TAstNode* ParseSubLinkExpr(const SubLink* value, const TExprSettings& settings) {
+        if (!settings.AllowSubLinks) {
+            AddError(TStringBuilder() << "SubLinks are not allowed in: " << settings.Scope);
+            return nullptr;
+        }
+
         TString linkType;
         TString operName;
         switch (value->subLinkType) {
@@ -1840,17 +1849,15 @@ public:
         TVector<TAstNode*> groupByItems;
         for (int i = 0; i < ListLength(value->partitionClause); ++i) {
             auto node = ListNodeNth(value->partitionClause, i);
-            if (NodeTag(node) != T_ColumnRef) {
-                NodeNotImplemented(value, node);
+            TExprSettings settings;
+            settings.AllowColumns = true;
+            settings.Scope = "PARTITITON BY";
+            auto expr = ParseExpr(node, settings);
+            if (!expr) {
                 return nullptr;
             }
 
-            auto ref = ParseColumnRef(CAST_NODE(ColumnRef, node));
-            if (!ref) {
-                return nullptr;
-            }
-
-            auto lambda = L(A("lambda"), QL(), ref);
+            auto lambda = L(A("lambda"), QL(), expr);
             groupByItems.push_back(L(A("PgGroup"), L(A("Void")), lambda));
         }
 
@@ -2093,6 +2100,7 @@ public:
 
         TExprSettings settings;
         settings.AllowColumns = true;
+        settings.AllowSubLinks = true;
         settings.Scope = "ORDER BY";
         settings.AllowAggregates = allowAggregates;
         auto expr = ParseExpr(value->node, settings);

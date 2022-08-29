@@ -5,7 +5,6 @@
 #include <ydb/library/yql/utils/log/log.h>
 
 #include <util/generic/hash_set.h>
-#include <util/digest/murmur.h>
 #include <util/system/env.h>
 #include <tuple>
 
@@ -13,17 +12,6 @@ namespace NYql {
 
 namespace {
     static constexpr bool UseDeterminsticHash = false;
-
-    ui64 CseeHash(const void* data, size_t size, ui64 initHash) {
-        return MurmurHash<ui64>(data, size, initHash);
-    }
-
-    template<typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-    ui64 CseeHash(T value, ui64 initHash) {
-        // workaround Coverity warning for Murmur when sizeof(T) < 8
-        ui64 val = static_cast<ui64>(value);
-        return MurmurHash<ui64>(&val, sizeof(val), initHash);
-    }
 
     struct TLambdaFrame {
         TLambdaFrame(const TExprNode* lambda, const TLambdaFrame* prev)

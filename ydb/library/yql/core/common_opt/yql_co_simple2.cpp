@@ -1,4 +1,5 @@
 #include "yql_co.h"
+#include "yql_co_pgselect.h"
 
 #include <ydb/library/yql/core/yql_opt_utils.h>
 #include <ydb/library/yql/core/yql_expr_csee.h>
@@ -498,6 +499,8 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
 
         return node;
     };
+
+    map["PgGroupRef"] = ExpandPgGroupRef;
 }
 
 }

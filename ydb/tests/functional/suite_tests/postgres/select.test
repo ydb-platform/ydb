@@ -178,7 +178,7 @@ statement query
 SELECT 2+2, 57
 UNION ALL
 select q1 as column0, q2 as column1 from int8_tbl
-order by column0
+order by column0, column1
 
 --
 -- Test ORDER BY options

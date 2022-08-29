@@ -173,7 +173,7 @@ def format_yql_statement(lines_or_statement, table_path_prefix):
     if not isinstance(lines_or_statement, list):
         lines_or_statement = [lines_or_statement]
     statement = "\n".join(
-        ['pragma TablePathPrefix = "%s";' % table_path_prefix, "pragma SimpleColumns;"] + lines_or_statement)
+        ["PRAGMA Kikimr.UseNewEngine=\"True\";", 'pragma TablePathPrefix = "%s";' % table_path_prefix, "pragma SimpleColumns;"] + lines_or_statement)
     return statement
 
 
@@ -238,21 +238,6 @@ def format_as_table(data):
 
 @six.add_metaclass(abc.ABCMeta)
 class BaseSuiteRunner(object):
-    check_new_engine_plan = True
-    check_new_engine_query_results = True
-    ignored_files = set([
-        "/Root/postgres_jointest/join3.test_plan",
-        "/Root/postgres_jointest/join4.test_plan",
-        "/Root/postgres_jointest/join2.test_plan",
-        "/Root/postgres_jointest/join0.test_plan",
-    ])
-
-    ignored_results_matching = set([
-        "/Root/postgres_select.test_results",
-        "/Root/postgres_jointest/join0.test_results",
-        "/Root/postgres_jointest/join4.test_results",
-    ])
-
     @classmethod
     def setup_class(cls):
         cls.cluster = kikimr_cluster_factory(
@@ -349,50 +334,6 @@ class BaseSuiteRunner(object):
     def get_query_and_output(self, statement_text):
         return statement_text, None
 
-    def format_new_engine(self, query):
-        return "\n".join(
-            [
-                "PRAGMA Kikimr.UseNewEngine=\"True\";",
-                query,
-            ]
-        )
-
-    def format_plan(self, plan):
-        plan = json.loads(plan)
-
-        def drop(what, j):
-            if what in j:
-                del j[what]
-
-        drop('meta', plan)
-        # new pg like plan, but use tables section to compare
-        drop('Plan', plan)
-
-        for table in plan.get('tables', []):
-            for write in table.get('writes', []):
-                drop('columns', write)
-                drop('key', write)
-                drop('scan_by', write)
-                drop('lookup_by', write)
-                # TODO(gvit): return limit checks
-                drop('limit', write)
-
-                if write.get('type') == 'Erase':
-                    write['type'] = 'MultiErase'
-
-            for read in table.get('reads', []):
-                drop('columns', read)
-                drop('key', read)
-                drop('scan_by', read)
-                drop('lookup_by', read)
-                # TODO(gvit): return limit checks
-                drop('limit', read)
-
-                if read.get('type') == 'Lookup':
-                    read['type'] = 'MultiLookup'
-
-        return self.pretty_json(plan)
-
     @staticmethod
     def pretty_json(j):
         return json.dumps(j, indent=4, sort_keys=True)
@@ -411,14 +352,6 @@ class BaseSuiteRunner(object):
                 query_plan,
                 query_name + '.plan',
             )
-
-            if self.check_new_engine_plan and self.table_path_prefix not in self.ignored_files:
-                new_engine_plan = self.explain(self.format_new_engine(statement.text))
-                self.execute_assert(
-                    self.format_plan(new_engine_plan),
-                    self.format_plan(query_plan),
-                    "New engine plan is not same with old engine."
-                )
 
             return
 
@@ -501,25 +434,15 @@ class BaseSuiteRunner(object):
 
     def execute_query(self, statement_text):
         yql_text = format_yql_statement(statement_text, self.table_path_prefix)
-        old_engine_result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
+        result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(yql_text, commit_tx=True))
 
-        if len(old_engine_result) == 1:
+        if len(result) == 1:
             scan_query_result = self.execute_scan_query(yql_text)
-            for i in range(len(old_engine_result)):
+            for i in range(len(result)):
                 self.execute_assert(
-                    old_engine_result[i].rows,
+                    result[i].rows,
                     scan_query_result,
                     "Results are not same",
                 )
 
-        if self.check_new_engine_query_results and self.table_path_prefix not in self.ignored_results_matching:
-            new_engine_yql_text = self.format_new_engine(format_yql_statement(statement_text, self.table_path_prefix_ne))
-            new_engine_result = self.pool.retry_operation_sync(lambda s: s.transaction().execute(new_engine_yql_text, commit_tx=True))
-            assert len(old_engine_result) == len(new_engine_result)
-            for i in range(len(old_engine_result)):
-                self.execute_assert(
-                    old_engine_result[i].rows,
-                    new_engine_result[i].rows,
-                    "Results are not same",
-                )
-        return old_engine_result
+        return result

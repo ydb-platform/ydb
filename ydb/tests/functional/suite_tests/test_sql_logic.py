@@ -16,7 +16,6 @@ from test_base import BaseSuiteRunner, get_token, get_test_suites, safe_execute,
 
 
 class TestSQLLogic(BaseSuiteRunner):
-    check_new_engine_plan = False
     check_new_engine_query_results = True
 
     def execute_assert(self, left, right, message):

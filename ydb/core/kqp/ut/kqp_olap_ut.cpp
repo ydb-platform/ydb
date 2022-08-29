@@ -1636,7 +1636,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(ManyColumnShards, UseSessionActor) {
+    Y_UNIT_TEST(ManyColumnShards) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -1645,8 +1645,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetNodeCount(2);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
-
-        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableKqpScanQueryMultipleOlapShardsReads(true);
 
         auto runtime = server->GetRuntime();
         auto sender = runtime->AllocateEdgeActor();
@@ -1704,7 +1702,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         UNIT_ASSERT_VALUES_EQUAL(result, insertRows);
     }
 
-    Y_UNIT_TEST_TWIN(ManyColumnShardsWithRestarts, UseSessionActor) {
+    Y_UNIT_TEST(ManyColumnShardsWithRestarts) {
         TPortManager tp;
         ui16 mbusport = tp.GetPort(2134);
         auto settings = Tests::TServerSettings(mbusport)
@@ -1713,8 +1711,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             .SetNodeCount(2);
 
         Tests::TServer::TPtr server = new Tests::TServer(settings);
-
-        server->GetRuntime()->GetAppData().FeatureFlags.SetEnableKqpScanQueryMultipleOlapShardsReads(true);
 
         auto runtime = server->GetRuntime();
         auto sender = runtime->AllocateEdgeActor();

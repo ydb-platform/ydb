@@ -429,12 +429,7 @@ private:
         bool sorted)
     {
         ui64 nodeId = ShardIdToNodeId.at(shardId);
-        bool supportsMultipleOlapShards = AppData()->FeatureFlags.GetEnableKqpScanQueryMultipleOlapShardsReads();
-        if (sorted) {
-            supportsMultipleOlapShards = false;
-        }
-
-        if (stageInfo.Meta.IsOlap() && !supportsMultipleOlapShards) {
+        if (stageInfo.Meta.IsOlap() && sorted) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
             return task;

@@ -55,7 +55,7 @@ struct IDqComputeActorAsyncInput {
     };
 
     struct TEvAsyncInputError : public NActors::TEventLocal<TEvAsyncInputError, TDqComputeEvents::EvAsyncInputError> {
-        TEvAsyncInputError(ui64 inputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode)
+        TEvAsyncInputError(ui64 inputIndex, const TIssues& issues, NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::UNSPECIFIED)
             : InputIndex(inputIndex)
             , Issues(issues)
             , FatalCode(fatalCode)

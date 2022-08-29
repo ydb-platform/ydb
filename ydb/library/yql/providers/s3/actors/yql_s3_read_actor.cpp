@@ -384,6 +384,8 @@ private:
 
     void Run() final try {
 
+        NYql::NDqProto::StatusIds::StatusCode fatalCode = NYql::NDqProto::StatusIds::EXTERNAL_ERROR;
+
         TIssue exceptIssue;
         try {
             TReadBufferFromStream buffer(this);
@@ -395,6 +397,7 @@ private:
                 Send(ParentActorId, new TEvPrivate::TEvNextBlock(block, PathIndex));
         } catch (const std::exception& err) {
             exceptIssue.Message = TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what();
+            fatalCode = NYql::NDqProto::StatusIds::BAD_REQUEST;
         }
 
         WaitFinish();
@@ -424,19 +427,19 @@ private:
         }
 
         if (Issues)
-            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(Issues), NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+            Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, std::move(Issues), fatalCode));
         else
             Send(ParentActorId, new TEvPrivate::TEvReadFinished);
     } catch (const TDtorException&) {
         return RetryStuff->Cancel();
     } catch (const std::exception& err) {
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(TStringBuilder() << "Error while reading file " << Path << ", details: " << err.what())}, NYql::NDqProto::StatusIds::INTERNAL_ERROR));
         return;
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) final {
         TString message = Sprintf("Unexpected message type 0x%08" PRIx32, ev->GetTypeRewrite());
-        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
+        Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}));
     }
 private:
     const ui64 InputIndex;

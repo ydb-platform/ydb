@@ -134,21 +134,41 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         return equiJoin;
     }
 
-    // TODO: derive from constraints
+    // TODO: derive strictness from constraints
     bool isStrict = true;
-    if (IsRequiredAndFilteredSide(joinTree, labels, firstCandidate)) {
-        VisitExpr(*predicate, [&](const TExprNode& node) {
-            if (node.IsCallable("AssumeStrict")) {
-                return false;
-            }
-            if (node.IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
+    {
+        YQL_ENSURE(args->ChildrenSize() == 1);
+        YQL_ENSURE(args->Head().IsArgument());
+        bool withDependsOn = false;
+        size_t insideAssumeStrict = 0;
+        size_t insideDependsOn = 0;
+        VisitExpr(predicate, [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("AssumeStrict")) {
+                ++insideAssumeStrict;
+            } else if (node->IsCallable("DependsOn")) {
+                ++insideDependsOn;
+            } else if (isStrict && !insideAssumeStrict && node->IsCallable({"Udf", "ScriptUdf", "Unwrap", "Ensure"})) {
                 isStrict = false;
+            } else if (insideDependsOn && node.Get() == args->Child(0)) {
+                withDependsOn = true;
             }
-            return isStrict;
+            return !withDependsOn;
+        }, [&](const TExprNode::TPtr& node) {
+            if (node->IsCallable("AssumeStrict")) {
+                YQL_ENSURE(insideAssumeStrict > 0);
+                --insideAssumeStrict;
+            } else if (node->IsCallable("DependsOn")) {
+                YQL_ENSURE(insideDependsOn > 0);
+                --insideDependsOn;
+            }
+            return true;
         });
-        if (!isStrict) {
+        if (withDependsOn) {
             return equiJoin;
         }
+    }
+    if (!isStrict && IsRequiredAndFilteredSide(joinTree, labels, firstCandidate)) {
+        return equiJoin;
     }
 
     TMap<TString, TSet<TString>> aliases;

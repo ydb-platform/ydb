@@ -3625,7 +3625,71 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             res.Wait();
             Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
         }
+    }
 
+    Y_UNIT_TEST(SchemeOperationFirstClassCitizen) {
+        TServerSettings settings = PQSettings(0);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        NPersQueue::TTestServer server(settings);
+        server.EnableLogs({NKikimrServices::PQ_READ_PROXY, NKikimrServices::BLACKBOX_VALIDATOR });
+
+        TString topic1 = "/Root/PQ/topic1";
+        server.AnnoyingClient->CreateTopicNoLegacy(topic1, 1);
+        {
+            NYdb::TDriverConfig driverCfg;
+            driverCfg.SetEndpoint(TStringBuilder() << "localhost:" << server.GrpcPort);
+            std::shared_ptr<NYdb::TDriver> ydbDriver(new NYdb::TDriver(driverCfg));
+            auto topicClient = NYdb::NTopic::TTopicClient(*ydbDriver);
+
+            auto res = topicClient.DescribeTopic(topic1);
+            res.Wait();
+            Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+
+            auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
+            Cerr << res2 << "\n";
+            {
+                NYdb::NTopic::TAlterTopicSettings settings;
+                settings.SetPartitionWriteSpeedBytesPerSecond(4_MB);
+                settings.SetPartitionWriteBurstBytes(4_MB);
+
+                auto res = topicClient.AlterTopic(topic1, settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+            }
+
+            {
+                auto res = topicClient.DescribeTopic(topic1);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+                UNIT_ASSERT_VALUES_EQUAL(res.GetValue().GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 4_MB);
+                auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
+                Cerr << res2 << "\n";
+            }
+
+            {
+                NYdb::NTopic::TAlterTopicSettings settings;
+                settings.SetPartitionWriteSpeedBytesPerSecond(8_MB);
+                settings.SetPartitionWriteBurstBytes(8_MB);
+
+                auto res = topicClient.AlterTopic(topic1, settings);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+            }
+
+            {
+                auto res = topicClient.DescribeTopic(topic1);
+                res.Wait();
+                Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
+                UNIT_ASSERT(res.GetValue().IsSuccess());
+                UNIT_ASSERT_VALUES_EQUAL(res.GetValue().GetTopicDescription().GetPartitionWriteSpeedBytesPerSecond(), 8_MB);
+                auto res2 = NYdb::TProtoAccessor::GetProto(res.GetValue().GetTopicDescription());
+                Cerr << res2 << "\n";
+            }
+        }
     }
 
 

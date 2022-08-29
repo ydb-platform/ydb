@@ -1020,8 +1020,6 @@ namespace NKikimr::NGRpcProxy::V1 {
             return res;
         }
 
-        bool local = true; //todo: check locality
-
         if (request.has_set_retention_period()) {
             CHECK_CDC;
             if (request.set_retention_period().seconds() < 0) {
@@ -1044,7 +1042,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                 partConfig->SetStorageLimitBytes(request.set_retention_storage_mb() * 1024 * 1024);
         }
 
-        if (local) {
+        bool local = true; //todo: check locality
+        if (local || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             if (request.has_set_partition_write_speed_bytes_per_second()) {
                 CHECK_CDC;
                 auto partSpeed = request.set_partition_write_speed_bytes_per_second();

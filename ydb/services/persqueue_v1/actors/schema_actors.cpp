@@ -115,7 +115,7 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
         settings->set_message_group_seqno_retention_period_ms(partConfig.GetSourceIdLifetimeSeconds() * 1000);
         settings->set_max_partition_message_groups_seqno_stored(partConfig.GetSourceIdMaxCounts());
 
-        if (local) {
+        if (local || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             settings->set_max_partition_write_speed(partConfig.GetWriteSpeedInBytesPerSecond());
             settings->set_max_partition_write_burst(partConfig.GetBurstSize());
         }
@@ -508,7 +508,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         (*result.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
         (*result.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
 
-        if (local) {
+        if (local || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
             result.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
             result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
         }

@@ -161,8 +161,6 @@ struct ne_impl {
 
 //____________________________________________________________________________//
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
 struct lt_impl {
     template <class Left, class Right>
     assertion_result operator()( Left const& left, Right const& right )
@@ -200,7 +198,6 @@ struct ge_impl {
         return left >= right;
     }
 };
-#pragma GCC diagnostic pop
 
 //____________________________________________________________________________//
 

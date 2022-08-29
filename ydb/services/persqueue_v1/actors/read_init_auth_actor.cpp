@@ -57,6 +57,10 @@ void TReadInitAndAuthActor::Die(const TActorContext& ctx) {
     for (auto& [_, holder] : Topics) {
         if (holder.PipeClient)
             NTabletPipe::CloseClient(ctx, holder.PipeClient);
+
+        // In case of cdc, primary path (actual cdc stream path) was overwritten, so restore previous value
+        if (holder.CdcStreamPath)
+            holder.DiscoveryConverter->RestorePrimaryPath();
     }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " auth is DEAD");

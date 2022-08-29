@@ -118,6 +118,12 @@ public:
         PrimaryPath = path;
     }
 
+    void RestorePrimaryPath() {
+        Y_VERIFY(!OriginalPath.empty());
+        PrimaryPath = OriginalPath;
+        OriginalPath.clear();
+    }
+
     // Only for control plane
     const TString& GetFullModernName() const {
         Y_VERIFY(!FullModernName.empty());

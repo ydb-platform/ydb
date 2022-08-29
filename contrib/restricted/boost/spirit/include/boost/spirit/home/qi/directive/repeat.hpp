@@ -113,6 +113,7 @@ namespace boost { namespace spirit { namespace qi
 
         // silence MSVC warning C4512: assignment operator could not be generated
         BOOST_DELETED_FUNCTION(finite_iterator& operator= (finite_iterator const&));
+        finite_iterator(const finite_iterator&) = default;
     };
 
     template <typename T>
@@ -209,6 +210,7 @@ namespace boost { namespace spirit { namespace qi
 
         // silence MSVC warning C4512: assignment operator could not be generated
         BOOST_DELETED_FUNCTION(repeat_parser& operator= (repeat_parser const&));
+        repeat_parser(const repeat_parser&) = default;
     };
 
     ///////////////////////////////////////////////////////////////////////////

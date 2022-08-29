@@ -1,21 +1,21 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_simple_q4_sql_plan/t1",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "rowid"
-                    ],
                     "columns": [
                         "a",
                         "b"
-                    ]
+                    ],
+                    "scan_by": [
+                        "rowid (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

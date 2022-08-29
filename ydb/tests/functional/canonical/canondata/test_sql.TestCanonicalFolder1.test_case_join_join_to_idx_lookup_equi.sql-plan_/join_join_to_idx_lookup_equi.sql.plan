@@ -1,23 +1,23 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_join_join_to_idx_lookup_equi_sql_plan/InputJoin1",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
                     "columns": [
                         "Fk21",
                         "Fk22",
                         "Key",
                         "Value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Key (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -25,17 +25,13 @@
             "name": "/local/base_join_join_to_idx_lookup_equi_sql_plan/InputJoin2",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
                     "columns": [
                         "Fk3",
                         "Key1",
                         "Key2",
                         "Value"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         },
@@ -43,14 +39,14 @@
             "name": "/local/base_join_join_to_idx_lookup_equi_sql_plan/InputJoin3",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
                     "columns": [
                         "Key",
                         "Value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Key (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

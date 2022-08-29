@@ -1,26 +1,26 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_subquery_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (expr)"
-                    ],
-                    "scan_by": [
-                        "Name"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Group (n/a)"
+                    ],
+                    "scan_by": [
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         },
@@ -28,15 +28,15 @@
             "name": "/local/base_pk_predicate_pk_predicate_subquery_sql_plan/Input3",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Name",
-                        "Type"
-                    ],
                     "columns": [
                         "Type",
                         "Value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Name (-\u221e, +\u221e)",
+                        "Type (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

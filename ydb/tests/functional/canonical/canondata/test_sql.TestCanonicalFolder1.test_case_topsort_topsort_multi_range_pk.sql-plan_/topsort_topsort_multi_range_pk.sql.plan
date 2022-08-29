@@ -1,39 +1,39 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_topsort_topsort_multi_range_pk_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Scan",
-                    "scan_by": [
-                        "Group (\"10\", +inf]",
-                        "Name"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Group (10, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Scan"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"10\")"
-                    ],
-                    "scan_by": [
-                        "Name (\"Name4\", +inf]"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
+                    "scan_by": [
+                        "Name (Name4, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

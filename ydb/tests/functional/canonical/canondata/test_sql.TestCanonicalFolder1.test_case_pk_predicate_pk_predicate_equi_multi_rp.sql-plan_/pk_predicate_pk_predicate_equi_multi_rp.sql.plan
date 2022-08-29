@@ -1,37 +1,29 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_equi_multi_rp_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"1\")",
-                        "Name (\"Name1\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"4\")",
-                        "Name (\"Name4\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

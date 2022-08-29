@@ -1,18 +1,14 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_write_delete_by_pk_sql_plan/Input",
             "writes": [
                 {
-                    "type": "Erase",
-                    "key": [
-                        "key (\"3\")",
-                        "subkey (\"4\")"
-                    ]
+                    "type": "MultiErase"
                 }
             ]
         }

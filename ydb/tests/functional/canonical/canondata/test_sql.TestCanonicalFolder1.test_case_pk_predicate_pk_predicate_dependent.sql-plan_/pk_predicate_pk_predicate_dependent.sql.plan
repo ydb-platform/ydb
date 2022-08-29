@@ -1,24 +1,20 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_dependent_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"4\")",
-                        "Name (expr)"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         },
@@ -26,13 +22,10 @@
             "name": "/local/base_pk_predicate_pk_predicate_dependent_sql_plan/Input2",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"101\")"
-                    ],
                     "columns": [
                         "Value2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

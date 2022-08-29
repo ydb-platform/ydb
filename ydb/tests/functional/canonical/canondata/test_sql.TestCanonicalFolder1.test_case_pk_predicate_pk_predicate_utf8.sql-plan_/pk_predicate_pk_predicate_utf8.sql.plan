@@ -1,39 +1,39 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_utf8_sql_plan/Input3",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Name (\"Anna\")"
-                    ],
-                    "scan_by": [
-                        "Type"
-                    ],
                     "columns": [
                         "Name",
                         "Type",
                         "Value"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Name (Anna)"
+                    ],
+                    "scan_by": [
+                        "Type (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Name (\"Dmitry\")"
-                    ],
-                    "scan_by": [
-                        "Type"
-                    ],
                     "columns": [
                         "Name",
                         "Type",
                         "Value"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Name (Dmitry)"
+                    ],
+                    "scan_by": [
+                        "Type (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

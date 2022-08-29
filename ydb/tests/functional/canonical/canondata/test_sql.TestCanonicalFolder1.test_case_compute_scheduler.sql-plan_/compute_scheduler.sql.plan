@@ -1,20 +1,20 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_compute_scheduler_sql_plan/compute_nodes",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "entry_id"
-                    ],
                     "columns": [
                         "scheduler"
-                    ]
+                    ],
+                    "scan_by": [
+                        "entry_id (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -22,13 +22,13 @@
             "name": "/local/base_compute_scheduler_sql_plan/schedulers",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "id"
-                    ],
                     "columns": [
                         "id"
-                    ]
+                    ],
+                    "scan_by": [
+                        "id (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

@@ -1,47 +1,23 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_select_result_limit_sql_plan/Input",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "columns": [
-                        "key",
-                        "value"
-                    ]
-                },
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "key",
-                        "subkey"
-                    ]
-                },
-                {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
-                    "limit": "\"1001\"",
                     "columns": [
                         "key",
                         "subkey",
                         "value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "key (-\u221e, +\u221e)",
+                        "subkey (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

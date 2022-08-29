@@ -1,25 +1,25 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_order_by_order_by_pk_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Group",
-                        "Name"
-                    ],
-                    "limit": "\"3\"",
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "limit": "3",
+                    "scan_by": [
+                        "Group (-\u221e, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

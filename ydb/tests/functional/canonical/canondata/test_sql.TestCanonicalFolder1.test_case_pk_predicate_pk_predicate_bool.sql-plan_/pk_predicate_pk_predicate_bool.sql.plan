@@ -1,57 +1,49 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_bool_sql_plan/Input4",
             "reads": [
                 {
-                    "type": "Lookup",
+                    "columns": [
+                        "Value"
+                    ],
+                    "type": "Lookup"
+                },
+                {
+                    "columns": [
+                        "Value"
+                    ],
+                    "type": "Lookup"
+                },
+                {
+                    "columns": [
+                        "Value"
+                    ],
+                    "limit": "1001",
                     "lookup_by": [
-                        "Key1 (\"false\")"
+                        "Key1 (false)"
                     ],
                     "scan_by": [
-                        "Key2 (\"false\", +inf]"
+                        "Key2 (false, +\u221e)"
                     ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "Value"
-                    ]
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"false\")",
-                        "Key2 (\"true\")"
-                    ],
                     "columns": [
                         "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
+                    ],
+                    "limit": "1001",
                     "lookup_by": [
-                        "Key1 (\"true\")"
+                        "Key1 (true)"
                     ],
                     "scan_by": [
-                        "Key2 [-inf, \"true\")"
+                        "Key2 (-\u221e, true)"
                     ],
-                    "limit": "\"1001\"",
-                    "columns": [
-                        "Value"
-                    ]
-                },
-                {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"true\")",
-                        "Key2 (\"false\")"
-                    ],
-                    "columns": [
-                        "Value"
-                    ]
+                    "type": "Lookup"
                 }
             ]
         }

@@ -1,24 +1,24 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_range_rp_1_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Scan",
-                    "scan_by": [
-                        "Group [\"100001\", +inf]",
-                        "Name"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Group [100001, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Scan"
                 }
             ]
         }

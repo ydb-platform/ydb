@@ -1,56 +1,56 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_ranges_1_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"10\")"
-                    ],
-                    "scan_by": [
-                        "Name [\"Name1\", \"Name3\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
+                    "scan_by": [
+                        "Name [Name1, Name3)"
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"10\")"
-                    ],
-                    "scan_by": [
-                        "Name [\"Name3\", \"Name5\"]"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
+                    "scan_by": [
+                        "Name [Name3, Name5]"
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"2\")"
-                    ],
-                    "scan_by": [
-                        "Name"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Group (2)"
+                    ],
+                    "scan_by": [
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

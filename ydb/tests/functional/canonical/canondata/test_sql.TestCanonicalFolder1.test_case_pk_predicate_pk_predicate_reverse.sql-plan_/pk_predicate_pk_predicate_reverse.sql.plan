@@ -1,25 +1,25 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_reverse_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Scan",
-                    "scan_by": [
-                        "Group (\"1\", \"3\"]",
-                        "Name"
-                    ],
-                    "limit": "\"1001\"",
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "limit": "1001",
+                    "scan_by": [
+                        "Group (1, 3]",
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Scan"
                 }
             ]
         }

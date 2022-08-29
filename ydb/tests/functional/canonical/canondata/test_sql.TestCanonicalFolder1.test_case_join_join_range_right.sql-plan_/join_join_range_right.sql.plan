@@ -1,22 +1,22 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_join_join_range_right_sql_plan/InputJoin1",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
                     "columns": [
                         "Fk21",
                         "Fk22",
                         "Value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Key (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -24,18 +24,18 @@
             "name": "/local/base_join_join_range_right_sql_plan/InputJoin2",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key1 (\"103\")"
-                    ],
-                    "scan_by": [
-                        "Key2"
-                    ],
                     "columns": [
                         "Key1",
                         "Key2",
                         "Value"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Key1 (103)"
+                    ],
+                    "scan_by": [
+                        "Key2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

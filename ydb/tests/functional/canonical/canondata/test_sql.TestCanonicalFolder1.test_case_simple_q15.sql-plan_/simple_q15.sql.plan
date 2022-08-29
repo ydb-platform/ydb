@@ -1,21 +1,21 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_simple_q15_sql_plan/t3",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "rowid"
-                    ],
                     "columns": [
                         "a",
                         "c"
-                    ]
+                    ],
+                    "scan_by": [
+                        "rowid (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -23,14 +23,14 @@
             "name": "/local/base_simple_q15_sql_plan/t4",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "rowid"
-                    ],
                     "columns": [
                         "a",
                         "c"
-                    ]
+                    ],
+                    "scan_by": [
+                        "rowid (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

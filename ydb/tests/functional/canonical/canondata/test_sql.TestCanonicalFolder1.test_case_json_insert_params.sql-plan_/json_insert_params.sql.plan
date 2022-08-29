@@ -1,28 +1,23 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_json_insert_params_sql_plan/ResultParamsJD",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key (expr)"
-                    ]
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Key (expr)"
-                    ],
                     "columns": [
+                        "Key",
                         "Value"
-                    ]
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         }

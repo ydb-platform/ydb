@@ -5,20 +5,5 @@
     },
     "ct.script": {
       "compare_tables": ["Questions"]
-    },
-    "q11.sql": {
-        "check_new_engine_plan": false
-    },
-    "q20.sql": {
-        "check_new_engine_plan": false
-    },
-    "q19.sql": {
-        "check_new_engine_plan": false
-    },
-    "q17.sql": {
-        "check_new_engine_plan": false
-    },
-    "q10.sql": {
-        "check_new_engine_plan": false
     }
 }

@@ -1,34 +1,28 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_write_update_on_sql_plan/Input",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ],
                     "columns": [
                         "key",
                         "subkey"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ],
                     "columns": [
+                        "key",
+                        "subkey",
                         "value"
-                    ]
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         },
@@ -36,41 +30,35 @@
             "name": "/local/base_write_update_on_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"1\")"
-                    ],
-                    "scan_by": [
+                    "columns": [
+                        "Group",
                         "Name"
                     ],
+                    "type": "Lookup"
+                },
+                {
                     "columns": [
                         "Amount",
                         "Group",
                         "Name"
-                    ]
-                },
-                {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Group (expr)",
-                        "Name (expr)"
                     ],
-                    "columns": [
-                        "Group",
-                        "Name"
-                    ]
+                    "lookup_by": [
+                        "Group (1)"
+                    ],
+                    "scan_by": [
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
-                        "Amount"
-                    ]
+                        "Amount",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         }

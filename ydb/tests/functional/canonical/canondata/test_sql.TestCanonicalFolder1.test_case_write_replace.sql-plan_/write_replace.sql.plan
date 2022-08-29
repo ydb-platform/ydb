@@ -1,34 +1,32 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_write_replace_sql_plan/Input",
             "reads": [
                 {
-                    "type": "Scan",
-                    "scan_by": [
-                        "key (\"1\", +inf]",
-                        "subkey"
-                    ],
                     "columns": [
                         "key",
                         "subkey"
-                    ]
+                    ],
+                    "scan_by": [
+                        "key (1, +\u221e)",
+                        "subkey (-\u221e, +\u221e)"
+                    ],
+                    "type": "Scan"
                 }
             ],
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "key (expr)",
-                        "subkey (expr)"
-                    ],
                     "columns": [
+                        "key",
+                        "subkey",
                         "value"
-                    ]
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         },
@@ -36,26 +34,22 @@
             "name": "/local/base_write_replace_sql_plan/Input1",
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
                         "Amount",
-                        "Comment"
-                    ]
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
                 },
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
                         "Amount",
-                        "Comment"
-                    ]
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         }

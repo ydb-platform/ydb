@@ -1,23 +1,23 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_write_upsert_cast_sql_plan/Input",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "key",
-                        "subkey"
-                    ],
                     "columns": [
                         "key",
                         "subkey",
                         "value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "key (-\u221e, +\u221e)",
+                        "subkey (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -25,14 +25,12 @@
             "name": "/local/base_write_upsert_cast_sql_plan/Input1",
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
-                        "Amount"
-                    ]
+                        "Amount",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         }

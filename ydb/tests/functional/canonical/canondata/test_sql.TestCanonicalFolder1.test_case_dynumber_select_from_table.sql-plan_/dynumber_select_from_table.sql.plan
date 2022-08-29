@@ -1,22 +1,22 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_dynumber_select_from_table_sql_plan/InputDyNumber",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
-                    "limit": "\"1001\"",
                     "columns": [
                         "Key",
                         "Value"
-                    ]
+                    ],
+                    "limit": "1001",
+                    "scan_by": [
+                        "Key (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

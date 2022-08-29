@@ -1,66 +1,51 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_in_sql_plan/Input2",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"1\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
                         "Value2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"11\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
                         "Value2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"3\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
                         "Value2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"7\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
                         "Value2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Key (\"9\")"
-                    ],
                     "columns": [
                         "Key",
                         "Value1",
                         "Value2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

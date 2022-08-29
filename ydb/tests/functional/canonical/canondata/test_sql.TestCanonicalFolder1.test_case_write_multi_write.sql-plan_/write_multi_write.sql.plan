@@ -1,46 +1,34 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_write_multi_write_sql_plan/Input1",
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ],
                     "columns": [
                         "Amount",
-                        "Comment"
-                    ]
-                },
-                {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
+                        "Comment",
+                        "Group",
+                        "Name"
                     ],
+                    "type": "MultiUpsert"
+                },
+                {
                     "columns": [
-                        "Comment"
-                    ]
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
+                    "type": "MultiUpsert"
                 },
                 {
-                    "type": "Erase",
-                    "key": [
-                        "Group (\"1\")",
-                        "Name (\"Name5\")"
-                    ]
+                    "type": "MultiErase"
                 },
                 {
-                    "type": "MultiErase",
-                    "key": [
-                        "Group (expr)",
-                        "Name (expr)"
-                    ]
+                    "type": "MultiErase"
                 }
             ]
         }

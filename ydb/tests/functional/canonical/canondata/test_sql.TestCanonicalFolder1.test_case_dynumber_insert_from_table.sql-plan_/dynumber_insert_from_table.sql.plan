@@ -1,21 +1,21 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_dynumber_insert_from_table_sql_plan/InputDyNumber",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
                     "columns": [
                         "Key",
                         "Value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Key (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -23,21 +23,16 @@
             "name": "/local/base_dynumber_insert_from_table_sql_plan/ResultTableDyNumber",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key (expr)"
-                    ]
+                    "type": "Lookup"
                 }
             ],
             "writes": [
                 {
-                    "type": "MultiUpsert",
-                    "key": [
-                        "Key (expr)"
-                    ],
                     "columns": [
+                        "Key",
                         "Value"
-                    ]
+                    ],
+                    "type": "MultiUpsert"
                 }
             ]
         }

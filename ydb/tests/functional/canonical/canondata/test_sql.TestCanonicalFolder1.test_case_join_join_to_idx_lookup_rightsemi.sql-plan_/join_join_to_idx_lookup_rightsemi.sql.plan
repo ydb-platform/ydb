@@ -1,21 +1,21 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin1",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key"
-                    ],
                     "columns": [
                         "Fk21",
                         "Value"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Key (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -23,42 +23,32 @@
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin2",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key1",
-                        "Key2"
-                    ],
                     "columns": [
                         "Key1"
-                    ]
-                },
-                {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)"
                     ],
                     "scan_by": [
-                        "Key2"
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
                     ],
-                    "columns": [
-                        "Fk3",
-                        "Key1",
-                        "Key2",
-                        "Value"
-                    ]
+                    "type": "FullScan"
                 },
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
                     "columns": [
                         "Fk3",
                         "Key1",
                         "Key2",
                         "Value"
-                    ]
+                    ],
+                    "type": "Lookup"
+                },
+                {
+                    "columns": [
+                        "Fk3",
+                        "Key1",
+                        "Key2",
+                        "Value"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         },
@@ -66,15 +56,15 @@
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoin4",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Key1",
-                        "Key2"
-                    ],
                     "columns": [
                         "Key1",
                         "Key2"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         },
@@ -82,17 +72,13 @@
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Key1 (expr)",
-                        "Key2 (expr)"
-                    ],
                     "columns": [
                         "Fk2",
                         "Key1",
                         "Key2",
                         "Value"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         },
@@ -100,18 +86,11 @@
             "name": "/local/base_join_join_to_idx_lookup_rightsemi_sql_plan/InputJoinIndex2/Index/indexImplTable",
             "reads": [
                 {
-                    "type": "MultiLookup",
-                    "lookup_by": [
-                        "Fk2 (expr)"
-                    ],
-                    "scan_by": [
-                        "Key1",
-                        "Key2"
-                    ],
                     "columns": [
                         "Key1",
                         "Key2"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

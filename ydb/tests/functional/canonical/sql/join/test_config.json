@@ -1,5 +1,2 @@
 {
-    "join_dup_column_right.sql": {
-        "check_new_engine_plan": false
-    }
 }

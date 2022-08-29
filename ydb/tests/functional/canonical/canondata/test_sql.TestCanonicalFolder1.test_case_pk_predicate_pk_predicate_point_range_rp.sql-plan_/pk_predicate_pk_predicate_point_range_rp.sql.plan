@@ -1,26 +1,26 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_point_range_rp_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"1\")"
-                    ],
-                    "scan_by": [
-                        "Name [\"Name1\", \"Name3\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "lookup_by": [
+                        "Group (1)"
+                    ],
+                    "scan_by": [
+                        "Name [Name1, Name3)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

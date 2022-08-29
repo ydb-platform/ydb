@@ -6,8 +6,7 @@
     "compare_tables": ["Input", "Input1"]
   },
   "delete_same.sql": {
-    "compare_tables": ["Input1"],
-    "check_new_engine_plan": false
+    "compare_tables": ["Input1"]
   },
   "insert_revert.sql": {
     "compare_tables": ["Input", "Input1"]

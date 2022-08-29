@@ -1,5 +1,2 @@
 {
-    "select_result_limit.sql": {
-        "check_new_engine_plan": false
-    }
 }

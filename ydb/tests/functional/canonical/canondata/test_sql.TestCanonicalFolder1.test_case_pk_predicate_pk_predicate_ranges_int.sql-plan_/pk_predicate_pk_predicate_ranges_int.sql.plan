@@ -1,24 +1,24 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_ranges_int_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "FullScan",
-                    "scan_by": [
-                        "Group",
-                        "Name"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "scan_by": [
+                        "Group (-\u221e, +\u221e)",
+                        "Name (-\u221e, +\u221e)"
+                    ],
+                    "type": "FullScan"
                 }
             ]
         }

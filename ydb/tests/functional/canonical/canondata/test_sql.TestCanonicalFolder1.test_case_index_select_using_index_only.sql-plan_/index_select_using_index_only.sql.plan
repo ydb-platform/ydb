@@ -1,25 +1,25 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_index_select_using_index_only_sql_plan/InputJoinIndex2/Index/indexImplTable",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Fk2 (\"103\")"
-                    ],
-                    "scan_by": [
-                        "Key1",
-                        "Key2"
-                    ],
-                    "limit": "\"1001\"",
                     "columns": [
                         "Key1"
-                    ]
+                    ],
+                    "limit": "1001",
+                    "lookup_by": [
+                        "Fk2 (103)"
+                    ],
+                    "scan_by": [
+                        "Key1 (-\u221e, +\u221e)",
+                        "Key2 (-\u221e, +\u221e)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

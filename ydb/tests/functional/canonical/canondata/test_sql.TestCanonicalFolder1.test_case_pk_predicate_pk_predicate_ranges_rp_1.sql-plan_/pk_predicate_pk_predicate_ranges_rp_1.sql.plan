@@ -1,50 +1,42 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_ranges_rp_1_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Scan",
+                    "columns": [
+                        "Amount",
+                        "Comment",
+                        "Group",
+                        "Name"
+                    ],
                     "scan_by": [
-                        "Group [\"3\", \"5\")",
-                        "Name"
+                        "Group [3, 5)",
+                        "Name (-\u221e, +\u221e)"
                     ],
-                    "columns": [
-                        "Amount",
-                        "Comment",
-                        "Group",
-                        "Name"
-                    ]
+                    "type": "Scan"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"10\")",
-                        "Name (\"Name5\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "type": "Lookup"
                 },
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"6\")",
-                        "Name (\"Name1\")"
-                    ],
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

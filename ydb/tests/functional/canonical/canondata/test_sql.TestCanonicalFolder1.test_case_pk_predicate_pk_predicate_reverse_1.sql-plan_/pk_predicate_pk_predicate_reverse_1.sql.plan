@@ -1,27 +1,27 @@
 {
     "meta": {
-        "version": "0.1",
-        "type": "query"
+        "type": "query",
+        "version": "0.2"
     },
     "tables": [
         {
             "name": "/local/base_pk_predicate_pk_predicate_reverse_1_sql_plan/Input1",
             "reads": [
                 {
-                    "type": "Lookup",
-                    "lookup_by": [
-                        "Group (\"10\")"
-                    ],
-                    "scan_by": [
-                        "Name [\"Name2\", \"Name4\")"
-                    ],
-                    "limit": "\"1001\"",
                     "columns": [
                         "Amount",
                         "Comment",
                         "Group",
                         "Name"
-                    ]
+                    ],
+                    "limit": "1001",
+                    "lookup_by": [
+                        "Group (10)"
+                    ],
+                    "scan_by": [
+                        "Name [Name2, Name4)"
+                    ],
+                    "type": "Lookup"
                 }
             ]
         }

@@ -646,6 +646,66 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutorTxLimit) {
 }
 
 
+Y_UNIT_TEST_SUITE(TFlatTableReschedule) {
+
+    class TTxRollbackOnReschedule : public ITransaction {
+    public:
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            Y_VERIFY(!Done);
+
+            i64 keyId = 42;
+
+            int attempt = ++Attempt;
+            if (attempt >= 2) {
+                TVector<NTable::TTag> tags;
+                tags.push_back(TRowsModel::ColumnValueId);
+                TVector<TRawTypeValue> key;
+                key.emplace_back(&keyId, sizeof(keyId), NScheme::TInt64::TypeId);
+                NTable::TRowState row;
+                auto ready = txc.DB.Select(TRowsModel::TableId, key, tags, row);
+                if (ready == NTable::EReady::Page) {
+                    return false;
+                }
+                Y_VERIFY(ready == NTable::EReady::Gone);
+            }
+
+            TString valueText = "value";
+            const auto key = NScheme::TInt64::TInstance(keyId);
+            const auto val = NScheme::TString::TInstance(valueText);
+            NTable::TUpdateOp updateOp{ TRowsModel::ColumnValueId, NTable::ECellOp::Set, val };
+            txc.DB.Update(TRowsModel::TableId, NTable::ERowOp::Upsert, { key }, { updateOp });
+
+            if (attempt == 1) {
+                txc.Reschedule();
+                return false;
+            }
+
+            Done = true;
+            return true;
+        }
+
+        void Complete(const TActorContext& ctx) override {
+            Y_VERIFY(Done);
+            ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+        }
+
+    private:
+        int Attempt = 0;
+        bool Done = false;
+    };
+
+    Y_UNIT_TEST(TestExecuteReschedule) {
+        TMyEnvBase env;
+        TRowsModel rows;
+
+        env.FireDummyTablet();
+        env.SendSync(rows.MakeScheme(new TCompactionPolicy()));
+        env.SendSync(new NFake::TEvExecute{ new TTxRollbackOnReschedule });
+    }
+
+} // namespace Y_UNIT_TEST_SUITE(TFlatTableExecuteReschedule)
+
+
 Y_UNIT_TEST_SUITE(TFlatTableBackgroundCompactions) {
 
     using namespace NKikimrResourceBroker;

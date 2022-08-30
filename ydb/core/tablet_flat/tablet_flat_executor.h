@@ -215,6 +215,19 @@ public:
         OnCommitted_.emplace_back(std::move(callback));
     }
 
+    /**
+     * Will rollback any changes and reschedule transaction for a retry
+     *
+     * Transaction must return false from its Execute after calling this method.
+     */
+    void Reschedule() {
+        Rescheduled_ = true;
+    }
+
+    bool IsRescheduled() const {
+        return Rescheduled_;
+    }
+
 public:
     const ui64 Tablet = Max<ui32>();
     const ui32 Generation = Max<ui32>();
@@ -224,6 +237,7 @@ public:
 
 private:
     TVector<std::function<void()>> OnCommitted_;
+    bool Rescheduled_ = false;
 };
 
 struct TCompactedPartLoans {

@@ -1639,11 +1639,16 @@ void TExecutor::ExecuteTransaction(TAutoPtr<TSeat> seat, const TActorContext &ct
         // It may not be safe to call Broken right now, call it later
         Send(SelfId(), new TEvPrivate::TEvBrokenTransaction());
     } else if (done) {
+        Y_VERIFY(!txc.IsRescheduled());
         Y_VERIFY(!seat->RequestedMemory);
         seat->OnCommitted = std::move(txc.OnCommitted_);
         CommitTransactionLog(seat, env, prod.Change, cpuTimer, ctx);
     } else {
         Y_VERIFY(!seat->CapturedMemory);
+        if (!env.ToLoad && !seat->RequestedMemory && !txc.IsRescheduled()) {
+            Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
+                    << NFmt::Do(*seat->Self) << " postoned w/o demands");
+        }
         PostponeTransaction(seat, env, prod.Change, cpuTimer, ctx);
     }
 
@@ -1688,12 +1693,8 @@ void TExecutor::ReleaseTxData(TSeat &seat, ui64 requested, const TActorContext &
 
 void TExecutor::PostponeTransaction(TAutoPtr<TSeat> seat, TPageCollectionTxEnv &env,
                                     TAutoPtr<NTable::TChange> change,
-                                    THPTimer &bookkeepingTimer, const TActorContext &ctx) {
-    if (!env.ToLoad && !seat->RequestedMemory) {
-        Y_Fail(NFmt::Do(*this) << " " << NFmt::Do(*seat) << " type "
-                << NFmt::Do(*seat->Self) << " postoned w/o demands");
-    }
-
+                                    THPTimer &bookkeepingTimer, const TActorContext &ctx)
+{
     TTxType txType = seat->Self->GetTxType();
 
     ui32 touchedPages = 0;

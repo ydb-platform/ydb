@@ -68,7 +68,14 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         NThreading::TPromise<void> checkedPromise = NThreading::NewPromise<void>();
         auto totalReceived = 0u;
-        readSettings.EventHandlers_.SimpleDataHandlers([&](NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) {
+
+        auto f = checkedPromise.GetFuture();
+        TAtomic check = 1;
+        readSettings.EventHandlers_.SimpleDataHandlers(
+            // [checkedPromise = std::move(checkedPromise), &check, &sentMessages, &totalReceived]
+            [&]
+            (NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& ev) mutable {
+            Y_VERIFY_S(AtomicGet(check) != 0, "check is false");
             auto& messages = ev.GetMessages();
             for (size_t i = 0u; i < messages.size(); ++i) {
                 auto& message = messages[i];
@@ -81,8 +88,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
 
         ReadSession = topicClient.CreateReadSession(readSettings);
 
-        checkedPromise.GetFuture().GetValueSync();
-        ReadSession->Close(TDuration::Seconds(1));
+        f.GetValueSync();
+        ReadSession->Close(TDuration::MilliSeconds(10));
+        AtomicSet(check, 0);
     }
 }
 

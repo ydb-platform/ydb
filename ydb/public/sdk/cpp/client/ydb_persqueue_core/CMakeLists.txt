@@ -16,6 +16,9 @@ target_link_libraries(cpp-client-ydb_persqueue_core PUBLIC
   client-ydb_persqueue_core-impl
   cpp-client-ydb_proto
   cpp-client-ydb_driver
+  api-grpc
+  api-grpc-draft
+  api-protos
 )
 generate_enum_serilization(cpp-client-ydb_persqueue_core
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_persqueue_core/persqueue.h

@@ -153,72 +153,21 @@ void TPQWriteService::Handle(TEvPQProxy::TEvSessionDead::TPtr& ev, const TActorC
 }
 
 
-StreamingWriteServerMessage FillWriteResponse(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode code) {
-    StreamingWriteServerMessage res;
-    FillIssue(res.add_issues(), code, errorReason);
-    res.set_status(ConvertPersQueueInternalCodeToStatus(code));
-    return res;
+void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx) {
+    HandleWriteRequest<NKikimr::NGRpcService::TEvStreamTopicWriteRequest>(ev, ctx);
 }
 
 void TPQWriteService::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {
-
-    LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection");
-
-    if (TooMuchSessions()) {
-        LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - too much sessions");
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("proxy overloaded", PersQueue::ErrorCode::OVERLOAD), grpc::Status::OK); //CANCELLED
-        return;
-    }
-
-    TString localCluster = AvailableLocalCluster(ctx);
-
-    if (HaveClusters && localCluster.empty()) {
-        ev->Get()->GetStreamCtx()->Attach(ctx.SelfID);
-        if (LocalCluster) {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - cluster disabled");
-            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("cluster disabled", PersQueue::ErrorCode::CLUSTER_DISABLED), grpc::Status::OK); //CANCELLED
-        } else {
-            LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new grpc connection failed - initializing");
-            ev->Get()->GetStreamCtx()->WriteAndFinish(FillWriteResponse("initializing", PersQueue::ErrorCode::INITIALIZING), grpc::Status::OK); //CANCELLED
-        }
-        return;
-    } else {
-        if (ConverterFactory == nullptr) {
-            ConverterFactory = std::make_shared<NPersQueue::TTopicNamesConverterFactory>(
-                    AppData(ctx)->PQConfig, localCluster
-            );
-        }
-        TopicsHandler = std::make_unique<NPersQueue::TTopicsListController>(
-                ConverterFactory, TVector<TString>{}
-        );
-        const ui64 cookie = NextCookie();
-
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "new session created cookie " << cookie);
-
-        auto ip = ev->Get()->GetStreamCtx()->GetPeerName();
-        TActorId worker = ctx.Register(new TWriteSessionActor(
-                ev->Release().Release(), cookie, SchemeCache, Counters,
-                DatacenterClassifier ? DatacenterClassifier->ClassifyAddress(NAddressClassifier::ExtractAddress(ip)) : "unknown",
-                *TopicsHandler
-        ));
-
-        Sessions[cookie] = worker;
-    }
+    HandleWriteRequest<NKikimr::NGRpcService::TEvStreamPQWriteRequest>(ev, ctx);
 }
 
 bool TPQWriteService::TooMuchSessions() {
     return Sessions.size() >= MaxSessions;
 }
 
-
 TString TPQWriteService::AvailableLocalCluster(const TActorContext&) const {
     return HaveClusters && Enabled ? *LocalCluster : "";
 }
-
-
-
-
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -228,6 +177,9 @@ TString TPQWriteService::AvailableLocalCluster(const TActorContext&) const {
 
 
 void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvStreamPQWriteRequest::TPtr& ev, const TActorContext& ctx) {
+    ctx.Send(NKikimr::NGRpcProxy::V1::GetPQWriteServiceActorID(), ev->Release().Release());
+}
 
+void NKikimr::NGRpcService::TGRpcRequestProxy::Handle(NKikimr::NGRpcService::TEvStreamTopicWriteRequest::TPtr& ev, const TActorContext& ctx) {
     ctx.Send(NKikimr::NGRpcProxy::V1::GetPQWriteServiceActorID(), ev->Release().Release());
 }

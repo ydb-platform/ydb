@@ -23,8 +23,29 @@ inline TActorId GetPQWriteServiceActorID() {
     return TActorId(0, "PQWriteSvc");
 }
 
-class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor> {
-    using IContext = NGRpcServer::IGRpcStreamingContext<PersQueue::V1::StreamingWriteClientMessage, PersQueue::V1::StreamingWriteServerMessage>;
+template<bool UseMigrationProtocol>
+class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor<UseMigrationProtocol>> {
+    using TSelf = TWriteSessionActor<UseMigrationProtocol>;
+    using TClientMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage,
+                                              Topic::StreamWriteMessage::FromClient>;
+    using TServerMessage = std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteServerMessage,
+                                              Topic::StreamWriteMessage::FromServer>;
+
+    using TInitRequest =
+        std::conditional_t<UseMigrationProtocol, PersQueue::V1::StreamingWriteClientMessage::InitRequest,
+                           Topic::StreamWriteMessage::InitRequest>;
+
+    using TEvWriteInit =
+        std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvWriteInit, TEvPQProxy::TEvTopicWriteInit>;
+    using TEvWrite = std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvWrite, TEvPQProxy::TEvTopicWrite>;
+    using TEvUpdateToken =
+        std::conditional_t<UseMigrationProtocol, TEvPQProxy::TEvUpdateToken, TEvPQProxy::TEvTopicUpdateToken>;
+    using TEvStreamWriteRequest =
+        std::conditional_t<UseMigrationProtocol, NKikimr::NGRpcService::TEvStreamPQWriteRequest,
+                           NKikimr::NGRpcService::TEvStreamTopicWriteRequest>;
+
+    using IContext = NGRpcServer::IGRpcStreamingContext<TClientMessage, TServerMessage>;
+
     using TEvDescribeTopicsResponse = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsResponse;
     using TEvDescribeTopicsRequest = NMsgBusProxy::NPqMetaCacheV2::TEvPqNewMetaCache::TEvDescribeTopicsRequest;
 
@@ -32,11 +53,11 @@ class TWriteSessionActor : public NActors::TActorBootstrapped<TWriteSessionActor
 static constexpr ui32 CODEC_ID_SIZE = 1;
 
 public:
-    TWriteSessionActor(NKikimr::NGRpcService::TEvStreamPQWriteRequest* request, const ui64 cookie,
+    TWriteSessionActor(TEvStreamWriteRequest* request, const ui64 cookie,
                        const NActors::TActorId& schemeCache,
                        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const TMaybe<TString> clientDC,
                        const NPersQueue::TTopicsListController& topicsController);
-    ~TWriteSessionActor();
+    ~TWriteSessionActor() = default;
 
     void Bootstrap(const NActors::TActorContext& ctx);
 
@@ -54,9 +75,9 @@ private:
             HFunc(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse, Handle);
 
             HFunc(TEvPQProxy::TEvDieCommand, HandlePoison)
-            HFunc(TEvPQProxy::TEvWriteInit,  Handle)
-            HFunc(TEvPQProxy::TEvWrite, Handle)
-            HFunc(TEvPQProxy::TEvUpdateToken, Handle)
+            HFunc(TEvWriteInit,  Handle)
+            HFunc(TEvWrite, Handle)
+            HFunc(TEvUpdateToken, Handle)
             HFunc(TEvPQProxy::TEvDone, Handle)
             HFunc(TEvPersQueue::TEvGetPartitionIdForWriteResponse, Handle)
 
@@ -79,8 +100,8 @@ private:
     }
 
 
-    void Handle(IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
-    void Handle(IContext::TEvWriteFinished::TPtr& ev, const TActorContext &ctx);
+    void Handle(typename IContext::TEvReadFinished::TPtr& ev, const TActorContext &ctx);
+    void Handle(typename IContext::TEvWriteFinished::TPtr& ev, const TActorContext &ctx);
     void HandleDone(const TActorContext &ctx);
 
     void Handle(NGRpcService::TGRpcRequestProxy::TEvRefreshTokenResponse::TPtr& ev, const TActorContext &ctx);
@@ -94,9 +115,9 @@ private:
     void CheckACL(const TActorContext& ctx);
     // Requests fresh ACL from 'SchemeCache'
     void InitCheckSchema(const TActorContext& ctx, bool needWaitSchema = false);
-    void Handle(TEvPQProxy::TEvWriteInit::TPtr& ev,  const NActors::TActorContext& ctx);
-    void Handle(TEvPQProxy::TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
-    void Handle(TEvPQProxy::TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(typename TEvWriteInit::TPtr& ev,  const NActors::TActorContext& ctx);
+    void Handle(typename TEvWrite::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(typename TEvUpdateToken::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvPQProxy::TEvDone::TPtr& ev, const NActors::TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx);
@@ -135,7 +156,7 @@ private:
     void SetupCounters(const TString& cloudId, const TString& dbId, const TString& folderId);
 
 private:
-    std::unique_ptr<NKikimr::NGRpcService::TEvStreamPQWriteRequest> Request;
+    std::unique_ptr<TEvStreamWriteRequest> Request;
 
     enum EState {
         ES_CREATED = 1,
@@ -177,7 +198,7 @@ private:
         using TPtr = TIntrusivePtr<TWriteRequestBatchInfo>;
 
         // Source requests from user (grpc session object)
-        std::deque<THolder<TEvPQProxy::TEvWrite>> UserWriteRequests;
+        std::deque<THolder<TEvWrite>> UserWriteRequests;
 
         // Formed write request's size
         ui64 ByteSize = 0;
@@ -187,13 +208,13 @@ private:
     };
 
     // Nonprocessed source client requests
-    std::deque<THolder<TEvPQProxy::TEvWrite>> Writes;
+    std::deque<THolder<TEvWrite>> Writes;
 
     // Formed, but not sent, batch requests to partition actor
-    std::deque<TWriteRequestBatchInfo::TPtr> FormedWrites;
+    std::deque<typename TWriteRequestBatchInfo::TPtr> FormedWrites;
 
     // Requests that is already sent to partition actor
-    std::deque<TWriteRequestBatchInfo::TPtr> SentMessages;
+    std::deque<typename TWriteRequestBatchInfo::TPtr> SentMessages;
 
 
     bool WritesDone;
@@ -219,7 +240,9 @@ private:
 
     TIntrusivePtr<NACLib::TUserToken> Token;
     TString Auth;
-    // Got 'update_token_request', authentication or authorization in progress or 'update_token_response' is not sent yet. Only single 'update_token_request' is allowed inflight
+    // Got 'update_token_request', authentication or authorization in progress,
+    // or 'update_token_response' is not sent yet.
+    // Only single 'update_token_request' is allowed inflight.
     bool UpdateTokenInProgress;
     bool UpdateTokenAuthenticated;
     bool ACLCheckInProgress;
@@ -255,7 +278,13 @@ private:
     NKikimr::NPQ::TPercentileCounter InitLatency;
     NKikimr::NPQ::TMultiCounter SLIBigLatency;
 
-    PersQueue::V1::StreamingWriteClientMessage::InitRequest InitRequest;
+    TInitRequest InitRequest;
 };
 
 }
+
+/////////////////////////////////////////
+// Implementation
+#define WRITE_SESSION_ACTOR_IMPL
+#include "write_session_actor.ipp"
+#undef WRITE_SESSION_ACTOR_IMPL

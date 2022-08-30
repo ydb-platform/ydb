@@ -27,7 +27,9 @@ using namespace Ydb;
 struct TEvPQProxy {
     enum EEv {
         EvWriteInit = EventSpaceBegin(TKikimrEvents::ES_PQ_PROXY_NEW), // TODO: Replace 'NEW' with version or something
+        EvTopicWriteInit,
         EvWrite,
+        EvTopicWrite,
         EvDone,
         EvReadInit,
         EvMigrationReadInit,
@@ -58,6 +60,7 @@ struct TEvPQProxy {
         EvDeadlineExceeded,
         EvGetStatus,
         EvUpdateToken,
+        EvTopicUpdateToken,
         EvCommitRange,
         EvEnd
     };
@@ -123,8 +126,6 @@ struct TEvPQProxy {
         const TString SelectQ, UpdateQ, DeleteQ;
     };
 
-
-
     struct TEvWriteInit : public NActors::TEventLocal<TEvWriteInit, EvWriteInit> {
         TEvWriteInit(PersQueue::V1::StreamingWriteClientMessage&& req, const TString& peerName)
             : Request(std::move(req))
@@ -135,12 +136,30 @@ struct TEvPQProxy {
         TString PeerName;
     };
 
+    struct TEvTopicWriteInit : public NActors::TEventLocal<TEvTopicWriteInit, EvTopicWriteInit> {
+        TEvTopicWriteInit(Topic::StreamWriteMessage::FromClient&& req, const TString& peerName)
+            : Request(std::move(req))
+            , PeerName(peerName)
+        { }
+
+        Topic::StreamWriteMessage::FromClient Request;
+        TString PeerName;
+    };
+
     struct TEvWrite : public NActors::TEventLocal<TEvWrite, EvWrite> {
         explicit TEvWrite(PersQueue::V1::StreamingWriteClientMessage&& req)
             : Request(std::move(req))
         { }
 
         PersQueue::V1::StreamingWriteClientMessage Request;
+    };
+
+    struct TEvTopicWrite : public NActors::TEventLocal<TEvTopicWrite, EvTopicWrite> {
+        explicit TEvTopicWrite(Topic::StreamWriteMessage::FromClient&& req)
+            : Request(std::move(req))
+        { }
+
+        Topic::StreamWriteMessage::FromClient Request;
     };
 
     struct TEvDone : public NActors::TEventLocal<TEvDone, EvDone> {
@@ -198,6 +217,14 @@ struct TEvPQProxy {
         { }
 
         PersQueue::V1::StreamingWriteClientMessage Request;
+    };
+
+    struct TEvTopicUpdateToken : public NActors::TEventLocal<TEvTopicUpdateToken, EvTopicUpdateToken> {
+        explicit TEvTopicUpdateToken(Topic::StreamWriteMessage::FromClient&& req)
+            : Request(std::move(req))
+        { }
+
+        Topic::StreamWriteMessage::FromClient Request;
     };
 
     struct TEvCloseSession : public NActors::TEventLocal<TEvCloseSession, EvCloseSession> {

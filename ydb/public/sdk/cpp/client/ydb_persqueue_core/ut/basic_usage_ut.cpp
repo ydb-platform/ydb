@@ -133,6 +133,8 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             TPersQueueYdbSdkTestSetup* setup, TWriteSessionSettings& writeSettings, ui64 count,
             TMaybe<bool> shouldCaptureData = Nothing()
     ) {
+        std::shared_ptr<NYdb::NPersQueue::IReadSession> readSession;
+
         auto& client = setup->GetPersQueueClient();
         auto session = client.CreateSimpleBlockingWriteSession(writeSettings);
         TString messageBase = "message-";
@@ -168,9 +170,9 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             if (totalReceived == sentMessages.size())
                 checkedPromise.SetValue();
         });
-        auto readSession = client.CreateReadSession(readSettings);
+        readSession = client.CreateReadSession(readSettings);
         checkedPromise.GetFuture().GetValueSync();
-        readSession->Close(TDuration::Zero());
+        readSession->Close(TDuration::MilliSeconds(10));
     }
 
     Y_UNIT_TEST(WriteAndReadSomeMessagesWithAsyncCompression) {

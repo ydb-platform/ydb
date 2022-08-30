@@ -792,6 +792,185 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
     } // Y_UNIT_TEST(TopicServiceReadBudget)
 
+    Y_UNIT_TEST(TopicServiceSimpleHappyWrites) {
+        TPersQueueV1TestServer server;
+        SET_LOCALS;
+        MAKE_INSECURE_STUB(Ydb::Topic::V1::TopicService);
+        server.EnablePQLogs({NKikimrServices::PQ_METACACHE, NKikimrServices::PQ_READ_PROXY});
+        server.EnablePQLogs({NKikimrServices::KQP_PROXY}, NLog::EPriority::PRI_EMERG);
+        server.EnablePQLogs({NKikimrServices::FLAT_TX_SCHEMESHARD}, NLog::EPriority::PRI_ERROR);
+
+        // add 2nd partition in this topic
+        pqClient->AlterTopic("rt3.dc1--acc--topic1", 2);
+
+        // grpc::ClientContext rcontextSecond;
+        // auto readStreamSecond = StubP_->StreamRead(&rcontextSecond);
+        // UNIT_ASSERT(readStreamSecond);
+
+        grpc::ClientContext rcontextWrite1;
+        auto writeStream1 = StubP_->StreamWrite(&rcontextWrite1);
+        UNIT_ASSERT(writeStream1);
+
+        grpc::ClientContext rcontextWrite2;
+        auto writeStream2 = StubP_->StreamWrite(&rcontextWrite2);
+        UNIT_ASSERT(writeStream2);
+
+        auto readStream = StubP_ -> StreamRead(&rcontext);
+        UNIT_ASSERT(readStream);
+
+        // init write session 1
+        {
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("acc/topic1");
+
+            req.mutable_init_request()->set_producer_id("A");
+            req.mutable_init_request()->set_message_group_id("A");
+
+            if (!writeStream1->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(writeStream1->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+            //send some reads
+            req.Clear();
+
+            auto* write = req.mutable_write_request();
+            write->set_codec(1);
+
+            for (ui32 i = 0; i < 10; ++i) {
+                auto* msg = write->add_messages();
+                msg->set_seq_no(i + 1);
+                msg->set_data(TString("x") * (i + 1));
+                *msg->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
+                msg->set_uncompressed_size(msg->data().size());
+            }
+            if (!writeStream1->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        // init write session 2
+        {
+            Ydb::Topic::StreamWriteMessage::FromClient req;
+            Ydb::Topic::StreamWriteMessage::FromServer resp;
+
+            req.mutable_init_request()->set_path("acc/topic1");
+
+            req.mutable_init_request()->set_producer_id("B");
+            req.mutable_init_request()->set_message_group_id("B");
+
+            if (!writeStream2->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(writeStream2->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamWriteMessage::FromServer::kInitResponse);
+            //send some reads
+            req.Clear();
+
+            auto* write = req.mutable_write_request();
+            write->set_codec(1);
+
+            for (ui32 i = 0; i < 10; ++i) {
+                auto* msg = write->add_messages();
+                msg->set_seq_no(i + 1);
+                msg->set_data(TString("y") * (i + 1));
+                *msg->mutable_created_at() = ::google::protobuf::util::TimeUtil::MillisecondsToTimestamp(TInstant::Now().MilliSeconds());
+                msg->set_uncompressed_size(msg->data().size());
+            }
+            if (!writeStream2->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        // init 1st read session
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            req.mutable_init_request()->add_topics_read_settings()->set_path("acc/topic1");
+
+            req.mutable_init_request()->set_consumer("user");
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+            UNIT_ASSERT(readStream->Read(&resp));
+            Cerr << "===Got response: " << resp.ShortDebugString() << Endl;
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kInitResponse);
+            //send some reads
+            req.Clear();
+            req.mutable_read_request()->set_bytes_size(256);
+            for (ui32 i = 0; i < 10; ++i) {
+                if (!readStream->Write(req)) {
+                    ythrow yexception() << "write fail";
+                }
+            }
+        }
+
+        // await both CreatePartitionStreamRequest from Server
+        // confirm both
+        ui64 assignId = 0;
+        {
+            Ydb::Topic::StreamReadMessage::FromClient req;
+            Ydb::Topic::StreamReadMessage::FromServer resp;
+
+            TVector<i64> partition_ids;
+            //lock partition
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "acc/topic1");
+            partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());
+
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+
+            resp.Clear();
+            UNIT_ASSERT(readStream->Read(&resp));
+            UNIT_ASSERT(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kStartPartitionSessionRequest);
+            UNIT_ASSERT(resp.start_partition_session_request().partition_session().path() == "acc/topic1");
+            partition_ids.push_back(resp.start_partition_session_request().partition_session().partition_id());
+
+            std::sort(partition_ids.begin(), partition_ids.end());
+            UNIT_ASSERT((partition_ids == TVector<i64>{0, 1}));
+
+            assignId = resp.start_partition_session_request().partition_session().partition_session_id();
+
+            req.Clear();
+
+            // invalid id should receive no reaction
+            req.mutable_start_partition_session_response()->set_partition_session_id(1124134);
+
+            UNIT_ASSERT_C(readStream->Write(req), "write fail");
+
+            Sleep(TDuration::MilliSeconds(100));
+
+            req.Clear();
+            req.mutable_start_partition_session_response()->set_partition_session_id(assignId);
+
+            if (!readStream->Write(req)) {
+                ythrow yexception() << "write fail";
+            }
+        }
+
+        Ydb::Topic::StreamReadMessage::FromServer resp;
+        UNIT_ASSERT(readStream->Read(&resp));
+        Cerr << "Got read response " << resp << "\n";
+        UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+
+        // second partition data goes to separate response - remove when reads return data from many partitions
+        UNIT_ASSERT(readStream->Read(&resp));
+        Cerr << "Got read response " << resp << "\n";
+        UNIT_ASSERT_C(resp.server_message_case() == Ydb::Topic::StreamReadMessage::FromServer::kReadResponse, resp);
+    }
+
     void SetupWriteSessionImpl(bool rr) {
         NPersQueue::TTestServer server{PQSettings(0, 2, rr), false};
         server.ServerSettings.SetEnableSystemViews(false);

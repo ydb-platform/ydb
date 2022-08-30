@@ -708,7 +708,7 @@ message AlterTopicRequest {
 
     // Add consumers.
     repeated Consumer add_consumers = 11 [(Ydb.size).le = 3000];
-    // Remove consumers (by its names)
+    // Remove consumers (by their names)
     repeated string drop_consumers = 12 [(Ydb.size).le = 3000];
     // Alter consumers
     repeated AlterConsumer alter_consumers = 13 [(Ydb.size).le = 3000];

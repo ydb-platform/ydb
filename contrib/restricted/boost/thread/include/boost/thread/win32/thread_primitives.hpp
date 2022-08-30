@@ -70,7 +70,7 @@ namespace boost
     {
         namespace win32
         {
-            namespace detail { typedef ticks_type (WINAPI *gettickcount64_t)(); }
+            namespace detail { typedef ticks_type (BOOST_WINAPI_WINAPI_CC *gettickcount64_t)(); }
             extern BOOST_THREAD_DECL boost::detail::win32::detail::gettickcount64_t gettickcount64;
 
             enum event_type
@@ -102,7 +102,7 @@ namespace boost
                 handle const res = ::boost::winapi::CreateEventExW(
                     0,
                     mutex_name,
-                    type ? create_event_manual_reset : 0 | state ? create_event_initial_set : 0,
+                    (type ? create_event_manual_reset : 0) | (state ? create_event_initial_set : 0),
                     event_all_access);
 #endif
                 return res;

@@ -80,12 +80,15 @@ namespace boost
         struct thread_exit_callback_node;
         struct tss_data_node
         {
-            boost::shared_ptr<boost::detail::tss_cleanup_function> func;
+            typedef void(*cleanup_func_t)(void*);
+            typedef void(*cleanup_caller_t)(cleanup_func_t, void*);
+
+            cleanup_caller_t caller;
+            cleanup_func_t func;
             void* value;
 
-            tss_data_node(boost::shared_ptr<boost::detail::tss_cleanup_function> func_,
-                          void* value_):
-                func(func_),value(value_)
+            tss_data_node(cleanup_caller_t caller_,cleanup_func_t func_,void* value_):
+                caller(caller_),func(func_),value(value_)
             {}
         };
 
@@ -113,8 +116,10 @@ namespace boost
             > notify_list_t;
             notify_list_t notify;
 
+//#ifndef BOOST_NO_EXCEPTIONS
             typedef std::vector<shared_ptr<shared_state_base> > async_states_t;
             async_states_t async_states_;
+//#endif
 //#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
             // These data must be at the end so that the access to the other fields doesn't change
             // when BOOST_THREAD_PROVIDES_INTERRUPTIONS is defined
@@ -129,8 +134,10 @@ namespace boost
                 thread_exit_callbacks(0),
                 id(0),
                 tss_data(),
-                notify(),
-                async_states_()
+                notify()
+//#ifndef BOOST_NO_EXCEPTIONS
+                , async_states_()
+//#endif
 //#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
                 , interruption_handle(create_anonymous_event(detail::win32::manual_reset_event,detail::win32::event_initially_reset))
                 , interruption_enabled(true)
@@ -138,6 +145,8 @@ namespace boost
             {}
             virtual ~thread_data_base();
 
+            #if !defined(BOOST_EMBTC)
+              
             friend void intrusive_ptr_add_ref(thread_data_base * p)
             {
                 BOOST_INTERLOCKED_INCREMENT(&p->count);
@@ -151,6 +160,13 @@ namespace boost
                 }
             }
 
+            #else
+              
+            friend void intrusive_ptr_add_ref(thread_data_base * p);
+            friend void intrusive_ptr_release(thread_data_base * p);
+
+            #endif
+      
 #if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
             void interrupt()
             {
@@ -166,12 +182,31 @@ namespace boost
               notify.push_back(std::pair<condition_variable*, mutex*>(cv, m));
             }
 
+//#ifndef BOOST_NO_EXCEPTIONS
             void make_ready_at_thread_exit(shared_ptr<shared_state_base> as)
             {
               async_states_.push_back(as);
             }
-
+//#endif
         };
+        
+#if defined(BOOST_EMBTC)
+
+        inline void intrusive_ptr_add_ref(thread_data_base * p)
+        {
+            BOOST_INTERLOCKED_INCREMENT(&p->count);
+        }
+
+        inline void intrusive_ptr_release(thread_data_base * p)
+        {
+            if(!BOOST_INTERLOCKED_DECREMENT(&p->count))
+            {
+                detail::heap_delete(p);
+            }
+        }
+
+#endif
+        
         BOOST_THREAD_DECL thread_data_base* get_current_thread_data();
 
         typedef boost::intrusive_ptr<detail::thread_data_base> thread_data_ptr;

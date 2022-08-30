@@ -18,6 +18,9 @@
 #if defined BOOST_THREAD_USES_DATETIME
 #include <boost/thread/xtime.hpp>
 #endif
+#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
+#include <boost/thread/interruption.hpp>
+#endif
 #include <boost/thread/detail/thread_heap_alloc.hpp>
 #include <boost/thread/detail/make_tuple_indices.hpp>
 #include <boost/thread/detail/invoke.hpp>
@@ -27,7 +30,7 @@
 #include <algorithm>
 #include <boost/core/ref.hpp>
 #include <boost/cstdint.hpp>
-#include <boost/bind.hpp>
+#include <boost/bind/bind.hpp>
 #include <stdlib.h>
 #include <memory>
 #include <boost/core/enable_if.hpp>
@@ -587,14 +590,8 @@ namespace boost
         thread::id BOOST_THREAD_DECL get_id() BOOST_NOEXCEPT;
 #endif
 
-#if defined BOOST_THREAD_PROVIDES_INTERRUPTIONS
-        void BOOST_THREAD_DECL interruption_point();
-        bool BOOST_THREAD_DECL interruption_enabled() BOOST_NOEXCEPT;
-        bool BOOST_THREAD_DECL interruption_requested() BOOST_NOEXCEPT;
-#endif
-
 #if defined BOOST_THREAD_USES_DATETIME
-        inline BOOST_SYMBOL_VISIBLE void sleep(xtime const& abs_time)
+        inline BOOST_SYMBOL_VISIBLE void sleep(::boost::xtime const& abs_time)
         {
             sleep(system_time(abs_time));
         }
@@ -604,6 +601,9 @@ namespace boost
     class BOOST_SYMBOL_VISIBLE thread::id
     {
     private:
+    
+    #if !defined(BOOST_EMBTC)
+      
         friend inline
         std::size_t
         hash_value(const thread::id &v)
@@ -615,6 +615,14 @@ namespace boost
 #endif
         }
 
+    #else
+      
+        friend
+        std::size_t
+        hash_value(const thread::id &v);
+
+    #endif
+      
 #if defined BOOST_THREAD_PROVIDES_BASIC_THREAD_ID
 #if defined(BOOST_THREAD_PLATFORM_WIN32)
         typedef unsigned int data;
@@ -707,6 +715,21 @@ namespace boost
 #endif
 #endif
     };
+    
+#if defined(BOOST_EMBTC)
+
+        inline
+        std::size_t
+        hash_value(const thread::id &v)
+        {
+#if defined BOOST_THREAD_PROVIDES_BASIC_THREAD_ID
+          return hash_value(v.thread_data);
+#else
+          return hash_value(v.thread_data.get());
+#endif
+        }
+
+#endif
 
 #ifdef BOOST_THREAD_PLATFORM_PTHREAD
     inline thread::id thread::get_id() const BOOST_NOEXCEPT
@@ -807,6 +830,7 @@ namespace boost
         };
 
         void BOOST_THREAD_DECL add_thread_exit_function(thread_exit_function_base*);
+//#ifndef BOOST_NO_EXCEPTIONS
         struct shared_state_base;
 #if defined(BOOST_THREAD_PLATFORM_WIN32)
         inline void make_ready_at_thread_exit(shared_ptr<shared_state_base> as)
@@ -820,6 +844,7 @@ namespace boost
 #else
         void BOOST_THREAD_DECL make_ready_at_thread_exit(shared_ptr<shared_state_base> as);
 #endif
+//#endif
     }
 
     namespace this_thread

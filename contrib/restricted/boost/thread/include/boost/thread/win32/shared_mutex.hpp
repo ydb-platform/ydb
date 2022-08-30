@@ -8,6 +8,7 @@
 //  accompanying file LICENSE_1_0.txt or copy at
 //  http://www.boost.org/LICENSE_1_0.txt)
 
+#include <cstring>
 #include <boost/assert.hpp>
 #include <boost/detail/interlocked.hpp>
 #include <boost/thread/win32/thread_primitives.hpp>
@@ -39,16 +40,22 @@ namespace boost
 
             friend bool operator==(state_data const& lhs,state_data const& rhs)
             {
-                return *reinterpret_cast<unsigned long const*>(&lhs)==*reinterpret_cast<unsigned long const*>(&rhs);
+                return std::memcmp(&lhs, &rhs, sizeof(lhs)) == 0;
             }
         };
 
-        state_data interlocked_compare_exchange(state_data* target, state_data new_value, state_data comparand)
+        static state_data interlocked_compare_exchange(state_data* target, state_data new_value, state_data comparand)
         {
+            BOOST_STATIC_ASSERT(sizeof(state_data) == sizeof(long));
+            long new_val, comp;
+            std::memcpy(&new_val, &new_value, sizeof(new_value));
+            std::memcpy(&comp, &comparand, sizeof(comparand));
             long const res=BOOST_INTERLOCKED_COMPARE_EXCHANGE(reinterpret_cast<long*>(target),
-                                                              *reinterpret_cast<long*>(&new_value),
-                                                              *reinterpret_cast<long*>(&comparand));
-            return *reinterpret_cast<state_data const*>(&res);
+                                                              new_val,
+                                                              comp);
+            state_data result;
+            std::memcpy(&result, &res, sizeof(result));
+            return result;
         }
 
         enum

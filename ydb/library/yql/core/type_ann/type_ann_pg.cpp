@@ -2079,6 +2079,11 @@ bool ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, 
         return false;
     }
 
+    if (root.IsCallable("PgAgg")) {
+        nodeVisited[&root] = false;
+        return false;
+    }
+
     bool hasChanges = false;
     for (const auto& child : root.Children()) {
         if (!ScanExprForMatchedGroup(row, *child, exprs, replaces, hashVisited, nodeVisited, ctx)) {

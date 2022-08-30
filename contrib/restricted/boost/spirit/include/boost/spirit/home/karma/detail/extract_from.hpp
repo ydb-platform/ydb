@@ -10,7 +10,6 @@
 #pragma once
 #endif
 
-#include <boost/spirit/include/phoenix_core.hpp>
 #include <boost/spirit/home/support/unused.hpp>
 #include <boost/spirit/home/support/attributes_fwd.hpp>
 #include <boost/spirit/home/karma/detail/attributes.hpp>
@@ -44,39 +43,44 @@ namespace boost { namespace spirit { namespace traits
     }
 
     // This is the default case: the plain attribute values
-    template <typename Attribute, typename Exposed, typename Enable/*= void*/>
-    struct extract_from_attribute
+    template <typename Attribute, typename Exposed
+      , bool IsOneElemSeq = traits::one_element_sequence<Attribute>::value>
+    struct extract_from_attribute_base
     {
-        typedef typename traits::one_element_sequence<Attribute>::type
-            is_one_element_sequence;
-
-        typedef typename mpl::eval_if<
-            is_one_element_sequence
-          , detail::value_at_c<Attribute, 0>
-          , mpl::identity<Attribute const&>
-        >::type type;
+        typedef Attribute const& type;
 
         template <typename Context>
-        static type call(Attribute const& attr, Context&, mpl::false_)
+        static type call(Attribute const& attr, Context&)
         {
             return attr;
         }
+    };
 
-        // This handles the case where the attribute is a single element fusion
-        // sequence. We silently extract the only element and treat it as the
-        // attribute to generate output from.
-        template <typename Context>
-        static type call(Attribute const& attr, Context& ctx, mpl::true_)
-        {
-            return extract_from<Exposed>(fusion::at_c<0>(attr), ctx);
-        }
+    // This handles the case where the attribute is a single element fusion
+    // sequence. We silently extract the only element and treat it as the
+    // attribute to generate output from.
+    template <typename Attribute, typename Exposed>
+    struct extract_from_attribute_base<Attribute, Exposed, true>
+    {
+        typedef typename remove_const<
+            typename remove_reference<
+                typename fusion::result_of::at_c<Attribute, 0>::type
+            >::type
+        >::type elem_type;
+
+        typedef typename result_of::extract_from<Exposed, elem_type>::type type;
 
         template <typename Context>
         static type call(Attribute const& attr, Context& ctx)
         {
-            return call(attr, ctx, is_one_element_sequence());
+            return extract_from<Exposed>(fusion::at_c<0>(attr), ctx);
         }
     };
+
+    template <typename Attribute, typename Exposed, typename Enable/*= void*/>
+    struct extract_from_attribute
+      : extract_from_attribute_base<Attribute, Exposed>
+    {};
 
     // This handles optional attributes.
     template <typename Attribute, typename Exposed>

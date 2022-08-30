@@ -4,8 +4,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_ACTION_JANUARY_07_2007_1128AM)
-#define SPIRIT_ACTION_JANUARY_07_2007_1128AM
+#ifndef BOOST_SPIRIT_QI_ACTION_ACTION_HPP
+#define BOOST_SPIRIT_QI_ACTION_ACTION_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -52,14 +52,12 @@ namespace boost { namespace spirit { namespace qi
           , Attribute& attr_) const
         {
             typedef typename attribute<Context, Iterator>::type attr_type;
-            typedef traits::make_attribute<attr_type, Attribute> make_attribute;
 
             // create an attribute if one is not supplied
             typedef traits::transform_attribute<
-                typename make_attribute::type, attr_type, domain> transform;
+                Attribute, attr_type, domain> transform;
 
-            typename make_attribute::type made_attr = make_attribute::call(attr_);
-            typename transform::type attr = transform::pre(made_attr);
+            typename transform::type attr = transform::pre(attr_);
 
             Iterator save = first;
             if (subject.parse(first, last, context, skipper, attr))
@@ -70,7 +68,7 @@ namespace boost { namespace spirit { namespace qi
                 {
                     // Do up-stream transformation, this integrates the results
                     // back into the original attribute value, if appropriate.
-                    traits::post_transform(attr_, attr);
+                    transform::post(attr_, attr);
                     return true;
                 }
 
@@ -109,14 +107,9 @@ namespace boost { namespace spirit { namespace qi
           , unused_type) const
         {
             typedef typename attribute<Context, Iterator>::type attr_type;
-            typedef traits::make_attribute<attr_type, unused_type> make_attribute;
 
             // synthesize the attribute since one is not supplied
-            typedef traits::transform_attribute<
-                typename make_attribute::type, attr_type, domain> transform;
-
-            typename make_attribute::type made_attr = make_attribute::call(unused_type());
-            typename transform::type attr = transform::pre(made_attr);
+            attr_type attr = attr_type();
 
             Iterator save = first;
             if (subject.parse(first, last, context, skipper, attr))
@@ -145,7 +138,7 @@ namespace boost { namespace spirit { namespace qi
         Action f;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(action& operator= (action const&));
+        BOOST_DELETED_FUNCTION(action& operator= (action const&))
         action(const action&) = default;
     };
 }}}

@@ -49,6 +49,12 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
         {
             typedef typename ScannerT::value_t value_t;
             typedef typename ScannerT::iterator_t iterator_t;
+            typedef scanner_policies<
+                no_skipper_iteration_policy<
+                BOOST_DEDUCED_TYPENAME ScannerT::iteration_policy_t>,
+                BOOST_DEDUCED_TYPENAME ScannerT::match_policy_t,
+                BOOST_DEDUCED_TYPENAME ScannerT::action_policy_t
+            > policies_t;
 
             if (!scan.at_end())
             {
@@ -56,7 +62,7 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
                 if (this->derived().test(ch))
                 {
                     iterator_t save(scan.first);
-                    ++scan;
+                    ++scan.change_policies(policies_t(scan));
                     return scan.create_match(1, ch, save, scan.first);
                 }
             }
@@ -584,19 +590,26 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
         typename parser_result<self_t, ScannerT>::type
         parse(ScannerT const& scan) const
         {
+            typedef scanner_policies<
+                no_skipper_iteration_policy<
+                BOOST_DEDUCED_TYPENAME ScannerT::iteration_policy_t>,
+                BOOST_DEDUCED_TYPENAME ScannerT::match_policy_t,
+                BOOST_DEDUCED_TYPENAME ScannerT::action_policy_t
+            > policies_t;
+
             typename ScannerT::iterator_t save = scan.first;
             std::size_t len = 0;
 
             if (!scan.at_end() && *scan == '\r')    // CR
             {
-                ++scan;
+                ++scan.change_policies(policies_t(scan));
                 ++len;
             }
 
             // Don't call skipper here
             if (scan.first != scan.last && *scan == '\n')    // LF
             {
-                ++scan;
+                ++scan.change_policies(policies_t(scan));
                 ++len;
             }
 

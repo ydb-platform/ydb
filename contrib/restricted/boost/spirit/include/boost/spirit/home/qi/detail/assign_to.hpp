@@ -20,7 +20,7 @@
 #include <boost/fusion/include/copy.hpp>
 #include <boost/fusion/adapted/struct/detail/extension.hpp>
 #include <boost/ref.hpp>
-#include <boost/range/iterator_range.hpp>
+#include <boost/range/range_fwd.hpp>
 
 namespace boost { namespace spirit { namespace traits
 {

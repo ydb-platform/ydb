@@ -4,8 +4,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_RAW_APRIL_9_2007_0912AM)
-#define SPIRIT_RAW_APRIL_9_2007_0912AM
+#ifndef BOOST_SPIRIT_QI_DIRECTIVE_RAW_HPP
+#define BOOST_SPIRIT_QI_DIRECTIVE_RAW_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -21,7 +21,7 @@
 #include <boost/spirit/home/support/unused.hpp>
 #include <boost/spirit/home/support/has_semantic_action.hpp>
 #include <boost/spirit/home/support/handles_container.hpp>
-#include <boost/range/iterator_range.hpp>
+#include <boost/range/iterator_range_core.hpp> // TODO: use forward include
 
 namespace boost { namespace spirit
 {
@@ -105,7 +105,7 @@ namespace boost { namespace spirit { namespace traits
         , typename Iterator>
     struct handles_container<qi::raw_directive<Subject>, Attribute
         , Context, Iterator>
-      : unary_handles_container<Subject, Attribute, Context, Iterator> {};
+      : mpl::true_ {};
 }}}
 
 #endif

@@ -12,9 +12,6 @@
 #pragma once
 #endif
 
-#include <boost/spirit/include/phoenix_limits.hpp>      // needs to be included before proto
-#include <boost/proto/proto.hpp>
-#include <boost/mpl/if.hpp>
 #include <boost/type_traits/is_base_of.hpp>
 #include <boost/spirit/home/support/unused.hpp>
 
@@ -71,6 +68,8 @@ namespace boost { namespace spirit
     template <typename Domain, typename Enable = void>
     struct modify
     {
+        typedef void proto_is_callable_;
+
         template <typename Sig>
         struct result;
 
@@ -112,13 +111,6 @@ namespace boost { namespace spirit
             return compound_modifier<Modifiers, Tag>(modifiers, tag);
         }
     };
-}}
-
-namespace boost { namespace proto
-{
-    template <typename Domain, typename Enable>
-    struct is_callable<spirit::modify<Domain, Enable> >
-      : mpl::true_ {};
 }}
 
 #endif

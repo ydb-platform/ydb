@@ -4,8 +4,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_SEQUENTIAL_OR_MARCH_12_2007_1130PM)
-#define SPIRIT_SEQUENTIAL_OR_MARCH_12_2007_1130PM
+#ifndef BOOST_SPIRIT_QI_OPERATOR_SEQUENTIAL_OR_HPP
+#define BOOST_SPIRIT_QI_OPERATOR_SEQUENTIAL_OR_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -19,6 +19,8 @@
 #include <boost/spirit/home/support/handles_container.hpp>
 #include <boost/fusion/include/as_vector.hpp>
 #include <boost/fusion/include/for_each.hpp>
+#include <boost/proto/operators.hpp>
+#include <boost/proto/tags.hpp>
 
 namespace boost { namespace spirit
 {

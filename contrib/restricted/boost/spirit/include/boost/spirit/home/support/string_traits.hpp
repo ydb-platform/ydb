@@ -18,7 +18,7 @@
 #include <boost/mpl/bool.hpp>
 #include <boost/mpl/identity.hpp>
 #include <boost/mpl/if.hpp>
-#include <boost/proto/proto_fwd.hpp>
+#include <boost/proto/proto_fwd.hpp> // for BOOST_PROTO_DISABLE_IF_IS_CONST
 #include <boost/type_traits/is_const.hpp>
 #if defined(__GNUC__) && (__GNUC__ < 4)
 #include <boost/type_traits/add_const.hpp>

@@ -4,8 +4,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_MATCHES_JAN_07_2010_0745PM)
-#define SPIRIT_MATCHES_JAN_07_2010_0745PM
+#ifndef BOOST_SPIRIT_QI_DIRECTIVE_MATCHES_HPP
+#define BOOST_SPIRIT_QI_DIRECTIVE_MATCHES_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -72,7 +72,7 @@ namespace boost { namespace spirit { namespace qi
         Subject subject;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(matches_directive& operator= (matches_directive const&));
+        BOOST_DELETED_FUNCTION(matches_directive& operator= (matches_directive const&))
     };
 
     ///////////////////////////////////////////////////////////////////////////

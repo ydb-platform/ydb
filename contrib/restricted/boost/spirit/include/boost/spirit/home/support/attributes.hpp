@@ -28,9 +28,9 @@
 #include <boost/fusion/include/for_each.hpp>
 #include <boost/fusion/include/is_view.hpp>
 #include <boost/fusion/include/mpl.hpp>
-#include <boost/utility/value_init.hpp>
 #include <boost/type_traits/is_same.hpp>
 #include <boost/type_traits/is_convertible.hpp>
+#include <boost/type_traits/is_reference.hpp>
 #include <boost/mpl/eval_if.hpp>
 #include <boost/mpl/end.hpp>
 #include <boost/mpl/find_if.hpp>
@@ -40,11 +40,12 @@
 #include <boost/mpl/or.hpp>
 #include <boost/mpl/has_xxx.hpp>
 #include <boost/mpl/equal.hpp>
-#include <boost/proto/proto_fwd.hpp>
+#include <boost/proto/traits.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/variant.hpp>
-#include <boost/range/iterator_range.hpp>
+#include <boost/range/range_fwd.hpp>
 #include <boost/config.hpp>
+#include <iterator> // for std::iterator_traits, std::distance
 #include <vector>
 #include <utility>
 #include <ios>
@@ -559,12 +560,12 @@ namespace boost { namespace spirit { namespace traits
     template <typename Iterator>
     struct attribute_size<iterator_range<Iterator> >
     {
-        typedef typename boost::detail::iterator_traits<Iterator>::
+        typedef typename std::iterator_traits<Iterator>::
             difference_type type;
 
         static type call(iterator_range<Iterator> const& r)
         {
-            return boost::detail::distance(r.begin(), r.end());
+            return std::distance(r.begin(), r.end());
         }
     };
 
@@ -923,6 +924,23 @@ namespace boost { namespace spirit { namespace traits
         type;
     };
 
+    namespace detail {
+        // Domain-agnostic class template partial specializations and
+        // type agnostic domain partial specializations are ambious.
+        // To resolve the ambiguity type agnostic domain partial
+        // specializations are dispatched via intermediate type.
+        template <typename Exposed, typename Transformed, typename Domain>
+        struct transform_attribute_base;
+
+        template <typename Attribute>
+        struct synthesize_attribute
+        {
+            typedef Attribute type;
+            static Attribute pre(unused_type) { return Attribute(); }
+            static void post(unused_type, Attribute const&) {}
+            static void fail(unused_type) {}
+        };
+    }
     ///////////////////////////////////////////////////////////////////////////
     //  transform_attribute
     //
@@ -930,90 +948,31 @@ namespace boost { namespace spirit { namespace traits
     //  attributes. This template can be used as a customization point, where
     //  the user is able specify specific transformation rules for any attribute
     //  type.
+    //
+    //  Note: the transformations involving unused_type are internal details
+    //  and may be subject to change at any time.
+    //
     ///////////////////////////////////////////////////////////////////////////
     template <typename Exposed, typename Transformed, typename Domain
       , typename Enable/* = void*/>
-    struct transform_attribute;
-
-    ///////////////////////////////////////////////////////////////////////////
-    template <typename Domain, typename Transformed, typename Exposed>
-    typename spirit::result_of::pre_transform<Exposed, Transformed, Domain>::type
-    pre_transform(Exposed& attr BOOST_PROTO_DISABLE_IF_IS_CONST(Exposed))
+    struct transform_attribute
+      : detail::transform_attribute_base<Exposed, Transformed, Domain>
     {
-        return transform_attribute<Exposed, Transformed, Domain>::pre(attr);
-    }
-
-    template <typename Domain, typename Transformed, typename Exposed>
-    typename spirit::result_of::pre_transform<Exposed const, Transformed, Domain>::type
-    pre_transform(Exposed const& attr)
-    {
-        return transform_attribute<Exposed const, Transformed, Domain>::pre(attr);
-    }
-
-    ///////////////////////////////////////////////////////////////////////////
-    // make_attribute
-    //
-    // All parsers and generators have specific attribute types.
-    // Spirit parsers and generators are passed an attribute; these are either
-    // references to the expected type, or an unused_type -- to flag that we do
-    // not care about the attribute. For semantic actions, however, we need to
-    // have a real value to pass to the semantic action. If the client did not
-    // provide one, we will have to synthesize the value. This class takes care
-    // of that. *Note that this behavior has changed. From Boost 1.47, semantic
-    // actions always take in the passed attribute as-is if the PP constant:
-    // BOOST_SPIRIT_ACTIONS_ALLOW_ATTR_COMPAT is defined.
-    ///////////////////////////////////////////////////////////////////////////
-    template <typename Attribute, typename ActualAttribute>
-    struct make_attribute
-    {
-        typedef typename remove_const<Attribute>::type attribute_type;
-        typedef typename
-            mpl::if_<
-                is_same<typename remove_const<ActualAttribute>::type, unused_type>
-              , attribute_type
-              , ActualAttribute&>::type
-        type;
-
-        typedef typename
-            mpl::if_<
-                is_same<typename remove_const<ActualAttribute>::type, unused_type>
-              , attribute_type
-              , ActualAttribute>::type
-        value_type;
-
-        static Attribute call(unused_type)
-        {
-             // synthesize the attribute/parameter
-            return boost::get(value_initialized<attribute_type>());
-        }
-
-        template <typename T>
-        static T& call(T& value)
-        {
-            return value; // just pass the one provided
-        }
+        BOOST_STATIC_ASSERT_MSG(!is_reference<Exposed>::value,
+            "Exposed cannot be a reference type");
+        BOOST_STATIC_ASSERT_MSG(!is_reference<Transformed>::value,
+            "Transformed cannot be a reference type");
     };
 
-    template <typename Attribute, typename ActualAttribute>
-    struct make_attribute<Attribute&, ActualAttribute>
-      : make_attribute<Attribute, ActualAttribute>
+    template <typename Transformed, typename Domain>
+    struct transform_attribute<unused_type, Transformed, Domain>
+      : detail::synthesize_attribute<Transformed>
     {};
 
-    template <typename Attribute, typename ActualAttribute>
-    struct make_attribute<Attribute const&, ActualAttribute>
-      : make_attribute<Attribute const, ActualAttribute>
+    template <typename Transformed, typename Domain>
+    struct transform_attribute<unused_type const, Transformed, Domain>
+      : detail::synthesize_attribute<Transformed>
     {};
-
-    template <typename ActualAttribute>
-    struct make_attribute<unused_type, ActualAttribute>
-    {
-        typedef unused_type type;
-        typedef unused_type value_type;
-        static unused_type call(unused_type)
-        {
-            return unused;
-        }
-    };
 
     ///////////////////////////////////////////////////////////////////////////
     // swap_impl
@@ -1380,15 +1339,5 @@ namespace boost { namespace spirit { namespace traits
         token_printer_debug<T>::print(out, val);
     }
 }}}
-
-///////////////////////////////////////////////////////////////////////////////
-namespace boost { namespace spirit { namespace result_of
-{
-    template <typename Exposed, typename Transformed, typename Domain>
-    struct pre_transform
-      : traits::transform_attribute<Exposed, Transformed, Domain>
-    {};
-}}}
-
 
 #endif

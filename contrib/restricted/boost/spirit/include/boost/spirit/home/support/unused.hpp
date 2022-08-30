@@ -12,6 +12,7 @@
 #pragma once
 #endif
 
+#include <boost/config.hpp>
 #include <boost/mpl/bool.hpp>
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -25,9 +26,7 @@ namespace boost { namespace spirit
     ///////////////////////////////////////////////////////////////////////////
     struct unused_type
     {
-        unused_type()
-        {
-        }
+        BOOST_DEFAULTED_FUNCTION(unused_type(), {})
 
         unused_type(const unused_type& a) = default;
 

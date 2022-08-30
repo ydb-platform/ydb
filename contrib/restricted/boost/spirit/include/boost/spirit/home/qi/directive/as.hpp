@@ -6,8 +6,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_AS_DECEMBER_6_2010_1013AM)
-#define SPIRIT_AS_DECEMBER_6_2010_1013AM
+#ifndef BOOST_SPIRIT_QI_DIRECTIVE_AS_HPP
+#define BOOST_SPIRIT_QI_DIRECTIVE_AS_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -25,8 +25,6 @@
 #include <boost/spirit/home/support/handles_container.hpp>
 #include <boost/spirit/home/support/assert_msg.hpp>
 #include <boost/spirit/home/support/container.hpp>
-#include <boost/range/iterator_range.hpp>
-#include <string>
 
 namespace boost { namespace spirit { namespace qi
 {

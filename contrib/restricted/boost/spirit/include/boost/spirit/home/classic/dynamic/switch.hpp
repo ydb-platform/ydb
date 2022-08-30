@@ -55,7 +55,7 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
 ///////////////////////////////////////////////////////////////////////////////
 //
 //  The switch_parser allows to build switch like parsing constructs, which
-//  will have much better perfomance as comparable straight solutions.
+//  will have much better performance as comparable straight solutions.
 //
 //  Input stream driven syntax:
 //

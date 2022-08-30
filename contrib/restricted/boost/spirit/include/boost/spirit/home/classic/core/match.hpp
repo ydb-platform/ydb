@@ -34,7 +34,7 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
     //      length of the match is the number of characters (or tokens) that
     //      is successfully matched. This can be queried through its length()
     //      member function. A negative value means that the match is
-    //      unsucessful.
+    //      unsuccessful.
     //
     //      Each parser may have an associated attribute. This attribute is
     //      also returned back to the client on a successful parse through

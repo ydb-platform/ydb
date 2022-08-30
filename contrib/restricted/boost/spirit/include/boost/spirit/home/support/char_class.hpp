@@ -12,10 +12,6 @@
 #pragma once
 #endif
 
-#include <string>
-
-#include <boost/spirit/include/phoenix_limits.hpp>      // needs to be included before proto
-#include <boost/proto/proto.hpp>
 #include <boost/config.hpp>
 #include <boost/mpl/bool.hpp>
 #include <boost/spirit/home/support/unused.hpp>
@@ -285,7 +281,7 @@ namespace boost { namespace spirit { namespace char_class
     template <typename CharEncoding>
     struct classify
     {
-        typedef typename CharEncoding::char_type char_type;
+        typedef typename CharEncoding::classify_type char_type;
 
 #define BOOST_SPIRIT_CLASSIFY(name, isname)                                     \
         template <typename Char>                                                \
@@ -511,7 +507,7 @@ namespace boost { namespace spirit { namespace char_class
     template <typename CharEncoding>
     struct convert
     {
-        typedef typename CharEncoding::char_type char_type;
+        typedef typename CharEncoding::classify_type char_type;
 
         template <typename Char>
         static Char
@@ -754,39 +750,14 @@ namespace boost { namespace spirit { namespace char_class
 namespace boost { namespace spirit { namespace traits
 {
     ///////////////////////////////////////////////////////////////////////////
-    // This meta-function evaluates to mpl::true_ if the function
-    // char_encoding::ischar() needs to be called to ensure correct matching.
-    // This happens mainly if the character type returned from the underlying
-    // iterator is larger than the character type of the used character
-    // encoding. Additionally, this meta-function provides a customization
-    // point for the lexer library to enforce this behavior while parsing
-    // a token stream.
-    template <typename Char, typename BaseChar>
-    struct mustcheck_ischar
-      : mpl::bool_<(sizeof(Char) > sizeof(BaseChar)) ? true : false> {};
-
-    ///////////////////////////////////////////////////////////////////////////
-    // The following template calls char_encoding::ischar, if necessary
-    template <typename CharParam, typename CharEncoding
-      , bool MustCheck = mustcheck_ischar<
-            CharParam, typename CharEncoding::char_type>::value>
-    struct ischar
-    {
-        static bool call(CharParam)
-        {
-            return true;
-        }
-    };
-
     template <typename CharParam, typename CharEncoding>
-    struct ischar<CharParam, CharEncoding, true>
+    struct ischar
     {
         static bool call(CharParam const& ch)
         {
-            return CharEncoding::ischar(int(ch));
+           return CharEncoding::ischar(int(ch));
         }
     };
-
 }}}
 
 #if defined(BOOST_MSVC)

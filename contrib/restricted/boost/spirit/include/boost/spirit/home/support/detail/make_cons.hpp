@@ -12,8 +12,6 @@
 #pragma once
 #endif
 
-#include <boost/spirit/include/phoenix_limits.hpp>      // needs to be included before proto
-#include <boost/proto/proto.hpp>
 #include <boost/mpl/eval_if.hpp>
 #include <boost/fusion/include/cons.hpp>
 #include <boost/type_traits/remove_const.hpp>

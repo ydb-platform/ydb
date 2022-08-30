@@ -8,8 +8,8 @@
   file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
 
-#ifndef PHOENIX_NEW_HPP
-#define PHOENIX_NEW_HPP
+#ifndef BOOST_SPIRIT_CLASSIC_PHOENIX_NEW_HPP
+#define BOOST_SPIRIT_CLASSIC_PHOENIX_NEW_HPP
 
 ///////////////////////////////////////////////////////////////////////////////
 #include <boost/spirit/home/classic/phoenix/actor.hpp>
@@ -54,7 +54,7 @@ BOOST_STATIC_ASSERT(PHOENIX_CONSTRUCT_LIMIT <= 15);
 //          A *a = new_<A>(...arbitrary list of actors...);
 //
 //      where the given parameters are submitted as parameters to the
-//      contructor of the object of type A. (This certainly implies, that
+//      constructor of the object of type A. (This certainly implies, that
 //      type A has a constructor with a fitting set of parameter types
 //      defined.)
 //
@@ -694,7 +694,7 @@ struct new_15 {
 #endif
 
 
-#if defined(__BORLANDC__) || (defined(__MWERKS__) && (__MWERKS__ <= 0x3002))
+#if defined(BOOST_BORLANDC) || (defined(__MWERKS__) && (__MWERKS__ <= 0x3002))
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -1312,4 +1312,4 @@ new_(
 ///////////////////////////////////////////////////////////////////////////////
 }   //  namespace phoenix
 
-#endif // PHOENIX_NEW_HPP
+#endif

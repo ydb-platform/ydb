@@ -133,7 +133,7 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_BEGIN
 
     //////////////////////////////////
     // if-parser, conditionally runs a parser is a functor condition is true.
-    // If the condition is fales, it fails the parse.
+    // If the condition is false, it fails the parse.
     // It can optionally become an if-else-parser through the member else_p.
     template <typename ParsableT, typename CondT>
     struct if_parser

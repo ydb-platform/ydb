@@ -222,7 +222,7 @@ struct default_case<CaseT, true> {
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-//  The case_chain template calculates recursivly the depth of the left
+//  The case_chain template calculates recursively the depth of the left
 //  subchain of the given case branch node.
 template <typename CaseT, bool IsSimple = CaseT::is_simple>
 struct case_chain {
@@ -240,7 +240,7 @@ struct case_chain<CaseT, true> {
 
 ///////////////////////////////////////////////////////////////////////////////
 //  The chain_parser template is used to extract the type and the instance of
-//  a left or a right parser, burried arbitrary deep inside the case parser
+//  a left or a right parser, buried arbitrary deep inside the case parser
 //  chain.
 template <int Depth, typename CaseT>
 struct chain_parser {

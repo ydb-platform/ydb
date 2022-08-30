@@ -5,8 +5,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_ALTERNATIVE_FEBRUARY_05_2007_1153AM)
-#define SPIRIT_ALTERNATIVE_FEBRUARY_05_2007_1153AM
+#ifndef BOOST_SPIRIT_QI_OPERATOR_ALTERNATIVE_HPP
+#define BOOST_SPIRIT_QI_OPERATOR_ALTERNATIVE_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -24,6 +24,8 @@
 #include <boost/fusion/include/any.hpp>
 #include <boost/fusion/include/mpl.hpp>
 #include <boost/fusion/include/for_each.hpp>
+#include <boost/proto/operators.hpp>
+#include <boost/proto/tags.hpp>
 
 namespace boost { namespace spirit
 {

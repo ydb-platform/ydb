@@ -5,8 +5,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_SEQUENCE_BASE_APRIL_22_2006_0811AM)
-#define SPIRIT_SEQUENCE_BASE_APRIL_22_2006_0811AM
+#ifndef BOOST_SPIRIT_QI_OPERATOR_SEQUENCE_BASE_HPP
+#define BOOST_SPIRIT_QI_OPERATOR_SEQUENCE_BASE_HPP
 
 #if defined(_MSC_VER)
 #pragma once

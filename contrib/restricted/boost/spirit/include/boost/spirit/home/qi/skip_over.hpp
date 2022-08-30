@@ -24,7 +24,7 @@ namespace boost { namespace spirit { namespace qi
     template <typename Iterator, typename T>
     inline void skip_over(Iterator& first, Iterator const& last, T const& skipper)
     {
-        while (first != last && skipper.parse(first, last, unused, unused, unused))
+        while (skipper.parse(first, last, unused, unused, unused))
             /***/;
     }
 

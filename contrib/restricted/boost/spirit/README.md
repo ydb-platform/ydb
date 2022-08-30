@@ -14,7 +14,14 @@ executable.
 
 The newest Spirit shines faster compile times. Currently only a parser framework.
 
-Requires C++14 compiler (GCC 5, Clang 3.5, VS 2015 Update 3).
+*WARNING*: C++14 compilers support will be dropped soon.
+
+Spirit X3 in Boost 1.81 (scheduled to November 2022) will use C++17 features.
+
+Supported compilers will be:
+* Clang 4 (currently 3.6)
+* GCC 7 (currently 5)
+* VS 2017 v15.8 (currently 2015 U3)
 
 ### Spirit V2 (2nd generation)
 

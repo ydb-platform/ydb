@@ -12,10 +12,11 @@
 #endif
 
 #include <boost/assert.hpp>
+#include <boost/static_assert.hpp>
 #include <boost/config.hpp>
 #include <boost/function.hpp>
 #include <boost/mpl/vector.hpp>
-#include <boost/type_traits/add_reference.hpp>
+#include <boost/type_traits/is_convertible.hpp>
 #include <boost/type_traits/is_same.hpp>
 
 #include <boost/fusion/include/vector.hpp>
@@ -37,6 +38,10 @@
 #include <boost/spirit/home/qi/nonterminal/detail/parser_binder.hpp>
 #include <boost/spirit/home/qi/nonterminal/nonterminal_fwd.hpp>
 #include <boost/spirit/home/qi/skip_over.hpp>
+
+#include <boost/proto/extends.hpp>
+#include <boost/proto/traits.hpp>
+#include <boost/type_traits/is_reference.hpp>
 
 #if defined(BOOST_MSVC)
 # pragma warning(push)
@@ -125,7 +130,10 @@ namespace boost { namespace spirit { namespace qi
         typedef typename
             spirit::detail::attr_from_sig<sig_type>::type
         attr_type;
-        typedef typename add_reference<attr_type>::type attr_reference_type;
+        BOOST_STATIC_ASSERT_MSG(
+            !is_reference<attr_type>::value,
+            "Reference qualifier on Qi rule attribute is meaningless");
+        typedef attr_type& attr_reference_type;
 
         // parameter_types is a sequence of types passed as parameters to the rule
         typedef typename
@@ -275,22 +283,27 @@ namespace boost { namespace spirit { namespace qi
           , Context& /*context*/, Skipper const& skipper
           , Attribute& attr_param) const
         {
+            BOOST_STATIC_ASSERT_MSG((is_same<skipper_type, unused_type>::value ||
+                !is_same<Skipper, unused_type>::value),
+                "The rule was instantiated with a skipper type but you have not pass any. "
+                "Did you use `parse` instead of `phrase_parse`?");
+            BOOST_STATIC_ASSERT_MSG(
+                (is_convertible<Skipper const&, skipper_type>::value),
+                "The passed skipper is not compatible/convertible to one "
+                "that the rule was instantiated with");
             if (f)
             {
                 // do a preskip if this is an implied lexeme
                 if (is_same<skipper_type, unused_type>::value)
                     qi::skip_over(first, last, skipper);
 
-                typedef traits::make_attribute<attr_type, Attribute> make_attribute;
-
                 // do down-stream transformation, provides attribute for
                 // rhs parser
                 typedef traits::transform_attribute<
-                    typename make_attribute::type, attr_type, domain>
+                    Attribute, attr_type, domain>
                 transform;
 
-                typename make_attribute::type made_attr = make_attribute::call(attr_param);
-                typename transform::type attr_ = transform::pre(made_attr);
+                typename transform::type attr_ = transform::pre(attr_param);
 
                 // If you are seeing a compilation error here, you are probably
                 // trying to use a rule or a grammar which has inherited
@@ -305,12 +318,12 @@ namespace boost { namespace spirit { namespace qi
                 {
                     // do up-stream transformation, this integrates the results
                     // back into the original attribute value, if appropriate
-                    traits::post_transform(attr_param, attr_);
+                    transform::post(attr_param, attr_);
                     return true;
                 }
 
                 // inform attribute transformation of failed rhs
-                traits::fail_transform(attr_param, attr_);
+                transform::fail(attr_param);
             }
             return false;
         }
@@ -321,22 +334,27 @@ namespace boost { namespace spirit { namespace qi
           , Context& caller_context, Skipper const& skipper
           , Attribute& attr_param, Params const& params) const
         {
+            BOOST_STATIC_ASSERT_MSG((is_same<skipper_type, unused_type>::value ||
+                !is_same<Skipper, unused_type>::value),
+                "The rule was instantiated with a skipper type but you have not pass any. "
+                "Did you use `parse` instead of `phrase_parse`?");
+            BOOST_STATIC_ASSERT_MSG(
+                (is_convertible<Skipper const&, skipper_type>::value),
+                "The passed skipper is not compatible/convertible to one "
+                "that the rule was instantiated with");
             if (f)
             {
                 // do a preskip if this is an implied lexeme
                 if (is_same<skipper_type, unused_type>::value)
                     qi::skip_over(first, last, skipper);
 
-                typedef traits::make_attribute<attr_type, Attribute> make_attribute;
-
                 // do down-stream transformation, provides attribute for
                 // rhs parser
                 typedef traits::transform_attribute<
-                    typename make_attribute::type, attr_type, domain>
+                    Attribute, attr_type, domain>
                 transform;
 
-                typename make_attribute::type made_attr = make_attribute::call(attr_param);
-                typename transform::type attr_ = transform::pre(made_attr);
+                typename transform::type attr_ = transform::pre(attr_param);
 
                 // If you are seeing a compilation error here, you are probably
                 // trying to use a rule or a grammar which has inherited
@@ -351,12 +369,12 @@ namespace boost { namespace spirit { namespace qi
                 {
                     // do up-stream transformation, this integrates the results
                     // back into the original attribute value, if appropriate
-                    traits::post_transform(attr_param, attr_);
+                    transform::post(attr_param, attr_);
                     return true;
                 }
 
                 // inform attribute transformation of failed rhs
-                traits::fail_transform(attr_param, attr_);
+                transform::fail(attr_param);
             }
             return false;
         }

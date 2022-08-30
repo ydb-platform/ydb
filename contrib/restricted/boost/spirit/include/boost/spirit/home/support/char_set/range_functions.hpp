@@ -11,7 +11,7 @@
 #pragma once
 #endif
 
-#include <boost/integer_traits.hpp>
+#include <limits>
 
 namespace boost { namespace spirit { namespace support { namespace detail
 {
@@ -47,14 +47,14 @@ namespace boost { namespace spirit { namespace support { namespace detail
         // another range 'other', so we can merge them
 
         typedef typename Range::value_type value_type;
-        typedef integer_traits<value_type> integer_traits;
+        typedef std::numeric_limits<value_type> limits;
 
         value_type decr_first =
-            range.first == integer_traits::const_min
+            range.first == (limits::min)()
             ? range.first : range.first-1;
 
         value_type incr_last =
-            range.last == integer_traits::const_max
+            range.last == (limits::max)()
             ? range.last : range.last+1;
 
         return (decr_first <= other.last) && (incr_last >= other.first);

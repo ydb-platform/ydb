@@ -203,101 +203,101 @@ namespace boost { namespace spirit { namespace char_encoding
         /* --  158  9e */   BOOST_CC_CTRL,
         /* --  159  9f */   BOOST_CC_CTRL,
         /*     160  a0 */   BOOST_CC_SPACE,
-        /*  ¡  161  a1 */   BOOST_CC_PUNCT,
-        /*  ¢  162  a2 */   BOOST_CC_PUNCT,
-        /*  £  163  a3 */   BOOST_CC_PUNCT,
-        /*  ¤  164  a4 */   BOOST_CC_PUNCT,
-        /*  ¥  165  a5 */   BOOST_CC_PUNCT,
-        /*  ¦  166  a6 */   BOOST_CC_PUNCT,
-        /*  §  167  a7 */   BOOST_CC_PUNCT,
-        /*  ¨  168  a8 */   BOOST_CC_PUNCT,
-        /*  ©  169  a9 */   BOOST_CC_PUNCT,
-        /*  ª  170  aa */   BOOST_CC_PUNCT,
-        /*  «  171  ab */   BOOST_CC_PUNCT,
-        /*  ¬  172  ac */   BOOST_CC_PUNCT,
-        /*  ­  173  ad */   BOOST_CC_PUNCT,
-        /*  ®  174  ae */   BOOST_CC_PUNCT,
-        /*  ¯  175  af */   BOOST_CC_PUNCT,
-        /*  °  176  b0 */   BOOST_CC_PUNCT,
-        /*  ±  177  b1 */   BOOST_CC_PUNCT,
-        /*  ²  178  b2 */   BOOST_CC_DIGIT|BOOST_CC_PUNCT,
-        /*  ³  179  b3 */   BOOST_CC_DIGIT|BOOST_CC_PUNCT,
-        /*  ´  180  b4 */   BOOST_CC_PUNCT,
-        /*  µ  181  b5 */   BOOST_CC_PUNCT,
-        /*  ¶  182  b6 */   BOOST_CC_PUNCT,
-        /*  ·  183  b7 */   BOOST_CC_PUNCT,
-        /*  ¸  184  b8 */   BOOST_CC_PUNCT,
-        /*  ¹  185  b9 */   BOOST_CC_DIGIT|BOOST_CC_PUNCT,
-        /*  º  186  ba */   BOOST_CC_PUNCT,
-        /*  »  187  bb */   BOOST_CC_PUNCT,
-        /*  ¼  188  bc */   BOOST_CC_PUNCT,
-        /*  ½  189  bd */   BOOST_CC_PUNCT,
-        /*  ¾  190  be */   BOOST_CC_PUNCT,
-        /*  ¿  191  bf */   BOOST_CC_PUNCT,
-        /*  À  192  c0 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Á  193  c1 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Â  194  c2 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ã  195  c3 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ä  196  c4 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Å  197  c5 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Æ  198  c6 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ç  199  c7 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  È  200  c8 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  É  201  c9 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ê  202  ca */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ë  203  cb */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ì  204  cc */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Í  205  cd */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Î  206  ce */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ï  207  cf */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ð  208  d0 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ñ  209  d1 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ò  210  d2 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ó  211  d3 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ô  212  d4 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Õ  213  d5 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ö  214  d6 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  ×  215  d7 */   BOOST_CC_PUNCT,
-        /*  Ø  216  d8 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ù  217  d9 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ú  218  da */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Û  219  db */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ü  220  dc */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Ý  221  dd */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  Þ  222  de */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
-        /*  ß  223  df */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  à  224  e0 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  á  225  e1 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  â  226  e2 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ã  227  e3 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ä  228  e4 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  å  229  e5 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  æ  230  e6 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ç  231  e7 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  è  232  e8 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  é  233  e9 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ê  234  ea */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ë  235  eb */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ì  236  ec */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  í  237  ed */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  î  238  ee */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ï  239  ef */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ð  240  f0 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ñ  241  f1 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ò  242  f2 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ó  243  f3 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ô  244  f4 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  õ  245  f5 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ö  246  f6 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ÷  247  f7 */   BOOST_CC_PUNCT,
-        /*  ø  248  f8 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ù  249  f9 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ú  250  fa */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  û  251  fb */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ü  252  fc */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ý  253  fd */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  þ  254  fe */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
-        /*  ÿ  255  ff */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  161  a1 */   BOOST_CC_PUNCT,
+        /*  ï¿½  162  a2 */   BOOST_CC_PUNCT,
+        /*  ï¿½  163  a3 */   BOOST_CC_PUNCT,
+        /*  ï¿½  164  a4 */   BOOST_CC_PUNCT,
+        /*  ï¿½  165  a5 */   BOOST_CC_PUNCT,
+        /*  ï¿½  166  a6 */   BOOST_CC_PUNCT,
+        /*  ï¿½  167  a7 */   BOOST_CC_PUNCT,
+        /*  ï¿½  168  a8 */   BOOST_CC_PUNCT,
+        /*  ï¿½  169  a9 */   BOOST_CC_PUNCT,
+        /*  ï¿½  170  aa */   BOOST_CC_PUNCT,
+        /*  ï¿½  171  ab */   BOOST_CC_PUNCT,
+        /*  ï¿½  172  ac */   BOOST_CC_PUNCT,
+        /*  ï¿½  173  ad */   BOOST_CC_PUNCT,
+        /*  ï¿½  174  ae */   BOOST_CC_PUNCT,
+        /*  ï¿½  175  af */   BOOST_CC_PUNCT,
+        /*  ï¿½  176  b0 */   BOOST_CC_PUNCT,
+        /*  ï¿½  177  b1 */   BOOST_CC_PUNCT,
+        /*  ï¿½  178  b2 */   BOOST_CC_DIGIT|BOOST_CC_PUNCT,
+        /*  ï¿½  179  b3 */   BOOST_CC_DIGIT|BOOST_CC_PUNCT,
+        /*  ï¿½  180  b4 */   BOOST_CC_PUNCT,
+        /*  ï¿½  181  b5 */   BOOST_CC_PUNCT,
+        /*  ï¿½  182  b6 */   BOOST_CC_PUNCT,
+        /*  ï¿½  183  b7 */   BOOST_CC_PUNCT,
+        /*  ï¿½  184  b8 */   BOOST_CC_PUNCT,
+        /*  ï¿½  185  b9 */   BOOST_CC_DIGIT|BOOST_CC_PUNCT,
+        /*  ï¿½  186  ba */   BOOST_CC_PUNCT,
+        /*  ï¿½  187  bb */   BOOST_CC_PUNCT,
+        /*  ï¿½  188  bc */   BOOST_CC_PUNCT,
+        /*  ï¿½  189  bd */   BOOST_CC_PUNCT,
+        /*  ï¿½  190  be */   BOOST_CC_PUNCT,
+        /*  ï¿½  191  bf */   BOOST_CC_PUNCT,
+        /*  ï¿½  192  c0 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  193  c1 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  194  c2 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  195  c3 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  196  c4 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  197  c5 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  198  c6 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  199  c7 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  200  c8 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  201  c9 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  202  ca */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  203  cb */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  204  cc */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  205  cd */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  206  ce */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  207  cf */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  208  d0 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  209  d1 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  210  d2 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  211  d3 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  212  d4 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  213  d5 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  214  d6 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  215  d7 */   BOOST_CC_PUNCT,
+        /*  ï¿½  216  d8 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  217  d9 */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  218  da */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  219  db */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  220  dc */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  221  dd */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  222  de */   BOOST_CC_ALPHA|BOOST_CC_UPPER,
+        /*  ï¿½  223  df */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  224  e0 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  225  e1 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  226  e2 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  227  e3 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  228  e4 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  229  e5 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  230  e6 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  231  e7 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  232  e8 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  233  e9 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  234  ea */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  235  eb */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  236  ec */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  237  ed */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  238  ee */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  239  ef */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  240  f0 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  241  f1 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  242  f2 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  243  f3 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  244  f4 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  245  f5 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  246  f6 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  247  f7 */   BOOST_CC_PUNCT,
+        /*  ï¿½  248  f8 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  249  f9 */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  250  fa */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  251  fb */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  252  fc */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  253  fd */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  254  fe */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
+        /*  ï¿½  255  ff */   BOOST_CC_ALPHA|BOOST_CC_LOWER,
     };
 
     ///////////////////////////////////////////////////////////////////////////
@@ -466,101 +466,101 @@ namespace boost { namespace spirit { namespace char_encoding
         /* --  158  9e */   '\0',
         /* --  159  9f */   '\0',
         /*     160  a0 */   '\0',
-        /*  ¡  161  a1 */   '\0',
-        /*  ¢  162  a2 */   '\0',
-        /*  £  163  a3 */   '\0',
-        /*  ¤  164  a4 */   '\0',
-        /*  ¥  165  a5 */   '\0',
-        /*  ¦  166  a6 */   '\0',
-        /*  §  167  a7 */   '\0',
-        /*  ¨  168  a8 */   '\0',
-        /*  ©  169  a9 */   '\0',
-        /*  ª  170  aa */   '\0',
-        /*  «  171  ab */   '\0',
-        /*  ¬  172  ac */   '\0',
-        /*  ­  173  ad */   '\0',
-        /*  ®  174  ae */   '\0',
-        /*  ¯  175  af */   '\0',
-        /*  °  176  b0 */   '\0',
-        /*  ±  177  b1 */   '\0',
-        /*  ²  178  b2 */   '\0',
-        /*  ³  179  b3 */   '\0',
-        /*  ´  180  b4 */   '\0',
-        /*  µ  181  b5 */   '\0',
-        /*  ¶  182  b6 */   '\0',
-        /*  ·  183  b7 */   '\0',
-        /*  ¸  184  b8 */   '\0',
-        /*  ¹  185  b9 */   '\0',
-        /*  º  186  ba */   '\0',
-        /*  »  187  bb */   '\0',
-        /*  ¼  188  bc */   '\0',
-        /*  ½  189  bd */   '\0',
-        /*  ¾  190  be */   '\0',
-        /*  ¿  191  bf */   '\0',
-        /*  à  192  c0 */   0xe0,
-        /*  á  193  c1 */   0xe1,
-        /*  â  194  c2 */   0xe2,
-        /*  ã  195  c3 */   0xe3,
-        /*  ä  196  c4 */   0xe4,
-        /*  å  197  c5 */   0xe5,
-        /*  æ  198  c6 */   0xe6,
-        /*  ç  199  c7 */   0xe7,
-        /*  è  200  c8 */   0xe8,
-        /*  é  201  c9 */   0xe9,
-        /*  ê  202  ca */   0xea,
-        /*  ë  203  cb */   0xeb,
-        /*  ì  204  cc */   0xec,
-        /*  í  205  cd */   0xed,
-        /*  î  206  ce */   0xee,
-        /*  ï  207  cf */   0xef,
-        /*  ð  208  d0 */   0xf0,
-        /*  ñ  209  d1 */   0xf1,
-        /*  ò  210  d2 */   0xf2,
-        /*  ó  211  d3 */   0xf3,
-        /*  ô  212  d4 */   0xf4,
-        /*  õ  213  d5 */   0xf5,
-        /*  ö  214  d6 */   0xf6,
-        /*  ×  215  d7 */   '\0',
-        /*  ø  216  d8 */   0xf8,
-        /*  ù  217  d9 */   0xf9,
-        /*  ú  218  da */   0xfa,
-        /*  û  219  db */   0xfb,
-        /*  ü  220  dc */   0xfc,
-        /*  ý  221  dd */   0xfd,
-        /*  þ  222  de */   0xfe,
-        /*  ß  223  df */   '\0',
-        /*  À  224  e0 */   0xc0,
-        /*  Á  225  e1 */   0xc1,
-        /*  Â  226  e2 */   0xc2,
-        /*  Ã  227  e3 */   0xc3,
-        /*  Ä  228  e4 */   0xc4,
-        /*  Å  229  e5 */   0xc5,
-        /*  Æ  230  e6 */   0xc6,
-        /*  Ç  231  e7 */   0xc7,
-        /*  È  232  e8 */   0xc8,
-        /*  É  233  e9 */   0xc9,
-        /*  Ê  234  ea */   0xca,
-        /*  Ë  235  eb */   0xcb,
-        /*  Ì  236  ec */   0xcc,
-        /*  Í  237  ed */   0xcd,
-        /*  Î  238  ee */   0xce,
-        /*  Ï  239  ef */   0xcf,
-        /*  Ð  240  f0 */   0xd0,
-        /*  Ñ  241  f1 */   0xd1,
-        /*  Ò  242  f2 */   0xd2,
-        /*  Ó  243  f3 */   0xd3,
-        /*  Ô  244  f4 */   0xd4,
-        /*  Õ  245  f5 */   0xd5,
-        /*  Ö  246  f6 */   0xd6,
-        /*  ÷  247  f7 */   '\0',
-        /*  Ø  248  f8 */   0xd8,
-        /*  Ù  249  f9 */   0xd9,
-        /*  Ú  250  fa */   0xda,
-        /*  Û  251  fb */   0xdb,
-        /*  Ü  252  fc */   0xdc,
-        /*  Ý  253  fd */   0xdd,
-        /*  Þ  254  fe */   0xde,
-        /*  ÿ  255  ff */   '\0',
+        /*  ï¿½  161  a1 */   '\0',
+        /*  ï¿½  162  a2 */   '\0',
+        /*  ï¿½  163  a3 */   '\0',
+        /*  ï¿½  164  a4 */   '\0',
+        /*  ï¿½  165  a5 */   '\0',
+        /*  ï¿½  166  a6 */   '\0',
+        /*  ï¿½  167  a7 */   '\0',
+        /*  ï¿½  168  a8 */   '\0',
+        /*  ï¿½  169  a9 */   '\0',
+        /*  ï¿½  170  aa */   '\0',
+        /*  ï¿½  171  ab */   '\0',
+        /*  ï¿½  172  ac */   '\0',
+        /*  ï¿½  173  ad */   '\0',
+        /*  ï¿½  174  ae */   '\0',
+        /*  ï¿½  175  af */   '\0',
+        /*  ï¿½  176  b0 */   '\0',
+        /*  ï¿½  177  b1 */   '\0',
+        /*  ï¿½  178  b2 */   '\0',
+        /*  ï¿½  179  b3 */   '\0',
+        /*  ï¿½  180  b4 */   '\0',
+        /*  ï¿½  181  b5 */   '\0',
+        /*  ï¿½  182  b6 */   '\0',
+        /*  ï¿½  183  b7 */   '\0',
+        /*  ï¿½  184  b8 */   '\0',
+        /*  ï¿½  185  b9 */   '\0',
+        /*  ï¿½  186  ba */   '\0',
+        /*  ï¿½  187  bb */   '\0',
+        /*  ï¿½  188  bc */   '\0',
+        /*  ï¿½  189  bd */   '\0',
+        /*  ï¿½  190  be */   '\0',
+        /*  ï¿½  191  bf */   '\0',
+        /*  ï¿½  192  c0 */   0xe0,
+        /*  ï¿½  193  c1 */   0xe1,
+        /*  ï¿½  194  c2 */   0xe2,
+        /*  ï¿½  195  c3 */   0xe3,
+        /*  ï¿½  196  c4 */   0xe4,
+        /*  ï¿½  197  c5 */   0xe5,
+        /*  ï¿½  198  c6 */   0xe6,
+        /*  ï¿½  199  c7 */   0xe7,
+        /*  ï¿½  200  c8 */   0xe8,
+        /*  ï¿½  201  c9 */   0xe9,
+        /*  ï¿½  202  ca */   0xea,
+        /*  ï¿½  203  cb */   0xeb,
+        /*  ï¿½  204  cc */   0xec,
+        /*  ï¿½  205  cd */   0xed,
+        /*  ï¿½  206  ce */   0xee,
+        /*  ï¿½  207  cf */   0xef,
+        /*  ï¿½  208  d0 */   0xf0,
+        /*  ï¿½  209  d1 */   0xf1,
+        /*  ï¿½  210  d2 */   0xf2,
+        /*  ï¿½  211  d3 */   0xf3,
+        /*  ï¿½  212  d4 */   0xf4,
+        /*  ï¿½  213  d5 */   0xf5,
+        /*  ï¿½  214  d6 */   0xf6,
+        /*  ï¿½  215  d7 */   '\0',
+        /*  ï¿½  216  d8 */   0xf8,
+        /*  ï¿½  217  d9 */   0xf9,
+        /*  ï¿½  218  da */   0xfa,
+        /*  ï¿½  219  db */   0xfb,
+        /*  ï¿½  220  dc */   0xfc,
+        /*  ï¿½  221  dd */   0xfd,
+        /*  ï¿½  222  de */   0xfe,
+        /*  ï¿½  223  df */   '\0',
+        /*  ï¿½  224  e0 */   0xc0,
+        /*  ï¿½  225  e1 */   0xc1,
+        /*  ï¿½  226  e2 */   0xc2,
+        /*  ï¿½  227  e3 */   0xc3,
+        /*  ï¿½  228  e4 */   0xc4,
+        /*  ï¿½  229  e5 */   0xc5,
+        /*  ï¿½  230  e6 */   0xc6,
+        /*  ï¿½  231  e7 */   0xc7,
+        /*  ï¿½  232  e8 */   0xc8,
+        /*  ï¿½  233  e9 */   0xc9,
+        /*  ï¿½  234  ea */   0xca,
+        /*  ï¿½  235  eb */   0xcb,
+        /*  ï¿½  236  ec */   0xcc,
+        /*  ï¿½  237  ed */   0xcd,
+        /*  ï¿½  238  ee */   0xce,
+        /*  ï¿½  239  ef */   0xcf,
+        /*  ï¿½  240  f0 */   0xd0,
+        /*  ï¿½  241  f1 */   0xd1,
+        /*  ï¿½  242  f2 */   0xd2,
+        /*  ï¿½  243  f3 */   0xd3,
+        /*  ï¿½  244  f4 */   0xd4,
+        /*  ï¿½  245  f5 */   0xd5,
+        /*  ï¿½  246  f6 */   0xd6,
+        /*  ï¿½  247  f7 */   '\0',
+        /*  ï¿½  248  f8 */   0xd8,
+        /*  ï¿½  249  f9 */   0xd9,
+        /*  ï¿½  250  fa */   0xda,
+        /*  ï¿½  251  fb */   0xdb,
+        /*  ï¿½  252  fc */   0xdc,
+        /*  ï¿½  253  fd */   0xdd,
+        /*  ï¿½  254  fe */   0xde,
+        /*  ï¿½  255  ff */   '\0',
     };
 
     ///////////////////////////////////////////////////////////////////////////
@@ -569,6 +569,7 @@ namespace boost { namespace spirit { namespace char_encoding
     struct iso8859_1
     {
         typedef unsigned char char_type;
+        typedef unsigned char classify_type;
 
         static bool
         isascii_(int ch)
@@ -581,13 +582,25 @@ namespace boost { namespace spirit { namespace char_encoding
         {
             // iso8859.1 uses all 8 bits
             // we have to watch out for sign extensions
-            return (0 == (ch & ~0xff) || ~0 == (ch | 0xff)) ? true : false;
+            return (0 == (ch & ~0xff) || ~0 == (ch | 0xff)) != 0;
+        }
+
+        // *** Note on assertions: The precondition is that the calls to
+        // these functions do not violate the required range of ch (type int)
+        // which is that strict_ischar(ch) should be true. It is the
+        // responsibility of the caller to make sure this precondition is not
+        // violated.
+
+        static bool
+        strict_ischar(int ch)
+        {
+            return ch >= 0 && ch <= 255;
         }
 
         static bool
         isalnum(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
+            BOOST_ASSERT(strict_ischar(ch));
             return (iso8859_1_char_types[ch] & BOOST_CC_ALPHA)
                 || (iso8859_1_char_types[ch] & BOOST_CC_DIGIT);
         }
@@ -595,29 +608,29 @@ namespace boost { namespace spirit { namespace char_encoding
         static bool
         isalpha(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_ALPHA) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_ALPHA) != 0;
         }
 
         static bool
         isdigit(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_DIGIT) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_DIGIT) != 0;
         }
 
         static bool
         isxdigit(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_XDIGIT) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_XDIGIT) != 0;
         }
 
         static bool
         iscntrl(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_CTRL) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_CTRL) != 0;
         }
 
         static bool
@@ -629,8 +642,8 @@ namespace boost { namespace spirit { namespace char_encoding
         static bool
         islower(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_LOWER) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_LOWER) != 0;
         }
 
         static bool
@@ -642,28 +655,29 @@ namespace boost { namespace spirit { namespace char_encoding
         static bool
         ispunct(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_PUNCT) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_PUNCT) != 0;
         }
 
         static bool
         isspace(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_SPACE) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_SPACE) != 0;
         }
 
         static bool
         isblank BOOST_PREVENT_MACRO_SUBSTITUTION (int ch)
         {
+            BOOST_ASSERT(strict_ischar(ch));
             return ('\x09' == ch || '\x20' == ch || '\xa0' == ch);
         }
 
         static bool
         isupper(int ch)
         {
-            BOOST_ASSERT(0 == (ch & ~UCHAR_MAX));
-            return (iso8859_1_char_types[ch] & BOOST_CC_UPPER) ? true : false;
+            BOOST_ASSERT(strict_ischar(ch));
+            return (iso8859_1_char_types[ch] & BOOST_CC_UPPER) != 0;
         }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -673,6 +687,7 @@ namespace boost { namespace spirit { namespace char_encoding
         static int
         tolower(int ch)
         {
+            BOOST_ASSERT(strict_ischar(ch));
             return isupper(ch) && '\0' != iso8859_1_char_conversion[ch] ?
                 iso8859_1_char_conversion[ch] : ch;
         }
@@ -680,6 +695,7 @@ namespace boost { namespace spirit { namespace char_encoding
         static int
         toupper(int ch)
         {
+            BOOST_ASSERT(strict_ischar(ch));
             return islower(ch) && '\0' != iso8859_1_char_conversion[ch] ?
                 iso8859_1_char_conversion[ch] : ch;
         }
@@ -689,6 +705,7 @@ namespace boost { namespace spirit { namespace char_encoding
         {
             // The first 256 characters in Unicode and the UCS are
             // identical to those in ISO/IEC-8859-1.
+            BOOST_ASSERT(strict_ischar(ch));
             return ch;
         }
     };

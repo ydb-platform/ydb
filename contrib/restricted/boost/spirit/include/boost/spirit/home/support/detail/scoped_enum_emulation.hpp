@@ -14,7 +14,9 @@
 #include <boost/version.hpp>
 #include <boost/config.hpp>
 
-#if BOOST_VERSION >= 104000
+#if BOOST_VERSION >= 105600
+# include <boost/core/scoped_enum.hpp>
+#elif BOOST_VERSION >= 104000
 # include <boost/detail/scoped_enum_emulation.hpp>
 #else
 # if !defined(BOOST_NO_CXX11_SCOPED_ENUMS)

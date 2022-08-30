@@ -15,13 +15,17 @@
 
 #include <boost/preprocessor/repetition/repeat_from_to.hpp>
 #include <boost/preprocessor/arithmetic/inc.hpp>
-#include <boost/spirit/include/phoenix_core.hpp>
 #include <boost/spirit/home/support/assert_msg.hpp>
 #include <boost/spirit/home/support/limits.hpp>
 #include <boost/fusion/include/at.hpp>
 #include <boost/fusion/include/size.hpp>
 #include <boost/mpl/size.hpp>
 #include <boost/mpl/at.hpp>
+#include <boost/phoenix/core/actor.hpp>
+#include <boost/phoenix/core/argument.hpp>
+#include <boost/phoenix/core/terminal.hpp>
+#include <boost/phoenix/core/v2_eval.hpp>
+#include <boost/proto/proto_fwd.hpp> // for transform placeholders
 
 #ifndef BOOST_SPIRIT_NO_PREDEFINED_TERMINALS
 

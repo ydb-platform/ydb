@@ -11,10 +11,15 @@
 #pragma once
 #endif
 
-#include <boost/spirit/include/phoenix_core.hpp>
-#include <boost/proto/proto.hpp>
 #include <boost/spirit/home/support/modify.hpp>
 #include <boost/spirit/home/support/detail/is_spirit_tag.hpp>
+#include <boost/proto/traits.hpp>
+
+namespace boost { namespace phoenix
+{
+    template <typename Expr>
+    struct actor;
+}}
 
 namespace boost { namespace spirit
 {

@@ -4,8 +4,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_OMIT_MARCH_24_2007_0802AM)
-#define SPIRIT_OMIT_MARCH_24_2007_0802AM
+#ifndef BOOST_SPIRIT_QI_DIRECTIVE_OMIT_HPP
+#define BOOST_SPIRIT_QI_DIRECTIVE_OMIT_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -71,7 +71,7 @@ namespace boost { namespace spirit { namespace qi
         Subject subject;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(omit_directive& operator= (omit_directive const&));
+        BOOST_DELETED_FUNCTION(omit_directive& operator= (omit_directive const&))
         omit_directive(const omit_directive&) = default;
     };
 

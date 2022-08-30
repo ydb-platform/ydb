@@ -191,7 +191,7 @@ namespace boost { namespace spirit { namespace karma { namespace detail
        // wchar_t is only 16-bits on Windows. If BOOST_SPIRIT_UNICODE is
        // defined, the character type is 32-bits wide so we need to make
        // sure the buffer is at least that wide.
-#if defined(BOOST_MSVC) && defined(BOOST_SPIRIT_UNICODE)
+#if (defined(_MSC_VER) || defined(__SIZEOF_WCHAR_T__) && __SIZEOF_WCHAR_T__ == 2) && defined(BOOST_SPIRIT_UNICODE)
        typedef spirit::char_encoding::unicode::char_type buffer_char_type;
 #else
        typedef wchar_t buffer_char_type;
@@ -237,9 +237,12 @@ namespace boost { namespace spirit { namespace karma { namespace detail
                 buffer.begin() + (std::min)(buffer.size(), maxwidth);
 
 #if defined(BOOST_MSVC)
-#pragma warning(pop)
+#pragma warning(disable: 4244) // conversion from 'x' to 'y', possible loss of data
 #endif
             std::copy(buffer.begin(), end, sink);
+#if defined(BOOST_MSVC)
+#pragma warning(pop)
+#endif
             return true;
         }
         template <typename RestIterator>
@@ -253,9 +256,12 @@ namespace boost { namespace spirit { namespace karma { namespace detail
                 buffer.begin() + (std::min)(buffer.size(), start_at);
 
 #if defined(BOOST_MSVC)
-#pragma warning(pop)
+#pragma warning(disable: 4244) // conversion from 'x' to 'y', possible loss of data
 #endif
             std::copy(begin, buffer.end(), sink);
+#if defined(BOOST_MSVC)
+#pragma warning(pop)
+#endif
             return true;
         }
 
@@ -383,7 +389,7 @@ namespace boost { namespace spirit { namespace karma { namespace detail
           , output_iterator<OutputIterator, Properties, Derived>
         >::type most_derived_type;
 
-        enum { properties = Properties::value };
+        static const generator_properties::enum_type properties = static_cast<generator_properties::enum_type>(Properties::value);
 
         typedef typename mpl::if_c<
             (properties & generator_properties::tracking) ? true : false

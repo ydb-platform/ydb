@@ -5,8 +5,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_PASS_CONTAINER_JANUARY_06_2009_0802PM)
-#define SPIRIT_PASS_CONTAINER_JANUARY_06_2009_0802PM
+#ifndef BOOST_SPIRIT_QI_DETAIL_PASS_CONTAINER_HPP
+#define BOOST_SPIRIT_QI_DETAIL_PASS_CONTAINER_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -355,7 +355,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         Attr& attr;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(pass_container& operator= (pass_container const&));
+        BOOST_DELETED_FUNCTION(pass_container& operator= (pass_container const&))
         pass_container(const pass_container&) = default;
     };
 

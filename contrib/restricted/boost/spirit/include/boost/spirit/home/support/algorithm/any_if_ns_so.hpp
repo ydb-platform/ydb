@@ -12,6 +12,7 @@
 #pragma once
 #endif
 
+#include <boost/spirit/home/support/algorithm/any_if.hpp>
 #include <boost/spirit/home/support/algorithm/any_ns_so.hpp>
 
 namespace boost { namespace spirit
@@ -47,7 +48,10 @@ namespace boost { namespace spirit
         any_if_ns_so(First1 const& first1, First2 const& first2
           , Last1 const& last1, Last2 const& last2, F& f, mpl::false_)
         {
-            bool head = f(*first1, spirit::detail::attribute_value<Pred, First1, Last2>(first2));
+            typename result_of::attribute_value<First1, First2, Last2, Pred>::type
+                attribute = spirit::detail::attribute_value<Pred, First1, Last2>(first2);
+
+            bool head = f(*first1, attribute);
             bool tail =
                 detail::any_if_ns_so<Pred>(
                     fusion::next(first1)

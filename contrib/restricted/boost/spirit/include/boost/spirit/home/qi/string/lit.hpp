@@ -119,7 +119,7 @@ namespace boost { namespace spirit { namespace qi
         String str;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(literal_string& operator= (literal_string const&));
+        BOOST_DELETED_FUNCTION(literal_string& operator= (literal_string const&))
         literal_string(const literal_string&) = default;
     };
 
@@ -138,7 +138,7 @@ namespace boost { namespace spirit { namespace qi
           , str_hi(in)
         {
 #if BOOST_WORKAROUND(BOOST_MSVC, BOOST_TESTED_AT(1600))
-            encoding; // suppresses warning: C4100: 'encoding' : unreferenced formal parameter
+            (void)encoding; // suppresses warning: C4100: 'encoding' : unreferenced formal parameter
 #endif
             typename string_type::iterator loi = str_lo.begin();
             typename string_type::iterator hii = str_hi.begin();

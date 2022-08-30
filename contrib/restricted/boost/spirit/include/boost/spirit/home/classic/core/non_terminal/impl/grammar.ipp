@@ -170,7 +170,7 @@ struct grammar_definition
         }
 
         int
-        undefine(grammar_t* target_grammar)
+        undefine(grammar_t* target_grammar) BOOST_OVERRIDE
         {
             typename grammar_t::object_id id = target_grammar->get_object_id();
 

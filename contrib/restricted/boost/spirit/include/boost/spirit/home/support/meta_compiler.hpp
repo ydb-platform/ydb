@@ -13,16 +13,17 @@
 #endif
 
 #include <boost/config.hpp>
-#include <boost/spirit/include/phoenix_limits.hpp>
 #include <boost/detail/workaround.hpp>
-#include <boost/spirit/include/phoenix_limits.hpp>      // needs to be included before proto
-#include <boost/proto/proto.hpp>
 #include <boost/spirit/home/support/make_component.hpp>
 #include <boost/spirit/home/support/modify.hpp>
 #include <boost/spirit/home/support/detail/make_cons.hpp>
 #include <boost/spirit/home/support/unused.hpp>
 #include <boost/spirit/home/support/assert_msg.hpp>
-#include <boost/utility/enable_if.hpp>
+#include <boost/core/enable_if.hpp>
+#include <boost/proto/matches.hpp>
+#include <boost/proto/tags.hpp>
+#include <boost/proto/traits.hpp>
+#include <boost/proto/proto_fwd.hpp> // for transform placeholders
 #include <boost/type_traits/remove_reference.hpp>
 
 namespace boost { namespace spirit

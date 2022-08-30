@@ -15,14 +15,14 @@
 
 #include <boost/spirit/home/support/unused.hpp>
 #include <boost/spirit/home/support/attributes_fwd.hpp>
-#include <boost/detail/iterator.hpp> // for boost::detail::iterator_traits
 #include <boost/mpl/has_xxx.hpp>
 #include <boost/mpl/bool.hpp>
 #include <boost/optional.hpp>
 #include <boost/variant.hpp>
 #include <boost/preprocessor/cat.hpp>
 #include <boost/preprocessor/repeat.hpp>
-#include <boost/range/iterator_range.hpp>
+#include <boost/range/range_fwd.hpp>
+#include <iterator> // for std::iterator_traits
 
 namespace boost { namespace spirit { namespace traits
 {
@@ -207,8 +207,7 @@ namespace boost { namespace spirit { namespace traits
     template <typename Iterator>
     struct container_iterator<iterator_range<Iterator> >
     {
-        typedef typename range_const_iterator<
-              iterator_range<Iterator> >::type type;
+        typedef Iterator type;
     };
 
     template <>
@@ -465,7 +464,7 @@ namespace boost { namespace spirit { namespace traits
     template <typename Iterator, typename Enable/* = void*/>
     struct deref_iterator
     {
-        typedef typename boost::detail::iterator_traits<Iterator>::reference type;
+        typedef typename std::iterator_traits<Iterator>::reference type;
         static type call(Iterator& it)
         {
             return *it;

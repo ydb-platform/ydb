@@ -4,8 +4,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_ALTERNATIVE_FUNCTION_APRIL_23_2007_1046AM)
-#define SPIRIT_ALTERNATIVE_FUNCTION_APRIL_23_2007_1046AM
+#ifndef BOOST_SPIRIT_QI_DETAIL_ALTERNATIVE_FUNCTION_HPP
+#define BOOST_SPIRIT_QI_DETAIL_ALTERNATIVE_FUNCTION_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -20,24 +20,22 @@
 
 namespace boost { namespace spirit { namespace qi { namespace detail
 {
-    template <typename Variant, typename Expected>
+    template <typename Variant, typename T>
     struct find_substitute
     {
-        // Get the type from the variant that can be a substitute for Expected.
-        // If none is found, just return Expected
+        // Get the type from the Variant that can be a substitute for T.
+        // If none is found, just return T
 
         typedef Variant variant_type;
         typedef typename variant_type::types types;
         typedef typename mpl::end<types>::type end;
 
-        typedef typename
-            mpl::find_if<types, is_same<mpl::_1, Expected> >::type
-        iter_1;
+        typedef typename mpl::find<types, T>::type iter_1;
 
         typedef typename
             mpl::eval_if<
                 is_same<iter_1, end>,
-                mpl::find_if<types, traits::is_substitute<mpl::_1, Expected> >,
+                mpl::find_if<types, traits::is_substitute<T, mpl::_1> >,
                 mpl::identity<iter_1>
             >::type
         iter;
@@ -45,7 +43,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         typedef typename
             mpl::eval_if<
                 is_same<iter, end>,
-                mpl::identity<Expected>,
+                mpl::identity<T>,
                 mpl::deref<iter>
             >::type
         type;
@@ -177,7 +175,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         Attribute& attr;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&));
+        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&))
         alternative_function(const alternative_function&) = default;
     };
 
@@ -205,7 +203,7 @@ namespace boost { namespace spirit { namespace qi { namespace detail
         Skipper const& skipper;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&));
+        BOOST_DELETED_FUNCTION(alternative_function& operator= (alternative_function const&))
         alternative_function(const alternative_function&) = default;
     };
 

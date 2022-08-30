@@ -10,7 +10,7 @@
 #pragma once
 #endif
 
-#include <boost/spirit/include/phoenix_core.hpp>
+#include <boost/phoenix/core/limits.hpp>
 
 #if !defined(SPIRIT_ARGUMENTS_LIMIT)
 # define SPIRIT_ARGUMENTS_LIMIT BOOST_PHOENIX_LIMIT

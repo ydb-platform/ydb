@@ -14,7 +14,6 @@
 #endif
 
 #include <boost/preprocessor/repetition/repeat_from_to.hpp>
-#include <boost/spirit/include/phoenix_core.hpp>
 #include <boost/spirit/home/support/nonterminal/expand_arg.hpp>
 #include <boost/spirit/home/support/assert_msg.hpp>
 #include <boost/spirit/home/support/argument.hpp>
@@ -25,6 +24,10 @@
 #include <boost/fusion/include/transform.hpp>
 #include <boost/mpl/size.hpp>
 #include <boost/mpl/at.hpp>
+#include <boost/phoenix/core/actor.hpp>
+#include <boost/phoenix/core/terminal.hpp>
+#include <boost/phoenix/core/v2_eval.hpp>
+#include <boost/proto/proto_fwd.hpp> // for transform placeholders
 
 ///////////////////////////////////////////////////////////////////////////////
 #ifndef BOOST_SPIRIT_NO_PREDEFINED_TERMINALS

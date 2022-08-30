@@ -12,10 +12,13 @@
 #pragma once
 #endif
 
-#include <boost/spirit/include/phoenix_core.hpp>
-#include <boost/proto/proto.hpp>
 #include <boost/spirit/home/support/detail/make_cons.hpp>
 #include <boost/spirit/home/support/modify.hpp>
+#include <boost/phoenix/core/actor.hpp>
+#include <boost/phoenix/core/is_actor.hpp>
+#include <boost/proto/tags.hpp>
+#include <boost/proto/traits.hpp>
+#include <boost/proto/transform.hpp>
 
 namespace boost { namespace spirit
 {

@@ -5,8 +5,8 @@
   Distributed under the Boost Software License, Version 1.0. (See accompanying
   file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#ifndef PHOENIX_BINDERS_HPP
-#define PHOENIX_BINDERS_HPP
+#ifndef BOOST_SPIRIT_CLASSIC_PHOENIX_BINDERS_HPP
+#define BOOST_SPIRIT_CLASSIC_PHOENIX_BINDERS_HPP
 
 ///////////////////////////////////////////////////////////////////////////////
 #include <boost/spirit/home/classic/phoenix/functions.hpp>
@@ -20,7 +20,7 @@ namespace phoenix {
 //
 //  Binders
 //
-//      There are times when it is desireable to bind a simple functor,
+//      There are times when it is desirable to bind a simple functor,
 //      function, member function or member variable for deferred
 //      evaluation. This can be done through the binding facilities
 //      provided below. There are template classes:
@@ -170,7 +170,7 @@ namespace phoenix {
 template <typename FuncT>
 struct functor_action : public FuncT {
 
-#if !defined(__BORLANDC__) && (!defined(__MWERKS__) || (__MWERKS__ > 0x3002))
+#if !defined(BOOST_BORLANDC) && (!defined(__MWERKS__) || (__MWERKS__ > 0x3002))
 
     template <
             typename A = nil_t
@@ -209,7 +209,7 @@ struct functor_action : public FuncT {
     :   FuncT(fptr_) {}
 };
 
-#if defined(__BORLANDC__) || (defined(__MWERKS__) && (__MWERKS__ <= 0x3002))
+#if defined(BOOST_BORLANDC) || (defined(__MWERKS__) && (__MWERKS__ <= 0x3002))
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -2661,7 +2661,7 @@ struct bound_member
     bound_member(CT & c, FPT fp)
     :   function<action_t>(action_t(c,fp)) {}
 
-#if !defined(__BORLANDC__)
+#if !defined(BOOST_BORLANDC)
     template <typename CT, typename FPT>
     bound_member(CT * c, FPT fp)
     :   function<action_t>(action_t(c,fp)) {}

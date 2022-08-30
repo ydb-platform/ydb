@@ -15,8 +15,11 @@
 #include <cwctype>
 #include <string>
 
+#include <boost/assert.hpp>
 #include <boost/cstdint.hpp>
 #include <boost/spirit/home/support/assert_msg.hpp>
+
+#include <boost/type_traits/make_unsigned.hpp>
 
 namespace boost { namespace spirit { namespace traits
 {
@@ -42,6 +45,7 @@ namespace boost { namespace spirit { namespace char_encoding
     struct standard_wide
     {
         typedef wchar_t char_type;
+        typedef wchar_t classify_type;
 
         template <typename Char>
         static typename std::char_traits<Char>::int_type
@@ -60,92 +64,92 @@ namespace boost { namespace spirit { namespace char_encoding
         static bool
         ischar(int ch)
         {
-            // we have to watch out for sign extensions (casting is there to 
+            // we have to watch out for sign extensions (casting is there to
             // silence certain compilers complaining about signed/unsigned
             // mismatch)
             return (
-                std::size_t(0) == 
-                    std::size_t(ch & ~traits::wchar_t_size<sizeof(wchar_t)>::mask) || 
-                std::size_t(~0) == 
+                std::size_t(0) ==
+                    std::size_t(ch & ~traits::wchar_t_size<sizeof(wchar_t)>::mask) ||
+                std::size_t(~0) ==
                     std::size_t(ch | traits::wchar_t_size<sizeof(wchar_t)>::mask)
-            ) ? true : false;     // any wchar_t, but no other bits set
+            ) != 0;     // any wchar_t, but no other bits set
         }
 
         static bool
         isalnum(wchar_t ch)
         {
             using namespace std;
-            return iswalnum(to_int_type(ch)) ? true : false;
+            return iswalnum(to_int_type(ch)) != 0;
         }
 
         static bool
         isalpha(wchar_t ch)
         {
             using namespace std;
-            return iswalpha(to_int_type(ch)) ? true : false;
+            return iswalpha(to_int_type(ch)) != 0;
         }
 
         static bool
         iscntrl(wchar_t ch)
         {
             using namespace std;
-            return iswcntrl(to_int_type(ch)) ? true : false;
+            return iswcntrl(to_int_type(ch)) != 0;
         }
 
         static bool
         isdigit(wchar_t ch)
         {
             using namespace std;
-            return iswdigit(to_int_type(ch)) ? true : false;
+            return iswdigit(to_int_type(ch)) != 0;
         }
 
         static bool
         isgraph(wchar_t ch)
         {
             using namespace std;
-            return iswgraph(to_int_type(ch)) ? true : false;
+            return iswgraph(to_int_type(ch)) != 0;
         }
 
         static bool
         islower(wchar_t ch)
         {
             using namespace std;
-            return iswlower(to_int_type(ch)) ? true : false;
+            return iswlower(to_int_type(ch)) != 0;
         }
 
         static bool
         isprint(wchar_t ch)
         {
             using namespace std;
-            return iswprint(to_int_type(ch)) ? true : false;
+            return iswprint(to_int_type(ch)) != 0;
         }
 
         static bool
         ispunct(wchar_t ch)
         {
             using namespace std;
-            return iswpunct(to_int_type(ch)) ? true : false;
+            return iswpunct(to_int_type(ch)) != 0;
         }
 
         static bool
         isspace(wchar_t ch)
         {
             using namespace std;
-            return iswspace(to_int_type(ch)) ? true : false;
+            return iswspace(to_int_type(ch)) != 0;
         }
 
         static bool
         isupper(wchar_t ch)
         {
             using namespace std;
-            return iswupper(to_int_type(ch)) ? true : false;
+            return iswupper(to_int_type(ch)) != 0;
         }
 
         static bool
         isxdigit(wchar_t ch)
         {
             using namespace std;
-            return iswxdigit(to_int_type(ch)) ? true : false;
+            return iswxdigit(to_int_type(ch)) != 0;
         }
 
         static bool
@@ -175,12 +179,11 @@ namespace boost { namespace spirit { namespace char_encoding
         }
 
         static ::boost::uint32_t
-        toucs4(int ch)
+        toucs4(wchar_t ch)
         {
-            return ch;
+            return static_cast<make_unsigned<wchar_t>::type>(ch);
         }
     };
 }}}
 
 #endif
-

@@ -6,8 +6,8 @@
   Distributed under the Boost Software License, Version 1.0. (See accompanying
   file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 ==============================================================================*/
-#ifndef CLASSIC_PHOENIX_CLOSURES_HPP
-#define CLASSIC_PHOENIX_CLOSURES_HPP
+#ifndef BOOST_SPIRIT_CLASSIC_PHOENIX_CLOSURES_HPP
+#define BOOST_SPIRIT_CLASSIC_PHOENIX_CLOSURES_HPP
 
 ///////////////////////////////////////////////////////////////////////////////
 #include <boost/spirit/home/classic/phoenix/actor.hpp>
@@ -119,7 +119,7 @@ namespace phoenix {
 //      where 'clos' is an instance of our closure 'my_closure' above.
 //      Take note that the usage above precludes locally declared
 //      classes. If my_closure is a locally declared type, we can still
-//      use its self_type as a paramater to closure_frame:
+//      use its self_type as a parameter to closure_frame:
 //
 //          closure_frame<my_closure::self_type> frame(clos);
 //
@@ -271,7 +271,8 @@ public:
     {
         using namespace std;
         BOOST_ASSERT(frame.get() != 0);
-        return (*frame.get())[tuple_index<N>()];
+        tuple_index<N> const idx;
+        return (*frame.get())[idx];
     }
 
 private:

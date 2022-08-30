@@ -22,8 +22,13 @@
 #endif
 
 
-#include <boost/spirit/include/phoenix_core.hpp>
 #include <boost/spirit/home/support/attributes.hpp>
+
+namespace boost { namespace phoenix
+{
+    template <typename Expr>
+    struct actor;
+}}
 
 namespace boost { namespace spirit { namespace traits
 {

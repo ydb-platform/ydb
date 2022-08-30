@@ -19,9 +19,10 @@
 #include <boost/spirit/home/support/unused.hpp>
 #include <boost/spirit/home/support/numeric_traits.hpp>
 #include <boost/spirit/home/support/detail/pow10.hpp>
-#include <boost/spirit/home/support/detail/sign.hpp>
 #include <boost/spirit/home/karma/detail/generate_to.hpp>
 #include <boost/spirit/home/karma/detail/string_generate.hpp>
+
+#include <boost/core/cmath.hpp>
 
 ///////////////////////////////////////////////////////////////////////////////
 //
@@ -68,7 +69,11 @@ namespace boost { namespace spirit { namespace traits
             typedef unsignedtype type;                                        \
             static type call(signedtype n)                                    \
             {                                                                 \
-                return static_cast<unsignedtype>((n >= 0) ? n : -n);          \
+                /* implementation is well-defined for one's complement, */    \
+                /* two's complement, and signed magnitude architectures */    \
+                /* by the C++ Standard. [conv.integral] [expr.unary.op] */    \
+                return (n >= 0) ?  static_cast<type>(n)                       \
+                                : -static_cast<type>(n);                      \
             }                                                                 \
         }                                                                     \
     /**/
@@ -84,6 +89,11 @@ namespace boost { namespace spirit { namespace traits
         }                                                                     \
     /**/
 
+#if defined(BOOST_MSVC)
+# pragma warning(push)
+// unary minus operator applied to unsigned type, result still unsigned
+# pragma warning(disable: 4146)
+#endif
     BOOST_SPIRIT_ABSOLUTE_VALUE(signed char, unsigned char);
     BOOST_SPIRIT_ABSOLUTE_VALUE(char, unsigned char);
     BOOST_SPIRIT_ABSOLUTE_VALUE(short, unsigned short);
@@ -97,6 +107,9 @@ namespace boost { namespace spirit { namespace traits
     BOOST_SPIRIT_ABSOLUTE_VALUE(boost::long_long_type, boost::ulong_long_type);
     BOOST_SPIRIT_ABSOLUTE_VALUE_UNSIGNED(boost::ulong_long_type);
 #endif
+#if defined(BOOST_MSVC)
+# pragma warning(pop)
+#endif
 
 #undef BOOST_SPIRIT_ABSOLUTE_VALUE
 #undef BOOST_SPIRIT_ABSOLUTE_VALUE_UNSIGNED
@@ -107,7 +120,7 @@ namespace boost { namespace spirit { namespace traits
         typedef float type;
         static type call(float n)
         {
-            return (spirit::detail::signbit)(n) ? -n : n;
+            return (std::fabs)(n);
         }
     };
 
@@ -117,7 +130,7 @@ namespace boost { namespace spirit { namespace traits
         typedef double type;
         static type call(double n)
         {
-            return (spirit::detail::signbit)(n) ? -n : n;
+            return (std::fabs)(n);
         }
     };
 
@@ -127,7 +140,7 @@ namespace boost { namespace spirit { namespace traits
         typedef long double type;
         static type call(long double n)
         {
-            return (spirit::detail::signbit)(n) ? -n : n;
+            return (std::fabs)(n);
         }
     };
 
@@ -164,7 +177,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(float n)
         {
-            return (spirit::detail::signbit)(n) ? true : false;
+            return (core::signbit)(n) ? true : false;
         }
     };
 
@@ -173,7 +186,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(double n)
         {
-            return (spirit::detail::signbit)(n) ? true : false;
+            return (core::signbit)(n) ? true : false;
         }
     };
 
@@ -182,7 +195,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(long double n)
         {
-            return (spirit::detail::signbit)(n) ? true : false;
+            return (core::signbit)(n) ? true : false;
         }
     };
 
@@ -207,7 +220,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(float n)
         {
-            return (math::fpclassify)(n) == FP_ZERO;
+            return (core::fpclassify)(n) == core::fp_zero;
         }
     };
 
@@ -216,7 +229,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(double n)
         {
-            return (math::fpclassify)(n) == FP_ZERO;
+            return (core::fpclassify)(n) == core::fp_zero;
         }
     };
 
@@ -225,7 +238,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(long double n)
         {
-            return (math::fpclassify)(n) == FP_ZERO;
+            return (core::fpclassify)(n) == core::fp_zero;
         }
     };
 
@@ -251,7 +264,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(float n)
         {
-            return (math::fpclassify)(n) == FP_NAN;
+            return (core::fpclassify)(n) == core::fp_nan;
         }
     };
 
@@ -260,7 +273,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(double n)
         {
-            return (math::fpclassify)(n) == FP_NAN;
+            return (core::fpclassify)(n) == core::fp_nan;
         }
     };
 
@@ -269,7 +282,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(long double n)
         {
-            return (math::fpclassify)(n) == FP_NAN;
+            return (core::fpclassify)(n) == core::fp_nan;
         }
     };
 
@@ -285,9 +298,8 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(T n)
         {
-            if (!std::numeric_limits<T>::has_infinity)
-                return false;
-            return (n == std::numeric_limits<T>::infinity()) ? true : false;
+            return std::numeric_limits<T>::has_infinity
+                && n == std::numeric_limits<T>::infinity();
         }
     };
 
@@ -296,7 +308,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(float n)
         {
-            return (math::fpclassify)(n) == FP_INFINITE;
+            return (core::fpclassify)(n) == core::fp_infinite;
         }
     };
 
@@ -305,7 +317,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(double n)
         {
-            return (math::fpclassify)(n) == FP_INFINITE;
+            return (core::fpclassify)(n) == core::fp_infinite;
         }
     };
 
@@ -314,7 +326,7 @@ namespace boost { namespace spirit { namespace traits
     {
         static bool call(long double n)
         {
-            return (math::fpclassify)(n) == FP_INFINITE;
+            return (core::fpclassify)(n) == core::fp_infinite;
         }
     };
 
@@ -562,12 +574,12 @@ namespace boost { namespace spirit { namespace karma
     ///////////////////////////////////////////////////////////////////////////
 #define BOOST_KARMA_NUMERICS_INNER_LOOP_PREFIX(z, x, data)                    \
         if (!traits::test_zero(n)) {                                          \
-            int ch = radix_type::call(remainder_type::call(n));               \
+            int ch_##x = radix_type::call(remainder_type::call(n));           \
             n = divide_type::call(n, num, ++exp);                             \
     /**/
 
-#define BOOST_KARMA_NUMERICS_INNER_LOOP_SUFFIX(z, x, data)                    \
-            *sink = char(ch);                                                 \
+#define BOOST_KARMA_NUMERICS_INNER_LOOP_SUFFIX(z, x, n_rolls_sub1)            \
+            *sink = char(BOOST_PP_CAT(ch_, BOOST_PP_SUB(n_rolls_sub1, x)));   \
             ++sink;                                                           \
         }                                                                     \
     /**/
@@ -598,7 +610,8 @@ namespace boost { namespace spirit { namespace karma
 
             BOOST_PP_REPEAT(
                 BOOST_KARMA_NUMERICS_LOOP_UNROLL,
-                BOOST_KARMA_NUMERICS_INNER_LOOP_SUFFIX, _);
+                BOOST_KARMA_NUMERICS_INNER_LOOP_SUFFIX,
+                BOOST_PP_DEC(BOOST_KARMA_NUMERICS_LOOP_UNROLL));
 
             *sink = char(ch);
             ++sink;

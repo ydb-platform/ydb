@@ -5,8 +5,8 @@
     Distributed under the Boost Software License, Version 1.0. (See accompanying
     file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
 =============================================================================*/
-#if !defined(SPIRIT_REPEAT_NOVEMBER_14_2008_1148AM)
-#define SPIRIT_REPEAT_NOVEMBER_14_2008_1148AM
+#ifndef BOOST_SPIRIT_QI_DIRECTIVE_REPEAT_HPP
+#define BOOST_SPIRIT_QI_DIRECTIVE_REPEAT_HPP
 
 #if defined(_MSC_VER)
 #pragma once
@@ -92,7 +92,7 @@ namespace boost { namespace spirit { namespace qi
         T const exact;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(exact_iterator& operator= (exact_iterator const&));
+        BOOST_DELETED_FUNCTION(exact_iterator& operator= (exact_iterator const&))
         exact_iterator(const exact_iterator&) = default;
     };
 
@@ -112,7 +112,7 @@ namespace boost { namespace spirit { namespace qi
         T const max;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(finite_iterator& operator= (finite_iterator const&));
+        BOOST_DELETED_FUNCTION(finite_iterator& operator= (finite_iterator const&))
         finite_iterator(const finite_iterator&) = default;
     };
 
@@ -130,7 +130,7 @@ namespace boost { namespace spirit { namespace qi
         T const min;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(infinite_iterator& operator= (infinite_iterator const&));
+        BOOST_DELETED_FUNCTION(infinite_iterator& operator= (infinite_iterator const&))
     };
 
     template <typename Subject, typename LoopIter>
@@ -209,7 +209,7 @@ namespace boost { namespace spirit { namespace qi
         LoopIter iter;
 
         // silence MSVC warning C4512: assignment operator could not be generated
-        BOOST_DELETED_FUNCTION(repeat_parser& operator= (repeat_parser const&));
+        BOOST_DELETED_FUNCTION(repeat_parser& operator= (repeat_parser const&))
         repeat_parser(const repeat_parser&) = default;
     };
 

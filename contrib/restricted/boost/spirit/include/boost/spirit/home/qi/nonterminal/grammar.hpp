@@ -19,6 +19,8 @@
 #include <boost/spirit/home/qi/nonterminal/nonterminal_fwd.hpp>
 #include <boost/spirit/home/qi/reference.hpp>
 #include <boost/noncopyable.hpp>
+#include <boost/proto/extends.hpp>
+#include <boost/proto/traits.hpp>
 #include <boost/type_traits/is_same.hpp>
 
 namespace boost { namespace spirit { namespace qi

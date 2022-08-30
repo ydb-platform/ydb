@@ -20,7 +20,6 @@
 #include <boost/spirit/home/classic/namespace.hpp>
 #include <boost/spirit/home/classic/core/assert.hpp> // for BOOST_SPIRIT_ASSERT
 #include <boost/spirit/home/classic/iterator/fixed_size_queue.hpp>
-#include <boost/detail/iterator.hpp> // for boost::detail::iterator_traits
 
 #include <boost/spirit/home/classic/iterator/multi_pass_fwd.hpp>
 
@@ -146,15 +145,15 @@ class first_owner
 // thrown by buf_id_check CheckingPolicy if an instance of an iterator is
 // used after another one has invalidated the queue
 ///////////////////////////////////////////////////////////////////////////////
-class illegal_backtracking : public std::exception
+class BOOST_SYMBOL_VISIBLE illegal_backtracking : public std::exception
 {
 public:
 
     illegal_backtracking() BOOST_NOEXCEPT_OR_NOTHROW {}
-    ~illegal_backtracking() BOOST_NOEXCEPT_OR_NOTHROW {}
+    ~illegal_backtracking() BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE {}
 
-    virtual const char*
-    what() const BOOST_NOEXCEPT_OR_NOTHROW
+    const char*
+    what() const BOOST_NOEXCEPT_OR_NOTHROW BOOST_OVERRIDE
     { return "BOOST_SPIRIT_CLASSIC_NS::illegal_backtracking"; }
 };
 
@@ -164,7 +163,7 @@ public:
 // This policy is most effective when used together with the std_deque
 // StoragePolicy.
 // If used with the fixed_size_queue StoragePolicy, it will not detect
-// iterator derefereces that are out of the range of the queue.
+// iterator dereferences that are out of the range of the queue.
 ///////////////////////////////////////////////////////////////////////////////
 class buf_id_check
 {
@@ -491,7 +490,7 @@ class inner
 {
     private:
         typedef
-            typename boost::detail::iterator_traits<InputT>::value_type
+            typename std::iterator_traits<InputT>::value_type
             result_type;
 
     public:
@@ -516,13 +515,13 @@ class inner
 
     public:
         typedef
-            typename boost::detail::iterator_traits<InputT>::difference_type
+            typename std::iterator_traits<InputT>::difference_type
             difference_type;
         typedef
-            typename boost::detail::iterator_traits<InputT>::pointer
+            typename std::iterator_traits<InputT>::pointer
             pointer;
         typedef
-            typename boost::detail::iterator_traits<InputT>::reference
+            typename std::iterator_traits<InputT>::reference
             reference;
 
     protected:
@@ -550,7 +549,7 @@ class inner
         }
 
         typedef
-            typename boost::detail::iterator_traits<InputT>::value_type
+            typename std::iterator_traits<InputT>::value_type
             value_t;
         void swap(inner& x)
         {
@@ -1297,5 +1296,3 @@ BOOST_SPIRIT_CLASSIC_NAMESPACE_END
 }} // namespace BOOST_SPIRIT_CLASSIC_NS
 
 #endif // BOOST_SPIRIT_ITERATOR_MULTI_PASS_HPP
-
-

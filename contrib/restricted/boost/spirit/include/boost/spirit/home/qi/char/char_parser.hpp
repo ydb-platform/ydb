@@ -18,6 +18,8 @@
 #include <boost/spirit/home/qi/skip_over.hpp>
 #include <boost/spirit/home/support/unused.hpp>
 #include <boost/spirit/home/support/info.hpp>
+#include <boost/proto/operators.hpp>
+#include <boost/proto/tags.hpp>
 
 namespace boost { namespace spirit
 {

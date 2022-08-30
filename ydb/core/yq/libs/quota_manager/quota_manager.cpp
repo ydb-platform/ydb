@@ -50,14 +50,14 @@ struct TQuotaCachedUsage {
     bool SyncInProgress = false;
     bool ChangedAfterSync = false;
     TQuotaCachedUsage() = default;
-    TQuotaCachedUsage(ui64 limit) 
+    TQuotaCachedUsage(ui64 limit)
         : Usage(limit) {}
-    TQuotaCachedUsage(ui64 limit, const TInstant& limitUpdatedAt, ui64 usage, const TInstant& usageUpdatedAt) 
+    TQuotaCachedUsage(ui64 limit, const TInstant& limitUpdatedAt, ui64 usage, const TInstant& usageUpdatedAt)
         : Usage(limit, limitUpdatedAt, usage, usageUpdatedAt) {}
 };
 
 struct TQuotaCache {
-    THashMap<NActors::TActorId /* Sender */, ui64 /* Cookie */> PendingUsageRequests; 
+    THashMap<NActors::TActorId /* Sender */, ui64 /* Cookie */> PendingUsageRequests;
     THashMap<TString /* MetricName */, TQuotaCachedUsage> UsageMap;
     THashSet<TString> PendingUsage;
     THashSet<TString> PendingLimit;
@@ -230,7 +230,7 @@ private:
         }
 
         if (it == subjectMap.end()) {
-            ReadQuota(subjectType, subjectId, 
+            ReadQuota(subjectType, subjectId,
                 [this, ev=ev](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];
@@ -341,7 +341,7 @@ private:
             return;
         }
 
-        auto& cache = it->second;    
+        auto& cache = it->second;
         cache.PendingLimit.erase(metricName);
 
         auto itQ = cache.UsageMap.find(metricName);
@@ -369,7 +369,7 @@ private:
     }
 
     void ReadQuota(const TString& subjectType, const TString& subjectId, TReadQuotaExecuter::TCallback callback) {
-    
+
         TDbExecutable::TPtr executable;
         auto& executer = TReadQuotaExecuter::Create(executable, false, nullptr);
 
@@ -415,7 +415,7 @@ private:
                     cache.UsageMap[itUsage.first].Usage = itUsage.second;
                 }
 
-                // 2. Append from Config 
+                // 2. Append from Config
                 for (const auto& quota : this->Config.GetQuotas()) {
                     if (quota.GetSubjectType() == executer.State.SubjectType && quota.GetSubjectId() == executer.State.SubjectId) {
                         for (const auto& limit : quota.GetLimit()) {
@@ -598,7 +598,7 @@ private:
                             LOG_T(cached.Usage.ToString(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName) << " RESYNC");
                             this->SyncQuota(executer.State.SubjectType, executer.State.SubjectId, executer.State.MetricName, cached);
                         }
-                    }                        
+                    }
                 }
             }
         );
@@ -616,7 +616,7 @@ private:
                 auto& cached = itQ->second;
                 cached.Usage.Merge(usage);
                 LOG_T(cached.Usage.ToString(subjectType, subjectId, metricName) << " MERGED " << reinterpret_cast<ui64>(&cached));
-            }                        
+            }
         }
     }
 
@@ -632,7 +632,7 @@ private:
             return;
         }
 
-        auto& cache = it->second;    
+        auto& cache = it->second;
         cache.PendingUsage.erase(metricName);
 
         auto itQ = cache.UsageMap.find(metricName);
@@ -658,7 +658,7 @@ private:
 
         auto it = subjectMap.find(subjectId);
         if (it == subjectMap.end()) {
-            ReadQuota(subjectType, subjectId, 
+            ReadQuota(subjectType, subjectId,
                 [this, ev=ev](TReadQuotaExecuter& executer) {
                     // This block is executed in correct self-context, no locks/syncs required
                     auto& subjectMap = this->QuotaCacheMap[executer.State.SubjectType];

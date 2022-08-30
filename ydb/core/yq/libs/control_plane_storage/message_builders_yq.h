@@ -1302,4 +1302,60 @@ public:
     }
 };
 
+template <class TEvent, class TMessage>
+class TRateLimiterResourceBuilderImpl {
+    TString Owner;
+    TString QueryId;
+    TString Scope;
+    TString Tenant;
+
+public:
+    TRateLimiterResourceBuilderImpl()
+    {
+        SetOwner(DefaultOwner());
+    }
+
+    static TString DefaultOwner()
+    {
+        return "owner";
+    }
+
+    TRateLimiterResourceBuilderImpl& SetOwner(const TString& owner)
+    {
+        Owner = owner;
+        return *this;
+    }
+
+    TRateLimiterResourceBuilderImpl& SetQueryId(const TString& queryId)
+    {
+        QueryId = queryId;
+        return *this;
+    }
+
+    TRateLimiterResourceBuilderImpl& SetScope(const TString& scope)
+    {
+        Scope = scope;
+        return *this;
+    }
+
+    TRateLimiterResourceBuilderImpl& SetTenant(const TString& tenant)
+    {
+        Tenant = tenant;
+        return *this;
+    }
+
+    std::unique_ptr<TEvent> Build()
+    {
+        TMessage req;
+        req.set_owner_id(Owner);
+        req.mutable_query_id()->set_value(QueryId);
+        req.set_scope(Scope);
+        req.set_tenant(Tenant);
+        return std::make_unique<TEvent>(std::move(req));
+    }
+};
+
+using TCreateRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<TEvControlPlaneStorage::TEvCreateRateLimiterResourceRequest, Fq::Private::CreateRateLimiterResourceRequest>;
+using TDeleteRateLimiterResourceBuilder = TRateLimiterResourceBuilderImpl<TEvControlPlaneStorage::TEvDeleteRateLimiterResourceRequest, Fq::Private::DeleteRateLimiterResourceRequest>;
+
 }

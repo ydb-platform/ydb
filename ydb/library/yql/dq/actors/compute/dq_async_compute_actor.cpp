@@ -316,7 +316,7 @@ private:
         if (TaskRunnerActor) {
             TaskRunnerActor->PassAway();
         }
-        if (UseCpuQuota() && CpuTimeSpent) {
+        if (UseCpuQuota() && CpuTimeSpent.MilliSeconds()) {
             // Send the rest of CPU time that we haven't taken into account
             Send(QuoterServiceActorId,
                 new NKikimr::TEvQuota::TEvRequest(

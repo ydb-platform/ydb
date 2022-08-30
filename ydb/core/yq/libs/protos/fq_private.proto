@@ -194,6 +194,8 @@ message CreateRateLimiterResourceRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string owner_id = 2;
     SignedIdentity query_id = 3;
+    string scope = 4;
+    string tenant = 5;
 }
 
 message CreateRateLimiterResourceResult {
@@ -208,6 +210,8 @@ message DeleteRateLimiterResourceRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     string owner_id = 2;
     SignedIdentity query_id = 3;
+    string scope = 4;
+    string tenant = 5;
 }
 
 message DeleteRateLimiterResourceResult {

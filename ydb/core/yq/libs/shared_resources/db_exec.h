@@ -44,27 +44,27 @@ inline TAsyncStatus Exec(TDbPool::TPtr dbPool, TDbExecutable::TPtr executable) {
 }
 
 /*
- * 1. TDbExecuter must be create like this: 
+ * 1. TDbExecuter must be created like this:
  *
  *    TDbExecutable::TPtr executable;
  *    auto& executer = TDbExecuter<...>::Create(executable);
- * 
+ *
  * 2. Template param is state struct. It's lifecycle matches executer. It's expected to keep all state
  *    between async db calls.
- * 
+ *
  * 3. TDbExecutable::Read adds read operation to DB access pipeline, Write adds write operation (w/o result
- *    processing). All calls are serialized. There is no concurrency issues in access TDbExecutable::State 
+ *    processing). All calls are serialized. There is no concurrency issues in access TDbExecutable::State
  *    from callbacks.
- * 
- * 4. Final callback (passed in TDbExecutable::Process) is expected to be called from AS thread, so actor 
- *    actorId must implement TEvents::TEvCallback handler, f.e.:
- * 
+ *
+ * 4. Final callback (passed in TDbExecutable::Process) is expected to be called from AS thread, so actor
+ *    must implement TEvents::TEvCallback handler, f.e.:
+ *
  *    hFunc(TEvents::TEvCallback, [](TEvents::TEvCallback::TPtr& ev) { ev->Get()->Callback(); } );
- * 
+ *
  *    it is safe to access TDbExecutable::State and actor class members from final callback w/o concurrency
  *    issus as well
- * 
- * 5. All pipeline is retried automatically. If TDbExecutable::State need to be cleaned up from failed run, 
+ *
+ * 5. Whole pipeline is retried automatically. If TDbExecutable::State needs to be cleaned up from failed run,
  *    pass handler as stateInitCallback to TDbExecutable ctor.
  */
 
@@ -81,7 +81,7 @@ private:
         TBuildCallback BuildCallback;
         TResultCallback ResultCallback;
         TCallback ProcessCallback;
-        TString Name; 
+        TString Name;
         bool Commit = false;
     };
     std::vector<TExecStep> Steps;
@@ -92,14 +92,14 @@ private:
     NActors::TActorSystem* ActorSystem = nullptr;
     TCallback HandlerCallback;
     TCallback StateInitCallback;
-    bool skipStep = false;
+    bool SkipStep_ = false;
 
 protected:
-    TDbExecuter(bool collectDebugInfo, std::function<void(TDbExecuter<TState>&)> stateInitCallback) 
+    TDbExecuter(bool collectDebugInfo, std::function<void(TDbExecuter<TState>&)> stateInitCallback)
         : TDbExecutable(collectDebugInfo), StateInitCallback(stateInitCallback) {
     }
 
-    TDbExecuter(bool collectDebugInfo) 
+    TDbExecuter(bool collectDebugInfo)
         : TDbExecutable(collectDebugInfo) {
             StateInitCallback = [](TDbExecuter<TState>& executer) { executer.State = TState{}; };
     }
@@ -123,7 +123,7 @@ public:
     };
 
     void SkipStep() {
-        skipStep = true;
+        SkipStep_ = true;
     }
 
     TAsyncStatus NextStep(NYdb::NTable::TSession session) {
@@ -151,15 +151,15 @@ public:
                     ActorSystem->Send(HandlerActorId, new TEvents::TEvCallback([this, holder=holder, handlerCallback=HandlerCallback]() {
                         handlerCallback(*this);
                     }));
-                }                
+                }
             }
             return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}});
         } else {
             TSqlQueryBuilder builder(DbPool->TablePathPrefix, Steps[CurrentStepIndex].Name);
-            skipStep = false;
+            SkipStep_ = false;
             Steps[CurrentStepIndex].BuildCallback(*this, builder);
 
-            if (skipStep) { // TODO Refactor this
+            if (SkipStep_) { // TODO Refactor this
                 this->CurrentStepIndex++;
                 return this->NextStep(session);
             }
@@ -172,7 +172,7 @@ public:
 
             return session.ExecuteDataQuery(query.Sql, transaction, query.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true))
             .Apply([this, session=session](const TFuture<TDataQueryResult>& future) {
-    
+
                 NYdb::NTable::TDataQueryResult result = future.GetValue();
                 auto status = static_cast<TStatus>(result);
 

@@ -80,11 +80,19 @@ NYql::TIssues ValidateNodesHealthCheck(
     return issues;
 }
 
-NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& owner)
+NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& scope, const TString& tenant, const TString& owner)
 {
     NYql::TIssues issues;
     if (!queryId) {
         issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "query id is not specified"));
+    }
+
+    if (!scope) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "scope is not specified"));
+    }
+
+    if (!tenant) {
+        issues.AddIssue(MakeErrorIssue(TIssuesIds::BAD_REQUEST, "tenant is not specified"));
     }
 
     if (!owner) {

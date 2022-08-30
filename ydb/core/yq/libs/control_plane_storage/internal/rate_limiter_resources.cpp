@@ -43,6 +43,8 @@ struct TEvPrivate {
 template <class TRequest, class TResponse, class TDerived>
 class TRateLimiterRequestActor : public NActors::TActor<TDerived> {
 public:
+    using TResponseEvent = TResponse;
+
     TRateLimiterRequestActor(TInstant startTime, typename TRequest::TPtr&& ev, TRequestCountersPtr requestCounters, TDebugInfoPtr debugInfo)
         : NActors::TActor<TDerived>(&TDerived::StateFunc)
         , Request(std::move(ev))
@@ -276,15 +278,17 @@ void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
 
     auto& request = ev->Get()->Request;
     const TString& queryId = request.query_id().value();
+    const TString& scope = request.scope();
+    const TString& tenant = request.tenant();
     const TString& owner = request.owner_id();
 
     CPS_LOG_T(TRequestActor::RequestTypeName << "Request: {" << request.DebugString() << "}");
 
-    NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(queryId, owner);
+    NYql::TIssues issues = ValidateCreateOrDeleteRateLimiterResource(queryId, scope, tenant, owner);
     if (issues) {
         CPS_LOG_W(TRequestActor::RequestTypeName << "Request: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
-        SendResponseIssues<TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
+        SendResponseIssues<typename TRequestActor::TResponseEvent>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         TRequestActor::LwProbe(queryId, startTime, false);
         return;
     }
@@ -294,14 +298,23 @@ void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
     const NActors::TActorId requestActor = Register(new TRequestActor(startTime, std::move(ev), requestCounters, debugInfo));
 
     TSqlQueryBuilder readQueryBuilder(YdbConnection->TablePathPrefix, TRequestActor::RequestTypeName);
-    readQueryBuilder.AddString("query_id", request.query_id().value());
+    readQueryBuilder.AddString("query_id", queryId);
+    readQueryBuilder.AddString("scope", scope);
+    readQueryBuilder.AddString("tenant", tenant);
     TStringBuilder text;
-    text << "SELECT `" SCOPE_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "` FROM " PENDING_SMALL_TABLE_NAME " WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
-        "SELECT `" INTERNAL_COLUMN_NAME "`";
+    text <<
+    "SELECT `" SCOPE_COLUMN_NAME "`, `" OWNER_COLUMN_NAME "` FROM " PENDING_SMALL_TABLE_NAME
+        " WHERE `" TENANT_COLUMN_NAME "` = $tenant"
+            " AND `" SCOPE_COLUMN_NAME "` = $scope"
+            " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
+
+    "SELECT `" INTERNAL_COLUMN_NAME "`";
     if constexpr (TRequestActor::IsCreateRequest) {
         text << ", `" QUERY_COLUMN_NAME "`";
     }
-    text << " FROM " QUERIES_TABLE_NAME " WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id;\n";
+    text << " FROM " QUERIES_TABLE_NAME
+        " WHERE `" SCOPE_COLUMN_NAME "` = $scope"
+            " AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n";
     readQueryBuilder.AddText(text);
 
     const auto query = readQueryBuilder.Build();

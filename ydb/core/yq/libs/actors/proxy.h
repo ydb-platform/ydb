@@ -94,12 +94,16 @@ NActors::IActor* CreatePingerActor(
 NActors::IActor* CreateRateLimiterResourceCreator(
     const NActors::TActorId& parent,
     const TString& ownerId,
-    const TString& queryId);
+    const TString& queryId,
+    const TScope& scope,
+    const TString& tenant);
 
 NActors::IActor* CreateRateLimiterResourceDeleter(
     const NActors::TActorId& parent,
     const TString& ownerId,
-    const TString& queryId);
+    const TString& queryId,
+    const TScope& scope,
+    const TString& tenant);
 
 TString MakeInternalError(const TString& text);
 

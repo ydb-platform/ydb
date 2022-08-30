@@ -107,22 +107,30 @@ private:
 NActors::IActor* CreateRateLimiterResourceCreator(
     const NActors::TActorId& parent,
     const TString& ownerId,
-    const TString& queryId)
+    const TString& queryId,
+    const TScope& scope,
+    const TString& tenant)
 {
     Fq::Private::CreateRateLimiterResourceRequest req;
     req.set_owner_id(ownerId);
     req.mutable_query_id()->set_value(queryId);
+    req.set_scope(scope.ToString());
+    req.set_tenant(tenant);
     return new TRetryingActor<NFq::TEvInternalService::TEvCreateRateLimiterResourceRequest, NFq::TEvInternalService::TEvCreateRateLimiterResourceResponse>(parent, req);
 }
 
 NActors::IActor* CreateRateLimiterResourceDeleter(
     const NActors::TActorId& parent,
     const TString& ownerId,
-    const TString& queryId)
+    const TString& queryId,
+    const TScope& scope,
+    const TString& tenant)
 {
     Fq::Private::DeleteRateLimiterResourceRequest req;
     req.set_owner_id(ownerId);
     req.mutable_query_id()->set_value(queryId);
+    req.set_scope(scope.ToString());
+    req.set_tenant(tenant);
     return new TRetryingActor<NFq::TEvInternalService::TEvDeleteRateLimiterResourceRequest, NFq::TEvInternalService::TEvDeleteRateLimiterResourceResponse>(parent, req);
 }
 

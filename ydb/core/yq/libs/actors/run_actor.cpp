@@ -1149,7 +1149,7 @@ private:
     bool StartRateLimiterResourceCreatorIfNeeded() {
         if (!RateLimiterResourceWasCreated && !RateLimiterResourceCreatorId && Params.RateLimiterConfig.GetEnabled()) {
             LOG_D("Start rate limiter resource creator");
-            RateLimiterResourceCreatorId = Register(CreateRateLimiterResourceCreator(SelfId(), Params.Owner, Params.QueryId));
+            RateLimiterResourceCreatorId = Register(CreateRateLimiterResourceCreator(SelfId(), Params.Owner, Params.QueryId, Params.Scope, Params.TenantName));
             return true;
         }
         return false;
@@ -1158,7 +1158,7 @@ private:
     bool StartRateLimiterResourceDeleterIfCan() {
         if (!RateLimiterResourceDeleterId && !RateLimiterResourceCreatorId && FinalizingStatusIsWritten && QueryResponseArrived && Params.RateLimiterConfig.GetEnabled()) {
             LOG_D("Start rate limiter resource deleter");
-            RateLimiterResourceDeleterId = Register(CreateRateLimiterResourceDeleter(SelfId(), Params.Owner, Params.QueryId));
+            RateLimiterResourceDeleterId = Register(CreateRateLimiterResourceDeleter(SelfId(), Params.Owner, Params.QueryId, Params.Scope, Params.TenantName));
             return true;
         }
         return false;
@@ -1800,13 +1800,13 @@ private:
                 case YandexQuery::ConnectionSetting::kObjectStorage:
                     html << "OBJECT STORAGE";
                     break;
-                case YandexQuery::ConnectionSetting::kDataStreams: 
+                case YandexQuery::ConnectionSetting::kDataStreams:
                     html << "DATA STREAMS";
                     break;
                 case YandexQuery::ConnectionSetting::kMonitoring:
                     html << "MONITORING";
                     break;
-                default:                    
+                default:
                     html << "UNDEFINED";
                     break;
                 }
@@ -1832,13 +1832,13 @@ private:
                 html << "<td>" << binding.content().name() << "</td>";
                 html << "<td>";
                 switch (binding.content().setting().binding_case()) {
-                case YandexQuery::BindingSetting::kDataStreams: 
+                case YandexQuery::BindingSetting::kDataStreams:
                     html << "DATA STREAMS";
                     break;
                 case YandexQuery::BindingSetting::kObjectStorage:
                     html << "OBJECT STORAGE";
                     break;
-                default:                    
+                default:
                     html << "UNDEFINED";
                     break;
                 }

@@ -29,6 +29,6 @@ NYql::TIssues ValidateNodesHealthCheck(
     const TString& instanceId,
     const TString& hostName);
 
-NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& owner);
+NYql::TIssues ValidateCreateOrDeleteRateLimiterResource(const TString& queryId, const TString& scope, const TString& tenant, const TString& owner);
 
 };

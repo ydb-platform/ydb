@@ -842,9 +842,10 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
     }
 
     switch (Config.GetMeteringMode()) {
-    case NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS:
-        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " metering mode METERING_MODE_SERVERLESS");
+    case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " metering mode METERING_MODE_REQUEST_UNITS");
         whichToFlush = TSet<EMeteringJson>{EMeteringJson::UsedStorageV1};
+        break;
 
     default:
         break;
@@ -1525,7 +1526,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 {
     Y_VERIFY(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
-    if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS) {
+    if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS) {
         MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
     }
 

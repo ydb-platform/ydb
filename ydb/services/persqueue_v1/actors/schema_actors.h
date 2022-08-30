@@ -164,7 +164,7 @@ private:
 
 
 class TAlterTopicActor : public TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>
-                        , public TCdcStreamCompatible
+                       , public TCdcStreamCompatible
 {
     using TBase = TUpdateSchemeActor<TAlterTopicActor, TEvAlterTopicRequest>;
 

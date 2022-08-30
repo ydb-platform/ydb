@@ -627,21 +627,86 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(Metering) {
+    void Metering(bool serverless) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions()
             .EnableProtoSourceIdInfo(true)
-            .EnablePqBilling(true));
+            .EnablePqBilling(serverless));
         ui64 txId = 100;
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        // create shared db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Shared"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            StoragePools {
+              Name: "pool-2"
+              Kind: "pool-kind-2"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // create serverless db
+        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
+            Name: "Serverless"
+            ResourcesDomainKey {
+                SchemeShard: %lu
+                PathId: 2
+            }
+        )", TTestTxConfig::SchemeShard));
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+            Name: "Serverless"
+            StoragePools {
+              Name: "pool-1"
+              Kind: "pool-kind-1"
+            }
+            PlanResolution: 50
+            Coordinators: 1
+            Mediators: 1
+            TimeCastBucketsPerMediator: 2
+            ExternalSchemeShard: true
+            ExternalHive: false
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TString dbName;
+        if (serverless) {
+            dbName = "/MyRoot/Serverless";
+        } else {
+            dbName = "/MyRoot/Shared";
+        }
+
+        ui64 schemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, dbName), {
+            NLs::PathExist,
+            NLs::ExtractTenantSchemeshard(&schemeShard)
+        });
+
+        UNIT_ASSERT(schemeShard != 0 && schemeShard != TTestTxConfig::SchemeShard);
+
+        TestCreateTable(runtime, schemeShard, ++txId, dbName, R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint64" }
             Columns { Name: "value" Type: "Uint64" }
             KeyColumnNames: ["key"]
             UniformPartitionsCount: 2
         )");
-        env.TestWaitNotification(runtime, txId);
+        env.TestWaitNotification(runtime, txId, schemeShard);
 
         runtime.SetLogPriority(NKikimrServices::PERSQUEUE, NLog::PRI_NOTICE);
         TVector<TString> meteringRecords;
@@ -654,7 +719,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
             return TTestActorRuntime::EEventAction::PROCESS;
         });
 
-        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+        TestCreateCdcStream(runtime, schemeShard, ++txId, dbName, R"(
             TableName: "Table"
             StreamDescription {
               Name: "Stream"
@@ -662,15 +727,20 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
               Format: ECdcStreamFormatProto
             }
         )");
-        env.TestWaitNotification(runtime, txId);
+        env.TestWaitNotification(runtime, txId, schemeShard);
 
         for (int i = 0; i < 10; ++i) {
             env.SimulateSleep(runtime, TDuration::Seconds(10));
         }
-        UNIT_ASSERT(meteringRecords.size() == 3);
 
-        for (auto& rec : meteringRecords) {
+        for (const auto& rec : meteringRecords) {
             Cerr << "GOT METERING: " << rec << "\n";
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(meteringRecords.size(), (serverless ? 3 : 0));
+
+        if (!meteringRecords) {
+            return;
         }
 
         NJson::TJsonValue json;
@@ -681,9 +751,16 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT(map.contains("tags"));
         UNIT_ASSERT(map.find("tags")->second.GetMap().contains("ydb_size"));
         UNIT_ASSERT_VALUES_EQUAL(map.find("schema")->second.GetString(), "ydb.serverless.v1");
-        UNIT_ASSERT_VALUES_EQUAL(map.find("resource_id")->second.GetString(), "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(map.find("resource_id")->second.GetString(), Sprintf("%s/Table/Stream/streamImpl", dbName.c_str()));
         UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().find("ydb_size")->second.GetInteger(), 0);
+    }
 
+    Y_UNIT_TEST(MeteringServerless) {
+        Metering(true);
+    }
+
+    Y_UNIT_TEST(MeteringDedicated) {
+        Metering(false);
     }
 
 } // TCdcStreamTests

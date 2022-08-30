@@ -306,8 +306,8 @@ message TPQTabletConfig {
     repeated TPartition Partitions = 31; // filled by schemeshard
 
     enum EMeteringMode {
-        METERING_MODE_YDS = 0;
-        METERING_MODE_SERVERLESS = 1;
+        METERING_MODE_RESERVED_CAPACITY = 0;
+        METERING_MODE_REQUEST_UNITS = 1;
     }
     optional EMeteringMode MeteringMode = 34;
 }

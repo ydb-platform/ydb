@@ -539,6 +539,13 @@ public:
             return result;
         }
 
+        const auto domainPath = TPath::Init(path.GetPathIdForDomain(), context.SS);
+        if (newTabletConfig.HasMeteringMode() && !context.SS->IsServerlessDomain(domainPath)) {
+            errStr = "Metering mode can only be specified for topic in serverless domain";
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
+
         auto getStorageLimit = [](auto &config, ui64 throughput) {
             if (config.GetPartitionConfig().HasStorageLimitBytes()) {
                 return config.GetPartitionConfig().GetStorageLimitBytes();

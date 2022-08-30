@@ -975,6 +975,20 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        switch (request.metering_mode()) {
+            case Ydb::Topic::METERING_MODE_UNSPECIFIED:
+                break; // schemeshard will set the default value if necessary
+            case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
+                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                break;
+            case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
+                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+                break;
+            default:
+                error = "Unknown metering mode";
+                return Ydb::StatusIds::BAD_REQUEST;
+        }
+
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
 
 
@@ -1084,6 +1098,19 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
+        switch (request.set_metering_mode()) {
+            case Ydb::Topic::METERING_MODE_UNSPECIFIED:
+                break; // do not change
+            case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
+                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                break;
+            case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
+                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+                break;
+            default:
+                error = "Unknown metering mode";
+                return Ydb::StatusIds::BAD_REQUEST;
+        }
 
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
 
@@ -1165,6 +1192,7 @@ namespace NKikimr::NGRpcProxy::V1 {
                 return Ydb::StatusIds::BAD_REQUEST;
             }
         }
+
         return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::ALREADY_EXISTS);
     }
 

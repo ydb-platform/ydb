@@ -73,6 +73,10 @@ struct TDomainInfo : public TAtomicRefCount<TDomainInfo> {
         }
     }
 
+    inline bool IsServerless() const {
+        return DomainKey != ResourcesDomainKey;
+    }
+
     TPathId DomainKey;
     TPathId ResourcesDomainKey;
     NKikimrSubDomains::TProcessingParams Params;

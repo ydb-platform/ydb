@@ -517,6 +517,19 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             result.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
         }
 
+        if (response.DomainInfo && response.DomainInfo->IsServerless()) {
+            switch (config.GetMeteringMode()) {
+                case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
+                    result.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
+                    break;
+                case NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS:
+                    result.set_metering_mode(Ydb::Topic::METERING_MODE_REQUEST_UNITS);
+                    break;
+                default:
+                    break;
+            }
+        }
+
         const auto& pqConfig = AppData(ctx)->PQConfig;
         for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
             auto rr = result.add_consumers();

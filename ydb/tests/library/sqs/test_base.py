@@ -723,8 +723,9 @@ class KikimrSqsTestBase(object):
         else:
             self._check_std_queue_is_empty(queue_name, queue_version)
 
-    def _get_table_lines_count(self, table_path):
-        data_result_sets = self._execute_yql_query('SELECT COUNT(*) AS count FROM `{}`;'.format(table_path))
+    def _get_table_lines_count(self, table_path, condition=None):
+        query = 'SELECT COUNT(*) AS count FROM `{}` {};'.format(table_path, condition if condition else '')
+        data_result_sets = self._execute_yql_query(query)
         assert_that(len(data_result_sets), equal_to(1))
         assert_that(len(data_result_sets[0].rows), equal_to(1))
         logging.debug('Received count result for table {}: {}'.format(table_path, data_result_sets[0].rows[0]))
@@ -749,11 +750,15 @@ class KikimrSqsTestBase(object):
         assert_that(get_lines_count('SentTimestampIdx'), equal_to(0))
 
     def _check_fifo_queue_is_empty(self, queue_name, queue_version):
+        tables_format = self.tables_format_per_user.get(self._username, 0)
         def get_table_path(table_name):
             return self._smart_make_table_path(self._username, queue_name, queue_version, None, table_name)
 
         def get_lines_count(table_name):
-            return self._get_table_lines_count(get_table_path(table_name))
+            condition=None
+            if tables_format == 1:
+                condition = f' WHERE QueueIdNumber = {queue_version}'
+            return self._get_table_lines_count(get_table_path(table_name), condition)
 
         assert_that(get_lines_count('Data'), equal_to(0))
         assert_that(get_lines_count('Groups'), equal_to(0))

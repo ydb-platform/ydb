@@ -61,6 +61,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvPrivate::EvTxComplete, HandleTxComplete);
             cFunc(TEvents::TSystem::Poison, PassAway);
 
             default:
@@ -216,7 +217,6 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::ScanDataForCopying() {
-        const bool fromTheBeginning = !LastScannedKey;
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT54, "TAssimilator::ScanDataForCopying", (Id, Self->GetLogId()),
             (LastScannedKey, LastScannedKey));
 
@@ -231,8 +231,16 @@ namespace NKikimr::NBlobDepot {
         };
         std::deque<TScanQueueItem> scanQ;
         ui32 totalSize = 0;
+        THPTimer timer;
+        ui32 numItems = 0;
 
         auto callback = [&](const TData::TKey& key, const TData::TValue& value) {
+            if (++numItems == 1000) {
+                numItems = 0;
+                if (TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
+                    return false;
+                }
+            }
             if (!value.OriginalBlobId) {
                 LastScannedKey.emplace(key.GetBlobId());
                 return true; // keep scanning
@@ -241,7 +249,7 @@ namespace NKikimr::NBlobDepot {
                 LastScannedKey.emplace(key.GetBlobId());
                 scanQ.push_back({.Key = *LastScannedKey, .OriginalBlobId = id});
                 totalSize += id.BlobSize();
-                NeedfulBlobs.insert(id);
+                EntriesToProcess = true;
                 return totalSize < MaxSizeToQuery;
             } else {
                 return false; // a blob belonging to different tablet
@@ -249,7 +257,11 @@ namespace NKikimr::NBlobDepot {
         };
 
         // FIXME: reentrable as it shares mailbox with the BlobDepot tablet itself
-        Self->Data->ScanRange(LastScannedKey ? &lastScannedKey : nullptr, nullptr, {}, callback);
+        const bool finished = Self->Data->ScanRange(LastScannedKey ? &lastScannedKey : nullptr, nullptr, {}, callback);
+
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT56, "ScanDataForCopying done", (Id, Self->GetLogId()),
+            (LastScannedKey, LastScannedKey), (ScanQ.size, scanQ.size()), (EntriesToProcess, EntriesToProcess),
+            (Finished, finished));
 
         if (!scanQ.empty()) {
             using TQuery = TEvBlobStorage::TEvGet::TQuery;
@@ -263,16 +275,44 @@ namespace NKikimr::NBlobDepot {
             auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, sz, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead);
             ev->Decommission = true;
             SendToBSProxy(SelfId(), Self->Config.GetDecommitGroupId(), ev.release());
-        } else if (fromTheBeginning) {
+        } else if (!finished) { // timeout hit, reschedule work
+            TActivationContext::Send(new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
+        } else if (!EntriesToProcess) { // we have finished scanning the whole table without any entries, copying is done
             OnCopyDone();
-        } else {
-            // restart the scan from the beginning and find other keys to copy or finish it
+        } else { // we have finished scanning, but we have replicated some data, restart scanning to ensure that nothing left
             LastScannedKey.reset();
+            EntriesToProcess = false;
             TActivationContext::Send(new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {}, nullptr, 0));
         }
     }
 
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
+        class TTxDropBlobIfNoData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+            const TLogoBlobID Id;
+            const TActorId AssimilatorId;
+
+        public:
+            TTxDropBlobIfNoData(TBlobDepot *self, TLogoBlobID id, TActorId assimilatorId)
+                : TTransactionBase(self)
+                , Id(id)
+                , AssimilatorId(assimilatorId)
+            {}
+
+            bool Execute(TTransactionContext& txc, const TActorContext&) override {
+                const TData::TKey key(Id);
+                if (const TData::TValue *v = Self->Data->FindKey(key); v && v->OriginalBlobId &&
+                        v->KeepState != NKikimrBlobDepot::EKeepState::Keep) {
+                    Self->Data->DeleteKey(key, txc, this);
+                }
+                return true;
+            }
+
+            void Complete(const TActorContext&) override {
+                Self->Data->CommitTrash(this);
+                TActivationContext::Send(new IEventHandle(TEvPrivate::EvTxComplete, 0, AssimilatorId, {}, nullptr, 0));
+            }
+        };
+
         auto& msg = *ev->Get();
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& resp = msg.Responses[i];
@@ -283,9 +323,18 @@ namespace NKikimr::NBlobDepot {
                 ev->Decommission = true;
                 SendToBSProxy(SelfId(), Self->Config.GetDecommitGroupId(), ev.release());
                 ++NumPutsInFlight;
+            } else if (resp.Status == NKikimrProto::NODATA) {
+                Self->Execute(std::make_unique<TTxDropBlobIfNoData>(Self, resp.Id, SelfId()));
+                ++NumPutsInFlight;
             }
         }
         if (!NumPutsInFlight) {
+            Action();
+        }
+    }
+
+    void TAssimilator::HandleTxComplete() {
+        if (!--NumPutsInFlight) {
             Action();
         }
     }
@@ -294,10 +343,6 @@ namespace NKikimr::NBlobDepot {
         auto& msg = *ev->Get();
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg),
             (NumPutsInFlight, NumPutsInFlight));
-        if (msg.Status == NKikimrProto::OK) {
-            const size_t numErased = NeedfulBlobs.erase(msg.Id);
-            Y_VERIFY(numErased == 1);
-        }
         if (!--NumPutsInFlight) {
             IssueCollects();
         }

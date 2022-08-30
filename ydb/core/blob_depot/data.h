@@ -370,7 +370,7 @@ namespace NKikimr::NBlobDepot {
         {}
 
         template<typename TCallback>
-        void ScanRange(const TKey *begin, const TKey *end, TScanFlags flags, TCallback&& callback) {
+        bool ScanRange(const TKey *begin, const TKey *end, TScanFlags flags, TCallback&& callback) {
             auto beginIt = !begin ? Data.begin()
                 : flags & EScanFlags::INCLUDE_BEGIN ? Data.lower_bound(*begin)
                 : Data.upper_bound(*begin);
@@ -385,7 +385,7 @@ namespace NKikimr::NBlobDepot {
                     do {
                         auto& current = *endIt--;
                         if (!callback(current.first, current.second)) {
-                            break;
+                            return false;
                         }
                     } while (beginIt != endIt);
                 }
@@ -393,10 +393,11 @@ namespace NKikimr::NBlobDepot {
                 while (beginIt != endIt) {
                     auto& current = *beginIt++;
                     if (!callback(current.first, current.second)) {
-                        break;
+                        return false;
                     }
                 }
             }
+            return true;
         }
 
         const TValue *FindKey(const TKey& key) const;

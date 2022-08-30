@@ -26,6 +26,10 @@
 // STL
 #include <string>
 
+#if defined(BOOST_TEST_STRING_VIEW)
+#include <string_view>
+#endif
+
 #include <boost/test/detail/suppress_warnings.hpp>
 
 //____________________________________________________________________________//
@@ -39,7 +43,7 @@ namespace unit_test {
 // ************************************************************************** //
 
 template<typename CharT>
-class basic_cstring {
+class BOOST_SYMBOL_VISIBLE basic_cstring {
     typedef basic_cstring<CharT>                        self_type;
 public:
     // Subtypes
@@ -163,7 +167,37 @@ private:
     // Data members
     iterator        m_begin;
     iterator        m_end;
+    static CharT null;
 };
+
+// ************************************************************************** //
+// **************         cstring_string_view_helper           ************** //
+// ************************************************************************** //
+
+
+#if defined(BOOST_TEST_STRING_VIEW)
+// Helper for instanciating a subclass of cstring using a string_view. We do not
+// change the API of cstring using BOOST_TEST_STRING_VIEW as the code should remain
+// compatible between boost.test and test module using different compiler options.
+//! @internal
+template <class CharT, class string_view_t = std::basic_string_view<CharT>>
+class BOOST_SYMBOL_VISIBLE stringview_cstring_helper : public basic_cstring<CharT> {
+public:
+  stringview_cstring_helper(string_view_t const& sv)
+  : basic_cstring<CharT>(const_cast<CharT*>(sv.data()), sv.size())
+  {}
+};
+#endif
+
+
+// ************************************************************************** //
+// **************            basic_cstring::impl               ************** //
+// ************************************************************************** //
+
+//____________________________________________________________________________//
+
+template<typename CharT>
+CharT basic_cstring<CharT>::null = 0;
 
 //____________________________________________________________________________//
 
@@ -171,7 +205,6 @@ template<typename CharT>
 inline typename basic_cstring<CharT>::pointer
 basic_cstring<CharT>::null_str()
 {
-    static CharT null = 0;
     return &null;
 }
 
@@ -368,17 +401,22 @@ template<typename CharT>
 inline basic_cstring<CharT>&
 basic_cstring<CharT>::trim_right( basic_cstring exclusions )
 {
+    if(!size()) {
+        return *this;
+    }
+
     if( exclusions.is_empty() )
         exclusions = default_trim_ex();
 
-    iterator it;
+    iterator it = end();
 
-    for( it = end()-1; it != begin()-1; --it ) {
+    do {
+        --it;
         if( self_type::traits_type::find( exclusions.begin(),  exclusions.size(), *it ) == reinterpret_cast<pointer>(0) )
             break;
-    }
+    } while(it != begin());
 
-    return trim_right( it+1 );
+    return trim_right( it + 1 );
 }
 
 //____________________________________________________________________________//

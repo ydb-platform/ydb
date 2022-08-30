@@ -575,6 +575,13 @@ public:
                 txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_READ_STALE;
                 txCtx->Readonly = true;
                 break;
+
+            case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                // TODO: (KIKIMR-3374) Use separate isolation mode to avoid optimistic locks.
+                txCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                txCtx->Readonly = true;
+                break;
+
             case Ydb::Table::TransactionSettings::TX_MODE_NOT_SET:
                 YQL_ENSURE(false, "tx_mode not set, settings: " << settings);
                 break;

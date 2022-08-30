@@ -811,6 +811,12 @@ private:
                 readonly = true;
                 break;
 
+            case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                // TODO: (KIKIMR-3374) Use separate isolation mode to avoid optimistic locks.
+                isolation = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
+                readonly = true;
+                break;
+
             default:
                 break;
         };

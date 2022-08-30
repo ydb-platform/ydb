@@ -351,7 +351,7 @@ register_parameters( rt::parameters_store& store )
         rt::env_var = "BOOST_TEST_LOG_SINK",
         rt::value_hint = "<stderr|stdout|file name>",
         rt::help = "Sets the log sink - the location "
-                   "where Boost.Test writes the logs of the test execution. it allows to easily redirect the "
+                   "where Boost.Test writes the logs of the test execution. It allows to easily redirect the "
                    "test logs to file or standard streams. By default testing log is "
                    "directed to standard output."
     ));
@@ -380,8 +380,7 @@ register_parameters( rt::parameters_store& store )
         ,
 #endif
         rt::help = "Combines an effect of " + btrt_report_format +
-                   " and " + btrt_log_format + " parameters. This parameter has higher priority "
-                   "than either one of them. In other words if this parameter is specified "
+                   " and " + btrt_log_format + " parameters. If this parameter is specified, "
                    "it overrides the value of other two parameters. This parameter does not "
                    "have a default value. The only acceptable values are string names of "
                    "output formats: HRF - human readable format and XML - XML formats for "

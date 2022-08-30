@@ -1,9 +1,10 @@
 # How to contribute to Boost.Test
 
 ## Ticket
-We like having a ticket stating the bug or the feature you want to implement. We use a dedicated ticket 
-management for this that can be found here: https://svn.boost.org/ . Please create a ticket there 
-by selecting the component `test`.
+We like having a ticket stating the bug you are experiencing or the feature you want to implement.
+We use the [GitHub issues](https://github.com/boostorg/test/issues) for raising bugs and feature requests, 
+while older tickets may be found in our former bug tracking system at https://svn.boost.org/ 
+(`test` component).
 
 ## Pull requests
 We welcome any contribution in the form of a pull request. Each PR is never integrated exactly as submitted,

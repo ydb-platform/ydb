@@ -528,6 +528,144 @@ Y_UNIT_TEST_SUITE(KqpTx) {
             [[2u];["Two"]]
             ])", FormatResultSetYson(result.GetResultSet(0)));
     }
+
+    Y_UNIT_TEST_QUAD(SnapshotRO, UseNewEngine, UseSessionActor) {
+        if (UseSessionActor && !UseNewEngine) {
+            return;
+        }
+
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Read Immediate
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT * FROM EightShard WHERE Key = 102;
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[3];[102u];["Value2"]]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        // Read Distributed
+        result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT COUNT(*) FROM EightShard WHERE Text = "Value1";
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[8u]])", FormatResultSetYson(result.GetResultSet(0)));
+
+        // Write
+        result = session.ExecuteDataQuery(Q1_(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data) VALUES
+                (100, 100500),
+                (100500, 100);
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_OPERATION));
+    }
+
+    Y_UNIT_TEST_QUAD(SnapshotROInteractive1, UseNewEngine, UseSessionActor) {
+        if (UseSessionActor && !UseNewEngine) {
+            return;
+        }
+
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto readQuery = Q1_(R"(
+            SELECT * FROM EightShard WHERE Key = 102;
+        )");
+
+        auto readResult = R"([
+            [[3];[102u];["Value2"]]
+        ])";
+
+        auto result = session.ExecuteDataQuery(readQuery,
+            TTxControl::BeginTx(TTxSettings::SnapshotRO())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
+
+        auto tx = result.GetTransaction();
+        UNIT_ASSERT(tx);
+        UNIT_ASSERT(tx->IsActive());
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data) VALUES
+                (102, 100500);
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(readQuery,
+            TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST_QUAD(SnapshotROInteractive2, UseNewEngine, UseSessionActor) {
+        if (UseSessionActor && !UseNewEngine) {
+            return;
+        }
+
+        auto kikimr = KikimrRunnerEnableSessionActor(UseSessionActor);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto readQuery = Q1_(R"(
+            SELECT COUNT(*) FROM EightShard WHERE Text = "Value1";
+        )");
+
+        auto readResult = R"([
+            [8u]
+        ])";
+
+        auto tx = session.BeginTransaction(TTxSettings::SnapshotRO())
+            .ExtractValueSync()
+            .GetTransaction();
+        UNIT_ASSERT(tx.IsActive());
+
+        auto result = session.ExecuteDataQuery(readQuery,
+            TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
+
+        result = session.ExecuteDataQuery(Q1_(R"(
+            UPSERT INTO `/Root/EightShard` (Key, Data, Text) VALUES
+                (100500u, -1, "Value1");
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(readQuery,
+            TTxControl::Tx(tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(readResult, FormatResultSetYson(result.GetResultSet(0)));
+
+        auto commitResult = tx.Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commitResult.GetStatus(), EStatus::SUCCESS, commitResult.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST_QUAD(SnapshotRONoMvccReads, UseNewEngine, UseSessionActor) {
+        if (UseSessionActor && !UseNewEngine) {
+            return;
+        }
+
+        TKikimrRunner kikimr(TKikimrSettings()
+            .SetEnableMvccSnapshotReads(false));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Query
+        auto result = session.ExecuteDataQuery(Q1_(R"(
+            SELECT * FROM EightShard WHERE Key = 102;
+        )"), TTxControl::BeginTx(TTxSettings::SnapshotRO()).CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
+
+        // Begin
+        auto beginResult = session.BeginTransaction(TTxSettings::SnapshotRO()).ExtractValueSync();
+        beginResult.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT_VALUES_EQUAL(beginResult.GetStatus(), EStatus::BAD_REQUEST);
+    }
 }
 
 } // namespace NKqp

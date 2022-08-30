@@ -126,7 +126,7 @@ report_access_to_invalid_parameter( bool v )
 
 struct nil {
     template<typename T>
-#if defined(__GNUC__) || defined(__HP_aCC) || defined(__EDG__) || defined(__SUNPRO_CC)
+#if defined(__GNUC__) || defined(__HP_aCC) || defined(__EDG__) || defined(__SUNPRO_CC) || defined(BOOST_EMBTC)
     operator T() const
 #else
     operator T const&() const

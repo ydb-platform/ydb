@@ -17,7 +17,7 @@
     defined(BOOST_NO_CXX11_TRAILING_RESULT_TYPES)
 
   // this feature works with VC2012 upd 5 while BOOST_NO_CXX11_TRAILING_RESULT_TYPES is defined
-  #if !defined(BOOST_MSVC) || BOOST_MSVC_FULL_VER < 170061030 /* VC2012 upd 5 */
+  #if !defined(BOOST_MSVC) || BOOST_MSVC_FULL_VER < 170061232 /* VC2012 upd 5 */
     #define BOOST_TEST_FWD_ITERABLE_CXX03
   #endif
 #endif
@@ -204,7 +204,7 @@ struct bt_iterator_traits< T, true >{
     BOOST_STATIC_ASSERT((is_forward_iterable<T>::value));
 
 #if defined(BOOST_TEST_FWD_ITERABLE_CXX03) || \
-    (defined(BOOST_MSVC) && (BOOST_MSVC_FULL_VER <= 170061030))
+    (defined(BOOST_MSVC) && (BOOST_MSVC_FULL_VER <= 170061232))
     typedef typename T::const_iterator const_iterator;
     typedef typename std::iterator_traits<const_iterator>::value_type value_type;
 #else
@@ -224,7 +224,7 @@ struct bt_iterator_traits< T, true >{
     }
 
 #if defined(BOOST_TEST_FWD_ITERABLE_CXX03) || \
-    (defined(BOOST_MSVC) && (BOOST_MSVC_FULL_VER <= 170061030))
+    (defined(BOOST_MSVC) && (BOOST_MSVC_FULL_VER <= 170061232))
     static std::size_t
     size(T const& container) {
         return container.size();

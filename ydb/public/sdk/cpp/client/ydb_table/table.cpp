@@ -2751,6 +2751,9 @@ private:
             case TTxSettings::TS_STALE_RO:
                 proto->mutable_stale_read_only();
                 break;
+            case TTxSettings::TS_SNAPSHOT_RO:
+                proto->mutable_snapshot_read_only();
+                break;
             default:
                 throw TContractViolation("Unexpected transaction mode.");
         }

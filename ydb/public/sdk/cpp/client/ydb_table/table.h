@@ -1072,6 +1072,10 @@ public:
         return TTxSettings(TS_STALE_RO);
     }
 
+    static TTxSettings SnapshotRO() {
+        return TTxSettings(TS_SNAPSHOT_RO);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -1083,6 +1087,9 @@ public:
         case TS_STALE_RO:
             out << "StaleRO";
             break;
+        case TS_SNAPSHOT_RO:
+            out << "SnapshotRO";
+            break;
         default:
             out << "Unknown";
             break;
@@ -1093,7 +1100,8 @@ private:
     enum ETransactionMode {
         TS_SERIALIZABLE_RW,
         TS_ONLINE_RO,
-        TS_STALE_RO
+        TS_STALE_RO,
+        TS_SNAPSHOT_RO
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);

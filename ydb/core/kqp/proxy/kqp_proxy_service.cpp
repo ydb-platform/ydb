@@ -664,6 +664,20 @@ public:
             }
         }
 
+        if (request.HasTxControl() && request.GetTxControl().has_begin_tx()) {
+            switch (request.GetTxControl().begin_tx().tx_mode_case()) {
+                case Ydb::Table::TransactionSettings::kSnapshotReadOnly:
+                    if (!AppData()->FeatureFlags.GetEnableMvccSnapshotReads()) {
+                        ReplyProcessError(Ydb::StatusIds::BAD_REQUEST,
+                            "Snapshot reads not supported in current database", requestId);
+                        return;
+                    }
+
+                default:
+                    break;
+            }
+        }
+
         TActorId targetId;
         if (!request.GetSessionId().empty()) {
             TProcessResult<TActorId> result;

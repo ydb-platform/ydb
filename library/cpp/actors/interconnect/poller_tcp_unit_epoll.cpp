@@ -5,7 +5,6 @@
 
 #include <csignal>
 #include <cerrno>
-#include <cstring>
 
 namespace NInterconnect {
     namespace {

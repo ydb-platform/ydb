@@ -1,6 +1,5 @@
 #include "actor.h"
 #include "executor_thread.h"
-#include "mailbox.h"
 #include <library/cpp/actors/util/datetime.h>
 
 namespace NActors {

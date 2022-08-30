@@ -722,6 +722,11 @@ namespace NKikimr::NHttpProxy {
 
     void THttpRequestContext::RequestBodyToProto(NProtoBuf::Message* request) {
         auto requestJsonStr = Request->Body;
+        if (requestJsonStr.empty()) {
+            throw NKikimr::NSQS::TSQSException(NKikimr::NSQS::NErrors::MALFORMED_QUERY_STRING) <<
+                "Empty body";
+        }
+
         std::string bufferStr;
         switch (ContentType) {
         case MIME_CBOR: {

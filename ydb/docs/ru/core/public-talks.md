@@ -4,6 +4,42 @@
 
 * [{{ ydb-name }} Whitepaper](https://storage.yandexcloud.net/ydb-public-talks/yandex-database-a4.pdf).
 
+## 2022: Вебинар YDB 2022-08-15 {#webinar20220815}
+
+* Тема: Scalability and Fault Tolerance in YDB — материал доступен только на английском языке.
+
+  * [Запись трансляции](https://www.youtube.com/watch?v=eYpyKXihGaY).
+  * Описание: In this talk we will cover two layers of YDB: Tablet and BlobStorage layers that together provide fault tolerance, scalability, and user isolation.
+  
+## 2022: Hydra {#hydra-2022}
+
+* Тема: Parallel Asynchronous Replication between YDB Database Instances — материал доступен только на английском языке.
+
+  * [О мероприятии](https://hydraconf.com/talks/d63511d6011a4b458b9c16be675f6897/).
+  * [Презентация](https://squidex.jugru.team/api/assets/srm/acbeabc7-56f1-4234-9e97-0e66c33be4ce/hydra-2022-fomichev-nizametdinov-1-.pdf).
+  * Описание: In this talk we present an approach to asynchronous replication in YDB that provides the following characteristics: changefeed from source database is sharded among multiple persistent queues, sharded changefeed is applied to the target database in a manner to guarantee target database consistency.
+
+### 2022: HighLoad++ Foundation 2022 {#highload-foundation-2022}
+
+* Тема: Q&A про Open Source {{ ydb-name }}, планы на будущее и афтерпати.
+  * [Запись трансляции](https://youtu.be/qRE2ROtd74g).
+* Тема: Миллион RPS в {{ ydb-name }}: история одного переезда Метрики.
+  * [Презентация](https://disk.yandex.ru/i/74ADp8C4bSZFNw).
+  * [Запись трансляции](https://youtu.be/9zagbmkdFDk).
+  * Описание: В Яндекс Метрике существует сборка визитов пользователей на сайте, для которой нужно хранить историю всех событий и склеивать их друг с другом на лету. Для этого использовалась конвейерная распределенная система со своим самописным локальным хранилищем и логикой репликации и шардирования. По мере роста нагрузки мы уперлись в производительность отдельного шарда, при этом продолжать наращивать количество шардов без принципиальной перестройки архитектуры было крайне болезненно.
+* Тема: {{ ydb-name }}: мультиверсионность в распределенной базе.
+  * [Презентация](https://disk.yandex.ru/i/gf31biuXZqdkKA).
+  * [Запись трансляции](https://youtu.be/k2ccFXWdBN4).
+  * Описание: Особенности реализации MVCC, за и против, сравнение поведения распределенной базы с MVCC и без MVCC под различными нагрузками.
+* Тема: Считаем число просмотров видео для десятков миллионов пользователей в день.
+  * [Презентация](https://disk.yandex.ru/i/TaIaktEWj22L6A).
+  * [Запись трансляции](https://youtu.be/AFJMOOpMjQM).
+  * Описание: Проектирование двух систем подсчёта пользователей: по общему числу просмотров видео и по количеству текущих зрителей лайв-трансляций. Решение задач: близкое к realtime время обновления счётчиков, возможность горизонтального масштабирования, отказоустойчивость при выпадении части мощностей.
+* Тема: Эволюция акторной системы.
+  * [Презентация](https://disk.yandex.ru/i/1eTk4vBqfoA__A).
+  * [Запись трансляции](https://youtu.be/bvfb4Mn4dXc).
+  * Описание: Существует несколько подходов к созданию эффективных многопоточных приложений на С++. В {{ ydb-name }} была выбрана модель акторов и с нуля создана своя акторная система.
+
 ### 2021: about:cloud о Serverless {#about-cloud-20210715}
 
 * Тема: Миграция приложения с PostgreSQL на Yandex {{ ydb-name }} Serverless. Производительность, стоимость, риски.

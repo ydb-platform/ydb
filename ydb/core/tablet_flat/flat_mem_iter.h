@@ -183,7 +183,9 @@ namespace NTable {
             return bool(CurrentVersion);
         }
 
-        void Apply(TRowState& row, NTable::ITransactionMapSimplePtr committedTransactions) const noexcept
+        void Apply(TRowState& row,
+                   NTable::ITransactionMapSimplePtr committedTransactions,
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
         {
             Y_VERIFY(row.Size() == Remap->Size(), "row state doesn't match the remap index");
 
@@ -192,14 +194,20 @@ namespace NTable {
 
             for (;;) {
                 const bool isDelta = update->RowVersion.Step == Max<ui64>();
-                if (!isDelta || committedTransactions.Find(update->RowVersion.TxId)) {
+                const TRowVersion* commitVersion;
+                if (!isDelta || (commitVersion = committedTransactions.Find(update->RowVersion.TxId))) {
+                    if (!isDelta) {
+                        transactionObserver.OnApplyCommitted(update->RowVersion);
+                    } else {
+                        transactionObserver.OnApplyCommitted(*commitVersion, update->RowVersion.TxId);
+                    }
                     if (row.Touch(update->Rop)) {
                         for (auto& up : **update) {
                             ApplyColumn(row, up);
                         }
                     }
                 } else {
-                    // FIXME: add uncommitted tx to stats?
+                    transactionObserver.OnSkipUncommitted(update->RowVersion.TxId);
                 }
                 if (!isDelta) {
                     break;
@@ -251,12 +259,14 @@ namespace NTable {
                 if (chain->RowVersion <= rowVersion) {
                     return true;
                 }
+                transactionObserver.OnSkipCommitted(chain->RowVersion);
             } else {
                 auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
                 Y_VERIFY(commitVersion);
                 if (*commitVersion <= rowVersion) {
                     return true;
                 }
+                transactionObserver.OnSkipCommitted(*commitVersion, chain->RowVersion.TxId);
             }
 
             stats.InvisibleRowSkips++;
@@ -268,6 +278,7 @@ namespace NTable {
                         return true;
                     }
 
+                    transactionObserver.OnSkipCommitted(chain->RowVersion);
                     stats.InvisibleRowSkips++;
                 } else {
                     auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
@@ -277,6 +288,7 @@ namespace NTable {
                     }
                     if (commitVersion) {
                         // Only committed deltas increment InvisibleRowSkips
+                        transactionObserver.OnSkipCommitted(*commitVersion, chain->RowVersion.TxId);
                         stats.InvisibleRowSkips++;
                     } else {
                         transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
@@ -286,6 +298,35 @@ namespace NTable {
 
             CurrentVersion = nullptr;
             return false;
+        }
+
+        /**
+         * Finds the first committed row and returns its version
+         */
+        std::optional<TRowVersion> SkipToCommitted(
+                NTable::ITransactionMapSimplePtr committedTransactions,
+                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+        {
+            Y_VERIFY_DEBUG(IsValid(), "Attempt to access an invalid row");
+
+            auto* chain = GetCurrentVersion();
+            Y_VERIFY_DEBUG(chain, "Unexpected empty chain");
+
+            // Skip uncommitted deltas
+            while (chain->RowVersion.Step == Max<ui64>()) {
+                auto* commitVersion = committedTransactions.Find(chain->RowVersion.TxId);
+                if (commitVersion) {
+                    return *commitVersion;
+                }
+                transactionObserver.OnSkipUncommitted(chain->RowVersion.TxId);
+                if (!(chain = chain->Next)) {
+                    CurrentVersion = nullptr;
+                    return { };
+                }
+                CurrentVersion = chain;
+            }
+
+            return chain->RowVersion;
         }
 
         bool IsValid() const

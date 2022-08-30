@@ -322,10 +322,28 @@ namespace NTable {
     public:
         /**
          * Called when iterator skips over an uncommitted delta
-         *
-         * This may be used for detecting possible conflicts with transactions.
          */
         virtual void OnSkipUncommitted(ui64 txId) = 0;
+
+        /**
+         * Called when iterator skips over committed delta
+         */
+        virtual void OnSkipCommitted(const TRowVersion& rowVersion) = 0;
+
+        /**
+         * Called when iterator skips over committed delta
+         */
+        virtual void OnSkipCommitted(const TRowVersion& rowVersion, ui64 txId) = 0;
+
+        /**
+         * Called when iterator applies committed changes from row version
+         */
+        virtual void OnApplyCommitted(const TRowVersion& rowVersion) = 0;
+
+        /**
+         * Called when iterator applies changes with a given row version and txId
+         */
+        virtual void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) = 0;
     };
 
     /**
@@ -338,6 +356,30 @@ namespace NTable {
         void OnSkipUncommitted(ui64 txId) const {
             if (ITransactionObserver* p = Get()) {
                 p->OnSkipUncommitted(txId);
+            }
+        }
+
+        void OnSkipCommitted(const TRowVersion& rowVersion) const {
+            if (ITransactionObserver* p = Get()) {
+                p->OnSkipCommitted(rowVersion);
+            }
+        }
+
+        void OnSkipCommitted(const TRowVersion& rowVersion, ui64 txId) const {
+            if (ITransactionObserver* p = Get()) {
+                p->OnSkipCommitted(rowVersion, txId);
+            }
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion) const {
+            if (ITransactionObserver* p = Get()) {
+                p->OnApplyCommitted(rowVersion);
+            }
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) const {
+            if (ITransactionObserver* p = Get()) {
+                p->OnApplyCommitted(rowVersion, txId);
             }
         }
     };
@@ -368,6 +410,30 @@ namespace NTable {
         void OnSkipUncommitted(ui64 txId) const {
             if (Ptr) {
                 Ptr->OnSkipUncommitted(txId);
+            }
+        }
+
+        void OnSkipCommitted(const TRowVersion& rowVersion) const {
+            if (Ptr) {
+                Ptr->OnSkipCommitted(rowVersion);
+            }
+        }
+
+        void OnSkipCommitted(const TRowVersion& rowVersion, ui64 txId) const {
+            if (Ptr) {
+                Ptr->OnSkipCommitted(rowVersion, txId);
+            }
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion) const {
+            if (Ptr) {
+                Ptr->OnApplyCommitted(rowVersion);
+            }
+        }
+
+        void OnApplyCommitted(const TRowVersion& rowVersion, ui64 txId) const {
+            if (Ptr) {
+                Ptr->OnApplyCommitted(rowVersion, txId);
             }
         }
 

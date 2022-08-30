@@ -64,7 +64,7 @@ namespace NPerf {
             for (auto &pin: Remap.KeyPins())
                 State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
 
-            Iter->Apply(State, /* committed */ nullptr);
+            Iter->Apply(State, /* committed */ nullptr, /* observer */ nullptr);
             aggr(State);
         }
 

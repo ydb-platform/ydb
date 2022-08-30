@@ -30,7 +30,7 @@ TString PrintRowImpl(const TRemap& remap, const TIterator& it)
             state.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
     }
 
-    it.Apply(state, /* committed */ nullptr);
+    it.Apply(state, /* committed */ nullptr, /* observer */ nullptr);
 
     {
         TStringStream ss;

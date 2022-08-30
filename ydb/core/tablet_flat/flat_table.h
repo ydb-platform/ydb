@@ -147,6 +147,10 @@ public:
                   TSelectStats& stats,
                   const ITransactionMapPtr& visible = nullptr,
                   const ITransactionObserverPtr& observer = nullptr) const noexcept;
+    TSelectRowVersionResult SelectRowVersion(
+            TRawVals key, IPages* env, ui64 readFlags,
+            const ITransactionMapPtr& visible = nullptr,
+            const ITransactionObserverPtr& observer = nullptr) const noexcept;
 
     EReady Precharge(TRawVals minKey, TRawVals maxKey, TTagsRef tags,
                      IPages* env, ui64 flg,

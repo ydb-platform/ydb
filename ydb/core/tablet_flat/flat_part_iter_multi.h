@@ -833,7 +833,19 @@ namespace NTable {
 
                 if (rowVersion < Part->MinRowVersion) {
                     // Don't bother seeking below the known first row version
-                    stats.InvisibleRowSkips++;
+                    if (!SkipMainVersion) {
+                        const auto& info = Part->Scheme->Groups[0];
+                        const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
+                        Y_VERIFY(!data->IsDelta(), "Unexpected delta without TxIdStats");
+                        if (!SkipEraseVersion && data->IsErased()) {
+                            transactionObserver.OnSkipCommitted(data->GetMaxVersion(info));
+                        } else if (data->IsVersioned()) {
+                            transactionObserver.OnSkipCommitted(data->GetMinVersion(info));
+                        } else {
+                            transactionObserver.OnSkipCommitted(Part->MinRowVersion);
+                        }
+                        stats.InvisibleRowSkips++;
+                    }
                     return EReady::Gone;
                 }
             }
@@ -853,6 +865,7 @@ namespace NTable {
                     }
                     if (commitVersion) {
                         // Skipping a newer committed delta
+                        transactionObserver.OnSkipCommitted(*commitVersion, txId);
                         stats.InvisibleRowSkips++;
                     } else {
                         // Skipping an uncommitted delta
@@ -873,6 +886,7 @@ namespace NTable {
                         return EReady::Data;
                     }
                     SkipEraseVersion = true;
+                    transactionObserver.OnSkipCommitted(current);
                     stats.InvisibleRowSkips++;
                 }
 
@@ -882,6 +896,7 @@ namespace NTable {
                     return EReady::Data;
                 }
 
+                transactionObserver.OnSkipCommitted(current);
                 stats.InvisibleRowSkips++;
 
                 if (!data->HasHistory()) {
@@ -957,6 +972,42 @@ namespace NTable {
             Y_UNREACHABLE();
         }
 
+        std::optional<TRowVersion> SkipToCommitted(
+                NTable::ITransactionMapSimplePtr committedTransactions,
+                NTable::ITransactionObserverSimplePtr transactionObserver) noexcept
+        {
+            Y_VERIFY_DEBUG(Main.IsValid(), "Attempt to use an invalid iterator");
+            Y_VERIFY(!SkipMainVersion, "Cannot use SkipToCommitted after positioning to history");
+
+            const auto& info = Part->Scheme->Groups[0];
+            const auto* data = Main.GetRecord()->GetAltRecord(SkipMainDeltas);
+
+            while (data->IsDelta()) {
+                ui64 txId = data->GetDeltaTxId(info);
+                const auto* commitVersion = committedTransactions.Find(txId);
+                if (commitVersion) {
+                    // Found a committed delta
+                    return *commitVersion;
+                }
+                // Skip an uncommitted delta
+                transactionObserver.OnSkipUncommitted(txId);
+                data = Main.GetRecord()->GetAltRecord(++SkipMainDeltas);
+                if (!data) {
+                    // This was the last delta, nothing else for this key
+                    SkipMainDeltas = 0;
+                    return { };
+                }
+            }
+
+            if (!SkipEraseVersion && data->IsErased()) {
+                // Return erase version of this row
+                return data->GetMaxVersion(info);
+            }
+
+            // Otherwise either row version or part version is the first committed version
+            return data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion;
+        }
+
         bool IsDelta() const noexcept
         {
             if (SkipMainVersion) {
@@ -1017,7 +1068,8 @@ namespace NTable {
         }
 
         void Apply(TRowState& row,
-                   NTable::ITransactionMapSimplePtr committedTransactions) const noexcept
+                   NTable::ITransactionMapSimplePtr committedTransactions,
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
         {
             Y_VERIFY_DEBUG(IsValid(), "Attempt to apply an invalid row");
 
@@ -1033,6 +1085,7 @@ namespace NTable {
                     const auto* commitVersion = committedTransactions.Find(txId);
                     // Apply committed deltas
                     if (commitVersion) {
+                        transactionObserver.OnApplyCommitted(*commitVersion, txId);
                         if (row.Touch(data->GetRop())) {
                             for (auto& pin : Pinout) {
                                 if (!row.IsFinalized(pin.To)) {
@@ -1044,7 +1097,7 @@ namespace NTable {
                             return;
                         }
                     } else {
-                        // FIXME: add uncommitted tx to stats?
+                        transactionObserver.OnSkipUncommitted(txId);
                     }
                     // Skip deltas until the row is finalized
                     data = Main.GetRecord()->GetAltRecord(++index);
@@ -1056,10 +1109,18 @@ namespace NTable {
             }
 
             if (!SkipEraseVersion && data->IsErased()) {
+                if (!SkipMainVersion) {
+                    const auto& info = Part->Scheme->Groups[0];
+                    transactionObserver.OnApplyCommitted(data->GetMaxVersion(info));
+                }
                 row.Touch(ERowOp::Erase);
                 return;
             }
 
+            if (!SkipMainVersion) {
+                const auto& info = Part->Scheme->Groups[0];
+                transactionObserver.OnApplyCommitted(data->IsVersioned() ? data->GetMinVersion(info) : Part->MinRowVersion);
+            }
             if (row.Touch(data->GetRop())) {
                 for (auto& pin: Pinout) {
                     if (!row.IsFinalized(pin.To)) {
@@ -1486,10 +1547,11 @@ namespace NTable {
         }
 
         void Apply(TRowState& row,
-                   NTable::ITransactionMapSimplePtr committedTransactions) const noexcept
+                   NTable::ITransactionMapSimplePtr committedTransactions,
+                   NTable::ITransactionObserverSimplePtr transactionObserver) const noexcept
         {
             Y_VERIFY_DEBUG(CurrentIt);
-            CurrentIt->Apply(row, committedTransactions);
+            CurrentIt->Apply(row, committedTransactions, transactionObserver);
         }
 
         TRowVersion GetRowVersion() const noexcept

@@ -881,7 +881,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
                     Uncommitted = false;
                     committed = true;
                 }
-                it.Apply(State, CommittedTransactions);
+                it.Apply(State, CommittedTransactions, TransactionObserver);
                 break;
             }
             case EType::Run: {
@@ -901,7 +901,7 @@ inline EReady TTableItBase<TIteratorOps>::Apply() noexcept
                     Uncommitted = false;
                     committed = true;
                 }
-                it.Apply(State, CommittedTransactions);
+                it.Apply(State, CommittedTransactions, TransactionObserver);
                 break;
             }
             default:

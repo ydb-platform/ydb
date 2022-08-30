@@ -71,6 +71,24 @@ namespace NTable {
         ui64 Ref = Max<ui64>();
     };
 
+    struct TSelectRowVersionResult {
+        EReady Ready;
+        TRowVersion RowVersion;
+
+        TSelectRowVersionResult(EReady ready)
+            : Ready(ready)
+        { }
+
+        TSelectRowVersionResult(const TRowVersion& rowVersion)
+            : Ready(EReady::Data)
+            , RowVersion(rowVersion)
+        { }
+
+        explicit operator bool() const {
+            return Ready == EReady::Data;
+        }
+    };
+
 #pragma pack(push, 1)
 
     struct TCellOp {

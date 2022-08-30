@@ -1054,7 +1054,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
-                it->Apply(row, committed);
+                it->Apply(row, committed, observer);
             }
         }
     }
@@ -1066,7 +1066,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
-                it->Apply(row, committed);
+                it->Apply(row, committed, observer);
             }
         }
     }
@@ -1080,7 +1080,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer))) {
                 // N.B. stop looking for snapshot after the first hit
                 snapshotFound = true;
-                it->Apply(row, committed);
+                it->Apply(row, committed, observer);
             }
         }
     }
@@ -1112,7 +1112,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                     }
                     if (ready = ready && bool(res)) {
                         if (res == EReady::Data) {
-                            it.Apply(row, committed);
+                            it.Apply(row, committed, observer);
                             if (row.IsFinalized()) {
                                 break;
                             }
@@ -1136,6 +1136,88 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     } else {
         return EReady::Data;
     }
+}
+
+TSelectRowVersionResult TTable::SelectRowVersion(
+        TRawVals key_, IPages* env, ui64 readFlags,
+        const ITransactionMapPtr& visible,
+        const ITransactionObserverPtr& observer) const noexcept
+{
+    Y_VERIFY(ColdParts.empty(), "Cannot select with cold parts");
+
+    const TCelled key(key_, *Scheme->Keys, true);
+
+    const TRemap remap(*Scheme, { });
+
+    const NBloom::TPrefix prefix(key);
+
+    TEpoch lastEpoch = TEpoch::Max();
+
+    auto committed = TMergedTransactionMap::Create(visible, CommittedTransactions);
+
+    // Mutable has the newest data
+    if (Mutable) {
+        lastEpoch = Mutable->Epoch;
+        if (auto it = TMemIt::Make(*Mutable, Mutable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid()) {
+                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
+                    return *rowVersion;
+                }
+            }
+        }
+    }
+
+    // Mutable data that is transitioning to frozen
+    if (MutableBackup) {
+        lastEpoch = MutableBackup->Epoch;
+        if (auto it = TMemIt::Make(*MutableBackup, MutableBackup->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid()) {
+                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
+                    return *rowVersion;
+                }
+            }
+        }
+    }
+
+    // Frozen are sorted by epoch, apply in reverse order
+    for (auto pos = Frozen.rbegin(); pos != Frozen.rend(); ++pos) {
+        const auto& memTable = *pos;
+        Y_VERIFY(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
+        lastEpoch = memTable->Epoch;
+        if (auto it = TMemIt::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
+            if (it->IsValid()) {
+                if (auto rowVersion = it->SkipToCommitted(committed, observer)) {
+                    return *rowVersion;
+                }
+            }
+        }
+    }
+
+    // Levels are ordered from newest to oldest, apply in order
+    bool ready = true;
+    for (const auto& run : GetLevels()) {
+        auto pos = run.Find(key);
+        if (pos != run.end()) {
+            const auto* part = pos->Part.Get();
+            if ((readFlags & EHint::NoByKey) ||
+                part->MightHaveKey(prefix.Get(part->Scheme->Groups[0].KeyTypes.size())))
+            {
+                TPartSimpleIt it(part, { }, Scheme->Keys, env);
+                it.SetBounds(pos->Slice);
+                auto res = it.Seek(key, ESeek::Exact);
+                if (res == EReady::Data && ready) {
+                    Y_VERIFY(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
+                    lastEpoch = part->Epoch;
+                    if (auto rowVersion = it.SkipToCommitted(committed, observer)) {
+                        return *rowVersion;
+                    }
+                }
+                ready = ready && bool(res);
+            }
+        }
+    }
+
+    return ready ? EReady::Gone : EReady::Page;
 }
 
 void TTable::DebugDump(IOutputStream& str, IPages* env, const NScheme::TTypeRegistry& reg) const

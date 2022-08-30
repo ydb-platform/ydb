@@ -145,7 +145,7 @@ namespace NTest {
             for (auto &pin: Remap_.KeyPins())
                 State.Set(pin.Pos, ECellOp::Set, key.Columns[pin.Key]);
 
-            Iter->Apply(State, /* committed */ nullptr);
+            Iter->Apply(State, /* committed */ nullptr, /* observer */ nullptr);
 
             return (NoBlobs = State.Need() > 0) ? EReady::Page : EReady::Data;
         }

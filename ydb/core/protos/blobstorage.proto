@@ -1544,13 +1544,15 @@ message TEvTestLoadRequest {
             optional uint64 ProductCount = 1 [default = 100];
             optional uint64 Quantity = 2 [default = 1000];
             optional uint64 OrderCount = 3 [default = 100];
-            optional uint64 Limit = 4 [default = 10]; 
+            optional uint64 Limit = 4 [default = 10];
             optional bool PartitionsByLoad = 5 [default = true];
         }
         message TKvWorkload {
             optional uint64 InitRowCount = 1 [default = 1000];
             optional bool PartitionsByLoad = 2 [default = true];
             optional uint64 MaxFirstKey = 3 [default = 5000];
+            optional uint64 StringLen = 4 [default = 8];
+            optional uint64 ColumnsCnt = 5 [default = 2];
         }
         optional uint64 Tag = 1;
         optional uint32 DurationSeconds = 2;

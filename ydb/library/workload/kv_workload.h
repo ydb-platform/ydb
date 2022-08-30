@@ -11,6 +11,8 @@ struct TKvWorkloadParams : public TWorkloadParams {
     ui64 MinPartitions = 1;
     ui64 InitRowCount = 1000;
     ui64 MaxFirstKey = 5000;
+    ui64 StringLen = 8;
+    ui64 ColumnsCnt = 2;
     bool PartitionsByLoad = true;
 };
 
@@ -44,17 +46,18 @@ public:
 private:
     TQueryInfoList UpsertRandom();
     TQueryInfoList SelectRandom();
-    
+
     TKvWorkloadGenerator(const TKvWorkloadParams* params);
 
     TQueryInfo FillKvData() const;
 
     std::string DbPath;
     TKvWorkloadParams Params;
+    TString BigString;
 
     std::random_device Rd;
     std::mt19937_64 Gen;
-    std::uniform_int_distribution<ui64> UniformDistGen;
+    std::uniform_int_distribution<ui64> KeyUniformDistGen;
 };
 
 } // namespace NYdbWorkload

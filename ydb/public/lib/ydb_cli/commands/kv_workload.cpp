@@ -19,7 +19,9 @@ TCommandKvInit::TCommandKvInit()
     , InitRowCount(1000)
     , MinPartitions(1)
     , MaxFirstKey(5000)
-    , PartitionsByLoad(true) 
+    , StringLen(8)
+    , ColumnsCnt(2)
+    , PartitionsByLoad(true)
 {}
 
 void TCommandKvInit::Config(TConfig& config) {
@@ -35,6 +37,10 @@ void TCommandKvInit::Config(TConfig& config) {
         .DefaultValue(true).StoreResult(&PartitionsByLoad);
     config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
         .DefaultValue(5000).StoreResult(&MaxFirstKey);
+    config.Opts->AddLongOption("len", "String len")
+        .DefaultValue(8).StoreResult(&StringLen);
+    config.Opts->AddLongOption("cols", "Number of columns")
+        .DefaultValue(2).StoreResult(&ColumnsCnt);
 }
 
 void TCommandKvInit::Parse(TConfig& config) {
@@ -50,34 +56,13 @@ int TCommandKvInit::Run(TConfig& config) {
     params.MinPartitions = MinPartitions;
     params.PartitionsByLoad = PartitionsByLoad;
     params.MaxFirstKey = MaxFirstKey;
+    params.StringLen = StringLen;
+    params.ColumnsCnt = ColumnsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
 
-    auto session = GetSession();
-    auto result = session.ExecuteSchemeQuery(workloadGen->GetDDLQueries()).GetValueSync();
-    ThrowOnError(result);
-
-    auto queryInfoList = workloadGen->GetInitialData();
-    for (auto queryInfo : queryInfoList) {
-        auto prepareResult = session.PrepareDataQuery(queryInfo.Query.c_str()).GetValueSync();
-        if (!prepareResult.IsSuccess()) {
-            Cerr << "Prepare failed: " << prepareResult.GetIssues().ToString() << Endl
-                << "Query:\n" << queryInfo.Query << Endl;
-            return EXIT_FAILURE;
-        }
-
-        auto dataQuery = prepareResult.GetQuery();
-        auto result = dataQuery.Execute(NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-                                        std::move(queryInfo.Params)).GetValueSync();
-        if (!result.IsSuccess()) {
-            Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
-                << "Query:\n" << queryInfo.Query << Endl;
-            return EXIT_FAILURE;
-        }
-    }
-
-    return EXIT_SUCCESS;
+    return InitTables(workloadGen);
 }
 
 
@@ -102,19 +87,7 @@ int TCommandKvClean::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
 
-    auto session = GetSession();
-
-    auto query = workloadGen->GetCleanDDLQueries();
-    TStatus result(EStatus::SUCCESS, NYql::TIssues());
-    result = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
-
-    if (!result.IsSuccess()) {
-        Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
-            << "Query:\n" << query << Endl;
-        return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
+    return CleanTables(workloadGen);
 }
 
 TCommandKvRun::TCommandKvRun()
@@ -134,6 +107,10 @@ void TCommandKvRunUpsertRandom::Config(TConfig& config) {
 
     config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
         .DefaultValue(5000).StoreResult(&MaxFirstKey);
+    config.Opts->AddLongOption("len", "String len")
+        .DefaultValue(8).StoreResult(&StringLen);
+    config.Opts->AddLongOption("cols", "Number of columns")
+        .DefaultValue(2).StoreResult(&ColumnsCnt);
 }
 
 void TCommandKvRunUpsertRandom::Parse(TConfig& config) {
@@ -146,6 +123,8 @@ int TCommandKvRunUpsertRandom::Run(TConfig& config) {
     NYdbWorkload::TKvWorkloadParams params;
     params.DbPath = config.Database;
     params.MaxFirstKey = MaxFirstKey;
+    params.StringLen = StringLen;
+    params.ColumnsCnt = ColumnsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);
@@ -163,6 +142,8 @@ void TCommandKvRunSelectRandom::Config(TConfig& config) {
 
     config.Opts->AddLongOption("max-first-key", "maximum value of first primary key")
         .DefaultValue(5000).StoreResult(&MaxFirstKey);
+    config.Opts->AddLongOption("cols", "Number of columns")
+        .DefaultValue(2).StoreResult(&ColumnsCnt);
 }
 
 void TCommandKvRunSelectRandom::Parse(TConfig& config) {
@@ -175,6 +156,7 @@ int TCommandKvRunSelectRandom::Run(TConfig& config) {
     NYdbWorkload::TKvWorkloadParams params;
     params.DbPath = config.Database;
     params.MaxFirstKey = MaxFirstKey;
+    params.ColumnsCnt = ColumnsCnt;
 
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::KV, &params);

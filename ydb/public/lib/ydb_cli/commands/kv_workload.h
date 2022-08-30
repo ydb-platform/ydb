@@ -21,6 +21,8 @@ private:
     ui64 InitRowCount;
     ui64 MinPartitions;
     ui64 MaxFirstKey;
+    ui64 StringLen;
+    ui64 ColumnsCnt;
     bool PartitionsByLoad;
 };
 
@@ -46,6 +48,8 @@ public:
 
 private:
     ui64 MaxFirstKey;
+    ui64 StringLen;
+    ui64 ColumnsCnt;
 
 };
 
@@ -58,6 +62,7 @@ public:
 
 private:
     ui64 MaxFirstKey;
+    ui64 ColumnsCnt;
 
 };
 

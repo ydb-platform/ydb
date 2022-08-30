@@ -66,6 +66,12 @@ protected:
     std::atomic_uint64_t WindowRetryCount;
     std::atomic_uint64_t TotalErrors;
     std::atomic_uint64_t WindowErrors;
+
+protected:
+    int InitTables(std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> workloadGen);
+
+    int CleanTables(std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> workloadGen);
+
 };
 
 }

@@ -83,7 +83,7 @@ void TWorkloadCommand::PrepareForRun(TConfig& config) {
         .SetDatabase(config.Database)
         .SetBalancingPolicy(EBalancingPolicy::UseAllNodes)
         .SetCredentialsProviderFactory(config.CredentialsGetter(config));
-    
+
     if (config.EnableSsl) {
         driverConfig.UseSecureConnection(config.CaCerts);
     }
@@ -212,6 +212,49 @@ void TWorkloadCommand::PrintWindowStats(int windowIt) {
         }
         std::cout << std::endl;
     }
+}
+
+int TWorkloadCommand::InitTables(std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> workloadGen) {
+    auto session = GetSession();
+    auto result = session.ExecuteSchemeQuery(workloadGen->GetDDLQueries()).GetValueSync();
+    ThrowOnError(result);
+
+    auto queryInfoList = workloadGen->GetInitialData();
+    for (auto queryInfo : queryInfoList) {
+        auto prepareResult = session.PrepareDataQuery(queryInfo.Query.c_str()).GetValueSync();
+        if (!prepareResult.IsSuccess()) {
+            Cerr << "Prepare failed: " << prepareResult.GetIssues().ToString() << Endl
+                << "Query:\n" << queryInfo.Query << Endl;
+            return EXIT_FAILURE;
+        }
+
+        auto dataQuery = prepareResult.GetQuery();
+        auto result = dataQuery.Execute(NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
+                                        std::move(queryInfo.Params)).GetValueSync();
+        if (!result.IsSuccess()) {
+            Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
+                << "Query:\n" << queryInfo.Query << Endl;
+            return EXIT_FAILURE;
+        }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+int TWorkloadCommand::CleanTables(std::shared_ptr<NYdbWorkload::IWorkloadQueryGenerator> workloadGen) {
+    auto session = GetSession();
+
+    auto query = workloadGen->GetCleanDDLQueries();
+    TStatus result(EStatus::SUCCESS, NYql::TIssues());
+    result = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
+
+    if (!result.IsSuccess()) {
+        Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
+            << "Query:\n" << query << Endl;
+        return EXIT_FAILURE;
+    }
+
+    return EXIT_SUCCESS;
 }
 
 } // namespace NYdb::NConsoleClient

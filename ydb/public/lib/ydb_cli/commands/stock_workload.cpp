@@ -67,30 +67,7 @@ int TCommandStockInit::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::STOCK, &params);
 
-    auto session = GetSession();
-    auto result = session.ExecuteSchemeQuery(workloadGen->GetDDLQueries()).GetValueSync();
-    ThrowOnError(result);
-
-    auto queryInfoList = workloadGen->GetInitialData();
-    for (auto queryInfo : queryInfoList) {
-        auto prepareResult = session.PrepareDataQuery(queryInfo.Query.c_str()).GetValueSync();
-        if (!prepareResult.IsSuccess()) {
-            Cerr << "Prepare failed: " << prepareResult.GetIssues().ToString() << Endl
-                << "Query:\n" << queryInfo.Query << Endl;
-            return EXIT_FAILURE;
-        }
-
-        auto dataQuery = prepareResult.GetQuery();
-        auto result = dataQuery.Execute(NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-                                        std::move(queryInfo.Params)).GetValueSync();
-        if (!result.IsSuccess()) {
-            Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
-                << "Query:\n" << queryInfo.Query << Endl;
-            return EXIT_FAILURE;
-        }
-    }
-
-    return EXIT_SUCCESS;
+    return InitTables(workloadGen);
 }
 
 TCommandStockClean::TCommandStockClean()
@@ -114,19 +91,7 @@ int TCommandStockClean::Run(TConfig& config) {
     NYdbWorkload::TWorkloadFactory factory;
     auto workloadGen = factory.GetWorkloadQueryGenerator(NYdbWorkload::EWorkload::STOCK, &params);
 
-    auto session = GetSession();
-
-    auto query = workloadGen->GetCleanDDLQueries();
-    TStatus result(EStatus::SUCCESS, NYql::TIssues());
-    result = session.ExecuteSchemeQuery(TString(query)).GetValueSync();
-
-    if (!result.IsSuccess()) {
-        Cerr << "Query execution failed: " << result.GetIssues().ToString() << Endl
-            << "Query:\n" << query << Endl;
-        return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
+    return CleanTables(workloadGen);
 }
 
 TCommandStockRun::TCommandStockRun()

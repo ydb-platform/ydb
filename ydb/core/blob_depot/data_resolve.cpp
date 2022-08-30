@@ -111,7 +111,7 @@ namespace NKikimr::NBlobDepot {
                         if (key != LastScannedKey) {
                             LastScannedKey = key;
                             progress = true;
-                            Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>());
+                            Self->Data->AddDataOnLoad(key, rowset.template GetValue<Schema::Data::Value>(), txc, this);
 
                             const bool matchBegin = !begin || (flags & EScanFlags::INCLUDE_BEGIN ? *begin <= key : *begin < key);
                             const bool matchEnd = !end || (flags & EScanFlags::INCLUDE_END ? key <= *end : key < *end);
@@ -161,6 +161,8 @@ namespace NKikimr::NBlobDepot {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT30, "TTxResolve::Complete", (Id, Self->GetLogId()),
                 (Sender, Request->Sender), (Cookie, Request->Cookie), (SuccessorTx, bool(SuccessorTx)),
                 (Outbox.size, Outbox.size()));
+
+            Self->Data->CommitTrash(this);
 
             if (SuccessorTx) {
                 Self->Execute(std::move(SuccessorTx));
@@ -354,13 +356,15 @@ namespace NKikimr::NBlobDepot {
                             .Id = response.Id,
                             .Keep = response.Keep,
                             .DoNotKeep = response.DoNotKeep
-                        }, txc);
+                        }, txc, this);
                     }
                 }
                 return true;
             }
 
             void Complete(const TActorContext&) override {
+                Self->Data->CommitTrash(this);
+
                 auto& contexts = Self->Data->ResolveDecommitContexts;
                 if (const auto it = contexts.find(Ev->Cookie); it != contexts.end()) {
                     TResolveDecommitContext& context = it->second;

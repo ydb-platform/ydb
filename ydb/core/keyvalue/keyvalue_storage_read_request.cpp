@@ -283,11 +283,12 @@ public:
                         "Unexpected EvGetResult.",
                         (KeyValue, TabletInfo->TabletID),
                         (Status, result->Status),
+                        (Id, response.Id),
                         (ResponseStatus, response.Status),
-                        (Deadline, IntermediateResult->Deadline.MilliSeconds()),
-                        (Now, TActivationContext::Now().MilliSeconds()),
+                        (Deadline, IntermediateResult->Deadline),
+                        (Now, TActivationContext::Now()),
                         (SentAt, batch.SentTime),
-                        (GotAt, IntermediateResult->Stat.IntermediateCreatedAt.MilliSeconds()),
+                        (GotAt, IntermediateResult->Stat.IntermediateCreatedAt),
                         (ErrorReason, result->ErrorReason));
                 hasErrorResponses = true;
             }

@@ -210,12 +210,12 @@ namespace NKikimr::NBlobDepot {
         struct TValue {
             TString Meta;
             TValueChain ValueChain;
-            NKikimrBlobDepot::EKeepState KeepState;
-            bool Public;
-            bool Unconfirmed;
+            NKikimrBlobDepot::EKeepState KeepState = NKikimrBlobDepot::EKeepState::Default;
+            bool Public = false;
+            bool Unconfirmed = false;
             std::optional<TLogoBlobID> OriginalBlobId;
 
-            TValue() = delete;
+            TValue() = default;
             TValue(const TValue&) = delete;
             TValue(TValue&&) = default;
 
@@ -233,11 +233,51 @@ namespace NKikimr::NBlobDepot {
                     : std::nullopt)
             {}
 
+            explicit TValue(const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item)
+                : Meta(item.GetMeta())
+                , Public(false)
+                , Unconfirmed(item.GetUnconfirmed())
+            {
+                auto *chain = ValueChain.Add();
+                auto *locator = chain->MutableLocator();
+                locator->CopyFrom(item.GetBlobLocator());
+            }
+
             explicit TValue(NKikimrBlobDepot::EKeepState keepState)
                 : KeepState(keepState)
                 , Public(false)
                 , Unconfirmed(false)
             {}
+
+            void SerializeToProto(NKikimrBlobDepot::TValue *proto) const {
+                if (Meta) {
+                    proto->SetMeta(Meta);
+                }
+                if (!ValueChain.empty()) {
+                    proto->MutableValueChain()->CopyFrom(ValueChain);
+                }
+                if (KeepState != proto->GetKeepState()) {
+                    proto->SetKeepState(KeepState);
+                }
+                if (Public != proto->GetPublic()) {
+                    proto->SetPublic(Public);
+                }
+                if (Unconfirmed != proto->GetUnconfirmed()) {
+                    proto->SetUnconfirmed(Unconfirmed);
+                }
+                if (OriginalBlobId) {
+                    LogoBlobIDFromLogoBlobID(*OriginalBlobId, proto->MutableOriginalBlobId());
+                }
+            }
+
+            TString SerializeToString() const {
+                NKikimrBlobDepot::TValue proto;
+                SerializeToProto(&proto);
+                TString s;
+                const bool success = proto.SerializeToString(&s);
+                Y_VERIFY(success);
+                return s;
+            }
 
             TString ToString() const {
                 TStringStream s;
@@ -359,32 +399,38 @@ namespace NKikimr::NBlobDepot {
             }
         }
 
-        NKikimrBlobDepot::EKeepState GetKeepState(const TKey& key) const;
+        const TValue *FindKey(const TKey& key) const;
+
+        template<typename T, typename... TArgs>
+        bool UpdateKey(TKey key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie, T&& callback, TArgs&&... args);
+
+        void UpdateKey(const TKey& key, const NKikimrBlobDepot::TEvCommitBlobSeq::TItem& item,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
         TRecordsPerChannelGroup& GetRecordsPerChannelGroup(TLogoBlobID id);
 
-        void AddDataOnLoad(TKey key, TString value);
-        void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob, NTabletFlatExecutor::TTransactionContext& txc);
+        void AddDataOnLoad(TKey key, TString value, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void AddDataOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBlob& blob,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
-        void PutKey(TKey key, TValue&& data);
-
-        std::optional<TString> UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState);
-        void DeleteKey(const TKey& key, const std::function<void(TLogoBlobID)>& updateTrash, void *cookie);
+        bool UpdateKeepState(TKey key, NKikimrBlobDepot::EKeepState keepState,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+        void DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void CommitTrash(void *cookie);
         void HandleTrash();
         void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev);
         void OnPushNotifyResult(TEvBlobDepot::TEvPushNotifyResult::TPtr ev);
         void OnCommitConfirmedGC(ui8 channel, ui32 groupId);
+        bool OnBarrierShift(ui64 tabletId, ui8 channel, bool hard, TGenStep previous, TGenStep current, ui32& maxItems,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
 
         void AccountBlob(TLogoBlobID id, bool add);
 
         bool CanBeCollected(ui32 groupId, TBlobSeqId id) const;
 
         void OnLeastExpectedBlobIdChange(ui8 channel);
-
-        static TString ToValueProto(const TValue& value);
 
         template<typename TCallback>
         void EnumerateRefCount(TCallback&& callback) {

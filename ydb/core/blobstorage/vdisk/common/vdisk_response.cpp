@@ -28,6 +28,10 @@ void SendVDiskResponse(const TActorContext &ctx, const TActorId &recipient, IEve
         HANDLE_EVENT(TEvVGetResult, EvVGetResultSent)
 
 #undef HANDLE_EVENT
+
+        case TEvBlobStorage::EvVAssimilateResult: // override channel for assimilation result
+            channel = TInterconnectChannels::IC_BLOBSTORAGE_ASYNC_DATA;
+            break;
     }
 
     auto event = std::make_unique<IEventHandle>(recipient, ctx.SelfID, ev, IEventHandle::MakeFlags(channel, 0), cookie);

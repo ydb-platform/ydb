@@ -31,19 +31,8 @@ namespace NKikimr::NBlobDepot {
                     auto *responseItem = responseRecord->AddItems();
                     responseItem->SetStatus(NKikimrProto::OK);
 
-                    NKikimrBlobDepot::TValue value;
-                    if (item.HasMeta()) {
-                        value.SetMeta(item.GetMeta());
-                    }
-                    if (const auto keepState = Self->Data->GetKeepState(key); keepState != NKikimrBlobDepot::EKeepState::Default) {
-                        value.SetKeepState(keepState);
-                    }
-                    auto *chain = value.AddValueChain();
-                    auto *locator = chain->MutableLocator();
-                    locator->CopyFrom(item.GetBlobLocator());
-
-                    const auto blobSeqId = TBlobSeqId::FromProto(locator->GetBlobSeqId());
-                    const bool canBeCollected = Self->Data->CanBeCollected(locator->GetGroupId(), blobSeqId);
+                    const auto blobSeqId = TBlobSeqId::FromProto(item.GetBlobLocator().GetBlobSeqId());
+                    const bool canBeCollected = Self->Data->CanBeCollected(item.GetBlobLocator().GetGroupId(), blobSeqId);
 
                     if (blobSeqId.Generation == generation) {
                         // check for internal sanity -- we can't issue barriers on given ids without confirmed trimming
@@ -60,20 +49,15 @@ namespace NKikimr::NBlobDepot {
                     }
 
                     TString error;
-                    if (!CheckKeyAgainstBarrier(key, value, &error)) {
+                    if (!CheckKeyAgainstBarrier(key, &error)) {
                         responseItem->SetStatus(NKikimrProto::ERROR);
                         responseItem->SetErrorReason(TStringBuilder() << "BlobId# " << key.ToString()
                             << " is being put beyond the barrier: " << error);
                         continue;
                     }
 
-                    TString valueData;
-                    const bool success = value.SerializeToString(&valueData);
-                    Y_VERIFY(success);
-
-                    db.Table<Schema::Data>().Key(item.GetKey()).Update<Schema::Data::Value>(valueData);
-
-                    Self->Data->PutKey(std::move(key), TData::TValue(std::move(value)));
+                    // obtain value
+                    Self->Data->UpdateKey(key, item, txc, this);
                 }
 
                 return true;
@@ -97,26 +81,29 @@ namespace NKikimr::NBlobDepot {
                 }
             }
 
-            bool CheckKeyAgainstBarrier(const TData::TKey& key, const NKikimrBlobDepot::TValue& value,
-                    TString *error) {
+            bool CheckKeyAgainstBarrier(const TData::TKey& key, TString *error) {
                 const auto& v = key.AsVariant();
                 if (const auto *id = std::get_if<TLogoBlobID>(&v)) {
                     bool underSoft, underHard;
                     Self->BarrierServer->GetBlobBarrierRelation(*id, &underSoft, &underHard);
                     if (underHard) {
-                        *error = TStringBuilder() << "under barrier# " << Self->BarrierServer->ToStringBarrier(
+                        *error = TStringBuilder() << "under hard barrier# " << Self->BarrierServer->ToStringBarrier(
                             id->TabletID(), id->Channel(), true);
                         return false;
-                    } else if (underSoft && value.GetKeepState() != NKikimrBlobDepot::EKeepState::Keep) {
-                        *error = TStringBuilder() << "under barrier# " << Self->BarrierServer->ToStringBarrier(
-                            id->TabletID(), id->Channel(), false);
-                        return false;
+                    } else if (underSoft) {
+                        const TData::TValue *value = Self->Data->FindKey(key);
+                        if (!value || value->KeepState != NKikimrBlobDepot::EKeepState::Keep) {
+                            *error = TStringBuilder() << "under soft barrier# " << Self->BarrierServer->ToStringBarrier(
+                                id->TabletID(), id->Channel(), false);
+                            return false;
+                        }
                     }
                 }
                 return true;
             }
 
             void Complete(const TActorContext&) override {
+                Self->Data->CommitTrash(this);
                 Self->Data->HandleTrash();
                 TActivationContext::Send(Response.release());
             }

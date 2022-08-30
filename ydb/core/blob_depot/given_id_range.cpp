@@ -145,7 +145,12 @@ namespace NKikimr::NBlobDepot {
                 myChunk -= otherChunk;
                 NumAvailableItems -= otherChunk.Count();
 
-                ++myIt;
+                if (myChunk.Count()) {
+                    ++myIt;
+                } else {
+                    myIt = Ranges.erase(myIt);
+                }
+
                 ++otherIt;
             }
         }
@@ -155,7 +160,11 @@ namespace NKikimr::NBlobDepot {
 
     void TGivenIdRange::Output(IOutputStream& s) const {
         s << "{";
-        for (const auto& [key, chunk] : Ranges) {
+        for (auto it = Ranges.begin(); it != Ranges.end(); ++it) {
+            const auto& [key, chunk] = *it;
+            if (it != Ranges.begin()) {
+                s << " ";
+            }
             s << key << ":";
             for (ui32 i = 0; i < chunk.Size(); ++i) {
                 s << int(chunk[i]);

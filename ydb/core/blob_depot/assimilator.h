@@ -43,6 +43,7 @@ namespace NKikimr::NBlobDepot {
     private:
         void Action();
         void SendAssimilateRequest();
+        void Handle(TEvents::TEvUndelivered::TPtr ev);
         void Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev);
         void ScanDataForCopying();
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev);

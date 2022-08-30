@@ -19,6 +19,7 @@ namespace NKikimr::NBlobDepot {
         THashMap<std::tuple<ui64, ui8>, TBarrier> Barriers;
 
     private:
+        class TTxAdvanceBarrier;
         class TTxCollectGarbage;
 
     public:
@@ -27,10 +28,13 @@ namespace NKikimr::NBlobDepot {
         {}
 
         void AddBarrierOnLoad(ui64 tabletId, ui8 channel, TGenStep softGenCtr, TGenStep soft, TGenStep hardGenCtr, TGenStep hard);
-        void AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier, NTabletFlatExecutor::TTransactionContext& txc);
+        bool AddBarrierOnDecommit(const TEvBlobStorage::TEvAssimilateResult::TBarrier& barrier, ui32& maxItems,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void Handle(TEvBlobDepot::TEvCollectGarbage::TPtr ev);
         void GetBlobBarrierRelation(TLogoBlobID id, bool *underSoft, bool *underHard) const;
         void OnDataLoaded();
+
+        void ValidateBlobInvariant(ui64 tabletId, ui8 channel);
 
         TString ToStringBarrier(ui64 tabletId, ui8 channel, bool hard) const {
             if (const auto it = Barriers.find(std::make_tuple(tabletId, channel)); it == Barriers.end()) {
@@ -49,6 +53,8 @@ namespace NKikimr::NBlobDepot {
                 callback(tabletId, channel, value.SoftGenCtr, value.Soft, value.HardGenCtr, value.Hard);
             }
         }
+
+        void FinishRequest(ui64 tabletId, ui8 channel, std::optional<TString> error);
     };
 
 } // NKikimr::NBlobDepot

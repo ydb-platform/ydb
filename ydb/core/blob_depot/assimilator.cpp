@@ -42,6 +42,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::PassAway() {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT52, "TAssimilator::PassAway", (Id, Self->GetLogId()));
+        TActorBootstrapped::PassAway();
     }
 
     STATEFN(TAssimilator::StateFunc) {
@@ -51,6 +53,7 @@ namespace NKikimr::NBlobDepot {
 
         switch (const ui32 type = ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvAssimilateResult, Handle);
+            hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
@@ -58,6 +61,7 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
             cFunc(TEvPrivate::EvResume, Action);
+            cFunc(TEvents::TSystem::Poison, PassAway);
 
             default:
                 Y_VERIFY_DEBUG(false, "unexpected event Type# %08" PRIx32, type);
@@ -79,15 +83,28 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TAssimilator::SendAssimilateRequest() {
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT53, "TAssimilator::SendAssimilateRequest", (Id, Self->GetLogId()),
+            (SelfId, SelfId()), (DecommitGroupId, Self->Config.GetDecommitGroupId()));
         SendToBSProxy(SelfId(), Self->Config.GetDecommitGroupId(), new TEvBlobStorage::TEvAssimilate(SkipBlocksUpTo,
             SkipBarriersUpTo, SkipBlobsUpTo));
     }
 
+    void TAssimilator::Handle(TEvents::TEvUndelivered::TPtr ev) {
+        STLOG(PRI_ERROR, BLOB_DEPOT, BDT55, "received TEvUndelivered", (Id, Self->GetLogId()), (Sender, ev->Sender),
+            (Cookie, ev->Cookie), (Type, ev->Get()->SourceType), (Reason, ev->Get()->Reason));
+        TActivationContext::Schedule(TDuration::Seconds(1), new IEventHandle(TEvPrivate::EvResume, 0, SelfId(), {},
+            nullptr, 0));
+    }
+
     void TAssimilator::Handle(TEvBlobStorage::TEvAssimilateResult::TPtr ev) {
         class TTxPutAssimilatedData : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
-            TAssimilator *Self;
+            TAssimilator* const Self;
             std::unique_ptr<TEvBlobStorage::TEvAssimilateResult> Ev;
+            bool BlocksFinished = false;
+            bool BarriersFinished = false;
+
             bool UnblockRegisterActorQ = false;
+            bool MoreData = false;
 
         public:
             TTxPutAssimilatedData(TAssimilator *self, TEvBlobStorage::TEvAssimilateResult::TPtr ev)
@@ -96,85 +113,102 @@ namespace NKikimr::NBlobDepot {
                 , Ev(ev->Release().Release())
             {}
 
+            TTxPutAssimilatedData(TTxPutAssimilatedData& predecessor)
+                : TTransactionBase(predecessor.Self->Self)
+                , Self(predecessor.Self)
+                , Ev(std::move(predecessor.Ev))
+                , BlocksFinished(predecessor.BlocksFinished)
+                , BarriersFinished(predecessor.BarriersFinished)
+            {}
+
             bool Execute(TTransactionContext& txc, const TActorContext&) override {
                 NIceDb::TNiceDb db(txc.DB);
 
-                bool blocksFinished = false;
-                bool barriersFinished = false;
-
-                if (const auto& blocks = Ev->Blocks; !blocks.empty()) {
-                    Self->SkipBlocksUpTo = blocks.back().TabletId;
-                }
-                if (const auto& barriers = Ev->Barriers; !barriers.empty()) {
-                    Self->SkipBarriersUpTo = {barriers.back().TabletId, barriers.back().Channel};
-                }
-                if (const auto& blobs = Ev->Blobs; !blobs.empty()) {
-                    Self->SkipBlobsUpTo = blobs.back().Id;
+                const bool wasEmpty = Ev->Blocks.empty() && Ev->Barriers.empty() && Ev->Blobs.empty();
+                if (wasEmpty) {
+                    BlocksFinished = BarriersFinished = true;
                 }
 
-                for (const auto& block : Ev->Blocks) {
+                ui32 maxItems = 10'000;
+                for (auto& blocks = Ev->Blocks; maxItems && !blocks.empty(); blocks.pop_front(), --maxItems) {
+                    auto& block = blocks.front();
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT31, "assimilated block", (Id, Self->Self->GetLogId()), (Block, block));
                     Self->Self->BlocksManager->AddBlockOnDecommit(block, txc);
+                    Self->SkipBlocksUpTo.emplace(block.TabletId);
                 }
-                for (const auto& barrier : Ev->Barriers) {
+                for (auto& barriers = Ev->Barriers; maxItems && !barriers.empty(); barriers.pop_front(), --maxItems) {
+                    auto& barrier = barriers.front();
                     STLOG(PRI_DEBUG, BLOB_DEPOT, BDT32, "assimilated barrier", (Id, Self->Self->GetLogId()), (Barrier, barrier));
-                    Self->Self->BarrierServer->AddBarrierOnDecommit(barrier, txc);
-                    blocksFinished = true; // there will be no blocks for sure
-                }
-                for (const auto& blob : Ev->Blobs) {
-                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT33, "assimilated blob", (Id, Self->Self->GetLogId()), (Blob, blob));
-                    Self->Self->Data->AddDataOnDecommit(blob, txc);
-                    blocksFinished = barriersFinished = true; // no blocks and no more barriers
-                }
-
-                auto& decommitState = Self->Self->DecommitState;
-                const auto decommitStateOnEntry = decommitState;
-                if (blocksFinished && decommitState < EDecommitState::BlocksFinished) {
-                    decommitState = EDecommitState::BlocksFinished;
-                    UnblockRegisterActorQ = true;
-                }
-                if (barriersFinished && decommitState < EDecommitState::BarriersFinished) {
-                    decommitState = EDecommitState::BarriersFinished;
-                }
-                const bool done = Ev->Blocks.empty() && Ev->Barriers.empty() && Ev->Blobs.empty();
-                if (done && decommitState < EDecommitState::BlobsFinished) {
-                    decommitState = EDecommitState::BlobsFinished;
-                }
-
-                db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
-                    NIceDb::TUpdate<Schema::Config::DecommitState>(decommitState),
-                    NIceDb::TUpdate<Schema::Config::AssimilatorState>(Self->SerializeAssimilatorState())
-                );
-
-                auto toString = [](EDecommitState state) {
-                    switch (state) {
-                        case EDecommitState::Default: return "Default";
-                        case EDecommitState::BlocksFinished: return "BlocksFinished";
-                        case EDecommitState::BarriersFinished: return "BarriersFinished";
-                        case EDecommitState::BlobsFinished: return "BlobsFinished";
-                        case EDecommitState::BlobsCopied: return "BlobsCopied";
-                        case EDecommitState::Done: return "Done";
+                    if (!Self->Self->BarrierServer->AddBarrierOnDecommit(barrier, maxItems, txc, this)) {
+                        Y_VERIFY(!maxItems);
+                        break;
                     }
-                };
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT47, "decommit state change", (Id, Self->Self->GetLogId()),
-                    (From, toString(decommitStateOnEntry)), (To, toString(decommitState)),
-                    (UnblockRegisterActorQ, UnblockRegisterActorQ));
+                    Self->SkipBarriersUpTo.emplace(barrier.TabletId, barrier.Channel);
+                    BlocksFinished = true; // there will be no blocks for sure
+                }
+                for (auto& blobs = Ev->Blobs; maxItems && !blobs.empty(); blobs.pop_front(), --maxItems) {
+                    auto& blob = blobs.front();
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT33, "assimilated blob", (Id, Self->Self->GetLogId()), (Blob, blob));
+                    Self->Self->Data->AddDataOnDecommit(blob, txc, this);
+                    Self->SkipBlobsUpTo.emplace(blob.Id);
+                    Self->Self->Data->LastAssimilatedBlobId = blob.Id;
+                    BlocksFinished = BarriersFinished = true; // no blocks and no more barriers
+                }
 
-                if (!Ev->Blobs.empty()) {
-                    Self->Self->Data->LastAssimilatedBlobId = Ev->Blobs.back().Id;
+                if (Ev->Blocks.empty() && Ev->Barriers.empty() && Ev->Blobs.empty()) {
+                    auto& decommitState = Self->Self->DecommitState;
+                    const auto decommitStateOnEntry = decommitState;
+                    if (BlocksFinished && decommitState < EDecommitState::BlocksFinished) {
+                        decommitState = EDecommitState::BlocksFinished;
+                        UnblockRegisterActorQ = true;
+                    }
+                    if (BarriersFinished && decommitState < EDecommitState::BarriersFinished) {
+                        decommitState = EDecommitState::BarriersFinished;
+                    }
+                    if (wasEmpty && decommitState < EDecommitState::BlobsFinished) {
+                        decommitState = EDecommitState::BlobsFinished;
+                    }
+
+                    db.Table<Schema::Config>().Key(Schema::Config::Key::Value).Update(
+                        NIceDb::TUpdate<Schema::Config::DecommitState>(decommitState),
+                        NIceDb::TUpdate<Schema::Config::AssimilatorState>(Self->SerializeAssimilatorState())
+                    );
+
+                    auto toString = [](EDecommitState state) {
+                        switch (state) {
+                            case EDecommitState::Default: return "Default";
+                            case EDecommitState::BlocksFinished: return "BlocksFinished";
+                            case EDecommitState::BarriersFinished: return "BarriersFinished";
+                            case EDecommitState::BlobsFinished: return "BlobsFinished";
+                            case EDecommitState::BlobsCopied: return "BlobsCopied";
+                            case EDecommitState::Done: return "Done";
+                        }
+                    };
+
+                    STLOG(PRI_DEBUG, BLOB_DEPOT, BDT47, "decommit state change", (Id, Self->Self->GetLogId()),
+                        (From, toString(decommitStateOnEntry)), (To, toString(decommitState)),
+                        (UnblockRegisterActorQ, UnblockRegisterActorQ));
+                } else {
+                    MoreData = true;
                 }
 
                 return true;
             }
 
             void Complete(const TActorContext&) override {
-                if (UnblockRegisterActorQ) {
-                    STLOG(PRI_INFO, BLOB_DEPOT, BDT35, "blocks assimilation complete", (Id, Self->Self->GetLogId()),
-                        (DecommitGroupId, Self->Self->Config.GetDecommitGroupId()));
-                    Self->Self->ProcessRegisterAgentQ();
-                }
+                Self->Self->Data->CommitTrash(this);
 
-                Self->Action();
+                if (MoreData) {
+                    Self->Self->Execute(std::make_unique<TTxPutAssimilatedData>(*this));
+                } else {
+                    if (UnblockRegisterActorQ) {
+                        STLOG(PRI_INFO, BLOB_DEPOT, BDT35, "blocks assimilation complete", (Id, Self->Self->GetLogId()),
+                            (DecommitGroupId, Self->Self->Config.GetDecommitGroupId()));
+                        Self->Self->ProcessRegisterAgentQ();
+                    }
+
+                    Self->Action();
+                }
             }
         };
 
@@ -183,6 +217,8 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::ScanDataForCopying() {
         const bool fromTheBeginning = !LastScannedKey;
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT54, "TAssimilator::ScanDataForCopying", (Id, Self->GetLogId()),
+            (LastScannedKey, LastScannedKey));
 
         TData::TKey lastScannedKey;
         if (LastScannedKey) {
@@ -241,7 +277,7 @@ namespace NKikimr::NBlobDepot {
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& resp = msg.Responses[i];
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT34, "got TEvGetResult", (Id, Self->GetLogId()), (BlobId, resp.Id),
-                (Status, resp.Status));
+                (Status, resp.Status), (NumPutsInFlight, NumPutsInFlight));
             if (resp.Status == NKikimrProto::OK) {
                 auto ev = std::make_unique<TEvBlobStorage::TEvPut>(resp.Id, resp.Buffer, TInstant::Max());
                 ev->Decommission = true;
@@ -256,7 +292,8 @@ namespace NKikimr::NBlobDepot {
 
     void TAssimilator::Handle(TEvBlobStorage::TEvPutResult::TPtr ev) {
         auto& msg = *ev->Get();
-        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg));
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg),
+            (NumPutsInFlight, NumPutsInFlight));
         if (msg.Status == NKikimrProto::OK) {
             const size_t numErased = NeedfulBlobs.erase(msg.Id);
             Y_VERIFY(numErased == 1);

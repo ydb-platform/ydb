@@ -36,6 +36,7 @@ namespace NKikimr::NBlobDepot {
 
         TLoadState LoadState;
         std::unique_ptr<TTxLoad> SuccessorTx;
+        TTransactionContext *Txc;
 
     public:
         TTxLoad(TBlobDepot *self, TLoadState loadState = TLoadDataBegin{})
@@ -50,6 +51,8 @@ namespace NKikimr::NBlobDepot {
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT28, "TData::TTxLoad::Execute", (Id, Self->GetLogId()));
+
+            Txc = &txc;
 
             NIceDb::TNiceDb db(txc.DB);
             bool progress = false;
@@ -117,7 +120,7 @@ namespace NKikimr::NBlobDepot {
         template<typename T>
         void ProcessRow(T&& row, Schema::Data*) {
             auto key = TData::TKey::FromBinaryKey(row.template GetValue<Schema::Data::Key>(), Self->Config);
-            Self->Data->AddDataOnLoad(key, row.template GetValue<Schema::Data::Value>());
+            Self->Data->AddDataOnLoad(key, row.template GetValue<Schema::Data::Value>(), *Txc, this);
             Y_VERIFY(!Self->Data->LastLoadedKey || *Self->Data->LastLoadedKey < key);
             Self->Data->LastLoadedKey = std::move(key);
         }
@@ -140,6 +143,8 @@ namespace NKikimr::NBlobDepot {
         void Complete(const TActorContext&) override {
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT29, "TData::TTxLoad::Complete", (Id, Self->GetLogId()),
                 (SuccessorTx, bool(SuccessorTx)), (LoadState.index, LoadState.index()));
+
+            Self->Data->CommitTrash(this);
 
             if (SuccessorTx) {
                 Self->Execute(std::move(SuccessorTx));

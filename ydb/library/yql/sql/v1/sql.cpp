@@ -5129,7 +5129,7 @@ TNodePtr TSqlExpression::SubExpr(const TRule_xor_subexpr& node, const TTrailingQ
                     auto list = new TAstListNodeImpl(pos, { escapedPattern, optionsApply });
                     auto runConfig = new TAstListNodeImpl(pos, { new TAstAtomNodeImpl(pos, "quote", 0), list });
 
-                    const auto& matcher = BuildUdf(Ctx, pos, "Re2", "Match", { runConfig });
+                    const TNodePtr matcher = new TCallNodeImpl(pos, "AssumeStrict", { BuildUdf(Ctx, pos, "Re2", "Match", { runConfig }) });
                     isMatch = new TCallNodeImpl(pos, "Apply", { matcher, res });
 
                     bool isUtf8 = false;

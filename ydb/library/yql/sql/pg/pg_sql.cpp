@@ -1837,7 +1837,7 @@ public:
                 return nullptr;
             }
 
-            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), false);
+            auto sort = ParseSortBy(CAST_NODE_EXT(PG_SortBy, T_SortBy, node), true);
             if (!sort) {
                 return nullptr;
             }
@@ -1851,6 +1851,7 @@ public:
             auto node = ListNodeNth(value->partitionClause, i);
             TExprSettings settings;
             settings.AllowColumns = true;
+            settings.AllowAggregates = true;
             settings.Scope = "PARTITITON BY";
             auto expr = ParseExpr(node, settings);
             if (!expr) {

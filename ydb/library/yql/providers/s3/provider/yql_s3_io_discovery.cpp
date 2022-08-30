@@ -1,5 +1,6 @@
-#include "yql_s3_provider_impl.h"
 #include "yql_s3_list.h"
+#include "yql_s3_path.h"
+#include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/path_generator/yql_s3_path_generator.h>
@@ -406,33 +407,38 @@ private:
             req.Url = url;
 
             if (partitionedBy.empty()) {
+                if (path.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), "Can not read from empty path"));
+                    return false;
+                }
                 if (path.EndsWith("/")) {
                     req.Pattern = path + "*";
                 } else {
                     // treat paths as regular wildcard patterns
                     req.Pattern = path;
                 }
+                req.Pattern = NormalizeS3Path(req.Pattern);
                 reqs.push_back(req);
             } else {
                 if (IS3Lister::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
-                const TString pathNoTrailingSlash = path.substr(0, path.EndsWith("/") ? path.size() - 1 : path.size());
                 if (!config.Generator) {
                     // Hive-style partitioning
-                    TString generated;
+                    TStringBuilder generated;
+                    generated << path;
                     for (auto& col : config.Columns) {
-                        generated += "/" + col + "=*";
+                        generated << "/" << col << "=*";
                     }
-                    generated += "/*";
-                    req.Pattern = pathNoTrailingSlash + generated;
+                    generated << "/*";
+                    req.Pattern = NormalizeS3Path(generated);
                     reqs.push_back(req);
                 } else {
                     for (auto& rule : config.Generator->GetRules()) {
                         YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
                         req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
-                        req.Pattern = pathNoTrailingSlash + rule.Path + "/*";
+                        req.Pattern = NormalizeS3Path(TStringBuilder() << path << "/" << rule.Path << "/*");
                         reqs.push_back(req);
                     }
                 }

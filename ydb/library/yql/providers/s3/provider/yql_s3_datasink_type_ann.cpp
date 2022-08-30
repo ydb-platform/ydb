@@ -1,3 +1,4 @@
+#include "yql_s3_path.h"
 #include "yql_s3_provider_impl.h"
 
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
@@ -57,7 +58,7 @@ private:
         return TStatus::Ok;
     }
 
-    TStatus HandleTarget(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatus HandleTarget(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (!EnsureMinMaxArgsCount(*input, 2U, 3U, ctx)) {
             return TStatus::Error;
         }
@@ -66,9 +67,21 @@ private:
             return TStatus::Error;
         }
 
-        if (const auto& path = input->Child(TS3Target::idx_Path)->Content(); path.empty() || path.back() != '/') {
+        const auto& path = input->Child(TS3Target::idx_Path)->Content();
+        if (path.empty() || path.back() != '/') {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Expected non empty path to directory ends with '/'."));
             return TStatus::Error;
+        }
+
+        TString normalized = NormalizeS3Path(ToString(path));
+        if (normalized == "/") {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Unable to write to root directory"));
+            return TStatus::Error;
+        }
+
+        if (normalized != path) {
+            output = ctx.ChangeChild(*input, TS3Target::idx_Path, ctx.NewAtom(input->Child(TS3Target::idx_Path)->Pos(), normalized));
+            return TStatus::Repeat;
         }
 
         if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormat(input->Child(TS3Target::idx_Format)->Content(), ctx)) {

@@ -4,6 +4,7 @@
 #include "subscriber.h"
 #include "percentile_counter.h"
 #include "read_speed_limiter.h"
+#include "metering_sink.h"
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/protos/counters_pq.pb.h>
@@ -201,6 +202,7 @@ struct TUserInfo {
 
     std::shared_ptr<TPercentileCounter> ReadTimeLag;
     bool DoInternalRead = false;
+    bool MeterRead = true;
 
     bool WriteInProgress = false;
 
@@ -229,7 +231,8 @@ struct TUserInfo {
     }
 
     void ReadDone(const TActorContext& ctx, const TInstant& now, ui64 readSize, ui32 readCount,
-                  const TString& clientDC) {
+                  const TString& clientDC, const TActorId& tablet) {
+        Y_UNUSED(tablet);
         if (BytesRead && !clientDC.empty()) {
             if (BytesRead)
                 BytesRead.Inc(readSize);
@@ -269,7 +272,7 @@ struct TUserInfo {
         const ui64 readRuleGeneration, const bool important, const NPersQueue::TTopicConverterPtr& topicConverter,
         const ui32 partition, const TString &session, ui32 gen, ui32 step, i64 offset,
         const ui64 readOffsetRewindSum, const TString& dcId, TInstant readFromTimestamp,
-        const TString& cloudId, const TString& dbId, const TMaybe<TString>& dbPath, const TString& folderId,
+        const TString& cloudId, const TString& dbId, const TMaybe<TString>& dbPath, const TString& folderId, bool meterRead,
         ui64 burst = 1'000'000'000, ui64 speed = 1'000'000'000
     )
         : ReadSpeedLimiter(std::move(readSpeedLimiter))
@@ -301,6 +304,7 @@ struct TUserInfo {
                        {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
         , WriteLagMs(TDuration::Minutes(1), 100)
         , DoInternalRead(user != CLIENTID_WITHOUT_CONSUMER)
+        , MeterRead(meterRead)
     {
         if (AppData(ctx)->Counters) {
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

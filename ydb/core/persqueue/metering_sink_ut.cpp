@@ -56,7 +56,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
     TMeteringSink meteringSink;
     const ui64 creationTs = 1651752943168786;
     const ui64 flushTs    = 1651754943168786;
-    const ui32 consumersThroughput = 10;
+    const ui32 consumersCount = 10;
     const ui64 writeQuota = 512_KB;
     const ui64 reservedSpace = 10_MB;
     const ui32 partitions = 2;
@@ -71,7 +71,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
             .PartitionsSize = partitions,
             .WriteQuota = writeQuota,
             .ReservedSpace = reservedSpace,
-            .ConsumersThroughput = consumersThroughput
+            .ConsumersCount = consumersCount
         }, {EMeteringJson::ResourcesReservedV1}, [&](TString json) {
             fullMetering = TStringBuilder() << fullMetering << '\n' << json;
         });
@@ -84,7 +84,7 @@ Y_UNIT_TEST(FlushResourcesReservedV1) {
         ",\"id\":\"reserved_resources-databaseId-tabletId-" << creationTs / 1'000 << "-" <<
         meteringSink.GetMeteringCounter() << "\"" <<
         ",\"schema\":\"yds.resources.reserved.v1\",\"tags\":{\"reserved_throughput_bps\":" <<
-        writeQuota << ",\"shard_enhanced_consumers_throughput\":" << consumersThroughput <<
+        writeQuota << ",\"reserved_consumers_count\":" << consumersCount <<
         ",\"reserved_storage_bytes\":" << reservedSpace << "},\"usage\":{\"quantity\":" <<
         partitions * (flushTs - creationTs) / 1'000'000 << ",\"unit\":\"second\"," <<
         "\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
@@ -122,7 +122,7 @@ Y_UNIT_TEST(FlushThroughputV1) {
         "\"id\":\"yds.reserved_resources-databaseId-tabletId-" << creationTs / 1'000 << "-" <<
         meteringSink.GetMeteringCounter() << "\"" <<
         ",\"schema\":\"yds.throughput.reserved.v1\",\"tags\":" <<
-        "{\"reserved_throughput_bps\":" << writeQuota << "}," << "\"usage\":{\"quantity\":" <<
+        "{\"reserved_throughput_bps\":" << writeQuota << ",\"reserved_consumers_count\":" << 0 << "}," << "\"usage\":{\"quantity\":" <<
         partitions * (flushTs - creationTs) / 1'000'000 << ",\"unit\":\"second\"" <<
         ",\"start\":" << creationTs / 1'000'000 << ",\"finish\":" << flushTs / 1'000'000 <<
         "},\"labels\":{\"datastreams_stream_name\":\"streamName\",\"ydb_database\":\"databaseId\"}," <<

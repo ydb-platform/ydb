@@ -2,6 +2,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#include <library/cpp/json/json_reader.h>
 #include <util/string/printf.h>
 
 using namespace NKikimr;
@@ -664,9 +665,25 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         env.TestWaitNotification(runtime, txId);
 
         for (int i = 0; i < 10; ++i) {
-            UNIT_ASSERT(meteringRecords.empty());
             env.SimulateSleep(runtime, TDuration::Seconds(10));
         }
+        UNIT_ASSERT(meteringRecords.size() == 3);
+
+        for (auto& rec : meteringRecords) {
+            Cerr << "GOT METERING: " << rec << "\n";
+        }
+
+        NJson::TJsonValue json;
+        NJson::ReadJsonTree(meteringRecords[0], &json, true);
+        auto& map = json.GetMap();
+        UNIT_ASSERT(map.contains("schema"));
+        UNIT_ASSERT(map.contains("resource_id"));
+        UNIT_ASSERT(map.contains("tags"));
+        UNIT_ASSERT(map.find("tags")->second.GetMap().contains("ydb_size"));
+        UNIT_ASSERT_VALUES_EQUAL(map.find("schema")->second.GetString(), "ydb.serverless.v1");
+        UNIT_ASSERT_VALUES_EQUAL(map.find("resource_id")->second.GetString(), "/MyRoot/Table/Stream/streamImpl");
+        UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().find("ydb_size")->second.GetInteger(), 0);
+
     }
 
 } // TCdcStreamTests

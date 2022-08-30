@@ -11,15 +11,16 @@ std::atomic<ui64> TMeteringSink::MeteringCounter_{0};
 bool TMeteringSink::Create(TInstant now, const TMeteringSink::TParameters& p,
                            const TSet<EMeteringJson>& whichToFlush,
                            std::function<void(TString)> howToFlush) {
+    MayFlushForcibly(now);
     if (p.PartitionsSize == 0) {
         Created_ = false;
     } else {
-        if (!Created_) {
-            for (auto which : whichToFlush) {
-                LastFlush_[which] = now;
-            }
+        for (auto which : whichToFlush) {
+            LastFlush_[which] = now;
         }
         CurrentPutUnitsQuantity_ = 0;
+        CurrentUsedStorage_ = 0;
+
         Created_ = true;
         Parameters_ = p;
         WhichToFlush_ = whichToFlush;
@@ -49,6 +50,9 @@ ui64 TMeteringSink::IncreaseQuantity(EMeteringJson meteringJson, ui64 inc) {
     case EMeteringJson::PutEventsV1:
         CurrentPutUnitsQuantity_ += inc;
         return CurrentPutUnitsQuantity_;
+    case EMeteringJson::UsedStorageV1:
+        CurrentUsedStorage_ += inc;
+        return CurrentUsedStorage_;
 
     default:
         return 0;
@@ -67,7 +71,7 @@ bool TMeteringSink::IsCreated() const {
 TString TMeteringSink::GetMeteringJson(const TString& metricBillingId, const TString& schemeName,
                                       const THashMap<TString, ui64>& tags,
                                       const TString& quantityUnit, ui64 quantity,
-                                      TInstant start, TInstant end, TInstant now) {
+                                      TInstant start, TInstant end, TInstant now, const TString& version) {
     MeteringCounter_.fetch_add(1);
     TStringStream output;
     NJson::TJsonWriter writer(&output, false);
@@ -102,7 +106,7 @@ TString TMeteringSink::GetMeteringJson(const TString& metricBillingId, const TSt
     writer.Write("ydb_database", Parameters_.YdbDatabaseId);
     writer.CloseMap(); // "labels"
 
-    writer.Write("version", "v1");
+    writer.Write("version", version);
     writer.Write("source_id", Parameters_.TabletId);
     writer.Write("source_wt", now.Seconds());
     writer.CloseMap();
@@ -113,33 +117,83 @@ TString TMeteringSink::GetMeteringJson(const TString& metricBillingId, const TSt
 
 
 void TMeteringSink::Flush(TInstant now, bool force) {
-    bool needFlush = force;
 
     for (auto whichOne : WhichToFlush_) {
+        bool needFlush = force;
+        TString units;
+        TString schema;
+        TString name;
+
         switch (whichOne) {
+        case EMeteringJson::UsedStorageV1: {
+            units = "byte*second";
+            schema = "ydb.serverless.v1";
+            name = "used_storage";
+
+            needFlush |= IsTimeToFlush(now, LastFlush_[whichOne]);
+            if (!needFlush) {
+                break;
+            }
+            ui64 duration = (now - LastFlush_[whichOne]).MilliSeconds();
+            ui64 cus = CurrentUsedStorage_ * 1024 * 1024; // in bytes
+            ui64 avgUsage = cus * 1000 / duration;
+            CurrentUsedStorage_ = 0;
+            const THashMap<TString, ui64> tags = {
+                {"ydb_size", avgUsage}
+            };
+
+
+            auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
+            while (interval < now) {
+                const auto metricsJson = GetMeteringJson(
+                    name, schema, tags, "byte*second",
+                    (now - LastFlush_[whichOne]).Seconds(),
+                    LastFlush_[whichOne], interval, now, "1.0.0");
+                LastFlush_[whichOne] = interval;
+                FlushFunction_(metricsJson);
+                interval += Parameters_.FlushLimit;
+            }
+            if (LastFlush_[whichOne] < now) {
+                const auto metricsJson = GetMeteringJson(
+                    name, schema, tags, "byte*second",
+                    (now - LastFlush_[whichOne]).Seconds(),
+                    LastFlush_[whichOne], now, now, "1.0.0");
+                LastFlush_[whichOne] = now;
+                FlushFunction_(metricsJson);
+            }
+        }
+        break;
+
+
+
         case EMeteringJson::PutEventsV1: {
+            units = "put_units";
+            schema = "yds.events.puts.v1";
+            name = "put_events";
+
+            auto& putUnits = CurrentPutUnitsQuantity_;
+
             needFlush |= IsTimeToFlush(now, LastFlush_[whichOne]);
             if (!needFlush) {
                 break;
             }
             const auto isTimeToFlushUnits = now.Hours() > LastFlush_[whichOne].Hours();
             if (isTimeToFlushUnits || needFlush) {
-                if (CurrentPutUnitsQuantity_ > 0) {
+                if (putUnits > 0) {
                     // If we jump over a hour edge, report requests metrics for a previous hour
                     const TInstant requestsEndTime = isTimeToFlushUnits
                         ? TInstant::Hours(LastFlush_[whichOne].Hours() + 1) : now;
 
                     const auto record = GetMeteringJson(
-                        "put_units", "yds.events.puts.v1", {}, "put_events", CurrentPutUnitsQuantity_,
+                        units, schema, {}, name, putUnits,
                         LastFlush_[whichOne], requestsEndTime, now);
                     FlushFunction_(record);
                 }
-                CurrentPutUnitsQuantity_ = 0;
+                putUnits = 0;
                 LastFlush_[whichOne] = now;
             }
         }
         break;
-
         case EMeteringJson::ResourcesReservedV1: {
             needFlush |= IsTimeToFlush(now, LastFlush_[whichOne]);
             if (!needFlush) {
@@ -149,7 +203,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             const TString schema = "yds.resources.reserved.v1";
             const THashMap<TString, ui64> tags = {
                 {"reserved_throughput_bps", Parameters_.WriteQuota},
-                {"shard_enhanced_consumers_throughput", Parameters_.ConsumersThroughput},
+                {"reserved_consumers_count", Parameters_.ConsumersCount},
                 {"reserved_storage_bytes", Parameters_.ReservedSpace}
             };
             auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
@@ -182,6 +236,7 @@ void TMeteringSink::Flush(TInstant now, bool force) {
             const TString schema = "yds.throughput.reserved.v1";
             const THashMap<TString, ui64> tags = {
                 {"reserved_throughput_bps", Parameters_.WriteQuota},
+                {"reserved_consumers_count", Parameters_.ConsumersCount}
             };
             auto interval = TInstant::Hours(LastFlush_[whichOne].Hours()) + Parameters_.FlushLimit;
             while (interval < now) {

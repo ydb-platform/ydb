@@ -4,6 +4,7 @@
 #include <ydb/services/ydb/ydb_keys_ut.h>
 
 #include <ydb/public/sdk/cpp/client/ydb_datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_public/persqueue.h>
 #include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
 #include <ydb/public/sdk/cpp/client/ydb_table/table.h>
@@ -45,6 +46,12 @@ public:
         // NOTE(shmel1k@): KIKIMR-14221
         appConfig.MutablePQConfig()->SetCheckACL(false);
         appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
+
+        auto cst = appConfig.MutablePQConfig()->AddClientServiceType();
+        cst->SetName("data-transfer");
+        cst = appConfig.MutablePQConfig()->AddClientServiceType();
+        cst->SetName("data-transfer2");
+
 
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetEnableQuoting(true);
         appConfig.MutablePQConfig()->MutableQuotingConfig()->SetQuotaWaitDurationMs(300);
@@ -337,7 +344,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                               UNIT_ASSERT(map.contains("tags"));
                               auto& tags = map.find("tags")->second.GetMap();
                               UNIT_ASSERT(tags.contains("reserved_throughput_bps"));
-                              UNIT_ASSERT(tags.contains("shard_enhanced_consumers_throughput"));
+                              UNIT_ASSERT(tags.contains("reserved_consumers_count"));
                               UNIT_ASSERT(tags.contains("reserved_storage_bytes"));
                           },
                           [streamName](const NJson::TJsonValue::TMapType& map) {
@@ -425,9 +432,12 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                             [](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("tags"));
                                 auto& tags = map.find("tags")->second.GetMap();
-                                UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(tags.size(), 2);
                                 UNIT_ASSERT_VALUES_EQUAL(
                                     tags.find("reserved_throughput_bps")->second.GetUInteger(), 1_MB);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    tags.find("reserved_consumers_count")->second.GetUInteger(), 0);
+
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
                                 UNIT_ASSERT(map.contains("labels"));
@@ -485,6 +495,146 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT(res.GetValue().IsSuccess());
         }
     }
+
+
+    Y_UNIT_TEST(TestReservedConsumersMetering) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        const ui64 storageMb = 55_GB / 1_MB;
+        const ui32 shardCount = 1;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(shardCount)
+                                                .RetentionStorageMegabytes(storageMb)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+
+        NYdb::NPersQueue::TPersQueueClient pqClient(*testServer.Driver);
+        std::vector<std::pair<TString, TString>> opts = {{"user1", ""}, {"user2", "data-transfer"}, {"user3", "data-streams"}, {"user4", "data-transfer2"}};
+        for (const auto& p : opts) {
+            NYdb::NPersQueue::TAddReadRuleSettings addReadRuleSettings;
+            addReadRuleSettings.ReadRule(NYdb::NPersQueue::TReadRuleSettings().ServiceType(p.second).ConsumerName(p.first));
+            auto res = pqClient.AddReadRule(streamName, addReadRuleSettings);
+            res.Wait();
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+        }
+
+        {
+            for (int i = 0; i < 5; ++i) {
+                std::vector<NYDS_V1::TDataRecord> records;
+                for (ui32 i = 1; i <= 30; ++i) {
+                    TString data = Sprintf("%04u", i);
+                    records.push_back({data, data, ""});
+                }
+                auto result = testServer.DataStreamsClient->PutRecords(streamName, records).ExtractValueSync();
+                Cerr << result.GetResult().DebugString() << Endl;
+                UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                sleep(1);
+            }
+        }
+
+        std::vector<TString> consumers = {"user1", "user2"};
+        for (auto& consumer : consumers) {
+            NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+
+            auto session = pqClient.CreateReadSession(NYdb::NTopic::TReadSessionSettings()
+                                                          .ConsumerName(consumer)
+                                                          .AppendTopics(NYdb::NTopic::TTopicReadSettings().Path("/Root/" + streamName)));
+            ui32 readCount = 0;
+            while (readCount < 150) {
+                auto event = session->GetEvent(true);
+
+                if (auto* dataReceivedEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*event)) {
+                    readCount += dataReceivedEvent->GetMessages().size();
+                } else if (auto* createPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*event)) {
+                    createPartitionStreamEvent->Confirm();
+                } else if (auto* destroyPartitionStreamEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent>(&*event)) {
+                    destroyPartitionStreamEvent->Confirm();
+                } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
+                    break;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(readCount, 150);
+        }
+
+        {
+            auto res = pqClient.DropTopic(streamName);
+            res.Wait();
+            UNIT_ASSERT(res.GetValue().IsSuccess());
+        }
+
+        auto storageSchemaFound =
+            CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName, "yds.storage.reserved.v1",
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("tags"));
+                                UNIT_ASSERT_VALUES_EQUAL(map.find("tags")->second.GetMap().size(), 0);
+                            },
+                            [streamName](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("labels"));
+                                auto& labels = map.find("labels")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("datastreams_stream_name")->second.GetString(), streamName);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("ydb_database")->second.GetString(), "root");
+                            },
+                            [/*storageMb*/](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("usage"));
+                                auto& usage = map.find("usage")->second.GetMap();
+                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 10);
+                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 9);
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
+                                                         "mbyte*second");
+        //                        UNIT_ASSERT_VALUES_EQUAL(usage.find("quantity")->second.GetUInteger(),
+        //                                       storageMb);
+
+                            });
+        UNIT_ASSERT_VALUES_EQUAL(storageSchemaFound, 9);
+
+
+        ui32 s = 0;
+        auto throughputSchemaFound =
+            CheckMeteringFile(testServer.MeteringFile.Get(), "/Root/" + streamName,
+                            "yds.throughput.reserved.v1",
+                            [&s](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("tags"));
+                                auto& tags = map.find("tags")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(tags.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    tags.find("reserved_throughput_bps")->second.GetUInteger(), 1_MB);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    tags.find("reserved_consumers_count")->second.GetUInteger(), ui32(s >= 1) + ui32(s >= 3) );
+                                ++s;
+
+                            },
+                            [streamName](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("labels"));
+                                auto& labels = map.find("labels")->second.GetMap();
+                                UNIT_ASSERT_VALUES_EQUAL(labels.size(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("datastreams_stream_name")->second.GetString(), streamName);
+                                UNIT_ASSERT_VALUES_EQUAL(
+                                    labels.find("ydb_database")->second.GetString(), "root");
+                            },
+                            [](const NJson::TJsonValue::TMapType& map) {
+                                UNIT_ASSERT(map.contains("usage"));
+                                auto& usage = map.find("usage")->second.GetMap();
+                                UNIT_ASSERT(usage.find("quantity")->second.GetInteger() <= 1);
+                                UNIT_ASSERT_GT(usage.find("start")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 10);
+                                UNIT_ASSERT_GT(usage.find("finish")->second.GetUInteger(),
+                                               TInstant::Now().Seconds() - 9);
+                                UNIT_ASSERT_VALUES_EQUAL(usage.find("unit")->second.GetString(),
+                                                         "second");
+                            });
+        UNIT_ASSERT_VALUES_EQUAL(throughputSchemaFound, 9);
+    }
+
 
     Y_UNIT_TEST(TestNonChargeableUser) {
         TSecureDatastreamsTestServer testServer;
@@ -549,7 +699,7 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                                 UNIT_ASSERT(map.contains("tags"));
                                 auto& tags = map.find("tags")->second.GetMap();
                                 UNIT_ASSERT(tags.contains("reserved_throughput_bps"));
-                                UNIT_ASSERT(tags.contains("shard_enhanced_consumers_throughput"));
+                                UNIT_ASSERT(tags.contains("reserved_consumers_count"));
                                 UNIT_ASSERT(tags.contains("reserved_storage_bytes"));
                             },
                             [streamName](const NJson::TJsonValue::TMapType& map) {
@@ -949,9 +1099,12 @@ Y_UNIT_TEST_SUITE(DataStreams) {
                           [](const NJson::TJsonValue::TMapType& map) {
                               UNIT_ASSERT(map.contains("tags"));
                               auto& tags = map.find("tags")->second.GetMap();
-                              UNIT_ASSERT_VALUES_EQUAL(tags.size(), 1);
+                              UNIT_ASSERT_VALUES_EQUAL(tags.size(), 2);
                               UNIT_ASSERT_VALUES_EQUAL(
                                   tags.find("reserved_throughput_bps")->second.GetInteger(), 1_MB);
+                              UNIT_ASSERT_VALUES_EQUAL(
+                                  tags.find("reserved_consumers_count")->second.GetInteger(), 0);
+
                           },
                           [](const NJson::TJsonValue::TMapType& map) {
                               UNIT_ASSERT(map.contains("usage"));

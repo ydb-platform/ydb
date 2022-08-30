@@ -68,7 +68,9 @@ struct TReadInfo {
         const ui32 partition,
         TUserInfo* ui,
         const ui64 dst,
-        const ui64 sizeLag
+        const ui64 sizeLag,
+        const TActorId& tablet,
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
     );
 
     TReadAnswer FormAnswer(
@@ -77,10 +79,13 @@ struct TReadInfo {
         const ui32 partition,
         TUserInfo* ui,
         const ui64 dst,
-        const ui64 sizeLag
+        const ui64 sizeLag,
+        const TActorId& tablet,
+        const NKikimrPQ::TPQTabletConfig::EMeteringMode meteringMode
+
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag);
+        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode);
     }
 };
 

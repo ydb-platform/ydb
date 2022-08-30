@@ -166,6 +166,8 @@ private:
     TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, ui32* rcount, ui32* rsize);
     TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount, ui32* rsize, ui64* insideHeadOffset);
 
+    ui64 GetUsedStorage(const TActorContext& ctx);
+
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
         return NKikimrServices::TActivity::PERSQUEUE_PARTITION_ACTOR;
@@ -475,6 +477,8 @@ private:
     TDeque<NKikimrPQ::TStatusResponse::TErrorMessage> Errors;
 
     THolder<TMirrorerInfo> Mirrorer;
+
+    TInstant LastUsedStorageMeterTimestamp;
 };
 
 } // namespace NKikimr::NPQ

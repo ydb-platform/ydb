@@ -244,7 +244,8 @@ private:
 };
 
 
-TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request, const TActorContext&ctx)
+TActorId CreateReadProxy(const TActorId& sender, const TActorId& tablet, const NKikimrClient::TPersQueueRequest& request,
+                         const TActorContext& ctx)
 {
     return ctx.Register(new TReadProxy(sender, tablet, request));
 }
@@ -607,8 +608,6 @@ void TPersQueue::ApplyNewConfigAndReply(const TActorContext& ctx)
     // in order to answer only after all parts are ready to work
     Y_VERIFY(ConfigInited && PartitionsInited == Partitions.size());
 
-    MeteringSink.MayFlushForcibly(ctx.Now());
-
     Config = NewConfig;
 
     if (!Config.PartitionsSize()) {
@@ -831,15 +830,6 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
         return;
     }
 
-    switch (Config.GetMeteringMode()) {
-    case NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS:
-        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " disable metering"
-            << ": reason# " << "METERING_MODE_SERVERLESS");
-        return;
-    default:
-        break;
-    }
-
     TSet<EMeteringJson> whichToFlush{EMeteringJson::PutEventsV1, EMeteringJson::ResourcesReservedV1};
     ui64 storageLimitBytes{Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
         Config.GetPartitionConfig().GetLifetimeSeconds()};
@@ -850,6 +840,26 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
                                            EMeteringJson::ThroughputV1,
                                            EMeteringJson::StorageV1};
     }
+
+    switch (Config.GetMeteringMode()) {
+    case NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS:
+        LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE, "Tablet " << TabletID() << " metering mode METERING_MODE_SERVERLESS");
+        whichToFlush = TSet<EMeteringJson>{EMeteringJson::UsedStorageV1};
+
+    default:
+        break;
+    }
+
+    auto countReadRulesWithPricing = [&](const TActorContext& ctx, const auto& config) {
+        ui32 result = 0;
+        for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
+            TString rrServiceType = config.ReadRuleServiceTypesSize() <= i ? "" : config.GetReadRuleServiceTypes(i);
+            if (rrServiceType.empty() || rrServiceType == AppData(ctx)->PQConfig.GetDefaultClientServiceType().GetName())
+                ++result;
+        }
+        return result;
+    };
+
 
     MeteringSink.Create(ctx.Now(), {
             .FlushInterval  = TDuration::Seconds(pqConfig.GetBillingMeteringConfig().GetFlushIntervalSec()),
@@ -862,8 +872,7 @@ void TPersQueue::InitializeMeteringSink(const TActorContext& ctx) {
             .PartitionsSize = Config.PartitionsSize(),
             .WriteQuota     = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond(),
             .ReservedSpace  = storageLimitBytes,
-            .ConsumersThroughput = Config.GetPartitionConfig().GetWriteSpeedInBytesPerSecond() *
-                                   Config.ReadRulesSize(),
+            .ConsumersCount = countReadRulesWithPricing(ctx, Config),
         }, whichToFlush, std::bind(NMetering::SendMeteringJson, ctx, std::placeholders::_1));
 }
 
@@ -931,6 +940,11 @@ void TPersQueue::SetCacheCounters(TEvPQ::TEvTabletCacheCounters::TCacheCounters&
     Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_READ] = cacheCounters.CachedOnRead;
     Counters->Simple()[COUNTER_PQ_TABLET_CACHED_ON_WRATE] = cacheCounters.CachedOnWrite;
     Counters->Simple()[COUNTER_PQ_TABLET_OPENED_PIPES] = PipesInfo.size();
+}
+
+void TPersQueue::Handle(TEvPQ::TEvMetering::TPtr& ev, const TActorContext&)
+{
+    MeteringSink.IncreaseQuantity(ev->Get()->Type, ev->Get()->Quantity);
 }
 
 
@@ -1511,8 +1525,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, const TActorId& p
 {
     Y_VERIFY(req.CmdWriteSize());
     MeteringSink.MayFlush(ctx.Now()); // To ensure hours' border;
-    MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1,
-                                  req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
+    if (Config.GetMeteringMode() != NKikimrPQ::TPQTabletConfig::METERING_MODE_SERVERLESS) {
+        MeteringSink.IncreaseQuantity(EMeteringJson::PutEventsV1, req.HasPutUnitsSize() ? req.GetPutUnitsSize() : 0);
+    }
 
     TVector <TEvPQ::TEvWrite::TMsg> msgs;
 
@@ -2154,6 +2169,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);
         HFuncTraced(TEvPQ::TEvTabletCacheCounters, Handle);

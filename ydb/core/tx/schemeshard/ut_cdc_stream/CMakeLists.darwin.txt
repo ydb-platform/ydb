@@ -22,6 +22,7 @@ target_link_libraries(ydb-core-tx-schemeshard-ut_cdc_stream PUBLIC
   core-tx-schemeshard
   ydb-core-testlib
   tx-schemeshard-ut_helpers
+  library-cpp-json
 )
 target_link_options(ydb-core-tx-schemeshard-ut_cdc_stream PRIVATE
   -Wl,-no_deduplicate

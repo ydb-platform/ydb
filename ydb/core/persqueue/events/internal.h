@@ -6,7 +6,7 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/persqueue/key.h>
-
+#include <ydb/core/persqueue/metering_sink.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/actorid.h>
 
@@ -112,6 +112,7 @@ struct TEvPQ {
         EvCreateConsumer,
         EvRequestPartitionStatus,
         EvReaderEventArrived,
+        EvMetering,
         EvEnd
     };
 
@@ -622,6 +623,16 @@ struct TEvPQ {
         {}
 
         ui64 Id;
+    };
+
+    struct TEvMetering : public TEventLocal<TEvMetering, EvMetering> {
+        TEvMetering(NPQ::EMeteringJson type, ui64 quantity)
+        : Type (type)
+        , Quantity(quantity)
+        {}
+
+        NPQ::EMeteringJson Type;
+        ui64 Quantity;
     };
 };
 

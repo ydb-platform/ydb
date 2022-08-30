@@ -102,44 +102,48 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     Y_UNIT_TEST(CreateAndDropTableCheckAuditLog) {
         TStringStream logStream;
-        TKikimrRunner kikimr(TKikimrSettings().SetLogStream(&logStream));
-        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
         {
-            auto schemeClient = kikimr.GetSchemeClient();
+            TKikimrRunner kikimr(TKikimrSettings().SetLogStream(&logStream));
 
-            NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.create_table"});
-            AssertSuccessResult(schemeClient.ModifyPermissions("/Root",
-                    NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
-                ).ExtractValueSync()
-            );
-        }
+            auto driverConfig = TDriverConfig()
+                .SetEndpoint(kikimr.GetEndpoint())
+                .SetAuthToken("user0@builtin");
+            auto driver = TDriver(driverConfig);
+            auto db = NYdb::NTable::TTableClient(driver);
+            auto session = db.CreateSession().GetValueSync().GetSession();
+            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_INFO);
+            
+            {
+                auto schemeClient = kikimr.GetSchemeClient();
 
-        auto driverConfig = TDriverConfig()
-            .SetEndpoint(kikimr.GetEndpoint())
-            .SetAuthToken("user0@builtin");
-        auto driver = TDriver(driverConfig);
-        auto db = NYdb::NTable::TTableClient(driver);
-
-        auto session = db.CreateSession().GetValueSync().GetSession();
-
-        {
-            const static TString createTableQuery = R"(
-                CREATE TABLE `/Root/Test1234/KeyValue` (
-                    Key Uint32,
-                    Value String,
-                    PRIMARY KEY(Key)
+                NYdb::NScheme::TPermissions permissions("user0@builtin", {"ydb.deprecated.create_table"});
+                AssertSuccessResult(schemeClient.ModifyPermissions("/Root",
+                        NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+                    ).ExtractValueSync()
                 );
-            )";
-            auto result = session.ExecuteSchemeQuery(createTableQuery).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
+            }
 
-        {
-            const static TString dropTableQuery = R"(
-                DROP TABLE `/Root/Test1234/KeyValue`;
-            )";
-            auto result = session.ExecuteSchemeQuery(dropTableQuery).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            {
+                const static TString createTableQuery = R"(
+                    CREATE TABLE `/Root/Test1234/KeyValue` (
+                        Key Uint32,
+                        Value String,
+                        PRIMARY KEY(Key)
+                    );
+                )";
+                auto result = session.ExecuteSchemeQuery(createTableQuery).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+
+            {
+                const static TString dropTableQuery = R"(
+                    DROP TABLE `/Root/Test1234/KeyValue`;
+                )";
+                auto result = session.ExecuteSchemeQuery(dropTableQuery).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            
+            driver.Stop(true);
         }
 
         TString line;

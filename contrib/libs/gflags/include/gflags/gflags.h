@@ -223,7 +223,7 @@ extern GFLAGS_DLL_DECL bool GetCommandLineFlagInfo(const char* name, CommandLine
 //   if (GetCommandLineFlagInfoOrDie("foo").is_default) ...
 extern GFLAGS_DLL_DECL CommandLineFlagInfo GetCommandLineFlagInfoOrDie(const char* name);
 
-enum FlagSettingMode {
+enum GFLAGS_DLL_DECL FlagSettingMode {
   // update the flag's value (can call this multiple times).
   SET_FLAGS_VALUE,
   // update the flag's value, but *only if* it has not yet been updated

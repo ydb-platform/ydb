@@ -50,11 +50,13 @@
 // Set to 1 by default when the shared gflags library was built on Windows.
 // Must be overwritten when this header file is used with the optionally also
 // built static library instead; set by CMake's INTERFACE_COMPILE_DEFINITIONS.
+#define GFLAGS_IS_A_DLL 0
 #ifndef GFLAGS_IS_A_DLL
-#  define GFLAGS_IS_A_DLL 0
+#  define GFLAGS_IS_A_DLL 1
 #endif
 
 // We always want to import the symbols of the gflags library.
+#define GFLAGS_DLL_DECL 
 #ifndef GFLAGS_DLL_DECL
 #  if GFLAGS_IS_A_DLL && defined(_MSC_VER)
 #    define GFLAGS_DLL_DECL __declspec(dllimport)
@@ -66,6 +68,7 @@
 #endif
 
 // We always want to import variables declared in user code.
+#define GFLAGS_DLL_DECLARE_FLAG 
 #ifndef GFLAGS_DLL_DECLARE_FLAG
 #  if GFLAGS_IS_A_DLL && defined(_MSC_VER)
 #    define GFLAGS_DLL_DECLARE_FLAG __declspec(dllimport)

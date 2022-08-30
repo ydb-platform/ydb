@@ -715,13 +715,10 @@ class KikimrSqsTestBase(object):
         if queue_name is None:
             queue_name = self.queue_name
         is_fifo = queue_name.endswith('.fifo')
-
         queue_version = self._get_queue_version_number(self._username, queue_name)
+        tables_format = self.tables_format_per_user.get(self._username, 0)
 
-        if is_fifo:
-            self._check_fifo_queue_is_empty(queue_name, queue_version)
-        else:
-            self._check_std_queue_is_empty(queue_name, queue_version)
+        self.__check_queue_tables_are_empty(queue_name, is_fifo, queue_version, tables_format)
 
     def _get_table_lines_count(self, table_path, condition=None):
         query = 'SELECT COUNT(*) AS count FROM `{}` {};'.format(table_path, condition if condition else '')
@@ -731,39 +728,17 @@ class KikimrSqsTestBase(object):
         logging.debug('Received count result for table {}: {}'.format(table_path, data_result_sets[0].rows[0]))
         return data_result_sets[0].rows[0]['count']
 
-    def _check_std_queue_is_empty(self, queue_name, queue_version):
-        shards = self._get_queue_shards_count(self._username, queue_name, queue_version)
-        assert_that(shards, not_(equal_to(0)))
-        for shard in range(shards):
-            self._check_std_queue_shard_is_empty(queue_name, queue_version, shard)
+    def __check_queue_tables_are_empty(self, queue_name, is_fifo, queue_version, tables_format):
+        shards = [None] if is_fifo else range(self._get_queue_shards_count(self._username, queue_name, queue_version))
+        rows_condition = f' WHERE QueueIdNumber = {queue_version}' if tables_format == 1 else None
 
-    def _check_std_queue_shard_is_empty(self, queue_name, queue_version, shard):
-        def get_table_path(table_name):
-            return self._smart_make_table_path(self._username, queue_name, queue_version, shard, table_name)
-
-        def get_lines_count(table_name):
-            return self._get_table_lines_count(get_table_path(table_name))
-
-        assert_that(get_lines_count('Infly'), equal_to(0))
-        assert_that(get_lines_count('MessageData'), equal_to(0))
-        assert_that(get_lines_count('Messages'), equal_to(0))
-        assert_that(get_lines_count('SentTimestampIdx'), equal_to(0))
-
-    def _check_fifo_queue_is_empty(self, queue_name, queue_version):
-        tables_format = self.tables_format_per_user.get(self._username, 0)
-        def get_table_path(table_name):
-            return self._smart_make_table_path(self._username, queue_name, queue_version, None, table_name)
-
-        def get_lines_count(table_name):
-            condition=None
-            if tables_format == 1:
-                condition = f' WHERE QueueIdNumber = {queue_version}'
-            return self._get_table_lines_count(get_table_path(table_name), condition)
-
-        assert_that(get_lines_count('Data'), equal_to(0))
-        assert_that(get_lines_count('Groups'), equal_to(0))
-        assert_that(get_lines_count('Messages'), equal_to(0))
-        assert_that(get_lines_count('SentTimestampIdx'), equal_to(0))
+        table_names = ['Messages', 'SentTimestampIdx']
+        table_names += ['Data', 'Groups'] if is_fifo else ['Infly', 'MessageData']
+        for shard in shards:
+            for table_name in table_names:
+                table_path = self._smart_make_table_path(self._username, queue_name, queue_version, shard, table_name)
+                rows_count = self._get_table_lines_count(table_path, rows_condition)
+                assert_that(rows_count, equal_to(0))
 
     def _break_queue(self, username, queuename, is_fifo):
         version = self._get_queue_version_number(username, queuename)

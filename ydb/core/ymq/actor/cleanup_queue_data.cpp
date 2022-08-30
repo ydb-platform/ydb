@@ -96,6 +96,7 @@ namespace NKikimr::NSQS {
     }
 
     void TCleanupQueueDataActor::RunGetQueuesQuery(EState state, TDuration sendAfter, const TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] getting queues...");
         State = state;
 
         NClient::TParameters params;
@@ -128,7 +129,7 @@ namespace NKikimr::NSQS {
                 Y_VERIFY(response.GetResults().size() == 1);
                 const auto& rr = response.GetResults(0).GetValue().GetStruct(0);
                 if (rr.GetList().empty()) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::SQS, "there are no queues to delete");
+                    LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] there are no queues to delete");
                     LockQueueToRemove(IDLE_TIMEOUT, ctx);
                     return;
                 }
@@ -145,12 +146,11 @@ namespace NKikimr::NSQS {
                 Y_VERIFY(response.GetResults().size() == 1);
                 const auto& rr = response.GetResults(0).GetValue().GetStruct(0);
                 ui64 removedRows = rr.GetList()[0].GetStruct(0).GetUint64();
-                LOG_DEBUG_S(ctx, NKikimrServices::SQS, "removed " << removedRows << " rows for queue_id_number=" << QueueIdNumber);
                 OnRemovedData(removedRows, ctx);
                 break;
             }
             case EState::Finish: {
-                LOG_INFO_S(ctx, NKikimrServices::SQS, "queue data (queue_id_number=" << QueueIdNumber << ") removed successfuly.");
+                LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] queue data (queue_id_number=" << QueueIdNumber << ") removed successfuly.");
                 MonitoringCounters->CleanupRemovedQueuesDone->Inc();
                 LockQueueToRemove(TDuration::Zero(), ctx);
                 break;
@@ -166,7 +166,7 @@ namespace NKikimr::NSQS {
         MonitoringCounters->CleanupRemovedQueuesErrors->Inc();
         auto runAfter = RetryPeriod;
         RetryPeriod = Min(RetryPeriod * 2, RETRY_PERIOD_MAX);
-        LOG_ERROR_S(ctx, NKikimrServices::SQS, "Got an error while deleting data : " << error);
+        LOG_ERROR_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got an error while deleting data : " << error);
         LockQueueToRemove(runAfter, ctx);
     }
     
@@ -183,6 +183,7 @@ namespace NKikimr::NSQS {
     }
     
     void TCleanupQueueDataActor::UpdateLock(const TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] update queue lock...");
         State = EState::UpdateLockQueue;
 
         NClient::TParameters params;
@@ -200,7 +201,7 @@ namespace NKikimr::NSQS {
         // Select RemoveTimestamp, QueueIdNumber, FifoQueue, Shards, TablesFormat
         ui64 queueIdNumber = queueRow.GetStruct(1).GetOptional().GetUint64();
         if (queueIdNumber != QueueIdNumber) {
-            LOG_WARN_S(ctx, NKikimrServices::SQS, "Got queue to remove data queue_id_number=" << queueIdNumber 
+            LOG_WARN_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to continue remove data queue_id_number=" << queueIdNumber 
                 << ", but was locked queue_id_number=" << QueueIdNumber);
             StartRemoveData(queueRow, ctx);
             return;
@@ -221,7 +222,7 @@ namespace NKikimr::NSQS {
         Shards = queueRow.GetStruct(3).GetOptional().GetUint32();
         TablesFormat = queueRow.GetStruct(4).GetOptional().GetUint32();
         
-        LOG_INFO_S(ctx, NKikimrServices::SQS, "Got queue to remove data: removed at " << RemoveQueueTimetsamp 
+        LOG_INFO_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] got queue to remove data: removed at " << RemoveQueueTimetsamp 
             << " queue_id_number=" << QueueIdNumber << " tables_format=" << TablesFormat);
         if (TablesFormat == 0) {
             Finish(ctx); // TODO move code for removing directories
@@ -231,6 +232,9 @@ namespace NKikimr::NSQS {
     }
     
     void TCleanupQueueDataActor::OnRemovedData(ui64 removedRows, const TActorContext& ctx) {
+        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[cleanup removed queues] removed rows " << removedRows 
+            << ", cleared tables " << ClearedTablesCount << ", shards to remove " << ShardsToRemove
+        );
         MonitoringCounters->CleanupRemovedQueuesRows->Add(removedRows);
         if (removedRows == 0) {
             if (ShardsToRemove) {
@@ -263,7 +267,7 @@ namespace NKikimr::NSQS {
     }
     
     void TCleanupQueueDataActor::RunRemoveData(const TActorContext& ctx) {
-        if (StartProcessTimestamp + UPDATE_LOCK_PERIOD > ctx.Now()) {
+        if (ctx.Now() - StartProcessTimestamp > UPDATE_LOCK_PERIOD) {
             UpdateLock(ctx);
             return;
         }

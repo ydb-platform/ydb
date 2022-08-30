@@ -830,6 +830,7 @@ private:
 // Common service monitoring counters
 struct TMonitoringCounters : public TAtomicRefCount<TMonitoringCounters> {
     TLazyCachedCounter CleanupRemovedQueuesLagSec;
+    TLazyCachedCounter CleanupRemovedQueuesLagCount;
     
     TLazyCachedCounter CleanupRemovedQueuesDone;
     TLazyCachedCounter CleanupRemovedQueuesRows;

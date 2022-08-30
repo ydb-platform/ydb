@@ -21,7 +21,7 @@ namespace NKikimr::NSQS {
         TString removedQueuesTable = Cfg().GetRoot() + "/.RemovedQueues";
         RemovedQueuesQuery = TStringBuilder() << R"__(
             --!syntax_v1
-            SELECT RemoveTimestamp FROM `)__" << removedQueuesTable <<  R"__(` ORDER BY RemoveTimestamp LIMIT 1;
+            SELECT RemoveTimestamp FROM `)__" << removedQueuesTable <<  R"__(` ORDER BY RemoveTimestamp LIMIT 1000;
         )__";
 
         RequestMetrics(TDuration::Zero(), ctx);
@@ -52,13 +52,13 @@ namespace NKikimr::NSQS {
         TDuration removeQueuesDataLag;
         
         if (!rr.GetList().empty()) {
-            Y_VERIFY(rr.GetList().size() == 1);
             TInstant minRemoveQueueTimestamp = TInstant::MilliSeconds(rr.GetList()[0].GetStruct(0).GetOptional().GetUint64());
             removeQueuesDataLag = ctx.Now() - minRemoveQueueTimestamp;
         }
         
-        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[monitoring] Report deletion queue data lag: " << removeQueuesDataLag << ", list is empty: " << rr.GetList().empty());
+        LOG_DEBUG_S(ctx, NKikimrServices::SQS, "[monitoring] Report deletion queue data lag: " << removeQueuesDataLag << ", count: " << rr.GetList().size());
         *Counters->CleanupRemovedQueuesLagSec = removeQueuesDataLag.Seconds();
+        *Counters->CleanupRemovedQueuesLagCount = rr.GetList().size();
         RequestMetrics(RetryPeriod, ctx);
     }
 

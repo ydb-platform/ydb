@@ -23,11 +23,7 @@
 #ifndef Y_ABSL_STRINGS_NUMBERS_H_
 #define Y_ABSL_STRINGS_NUMBERS_H_
 
-#if defined(__SSE4_2__) && !defined(__CUDACC__)
-#define _Y__SSE4_2__
-#endif
-
-#ifdef _Y__SSE4_2__
+#ifdef __SSE4_2__
 #ifdef _MSC_VER
 #include <intrin.h>
 #else
@@ -44,7 +40,7 @@
 #include <type_traits>
 
 #include "y_absl/base/config.h"
-#ifdef _Y__SSE4_2__
+#ifdef __SSE4_2__
 // TODO(jorg): Remove this when we figure out the right way
 // to swap bytes on SSE 4.2 that works with the compilers
 // we claim to support.  Also, add tests for the compiler
@@ -248,7 +244,7 @@ Y_ABSL_MUST_USE_RESULT bool safe_strtoi_base(y_absl::string_view s, int_type* ou
 // Returns the number of non-pad digits of the output (it can never be zero
 // since 0 has one digit).
 inline size_t FastHexToBufferZeroPad16(uint64_t val, char* out) {
-#ifdef _Y__SSE4_2__
+#ifdef __SSE4_2__
   uint64_t be = y_absl::big_endian::FromHost64(val);
   const auto kNibbleMask = _mm_set1_epi8(0xf);
   const auto kHexDigits = _mm_setr_epi8('0', '1', '2', '3', '4', '5', '6', '7',

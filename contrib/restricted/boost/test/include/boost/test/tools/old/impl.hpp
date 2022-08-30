@@ -209,10 +209,7 @@ struct equal_coll_impl {
         std::size_t         pos = 0;
 
         for( ; left_begin != left_end && right_begin != right_end; ++left_begin, ++right_begin, ++pos ) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
             if( *left_begin != *right_begin ) {
-#pragma GCC diagnostic pop
                 pr = false;
                 pr.message() << "\nMismatch at position " << pos << ": "
                   << ::boost::test_tools::tt_detail::print_helper(*left_begin)

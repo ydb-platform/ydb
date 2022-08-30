@@ -54,7 +54,8 @@ public:
         ApplyRangePredicates(batch);
 
         if (!ReadMetadata->Program.empty()) {
-            ApplyProgram(batch, ReadMetadata->Program, NArrow::GetCustomExecContext());
+            auto status = ApplyProgram(batch, ReadMetadata->Program, NArrow::GetCustomExecContext());
+            Y_VERIFY_S(status.ok(), status.message());
         }
 
         // Leave only requested columns

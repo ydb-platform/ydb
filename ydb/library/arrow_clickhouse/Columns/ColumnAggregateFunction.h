@@ -144,7 +144,4 @@ private:
     std::shared_ptr<arrow::UInt64Builder> builder;
 };
 
-using AggregateColumnsData = std::vector<arrow::UInt64Builder *>;
-using AggregateColumnsConstData = std::vector<const arrow::UInt64Array *>;
-
 }

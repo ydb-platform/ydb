@@ -5,7 +5,9 @@
 #pragma once
 #include "arrow_clickhouse_types.h"
 
+#include <ydb/library/yql/udfs/common/clickhouse/client/src/Common/BitHelpers.h>
 #include <AggregateFunctions/IAggregateFunction.h>
+#include <AggregateFunctions/AggregateFunctionWrapper.h>
 
 
 namespace CH
@@ -669,7 +671,7 @@ public:
         : ArrowAggregateFunctionWrapper(std::move(name))
     {}
 
-    AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) override
+    AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) const override
     {
         return createAggregateFunctionSingleValue<AggFunc, AggData>(argument_types);
     }

@@ -515,7 +515,8 @@ TIndexedReadData::MakeResult(TVector<std::vector<std::shared_ptr<arrow::RecordBa
 
     if (ReadMetadata->HasProgram()) {
         for (auto& batch : out) {
-            ApplyProgram(batch.ResultBatch, ReadMetadata->Program, NArrow::GetCustomExecContext());
+            auto status = ApplyProgram(batch.ResultBatch, ReadMetadata->Program, NArrow::GetCustomExecContext());
+            Y_VERIFY_S(status.ok(), status.message());
         }
     }
     return out;

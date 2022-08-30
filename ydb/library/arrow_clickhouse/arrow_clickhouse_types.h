@@ -6,6 +6,8 @@
 #include <map>
 #include <stdexcept>
 
+#include <util/system/types.h>
+
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
@@ -88,6 +90,10 @@ using ColumnBinary = arrow::BinaryArray;
 using ColumnString = arrow::StringArray;
 using ColumnFixedString = arrow::FixedSizeBinaryArray;
 
+using ColumnTimestamp = arrow::TimestampArray;
+using ColumnDuration = arrow::DurationArray;
+using ColumnDecimal = arrow::DecimalArray;
+
 using MutableColumnInt8 = arrow::Int8Builder;
 using MutableColumnInt16 = arrow::Int16Builder;
 using MutableColumnInt32 = arrow::Int32Builder;
@@ -105,6 +111,10 @@ using MutableColumnBinary = arrow::BinaryBuilder;
 using MutableColumnString = arrow::StringBuilder;
 using MutableColumnFixedString = arrow::FixedSizeBinaryBuilder;
 
+using MutableColumnTimestamp = arrow::TimestampBuilder;
+using MutableColumnDuration = arrow::DurationBuilder;
+using MutableColumnDecimal = arrow::DecimalBuilder;
+
 using IDataType = arrow::DataType;
 using DataTypePtr = std::shared_ptr<IDataType>;
 using DataTypes = arrow::DataTypeVector;
@@ -119,7 +129,31 @@ using DataTypeUInt16 = arrow::UInt16Type;
 using DataTypeUInt32 = arrow::UInt32Type;
 using DataTypeUInt64 = arrow::UInt64Type;
 
+using DataTypeBinary = arrow::BinaryType;
+using DataTypeString = arrow::StringType;
 using DataTypeFixedString = arrow::FixedSizeBinaryType;
+
+using DataTypeTimestamp = arrow::TimestampType;
+using DataTypeDuration = arrow::DurationType;
+using DataTypeDecimal = arrow::DecimalType;
+
+class IAggregateFunction;
+using AggregateFunctionPtr = std::shared_ptr<const IAggregateFunction>;
+
+struct AggregateDescription
+{
+    AggregateFunctionPtr function;
+    Array parameters;        /// Parameters of the (parametric) aggregate function.
+    ColumnNumbers arguments;
+    Names argument_names;    /// used if no `arguments` are specified.
+    String column_name;      /// What name to use for a column with aggregate function values
+};
+
+using AggregateDescriptions = std::vector<AggregateDescription>;
+
+using AggregateColumnsData = std::vector<arrow::UInt64Builder *>;
+using AggregateColumnsConstData = std::vector<const arrow::UInt64Array *>;
+
 
 inline Columns columnsFromHeader(const Header& schema, size_t num_rows = 0)
 {

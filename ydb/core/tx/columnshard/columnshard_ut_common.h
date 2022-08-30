@@ -132,6 +132,39 @@ struct TTestSchema {
         return schema;
     }
 
+    static auto YdbAllTypesSchema() {
+        TVector<std::pair<TString, TTypeId>> schema = {
+            { "ts", NTypeIds::Timestamp },
+
+            { "i8", NTypeIds::Int8 },
+            { "i16", NTypeIds::Int16 },
+            { "i32", NTypeIds::Int32 },
+            { "i64", NTypeIds::Int64 },
+            { "u8", NTypeIds::Uint8 },
+            { "u16", NTypeIds::Uint16 },
+            { "u32", NTypeIds::Uint32 },
+            { "u64", NTypeIds::Uint64 },
+            { "float", NTypeIds::Float },
+            { "double", NTypeIds::Double },
+
+            { "byte", NTypeIds::Byte },
+            //{ "bool", NTypeIds::Bool },
+            //{ "decimal", NTypeIds::Decimal },
+            //{ "dynum", NTypeIds::DyNumber },
+
+            { "date", NTypeIds::Date },
+            { "datetime", NTypeIds::Datetime },
+            //{ "interval", NTypeIds::Interval },
+
+            {"text", NTypeIds::Text },
+            {"bytes", NTypeIds::Bytes },
+            {"yson", NTypeIds::Yson },
+            {"json", NTypeIds::Json },
+            {"jsondoc", NTypeIds::JsonDocument }
+        };
+        return schema;
+    };
+
     static NKikimrSchemeOp::TOlapColumnDescription CreateColumn(ui32 id, const TString& name, TTypeId type) {
         NKikimrSchemeOp::TOlapColumnDescription col;
         col.SetId(id);
@@ -160,7 +193,10 @@ struct TTestSchema {
                 *schema->MutableColumns()->Add() = CreateColumn(i + 1, columns[i].first, columns[i].second);
             }
 
-            for (auto& column : ExtractNames(YdbPkSchema())) {
+            auto pk = columns;
+            Y_VERIFY(pk.size() >= 4);
+            pk.resize(4);
+            for (auto& column : ExtractNames(pk)) {
                 schema->AddKeyColumnNames(column);
             }
 

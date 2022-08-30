@@ -8,6 +8,7 @@
 #include <type_traits>
 
 #include <AggregateFunctions/IAggregateFunction.h>
+#include <AggregateFunctions/AggregateFunctionWrapper.h>
 #include <AggregateFunctions/AggregateFunctionSum.h>
 
 namespace CH
@@ -151,13 +152,13 @@ public:
         : ArrowAggregateFunctionWrapper(std::move(name))
     {}
 
-    AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) override
+    AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) const override
     {
         return createWithSameType<AggregateFunctionAvg>(argument_types);
     }
 
     template <template <typename> typename AggFunc>
-    std::shared_ptr<IAggregateFunction> createWithSameType(const DataTypes & argument_types)
+    std::shared_ptr<IAggregateFunction> createWithSameType(const DataTypes & argument_types) const
     {
         if (argument_types.size() != 1)
             return {};

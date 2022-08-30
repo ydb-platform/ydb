@@ -2,9 +2,18 @@
 
 #include "functions.h"
 #include "func_common.h"
+#include "program.h"
+
 #include <util/system/yassert.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/registry_internal.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
+
+#ifndef WIN32
+#include <AggregateFunctions/AggregateFunctionCount.h>
+#include <AggregateFunctions/AggregateFunctionMinMaxAny.h>
+#include <AggregateFunctions/AggregateFunctionSum.h>
+#include <AggregateFunctions/AggregateFunctionAvg.h>
+#endif
 
 namespace cp = ::arrow::compute;
 
@@ -50,6 +59,23 @@ static void RegisterYdbCast(cp::FunctionRegistry* registry) {
     Y_VERIFY(registry->AddFunction(std::make_shared<YdbCastMetaFunction>()).ok());
 }
 
+static void RegisterHouseAggregates(cp::FunctionRegistry* registry) {
+#ifndef WIN32
+    try {
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAny>(GetHouseFunctionName(EAggregate::Any))).ok());
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedCount>(GetHouseFunctionName(EAggregate::Count))).ok());
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedMin>(GetHouseFunctionName(EAggregate::Min))).ok());
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedMax>(GetHouseFunctionName(EAggregate::Max))).ok());
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedSum>(GetHouseFunctionName(EAggregate::Sum))).ok());
+        Y_VERIFY(registry->AddFunction(std::make_shared<CH::WrappedAvg>(GetHouseFunctionName(EAggregate::Avg))).ok());
+    } catch (const std::exception& /*ex*/) {
+        Y_VERIFY(false);
+    }
+#else
+    Y_UNUSED(registry);
+#endif
+}
+
 
 static std::unique_ptr<cp::FunctionRegistry> CreateCustomRegistry() {
     auto registry = cp::FunctionRegistry::Make();
@@ -57,6 +83,7 @@ static std::unique_ptr<cp::FunctionRegistry> CreateCustomRegistry() {
     RegisterRound(registry.get());
     RegisterArithmetic(registry.get());
     RegisterYdbCast(registry.get());
+    RegisterHouseAggregates(registry.get());
     return registry;
 }
 

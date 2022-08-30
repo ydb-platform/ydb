@@ -6,6 +6,7 @@
 #include "arrow_clickhouse_types.h"
 
 #include <AggregateFunctions/IAggregateFunction.h>
+#include <AggregateFunctions/AggregateFunctionWrapper.h>
 #include <Columns/ColumnsCommon.h>
 
 #include <array>
@@ -84,7 +85,7 @@ public:
         : ArrowAggregateFunctionWrapper(std::move(name))
     {}
 
-    AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) override
+    AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) const override
     {
         return std::make_shared<AggregateFunctionCount>(argument_types);
     }

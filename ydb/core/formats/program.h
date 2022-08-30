@@ -98,6 +98,7 @@ enum class EAggregate {
 
 const char * GetFunctionName(EOperation op);
 const char * GetFunctionName(EAggregate op);
+const char * GetHouseFunctionName(EAggregate op);
 EOperation ValidateOperation(EOperation op, ui32 argsSize);
 
 class TAssign {
@@ -246,21 +247,27 @@ struct TProgramStep {
         return Assignes.empty() && Filters.empty() && Projection.empty();
     }
 
-    void Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
+    arrow::Status Apply(std::shared_ptr<arrow::RecordBatch>& batch, arrow::compute::ExecContext* ctx) const;
 
-    void ApplyAssignes(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
-    void ApplyAggregates(std::shared_ptr<TDatumBatch>& batch, arrow::compute::ExecContext* ctx) const;
-    void ApplyFilters(std::shared_ptr<TDatumBatch>& batch) const;
-    void ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
-    void ApplyProjection(std::shared_ptr<TDatumBatch>& batch) const;
+    arrow::Status ApplyAssignes(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
+    arrow::Status ApplyAggregates(TDatumBatch& batch, arrow::compute::ExecContext* ctx) const;
+    arrow::Status ApplyFilters(TDatumBatch& batch) const;
+    arrow::Status ApplyProjection(std::shared_ptr<arrow::RecordBatch>& batch) const;
+    arrow::Status ApplyProjection(TDatumBatch& batch) const;
 };
 
-inline void ApplyProgram(std::shared_ptr<arrow::RecordBatch>& batch,
-                         const std::vector<std::shared_ptr<TProgramStep>>& program,
-                         arrow::compute::ExecContext* ctx = nullptr) {
+inline arrow::Status ApplyProgram(
+    std::shared_ptr<arrow::RecordBatch>& batch,
+    const std::vector<std::shared_ptr<TProgramStep>>& program,
+    arrow::compute::ExecContext* ctx = nullptr)
+{
     for (auto& step : program) {
-        step->Apply(batch, ctx);
+        auto status = step->Apply(batch, ctx);
+        if (!status.ok()) {
+            return status;
+        }
     }
+    return arrow::Status::OK();
 }
 
 struct TSsaProgramSteps {

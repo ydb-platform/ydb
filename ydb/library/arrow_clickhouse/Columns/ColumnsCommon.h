@@ -27,25 +27,29 @@ inline StringRef serializeNumberIntoArena(T value, Arena & arena, char const *& 
     return StringRef(pos, sizeof(T));
 }
 
-template <bool fixed>
 inline StringRef serializeStringIntoArena(const StringRef & str, Arena & arena, char const *& begin)
 {
-    if constexpr (fixed)
-    {
-        auto * pos = arena.allocContinue(str.size, begin);
-        memcpy(pos, str.data, str.size);
-        return StringRef(pos, str.size);
-    }
-    else
-    {
-        StringRef res;
-        res.size = sizeof(str.size) + str.size;
-        char * pos = arena.allocContinue(res.size, begin);
-        memcpy(pos, &str.size, sizeof(str.size));
-        memcpy(pos + sizeof(str.size), str.data, str.size);
-        res.data = pos;
-        return res;
-    }
+    StringRef res;
+    res.size = sizeof(str.size) + str.size;
+    char * pos = arena.allocContinue(res.size, begin);
+    memcpy(pos, &str.size, sizeof(str.size));
+    memcpy(pos + sizeof(str.size), str.data, str.size);
+    res.data = pos;
+    return res;
+}
+
+inline StringRef serializeFixedStringIntoArena(const StringRef & str, Arena & arena, char const *& begin)
+{
+    auto * pos = arena.allocContinue(str.size, begin);
+    memcpy(pos, str.data, str.size);
+    return StringRef(pos, str.size);
+}
+
+inline StringRef serializeDecimalIntoArena(const StringRef & str, Arena & arena, char const *& begin)
+{
+    auto * pos = arena.allocContinue(str.size, begin);
+    memcpy(pos, str.data, str.size);
+    return StringRef(pos, str.size);
 }
 
 template <typename T>
@@ -85,6 +89,11 @@ inline bool insertFixedString(MutableColumn & column, const StringRef & value)
     return assert_cast<MutableColumnFixedString &>(column).Append(arrow::util::string_view{value.data, value.size}).ok();
 }
 
+inline bool insertDecimal(MutableColumn & column, const StringRef & value)
+{
+    return assert_cast<MutableColumnDecimal &>(column).Append(arrow::util::string_view{value.data, value.size}).ok();
+}
+
 template <typename DataType>
 inline const char * deserializeNumberFromArena(arrow::NumericBuilder<DataType> & column, const char * pos)
 {
@@ -105,6 +114,12 @@ inline const char * deserializeStringFromArena(MutableColumnBinary & column, con
 }
 
 inline const char * deserializeStringFromArena(MutableColumnFixedString & column, const char * pos)
+{
+    column.Append(pos).ok();
+    return pos + column.byte_width();
+}
+
+inline const char * deserializeDecimalFromArena(MutableColumnDecimal & column, const char * pos)
 {
     column.Append(pos).ok();
     return pos + column.byte_width();

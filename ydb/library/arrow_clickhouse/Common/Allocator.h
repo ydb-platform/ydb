@@ -15,10 +15,12 @@
 #if !defined(__APPLE__) && !defined(__FreeBSD__)
 #include <malloc.h>
 #endif
+#if !defined(WIN32)
+#include <sys/mman.h>
+#endif
 
 #include <cstdlib>
 #include <algorithm>
-#include <sys/mman.h>
 
 
 #include <common/mremap.h>

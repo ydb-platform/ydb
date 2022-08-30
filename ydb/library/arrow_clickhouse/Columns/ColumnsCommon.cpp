@@ -288,6 +288,13 @@ bool insertData(MutableColumn & column, const StringRef & value)
         case arrow::Type::BINARY:
             return insertString(column, value);
 
+        case arrow::Type::TIMESTAMP:
+            return insertNumber(column, *reinterpret_cast<const Int64 *>(value.data));
+        case arrow::Type::DURATION:
+            return insertNumber(column, *reinterpret_cast<const Int64 *>(value.data));
+        case arrow::Type::DECIMAL:
+            return insertDecimal(column, value);
+
         case arrow::Type::EXTENSION: // AggregateColumn
             break; // TODO
 
@@ -328,13 +335,23 @@ StringRef serializeValueIntoArena(const IColumn& column, size_t row, Arena & poo
         case arrow::Type::FIXED_SIZE_BINARY:
         {
             auto str = assert_cast<const ColumnFixedString &>(column).GetView(row);
-            return serializeStringIntoArena<true>(StringRef(str.data(), str.size()), pool, begin);
+            return serializeFixedStringIntoArena(StringRef(str.data(), str.size()), pool, begin);
         }
         case arrow::Type::STRING:
         case arrow::Type::BINARY:
         {
             auto str = assert_cast<const ColumnBinary &>(column).GetView(row);
-            return serializeStringIntoArena<false>(StringRef(str.data(), str.size()), pool, begin);
+            return serializeStringIntoArena(StringRef(str.data(), str.size()), pool, begin);
+        }
+
+        case arrow::Type::TIMESTAMP:
+            return serializeNumberIntoArena(assert_cast<const ColumnTimestamp &>(column).Value(row), pool, begin);
+        case arrow::Type::DURATION:
+            return serializeNumberIntoArena(assert_cast<const ColumnDuration &>(column).Value(row), pool, begin);
+        case arrow::Type::DECIMAL:
+        {
+            auto str = assert_cast<const ColumnDecimal &>(column).GetView(row);
+            return serializeDecimalIntoArena(StringRef(str.data(), str.size()), pool, begin);
         }
 
         case arrow::Type::EXTENSION: // AggregateColumn
@@ -380,6 +397,13 @@ const char * deserializeAndInsertFromArena(MutableColumn& column, const char * p
         case arrow::Type::STRING:
         case arrow::Type::BINARY:
             return deserializeStringFromArena(assert_cast<MutableColumnBinary &>(column), pos);
+
+        case arrow::Type::TIMESTAMP:
+            return deserializeNumberFromArena(assert_cast<MutableColumnTimestamp &>(column), pos);
+        case arrow::Type::DURATION:
+            return deserializeNumberFromArena(assert_cast<MutableColumnDuration &>(column), pos);
+        case arrow::Type::DECIMAL:
+            return deserializeDecimalFromArena(assert_cast<MutableColumnDecimal &>(column), pos);
 
         case arrow::Type::EXTENSION: // AggregateColumn
             break; // TODO
@@ -430,6 +454,13 @@ void updateHashWithValue(const IColumn& column, size_t row, SipHash & hash)
             return hash.update(str.data(), str.size());
         }
 
+        case arrow::Type::TIMESTAMP:
+            return hash.update(assert_cast<const ColumnTimestamp &>(column).Value(row));
+        case arrow::Type::DURATION:
+            return hash.update(assert_cast<const ColumnDuration &>(column).Value(row));
+        case arrow::Type::DECIMAL:
+            return hash.update(assert_cast<const ColumnDecimal &>(column).Value(row));
+
         case arrow::Type::EXTENSION: // AggregateColumn
             break; // TODO
 
@@ -475,6 +506,13 @@ MutableColumnPtr createMutableColumn(const DataTypePtr & type)
         case arrow::Type::STRING:
             return std::make_shared<MutableColumnString>();
 
+        case arrow::Type::TIMESTAMP:
+            return std::make_shared<MutableColumnTimestamp>(type, arrow::default_memory_pool());
+        case arrow::Type::DURATION:
+            return std::make_shared<MutableColumnDuration>(type, arrow::default_memory_pool());
+        case arrow::Type::DECIMAL:
+            return std::make_shared<MutableColumnDecimal>(type, arrow::default_memory_pool());
+
         case arrow::Type::EXTENSION: // AggregateColumn
             break; // TODO: do we really need it here?
 
@@ -516,6 +554,13 @@ uint32_t fixedContiguousSize(const DataTypePtr & type)
         case arrow::Type::STRING:
         case arrow::Type::BINARY:
             break;
+
+        case arrow::Type::TIMESTAMP:
+            return 8;
+        case arrow::Type::DURATION:
+            return 8;
+        case arrow::Type::DECIMAL:
+            return std::static_pointer_cast<DataTypeDecimal>(type)->byte_width();
 
         case arrow::Type::EXTENSION: // AggregateColumn
             break;

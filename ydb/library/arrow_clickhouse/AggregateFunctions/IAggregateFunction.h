@@ -481,15 +481,4 @@ struct AggregateFunctionProperties
     bool is_order_dependent = false;
 };
 
-
-class ArrowAggregateFunctionWrapper : public arrow::compute::ScalarAggregateFunction
-{
-public:
-    ArrowAggregateFunctionWrapper(std::string name)
-        : arrow::compute::ScalarAggregateFunction(std::move(name), arrow::compute::Arity::Unary(), nullptr)
-    {}
-
-    virtual AggregateFunctionPtr getHouseFunction(const DataTypes & argument_types) = 0;
-};
-
 }

@@ -160,7 +160,6 @@ TVector<TCell> MakeTestCells(const TVector<TTypeId>& types, ui32 value, TVector<
     cells.reserve(types.size());
 
     for (auto& type : types) {
-        // test only: 64-bit integer or string
         if (type == NTypeIds::Utf8 ||
             type == NTypeIds::String ||
             type == NTypeIds::String4k ||
@@ -176,12 +175,19 @@ TVector<TCell> MakeTestCells(const TVector<TTypeId>& types, ui32 value, TVector<
             mem.push_back("{ \"a\" = [ { \"b\" = 1; } ]; }");
             const TString& str = mem.back();
             cells.push_back(TCell(str.data(), str.size()));
-        } else if (type == NTypeIds::Timestamp ||
-                    type == NTypeIds::Uint64 ||
-                    type == NTypeIds::Int64) {
+        } else if (type == NTypeIds::Timestamp || type == NTypeIds::Uint64 || type == NTypeIds::Int64) {
             cells.push_back(TCell::Make<ui64>(value));
-        } else if (type == NTypeIds::Int32) {
-            cells.push_back(TCell::Make<i32>(value));
+        } else if (type == NTypeIds::Uint32 || type == NTypeIds::Int32 || type == NTypeIds::Datetime) {
+            cells.push_back(TCell::Make<ui32>(value));
+        } else if (type == NTypeIds::Uint16 || type == NTypeIds::Int16 || type == NTypeIds::Date) {
+            cells.push_back(TCell::Make<ui16>(value));
+        } else if (type == NTypeIds::Uint8 || type == NTypeIds::Int8 || type == NTypeIds::Byte ||
+                    type == NTypeIds::Bool) {
+            cells.push_back(TCell::Make<ui8>(value));
+        } else if (type == NTypeIds::Float) {
+            cells.push_back(TCell::Make<float>(value));
+        } else if (type == NTypeIds::Double) {
+            cells.push_back(TCell::Make<double>(value));
         } else {
             UNIT_ASSERT(false);
         }

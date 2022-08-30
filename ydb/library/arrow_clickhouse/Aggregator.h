@@ -20,17 +20,6 @@
 namespace CH
 {
 
-struct AggregateDescription
-{
-    AggregateFunctionPtr function;
-    Array parameters;        /// Parameters of the (parametric) aggregate function.
-    ColumnNumbers arguments;
-    Names argument_names;    /// used if no `arguments` are specified.
-    String column_name;      /// What name to use for a column with aggregate function values
-};
-
-using AggregateDescriptions = std::vector<AggregateDescription>;
-
 /** Different data structures that can be used for aggregation
   * For efficiency, the aggregation data itself is put into the pool.
   * Data and pool ownership (states of aggregate functions)

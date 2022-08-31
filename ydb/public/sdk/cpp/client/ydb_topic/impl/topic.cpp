@@ -34,6 +34,7 @@ TTopicDescription::TTopicDescription(Ydb::Topic::DescribeTopicResult&& result)
     , RetentionStorageMb_(Proto_.retention_storage_mb() > 0 ? TMaybe<ui64>(Proto_.retention_storage_mb()) : Nothing())
     , PartitionWriteSpeedBytesPerSecond_(Proto_.partition_write_speed_bytes_per_second())
     , PartitionWriteBurstBytes_(Proto_.partition_write_burst_bytes())
+    , MeteringMode_(TProtoAccessor::FromProto(Proto_.metering_mode()))
 {
     Owner_ = Proto_.self().owner();
     PermissionToSchemeEntry(Proto_.self().permissions(), &Permissions_);
@@ -116,6 +117,10 @@ ui64 TTopicDescription::GetPartitionWriteSpeedBytesPerSecond() const {
 
 ui64 TTopicDescription::GetPartitionWriteBurstBytes() const {
     return PartitionWriteBurstBytes_;
+}
+
+EMeteringMode TTopicDescription::GetMeteringMode() const {
+    return MeteringMode_;
 }
 
 const TMap<TString, TString>& TTopicDescription::GetAttributes() const {

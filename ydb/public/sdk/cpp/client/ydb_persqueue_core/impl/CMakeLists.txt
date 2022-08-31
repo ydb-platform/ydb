@@ -14,6 +14,7 @@ target_link_libraries(client-ydb_persqueue_core-impl PUBLIC
   cpp-containers-disjoint_interval_tree
   cpp-grpc-client
   cpp-monlib-dynamic_counters
+  cpp-monlib-metrics
   cpp-string_utils-url
   library-persqueue-obfuscate
   api-grpc-draft

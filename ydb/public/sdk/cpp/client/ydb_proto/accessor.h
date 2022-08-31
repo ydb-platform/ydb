@@ -51,6 +51,9 @@ public:
     static Ydb::Table::ValueSinceUnixEpochModeSettings::Unit GetProto(NTable::TValueSinceUnixEpochModeSettings::EUnit value);
     static NTable::TValueSinceUnixEpochModeSettings::EUnit FromProto(Ydb::Table::ValueSinceUnixEpochModeSettings::Unit value);
 
+    static Ydb::Topic::MeteringMode GetProto(NTopic::EMeteringMode mode);
+    static NTopic::EMeteringMode FromProto(Ydb::Topic::MeteringMode mode);
+
     // exports & imports
     template <typename TProtoSettings> static typename TProtoSettings::Scheme GetProto(ES3Scheme value);
     template <typename TProtoSettings> static ES3Scheme FromProto(typename TProtoSettings::Scheme value);

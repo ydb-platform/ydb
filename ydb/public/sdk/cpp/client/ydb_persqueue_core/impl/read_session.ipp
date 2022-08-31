@@ -2387,57 +2387,57 @@ void TErrorHandler<UseMigrationProtocol>::AbortSession(TASessionClosedEvent<UseM
     }
 }
 
-#define HISTOGRAM_SETUP NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
+#define HISTOGRAM_SETUP ::NMonitoring::ExplicitHistogram({0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100})
 
 template <typename TReaderCounters>
 void MakeCountersNotNull(TReaderCounters& counters) {
     if (!counters.Errors) {
-        counters.Errors = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        counters.Errors = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
     }
 
     if (!counters.CurrentSessionLifetimeMs) {
-        counters.CurrentSessionLifetimeMs = MakeIntrusive<NMonitoring::TCounterForPtr>(false);
+        counters.CurrentSessionLifetimeMs = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
     }
 
     if (!counters.BytesRead) {
-        counters.BytesRead = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        counters.BytesRead = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
     }
 
     if (!counters.MessagesRead) {
-        counters.MessagesRead = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        counters.MessagesRead = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
     }
 
     if (!counters.BytesReadCompressed) {
-        counters.BytesReadCompressed = MakeIntrusive<NMonitoring::TCounterForPtr>(true);
+        counters.BytesReadCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(true);
     }
 
     if (!counters.BytesInflightUncompressed) {
-        counters.BytesInflightUncompressed = MakeIntrusive<NMonitoring::TCounterForPtr>(false);
+        counters.BytesInflightUncompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
     }
 
     if (!counters.BytesInflightCompressed) {
-        counters.BytesInflightCompressed = MakeIntrusive<NMonitoring::TCounterForPtr>(false);
+        counters.BytesInflightCompressed = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
     }
 
     if (!counters.BytesInflightTotal) {
-        counters.BytesInflightTotal = MakeIntrusive<NMonitoring::TCounterForPtr>(false);
+        counters.BytesInflightTotal = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
     }
 
     if (!counters.MessagesInflight) {
-        counters.MessagesInflight = MakeIntrusive<NMonitoring::TCounterForPtr>(false);
+        counters.MessagesInflight = MakeIntrusive<::NMonitoring::TCounterForPtr>(false);
     }
 
 
     if (!counters.TotalBytesInflightUsageByTime) {
-        counters.TotalBytesInflightUsageByTime = MakeIntrusive<NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
+        counters.TotalBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
     }
 
     if (!counters.UncompressedBytesInflightUsageByTime) {
-        counters.UncompressedBytesInflightUsageByTime = MakeIntrusive<NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
+        counters.UncompressedBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
     }
 
     if (!counters.CompressedBytesInflightUsageByTime) {
-        counters.CompressedBytesInflightUsageByTime = MakeIntrusive<NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
+        counters.CompressedBytesInflightUsageByTime = MakeIntrusive<::NMonitoring::THistogramCounter>(HISTOGRAM_SETUP);
     }
 }
 

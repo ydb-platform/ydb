@@ -36,6 +36,14 @@ enum class ECodec : ui32 {
     CUSTOM = 10000,
 };
 
+enum class EMeteringMode : ui32 {
+    Unspecified = 0,
+    ReservedCapacity = 1,
+    RequestUnits = 2,
+
+    Unknown = std::numeric_limits<int>::max(),
+};
+
 
 class TConsumer {
 public:
@@ -120,6 +128,8 @@ private:
 
     const Ydb::Topic::DescribeTopicResult& GetProto() const;
 
+    EMeteringMode GetMeteringMode() const;
+
     const Ydb::Topic::DescribeTopicResult Proto_;
     TVector<TPartitionInfo> Partitions_;
     TVector<ECodec> SupportedCodecs_;
@@ -128,6 +138,7 @@ private:
     TMaybe<ui64> RetentionStorageMb_;
     ui64 PartitionWriteSpeedBytesPerSecond_;
     ui64 PartitionWriteBurstBytes_;
+    EMeteringMode MeteringMode_;
     TMap<TString, TString> Attributes_;
     TVector<TConsumer> Consumers_;
 
@@ -285,6 +296,7 @@ struct TCreateTopicSettings : public TOperationRequestSettings<TCreateTopicSetti
     FLUENT_SETTING_VECTOR(ECodec, SupportedCodecs);
 
     FLUENT_SETTING_DEFAULT(ui64, RetentionStorageMb, 0);
+    FLUENT_SETTING_DEFAULT(EMeteringMode, MeteringMode, EMeteringMode::Unspecified);
 
     FLUENT_SETTING_DEFAULT(ui64, PartitionWriteSpeedBytesPerSecond, 0);
     FLUENT_SETTING_DEFAULT(ui64, PartitionWriteBurstBytes, 0);
@@ -351,6 +363,8 @@ struct TAlterTopicSettings : public TOperationRequestSettings<TAlterTopicSetting
 
     FLUENT_SETTING_OPTIONAL(ui64, SetPartitionWriteSpeedBytesPerSecond);
     FLUENT_SETTING_OPTIONAL(ui64, SetPartitionWriteBurstBytes);
+
+    FLUENT_SETTING_OPTIONAL(EMeteringMode, SetMeteringMode);
 
     FLUENT_SETTING_VECTOR(TConsumerSettings<TAlterTopicSettings>, AddConsumers);
     FLUENT_SETTING_VECTOR(TString, DropConsumers);

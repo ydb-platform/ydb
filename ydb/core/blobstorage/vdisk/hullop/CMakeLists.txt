@@ -19,6 +19,7 @@ target_link_libraries(blobstorage-vdisk-hullop PUBLIC
 target_sources(blobstorage-vdisk-hullop PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hull.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullactor.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompdelete.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllog.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/blobstorage_hulllogcutternotify.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/hullop/hullop_compactfreshappendix.cpp

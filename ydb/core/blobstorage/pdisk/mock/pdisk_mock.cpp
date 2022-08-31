@@ -152,6 +152,15 @@ struct TPDiskMockState::TImpl {
         AdjustFreeChunks();
     }
 
+    void UncommitChunk(TOwner& owner, TChunkIdx chunkIdx) {
+        if (owner.ReservedChunks.contains(chunkIdx)) {
+        } else if (owner.CommittedChunks.erase(chunkIdx)) {
+            owner.ReservedChunks.insert(chunkIdx);
+        } else {
+            Y_FAIL();
+        }
+    }
+
     void SetCorruptedArea(ui32 chunkIdx, ui32 begin, ui32 end, bool enabled) {
         const ui64 chunkBegin = ui64(chunkIdx) * ChunkSize;
         const ui64 diskBegin = chunkBegin + begin;
@@ -445,7 +454,11 @@ public:
                         Impl.CommitChunk(owner, chunk);
                     }
                     for (const TChunkIdx chunk : cr.DeleteChunks) {
-                        Impl.DeleteChunk(owner, chunk);
+                        if (cr.DeleteToDecommitted) {
+                            Impl.UncommitChunk(owner, chunk);
+                        } else {
+                            Impl.DeleteChunk(owner, chunk);
+                        }
                     }
                     isStartingPoint = cr.IsStartingPoint;
                 }
@@ -484,6 +497,28 @@ public:
                 Send(owner.CutLogId, new NPDisk::TEvCutLog(ownerId, owner.OwnerRound, lsn, 0, 0, 0, 0));
             }
         }
+    }
+
+    void Handle(NPDisk::TEvChunkForget::TPtr ev) {
+        auto *msg = ev->Get();
+        NKikimrProto::EReplyStatus status = NKikimrProto::OK;
+        TString errorReason;
+        if (const auto it = Impl.Owners.find(msg->Owner); it == Impl.Owners.end()) {
+            Y_FAIL("invalid Owner");
+        } else if (it->second.Slain) {
+            status = NKikimrProto::INVALID_OWNER;
+            errorReason = "VDisk is slain";
+        } else if (msg->OwnerRound != it->second.OwnerRound) {
+            status = NKikimrProto::INVALID_ROUND;
+            errorReason = "invalid OwnerRound";
+        } else {
+            TImpl::TOwner& owner = it->second;
+            PDISK_MOCK_LOG(DEBUG, PDMxx, "received TEvChunkForget", (Msg, msg->ToString()), (VDiskId, owner.VDiskId));
+            for (const TChunkIdx chunkIdx : msg->ForgetChunks) {
+                Impl.DeleteChunk(owner, chunkIdx);
+            }
+        }
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(status, {}, errorReason), 0, ev->Cookie);
     }
 
     void Handle(NPDisk::TEvReadLog::TPtr ev) {
@@ -677,6 +712,7 @@ public:
     STRICT_STFUNC(StateFunc,
         hFunc(NPDisk::TEvYardInit, Handle);
         hFunc(NPDisk::TEvLog, Handle);
+        hFunc(NPDisk::TEvChunkForget, Handle);
         hFunc(NPDisk::TEvMultiLog, Handle);
         cFunc(EvResume, HandleLogQ);
         hFunc(NPDisk::TEvReadLog, Handle);

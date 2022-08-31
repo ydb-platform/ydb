@@ -22,7 +22,7 @@ namespace NKikimr {
             DskSpaceTrackerId = 9,
             LocalRecovInfoId = 10,
             AnubisRunnerId = 11,
-            DelayedHugeBlobDeleterId = 12,
+            DelayedCompactionDeleterId = 12,
             ScrubId = 13,
             DbMainPageLogoBlobs = 14,
             DbMainPageBlocks = 15,
@@ -42,7 +42,7 @@ namespace NKikimr {
                 case HugeKeeperId:             return "HugeKeeperId";
                 case DskSpaceTrackerId:        return "DskSpaceTrackerId";
                 case LocalRecovInfoId:         return "LocalRecovInfoId";
-                case DelayedHugeBlobDeleterId: return "DelayedHugeBlobDeleterId";
+                case DelayedCompactionDeleterId: return "DelayedCompactionDeleterId";
                 case ScrubId:                  return "ScrubId";
                 case DbMainPageLogoBlobs:      return "DbMainPageLogoBlobs";
                 case DbMainPageBlocks:         return "DbMainPageBlocks";

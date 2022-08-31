@@ -4,7 +4,7 @@
 #include "blobstorage_buildslice.h"
 #include "hullop_compactfreshappendix.h"
 #include <ydb/core/blobstorage/vdisk/hulldb/compstrat/hulldb_compstrat_selector.h>
-#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedelete.h>
+#include <ydb/core/blobstorage/vdisk/hullop/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
 
 namespace NKikimr {
@@ -363,16 +363,9 @@ namespace NKikimr {
                 LogRemovedHugeBlobs(ctx, CompactionTask->GetHugeBlobsToDelete(), true);
             }
 
-            // this flag is set if there are other users of this slice
-            bool prevSliceActive = prevSlice.RefCount() != 1;
-
             // delete list, includes previous ChunksToDelete and reserved chunks
             TVector<ui32> deleteChunks(std::move(prevSlice->ChunksToDelete));
             deleteChunks.insert(deleteChunks.end(), reservedChunksLeft.begin(), reservedChunksLeft.end());
-
-            // select the vector where to put freed chunks to; if we have an active snapshot, then we preserve chunks and
-            // put them to ChunksToDelete in order to remove them at next commit; otherwise we can delete them immediately
-            TVector<ui32>& freedChunksSink = prevSliceActive ? RTCtx->LevelIndex->CurSlice->ChunksToDelete : deleteChunks;
 
             // only delete chunks if we actually delete SST's from yard; otherwise it is move operation, we delete them from one
             // level and put to another
@@ -380,7 +373,7 @@ namespace NKikimr {
                 TLeveledSstsIterator delIt(&CompactionTask->GetSstsToDelete());
                 for (delIt.SeekToFirst(); delIt.Valid(); delIt.Next()) {
                     const TLevelSegment& seg = *delIt.Get().SstPtr;
-                    seg.FillInChunkIds(freedChunksSink);
+                    seg.FillInChunkIds(deleteChunks);
                     if (seg.Info.IsCreatedByRepl()) { // mark it out-of-index to schedule deletion from the bulk formed segments table
                         prevSlice->BulkFormedSegments.RemoveSstFromIndex(seg.GetEntryPoint());
                     }
@@ -394,7 +387,7 @@ namespace NKikimr {
 
             // apply compaction to bulk-formed SSTables; it produces a set of bulk-formed segments suitable for saving
             // in new slice containing only needed entries
-            prevSlice->BulkFormedSegments.ApplyCompactionResult(RTCtx->LevelIndex->CurSlice->BulkFormedSegments, freedChunksSink);
+            prevSlice->BulkFormedSegments.ApplyCompactionResult(RTCtx->LevelIndex->CurSlice->BulkFormedSegments, deleteChunks);
 
             // manage recovery log LSN to keep:
             // we can't advance LsnToKeep until the prev snapshot dies,
@@ -404,15 +397,9 @@ namespace NKikimr {
             // run level committer
             TDiskPartVec removedHugeBlobs(CompactionTask->ExtractHugeBlobsToDelete());
             auto committer = std::make_unique<TAsyncLevelCommitter>(HullLogCtx, HullDbCommitterCtx, RTCtx->LevelIndex,
-                    ctx.SelfID, std::move(chunksAdded), std::move(deleteChunks), std::move(removedHugeBlobs),
-                    prevSliceActive);
+                    ctx.SelfID, std::move(chunksAdded), std::move(deleteChunks), std::move(removedHugeBlobs));
             TActorId committerID = ctx.RegisterWithSameMailbox(committer.release());
             ActiveActors.Insert(committerID);
-
-            if (prevSliceActive) {
-                // notify LIActor when previous slice is not used anymore
-                prevSlice->SetUpCommitter(ctx.ExecutorThread.ActorSystem, committerID);
-            }
 
             // drop prev slice, some snapshot can still have a pointer to it
             prevSlice.Drop();
@@ -673,7 +660,8 @@ namespace NKikimr {
                                                     HullDs->HullCtx,
                                                     RTCtx->LsnMngr,
                                                     loggerId,
-                                                    HullLogCtx->HugeKeeperId))
+                                                    HullLogCtx->HugeKeeperId,
+                                                    RTCtx->SkeletonId))
             , CompactionTask(new TCompactionTask)
             , ActiveActors(RTCtx->LevelIndex->ActorCtx->ActiveActors)
             , LevelStat(HullDs->HullCtx->VCtx->VDiskCounters)

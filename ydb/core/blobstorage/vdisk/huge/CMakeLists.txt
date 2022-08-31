@@ -19,7 +19,6 @@ target_link_libraries(blobstorage-vdisk-huge PUBLIC
 target_sources(blobstorage-vdisk-huge PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedefs.cpp
-  ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugedelete.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugeheap.cpp
   ${CMAKE_SOURCE_DIR}/ydb/core/blobstorage/vdisk/huge/blobstorage_hullhugerecovery.cpp
 )

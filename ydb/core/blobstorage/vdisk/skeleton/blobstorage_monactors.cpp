@@ -62,7 +62,7 @@ namespace NKikimr {
         TString DskSpaceTrackerInfo;
         TString LocalRecovInfo;
         TString AnubisRunnerInfo;
-        TString DelayedHugeBlobDeleterInfo;
+        TString DelayedCompactionDeleterInfo;
         TString ScrubInfo;
 
         friend class TActorBootstrapped<TSkeletonMonMainPageActor>;
@@ -74,7 +74,7 @@ namespace NKikimr {
                 Counter++;
                 ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::HullInfoId));
                 Counter++;
-                ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::DelayedHugeBlobDeleterId));
+                ctx.Send(Db->SkeletonID, new NMon::TEvHttpInfo(Ev->Get()->Request, TDbMon::DelayedCompactionDeleterId));
                 Counter++;
             }
 
@@ -154,7 +154,7 @@ namespace NKikimr {
                     DIV_CLASS("col-md-6") {Output(HugeKeeperInfo, str, "Huge Blob Keeper");}
                     DIV_CLASS("col-md-6") {Output(DskSpaceTrackerInfo, str, "Disk Space Tracker");}
                     DIV_CLASS("col-md-6") {Output(LocalRecovInfo, str, "Local Recovery Info");}
-                    DIV_CLASS("col-md-6") {Output(DelayedHugeBlobDeleterInfo, str, "Delayed Huge Blob Deleter Info");}
+                    DIV_CLASS("col-md-6") {Output(DelayedCompactionDeleterInfo, str, "Delayed Compaction Deleter Info");}
                     DIV_CLASS("col-md-6") {Output(ScrubInfo, str, "Scrub Info");}
                     // uses column wrapping (sum is greater than 12)
                 }
@@ -193,7 +193,7 @@ namespace NKikimr {
                 {TDbMon::DskSpaceTrackerId,        &TThis::DskSpaceTrackerInfo},
                 {TDbMon::LocalRecovInfoId,         &TThis::LocalRecovInfo},
                 {TDbMon::AnubisRunnerId,           &TThis::AnubisRunnerInfo},
-                {TDbMon::DelayedHugeBlobDeleterId, &TThis::DelayedHugeBlobDeleterInfo},
+                {TDbMon::DelayedCompactionDeleterId, &TThis::DelayedCompactionDeleterInfo},
                 {TDbMon::ScrubId,                  &TThis::ScrubInfo},
             };
 

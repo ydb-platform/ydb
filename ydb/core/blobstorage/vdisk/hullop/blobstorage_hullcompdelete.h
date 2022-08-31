@@ -1,8 +1,8 @@
 #pragma once
 
 #include "defs.h"
-#include "blobstorage_hullhuge.h"
 
+#include <ydb/core/blobstorage/vdisk/huge/blobstorage_hullhuge.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/core/base/blobstorage.h>
 
@@ -38,7 +38,7 @@ namespace NKikimr {
     // LevelIndex-wide state of taken snapshots; contains shared data between corresponding actor and LevelIndex; when
     // snapshot is taken, it is stored here; when it is released, a message is sent to deletion actor and the action is
     // taken
-    class TDelayedHugeBlobDeleterInfo : public TThrRefBase {
+    class TDelayedCompactionDeleterInfo : public TThrRefBase {
         // map <LastDeletionLsn> -> <number of snapshots that were taken during the time LastDeletionLsn was equal
         // to key>; when snapshot counter reaches zero, the key is deleted from map
         TMap<ui64, ui32> CurrentSnapshots;
@@ -53,18 +53,21 @@ namespace NKikimr {
         TActorId ActorId;
 
         // a queue of removed huge blobs per compaction
-        struct TRemovedHugeBlobsQueueItem {
+        struct TReleaseQueueItem {
             ui64 RecordLsn;
             TDiskPartVec RemovedHugeBlobs;
+            TVector<TChunkIdx> ChunksToForget;
             TLogSignature Signature;
 
-            TRemovedHugeBlobsQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TLogSignature signature)
+            TReleaseQueueItem(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TVector<TChunkIdx> chunksToForget,
+                    TLogSignature signature)
                 : RecordLsn(recordLsn)
                 , RemovedHugeBlobs(std::move(removedHugeBlobs))
+                , ChunksToForget(std::move(chunksToForget))
                 , Signature(signature)
             {}
         };
-        TDeque<TRemovedHugeBlobsQueueItem> RemovedHugeBlobsQueue;
+        TDeque<TReleaseQueueItem> ReleaseQueue;
 
     public:
         void SetActorId(const TActorId& actorId) {
@@ -85,19 +88,19 @@ namespace NKikimr {
 
         // this function is called every time when compaction is about to commit new entrypoint containing at least
         // one removed huge blob; recordLsn is allocated LSN of this entrypoint
-        void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, const TActorContext& ctx,
-                const TActorId& hugeKeeperId, TLogSignature signature) {
+        void Update(ui64 recordLsn, TDiskPartVec&& removedHugeBlobs, TVector<TChunkIdx> chunksToForget, TLogSignature signature,
+                const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId, const TPDiskCtxPtr& pdiskCtx) {
             Y_VERIFY(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
-            RemovedHugeBlobsQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), signature);
-            ProcessRemovedHugeBlobsQueue(ctx, hugeKeeperId);
+            ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(chunksToForget), signature);
+            ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx);
         }
 
         void RenderState(IOutputStream &str) {
             HTML(str) {
                 DIV_CLASS("panel panel-default") {
                     DIV_CLASS("panel-heading") {
-                        str << "Delayed Huge Blob Deleter";
+                        str << "Delayed Compaction Deleter";
                     }
                     DIV_CLASS("panel-body") {
                          DIV_CLASS("panel panel-default") {
@@ -136,15 +139,20 @@ namespace NKikimr {
                         }
 
                         ui32 index = 1;
-                        for (const auto &record : RemovedHugeBlobsQueue) {
+                        for (const auto &record : ReleaseQueue) {
                             TMap<TChunkIdx, ui32> slots;
                             for (const TDiskPart &part : record.RemovedHugeBlobs) {
                                 ++slots[part.ChunkIdx];
                             }
+                            for (const TChunkIdx chunkIdx : record.ChunksToForget) {
+                                ui32& value = slots[chunkIdx];
+                                Y_VERIFY(!value);
+                                value = Max<ui32>();
+                            }
 
                             DIV_CLASS("panel panel-default") {
                                 DIV_CLASS("panel-heading") {
-                                    str << "RemovedHugeBlobsQueue[" << index << "]";
+                                    str << "ReleaseQueue[" << index << "]";
                                 }
                                 DIV_CLASS("panel-body") {
                                     DIV() {
@@ -161,10 +169,16 @@ namespace NKikimr {
                                             }
                                         }
                                         TABLEBODY() {
-                                            for (const auto &pair : slots) {
+                                            for (const auto& [chunkIdx, value] : slots) {
                                                 TABLER() {
-                                                    TABLED() { str << pair.first; }
-                                                    TABLED() { str << pair.second; }
+                                                    TABLED() { str << chunkIdx; }
+                                                    TABLED() {
+                                                        if (value != Max<ui32>()) {
+                                                            str << value;
+                                                        } else {
+                                                            str << "decommitted SST chunk";
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -180,27 +194,33 @@ namespace NKikimr {
         }
 
     private:
-        friend class TDelayedHugeBlobDeleterActor;
+        friend class TDelayedCompactionDeleterActor;
 
-        void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId) {
+        void ReleaseSnapshot(ui64 cookie, const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
+                const TPDiskCtxPtr& pdiskCtx) {
             auto it = CurrentSnapshots.find(cookie);
             Y_VERIFY(it != CurrentSnapshots.end() && it->second > 0);
             if (!--it->second) {
                 CurrentSnapshots.erase(it);
-                ProcessRemovedHugeBlobsQueue(ctx, hugeKeeperId);
+                ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx);
             }
         }
 
-        void ProcessRemovedHugeBlobsQueue(const TActorContext& ctx, const TActorId& hugeKeeperId) {
+        void ProcessReleaseQueue(const TActorContext& ctx, const TActorId& hugeKeeperId, const TActorId& skeletonId,
+                const TPDiskCtxPtr& pdiskCtx) {
             // if we have no snapshots, we can safely process all messages; otherwise we can process only those messages
             // which do not have snapshots created before the point of compaction
-            while (RemovedHugeBlobsQueue) {
-                TRemovedHugeBlobsQueueItem& item = RemovedHugeBlobsQueue.front();
+            while (ReleaseQueue) {
+                TReleaseQueueItem& item = ReleaseQueue.front();
                 if (CurrentSnapshots.empty() || (item.RecordLsn <= CurrentSnapshots.begin()->first)) {
                     // matching record -- commit it to huge hull keeper and throw out of the queue
                     ctx.Send(hugeKeeperId, new TEvHullFreeHugeSlots(std::move(item.RemovedHugeBlobs),
                         item.RecordLsn, item.Signature));
-                    RemovedHugeBlobsQueue.pop_front();
+                    if (item.ChunksToForget) {
+                        TActivationContext::Send(new IEventHandle(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
+                            pdiskCtx->Dsk->Owner, pdiskCtx->Dsk->OwnerRound, std::move(item.ChunksToForget))));
+                    }
+                    ReleaseQueue.pop_front();
                 } else {
                     // we have no matching record
                     break;
@@ -209,24 +229,24 @@ namespace NKikimr {
         }
     };
 
-    struct TDelayedHugeBlobDeleterNotifier : public TThrRefBase {
+    struct TDelayedCompactionDeleterNotifier : public TThrRefBase {
         TActorSystem* const ActorSystem;
-        const TIntrusivePtr<TDelayedHugeBlobDeleterInfo> Info;
+        const TIntrusivePtr<TDelayedCompactionDeleterInfo> Info;
         const ui64 Cookie;
 
-        TDelayedHugeBlobDeleterNotifier(TActorSystem *actorSystem, TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info)
+        TDelayedCompactionDeleterNotifier(TActorSystem *actorSystem, TIntrusivePtr<TDelayedCompactionDeleterInfo> info)
             : ActorSystem(actorSystem)
             , Info(std::move(info))
             , Cookie(Info->TakeSnapshot())
         {}
 
         // implemented in blobstorage_hull.h
-        ~TDelayedHugeBlobDeleterNotifier() {
+        ~TDelayedCompactionDeleterNotifier() {
             ActorSystem->Send(new IEventHandle(Info->GetActorId(), TActorId(), new TEvHullReleaseSnapshot(Cookie)));
         }
     };
 
-    IActor *CreateDelayedHugeBlobDeleterActor(const TActorId &hugeKeeperId,
-        TIntrusivePtr<TDelayedHugeBlobDeleterInfo> info);
+    IActor *CreateDelayedCompactionDeleterActor(const TActorId hugeKeeperId, const TActorId skeletonId,
+        TPDiskCtxPtr pdiskCtx, TIntrusivePtr<TDelayedCompactionDeleterInfo> info);
 
 } // NKikimr

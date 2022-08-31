@@ -28,11 +28,11 @@ namespace NKikimr {
 
         // TLevelIndexSnapshot is created via TLevelIndex::GetSnapshot
         TLevelIndexSnapshot(const TLevelSlicePtr &slice, TFreshDataSnapshot &&freshSnap, ui32 level0SegsNum,
-                TActorSystem *actorSystem, TIntrusivePtr<TDelayedHugeBlobDeleterInfo> deleterInfo)
+                TActorSystem *actorSystem, TIntrusivePtr<TDelayedCompactionDeleterInfo> deleterInfo)
             : SliceSnap(slice, level0SegsNum)
             , FreshSnap(std::move(freshSnap))
             , Notifier(actorSystem
-                    ? new TDelayedHugeBlobDeleterNotifier(actorSystem, std::move(deleterInfo))
+                    ? new TDelayedCompactionDeleterNotifier(actorSystem, std::move(deleterInfo))
                     : nullptr)
         {}
 
@@ -60,7 +60,7 @@ namespace NKikimr {
         TFreshDataSnapshot FreshSnap;
 
     private:
-        TIntrusivePtr<TDelayedHugeBlobDeleterNotifier> Notifier;
+        TIntrusivePtr<TDelayedCompactionDeleterNotifier> Notifier;
     };
 
     extern template class TLevelIndexSnapshot<TKeyLogoBlob, TMemRecLogoBlob>;

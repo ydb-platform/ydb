@@ -133,9 +133,9 @@ namespace NKikimr {
 
         // create delayed huge blob deleter actor only for LogoBlobs level index as huge blobs are only possible
         // for that data
-        auto& deleterInfo = HullDs->LogoBlobs->DelayedHugeBlobDeleterInfo;
-        auto hugeBlobDeleterAid = ctx.RegisterWithSameMailbox(CreateDelayedHugeBlobDeleterActor(hullLogCtx->HugeKeeperId,
-            deleterInfo));
+        auto& deleterInfo = HullDs->LogoBlobs->DelayedCompactionDeleterInfo;
+        auto hugeBlobDeleterAid = ctx.RegisterWithSameMailbox(CreateDelayedCompactionDeleterActor(hullLogCtx->HugeKeeperId,
+            hullLogCtx->SkeletonId, hullLogCtx->PDiskCtx, deleterInfo));
         deleterInfo->SetActorId(hugeBlobDeleterAid);
         activeActors.Insert(hugeBlobDeleterAid);
 

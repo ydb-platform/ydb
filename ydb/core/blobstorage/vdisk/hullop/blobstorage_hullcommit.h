@@ -3,7 +3,6 @@
 #include "blobstorage_hulllog.h"
 #include "hullop_entryserialize.h"
 #include <ydb/core/blobstorage/vdisk/common/vdisk_private_events.h>
-#include <ydb/core/blobstorage/vdisk/hulldb/generic/hulldb_events.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/generic/hullds_idx.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/hulldb_bulksst_add.h>
 #include <ydb/core/blobstorage/vdisk/synclog/blobstorage_synclog_public_events.h>
@@ -21,20 +20,23 @@ namespace NKikimr {
         TIntrusivePtr<TLsnMngr> LsnMngr;
         const TActorId LoggerId;
         const TActorId HugeKeeperId;
+        const TActorId SkeletonId;
 
         THullDbCommitterCtx(
                 TPDiskCtxPtr pdiskCtx,
                 THullCtxPtr hullCtx,
                 TIntrusivePtr<TLsnMngr> lsnMngr,
-                const TActorId &loggerId,
-                const TActorId hugeKeeperId)
+                const TActorId loggerId,
+                const TActorId hugeKeeperId,
+                const TActorId skeletonId)
             : PDiskCtx(std::move(pdiskCtx))
             , HullCtx(std::move(hullCtx))
             , LsnMngr(std::move(lsnMngr))
             , LoggerId(loggerId)
             , HugeKeeperId(hugeKeeperId)
+            , SkeletonId(skeletonId)
         {
-            Y_VERIFY(PDiskCtx && HullCtx && LsnMngr && LoggerId && HugeKeeperId);
+            Y_VERIFY(PDiskCtx && HullCtx && LsnMngr && LoggerId && HugeKeeperId && SkeletonId);
         }
     };
 
@@ -62,15 +64,18 @@ namespace NKikimr {
             TDiskPartVec     RemovedHugeBlobs;  // freed huge blobs
             TLevelSegmentPtr ReplSst;           // pointer to replicated SST
             ui32             NumRecoveredBlobs; // number of blobs in this SST (valid only for replicated tables)
+            bool             DeleteToDecommitted;
 
             // constructor for ordinary committer (advance, fresh, level)
             THullCommitMeta(TVector<ui32>&& chunksAdded,
                             TVector<ui32>&& chunksDeleted,
-                            TDiskPartVec&&  removedHugeBlobs)
+                            TDiskPartVec&&  removedHugeBlobs,
+                            bool            prevSliceActive)
                 : CommitChunks(std::move(chunksAdded))
                 , DeleteChunks(std::move(chunksDeleted))
                 , RemovedHugeBlobs(std::move(removedHugeBlobs))
                 , NumRecoveredBlobs(0)
+                , DeleteToDecommitted(prevSliceActive)
             {}
 
             // constructor for repl sst committer
@@ -82,6 +87,7 @@ namespace NKikimr {
                 , DeleteChunks(std::move(chunksDeleted))
                 , ReplSst(std::move(replSst))
                 , NumRecoveredBlobs(numRecoveredBlobs)
+                , DeleteToDecommitted(false)
             {}
         };
 
@@ -131,13 +137,14 @@ namespace NKikimr {
 
             // notify delayed deleter when log record is actually written; we MUST ensure that updates are coming in
             // order of increasing LSN's; this is achieved automatically as all actors reside on the same mailbox
-            LevelIndex->DelayedHugeBlobDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
-                    ctx, Ctx->HugeKeeperId, PDiskSignatureForHullDbKey<TKey>());
+            LevelIndex->DelayedCompactionDeleterInfo->Update(LsnSeg.Last, std::move(Metadata.RemovedHugeBlobs),
+                CommitRecord.DeleteToDecommitted ? CommitRecord.DeleteChunks : TVector<TChunkIdx>(),
+                PDiskSignatureForHullDbKey<TKey>(), ctx, Ctx->HugeKeeperId, Ctx->SkeletonId, Ctx->PDiskCtx);
 
             NPDisk::TEvLogResult* msg = ev->Get();
 
             // notify descendants about successful commit
-            bool finished = OnLogResult(msg);
+            OnLogResult(msg);
 
             // update current entry point for desired level index
             const auto& results = msg->Results;
@@ -153,8 +160,7 @@ namespace NKikimr {
             // advance LSN
             LevelIndex->CurEntryPointLsn = LsnSeg.Last;
 
-            if (finished)
-                Finish(ctx);
+            Finish(ctx);
         }
 
         void Finish(const TActorContext& ctx) {
@@ -222,6 +228,7 @@ namespace NKikimr {
             CommitRecord.IsStartingPoint = true;
             CommitRecord.CommitChunks = std::move(Metadata.CommitChunks);
             CommitRecord.DeleteChunks = std::move(Metadata.DeleteChunks);
+            CommitRecord.DeleteToDecommitted = Metadata.DeleteToDecommitted;
 
             // validate its contents
             VerifyCommitRecord(CommitRecord);
@@ -256,9 +263,7 @@ namespace NKikimr {
             }
         }
 
-        virtual bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) {
-            return true;
-        }
+        virtual void OnLogResult(NPDisk::TEvLogResult* /*msg*/) {}
 
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
@@ -312,7 +317,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    typename TBase::THullCommitMeta(TVector<ui32>(), TVector<ui32>(), TDiskPartVec()),
+                    {TVector<ui32>(), TVector<ui32>(), TDiskPartVec(), false},
                     callerInfo)
         {}
     };
@@ -326,9 +331,8 @@ namespace NKikimr {
     {
         using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitFresh, NKikimrServices::TActivity::BS_ASYNC_FRESH_COMMITTER>;
 
-        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
+        void OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
             TBase::LevelIndex->FreshCompactionFinished();
-            return true;
         }
 
     public:
@@ -346,9 +350,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    typename TBase::THullCommitMeta(std::move(chunksAdded),
-                                                    std::move(chunksDeleted),
-                                                    std::move(removedHugeBlobs)),
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), false},
                     callerInfo)
         {}
     };
@@ -357,43 +359,11 @@ namespace NKikimr {
     // TAsyncLevelCommitter
     ////////////////////////////////////////////////////////////////////////////
 
-    // this committer as well as committing log event and waiting for result
-    // optionally waits for some slice to destroy, that is stopping using
-    // ChunksToDelete from hull actor; it happens when we have active snapshot
-    // while doing this commit, notification comes through THullFreeSlice
-    // message
-
     template <class TKey, class TMemRec>
     class TAsyncLevelCommitter
         : public TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitLevel, NKikimrServices::TActivity::BS_ASYNC_LEVEL_COMMITTER>
     {
         using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitLevel, NKikimrServices::TActivity::BS_ASYNC_LEVEL_COMMITTER>;
-
-        bool PrevSnapshotReleased;
-        bool LogCommitted;
-
-        bool Done() const {
-            return PrevSnapshotReleased && LogCommitted;
-        }
-
-        void Handle(THullFreeSlice::TPtr& /*ev*/, const TActorContext& ctx) {
-            PrevSnapshotReleased = true;
-            if (Done())
-                TBase::Finish(ctx);
-        }
-
-        STFUNC(StateFunc) override {
-            switch (ev->GetTypeRewrite()) {
-                HFunc(THullFreeSlice, Handle);
-                default:
-                    return TBase::StateFunc(ev, ctx);
-            }
-        }
-
-        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
-            LogCommitted = true;
-            return Done();
-        }
 
     public:
         TAsyncLevelCommitter(
@@ -403,19 +373,14 @@ namespace NKikimr {
                 const TActorId& notifyID,
                 TVector<ui32>&& chunksAdded,
                 TVector<ui32>&& chunksDeleted,
-                TDiskPartVec&& removedHugeBlobs,
-                bool waitForHullFreeSlice)
+                TDiskPartVec&& removedHugeBlobs)
             : TBase(std::move(hullLogCtx),
                     std::move(ctx),
                     std::move(levelIndex),
                     notifyID,
                     TActorId(),
-                    typename TBase::THullCommitMeta(std::move(chunksAdded),
-                                                    std::move(chunksDeleted),
-                                                    std::move(removedHugeBlobs)),
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(removedHugeBlobs), true},
                     TString())
-            , PrevSnapshotReleased(!waitForHullFreeSlice)
-            , LogCommitted(false)
         {}
     };
 
@@ -429,10 +394,6 @@ namespace NKikimr {
     {
         using TBase = TBaseHullDbCommitter<TKey, TMemRec, THullCommitFinished::CommitReplSst,  NKikimrServices::TActivity::BS_ASYNC_REPLSST_COMMITTER>;
         using TLevelSegment = NKikimr::TLevelSegment<TKey, TMemRec>;
-
-        bool OnLogResult(NPDisk::TEvLogResult* /*msg*/) override {
-            return true;
-        }
 
     public:
         TAsyncReplSstCommitter(
@@ -450,8 +411,7 @@ namespace NKikimr {
                     std::move(levelIndex),
                     notifyID,
                     secondNotifyID,
-                    typename TBase::THullCommitMeta(std::move(chunksAdded), std::move(chunksDeleted), std::move(replSst),
-                        numRecoveredBlobs),
+                    {std::move(chunksAdded), std::move(chunksDeleted), std::move(replSst), numRecoveredBlobs},
                     TString())
         {}
     };

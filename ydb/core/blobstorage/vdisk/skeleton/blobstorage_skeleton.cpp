@@ -1943,7 +1943,7 @@ namespace NKikimr {
                     ctx.Send(ev->Sender, new NMon::TEvHttpInfoRes(str.Str(), TDbMon::LocalRecovInfoId));
                     break;
                 }
-                case TDbMon::DelayedHugeBlobDeleterId: {
+                case TDbMon::DelayedCompactionDeleterId: {
                     TStringStream str;
                     if (Hull) {
                         Hull->OutputHtmlForHugeBlobDeleter(str);
@@ -2293,6 +2293,10 @@ namespace NKikimr {
             ctx.Send(ev->Forward(Hull->GetHullDs()->LogoBlobs->LIActor));
         }
 
+        void Handle(NPDisk::TEvChunkForgetResult::TPtr ev) {
+            CHECK_PDISK_RESPONSE(VCtx, ev, TActivationContext::AsActorContext());
+        }
+
         // NOTES: we have 4 state functions, one of which is an error state (StateDatabaseError) and
         // others are good: StateLocalRecovery, StateSyncGuidRecovery, StateNormal
         // We switch between states in the following manner:
@@ -2343,6 +2347,7 @@ namespace NKikimr {
             FFunc(TEvBlobStorage::EvRecoverBlob, ForwardToScrubActor)
             FFunc(TEvBlobStorage::EvNonrestoredCorruptedBlobNotify, ForwardToScrubActor)
             HFunc(TEvProxyQueueState, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
         )
 
         STRICT_STFUNC(StateSyncGuidRecovery,
@@ -2393,6 +2398,7 @@ namespace NKikimr {
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
             HFunc(TEvProxyQueueState, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
         )
 
         STRICT_STFUNC(StateNormal,
@@ -2454,6 +2460,7 @@ namespace NKikimr {
             HFunc(TEvRestoreCorruptedBlob, Handle)
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
             HFunc(TEvProxyQueueState, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
         )
 
         STRICT_STFUNC(StateDatabaseError,
@@ -2478,6 +2485,7 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvCaptureVDiskLayout, Handle)
             HFunc(TEvProxyQueueState, Handle)
             hFunc(TEvVPatchDyingRequest, Handle)
+            hFunc(NPDisk::TEvChunkForgetResult, Handle)
         )
 
         PDISK_TERMINATE_STATE_FUNC_DEF;

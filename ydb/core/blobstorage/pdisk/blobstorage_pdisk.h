@@ -22,18 +22,12 @@ IActor* CreatePDisk(const TIntrusivePtr<TPDiskConfig> &cfg, const NPDisk::TKey &
 namespace NPDisk {
 
 struct TCommitRecord {
-    ui64 FirstLsnToKeep; // 0 == not set
+    ui64 FirstLsnToKeep = 0; // 0 == not set
     TVector<TChunkIdx> CommitChunks;
     TVector<TChunkIdx> DeleteChunks;
-    bool IsStartingPoint;
-    bool DeleteToDecommitted; // 1 == set chunks to Decommitted state that requires a ChunkForget event or a restart
+    bool IsStartingPoint = false;
+    bool DeleteToDecommitted = false; // 1 == set chunks to Decommitted state that requires a ChunkForget event or a restart
     // the value of DeleteToDecommitted is not stored as a part of the commit record.
-
-    TCommitRecord()
-        : FirstLsnToKeep(0)
-        , IsStartingPoint(false)
-        , DeleteToDecommitted(false)
-    {}
 
     void ValidateChunks(TVector<TChunkIdx> &chunks) {
         if (chunks.size()) {

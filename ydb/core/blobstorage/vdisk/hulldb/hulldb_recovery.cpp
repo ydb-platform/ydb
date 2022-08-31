@@ -438,7 +438,7 @@ namespace NKikimr {
     void THullDbRecovery::OutputHtmlForHugeBlobDeleter(IOutputStream &str) const
     {
         if (HullDs && HullDs->LogoBlobs) {
-            HullDs->LogoBlobs->DelayedHugeBlobDeleterInfo->RenderState(str);
+            HullDs->LogoBlobs->DelayedCompactionDeleterInfo->RenderState(str);
         }
     }
 

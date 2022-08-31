@@ -1256,6 +1256,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                                 (ui32)PDiskId, (ui32)chunkIdx, (ui32)state.OwnerId, (ui32)OwnerUnallocated);
                         Y_VERIFY(state.OwnerId == evChunkForget.Owner);
                         Mon.UncommitedDataChunks->Dec();
+                        state.OwnerId = OwnerUnallocated;
                         state.CommitState = TChunkState::FREE;
                         Keeper.PushFreeOwnerChunk(evChunkForget.Owner, chunkIdx);
                         break;
@@ -2556,7 +2557,11 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 SendChunkReadError(read, err, NKikimrProto::ERROR);
                 return false;
             }
-            if (state.CommitState != TChunkState::DATA_RESERVED && state.CommitState != TChunkState::DATA_COMMITTED) {
+            if (state.CommitState != TChunkState::DATA_RESERVED
+                    && state.CommitState != TChunkState::DATA_COMMITTED
+                    && state.CommitState != TChunkState::DATA_DECOMMITTED
+                    && state.CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+                    && state.CommitState != TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS) {
                 err << "chunk has unexpected CommitState# " << state.CommitState;
                 SendChunkReadError(read, err, NKikimrProto::ERROR);
                 return false;
@@ -2638,7 +2643,10 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 return false;
             }
             if (state.CommitState != TChunkState::DATA_RESERVED
-                    && state.CommitState != TChunkState::DATA_COMMITTED) {
+                    && state.CommitState != TChunkState::DATA_COMMITTED
+                    && state.CommitState != TChunkState::DATA_DECOMMITTED
+                    && state.CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+                    && state.CommitState != TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS) {
                 err << "Can't write chunkIdx# " << ev.ChunkIdx
                     << " destination chunk has CommitState# " << state.CommitState
                     << " ownerId# " << ev.Owner;

@@ -963,6 +963,7 @@ bool TPDisk::ValidateCommitChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
     return true;
 }
 
+// Called when commit record is successfully saved to the disk.
 void TPDisk::CommitChunk(ui32 chunkIdx) {
     TGuard<TMutex> guard(StateMutex);
     TChunkState &state = ChunkState[chunkIdx];
@@ -975,6 +976,12 @@ void TPDisk::CommitChunk(ui32 chunkIdx) {
     case TChunkState::DATA_COMMITTED:
         state.CommitState = TChunkState::DATA_COMMITTED;
         break;
+    case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
+        [[fallthrough]];
+    case TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS:
+        [[fallthrough]];
+    case TChunkState::DATA_DECOMMITTED:
+        [[fallthrough]];
     case TChunkState::DATA_ON_QUARANTINE:
         [[fallthrough]];
     case TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE:
@@ -1025,6 +1032,7 @@ bool TPDisk::ValidateDeleteChunk(ui32 chunkIdx, TOwner owner, TStringStream& out
 }
 
 // Marks chunk deleted but does not move it to the free list.
+// Called when commit record is successfully saved to the disk.
 void TPDisk::DeleteChunk(ui32 chunkIdx, TOwner owner) {
     TGuard<TMutex> guard(StateMutex);
     TChunkState &state = ChunkState[chunkIdx];

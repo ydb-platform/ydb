@@ -123,12 +123,13 @@ public:
 
     const TVector<TConsumer>& GetConsumers() const;
 
+    EMeteringMode GetMeteringMode() const;
+
     void SerializeTo(Ydb::Topic::CreateTopicRequest& request) const;
 private:
 
     const Ydb::Topic::DescribeTopicResult& GetProto() const;
 
-    EMeteringMode GetMeteringMode() const;
 
     const Ydb::Topic::DescribeTopicResult Proto_;
     TVector<TPartitionInfo> Partitions_;

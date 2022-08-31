@@ -27,7 +27,7 @@ public:
         AddHandler({TPqReadTopic::CallableName()}, Hndl(&TSelf::HandleReadTopic));
         AddHandler({TPqTopic::CallableName()}, Hndl(&TSelf::HandleTopic));
         AddHandler({TDqPqTopicSource::CallableName()}, Hndl(&TSelf::HandleDqTopicSource));
-        AddHandler({TCoWriteTime::CallableName(), TCoOffset::CallableName()}, Hndl(&TSelf::HandleMetadata));
+        AddHandler({TCoSystemMetadata::CallableName()}, Hndl(&TSelf::HandleMetadata));
     }
 
     TStatus HandleConfigure(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -191,33 +191,44 @@ public:
     }
 
     TStatus HandleMetadata(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
-        const auto* descriptor = FindPqMetaFieldDescriptorByCallable(TString(input->Content()));
-
-        if (!EnsureDependsOn(input->Head(), ctx)) {
+        const auto key = input->ChildPtr(0);
+        if (!EnsureCallable(*key, ctx)) {
             return IGraphTransformer::TStatus::Error;
         }
 
-        auto depOn = input->Head().HeadPtr();
-        if (!EnsureStructType(*depOn, ctx)) {
+        const auto metadataKey = TString(key->TailPtr()->Content());
+        const auto* descriptor = FindPqMetaFieldDescriptorByKey(metadataKey);
+        if (!descriptor) {
+            ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), TStringBuilder() << "Metadata key " << metadataKey << " wasn't found"));
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (depOn->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
-            auto structType = depOn->GetTypeAnn()->Cast<TStructExprType>();
+        const auto dependsOn = input->Child(1);
+        if (!EnsureDependsOn(*dependsOn, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        const auto row = dependsOn->TailPtr();
+        if (!EnsureStructType(*row, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (row->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Struct) {
+            auto structType = row->GetTypeAnn()->Cast<TStructExprType>();
             if (auto pos = structType->FindItem(descriptor->SysColumn)) {
                 bool isOptional = false;
                 const TDataExprType* dataType = nullptr;
-                if (!EnsureDataOrOptionalOfData(depOn->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
+                if (!EnsureDataOrOptionalOfData(row->Pos(), structType->GetItems()[*pos]->GetItemType(), isOptional, dataType, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
-                if (!EnsureSpecificDataType(depOn->Pos(), *dataType, descriptor->Type, ctx)) {
+                if (!EnsureSpecificDataType(row->Pos(), *dataType, descriptor->Type, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
 
                 output = ctx.Builder(input->Pos())
                     .Callable("Member")
-                        .Add(0, depOn)
+                        .Add(0, row)
                         .Atom(1, descriptor->SysColumn, TNodeFlags::Default)
                     .Seal()
                     .Build();

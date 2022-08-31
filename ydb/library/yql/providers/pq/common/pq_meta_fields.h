@@ -13,24 +13,22 @@ namespace NYql {
 
 struct TMetaFieldDescriptor {
 public:
-    TMetaFieldDescriptor(TString callableName, TString sysColumn, NUdf::EDataSlot type)
-        : CallableName(callableName)
+    TMetaFieldDescriptor(TString key, TString sysColumn, NUdf::EDataSlot type)
+        : Key(key)
         , SysColumn(sysColumn)
         , Type(type)
     { }
 
 public:
-    const TString CallableName;
+    const TString Key;
     const TString SysColumn;
     const NUdf::EDataSlot Type;
 };
 
-const TMetaFieldDescriptor* FindPqMetaFieldDescriptorByCallable(const TString& callableName);
+const TMetaFieldDescriptor* FindPqMetaFieldDescriptorByKey(const TString& key);
 
 const TMetaFieldDescriptor* FindPqMetaFieldDescriptorBySysColumn(const TString& sysColumn);
 
 std::vector<TString> AllowedPqMetaSysColumns();
-
-std::vector<TString> AllowedPqMetaCallables();
 
 }

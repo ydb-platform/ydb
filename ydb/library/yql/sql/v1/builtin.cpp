@@ -2912,13 +2912,7 @@ struct TBuiltinFuncData {
             {"tablerows", BuildSimpleBuiltinFactoryCallback<TTableRows>() },
             {"weakfield", BuildSimpleBuiltinFactoryCallback<TWeakFieldOp>()},
 
-            // meta fields
-            {"writetime", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("WriteTime")},
-            {"offset", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("Offset")},
-            // {"createtime", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("CreateTime")},
-            // {"partitionid", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("PartitionId")},
-            // {"messagegroupid", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("MessageGroupId")},
-            // {"seqno", BuildNamedBuiltinFactoryCallback<TCallDirectRow>("SeqNo")},
+            {"systemmetadata", BuildNamedArgcBuiltinFactoryCallback<TCallDirectRow>("SystemMetadata", 1, -1)},
 
             // Hint builtins
             {"grouping", BuildSimpleBuiltinFactoryCallback<TGroupingNode>()},

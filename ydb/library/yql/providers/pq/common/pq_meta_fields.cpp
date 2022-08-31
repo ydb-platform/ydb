@@ -5,22 +5,22 @@
 
 namespace {
     const std::vector<NYql::TMetaFieldDescriptor> PqMetaFields = {
-        NYql::TMetaFieldDescriptor("CreateTime", "_yql_sys_create_time", NYql::NUdf::EDataSlot::Timestamp),
-        NYql::TMetaFieldDescriptor("WriteTime", "_yql_sys_write_time", NYql::NUdf::EDataSlot::Timestamp),
-        NYql::TMetaFieldDescriptor("PartitionId", "_yql_sys_partition_id", NYql::NUdf::EDataSlot::Uint64),
-        NYql::TMetaFieldDescriptor("Offset", "_yql_sys_offset", NYql::NUdf::EDataSlot::Uint64),
-        NYql::TMetaFieldDescriptor("MessageGroupId", "_yql_sys_message_group_id", NYql::NUdf::EDataSlot::String),
-        NYql::TMetaFieldDescriptor("SeqNo", "_yql_sys_seq_no", NYql::NUdf::EDataSlot::Uint64),
+        NYql::TMetaFieldDescriptor("create_time", "_yql_sys_create_time", NYql::NUdf::EDataSlot::Timestamp),
+        NYql::TMetaFieldDescriptor("write_time", "_yql_sys_write_time", NYql::NUdf::EDataSlot::Timestamp),
+        NYql::TMetaFieldDescriptor("partition_id", "_yql_sys_partition_id", NYql::NUdf::EDataSlot::Uint64),
+        NYql::TMetaFieldDescriptor("offset", "_yql_sys_offset", NYql::NUdf::EDataSlot::Uint64),
+        NYql::TMetaFieldDescriptor("message_group_id", "_yql_sys_message_group_id", NYql::NUdf::EDataSlot::String),
+        NYql::TMetaFieldDescriptor("seq_no", "_yql_sys_seq_no", NYql::NUdf::EDataSlot::Uint64),
     };
 }
 
 namespace NYql {
 
-const TMetaFieldDescriptor* FindPqMetaFieldDescriptorByCallable(const TString& callableName) {
+const TMetaFieldDescriptor* FindPqMetaFieldDescriptorByKey(const TString& key) {
     const auto iter = std::find_if(
         PqMetaFields.begin(),
         PqMetaFields.end(),
-        [&](const NYql::TMetaFieldDescriptor& item){ return item.CallableName == callableName; });
+        [&](const NYql::TMetaFieldDescriptor& item){ return item.Key == key; });
     if (iter != PqMetaFields.end()) {
         return iter;
     }
@@ -46,17 +46,6 @@ std::vector<TString> AllowedPqMetaSysColumns() {
 
     for (const auto& descriptor : PqMetaFields) {
         res.emplace_back(descriptor.SysColumn);
-    }
-
-    return res;
-}
-
-std::vector<TString> AllowedPqMetaCallables() {
-    std::vector<TString> res;
-    res.reserve(PqMetaFields.size());
-
-    for (const auto& descriptor : PqMetaFields) {
-        res.emplace_back(descriptor.CallableName);
     }
 
     return res;

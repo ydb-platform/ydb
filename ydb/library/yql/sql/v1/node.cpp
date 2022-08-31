@@ -672,6 +672,10 @@ TCallDirectRow::TPtr TCallDirectRow::DoClone() const {
     return new TCallDirectRow(Pos, OpName, CloneContainer(Args));
 }
 
+TCallDirectRow::TCallDirectRow(TPosition pos, const TString& opName, i32 minArgs, i32 maxArgs, const TVector<TNodePtr>& args)
+    : TCallNode(pos, opName, minArgs, maxArgs, args)
+{}
+
 TCallDirectRow::TCallDirectRow(TPosition pos, const TString& opName, const TVector<TNodePtr>& args)
     : TCallNode(pos, opName, 0, 0, args)
 {}

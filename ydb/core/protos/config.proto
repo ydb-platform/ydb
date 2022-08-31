@@ -1423,6 +1423,7 @@ message THiveConfig {
     optional EHiveNodeSelectStrategy NodeSelectStrategy = 45 [default = HIVE_NODE_SELECT_STRATEGY_RANDOM_MIN_7P];
     optional bool CheckMoveExpediency = 46 [default = true];
     optional uint64 StoragePoolFreshPeriod = 47 [default = 60000]; // milliseconds
+    optional string PoolsToMonitorForUsage = 48 [default = "System,User,IC"];
 }
 
 message TDataShardConfig {

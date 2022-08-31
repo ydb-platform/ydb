@@ -15,6 +15,7 @@
 #include <library/cpp/actors/core/log.h>
 
 #include <util/system/info.h>
+#include <util/string/vector.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -662,8 +663,13 @@ class TLocalNodeRegistrar : public TActorBootstrapped<TLocalNodeRegistrar> {
                 }
                 usage = static_cast<double>(MemUsage) / MemLimit;
             }
+
+            TVector<TString> poolsToMonitorForUsage = SplitString(AppData()->HiveConfig.GetPoolsToMonitorForUsage(), ",");
+
             for (const auto& poolInfo : info.poolstats()) {
-                usage = std::max(usage, poolInfo.usage());
+                if (Find(poolsToMonitorForUsage, poolInfo.GetName()) != poolsToMonitorForUsage.end()) {
+                    usage = std::max(usage, poolInfo.usage());
+                }
             }
 
             NodeUsage = usage;

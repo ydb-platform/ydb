@@ -176,7 +176,7 @@ private:
 
     auto FormNetDataFromJson(TStringBuf jsonData) const {
         NKikimrNetClassifier::TNetData netData;
-        TVector<TString> tagsToFilter(UpdaterConfig().GetNetBoxTags().begin(), UpdaterConfig().GetNetBoxTags().end());
+        THashSet<TString> tagsToFilter(UpdaterConfig().GetNetBoxTags().begin(), UpdaterConfig().GetNetBoxTags().end());
         NJson::TJsonValue value;
         bool res = NJson::ReadJsonTree(jsonData, &value);
         if (!res)
@@ -188,20 +188,31 @@ private:
                 return NKikimrNetClassifier::TNetData{};
             TString mask = v["prefix"].GetString();
 
-            if (!v["tags"].IsArray() || v["tags"].GetArray().size() == 0)
-                return NKikimrNetClassifier::TNetData{};
-            const auto& tags = v["tags"].GetArray();
             TString label;
-            for (auto& tag : tags) {
-                if (!tag.IsString())
+            auto customFields = v.GetValueByPath("custom_fields");
+            if (customFields) {
+                if (!customFields->IsMap() || !(*customFields)["owner"].IsString()) {
                     return NKikimrNetClassifier::TNetData{};
-                if (std::count(tagsToFilter.begin(), tagsToFilter.end(), tag.GetString())) {
-                    label = tag.GetString();
-                    break;
                 }
-            }
-            if (tagsToFilter.empty()) {
-                label = tags.front().GetString();
+                auto owner = (*customFields)["owner"].GetString();
+                if (tagsToFilter.empty() || tagsToFilter.contains(owner)) {
+                    label = owner;
+                }
+            } else {
+                if (!v["tags"].IsArray() || v["tags"].GetArray().size() == 0)
+                    return NKikimrNetClassifier::TNetData{};
+                const auto& tags = v["tags"].GetArray();
+                for (auto& tag : tags) {
+                    if (!tag.IsString())
+                        return NKikimrNetClassifier::TNetData{};
+                    if (tagsToFilter.contains(tag.GetString())) {
+                        label = tag.GetString();
+                        break;
+                    }
+                }
+                if (tagsToFilter.empty()) {
+                    label = tags.front().GetString();
+                }
             }
             if (!label) {
                 continue;

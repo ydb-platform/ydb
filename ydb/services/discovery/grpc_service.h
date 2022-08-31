@@ -6,32 +6,21 @@
 
 #include <library/cpp/grpc/server/grpc_server.h>
 
+#include <ydb/core/grpc_services/base/base_service.h>
+
+
 namespace NKikimr {
 namespace NGRpcService {
 
  class TGRpcDiscoveryService
-     : public NGrpc::TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>
+     : public TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>
  {
- public:
-     TGRpcDiscoveryService(NActors::TActorSystem* system,
-                     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                     NActors::TActorId id);
-
-     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-     void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
-
-     bool IncRequest();
-     void DecRequest();
+  public:
+     using TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>::TGrpcServiceBase;
 
   private:
      void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
 
-     NActors::TActorSystem* ActorSystem_;
-     grpc::ServerCompletionQueue* CQ_ = nullptr;
-
-     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
-     NActors::TActorId GRpcRequestProxyId_;
-     NGrpc::TGlobalLimiter* Limiter_ = nullptr;
  };
 
 } // namespace NGRpcService

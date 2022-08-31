@@ -37,36 +37,6 @@ void YdsProcessAttr(const TSchemeBoardEvents::TDescribeSchemeResult& schemeData,
 
 namespace NKikimr::NGRpcService {
 
-TGRpcDataStreamsService::TGRpcDataStreamsService(NActors::TActorSystem *system,
-                                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                                 NActors::TActorId id)
-    : ActorSystem_(system)
-    , Counters_(counters)
-    , GRpcRequestProxyId_(id)
-{
-}
-
-void TGRpcDataStreamsService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger)
-{
-    CQ_ = cq;
-
-    SetupIncomingRequests(logger);
-}
-
-void TGRpcDataStreamsService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcDataStreamsService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcDataStreamsService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
-
 void TGRpcDataStreamsService::SetupIncomingRequests(NGrpc::TLoggerPtr logger)
 {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);

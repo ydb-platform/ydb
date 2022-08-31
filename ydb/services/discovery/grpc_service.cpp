@@ -16,34 +16,7 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
     return TString{res[0]};
 }
 
-TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
-                                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                                 NActors::TActorId id)
-     : ActorSystem_(system)
-     , Counters_(counters)
-     , GRpcRequestProxyId_(id)
- {
- }
-
- void TGRpcDiscoveryService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-     CQ_ = cq;
-     SetupIncomingRequests(std::move(logger));
- }
-
- void TGRpcDiscoveryService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter *limiter) {
-     Limiter_ = limiter;
- }
-
- bool TGRpcDiscoveryService::IncRequest() {
-     return Limiter_->Inc();
- }
-
- void TGRpcDiscoveryService::DecRequest() {
-     Limiter_->Dec();
-     Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
- }
-
- void TGRpcDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+void TGRpcDiscoveryService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
      auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
      using namespace Ydb;
 #ifdef ADD_REQUEST
@@ -56,7 +29,7 @@ TGRpcDiscoveryService::TGRpcDiscoveryService(NActors::TActorSystem *system,
                 NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer(), GetSdkBuildInfo(ctx));        \
                 ActorSystem_->Send(GRpcRequestProxyId_,                                                       \
                     new TGrpcRequestOperationCall<Discovery::NAME##Request, Discovery::NAME##Response>        \
-                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::Rps, nullptr}));                     \
+                        (ctx, &CB, TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr}));                     \
             }, &Ydb::Discovery::V1::DiscoveryService::AsyncService::Request ## NAME,                          \
             #NAME, logger, getCounterBlock("discovery", #NAME))->Run();
 

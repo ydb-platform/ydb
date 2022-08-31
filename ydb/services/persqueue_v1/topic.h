@@ -6,6 +6,8 @@
 
 #include <library/cpp/grpc/server/grpc_server.h>
 
+#include <ydb/core/grpc_services/base/base_service.h>
+
 
 namespace NKikimr {
 
@@ -13,33 +15,24 @@ namespace NGRpcService {
 namespace V1 {
 
 class TGRpcTopicService
-    : public NGrpc::TGrpcServiceBase<Ydb::Topic::V1::TopicService>
+    : public TGrpcServiceBase<Ydb::Topic::V1::TopicService>
 {
 public:
-    TGRpcTopicService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache, const NActors::TActorId& grpcRequestProxy);
+    TGRpcTopicService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters, const NActors::TActorId& schemeCache, const NActors::TActorId& grpcRequestProxy, bool rlAllowed);
 
     void InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) override;
-    void SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) override;
     void StopService() noexcept override;
 
     using NGrpc::TGrpcServiceBase<Ydb::Topic::V1::TopicService>::GetService;
 
-    bool IncRequest();
-    void DecRequest();
 
 private:
-    void SetupIncomingRequests(NGrpc::TLoggerPtr logger);
+    void SetupIncomingRequests(NGrpc::TLoggerPtr logger) override;
 
     void InitNewSchemeCacheActor();
 
-    NActors::TActorSystem* ActorSystem;
-    grpc::ServerCompletionQueue* CQ = nullptr;
-
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters;
-    NGrpc::TGlobalLimiter* Limiter = nullptr;
     NActors::TActorId SchemeCache;
     NActors::TActorId NewSchemeCache;
-    NActors::TActorId GRpcRequestProxy;
 };
 
 } // namespace V1

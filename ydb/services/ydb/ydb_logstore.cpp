@@ -7,31 +7,6 @@
 
 namespace NKikimr::NGRpcService {
 
-TGRpcYdbLogStoreService::TGRpcYdbLogStoreService(NActors::TActorSystem *system,
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-    NActors::TActorId id)
-    : ActorSystem_(system)
-    , Counters_(counters)
-    , GRpcRequestProxyId_(id) {}
-
-void TGRpcYdbLogStoreService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-    CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcYdbLogStoreService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcYdbLogStoreService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcYdbLogStoreService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcYdbLogStoreService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     using namespace Ydb;
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);

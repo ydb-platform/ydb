@@ -6,6 +6,7 @@
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
 
 #include <library/cpp/grpc/server/grpc_server.h>
+#include <ydb/core/grpc_services/base/base_service.h>
 
 namespace NKikimr {
 namespace NGRpcService {

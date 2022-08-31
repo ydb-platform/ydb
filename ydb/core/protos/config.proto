@@ -612,6 +612,9 @@ message TGRpcConfig {
 
     optional bool SkipSchemeCheck = 24 [default = false];
 
+    repeated string RatelimiterServicesEnabled = 25;
+    repeated string RatelimiterServicesDisabled = 26;
+
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
     optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE

@@ -607,39 +607,9 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TKesusGRpcService::TKesusGRpcService(
-        NActors::TActorSystem* actorSystem,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-        NActors::TActorId id)
-    : ActorSystem(actorSystem)
-    , Counters(counters)
-    , GRpcRequestProxyId(id)
-{}
-
-TKesusGRpcService::~TKesusGRpcService() {
-    // empty
-}
-
-void TKesusGRpcService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
-    CQ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
-
-void TKesusGRpcService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter = limiter;
-}
-
-bool TKesusGRpcService::IncRequest() {
-    return Limiter->Inc();
-}
-
-void TKesusGRpcService::DecRequest() {
-    Limiter->Dec();
-    Y_ASSERT(Limiter->GetCurrentInFlight() >= 0);
-}
-
 void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
-    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters, ActorSystem);
+    auto getCounterBlock = NGRpcService::CreateCounterCb(Counters_, ActorSystem_);
+    using NGRpcService::TRateLimiterMode;
 
 #ifdef ADD_REQUEST
 #error ADD_REQUEST macro is already defined
@@ -649,12 +619,12 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     MakeIntrusive<NGRpcService::TGRpcRequest<Ydb::Coordination::IN, Ydb::Coordination::OUT, TKesusGRpcService>>( \
         this, \
         &Service_, \
-        CQ, \
+        CQ_, \
         [this](NGrpc::IRequestContextBase* reqCtx) { \
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, reqCtx->GetPeer()); \
-            ActorSystem->Send(GRpcRequestProxyId, \
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, reqCtx->GetPeer()); \
+            ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::Coordination::IN, Ydb::Coordination::OUT> \
-                    (reqCtx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Rps, nullptr})); \
+                    (reqCtx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(TRateLimiterMode::Rps), nullptr})); \
         }, \
         &Ydb::Coordination::V1::CoordinationService::AsyncService::Request ## NAME, \
         "Coordination/" #NAME,             \
@@ -671,13 +641,13 @@ void TKesusGRpcService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     TGRpcSessionActor::TGRpcRequest::Start(
         this,
         this->GetService(),
-        CQ,
+        CQ_,
         &Ydb::Coordination::V1::CoordinationService::AsyncService::RequestSession,
         [this](TIntrusivePtr<TGRpcSessionActor::IContext> context) {
-            NGRpcService::ReportGrpcReqToMon(*ActorSystem, context->GetPeerName());
-            ActorSystem->Send(GRpcRequestProxyId, new NGRpcService::TEvCoordinationSessionRequest(context));
+            NGRpcService::ReportGrpcReqToMon(*ActorSystem_, context->GetPeerName());
+            ActorSystem_->Send(GRpcRequestProxyId_, new NGRpcService::TEvCoordinationSessionRequest(context));
         },
-        *ActorSystem,
+        *ActorSystem_,
         "Coordination/Session",
         getCounterBlock("coordination", "Session", true, true),
         /* TODO: limiter */ nullptr);

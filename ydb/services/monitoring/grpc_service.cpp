@@ -17,33 +17,6 @@ static TString GetSdkBuildInfo(NGrpc::IRequestContextBase* reqCtx) {
     return TString{res[0]};
 }
 
-TGRpcMonitoringService::TGRpcMonitoringService(NActors::TActorSystem* system,
-                                               TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
-                                               NActors::TActorId id)
-     : ActorSystem_(system)
-     , Counters_(counters)
-     , GRpcRequestProxyId_(id)
-{
-}
-
-void TGRpcMonitoringService::InitService(grpc::ServerCompletionQueue* cq, NGrpc::TLoggerPtr logger) {
-    CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcMonitoringService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcMonitoringService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcMonitoringService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
-
 void TGRpcMonitoringService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
     using namespace Ydb;

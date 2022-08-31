@@ -315,6 +315,9 @@ enum class TRateLimiterMode : ui8 {
     RuOnProgress = 3,
 };
 
+#define RLSWITCH(mode) \
+    IsRlAllowed() ? mode : TRateLimiterMode::Off
+
 class ICheckerIface;
 
 // The way to pass some common data to request processing

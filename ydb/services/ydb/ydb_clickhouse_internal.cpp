@@ -10,29 +10,11 @@ namespace NGRpcService {
 TGRpcYdbClickhouseInternalService::TGRpcYdbClickhouseInternalService(NActors::TActorSystem *system,
     TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
     TIntrusivePtr<TInFlightLimiterRegistry> inFlightLimiterRegistry,
-    NActors::TActorId id)
-    : ActorSystem_(system)
-    , Counters_(counters)
+    NActors::TActorId id,
+    bool rlAllowed)
+    : TGrpcServiceBase<Ydb::ClickhouseInternal::V1::ClickhouseInternalService>(system, counters, id, rlAllowed)
     , LimiterRegistry_(inFlightLimiterRegistry)
-    , GRpcRequestProxyId_(id) {}
-
-void TGRpcYdbClickhouseInternalService::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
-    CQ_ = cq;
-    SetupIncomingRequests(std::move(logger));
-}
-
-void TGRpcYdbClickhouseInternalService::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
-    Limiter_ = limiter;
-}
-
-bool TGRpcYdbClickhouseInternalService::IncRequest() {
-    return Limiter_->Inc();
-}
-
-void TGRpcYdbClickhouseInternalService::DecRequest() {
-    Limiter_->Dec();
-    Y_ASSERT(Limiter_->GetCurrentInFlight() >= 0);
-}
+{}
 
 void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
     auto getCounterBlock = CreateCounterCb(Counters_, ActorSystem_);
@@ -47,7 +29,7 @@ void TGRpcYdbClickhouseInternalService::SetupIncomingRequests(NGrpc::TLoggerPtr 
             NGRpcService::ReportGrpcReqToMon(*ActorSystem_, ctx->GetPeer()); \
             ActorSystem_->Send(GRpcRequestProxyId_, \
                 new NGRpcService::TGrpcRequestOperationCall<Ydb::ClickhouseInternal::IN, Ydb::ClickhouseInternal::OUT> \
-                    (ctx, &CB, NGRpcService::TRequestAuxSettings{NGRpcService::TRateLimiterMode::Rps, nullptr})); \
+                    (ctx, &CB, NGRpcService::TRequestAuxSettings{RLSWITCH(NGRpcService::TRateLimiterMode::Rps), nullptr})); \
         }, &Ydb::ClickhouseInternal::V1::ClickhouseInternalService::AsyncService::Request ## NAME, \
         #NAME, logger, getCounterBlock("clickhouse_internal", #NAME), getLimiter("ClickhouseInternal", #NAME, DEFAULT_MAX_IN_FLIGHT))->Run();
 

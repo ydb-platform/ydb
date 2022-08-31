@@ -255,10 +255,10 @@ public:
         for (const auto& tabletIdx : tabletIdIndex) {
             TTabletInfo& x = *tabletIdx.second;
             if (BadOnly) {
-                if (x.IsAlive() || x.GetLeader().IsExternalBoot()) {
+                if (x.IsAlive()) {
                     continue;
                 }
-                if (x.IsLeader() && x.AsLeader().Type == TTabletTypes::BlockStoreVolume && x.IsStopped()) {
+                if (x.IsLeader() && (x.AsLeader().IsLockedToActor() || x.AsLeader().IsExternalBoot())) {
                     continue;
                 }
             }
@@ -1120,6 +1120,10 @@ public:
                 ++runningTablets;
                 ++tabletsByNodeByType[pr.second.NodeId][GetTabletType(pr.second.Type)];
             }
+            if (pr.second.IsLockedToActor()) {
+                ++runningTablets;
+                ++tabletsByNodeByType[pr.second.LockedToActor.NodeId()][GetTabletType(pr.second.Type)];
+            }
             for (const auto& sl : pr.second.Followers) {
                 if (sl.IsRunning()){
                     ++runningTablets;
@@ -1762,6 +1766,10 @@ public:
             if (pr.second.IsRunning()) {
                 ++runningTablets;
                 ++tabletsByNodeByType[pr.second.NodeId][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
+            }
+            if (pr.second.IsLockedToActor()) {
+                ++runningTablets;
+                ++tabletsByNodeByType[pr.second.LockedToActor.NodeId()][TTxMonEvent_Landing::GetTabletType(pr.second.Type)];
             }
             for (const auto& sl : pr.second.Followers) {
                 if (sl.IsRunning()) {

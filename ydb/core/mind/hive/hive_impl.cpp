@@ -439,6 +439,10 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
             if (!tablet.InitiateBlockStorage(sideEffects, std::numeric_limits<ui32>::max())) {
                 DeleteTabletWithoutStorage(&tablet);
             }
+        } else if (tablet.IsLockedToActor()) {
+            // we are wating for a lock
+        } else if (tablet.IsExternalBoot()) {
+            // we are wating for external boot request
         } else if (tablet.IsStopped() && tablet.State == ETabletState::Stopped) {
             ReportStoppedToWhiteboard(tablet);
             BLOG_D("Report tablet " << tablet.ToString() << " as stopped to Whiteboard");

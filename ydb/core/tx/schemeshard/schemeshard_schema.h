@@ -1720,6 +1720,11 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_ParentDomainEffectiveACLVersion = 8;
     static constexpr ui64 SysParam_TenantInitState = 9;
     static constexpr ui64 SysParam_ServerlessStorageLastBillTime = 10;
+    static constexpr ui64 SysParam_MaxIncompatibleChange = 11;
+
+    // List of incompatible changes:
+    // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record
+    static constexpr ui64 MaxIncompatibleChangeSupported = 1;
 };
 
 }

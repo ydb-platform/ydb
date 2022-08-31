@@ -18,6 +18,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TDeque<TPathId> BlockStoreVolumesToClean;
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
+    bool Broken = false;
 
     explicit TTxInit(TSelf *self)
         : TBase(self)
@@ -187,6 +188,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                                                rows.GetValue<Schema::Paths::ParentId>());
 
                 TString name = rows.GetValue<Schema::Paths::Name>();
+
+                if (pathId.LocalPathId == 0) {
+                    // Skip special incompatibility marker
+                    Y_VERIFY_S(parentPathId.LocalPathId == 0 && name == "/incompatible/",
+                        "Unexpected row PathId# " << pathId << " ParentPathId# " << parentPathId << " Name# " << name);
+                    if (!rows.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
 
                 TPathElement::EPathType pathType = (TPathElement::EPathType)rows.GetValue<Schema::Paths::PathType>();
 
@@ -559,6 +570,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
         }
+
+        // We need to sort partitions by PathId/PartitionId due to incompatible change 1
+        std::sort(partitionsRows.begin(), partitionsRows.end());
 
         return true;
     }
@@ -1279,6 +1293,17 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 #define RETURN_IF_NO_PRECHARGED(readIsOk) \
         if (!readIsOk) { \
             return false;\
+        }
+
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_MaxIncompatibleChange, Self->MaxIncompatibleChange));
+        if (Self->MaxIncompatibleChange > Schema::MaxIncompatibleChangeSupported) {
+            LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "TTxInit, unsupported changes detected: MaxIncompatibleChange = " << Self->MaxIncompatibleChange <<
+                        ", MaxIncompatibleChangeSupported = " << Schema::MaxIncompatibleChangeSupported <<
+                        ", restarting!");
+            Self->BreakTabletAndRestart(ctx);
+            Broken = true;
+            return true;
         }
 
         {
@@ -4623,6 +4648,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     }
 
     void Complete(const TActorContext &ctx) override {
+        if (Broken) {
+            return;
+        }
+
         auto delayPublications = OnComplete.ExtractPublicationsToSchemeBoard(); //there no Populator exist jet
         for (auto& [txId, pathIds] : Publications) {
             std::move(pathIds.begin(), pathIds.end(), std::back_inserter(delayPublications[txId]));

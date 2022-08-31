@@ -177,6 +177,7 @@ public:
 
     TVector<TString> RootPathElements;
 
+    ui64 MaxIncompatibleChange = 0;
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
 
@@ -545,6 +546,9 @@ public:
 
     void IncrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
     void DecrementPathDbRefCount(const TPathId& pathId, const TStringBuf& debug = TStringBuf());
+
+    // incompatible changes
+    void BumpIncompatibleChanges(NIceDb::TNiceDb& db, ui64 incompatibleChange);
 
     // path
     void PersistPath(NIceDb::TNiceDb& db, const TPathId& pathId);

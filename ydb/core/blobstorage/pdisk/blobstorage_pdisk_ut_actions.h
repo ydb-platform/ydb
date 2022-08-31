@@ -1030,6 +1030,20 @@ public:
     {}
 };
 
+class TTestChunkForget1 : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TString ChunkWriteData;
+    TString CommitData;
+    TVector<ui32> ReservedChunks;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkForget1(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
 template<ui32 WishDataSize>
 class TTestChunk3WriteRead : public TBaseTest {
     NPDisk::TOwner Owner;

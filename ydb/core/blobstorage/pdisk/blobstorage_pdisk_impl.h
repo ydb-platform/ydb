@@ -73,7 +73,7 @@ public:
     TVector<TLogWrite*> JointLogWrites;
     TVector<TLogWrite*> JointCommits;
     TVector<TChunkTrim*> JointChunkTrims;
-
+    TVector<std::unique_ptr<TChunkForget>> JointChunkForgets;
     TVector<std::unique_ptr<TRequestBase>> FastOperationsQueue;
     TDeque<TRequestBase*> PausedQueue;
     std::set<std::unique_ptr<TYardInit>> PendingYardInits;
@@ -273,6 +273,8 @@ public:
     // Chunk reservation
     TVector<TChunkIdx> AllocateChunkForOwner(const TRequestBase *req, const ui32 count, TString &errorReason);
     void ChunkReserve(TChunkReserve &evChunkReserve);
+    bool ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason);
+    void ChunkForget(TChunkForget &evChunkForget);
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Whiteboard and HTTP reports creation
     void WhiteboardReport(TWhiteboardReport &whiteboardReport); // Called by actor
@@ -313,6 +315,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // Update process
     void ProcessLogWriteQueueAndCommits();
+    void ProcessChunkForgetQueue();
     void ProcessChunkWriteQueue();
     void ProcessChunkReadQueue();
     void ProcessLogReadQueue();

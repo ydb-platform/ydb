@@ -82,6 +82,7 @@ struct TReqId {
         TryTrimChunk = 63,
         ReleaseChunks = 64,
         StopDevice = 65,
+        ChunkForget = 66,
     };
 
     // 56 bit idx, 8 bit source
@@ -139,6 +140,7 @@ enum class ERequestType {
     RequestTryTrimChunk,
     RequestReleaseChunks,
     RequestStopDevice,
+    RequestChunkForget,
 };
 
 inline IOutputStream& operator <<(IOutputStream& out, const TReqId& reqId) {

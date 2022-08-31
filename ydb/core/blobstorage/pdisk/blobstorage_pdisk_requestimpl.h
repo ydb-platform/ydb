@@ -667,6 +667,27 @@ public:
 };
 
 //
+// TChunkForget
+//
+class TChunkForget : public TRequestBase {
+public:
+    TVector<TChunkIdx> ForgetChunks;
+
+    TChunkForget(const NPDisk::TEvChunkForget &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ChunkForget, reqIdx), ev.Owner, ev.OwnerRound, NPriInternal::LogWrite)
+        , ForgetChunks(std::move(ev.ForgetChunks))
+    {}
+
+    ERequestType GetType() const override {
+        return ERequestType::RequestChunkForget;
+    }
+
+    void EstimateCost(const TDriveModel &) override {
+        Cost = 1;
+    }
+};
+
+//
 // TWhiteboardReport
 //
 class TWhiteboardReport : public TRequestBase {

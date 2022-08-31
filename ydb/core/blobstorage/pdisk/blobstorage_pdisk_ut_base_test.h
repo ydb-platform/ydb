@@ -268,6 +268,16 @@ protected:
         ActTestFSM(ctx);
     }
 
+    void Handle(NPDisk::TEvChunkForgetResult::TPtr &ev, const TActorContext &ctx) {
+        NPDisk::TEvChunkForgetResult &result = *(ev->Get());
+        LastResponse.Status = result.Status;
+        LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
+        LastResponse.StatusFlags = result.StatusFlags;
+        VERBOSE_COUT("Got " << result.ToString());
+        ActTestFSM(ctx);
+    }
+
+
     void Handle(NPDisk::TEvChunksLockResult::TPtr &ev, const TActorContext &ctx) {
         NPDisk::TEvChunksLockResult &result = *(ev->Get());
         LastResponse.Status = result.Status;
@@ -368,6 +378,7 @@ public:
             HFunc(NPDisk::TEvSlayResult, Handle);
             HFunc(NPDisk::TEvYardControlResult, Handle);
             HFunc(NPDisk::TEvCutLog, Handle);
+            HFunc(NPDisk::TEvChunkForgetResult, Handle);
             HFunc(NMon::TEvHttpInfoRes, Handle);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvPDiskStateUpdate, Handle);
             HFunc(NNodeWhiteboard::TEvWhiteboard::TEvVDiskStateUpdate, Handle);

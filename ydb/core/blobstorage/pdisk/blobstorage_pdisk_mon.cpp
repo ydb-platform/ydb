@@ -188,6 +188,7 @@ TPDiskMon::TPDiskMon(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& count
     CheckSpace.Setup(PDiskGroup, "YardCheckSpace");
     YardConfigureScheduler.Setup(PDiskGroup, "YardConfigureScheduler");
     ChunkReserve.Setup(PDiskGroup, "YardChunkReserve");
+    ChunkForget.Setup(PDiskGroup, "YardChunkForget");
     Harakiri.Setup(PDiskGroup, "YardHarakiri");
     YardSlay.Setup(PDiskGroup, "YardSlay");
     YardControl.Setup(PDiskGroup, "YardControl");

@@ -623,6 +623,12 @@ public:
         PDisk->Mon.ChunkReserve.CountResponse();
     }
 
+    void ErrorHandle(NPDisk::TEvChunkForget::TPtr &ev) {
+        PDisk->Mon.ChunkForget.CountRequest();
+        Send(ev->Sender, new NPDisk::TEvChunkForgetResult(NKikimrProto::CORRUPTED, 0, StateErrorReason));
+        PDisk->Mon.ChunkForget.CountResponse();
+    }
+
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
         Y_VERIFY(PDisk);
@@ -724,6 +730,11 @@ public:
 
     void Handle(NPDisk::TEvChunkReserve::TPtr &ev) {
         auto* request = PDisk->ReqCreator.CreateFromEv<TChunkReserve>(*ev->Get(), ev->Sender);
+        PDisk->InputRequest(request);
+    }
+
+    void Handle(NPDisk::TEvChunkForget::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkForget>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -1001,6 +1012,7 @@ public:
             hFunc(NPDisk::TEvHarakiri, ErrorHandle);
             hFunc(NPDisk::TEvSlay, InitHandle);
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
+            hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, InitHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);
@@ -1030,6 +1042,7 @@ public:
             hFunc(NPDisk::TEvHarakiri, Handle);
             hFunc(NPDisk::TEvSlay, Handle);
             hFunc(NPDisk::TEvChunkReserve, Handle);
+            hFunc(NPDisk::TEvChunkForget, Handle);
             hFunc(NPDisk::TEvChunksLock, Handle);
             hFunc(NPDisk::TEvChunksUnlock, Handle);
             hFunc(NPDisk::TEvYardControl, Handle);
@@ -1059,6 +1072,7 @@ public:
             hFunc(NPDisk::TEvHarakiri, ErrorHandle);
             hFunc(NPDisk::TEvSlay, ErrorHandle);
             hFunc(NPDisk::TEvChunkReserve, ErrorHandle);
+            hFunc(NPDisk::TEvChunkForget, ErrorHandle);
             hFunc(NPDisk::TEvYardControl, ErrorHandle);
             hFunc(NPDisk::TEvAskForCutLog, ErrorHandle);
             hFunc(NPDisk::TEvWhiteboardReportResult, Handle);

@@ -710,6 +710,7 @@ struct TPDiskMon {
     TReqCounters CheckSpace;
     TReqCounters YardConfigureScheduler;
     TReqCounters ChunkReserve;
+    TReqCounters ChunkForget;
     TReqCounters Harakiri;
     TReqCounters YardSlay;
     TReqCounters YardControl;

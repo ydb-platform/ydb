@@ -52,6 +52,10 @@ private:
                 request->GateId = GateLog;
                 request->IsSensitive = true;
                 return;
+            case ERequestType::RequestChunkForget:
+                request->GateId = GateLog;
+                request->IsSensitive = true;
+                return;
             case ERequestType::RequestChunkRead:
                 request->IsFast = (request->PriorityClass == NPriRead::HullOnlineOther);
                 request->IsSensitive = (request->PriorityClass == NPriRead::HullOnlineRt);

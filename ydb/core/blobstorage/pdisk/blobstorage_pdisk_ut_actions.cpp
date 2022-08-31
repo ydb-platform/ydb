@@ -815,6 +815,85 @@ void TTestChunkDelete2::TestFSM(const TActorContext &ctx) {
     TestStep += 10;
 }
 
+void TTestChunkForget1::TestFSM(const TActorContext &ctx) {
+    constexpr ui32 toReserve = 535;
+    VERBOSE_COUT("Test step " << TestStep);
+    switch (TestStep) {
+    case 0:
+        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+        VERBOSE_COUT(" Sending TEvInit");
+        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+        break;
+    case 10:
+    {
+        TEST_RESPONSE(EvYardInitResult, OK);
+        Owner = LastResponse.Owner;
+        OwnerRound = LastResponse.OwnerRound;
+        VERBOSE_COUT(" Sending TEvChunkReserve");
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, toReserve));
+        break;
+    case 20:
+        TEST_RESPONSE(EvChunkReserveResult, OK);
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == toReserve,
+            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
+        ReservedChunks = LastResponse.ChunkIds;
+        VERBOSE_COUT(" Sending TEvLog to commit Chunks");
+        for (ui32 i = 0; i < ReservedChunks.size(); ++i) {
+            VERBOSE_COUT("  id = " << ReservedChunks[i]);
+        }
+        CommitData = TString::Uninitialized(sizeof(ui32) * ReservedChunks.size());
+        memcpy((void*)CommitData.data(), &(ReservedChunks[0]), sizeof(ui32) * ReservedChunks.size());
+        NPDisk::TCommitRecord commitRecord;
+        commitRecord.CommitChunks = ReservedChunks;
+        commitRecord.IsStartingPoint = true;
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, CommitData, TLsnSeg(1, 1),
+                    (void*)43));
+        break;
+    }
+    case 30:
+        TEST_RESPONSE(EvLogResult, OK);
+        VERBOSE_COUT(" Sending TEvReserve to make sure no more chunks can be reserved");
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, toReserve));
+        break;
+    case 40:
+        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
+        VERBOSE_COUT(" Sending TEvLog to delete Chunks");
+        CommitData = TString();
+    {
+        NPDisk::TCommitRecord commitRecord;
+        commitRecord.DeleteChunks = ReservedChunks;
+        commitRecord.IsStartingPoint = true;
+        commitRecord.DeleteToDecommitted = true;
+        ctx.Send(Yard, new NPDisk::TEvLog(Owner, OwnerRound, 0, commitRecord, CommitData, TLsnSeg(2, 2),
+                    (void*)43));
+        break;
+    }
+    case 50:
+        TEST_RESPONSE(EvLogResult, OK);
+        VERBOSE_COUT(" Sending TEvReserve to make sure no more chunks can be reserved");
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, toReserve));
+        break;
+    case 60:
+        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
+        ctx.Send(Yard, new NPDisk::TEvChunkForget(Owner, OwnerRound, ReservedChunks));
+        break;
+    case 70:
+        TEST_RESPONSE(EvChunkForgetResult, OK);
+        VERBOSE_COUT(" Sending TEvReserve to make sure some chunks can be reserved");
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, toReserve));
+        break;
+    case 80:
+        TEST_RESPONSE(EvChunkReserveResult, OK);
+        VERBOSE_COUT("Done");
+        SignalDoneEvent();
+        break;
+    default:
+        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+        break;
+    }
+    TestStep += 10;
+}
+
 void TTestInitStartingPoints::TestFSM(const TActorContext &ctx) {
     TString data("testdata");
     VERBOSE_COUT("Test step " << TestStep);

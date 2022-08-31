@@ -26,10 +26,13 @@ struct TCommitRecord {
     TVector<TChunkIdx> CommitChunks;
     TVector<TChunkIdx> DeleteChunks;
     bool IsStartingPoint;
+    bool DeleteToDecommitted; // 1 == set chunks to Decommitted state that requires a ChunkForget event or a restart
+    // the value of DeleteToDecommitted is not stored as a part of the commit record.
 
     TCommitRecord()
         : FirstLsnToKeep(0)
         , IsStartingPoint(false)
+        , DeleteToDecommitted(false)
     {}
 
     void ValidateChunks(TVector<TChunkIdx> &chunks) {
@@ -62,6 +65,7 @@ struct TCommitRecord {
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&DeleteChunks[0], sizeof(DeleteChunks[0]) * DeleteChunks.size());
         }
         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&IsStartingPoint, sizeof(IsStartingPoint));
+        REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&DeleteToDecommitted, sizeof(DeleteToDecommitted));
     }
 
     TString ToString() const {
@@ -69,6 +73,7 @@ struct TCommitRecord {
         str << "{CommitRecord";
         str << " FirstLsnToKeep# " << FirstLsnToKeep;
         str << " IsStartingPoint# " << IsStartingPoint;
+        str << " DeleteToDecommitted# " << DeleteToDecommitted;
         str << " CommitChunks# ";
         PrintChunks(str, CommitChunks);
         str << " DeleteChunks# ";
@@ -81,8 +86,7 @@ struct TCommitRecord {
         return sizeof(TCommitRecord) + (CommitChunks.size() + DeleteChunks.size()) * sizeof(ui32);
     }
 
-protected:
-    void PrintChunks(IOutputStream &str, const TVector<TChunkIdx> vec) const {
+    static void PrintChunks(IOutputStream &str, const TVector<TChunkIdx> &vec) {
         str << "[";
         for (ui32 i = 0; i < vec.size(); i++) {
             if (i)
@@ -631,6 +635,70 @@ struct TEvChunkReserveResult : public TEventLocal<TEvChunkReserveResult, TEvBlob
     static TString ToString(const TEvChunkReserveResult &record) {
         TStringStream str;
         str << "{EvChunkReserveResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << " ErrorReason# \"" << record.ErrorReason << "\"";
+        str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
+        str << "}";
+        return str.Str();
+    }
+};
+
+////////////////////////////////////////////////////////////////////////////
+// CHUNK FORGET
+////////////////////////////////////////////////////////////////////////////
+struct TEvChunkForget : public TEventLocal<TEvChunkForget, TEvBlobStorage::EvChunkForget> {
+    TOwner Owner;
+    TOwnerRound OwnerRound;
+    TVector<TChunkIdx> ForgetChunks;
+
+    TEvChunkForget(TOwner owner, TOwnerRound ownerRound)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+    {}
+
+    TEvChunkForget(TOwner owner, TOwnerRound ownerRound, TVector<TChunkIdx> forgetChunks)
+        : Owner(owner)
+        , OwnerRound(ownerRound)
+        , ForgetChunks(std::move(forgetChunks))
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvChunkForget &record) {
+        TStringStream str;
+        str << "{EvChunkForget ownerId# " << (ui32)record.Owner;
+        str << " ownerRound# " << record.OwnerRound;
+        str << " ForgetChunks# ";
+        TCommitRecord::PrintChunks(str, record.ForgetChunks);
+        str << "}";
+        return str.Str();
+    }
+};
+
+struct TEvChunkForgetResult : public TEventLocal<TEvChunkForgetResult, TEvBlobStorage::EvChunkForgetResult> {
+    NKikimrProto::EReplyStatus Status;
+    TStatusFlags StatusFlags;
+    TString ErrorReason;
+
+    TEvChunkForgetResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags)
+        : Status(status)
+        , StatusFlags(statusFlags)
+    {}
+
+    TEvChunkForgetResult(NKikimrProto::EReplyStatus status, TStatusFlags statusFlags, TString &errorReason)
+        : Status(status)
+        , StatusFlags(statusFlags)
+        , ErrorReason(errorReason)
+    {}
+
+    TString ToString() const {
+        return ToString(*this);
+    }
+
+    static TString ToString(const TEvChunkForgetResult &record) {
+        TStringStream str;
+        str << "{EvChunkForgetResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " ErrorReason# \"" << record.ErrorReason << "\"";
         str << " StatusFlags# " << StatusFlagsToString(record.StatusFlags);
         str << "}";

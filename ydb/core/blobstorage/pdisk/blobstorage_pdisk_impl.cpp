@@ -85,6 +85,7 @@ TPDisk::TPDisk(const TIntrusivePtr<TPDiskConfig> cfg, const TIntrusivePtr<::NMon
     JointChunkWrites.reserve(16 << 10);
     JointLogWrites.reserve(16 << 10);
     JointCommits.reserve(16 << 10);
+    JointChunkForgets.reserve(16 << 10);
 }
 
 TString TPDisk::DynamicStateToString(bool isMultiline) {
@@ -332,6 +333,7 @@ void TPDisk::Stop() {
     }
     JointLogWrites.clear();
     JointCommits.clear();
+    JointChunkForgets.clear();
     for (const auto& req : FastOperationsQueue) {
         TRequestBase::AbortDelete(req.get(), ActorSystem);
     }
@@ -1159,6 +1161,118 @@ void TPDisk::ChunkReserve(TChunkReserve &evChunkReserve) {
     guard.Release();
     ActorSystem->Send(evChunkReserve.Sender, result.Release());
     Mon.ChunkReserve.CountResponse();
+
+}
+bool TPDisk::ValidateForgetChunk(ui32 chunkIdx, TOwner owner, TStringStream& outErrorReason) {
+    TGuard<TMutex> guard(StateMutex);
+    if (chunkIdx >= ChunkState.size()) {
+        outErrorReason << "PDiskId# " << PDiskId
+            << " Can't forget chunkIdx# " << chunkIdx
+            << " > total# " << ChunkState.size()
+            << " ownerId# " << owner
+            << " Marker# BPD89";
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, outErrorReason.Str());
+        return false;
+    }
+    if (ChunkState[chunkIdx].OwnerId != owner) {
+        outErrorReason << "PDiskId# " << PDiskId
+            << " Can't forget chunkIdx# " << chunkIdx
+            << ", ownerId# " << owner
+            << " != real ownerId# " << ChunkState[chunkIdx].OwnerId
+            << " Marker# BPD90";
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, outErrorReason.Str());
+        return false;
+    }
+    if (ChunkState[chunkIdx].CommitState != TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+            && ChunkState[chunkIdx].CommitState != TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS
+            && ChunkState[chunkIdx].CommitState != TChunkState::DATA_DECOMMITTED) {
+        outErrorReason << "PDiskId# " << PDiskId
+            << " Can't forget chunkIdx# " << chunkIdx
+            << " in CommitState# " << ChunkState[chunkIdx].CommitState
+            << " ownerId# " << owner << " Marker# BPD91";
+        LOG_ERROR_S(*ActorSystem, NKikimrServices::BS_PDISK, outErrorReason.Str());
+        return false;
+    }
+    return true;
+}
+
+void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
+    TStringStream errorReason;
+    TGuard<TMutex> guard(StateMutex);
+
+    THolder<NPDisk::TEvChunkForgetResult> result;
+
+    bool isOk = true;
+
+    for (ui32 chunkIdx : evChunkForget.ForgetChunks) {
+        if (!ValidateForgetChunk(chunkIdx, evChunkForget.Owner, errorReason)) {
+            result = MakeHolder<NPDisk::TEvChunkForgetResult>(NKikimrProto::ERROR,
+                    NotEnoughDiskSpaceStatusFlags(evChunkForget.Owner, evChunkForget.OwnerGroupType),
+                    errorReason.Str());
+            isOk = false;
+            break;
+        }
+    }
+    if (isOk) {
+        for (ui32 chunkIdx : evChunkForget.ForgetChunks) {
+            TChunkState& state = ChunkState[chunkIdx];
+            if (state.HasAnyOperationsInProgress()) {
+                switch (state.CommitState) {
+                    case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE;
+                        QuarantineChunks.push_back(chunkIdx);
+                        break;
+                    case TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS:
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE;
+                        QuarantineChunks.push_back(chunkIdx);
+                        break;
+                    case TChunkState::DATA_DECOMMITTED:
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::DATA_ON_QUARANTINE;
+                        QuarantineChunks.push_back(chunkIdx);
+                        break;
+                    default:
+                        Y_FAIL_S("PDiskId# " << PDiskId
+                                << " ChunkForget with in flight, ownerId# " << (ui32)evChunkForget.Owner
+                                << " chunkIdx# " << chunkIdx << " unexpected commitState# " << state.CommitState);
+                }
+            } else {
+                switch (state.CommitState) {
+                    case TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS:
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS;
+                        break;
+                    case TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS:
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS;
+                        break;
+                    case TChunkState::DATA_DECOMMITTED:
+                        Y_VERIFY_S(state.CommitsInProgress == 0,
+                                "PDiskId# " << PDiskId << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
+                        LOG_INFO(*ActorSystem, NKikimrServices::BS_PDISK, "PDiskId# %" PRIu32 " chunkIdx# %" PRIu32
+                                " forgotten, ownerId# %" PRIu32 " -> %" PRIu32,
+                                (ui32)PDiskId, (ui32)chunkIdx, (ui32)state.OwnerId, (ui32)OwnerUnallocated);
+                        Y_VERIFY(state.OwnerId == evChunkForget.Owner);
+                        Mon.UncommitedDataChunks->Dec();
+                        state.CommitState = TChunkState::FREE;
+                        Keeper.PushFreeOwnerChunk(evChunkForget.Owner, chunkIdx);
+                        break;
+                    default:
+                        Y_FAIL_S("PDiskId# " << PDiskId
+                                << " ChunkForget, ownerId# " << (ui32)evChunkForget.Owner
+                                << " chunkIdx# " << chunkIdx << " unexpected commitState# " << state.CommitState);
+                }
+            }
+        }
+        result = MakeHolder<NPDisk::TEvChunkForgetResult>(NKikimrProto::OK, 0);
+        result->StatusFlags = GetStatusFlags(evChunkForget.Owner, evChunkForget.OwnerGroupType);
+    }
+
+    guard.Release();
+    ActorSystem->Send(evChunkForget.Sender, result.Release());
+    Mon.ChunkForget.CountResponse();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1692,7 +1806,10 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
         for (ui32 i = 0; i < ChunkState.size(); ++i) {
             TChunkState &state = ChunkState[i];
             if (state.OwnerId == owner) {
-                if (state.CommitState == TChunkState::DATA_RESERVED) {
+                if (state.CommitState == TChunkState::DATA_RESERVED
+                        || state.CommitState == TChunkState::DATA_DECOMMITTED
+                        || state.CommitState == TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+                        || state.CommitState == TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS) {
                     Mon.UncommitedDataChunks->Dec();
                 } else if (state.CommitState == TChunkState::DATA_COMMITTED) {
                     Mon.CommitedDataChunks->Dec();
@@ -1712,14 +1829,23 @@ void TPDisk::KillOwner(TOwner owner, TOwnerRound killOwnerRound, TCompletionEven
                         || state.CommitState == TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS
                         || state.CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS
                         || state.CommitState == TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
-                        || state.CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE) {
+                        || state.CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE
+                        || state.CommitState == TChunkState::DATA_DECOMMITTED
+                        || state.CommitState == TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+                        || state.CommitState == TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS
+                        ) {
                     if (state.CommitState == TChunkState::DATA_RESERVED
-                            || state.CommitState == TChunkState::DATA_COMMITTED) {
+                            || state.CommitState == TChunkState::DATA_COMMITTED
+                            || state.CommitState == TChunkState::DATA_DECOMMITTED) {
                         state.CommitState = TChunkState::DATA_ON_QUARANTINE;
                     } else  if (state.CommitState == TChunkState::DATA_COMMITTED_DELETE_IN_PROGRESS) {
                         state.CommitState = TChunkState::DATA_RESERVED_DELETE_IN_PROGRESS;
                     } else  if (state.CommitState == TChunkState::DATA_COMMITTED_DELETE_ON_QUARANTINE) {
                         state.CommitState = TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE;
+                    } else if (state.CommitState == TChunkState::DATA_RESERVED_DECOMMIT_IN_PROGRESS
+                            || state.CommitState == TChunkState::DATA_COMMITTED_DECOMMIT_IN_PROGRESS) {
+                        state.CommitState = TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE;
+                        QuarantineChunks.push_back(i);
                     }
 
                     if (state.CommitState != TChunkState::DATA_RESERVED_DELETE_ON_QUARANTINE
@@ -2102,11 +2228,22 @@ void TPDisk::ProcessFastOperationsQueue() {
                 MarkChunksAsReleased(static_cast<TReleaseChunks&>(*req));
                 break;
             default:
-                Y_FAIL();
+                Y_FAIL_S("Unexpected request type# " << (ui64)req->GetType());
                 break;
         }
     }
     FastOperationsQueue.clear();
+}
+
+void TPDisk::ProcessChunkForgetQueue() {
+    if (JointChunkForgets.empty())
+        return;
+
+    for (auto& req : JointChunkForgets) {
+        ChunkForget(*req);
+    }
+
+    JointChunkForgets.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2561,6 +2698,14 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ownerData.WriteThroughput.Increment(log->Data.size(), ActorSystem->Timestamp());
             break;
         }
+        case ERequestType::RequestChunkForget:
+        {
+            auto *forget = static_cast<TChunkForget*>(request);
+            TOwnerData &ownerData = OwnerData[forget->Owner];
+            forget->SetOwnerGroupType(ownerData.IsStaticGroupOwner());
+            forget->JobKind = NSchLab::JobKindWrite;
+            break;
+        }
         case ERequestType::RequestYardInit:
             break;
         case ERequestType::RequestCheckSpace:
@@ -2861,6 +3006,12 @@ void TPDisk::RouteRequest(TRequestBase *request) {
             }
             break;
         }
+        case ERequestType::RequestChunkForget:
+        {
+            TChunkForget *forget = static_cast<TChunkForget*>(request);
+            JointChunkForgets.push_back(std::unique_ptr<TChunkForget>(forget));
+            break;
+        }
         default:
             Y_FAIL_S("RouteRequest, unexpected request type# " << ui64(request->GetType()));
             break;
@@ -3080,7 +3231,7 @@ void TPDisk::Update() {
 
     // Processing
     bool isNonLogWorkloadPresent = !JointChunkWrites.empty() || !FastOperationsQueue.empty() ||
-            !JointChunkReads.empty() || !JointLogReads.empty() || !JointChunkTrims.empty();
+            !JointChunkReads.empty() || !JointLogReads.empty() || !JointChunkTrims.empty() || !JointChunkForgets.empty();
     bool isLogWorkloadPresent = !JointLogWrites.empty();
     bool isNothingToDo = true;
     if (isLogWorkloadPresent || isNonLogWorkloadPresent) {
@@ -3146,6 +3297,7 @@ void TPDisk::Update() {
     if (tact != ETact::TactLc) {
         ProcessLogWriteQueueAndCommits();
     }
+    ProcessChunkForgetQueue();
     LastTact = tact;
 
 

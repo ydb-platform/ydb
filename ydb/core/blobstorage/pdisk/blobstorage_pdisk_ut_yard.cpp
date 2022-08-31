@@ -396,6 +396,11 @@ YARD_UNIT_TEST(TestChunkDelete) {
     Run<TTestChunkDelete2>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
+YARD_UNIT_TEST(TestChunkForget) {
+    TTestContext tc(false, true);
+    Run<TTestChunkForget1>(&tc, 1, MIN_CHUNK_SIZE);
+}
+
 YARD_UNIT_TEST(Test3HugeAsyncLog) {
     TTestContext tc(false, true);
     constexpr ui32 chunkSize = MIN_CHUNK_SIZE;

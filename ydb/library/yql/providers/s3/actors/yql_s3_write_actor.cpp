@@ -137,45 +137,23 @@ private:
         hFunc(TEvPrivate::TEvUploadPartFinished, Handle);
     )
 
-    static std::optional<NXml::TConstNode> TryParseXmlResponse(const TString& response, TActorId parentId, TActorId selfId, TActorSystem* actorSystem, const TString& errorAvantMessage = "") {
-        try {
-            const NXml::TDocument xml(response, NXml::TDocument::String);
-            const auto& root = xml.Root();
-            if (root.Name() == "Error") {
-                auto errorCode = root.Node("Code", true).Value<TString>();
-                auto errorText =  root.Node("Message", true).Value<TString>();
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << errorAvantMessage << "Error code: '" << errorCode << ". Description: " << errorText)})));
-            }
-            return root;
-        } catch(const std::exception& ex) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << errorAvantMessage << "Error while parsing xml: '" << ex.what())})));
-        }
-        return std::nullopt;
-    }
-
-    static std::optional<NXml::TConstNode> TryParseXmlResponse(IHTTPGateway::TResult response, TActorId parentId, TActorId selfId, TActorSystem* actorSystem, const TString& errorAvantMessage = "") {
-        return TryParseXmlResponse(std::get<IHTTPGateway::TContent>(response).Extract(), parentId, selfId, actorSystem, errorAvantMessage);
-    }
-
     static void OnUploadsCreated(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
-        case 0U: {
-            auto maybeRoot = TryParseXmlResponse(std::move(result), parentId, selfId, actorSystem, "create upload error: ");
-            if (!maybeRoot || maybeRoot->Name() == "Error") {
-                break;
-            }
-            auto root = *maybeRoot;
-            if (root.Name() != "InitiateMultipartUploadResult")
+        case 0U: try {
+            const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
+            if (const auto& root = xml.Root(); root.Name() == "Error") {
+                const auto& code = root.Node("Code", true).Value<TString>();
+                const auto& message = root.Node("Message", true).Value<TString>();
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
+            } else if (root.Name() != "InitiateMultipartUploadResult")
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on create upload.")})));
             else {
                 const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
-                try {
-                    actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
-                } catch (const std::exception& ex) {
-                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse create upload response.")})));
-                    break;
-                }
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
             }
+            break;
+        } catch (const std::exception& ex) {
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse create upload response.")})));
             break;
         }
         case 1U:
@@ -198,11 +176,7 @@ private:
                     break;
                 }
             }
-
-            if (!TryParseXmlResponse(str, parentId, selfId, actorSystem, "upload part error: ")) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response: " << str)})));
-            }
-
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response:" << Endl << str)})));
             break;
         }
         case 1U:
@@ -213,18 +187,19 @@ private:
 
     static void OnMultipartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, IHTTPGateway::TResult&& result) {
         switch (result.index()) {
-        case 0U: {
-
-            auto maybeRoot = TryParseXmlResponse(std::move(result), parentId, selfId, actorSystem, "upload error: ");
-            if (!maybeRoot || maybeRoot->Name() == "Error") {
-                break;
-            }
-            auto root = *maybeRoot;
-            if (root.Name() != "CompleteMultipartUploadResult") {
+        case 0U: try {
+            const NXml::TDocument xml(std::get<IHTTPGateway::TContent>(std::move(result)).Extract(), NXml::TDocument::String);
+            if (const auto& root = xml.Root(); root.Name() == "Error") {
+                const auto& code = root.Node("Code", true).Value<TString>();
+                const auto& message = root.Node("Message", true).Value<TString>();
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << message << ", error: code: " << code)})));
+            } else if (root.Name() != "CompleteMultipartUploadResult")
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Unexpected response '" << root.Name() << "' on finish upload.")})));
-            } else {
+            else
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
-            }
+            break;
+        } catch (const std::exception& ex) {
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "Error '" << ex.what() << "' on parse finish upload response.")})));
             break;
         }
         case 1U:
@@ -242,9 +217,7 @@ private:
             {
                 auto content = std::get<IHTTPGateway::TContent>(std::move(result));
                 if (content.HttpResponseCode >= 300) {
-                    if (!TryParseXmlResponse(content.Extract(), parentId, selfId, actorSystem, "upload error: ")) {
-                        actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "HTTP error code: " << content.HttpResponseCode << ". Response: " << content.data())})));
-                    }
+                    actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError({TIssue(TStringBuilder() << "HTTP error code: " << content.HttpResponseCode)})));
                 } else {
                     actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url)));
                 }
@@ -402,6 +375,7 @@ private:
                 ins.first->second.emplace_back(fileWrite.get());
                 RegisterWithSameMailbox(fileWrite.release());
             }
+
             ins.first->second.back()->SendData(TString((Keys.empty() ? v : *v.GetElements()).AsStringRef()));
         }
 

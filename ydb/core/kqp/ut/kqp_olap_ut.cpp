@@ -1284,7 +1284,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(AggregationPushdown) {
+    Y_UNIT_TEST(AggregationCountPushdown) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false)
             .SetEnableOlapSchemaOperations(true);
@@ -1308,6 +1308,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             TString query = R"(
                 --!syntax_v1
                 PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                PRAGMA EmitAggApply;
                 SELECT
                     COUNT(level)
                 FROM `/Root/olapStore/olapTable`
@@ -1326,7 +1327,47 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
     }
 
-    Y_UNIT_TEST(AggregationGroupByPushdown) {
+    Y_UNIT_TEST(AggregationSumPushdown) {
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false)
+            .SetEnableOlapSchemaOperations(true);
+        TKikimrRunner kikimr(settings);
+
+        // EnableDebugLogging(kikimr);
+        CreateTestOlapTable(kikimr);
+        auto tableClient = kikimr.GetTableClient();
+
+        {
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 10000, 3000000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 11000, 3001000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 12000, 3002000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 13000, 3003000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 14000, 3004000, 1000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 20000, 2000000, 7000);
+            WriteTestData(kikimr, "/Root/olapStore/olapTable", 30000, 1000000, 11000);
+        }
+
+        {
+            TString query = R"(
+                --!syntax_v1
+                PRAGMA Kikimr.KqpPushOlapProcess = "true";
+                PRAGMA EmitAggApply;
+                SELECT
+                    SUM(level)
+                FROM `/Root/olapStore/olapTable`
+            )";
+            auto it = tableClient.StreamExecuteScanQuery(query).GetValueSync();
+
+            UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+            TString result = StreamResultToYson(it);
+            CompareYson(result, R"([[[46000;]]])");
+
+            // Check plan
+            // CheckPlanForAggregatePushdown(query, tableClient, { "TKqpOlapAgg" });
+        }
+    }
+
+    Y_UNIT_TEST(AggregationCountGroupByPushdown) {
         // remove this return when GROUP BY will be implemented on columnshard
         return;
 

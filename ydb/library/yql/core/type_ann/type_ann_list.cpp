@@ -4970,6 +4970,34 @@ namespace {
 
         if (name == "count" || name == "count_all") {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64));
+        } else if (name == "sum") {
+            bool isOptional;
+            const TDataExprType* lambdaType;
+            if(IsDataOrOptionalOfData(lambda->GetTypeAnn(), isOptional, lambdaType)) {
+                auto lambdaTypeSlot = lambdaType->GetSlot();
+                const TTypeAnnotationNode *sumResultType = nullptr;
+                if (IsDataTypeSigned(lambdaTypeSlot)) {
+                    sumResultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Int64);
+                } else if (IsDataTypeUnsigned(lambdaTypeSlot)) {
+                    sumResultType = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
+                } else if (IsDataTypeDecimal(lambdaTypeSlot)) {
+                    const auto decimalType = lambdaType->Cast<TDataExprParamsType>();
+                    sumResultType = ctx.Expr.MakeType<TDataExprParamsType>(EDataSlot::Decimal, "35", decimalType->GetParamTwo());
+                } else if (IsDataTypeFloat(lambdaTypeSlot) || IsDataTypeInterval(lambdaTypeSlot)) {
+                    sumResultType = ctx.Expr.MakeType<TDataExprType>(lambdaTypeSlot);
+                } else {
+                    ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                        TStringBuilder() << "Unsupported column type: " << lambdaTypeSlot));
+                    return IGraphTransformer::TStatus::Error;
+                }
+                input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(sumResultType));
+            } else if (IsNull(*lambda->GetTypeAnn())) {
+                input->SetTypeAnn(ctx.Expr.MakeType<TNullExprType>());
+            } else {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                    TStringBuilder() << "Unsupported type: " << FormatType(lambda->GetTypeAnn()) << ". Expected Data or Optional of Data."));
+                return IGraphTransformer::TStatus::Error;
+            }
         } else {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
                 TStringBuilder() << "Unsupported agg name: " << name));

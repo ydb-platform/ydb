@@ -415,6 +415,8 @@ void THive::Handle(TEvLocal::TEvTabletStatus::TPtr& ev) {
 
 void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
     BLOG_D("Handle BootTablets");
+    SignalTabletActive(DEPRECATED_CTX);
+    ReadyForConnections = true;
     RequestPoolsInformation();
     for (auto& [id, node] : Nodes) {
         if (node.IsUnknown() && node.Local) {
@@ -462,8 +464,6 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
         }
     }
     sideEffects.Complete(DEPRECATED_CTX);
-    SignalTabletActive(DEPRECATED_CTX);
-    ReadyForConnections = true;
     if (AreWeRootHive()) {
         BLOG_D("Root Hive is ready");
     } else {

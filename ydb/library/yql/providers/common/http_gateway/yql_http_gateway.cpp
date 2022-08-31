@@ -113,8 +113,8 @@ public:
             byteRange << Offset + expectedSize - 1;
         }
         curl_easy_setopt(Handle, CURLOPT_RANGE, byteRange.c_str());
-        curl_easy_setopt(Handle, EMethod::PUT == method ? CURLOPT_HEADERFUNCTION : CURLOPT_WRITEFUNCTION, &WriteMemoryCallback);
-        curl_easy_setopt(Handle, EMethod::PUT == method ? CURLOPT_HEADERDATA :CURLOPT_WRITEDATA, static_cast<void*>(this));
+        curl_easy_setopt(Handle, CURLOPT_WRITEFUNCTION, &WriteMemoryCallback);
+        curl_easy_setopt(Handle, CURLOPT_WRITEDATA, static_cast<void*>(this));
         if (method == EMethod::POST) {
             curl_easy_setopt(Handle, CURLOPT_POSTFIELDSIZE, bodySize);
         }

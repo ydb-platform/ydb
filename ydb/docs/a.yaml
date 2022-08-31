@@ -1,4 +1,4 @@
-title: Deploy docs
+title: Deploy YDB OSS docs
 # slug вашего сервиса в ABC. Его можно узнать из url страницы
 # вашего сервиса в ABC, например для адреса
 # https://abc.yandex-team.ru/services/market/, market - это slug

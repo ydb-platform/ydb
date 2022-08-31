@@ -720,8 +720,10 @@ private:
     void ProcessContinueRun() {
         if (!ContinueRunEvents.empty() && !CpuTimeQuotaAsked && !ContinueRunInflight) {
             Send(TaskRunnerActorId, ContinueRunEvents.front().first.release());
-            const TDuration quotaWaitDelay = TInstant::Now() - ContinueRunEvents.front().second;
-            CpuTimeQuotaWaitDelay->Collect(quotaWaitDelay.MilliSeconds());
+            if (CpuTimeQuotaWaitDelay) {
+                const TDuration quotaWaitDelay = TInstant::Now() - ContinueRunEvents.front().second;
+                CpuTimeQuotaWaitDelay->Collect(quotaWaitDelay.MilliSeconds());
+            }
             ContinueRunEvents.pop_front();
             ContinueRunInflight = true;
         }

@@ -1041,7 +1041,6 @@ std::atomic<ui64> TVDiskMock::OwnerRound = 2;
             TVDiskMock mock(&testCtx);
             mock.Init();
 
-
             ui32 vdisksNum = 100;
             std::vector<TVDiskMock> mocks;
             for (ui32 i = 0; i < vdisksNum; ++i) {
@@ -1102,7 +1101,6 @@ std::atomic<ui64> TVDiskMock::OwnerRound = 2;
             TVDiskMock mock(&testCtx);
             mock.Init();
 
-
             ui32 vdisksNum = 100;
             std::vector<TVDiskMock> mocks;
             for (ui32 i = 0; i < vdisksNum; ++i) {
@@ -1151,6 +1149,90 @@ std::atomic<ui64> TVDiskMock::OwnerRound = 2;
                 reservedChunks.clear();
             } 
             testCtx.Recv<NPDisk::TEvHarakiriResult>();
+        }
+    }
+
+    Y_UNIT_TEST(DecommitWithInflight) {
+        THPTimer timer;
+        ui32 timeLimit = 20;
+        while (timer.Passed() < timeLimit) {
+            TActorTestContext testCtx(false);
+            ui32 dataSize = 1024;
+
+            auto logNoTest = [&](TVDiskMock& mock, NPDisk::TCommitRecord rec) {
+                auto evLog = MakeHolder<NPDisk::TEvLog>(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound, 0, PrepareData(1),
+                        mock.GetLsnSeg(), nullptr);
+                evLog->Signature.SetCommitRecord();
+                evLog->CommitRecord = std::move(rec);
+                testCtx.Send(evLog.Release());
+            };
+
+            auto sendManyReads = [&](TVDiskMock& mock, TChunkIdx chunk, ui32 number, ui64& cookie) {
+                for (ui32 i = 0; i < number; ++i) {
+                    testCtx.Send(new NPDisk::TEvChunkRead(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                        chunk, 0, dataSize, 0, (void*)(cookie++)));
+                }
+            };
+            
+            auto sendManyWrites = [&](TVDiskMock& mock, TChunkIdx chunk, ui32 number, ui64& cookie) {
+                for (ui32 i = 0; i < number; ++i) {
+                    TString data = PrepareData(dataSize);
+                    testCtx.Send(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                        chunk, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), (void*)(cookie++), false, 0));
+                }
+            };
+
+            TVDiskMock mock(&testCtx);
+            mock.Init();
+
+            ui32 reservedChunks = 10;
+            for (ui32 i = 0; i < reservedChunks; ++i) {
+                mock.ReserveChunk();
+            }
+
+            {
+                auto& chunkIds = mock.Chunks[EChunkState::COMMITTED];
+                for (auto it = chunkIds.begin(); it != chunkIds.end(); ++it) {
+                    TString data = PrepareData(dataSize);
+                    testCtx.TestResponce<NPDisk::TEvChunkWriteResult>(new NPDisk::TEvChunkWrite(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound,
+                        *it, 0, new NPDisk::TEvChunkWrite::TStrokaBackedUpParts(data), (void*)10, false, 0),
+                        NKikimrProto::OK);
+                }
+            }
+
+            mock.CommitReservedChunks();
+
+            ui32 inflight = 100;
+            auto& chunkIds = mock.Chunks[EChunkState::COMMITTED];
+
+            ui64 cookie = 0;
+            for (auto it = chunkIds.begin(); it != chunkIds.end(); ++it) {
+                sendManyWrites(mock, *it, inflight, cookie);
+                sendManyReads(mock, *it, inflight, cookie);
+                NPDisk::TCommitRecord rec;
+                rec.DeleteChunks.push_back(*it);
+                rec.DeleteToDecommitted = true;
+                logNoTest(mock, rec);
+                sendManyWrites(mock, *it, inflight, cookie);
+                sendManyReads(mock, *it, inflight, cookie);
+            }
+            mock.Chunks[EChunkState::COMMITTED].clear();
+
+
+            for (ui32 i = 0; i < inflight * 2 * reservedChunks; ++i) {
+                {
+                    auto res = testCtx.Recv<NPDisk::TEvChunkReadResult>();
+                    UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+                }
+                {
+                    auto res = testCtx.Recv<NPDisk::TEvChunkWriteResult>();
+                    UNIT_ASSERT_VALUES_EQUAL_C(res->Status, NKikimrProto::OK, res->ToString());
+                }
+            } 
+            for (ui32 i = 0; i < reservedChunks; ++i) {
+                testCtx.TestResponce<NPDisk::TEvChunkForgetResult>(new NPDisk::TEvChunkForget(mock.PDiskParams->Owner, mock.PDiskParams->OwnerRound),
+                        NKikimrProto::OK);
+            }
         }
     }
 }

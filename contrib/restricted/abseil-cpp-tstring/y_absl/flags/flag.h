@@ -67,6 +67,10 @@ Y_ABSL_NAMESPACE_BEGIN
 //      Y_ABSL_FLAG(int, count, 0, "Count of items to process");
 //
 // No public methods of `y_absl::Flag<T>` are part of the Abseil Flags API.
+//
+// For type support of Abseil Flags, see the marshalling.h header file, which
+// discusses supported standard types, optional flags, and additional Abseil
+// type support.
 #if !defined(_MSC_VER) || defined(__clang__)
 template <typename T>
 using Flag = flags_internal::Flag<T>;
@@ -265,6 +269,7 @@ Y_ABSL_NAMESPACE_END
 // global name for FLAGS_no<flag_name> symbol, thus preventing the possibility
 // of defining two flags with names foo and nofoo.
 #define Y_ABSL_FLAG_IMPL(Type, name, default_value, help)                       \
+  extern ::y_absl::Flag<Type> FLAGS_##name;                                     \
   namespace y_absl /* block flags in namespaces */ {}                           \
   Y_ABSL_FLAG_IMPL_DECLARE_DEF_VAL_WRAPPER(name, Type, default_value)           \
   Y_ABSL_FLAG_IMPL_DECLARE_HELP_WRAPPER(name, help)                             \

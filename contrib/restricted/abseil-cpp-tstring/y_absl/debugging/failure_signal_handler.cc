@@ -42,7 +42,6 @@
 #include <ctime>
 
 #include "y_absl/base/attributes.h"
-#include "y_absl/base/internal/errno_saver.h"
 #include "y_absl/base/internal/raw_logging.h"
 #include "y_absl/base/internal/sysinfo.h"
 #include "y_absl/debugging/internal/examine_stack.h"
@@ -52,7 +51,7 @@
 #define Y_ABSL_HAVE_SIGACTION
 // Apple WatchOS and TVOS don't allow sigaltstack
 #if !(defined(TARGET_OS_WATCH) && TARGET_OS_WATCH) && \
-    !(defined(TARGET_OS_TV) && TARGET_OS_TV)
+    !(defined(TARGET_OS_TV) && TARGET_OS_TV) && !defined(__QNX__)
 #define Y_ABSL_HAVE_SIGALTSTACK
 #endif
 #endif
@@ -217,8 +216,7 @@ static void InstallOneFailureHandler(FailureSignalData* data,
 #endif
 
 static void WriteToStderr(const char* data) {
-  y_absl::base_internal::ErrnoSaver errno_saver;
-  y_absl::raw_logging_internal::SafeWriteToStderr(data, strlen(data));
+  y_absl::raw_logging_internal::AsyncSignalSafeWriteToStderr(data, strlen(data));
 }
 
 static void WriteSignalMessage(int signo, int cpu,

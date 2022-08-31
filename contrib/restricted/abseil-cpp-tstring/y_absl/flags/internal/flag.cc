@@ -30,6 +30,7 @@
 #include "y_absl/base/call_once.h"
 #include "y_absl/base/casts.h"
 #include "y_absl/base/config.h"
+#include "y_absl/base/dynamic_annotations.h"
 #include "y_absl/base/optimization.h"
 #include "y_absl/flags/config.h"
 #include "y_absl/flags/internal/commandlineflag.h"
@@ -160,6 +161,8 @@ void FlagImpl::Init() {
         std::memcpy(buf.data() + Sizeof(op_), &initialized,
                     sizeof(initialized));
       }
+      // Type can contain valid uninitialized bits, e.g. padding.
+      Y_ABSL_ANNOTATE_MEMORY_IS_INITIALIZED(buf.data(), buf.size());
       OneWordValue().store(y_absl::bit_cast<int64_t>(buf),
                            std::memory_order_release);
       break;
@@ -205,7 +208,7 @@ void FlagImpl::AssertValidType(FlagFastTypeId rhs_type_id,
 
   if (lhs_runtime_type_id == rhs_runtime_type_id) return;
 
-#if defined(Y_ABSL_FLAGS_INTERNAL_HAS_RTTI)
+#ifdef Y_ABSL_INTERNAL_HAS_RTTI
   if (*lhs_runtime_type_id == *rhs_runtime_type_id) return;
 #endif
 

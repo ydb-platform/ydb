@@ -57,8 +57,9 @@ Y_ABSL_NAMESPACE_END
 
 #error "std::string_view should be used in all configurations"
 
-#if Y_ABSL_HAVE_BUILTIN(__builtin_memcmp) || \
-    (defined(__GNUC__) && !defined(__clang__))
+#if Y_ABSL_HAVE_BUILTIN(__builtin_memcmp) ||        \
+    (defined(__GNUC__) && !defined(__clang__)) || \
+    (defined(_MSC_VER) && _MSC_VER >= 1928)
 #define Y_ABSL_INTERNAL_STRING_VIEW_MEMCMP __builtin_memcmp
 #else  // Y_ABSL_HAVE_BUILTIN(__builtin_memcmp)
 #define Y_ABSL_INTERNAL_STRING_VIEW_MEMCMP memcmp

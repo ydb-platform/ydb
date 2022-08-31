@@ -24,11 +24,11 @@
 //   * A set of helper functions for creating status codes and checking their
 //     values
 //
-// Within Google, `y_absl::Status` is the primary mechanism for gracefully
-// handling errors across API boundaries (and in particular across RPC
-// boundaries). Some of these errors may be recoverable, but others may not.
-// Most functions that can produce a recoverable error should be designed to
-// return an `y_absl::Status` (or `y_absl::StatusOr`).
+// Within Google, `y_absl::Status` is the primary mechanism for communicating
+// errors in C++, and is used to represent error state in both in-process
+// library calls as well as RPC calls. Some of these errors may be recoverable,
+// but others may not. Most functions that can produce a recoverable error
+// should be designed to return an `y_absl::Status` (or `y_absl::StatusOr`).
 //
 // Example:
 //
@@ -469,8 +469,9 @@ class Status final {
 
   // Status::ok()
   //
-  // Returns `true` if `this->ok()`. Prefer checking for an OK status using this
-  // member function.
+  // Returns `true` if `this->code()` == `y_absl::StatusCode::kOk`,
+  // indicating the absence of an error.
+  // Prefer checking for an OK status using this member function.
   Y_ABSL_MUST_USE_RESULT bool ok() const;
 
   // Status::code()
@@ -532,7 +533,7 @@ class Status final {
   //----------------------------------------------------------------------------
 
   // A payload may be attached to a status to provide additional context to an
-  // error that may not be satisifed by an existing `y_absl::StatusCode`.
+  // error that may not be satisfied by an existing `y_absl::StatusCode`.
   // Typically, this payload serves one of several purposes:
   //
   //   * It may provide more fine-grained semantic information about the error
@@ -612,10 +613,6 @@ class Status final {
   const status_internal::Payloads* GetPayloads() const;
   status_internal::Payloads* GetPayloads();
 
-  // Takes ownership of payload.
-  static uintptr_t NewRep(
-      y_absl::StatusCode code, y_absl::string_view msg,
-      std::unique_ptr<status_internal::Payloads> payload);
   static bool EqualsSlow(const y_absl::Status& a, const y_absl::Status& b);
 
   // MSVC 14.0 limitation requires the const.
@@ -740,6 +737,19 @@ Status UnauthenticatedError(y_absl::string_view message);
 Status UnavailableError(y_absl::string_view message);
 Status UnimplementedError(y_absl::string_view message);
 Status UnknownError(y_absl::string_view message);
+
+// ErrnoToStatusCode()
+//
+// Returns the StatusCode for `error_number`, which should be an `errno` value.
+// See https://en.cppreference.com/w/cpp/error/errno_macros and similar
+// references.
+y_absl::StatusCode ErrnoToStatusCode(int error_number);
+
+// ErrnoToStatus()
+//
+// Convenience function that creates a `y_absl::Status` using an `error_number`,
+// which should be an `errno` value.
+Status ErrnoToStatus(int error_number, y_absl::string_view message);
 
 //------------------------------------------------------------------------------
 // Implementation details follow

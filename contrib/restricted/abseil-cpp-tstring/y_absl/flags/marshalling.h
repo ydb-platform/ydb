@@ -33,6 +33,7 @@
 // * `double`
 // * `TString`
 // * `std::vector<TString>`
+// * `std::optional<T>`
 // * `y_absl::LogSeverity` (provided natively for layering reasons)
 //
 // Note that support for integral types is implemented using overloads for
@@ -63,6 +64,42 @@
 // You can also provide your own custom flags by adding overloads for
 // `AbslParseFlag()` and `AbslUnparseFlag()` to your type definitions. (See
 // below.)
+//
+// -----------------------------------------------------------------------------
+// Optional Flags
+// -----------------------------------------------------------------------------
+//
+// The Abseil flags library supports flags of type `std::optional<T>` where
+// `T` is a type of one of the supported flags. We refer to this flag type as
+// an "optional flag." An optional flag is either "valueless", holding no value
+// of type `T` (indicating that the flag has not been set) or a value of type
+// `T`. The valueless state in C++ code is represented by a value of
+// `std::nullopt` for the optional flag.
+//
+// Using `std::nullopt` as an optional flag's default value allows you to check
+// whether such a flag was ever specified on the command line:
+//
+//   if (y_absl::GetFlag(FLAGS_foo).has_value()) {
+//     // flag was set on command line
+//   } else {
+//     // flag was not passed on command line
+//   }
+//
+// Using an optional flag in this manner avoids common workarounds for
+// indicating such an unset flag (such as using sentinal values to indicate this
+// state).
+//
+// An optional flag also allows a developer to pass a flag in an "unset"
+// valueless state on the command line, allowing the flag to later be set in
+// binary logic. An optional flag's valueless state is indicated by the special
+// notation of passing the value as an empty string through the syntax `--flag=`
+// or `--flag ""`.
+//
+//   $ binary_with_optional --flag_in_unset_state=
+//   $ binary_with_optional --flag_in_unset_state ""
+//
+// Note: as a result of the above syntax requirements, an optional flag cannot
+// be set to a `T` of any value which unparses to the empty string.
 //
 // -----------------------------------------------------------------------------
 // Adding Type Support for Abseil Flags
@@ -162,14 +199,27 @@
 #ifndef Y_ABSL_FLAGS_MARSHALLING_H_
 #define Y_ABSL_FLAGS_MARSHALLING_H_
 
+#include "y_absl/base/config.h"
+
+#if defined(Y_ABSL_HAVE_STD_OPTIONAL) && !defined(Y_ABSL_USES_STD_OPTIONAL)
+#include <optional>
+#endif
 #include <util/generic/string.h>
 #include <vector>
 
-#include "y_absl/base/config.h"
 #include "y_absl/strings/string_view.h"
+#include "y_absl/types/optional.h"
 
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
+
+// Forward declaration to be used inside composable flag parse/unparse
+// implementations
+template <typename T>
+inline bool ParseFlag(y_absl::string_view input, T* dst, TString* error);
+template <typename T>
+inline TString UnparseFlag(const T& v);
+
 namespace flags_internal {
 
 // Overloads of `AbslParseFlag()` and `AbslUnparseFlag()` for fundamental types.
@@ -189,6 +239,36 @@ bool AbslParseFlag(y_absl::string_view, TString*, TString*);
 bool AbslParseFlag(y_absl::string_view, std::vector<TString>*, TString*);
 
 template <typename T>
+bool AbslParseFlag(y_absl::string_view text, y_absl::optional<T>* f,
+                   TString* err) {
+  if (text.empty()) {
+    *f = y_absl::nullopt;
+    return true;
+  }
+  T value;
+  if (!y_absl::ParseFlag(text, &value, err)) return false;
+
+  *f = std::move(value);
+  return true;
+}
+
+#if defined(Y_ABSL_HAVE_STD_OPTIONAL) && !defined(Y_ABSL_USES_STD_OPTIONAL)
+template <typename T>
+bool AbslParseFlag(y_absl::string_view text, std::optional<T>* f,
+                   TString* err) {
+  if (text.empty()) {
+    *f = std::nullopt;
+    return true;
+  }
+  T value;
+  if (!y_absl::ParseFlag(text, &value, err)) return false;
+
+  *f = std::move(value);
+  return true;
+}
+#endif
+
+template <typename T>
 bool InvokeParseFlag(y_absl::string_view input, T* dst, TString* err) {
   // Comment on next line provides a good compiler error message if T
   // does not have AbslParseFlag(y_absl::string_view, T*, TString*).
@@ -200,6 +280,18 @@ bool InvokeParseFlag(y_absl::string_view input, T* dst, TString* err) {
 // can avoid the need for additional specializations of Unparse (below).
 TString AbslUnparseFlag(y_absl::string_view v);
 TString AbslUnparseFlag(const std::vector<TString>&);
+
+template <typename T>
+TString AbslUnparseFlag(const y_absl::optional<T>& f) {
+  return f.has_value() ? y_absl::UnparseFlag(*f) : "";
+}
+
+#if defined(Y_ABSL_HAVE_STD_OPTIONAL) && !defined(Y_ABSL_USES_STD_OPTIONAL)
+template <typename T>
+TString AbslUnparseFlag(const std::optional<T>& f) {
+  return f.has_value() ? y_absl::UnparseFlag(*f) : "";
+}
+#endif
 
 template <typename T>
 TString Unparse(const T& v) {

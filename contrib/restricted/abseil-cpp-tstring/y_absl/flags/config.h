@@ -45,14 +45,6 @@
 #define Y_ABSL_FLAGS_STRIP_HELP Y_ABSL_FLAGS_STRIP_NAMES
 #endif
 
-// Y_ABSL_FLAGS_INTERNAL_HAS_RTTI macro is used for selecting if we can use RTTI
-// for flag type identification.
-#ifdef Y_ABSL_FLAGS_INTERNAL_HAS_RTTI
-#error Y_ABSL_FLAGS_INTERNAL_HAS_RTTI cannot be directly set
-#elif !defined(__GNUC__) || defined(__GXX_RTTI)
-#define Y_ABSL_FLAGS_INTERNAL_HAS_RTTI 1
-#endif  // !defined(__GNUC__) || defined(__GXX_RTTI)
-
 // These macros represent the "source of truth" for the list of supported
 // built-in types.
 #define Y_ABSL_FLAGS_INTERNAL_BUILTIN_TYPES(A) \

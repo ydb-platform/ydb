@@ -16,12 +16,40 @@
 
 #include <ostream>
 
+#include "y_absl/base/attributes.h"
+
 namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 
 std::ostream& operator<<(std::ostream& os, y_absl::LogSeverity s) {
   if (s == y_absl::NormalizeLogSeverity(s)) return os << y_absl::LogSeverityName(s);
   return os << "y_absl::LogSeverity(" << static_cast<int>(s) << ")";
+}
+
+std::ostream& operator<<(std::ostream& os, y_absl::LogSeverityAtLeast s) {
+  switch (s) {
+    case y_absl::LogSeverityAtLeast::kInfo:
+    case y_absl::LogSeverityAtLeast::kWarning:
+    case y_absl::LogSeverityAtLeast::kError:
+    case y_absl::LogSeverityAtLeast::kFatal:
+      return os << ">=" << static_cast<y_absl::LogSeverity>(s);
+    case y_absl::LogSeverityAtLeast::kInfinity:
+      return os << "INFINITY";
+  }
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, y_absl::LogSeverityAtMost s) {
+  switch (s) {
+    case y_absl::LogSeverityAtMost::kInfo:
+    case y_absl::LogSeverityAtMost::kWarning:
+    case y_absl::LogSeverityAtMost::kError:
+    case y_absl::LogSeverityAtMost::kFatal:
+      return os << "<=" << static_cast<y_absl::LogSeverity>(s);
+    case y_absl::LogSeverityAtMost::kNegativeInfinity:
+      return os << "NEGATIVE_INFINITY";
+  }
+  return os;
 }
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl

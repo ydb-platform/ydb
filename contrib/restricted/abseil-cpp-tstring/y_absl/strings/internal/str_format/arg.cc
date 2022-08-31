@@ -320,7 +320,7 @@ bool ConvertIntArg(T v, const FormatConversionSpecImpl conv,
       return ConvertFloatImpl(static_cast<double>(v), conv, sink);
 
     default:
-       Y_ABSL_INTERNAL_ASSUME(false);
+       Y_ABSL_ASSUME(false);
   }
 
   if (conv.is_basic()) {

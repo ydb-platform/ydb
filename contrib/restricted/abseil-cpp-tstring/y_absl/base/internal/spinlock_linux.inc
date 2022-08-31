@@ -57,13 +57,10 @@ static_assert(sizeof(std::atomic<uint32_t>) == sizeof(int),
 extern "C" {
 
 Y_ABSL_ATTRIBUTE_WEAK void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockDelay)(
-    std::atomic<uint32_t> *w, uint32_t value, int loop,
+    std::atomic<uint32_t> *w, uint32_t value, int,
     y_absl::base_internal::SchedulingMode) {
   y_absl::base_internal::ErrnoSaver errno_saver;
-  struct timespec tm;
-  tm.tv_sec = 0;
-  tm.tv_nsec = y_absl::base_internal::SpinLockSuggestedDelayNS(loop);
-  syscall(SYS_futex, w, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, value, &tm);
+  syscall(SYS_futex, w, FUTEX_WAIT | FUTEX_PRIVATE_FLAG, value, nullptr);
 }
 
 Y_ABSL_ATTRIBUTE_WEAK void Y_ABSL_INTERNAL_C_SYMBOL(AbslInternalSpinLockWake)(

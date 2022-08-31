@@ -37,7 +37,8 @@
   "y_absl/debugging/internal/stacktrace_generic-inl.inc"
 #endif  // defined(Y_ABSL_HAVE_THREAD_LOCAL)
 
-#elif defined(__EMSCRIPTEN__)
+// Emscripten stacktraces rely on JS. Do not use them in standalone mode.
+#elif defined(__EMSCRIPTEN__) && !defined(STANDALONE_WASM)
 #define Y_ABSL_STACKTRACE_INL_HEADER \
   "y_absl/debugging/internal/stacktrace_emscripten-inl.inc"
 

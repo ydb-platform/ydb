@@ -133,7 +133,7 @@ inline bool ascii_isdigit(unsigned char c) { return c >= '0' && c <= '9'; }
 
 // ascii_isprint()
 //
-// Determines whether the given character is printable, including whitespace.
+// Determines whether the given character is printable, including spaces.
 inline bool ascii_isprint(unsigned char c) { return c >= 32 && c < 127; }
 
 // ascii_isgraph()
@@ -197,7 +197,7 @@ Y_ABSL_MUST_USE_RESULT inline TString AsciiStrToUpper(y_absl::string_view s) {
 Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripLeadingAsciiWhitespace(
     y_absl::string_view str) {
   auto it = std::find_if_not(str.begin(), str.end(), y_absl::ascii_isspace);
-  return str.substr(it - str.begin());
+  return str.substr(static_cast<size_t>(it - str.begin()));
 }
 
 // Strips in place whitespace from the beginning of the given string.
@@ -211,13 +211,13 @@ inline void StripLeadingAsciiWhitespace(TString* str) {
 Y_ABSL_MUST_USE_RESULT inline y_absl::string_view StripTrailingAsciiWhitespace(
     y_absl::string_view str) {
   auto it = std::find_if_not(str.rbegin(), str.rend(), y_absl::ascii_isspace);
-  return str.substr(0, str.rend() - it);
+  return str.substr(0, static_cast<size_t>(str.rend() - it));
 }
 
 // Strips in place whitespace from the end of the given string
 inline void StripTrailingAsciiWhitespace(TString* str) {
   auto it = std::find_if_not(str->rbegin(), str->rend(), y_absl::ascii_isspace);
-  str->erase(str->rend() - it);
+  str->erase(static_cast<size_t>(str->rend() - it));
 }
 
 // Returns y_absl::string_view with whitespace stripped from both ends of the

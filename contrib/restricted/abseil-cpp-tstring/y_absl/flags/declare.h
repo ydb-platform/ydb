@@ -60,6 +60,14 @@ Y_ABSL_NAMESPACE_END
 // The Y_ABSL_DECLARE_FLAG(type, name) macro expands to:
 //
 //   extern y_absl::Flag<type> FLAGS_name;
-#define Y_ABSL_DECLARE_FLAG(type, name) extern ::y_absl::Flag<type> FLAGS_##name
+#define Y_ABSL_DECLARE_FLAG(type, name) Y_ABSL_DECLARE_FLAG_INTERNAL(type, name)
+
+// Internal implementation of Y_ABSL_DECLARE_FLAG to allow macro expansion of its
+// arguments. Clients must use Y_ABSL_DECLARE_FLAG instead.
+#define Y_ABSL_DECLARE_FLAG_INTERNAL(type, name)               \
+  extern y_absl::Flag<type> FLAGS_##name;                      \
+  namespace y_absl /* block flags in namespaces */ {}          \
+  /* second redeclaration is to allow applying attributes */ \
+  extern y_absl::Flag<type> FLAGS_##name
 
 #endif  // Y_ABSL_FLAGS_DECLARE_H_

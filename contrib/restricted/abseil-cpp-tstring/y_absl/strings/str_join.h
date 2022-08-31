@@ -72,21 +72,15 @@ Y_ABSL_NAMESPACE_BEGIN
 // functions. You may provide your own Formatter to enable `y_absl::StrJoin()` to
 // work with arbitrary types.
 //
-// The following is an example of a custom Formatter that simply uses
-// `std::to_string()` to format an integer as a TString.
+// The following is an example of a custom Formatter that uses
+// `y_absl::FormatDuration` to join a list of `y_absl::Duration`s.
 //
-//   struct MyFormatter {
-//     void operator()(TString* out, int i) const {
-//       out->append(std::to_string(i));
-//     }
-//   };
-//
-// You would use the above formatter by passing an instance of it as the final
-// argument to `y_absl::StrJoin()`:
-//
-//   std::vector<int> v = {1, 2, 3, 4};
-//   TString s = y_absl::StrJoin(v, "-", MyFormatter());
-//   EXPECT_EQ("1-2-3-4", s);
+//   std::vector<y_absl::Duration> v = {y_absl::Seconds(1), y_absl::Milliseconds(10)};
+//   TString s =
+//       y_absl::StrJoin(v, ", ", [](TString* out, y_absl::Duration dur) {
+//         y_absl::StrAppend(out, y_absl::FormatDuration(dur));
+//       });
+//   EXPECT_EQ("1s, 10ms", s);
 //
 // The following standard formatters are provided within this file:
 //

@@ -15,7 +15,9 @@
 #define Y_ABSL_STATUS_INTERNAL_STATUS_INTERNAL_H_
 
 #include <util/generic/string.h>
+#include <utility>
 
+#include "y_absl/base/attributes.h"
 #include "y_absl/container/inlined_vector.h"
 #include "y_absl/strings/cord.h"
 
@@ -25,7 +27,14 @@ namespace y_absl {
 Y_ABSL_NAMESPACE_BEGIN
 // Returned Status objects may not be ignored. Codesearch doesn't handle ifdefs
 // as part of a class definitions (b/6995610), so we use a forward declaration.
+//
+// TODO(b/176172494): Y_ABSL_MUST_USE_RESULT should expand to the more strict
+// [[nodiscard]]. For now, just use [[nodiscard]] directly when it is available.
+#if Y_ABSL_HAVE_CPP_ATTRIBUTE(nodiscard)
+class [[nodiscard]] Status;
+#else
 class Y_ABSL_MUST_USE_RESULT Status;
+#endif
 Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 #endif  // !SWIG
@@ -61,6 +70,14 @@ struct StatusRep {
 };
 
 y_absl::StatusCode MapToLocalCode(int value);
+
+// Returns a pointer to a newly-allocated string with the given `prefix`,
+// suitable for output as an error message in assertion/`CHECK()` failures.
+//
+// This is an internal implementation detail for Abseil logging.
+TString* MakeCheckFailString(const y_absl::Status* status,
+                                 const char* prefix);
+
 }  // namespace status_internal
 
 Y_ABSL_NAMESPACE_END

@@ -22,9 +22,14 @@
 // Compile time check support for entry points.
 
 #ifndef Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
-#if Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__)
+// We disable format checker under vscode intellisense compilation.
+// See https://github.com/microsoft/vscode-cpptools/issues/3683 for
+// more details.
+#if Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__) && \
+    !defined(__INTELLISENSE__)
 #define Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER 1
-#endif  // Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__)
+#endif  // Y_ABSL_HAVE_ATTRIBUTE(enable_if) && !defined(__native_client__) &&
+        // !defined(__INTELLISENSE__)
 #endif  // Y_ABSL_INTERNAL_ENABLE_FORMAT_CHECKER
 
 namespace y_absl {

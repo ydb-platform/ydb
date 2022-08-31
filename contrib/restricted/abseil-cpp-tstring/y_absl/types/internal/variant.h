@@ -16,8 +16,8 @@
 // separate file to avoid cluttering the top of the API header with
 // implementation details.
 
-#ifndef Y_ABSL_TYPES_variant_internal_H_
-#define Y_ABSL_TYPES_variant_internal_H_
+#ifndef Y_ABSL_TYPES_VARIANT_INTERNAL_H_
+#define Y_ABSL_TYPES_VARIANT_INTERNAL_H_
 
 #include <cassert>
 #include <cstddef>
@@ -1643,4 +1643,4 @@ Y_ABSL_NAMESPACE_END
 }  // namespace y_absl
 
 #endif  // !defined(Y_ABSL_USES_STD_VARIANT)
-#endif  // Y_ABSL_TYPES_variant_internal_H_
+#endif  // Y_ABSL_TYPES_VARIANT_INTERNAL_H_

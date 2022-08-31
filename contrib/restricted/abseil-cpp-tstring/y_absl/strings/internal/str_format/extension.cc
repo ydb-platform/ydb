@@ -33,6 +33,8 @@ TString FlagsToString(Flags v) {
   return s;
 }
 
+#ifdef Y_ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
+
 #define Y_ABSL_INTERNAL_X_VAL(id) \
   constexpr y_absl::FormatConversionChar FormatConversionCharInternal::id;
 Y_ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(Y_ABSL_INTERNAL_X_VAL, )
@@ -45,16 +47,13 @@ constexpr y_absl::FormatConversionChar FormatConversionCharInternal::kNone;
 Y_ABSL_INTERNAL_CONVERSION_CHARS_EXPAND_(Y_ABSL_INTERNAL_CHAR_SET_CASE, )
 #undef Y_ABSL_INTERNAL_CHAR_SET_CASE
 
-// NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr FormatConversionCharSet FormatConversionCharSetInternal::kStar;
-// NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr FormatConversionCharSet FormatConversionCharSetInternal::kIntegral;
-// NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr FormatConversionCharSet FormatConversionCharSetInternal::kFloating;
-// NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr FormatConversionCharSet FormatConversionCharSetInternal::kNumeric;
-// NOLINTNEXTLINE(readability-redundant-declaration)
 constexpr FormatConversionCharSet FormatConversionCharSetInternal::kPointer;
+
+#endif  // Y_ABSL_INTERNAL_NEED_REDUNDANT_CONSTEXPR_DECL
 
 bool FormatSinkImpl::PutPaddedString(string_view value, int width,
                                      int precision, bool left) {

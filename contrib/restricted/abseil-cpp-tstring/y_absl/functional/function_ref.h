@@ -69,7 +69,8 @@ class FunctionRef;
 // An `y_absl::FunctionRef` is a lightweight wrapper to any invokable object with
 // a compatible signature. Generally, an `y_absl::FunctionRef` should only be used
 // as an argument type and should be preferred as an argument over a const
-// reference to a `std::function`.
+// reference to a `std::function`. `y_absl::FunctionRef` itself does not allocate,
+// although the wrapped invokable may.
 //
 // Example:
 //

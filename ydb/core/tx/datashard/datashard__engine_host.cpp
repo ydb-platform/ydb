@@ -653,7 +653,8 @@ void TEngineBay::AddReadRange(const TTableId& tableId, const TVector<NTable::TCo
 }
 
 void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range,
-    const TVector<NScheme::TTypeId>& keyTypes, const TVector<TColumnWriteMeta>& columns)
+    const TVector<NScheme::TTypeId>& keyTypes, const TVector<TColumnWriteMeta>& columns,
+    bool isPureEraseOp)
 {
     TVector<TKeyDesc::TColumnOp> columnOps;
     for (const auto& writeColumn : columns) {
@@ -665,7 +666,8 @@ void TEngineBay::AddWriteRange(const TTableId& tableId, const TTableRange& range
         columnOps.emplace_back(std::move(op));
     }
 
-    auto desc = MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Update, keyTypes, columnOps);
+    auto rowOp = isPureEraseOp ? TKeyDesc::ERowOperation::Erase : TKeyDesc::ERowOperation::Update;
+    auto desc = MakeHolder<TKeyDesc>(tableId, range, rowOp, keyTypes, columnOps);
     Info.Keys.emplace_back(TValidatedKey(std::move(desc), /* isWrite */ true));
     ++Info.WritesCount;
     if (!range.Point) {

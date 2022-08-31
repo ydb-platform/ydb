@@ -69,7 +69,7 @@ public:
         const TVector<NScheme::TTypeId>& keyTypes, ui64 itemsLimit = 0, bool reverse = false);
 
     void AddWriteRange(const TTableId& tableId, const TTableRange& range, const TVector<NScheme::TTypeId>& keyTypes,
-        const TVector<TColumnWriteMeta>& columns);
+        const TVector<TColumnWriteMeta>& columns, bool isPureEraseOp);
 
     void MarkTxLoaded() {
         Info.Loaded = true;

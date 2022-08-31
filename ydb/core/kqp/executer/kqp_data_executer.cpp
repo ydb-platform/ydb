@@ -1065,6 +1065,13 @@ private:
                                 } else {
                                     task.Meta.Writes->Ranges.MergeWritePoints(TShardKeyRanges(read.Ranges), keyTypes);
                                 }
+
+                                if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
+                                    task.Meta.Writes->AddEraseOp();
+                                } else {
+                                    task.Meta.Writes->AddUpdateOp();
+                                }
+
                             }
 
                             ShardsWithEffects.insert(task.Meta.ShardId);
@@ -1086,6 +1093,12 @@ private:
                                 task.Meta.Writes->Ranges = std::move(*shardInfo.KeyWriteRanges);
                             } else {
                                 task.Meta.Writes->Ranges.MergeWritePoints(std::move(*shardInfo.KeyWriteRanges), keyTypes);
+                            }
+
+                            if (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kDeleteRows) {
+                                task.Meta.Writes->AddEraseOp();
+                            } else {
+                                task.Meta.Writes->AddUpdateOp();
                             }
 
                             for (const auto& [name, info] : shardInfo.ColumnWrites) {
@@ -1398,6 +1411,9 @@ private:
                 if (task.Meta.Writes) {
                     auto* protoWrites = protoTaskMeta.MutableWrites();
                     task.Meta.Writes->Ranges.SerializeTo(protoWrites->MutableRange());
+                    if (task.Meta.Writes->IsPureEraseOp()) {
+                        protoWrites->SetIsPureEraseOp(true);
+                    }
 
                     for (const auto& [_, columnWrite] : task.Meta.Writes->ColumnWrites) {
                         auto& protoColumnWrite = *protoWrites->AddColumns();

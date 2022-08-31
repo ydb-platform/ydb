@@ -1081,4 +1081,71 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             NKqp::CompareYson(R"([[[[[["111"];["1"]]];%false]]])", result);
         }
     }
+
+    Y_UNIT_TEST(MoveMigratedTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime,
+                     TTestEnvOptions()
+                     .EnableAsyncIndexes(true));
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "USER_0"
+        )");
+        TestAlterSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "USER_0"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot/USER_0", R"(
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::ChildrenCount(1)});
+
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0/Table"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(3),
+                            NLs::CheckColumns("Table", {"key", "value"}, {}, {"key"})});
+
+        TestUpgradeSubDomain(runtime, ++txId, "/MyRoot", "USER_0");
+        env.TestWaitNotification(runtime, txId);
+
+        TestUpgradeSubDomainDecision(runtime, ++txId,  "/MyRoot", "USER_0", NKikimrSchemeOp::TUpgradeSubDomain::Commit);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 tenantSchemeShard = 0;
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/USER_0"),
+                           {NLs::PathExist,
+                            NLs::IsExternalSubDomain("USER_0"),
+                            NLs::ExtractTenantSchemeshard(&tenantSchemeShard)});
+
+        TestMoveTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/USER_0/Table", "/MyRoot/USER_0/TableMove");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/Table"),
+                           {NLs::PathNotExist});
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/TableMove"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"})});
+
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/USER_0/TableMove"),
+                           {NLs::IsTable,
+                            NLs::PathVersionEqual(6),
+                            NLs::CheckColumns("TableMove", {"key", "value"}, {}, {"key"})});
+    }
 }

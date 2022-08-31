@@ -27,7 +27,6 @@ target_link_options(restricted-aws-aws-c-common INTERFACE
   CoreFoundation
 )
 target_sources(restricted-aws-aws-c-common PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/allocator_sba.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/array_list.c
@@ -82,15 +81,4 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/xml_parser.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/asm/cpuid.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/cpuid.c
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
 )

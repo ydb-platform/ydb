@@ -30,14 +30,6 @@ target_link_libraries(restricted-aws-s2n PUBLIC
   OpenSSL::OpenSSL
 )
 target_sources(restricted-aws-s2n PRIVATE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202x4_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_basemul_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fq_avx2.S
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_invntt_avx2.S
@@ -212,92 +204,4 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_set.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_socket.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_timer.c
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202x4_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
-)
-set_property(
-  SOURCE
-  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c
-  APPEND
-  PROPERTY
-  COMPILE_OPTIONS
-  -mavx2
-  -mfma
-  -mbmi
-  -mbmi2
 )

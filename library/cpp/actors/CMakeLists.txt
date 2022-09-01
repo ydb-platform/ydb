@@ -1,0 +1,20 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(core)
+add_subdirectory(dnscachelib)
+add_subdirectory(dnsresolver)
+add_subdirectory(helpers)
+add_subdirectory(http)
+add_subdirectory(interconnect)
+add_subdirectory(memory_log)
+add_subdirectory(prof)
+add_subdirectory(protos)
+add_subdirectory(testlib)
+add_subdirectory(util)
+add_subdirectory(wilson)

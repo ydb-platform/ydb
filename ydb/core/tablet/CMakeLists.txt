@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-tablet)
 target_link_libraries(ydb-core-tablet PUBLIC

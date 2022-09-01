@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(logging)
 
 add_library(yq-libs-actors)
 target_compile_options(yq-libs-actors PRIVATE

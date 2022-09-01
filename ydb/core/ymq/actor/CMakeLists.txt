@@ -7,6 +7,8 @@
 
 
 find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
+add_subdirectory(yc_search_ut)
 
 add_library(core-ymq-actor)
 target_compile_options(core-ymq-actor PRIVATE

@@ -1,0 +1,34 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(draft)
+add_subdirectory(extensions)
+add_subdirectory(iam)
+add_subdirectory(impl)
+add_subdirectory(resources)
+add_subdirectory(ydb_common_client)
+add_subdirectory(ydb_coordination)
+add_subdirectory(ydb_datastreams)
+add_subdirectory(ydb_discovery)
+add_subdirectory(ydb_driver)
+add_subdirectory(ydb_export)
+add_subdirectory(ydb_extension)
+add_subdirectory(ydb_import)
+add_subdirectory(ydb_monitoring)
+add_subdirectory(ydb_operation)
+add_subdirectory(ydb_params)
+add_subdirectory(ydb_persqueue_core)
+add_subdirectory(ydb_persqueue_public)
+add_subdirectory(ydb_proto)
+add_subdirectory(ydb_rate_limiter)
+add_subdirectory(ydb_result)
+add_subdirectory(ydb_scheme)
+add_subdirectory(ydb_table)
+add_subdirectory(ydb_topic)
+add_subdirectory(ydb_types)
+add_subdirectory(ydb_value)

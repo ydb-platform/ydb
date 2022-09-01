@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-sys_view-service)
 target_link_libraries(core-sys_view-service PUBLIC

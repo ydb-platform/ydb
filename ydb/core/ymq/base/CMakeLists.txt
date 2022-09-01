@@ -7,6 +7,7 @@
 
 
 find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
 
 add_library(core-ymq-base)
 target_link_libraries(core-ymq-base PUBLIC

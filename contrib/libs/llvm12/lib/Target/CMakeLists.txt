@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(X86)
 
 add_library(llvm12-lib-Target)
 target_compile_options(llvm12-lib-Target PRIVATE

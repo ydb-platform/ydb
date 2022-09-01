@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-tx-tx_allocator_client)
 target_link_libraries(core-tx-tx_allocator_client PUBLIC

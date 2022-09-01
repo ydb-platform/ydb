@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(cpp-actors-wilson)
 target_link_libraries(cpp-actors-wilson PUBLIC

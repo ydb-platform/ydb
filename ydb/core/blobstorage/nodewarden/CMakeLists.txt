@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
+add_subdirectory(ut_sequence)
 
 add_library(core-blobstorage-nodewarden)
 target_link_libraries(core-blobstorage-nodewarden PUBLIC

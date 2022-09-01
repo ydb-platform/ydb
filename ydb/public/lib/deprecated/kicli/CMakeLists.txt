@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(lib-deprecated-kicli)
 target_link_libraries(lib-deprecated-kicli PUBLIC

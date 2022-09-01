@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-pgproxy)
 target_link_libraries(ydb-core-pgproxy PUBLIC

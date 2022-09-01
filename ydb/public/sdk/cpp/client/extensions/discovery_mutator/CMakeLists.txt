@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(client-extensions-discovery_mutator)
 target_link_libraries(client-extensions-discovery_mutator PUBLIC

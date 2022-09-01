@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-formats)
 target_compile_options(ydb-core-formats PRIVATE

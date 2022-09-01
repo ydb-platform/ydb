@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(effects)
 
 add_library(kqp-opt-physical)
 target_compile_options(kqp-opt-physical PRIVATE

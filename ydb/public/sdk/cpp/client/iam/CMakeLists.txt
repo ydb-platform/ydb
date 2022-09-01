@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(impl)
+add_subdirectory(proto)
 
 add_library(cpp-client-iam)
 target_link_libraries(cpp-client-iam PUBLIC

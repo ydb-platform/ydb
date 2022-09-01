@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(draft)
 
 add_library(api-grpc)
 set_property(TARGET api-grpc PROPERTY

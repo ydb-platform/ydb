@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(public)
+add_subdirectory(ut)
 
 add_library(core-tx-sequenceshard)
 target_compile_options(core-tx-sequenceshard PRIVATE

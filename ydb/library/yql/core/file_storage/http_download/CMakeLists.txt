@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(proto)
 
 add_library(core-file_storage-http_download)
 target_link_libraries(core-file_storage-http_download PUBLIC

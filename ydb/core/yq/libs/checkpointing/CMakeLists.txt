@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(events)
+add_subdirectory(ut)
 
 add_library(yq-libs-checkpointing)
 target_compile_options(yq-libs-checkpointing PRIVATE

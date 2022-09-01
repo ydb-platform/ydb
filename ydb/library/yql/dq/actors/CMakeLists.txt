@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(compute)
+add_subdirectory(protos)
+add_subdirectory(task_runner)
 
 add_library(yql-dq-actors)
 set_property(TARGET yql-dq-actors PROPERTY

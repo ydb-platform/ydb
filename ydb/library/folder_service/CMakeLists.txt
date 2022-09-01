@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mock)
+add_subdirectory(proto)
 
 add_library(ydb-library-folder_service)
 target_link_libraries(ydb-library-folder_service PUBLIC

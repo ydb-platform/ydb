@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(events)
+add_subdirectory(ut)
 
 add_library(yq-libs-control_plane_proxy)
 target_compile_options(yq-libs-control_plane_proxy PRIVATE

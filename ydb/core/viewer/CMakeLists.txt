@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(json)
+add_subdirectory(protos)
+add_subdirectory(ut)
 
 add_library(ydb-core-viewer)
 target_compile_options(ydb-core-viewer PRIVATE

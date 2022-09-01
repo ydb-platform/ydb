@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(interface)
 
 add_library(yq-libs-shared_resources)
 target_compile_options(yq-libs-shared_resources PRIVATE

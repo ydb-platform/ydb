@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_utils)
+add_subdirectory(with_offset_ranges_mode_ut)
 
 add_executable(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut)
 target_compile_options(ydb-public-sdk-cpp-client-ydb_persqueue_core-ut PRIVATE

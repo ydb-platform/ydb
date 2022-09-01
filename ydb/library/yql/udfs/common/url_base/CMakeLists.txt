@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lib)
 
 add_library(url_udf INTERFACE)
 target_link_libraries(url_udf INTERFACE

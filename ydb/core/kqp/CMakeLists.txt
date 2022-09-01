@@ -6,6 +6,21 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(compile)
+add_subdirectory(compute_actor)
+add_subdirectory(counters)
+add_subdirectory(executer)
+add_subdirectory(expr_nodes)
+add_subdirectory(host)
+add_subdirectory(node)
+add_subdirectory(opt)
+add_subdirectory(prepare)
+add_subdirectory(provider)
+add_subdirectory(proxy)
+add_subdirectory(rm)
+add_subdirectory(runtime)
+add_subdirectory(ut)
 
 add_library(ydb-core-kqp)
 target_compile_options(ydb-core-kqp PRIVATE

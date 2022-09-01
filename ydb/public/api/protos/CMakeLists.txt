@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(annotations)
+add_subdirectory(out)
 
 add_library(api-protos)
 target_link_libraries(api-protos PUBLIC

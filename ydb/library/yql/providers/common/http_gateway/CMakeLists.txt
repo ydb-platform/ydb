@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mock)
 
 add_library(providers-common-http_gateway)
 target_compile_options(providers-common-http_gateway PRIVATE

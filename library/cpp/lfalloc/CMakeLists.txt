@@ -6,15 +6,8 @@
 # original buildsystem will not be accepted.
 
 
-
-add_library(library-cpp-lfalloc)
-target_compile_options(library-cpp-lfalloc PRIVATE
-  -Wno-everything
-)
-target_link_libraries(library-cpp-lfalloc PUBLIC
-  contrib-libs-cxxsupp
-  cpp-malloc-api
-)
-target_sources(library-cpp-lfalloc PRIVATE
-  ${CMAKE_SOURCE_DIR}/library/cpp/lfalloc/lf_allocX64.cpp
-)
+if (APPLE)
+  include(CMakeLists.darwin.txt)
+elseif (UNIX AND NOT APPLE)
+  include(CMakeLists.linux.txt)
+endif()

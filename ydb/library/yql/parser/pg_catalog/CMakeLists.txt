@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yql-parser-pg_catalog)
 target_link_libraries(yql-parser-pg_catalog PUBLIC

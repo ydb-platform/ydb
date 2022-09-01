@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
+add_subdirectory(ut_client)
 
 add_library(core-blobstorage-backpressure)
 target_link_libraries(core-blobstorage-backpressure PUBLIC

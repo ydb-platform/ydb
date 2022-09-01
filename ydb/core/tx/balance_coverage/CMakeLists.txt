@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-tx-balance_coverage)
 target_link_libraries(core-tx-balance_coverage PUBLIC

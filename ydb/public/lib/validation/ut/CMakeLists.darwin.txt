@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_executable(ydb-public-lib-validation-ut)
 target_include_directories(ydb-public-lib-validation-ut PRIVATE

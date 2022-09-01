@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(out)
 
 add_library(ydb-core-protos)
 set_property(TARGET ydb-core-protos PROPERTY

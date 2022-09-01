@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(yq-libs-config)
 target_link_libraries(yq-libs-config PUBLIC

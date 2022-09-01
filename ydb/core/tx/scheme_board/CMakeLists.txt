@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_cache)
+add_subdirectory(ut_double_indexed)
+add_subdirectory(ut_monitoring)
+add_subdirectory(ut_populator)
+add_subdirectory(ut_replica)
+add_subdirectory(ut_subscriber)
 
 add_library(core-tx-scheme_board)
 target_link_libraries(core-tx-scheme_board PUBLIC

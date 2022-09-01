@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-http_proxy)
 target_compile_options(ydb-core-http_proxy PRIVATE

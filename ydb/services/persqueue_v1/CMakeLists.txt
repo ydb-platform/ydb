@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(actors)
+add_subdirectory(ut)
 
 add_library(ydb-services-persqueue_v1)
 target_link_libraries(ydb-services-persqueue_v1 PUBLIC

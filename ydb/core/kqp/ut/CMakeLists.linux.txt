@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(fat)
 
 add_executable(ydb-core-kqp-ut)
 target_compile_options(ydb-core-kqp-ut PRIVATE

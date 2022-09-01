@@ -22,3 +22,13 @@ target_sources(contrib-libs-crcutil PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/libs/crcutil/interface.cc
   ${CMAKE_SOURCE_DIR}/contrib/libs/crcutil/multiword_64_64_intrinsic_i386_mmx.cc
 )
+target_sources_custom(contrib-libs-crcutil
+  .sse4
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/libs/crcutil/crc32c_sse4.cc
+  CUSTOM_FLAGS
+  -msse4.1
+  -msse4.2
+  -mpopcnt
+  -mcx16
+)

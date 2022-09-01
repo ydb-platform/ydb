@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-mind-address_classification)
 target_link_libraries(core-mind-address_classification PUBLIC

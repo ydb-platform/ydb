@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(vdisk-hulldb-fresh)
 target_link_libraries(vdisk-hulldb-fresh PUBLIC

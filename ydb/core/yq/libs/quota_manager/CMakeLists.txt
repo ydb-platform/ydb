@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(events)
+add_subdirectory(proto)
 
 add_library(yq-libs-quota_manager)
 target_compile_options(yq-libs-quota_manager PRIVATE

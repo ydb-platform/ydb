@@ -6,6 +6,11 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common)
+add_subdirectory(easy_parse)
+add_subdirectory(fast_sax)
+add_subdirectory(writer)
+add_subdirectory(yson)
 
 add_library(library-cpp-json)
 target_link_libraries(library-cpp-json PUBLIC

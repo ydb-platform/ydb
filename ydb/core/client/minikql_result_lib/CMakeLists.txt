@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-client-minikql_result_lib)
 target_link_libraries(core-client-minikql_result_lib PUBLIC

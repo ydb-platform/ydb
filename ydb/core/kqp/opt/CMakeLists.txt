@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(logical)
+add_subdirectory(peephole)
+add_subdirectory(physical)
 
 add_library(core-kqp-opt)
 target_compile_options(core-kqp-opt PRIVATE

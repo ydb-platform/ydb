@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(cms-console-validators)
 target_link_libraries(cms-console-validators PUBLIC

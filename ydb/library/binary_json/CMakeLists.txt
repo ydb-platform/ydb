@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-library-binary_json)
 target_compile_options(ydb-library-binary_json PRIVATE

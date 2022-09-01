@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
 
 add_library(ydb-library-pdisk_io)
 target_link_libraries(ydb-library-pdisk_io PUBLIC

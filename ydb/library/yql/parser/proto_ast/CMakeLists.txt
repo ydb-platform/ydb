@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(collect_issues)
+add_subdirectory(gen)
 
 add_library(yql-parser-proto_ast)
 target_link_libraries(yql-parser-proto_ast PUBLIC

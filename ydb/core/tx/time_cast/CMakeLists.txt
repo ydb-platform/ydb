@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-tx-time_cast)
 target_link_libraries(core-tx-time_cast PUBLIC

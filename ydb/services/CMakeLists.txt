@@ -1,0 +1,22 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(auth)
+add_subdirectory(cms)
+add_subdirectory(datastreams)
+add_subdirectory(discovery)
+add_subdirectory(fq)
+add_subdirectory(kesus)
+add_subdirectory(lib)
+add_subdirectory(local_discovery)
+add_subdirectory(monitoring)
+add_subdirectory(persqueue_cluster_discovery)
+add_subdirectory(persqueue_v1)
+add_subdirectory(rate_limiter)
+add_subdirectory(ydb)
+add_subdirectory(yq)

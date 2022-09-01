@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
+add_subdirectory(ut)
 
 add_library(ydb-library-mkql_proto)
 target_compile_options(ydb-library-mkql_proto PRIVATE

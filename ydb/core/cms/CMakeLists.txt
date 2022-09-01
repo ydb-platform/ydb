@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(console)
+add_subdirectory(ut)
+add_subdirectory(ut_sentinel)
 
 add_library(ydb-core-cms)
 target_link_libraries(ydb-core-cms PUBLIC

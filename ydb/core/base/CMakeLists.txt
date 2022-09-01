@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(services)
+add_subdirectory(ut)
 
 add_library(ydb-core-base)
 target_link_libraries(ydb-core-base PUBLIC

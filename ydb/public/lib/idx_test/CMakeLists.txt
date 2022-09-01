@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(public-lib-idx_test)
 target_link_libraries(public-lib-idx_test PUBLIC

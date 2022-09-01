@@ -6,6 +6,12 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(buffered)
+add_subdirectory(json)
+add_subdirectory(legacy_protobuf)
+add_subdirectory(prometheus)
+add_subdirectory(spack)
+add_subdirectory(text)
 
 add_library(cpp-monlib-encode)
 target_link_libraries(cpp-monlib-encode PUBLIC

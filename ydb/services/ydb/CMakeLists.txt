@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(index_ut)
+add_subdirectory(sdk_credprovider_ut)
+add_subdirectory(ut)
 
 add_library(ydb-services-ydb)
 target_link_libraries(ydb-services-ydb PUBLIC

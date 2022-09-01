@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(tzdata)
 
 add_library(contrib-libs-cctz)
 target_compile_options(contrib-libs-cctz PRIVATE

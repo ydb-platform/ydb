@@ -6,6 +6,11 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(credentials)
+add_subdirectory(exceptions)
+add_subdirectory(fatal_error_handlers)
+add_subdirectory(operation)
+add_subdirectory(status)
 
 add_library(cpp-client-ydb_types)
 target_link_libraries(cpp-client-ydb_types PUBLIC

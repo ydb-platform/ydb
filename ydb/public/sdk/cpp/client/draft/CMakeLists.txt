@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(cpp-client-draft)
 target_link_libraries(cpp-client-draft PUBLIC

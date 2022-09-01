@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(internal)
 
 add_library(cpp-digest-argonish)
 target_link_libraries(cpp-digest-argonish PUBLIC

@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(base)
+add_subdirectory(counters)
+add_subdirectory(local_rpc)
+add_subdirectory(ut)
 
 add_library(ydb-core-grpc_services)
 target_compile_options(ydb-core-grpc_services PRIVATE

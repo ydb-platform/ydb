@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(expr)
+add_subdirectory(mkql)
+add_subdirectory(parser)
+add_subdirectory(skiff)
 
 add_library(providers-common-schema)
 target_link_libraries(providers-common-schema PUBLIC

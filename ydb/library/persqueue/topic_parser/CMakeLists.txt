@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(library-persqueue-topic_parser)
 target_link_libraries(library-persqueue-topic_parser PUBLIC

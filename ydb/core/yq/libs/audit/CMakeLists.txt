@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(events)
+add_subdirectory(mock)
 
 add_library(yq-libs-audit)
 target_link_libraries(yq-libs-audit PUBLIC

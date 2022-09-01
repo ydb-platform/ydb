@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(mock)
+add_subdirectory(ut)
 
 add_library(core-blobstorage-pdisk)
 target_link_libraries(core-blobstorage-pdisk PUBLIC

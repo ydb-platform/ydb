@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut_integration)
 
 add_library(ydb-services-fq)
 target_link_libraries(ydb-services-fq PUBLIC

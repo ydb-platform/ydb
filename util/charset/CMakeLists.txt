@@ -20,3 +20,10 @@ target_joined_source(util-charset
   ${CMAKE_SOURCE_DIR}/util/charset/utf8.cpp
   ${CMAKE_SOURCE_DIR}/util/charset/wide.cpp
 )
+target_sources_custom(util-charset
+  .sse41
+  SRCS
+  ${CMAKE_SOURCE_DIR}/util/charset/wide_sse41.cpp
+  CUSTOM_FLAGS
+  -msse4.1
+)

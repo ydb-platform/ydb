@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(actors)
 
 add_library(cpp-grpc-server)
 target_link_libraries(cpp-grpc-server PUBLIC

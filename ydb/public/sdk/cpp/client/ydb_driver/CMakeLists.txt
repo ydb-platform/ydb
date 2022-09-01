@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(cpp-client-ydb_driver)
 target_link_libraries(cpp-client-ydb_driver PUBLIC

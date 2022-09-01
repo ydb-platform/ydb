@@ -205,3 +205,83 @@ target_sources(restricted-aws-s2n PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_socket.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/utils/s2n_timer.c
 )
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/KeccakP-1600-times4-SIMD256_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_cbd_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_consts_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_fips202x4_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_indcpa_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_poly_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_polyvec_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)
+target_sources_custom(restricted-aws-s2n
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/s2n/pq-crypto/kyber_r3/kyber512r3_rejsample_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)

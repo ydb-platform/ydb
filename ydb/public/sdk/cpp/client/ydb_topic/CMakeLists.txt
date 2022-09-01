@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(impl)
+add_subdirectory(ut)
 
 add_library(cpp-client-ydb_topic)
 target_link_libraries(cpp-client-ydb_topic PUBLIC

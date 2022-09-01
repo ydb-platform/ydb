@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(gencrc)
 
 add_library(cpp-digest-old_crc)
 target_link_libraries(cpp-digest-old_crc PUBLIC

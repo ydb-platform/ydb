@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(model)
 
 add_library(test-libs-table)
 target_link_libraries(test-libs-table PUBLIC

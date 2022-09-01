@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(lexer)
 
 add_library(yql-sql-v0)
 target_compile_options(yql-sql-v0 PRIVATE

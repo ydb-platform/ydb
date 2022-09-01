@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(cluster_ordering)
+add_subdirectory(ut)
 
 add_library(ydb-services-persqueue_cluster_discovery)
 target_link_libraries(ydb-services-persqueue_cluster_discovery PUBLIC

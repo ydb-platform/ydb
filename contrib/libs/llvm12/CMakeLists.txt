@@ -6,6 +6,9 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(include)
+add_subdirectory(lib)
+add_subdirectory(utils)
 
 add_library(contrib-libs-llvm12 INTERFACE)
 target_include_directories(contrib-libs-llvm12 INTERFACE

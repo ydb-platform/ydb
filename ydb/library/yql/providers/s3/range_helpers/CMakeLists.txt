@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(providers-s3-range_helpers)
 target_compile_options(providers-s3-range_helpers PRIVATE

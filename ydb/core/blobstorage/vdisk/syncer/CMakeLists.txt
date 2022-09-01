@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(blobstorage-vdisk-syncer)
 target_link_libraries(blobstorage-vdisk-syncer PUBLIC

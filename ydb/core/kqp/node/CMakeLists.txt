@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-kqp-node)
 target_compile_options(core-kqp-node PRIVATE

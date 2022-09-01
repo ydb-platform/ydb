@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-ymq-http)
 target_link_libraries(core-ymq-http PUBLIC

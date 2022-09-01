@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(providers-common-structured_token)
 target_link_libraries(providers-common-structured_token PUBLIC

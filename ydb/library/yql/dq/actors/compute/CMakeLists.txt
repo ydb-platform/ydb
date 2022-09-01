@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(dq-actors-compute)
 target_compile_options(dq-actors-compute PRIVATE

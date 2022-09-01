@@ -6,6 +6,18 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(common_opt)
+add_subdirectory(expr_nodes)
+add_subdirectory(expr_nodes_gen)
+add_subdirectory(extract_predicate)
+add_subdirectory(facade)
+add_subdirectory(file_storage)
+add_subdirectory(issue)
+add_subdirectory(peephole_opt)
+add_subdirectory(services)
+add_subdirectory(sql_types)
+add_subdirectory(type_ann)
+add_subdirectory(user_data)
 
 add_library(library-yql-core)
 target_compile_options(library-yql-core PRIVATE

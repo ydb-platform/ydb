@@ -7,6 +7,7 @@
 
 
 find_package(OpenSSL REQUIRED)
+add_subdirectory(ut)
 
 add_library(library-http_proxy-authorization)
 target_link_libraries(library-http_proxy-authorization PUBLIC

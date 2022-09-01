@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yql-utils-failure_injector)
 target_link_libraries(yql-utils-failure_injector PUBLIC

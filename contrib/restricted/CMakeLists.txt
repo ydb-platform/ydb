@@ -1,0 +1,19 @@
+
+# This file was gererated by the build system used internally in the Yandex monorepo.
+# Only simple modifications are allowed (adding source-files to targets, adding simple properties
+# like target_include_directories). These modifications will be ported to original
+# ya.make files by maintainers. Any complex modifications which can't be ported back to the
+# original buildsystem will not be accepted.
+
+
+add_subdirectory(abseil-cpp)
+add_subdirectory(abseil-cpp-tstring)
+add_subdirectory(aws)
+add_subdirectory(boost)
+add_subdirectory(cityhash-1.0.2)
+add_subdirectory(dragonbox)
+add_subdirectory(fast_float)
+add_subdirectory(googletest)
+add_subdirectory(nlohmann_json)
+add_subdirectory(thrift)
+add_subdirectory(uriparser)

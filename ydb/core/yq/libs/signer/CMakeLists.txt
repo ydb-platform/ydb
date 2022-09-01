@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(yq-libs-signer)
 target_link_libraries(yq-libs-signer PUBLIC

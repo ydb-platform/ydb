@@ -6,6 +6,10 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(Columns)
+add_subdirectory(Common)
+add_subdirectory(DataStreams)
+add_subdirectory(ut)
 
 add_library(ydb-library-arrow_clickhouse)
 target_include_directories(ydb-library-arrow_clickhouse PUBLIC

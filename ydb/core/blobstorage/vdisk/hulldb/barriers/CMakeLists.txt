@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(vdisk-hulldb-barriers)
 target_link_libraries(vdisk-hulldb-barriers PUBLIC

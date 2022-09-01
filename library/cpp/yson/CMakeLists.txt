@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(json)
+add_subdirectory(node)
 
 add_library(library-cpp-yson)
 target_link_libraries(library-cpp-yson PUBLIC

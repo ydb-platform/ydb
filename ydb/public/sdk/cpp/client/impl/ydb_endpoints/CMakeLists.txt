@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(client-impl-ydb_endpoints)
 target_link_libraries(client-impl-ydb_endpoints PUBLIC

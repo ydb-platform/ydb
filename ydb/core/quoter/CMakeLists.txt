@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(quoter_service_bandwidth_test)
+add_subdirectory(ut)
 
 add_library(ydb-core-quoter)
 target_link_libraries(ydb-core-quoter PUBLIC

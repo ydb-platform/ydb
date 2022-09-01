@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(ydb-core-health_check)
 target_link_libraries(ydb-core-health_check PUBLIC

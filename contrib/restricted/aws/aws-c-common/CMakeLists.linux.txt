@@ -78,3 +78,13 @@ target_sources(restricted-aws-aws-c-common PRIVATE
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/asm/cpuid.c
   ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/cpuid.c
 )
+target_sources_custom(restricted-aws-aws-c-common
+  .avx2
+  SRCS
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/aws/aws-c-common/source/arch/intel/encoding_avx2.c
+  CUSTOM_FLAGS
+  -mavx2
+  -mfma
+  -mbmi
+  -mbmi2
+)

@@ -6,6 +6,8 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(protos)
+add_subdirectory(ut)
 
 add_library(public-lib-operation_id)
 target_link_libraries(public-lib-operation_id PUBLIC

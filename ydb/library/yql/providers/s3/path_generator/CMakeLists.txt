@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(providers-s3-path_generator)
 target_link_libraries(providers-s3-path_generator PUBLIC

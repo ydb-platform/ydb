@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-blobstorage-crypto)
 target_link_libraries(core-blobstorage-crypto PUBLIC

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(ut)
 
 add_library(core-client-metadata)
 target_compile_options(core-client-metadata PRIVATE

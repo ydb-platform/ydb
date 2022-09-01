@@ -3615,6 +3615,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     ReadRuleVersions: 567
     TopicPath: "/Root/PQ/rt3.dc1--acc--topic3"
     YdbDatabasePath: "/Root"
+    MeteringMode: METERING_MODE_REQUEST_UNITS
   }
   ErrorCode: OK
 }

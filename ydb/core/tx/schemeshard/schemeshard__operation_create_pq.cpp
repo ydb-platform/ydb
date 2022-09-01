@@ -147,15 +147,14 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context, bool 
         return nullptr;
     }
 
-    if (isServerlessDomain) {
-        if (!tabletConfig.HasMeteringMode()) {
-            tabletConfig.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-        }
-    } else {
-        if (tabletConfig.HasMeteringMode()) {
+    if (tabletConfig.HasRequestMeteringMode()) {
+        if (!isServerlessDomain) {
             status = NKikimrScheme::StatusPreconditionFailed;
-            errStr = "Metering mode can only be specified for topic in serverless domain";
+            errStr = "Metering mode can only be specified in a serverless domain";
             return nullptr;
+        } else {
+            tabletConfig.SetMeteringMode(tabletConfig.GetRequestMeteringMode());
+            tabletConfig.ClearRequestMeteringMode();
         }
     }
 

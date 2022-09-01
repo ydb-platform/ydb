@@ -75,10 +75,10 @@ public:
     }
 
     TPersQueueGroupInfo::TPtr ParseParams(
-            TOperationContext& context,
+            TOperationContext& context, bool isServerlessDomain,
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
-            TString& errStr)
+            TEvSchemeShard::EStatus& status, TString& errStr)
     {
         TPersQueueGroupInfo::TPtr params = new TPersQueueGroupInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
@@ -111,6 +111,17 @@ public:
 
             if (!CheckPersQueueConfig(alterConfig, false, &errStr)) {
                 return nullptr;
+            }
+
+            if (alterConfig.HasRequestMeteringMode()) {
+                if (!isServerlessDomain) {
+                    status = NKikimrScheme::StatusPreconditionFailed;
+                    errStr = "Metering mode can only be specified in a serverless domain";
+                    return nullptr;
+                } else {
+                    alterConfig.SetMeteringMode(alterConfig.GetRequestMeteringMode());
+                    alterConfig.ClearRequestMeteringMode();
+                }
             }
 
             if (alterConfig.GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
@@ -455,9 +466,13 @@ public:
         }
         newTabletConfig = tabletConfig;
 
-        TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
+        const auto domainPath = TPath::Init(path.GetPathIdForDomain(), context.SS);
+        TEvSchemeShard::EStatus parseStatus = NKikimrScheme::StatusInvalidParameter;
+        TPersQueueGroupInfo::TPtr alterData = ParseParams(
+            context, context.SS->IsServerlessDomain(domainPath), &newTabletConfig, alter, parseStatus, errStr);
+
         if (!alterData) {
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
+            result->SetError(parseStatus, errStr);
             return result;
         }
 
@@ -536,13 +551,6 @@ public:
                     << "Invalid retention period specified: " << newTabletConfig.GetPartitionConfig().GetLifetimeSeconds()
                     << " vs " << TSchemeShard::MaxPQLifetimeSeconds;
             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        }
-
-        const auto domainPath = TPath::Init(path.GetPathIdForDomain(), context.SS);
-        if (newTabletConfig.HasMeteringMode() && !context.SS->IsServerlessDomain(domainPath)) {
-            errStr = "Metering mode can only be specified for topic in serverless domain";
-            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
             return result;
         }
 

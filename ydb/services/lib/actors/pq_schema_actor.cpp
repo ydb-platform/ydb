@@ -977,12 +977,13 @@ namespace NKikimr::NGRpcProxy::V1 {
 
         switch (request.metering_mode()) {
             case Ydb::Topic::METERING_MODE_UNSPECIFIED:
-                break; // schemeshard will set the default value if necessary
-            case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
                 config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
                 break;
+            case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
+                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                break;
             case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
-                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
                 break;
             default:
                 error = "Unknown metering mode";
@@ -1102,10 +1103,10 @@ namespace NKikimr::NGRpcProxy::V1 {
             case Ydb::Topic::METERING_MODE_UNSPECIFIED:
                 break; // do not change
             case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
-                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
                 break;
             case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
-                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
                 break;
             default:
                 error = "Unknown metering mode";

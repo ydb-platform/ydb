@@ -6454,7 +6454,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             PartitionPerTablet: 1
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                MeteringMode: METERING_MODE_REQUEST_UNITS
+                RequestMeteringMode: METERING_MODE_REQUEST_UNITS
             }
         )");
         env.TestWaitNotification(runtime, txId, serverlessSchemeShard);
@@ -6476,6 +6476,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             PartitionPerTablet: 1
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
+                MeteringMode: METERING_MODE_REQUEST_UNITS
             }
         )");
         env.TestWaitNotification(runtime, txId, serverlessSchemeShard);
@@ -6496,7 +6497,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Topic2"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                RequestMeteringMode: METERING_MODE_RESERVED_CAPACITY
             }
         )");
         env.TestWaitNotification(runtime, txId, serverlessSchemeShard);
@@ -6519,7 +6520,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             PartitionPerTablet: 1
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                MeteringMode: METERING_MODE_REQUEST_UNITS
+                RequestMeteringMode: METERING_MODE_REQUEST_UNITS
             }
         )", {NKikimrScheme::StatusPreconditionFailed});
 
@@ -6548,7 +6549,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Topic2"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                MeteringMode: METERING_MODE_RESERVED_CAPACITY
+                RequestMeteringMode: METERING_MODE_RESERVED_CAPACITY
             }
         )", {NKikimrScheme::StatusPreconditionFailed});
     }

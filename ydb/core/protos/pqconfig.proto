@@ -309,7 +309,10 @@ message TPQTabletConfig {
         METERING_MODE_RESERVED_CAPACITY = 0;
         METERING_MODE_REQUEST_UNITS = 1;
     }
+    // Metering mode used in config
     optional EMeteringMode MeteringMode = 34;
+    // Metering mode passed in the request
+    optional EMeteringMode RequestMeteringMode = 35;
 }
 
 message TMessageGroupInfo {

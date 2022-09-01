@@ -21,6 +21,8 @@
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
 #define LOG_D(stream) \
     LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
+#define LOG_T(stream) \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, stream)
 
 namespace NYq {
 
@@ -252,7 +254,7 @@ private:
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
 
-            LOG_D("Send NodeInfo with size: " << nodesInfo.size() << " to DynamicNameserver");
+            LOG_T("Send NodeInfo with size: " << nodesInfo.size() << " to DynamicNameserver");
             if (!nodesInfo.empty()) {
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }

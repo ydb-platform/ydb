@@ -105,7 +105,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
 
     TInputChannelState& inputChannel = InCh(channelId);
 
-    LOG_D("Received input for channelId: " << channelId
+    LOG_T("Received input for channelId: " << channelId
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.GetData().GetRaw().size()
         << ", rows: " << channelData.GetData().GetRows()
@@ -551,7 +551,7 @@ void TDqComputeActorChannels::SendChannelData(NDqProto::TChannelData&& channelDa
     ui32 chunkRows = channelData.GetData().GetRows();
     bool finished = channelData.GetFinished();
 
-    LOG_D("SendChannelData, channelId: " << channelData.GetChannelId()
+    LOG_T("SendChannelData, channelId: " << channelData.GetChannelId()
         << ", peer: " << *outputChannel.Peer
         << ", rows: " << chunkRows
         << ", bytes: " << chunkBytes
@@ -588,7 +588,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
     if (!inputChannel.Peer || (inputChannel.Finished && !SupportCheckpoints) || inputChannel.RetryState ||
         inputChannel.LastRecvSeqNo == 0 || freeSpace <= 0)
     {
-        LOG_D("no poll, channelId: " << channelId << ", hasPeer: " << inputChannel.Peer.has_value()
+        LOG_T("no poll, channelId: " << channelId << ", hasPeer: " << inputChannel.Peer.has_value()
             << ", finished: " << inputChannel.Finished << ", retry: " << inputChannel.RetryState.has_value()
             << ", lastSeqNo: " << inputChannel.LastRecvSeqNo << ", freeSpace: " << freeSpace);
         return false;
@@ -598,7 +598,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
         if (inputChannel.PollRequest->SeqNo == inputChannel.LastRecvSeqNo &&
             inputChannel.PollRequest->FreeSpace == freeSpace)
         {
-            LOG_D("no poll, channelId: " << channelId << ", has poll request"
+            LOG_T("no poll, channelId: " << channelId << ", has poll request"
                 << " with same seqNo: " << inputChannel.PollRequest->SeqNo
                 << " and freeSpace: " << inputChannel.PollRequest->FreeSpace);
             return false;
@@ -607,7 +607,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
         if (!inputChannel.InFlight.empty()) {
             i64 lastFreeSpace = inputChannel.InFlight.rbegin()->second.FreeSpace;
             if (lastFreeSpace >= freeSpace) {
-                LOG_D("no poll, channelId: " << channelId
+                LOG_T("no poll, channelId: " << channelId
                     << ", has inflight messages: " << InFlightMessagesStr(inputChannel.InFlight)
                     << ", last with freeSpace: " << lastFreeSpace
                     << ", current freeSpace: " << freeSpace);
@@ -621,7 +621,7 @@ bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {
 
     inputChannel.PollRequest.emplace(inputChannel.LastRecvSeqNo, freeSpace);
 
-    LOG_D("Poll input channelId: " << channelId
+    LOG_T("Poll input channelId: " << channelId
         << ", from: " << *inputChannel.Peer
         << ", seqNo: " << inputChannel.LastRecvSeqNo
         << ", freeSpace: " << freeSpace);

@@ -117,7 +117,7 @@ private:
     };
 
     void OnStateRequest(TEvDqCompute::TEvStateRequest::TPtr& ev) {
-        CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " TaskId: " << Task.GetId() << " PingCookie: " << ev->Cookie);
+        CA_LOG_T("Got TEvStateRequest from actor " << ev->Sender << " PingCookie: " << ev->Cookie);
         if (!SentStatsRequest) {
             Send(TaskRunnerActorId, new NTaskRunnerActor::TEvStatistics(GetIds(SinksMap)));
             SentStatsRequest = true;
@@ -283,7 +283,7 @@ private:
     }
 
     void TakeInputChannelData(NDqProto::TChannelData&& channelData, bool ack) override {
-        CA_LOG_D("task: " << Task.GetId() << ", took input");
+        CA_LOG_T("took input");
         TInputChannelInfo* inputChannel = InputChannelsMap.FindPtr(channelData.GetChannelId());
         YQL_ENSURE(inputChannel, "task: " << Task.GetId() << ", unknown input channelId: " << channelData.GetChannelId());
 

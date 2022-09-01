@@ -371,7 +371,7 @@ protected:
     void ProcessOutputsImpl(ERunStatus status) {
         ProcessOutputsState.LastRunStatus = status;
 
-        CA_LOG_D("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight );
+        CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight );
         if (ProcessOutputsState.Inflight == 0) {
             ProcessOutputsState = TProcessOutputsState();
         }

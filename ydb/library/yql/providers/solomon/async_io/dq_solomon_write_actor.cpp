@@ -156,7 +156,7 @@ public:
         const TMaybe<NDqProto::TCheckpoint>& checkpoint,
         bool finished) override
     {
-        SINK_LOG_D("Got " << batch.size() << " items to send. Checkpoint: " << checkpoint.Defined()
+        SINK_LOG_T("Got " << batch.size() << " items to send. Checkpoint: " << checkpoint.Defined()
                    << ". Send queue: " << SendingBuffer.size() << ". Inflight: " << InflightBuffer.size()
                    << ". Checkpoint in progress: " << CheckpointInProgress.has_value());
 
@@ -310,7 +310,7 @@ private:
     void PushMetricsToBuffer(ui64& metricsCount) {
         try {
             auto data = UserMetricsEncoder.Encode();
-            SINK_LOG_D("Push " << data.size() << " bytes of data to buffer");
+            SINK_LOG_T("Push " << data.size() << " bytes of data to buffer");
 
             FreeSpace -= data.size();
             SendingBuffer.emplace(TMetricsToSend { std::move(data), metricsCount });
@@ -380,7 +380,7 @@ private:
             const size_t bodySize = metricsToSend.Data.size();
             const TActorId httpSenderId = Register(CreateHttpSenderActor(SelfId(), HttpProxyId, RetryPolicy));
             Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, Cookie);
-            SINK_LOG_D("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
+            SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");
 
             *Metrics.SentMetrics += metricsToSend.MetricsCount;
             InflightBuffer.emplace(Cookie++, TMetricsInflight { httpSenderId, metricsToSend.MetricsCount, bodySize });
@@ -401,7 +401,7 @@ private:
     }
 
     void HandleSuccessSolomonResponse(const NHttp::TEvHttpProxy::TEvHttpIncomingResponse& response, ui64 cookie) {
-        SINK_LOG_D("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
+        SINK_LOG_T("Solomon response[" << cookie << "]: " << response.Response->GetObfuscatedData());
         NJson::TJsonParser parser;
         switch (WriteParams.Shard.GetClusterType()) {
             case NSo::NProto::ESolomonClusterType::CT_SOLOMON:

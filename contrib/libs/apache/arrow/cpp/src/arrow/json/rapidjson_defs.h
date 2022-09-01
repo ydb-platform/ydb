@@ -15,36 +15,29 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#define ARROW_VERSION_MAJOR 5
-#define ARROW_VERSION_MINOR 0
-#define ARROW_VERSION_PATCH 0
-#define ARROW_VERSION ((ARROW_VERSION_MAJOR * 1000) + ARROW_VERSION_MINOR) * 1000 + ARROW_VERSION_PATCH
+// Include this file before including any RapidJSON headers.
 
-#define ARROW_VERSION_STRING "5.0.0"
+#pragma once
 
-#define ARROW_SO_VERSION "500"
-#define ARROW_FULL_SO_VERSION "500.0.0"
+#define RAPIDJSON_HAS_STDSTRING 1
+#define RAPIDJSON_HAS_CXX11_RVALUE_REFS 1
+#define RAPIDJSON_HAS_CXX11_RANGE_FOR 1
 
-#define ARROW_CXX_COMPILER_ID "GNU"
-#define ARROW_CXX_COMPILER_VERSION "10.2.0"
-#define ARROW_CXX_COMPILER_FLAGS " -fdiagnostics-color=always -O3 -DNDEBUG"
+// rapidjson will be defined in namespace arrow::rapidjson
+#define RAPIDJSON_NAMESPACE arrow::rapidjson
+#define RAPIDJSON_NAMESPACE_BEGIN \
+  namespace arrow {               \
+  namespace rapidjson {
+#define RAPIDJSON_NAMESPACE_END \
+  }                             \
+  }
 
-#define ARROW_GIT_ID ""
-#define ARROW_GIT_DESCRIPTION ""
-
-#define ARROW_PACKAGE_KIND ""
-
-#define ARROW_COMPUTE
-#define ARROW_CSV
-#define ARROW_DATASET
-#define ARROW_FILESYSTEM
-/* #undef ARROW_FLIGHT */
-#define ARROW_IPC
-#define ARROW_JSON
-
-/* #undef ARROW_S3 */
-#ifdef __GNUC__
-#define ARROW_USE_NATIVE_INT128
+// enable SIMD whitespace skipping, if available
+#if defined(ARROW_HAVE_SSE4_2)
+#define RAPIDJSON_SSE2 1
+#define RAPIDJSON_SSE42 1
 #endif
 
-/* #undef GRPCPP_PP_INCLUDE */
+#if defined(ARROW_HAVE_NEON)
+#define RAPIDJSON_NEON 1
+#endif

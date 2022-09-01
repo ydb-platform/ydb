@@ -15,36 +15,21 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#define ARROW_VERSION_MAJOR 5
-#define ARROW_VERSION_MINOR 0
-#define ARROW_VERSION_PATCH 0
-#define ARROW_VERSION ((ARROW_VERSION_MAJOR * 1000) + ARROW_VERSION_MINOR) * 1000 + ARROW_VERSION_PATCH
+#pragma once
 
-#define ARROW_VERSION_STRING "5.0.0"
+#include <memory>
 
-#define ARROW_SO_VERSION "500"
-#define ARROW_FULL_SO_VERSION "500.0.0"
+#include "arrow/util/delimiting.h"
+#include "arrow/util/macros.h"
+#include "arrow/util/visibility.h"
 
-#define ARROW_CXX_COMPILER_ID "GNU"
-#define ARROW_CXX_COMPILER_VERSION "10.2.0"
-#define ARROW_CXX_COMPILER_FLAGS " -fdiagnostics-color=always -O3 -DNDEBUG"
+namespace arrow {
+namespace json {
 
-#define ARROW_GIT_ID ""
-#define ARROW_GIT_DESCRIPTION ""
+struct ParseOptions;
 
-#define ARROW_PACKAGE_KIND ""
+ARROW_EXPORT
+std::unique_ptr<Chunker> MakeChunker(const ParseOptions& options);
 
-#define ARROW_COMPUTE
-#define ARROW_CSV
-#define ARROW_DATASET
-#define ARROW_FILESYSTEM
-/* #undef ARROW_FLIGHT */
-#define ARROW_IPC
-#define ARROW_JSON
-
-/* #undef ARROW_S3 */
-#ifdef __GNUC__
-#define ARROW_USE_NATIVE_INT128
-#endif
-
-/* #undef GRPCPP_PP_INCLUDE */
+}  // namespace json
+}  // namespace arrow

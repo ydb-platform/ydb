@@ -479,7 +479,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
 
     const auto read = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -569,7 +569,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     );
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -693,7 +693,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
 
     const auto read = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(read.Sql, read.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), read.Sql, read.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, user,permissions] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -1512,7 +1512,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, resultSetIndex, user, permissions] {
         if (resultSets->size() != 2) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 2 but equal " << resultSets->size() << ". Please contact internal support";
@@ -1670,7 +1670,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
     auto prepare = [resultSets=resultSets, limit] {
         if (resultSets->size() != 1) {
             ythrow TControlPlaneStorageException(TIssuesIds::INTERNAL_ERROR) << "Result set size is not equal to 1 but equal " << resultSets->size() << ". Please contact internal support";
@@ -1770,7 +1770,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
 
     const auto query = queryBuilder.Build();
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
-    auto [result, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
+    auto [result, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
 
     auto prepare = [=, id=request.job_id(), resultSets=resultSets] {
         if (resultSets->size() != 1) {

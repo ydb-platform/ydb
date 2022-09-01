@@ -469,6 +469,7 @@ private:
     bool IsSuperUser(const TString& user);
 
     std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> Read(
+        NActors::TActorSystem* actorSystem,
         const TString& query,
         const NYdb::TParams& params,
         const TRequestCountersPtr& requestCounters,
@@ -477,6 +478,7 @@ private:
         bool retryOnTli = true);
 
     TAsyncStatus Validate(
+        NActors::TActorSystem* actorSystem,
         std::shared_ptr<TMaybe<TTransaction>> transaction,
         size_t item, const TVector<TValidationQuery>& validators,
         TSession session,

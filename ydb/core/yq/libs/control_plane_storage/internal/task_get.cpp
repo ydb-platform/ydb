@@ -301,7 +301,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetTaskRequ
     };
 
     const auto query = queryBuilder.Build();
-    auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
+    auto [readStatus, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo, TTxSettings::StaleRO());
     auto result = readStatus.Apply(
         [=,
         resultSets=resultSets,

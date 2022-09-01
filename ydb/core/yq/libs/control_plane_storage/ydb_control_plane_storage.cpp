@@ -326,6 +326,7 @@ TAsyncStatus ExecDbRequest(TDbPool::TPtr dbPool, std::function<NYdb::TAsyncStatu
 }
 
 std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlPlaneStorageActor::Read(
+    NActors::TActorSystem* actorSystem,
     const TString& query,
     const NYdb::TParams& params,
     const TRequestCountersPtr& requestCounters,
@@ -343,12 +344,15 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
         ++(*retryCount);
         CollectDebugInfo(query, params, session, debugInfo);
         auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx(transactionMode).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-        return result.Apply([retryOnTli, resultSet] (const TFuture<TDataQueryResult>& future) {
+        return result.Apply([retryOnTli, resultSet, actorSystem, query] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             *resultSet = result.GetResultSets();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                 return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+            }
+            if (!status.IsSuccess()) {
+                CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << query);
             }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
@@ -363,6 +367,7 @@ std::pair<TAsyncStatus, std::shared_ptr<TVector<NYdb::TResultSet>>> TYdbControlP
 }
 
 TAsyncStatus TYdbControlPlaneStorageActor::Validate(
+    NActors::TActorSystem* actorSystem,
     std::shared_ptr<TMaybe<TTransaction>> transaction,
     size_t item,
     const TVector<TValidationQuery>& validators,
@@ -378,7 +383,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Validate(
     const TValidationQuery& validatonItem = validators[item];
     CollectDebugInfo(validatonItem.Query, validatonItem.Params, session, debugInfo);
     auto result = session.ExecuteDataQuery(validatonItem.Query, item == 0 ? TTxControl::BeginTx(transactionMode) : TTxControl::Tx(**transaction), validatonItem.Params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-    return result.Apply([=, validator=validatonItem.Validator] (const TFuture<TDataQueryResult>& future) {
+    return result.Apply([=, validator=validatonItem.Validator, query=validatonItem.Query] (const TFuture<TDataQueryResult>& future) {
         NYdb::NTable::TDataQueryResult result = future.GetValue();
         *transaction = result.GetTransaction();
         auto status = static_cast<TStatus>(result);
@@ -386,13 +391,14 @@ TAsyncStatus TYdbControlPlaneStorageActor::Validate(
             return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}});
         }
         if (!status.IsSuccess()) {
+            CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << query);
             return MakeFuture(status);
         }
         *successFinish = validator(result);
         if (*successFinish) {
             return MakeFuture(TStatus{EStatus::SUCCESS, NYql::TIssues{}});
         }
-        return Validate(transaction, item + 1, validators, session, successFinish, debugInfo);
+        return Validate(actorSystem, transaction, item + 1, validators, session, successFinish, debugInfo);
     });
 }
 
@@ -417,6 +423,9 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                 return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
             }
+            if (!status.IsSuccess()) {
+                CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << query);
+            }
             if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                 return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
             }
@@ -430,7 +439,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::Write(
         }
         ++(*retryCount);
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {
@@ -493,13 +502,16 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
     auto readModifyWriteHandler = [=](TSession session) {
         CollectDebugInfo(readQuery, readParams, session, debugInfo);
         auto readResult = session.ExecuteDataQuery(readQuery, validators ? TTxControl::Tx(**transaction) : TTxControl::BeginTx(transactionMode), readParams, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-        auto readResultStatus = readResult.Apply([resultSets, transaction] (const TFuture<TDataQueryResult>& future) {
+        auto readResultStatus = readResult.Apply([resultSets, transaction, actorSystem, readQuery] (const TFuture<TDataQueryResult>& future) {
             NYdb::NTable::TDataQueryResult result = future.GetValue();
             *resultSets = result.GetResultSets();
             *transaction = result.GetTransaction();
             auto status = static_cast<TStatus>(result);
             if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                 return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+            }
+            if (!status.IsSuccess()) {
+                CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << readQuery);
             }
             return status;
         });
@@ -508,7 +520,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
             return future.GetValue().IsSuccess() ? prepare(*resultSets) : make_pair(TString(""), NYdb::TParamsBuilder{}.Build());
         });
 
-        return resultPrepare.Apply([=](const auto& future) mutable {
+        return resultPrepare.Apply([=, actorSystem=actorSystem](const auto& future) mutable {
             if (!readResultStatus.GetValue().IsSuccess()) {
                 return readResultStatus;
             }
@@ -516,22 +528,28 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
             try {
                 auto [writeQuery, params] = future.GetValue();
                 if (!writeQuery) {
-                    return transaction->Get()->Commit().Apply([] (const auto& future) {
+                    return transaction->Get()->Commit().Apply([actorSystem=actorSystem] (const auto& future) {
                         auto result = future.GetValue();
                         auto status = static_cast<TStatus>(result);
                         if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                             return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+                        }
+                        if (!status.IsSuccess()) {
+                            CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", COMMIT");
                         }
                         return status;
                     });
                 }
                 CollectDebugInfo(writeQuery, params, session, debugInfo);
                 auto writeResult = session.ExecuteDataQuery(writeQuery, TTxControl::Tx(**transaction).CommitTx(), params, NYdb::NTable::TExecDataQuerySettings().KeepInQueryCache(true));
-                return writeResult.Apply([retryOnTli] (const TFuture<TDataQueryResult>& future) {
+                return writeResult.Apply([retryOnTli, actorSystem, writeQuery=writeQuery] (const TFuture<TDataQueryResult>& future) {
                     NYdb::NTable::TDataQueryResult result = future.GetValue();
                     auto status = static_cast<TStatus>(result);
                     if (status.GetStatus() == EStatus::SCHEME_ERROR) { // retry if table does not exist
                         return TStatus{EStatus::UNAVAILABLE, NYql::TIssues{status.GetIssues()}};
+                    }
+                    if (!status.IsSuccess()) {
+                        CPS_LOG_AS_W(*actorSystem, "DB Error, Status: " << status.GetStatus() << ", Issues: " << status.GetIssues().ToOneLineString() << ", Query: " << writeQuery);
                     }
                     if (!retryOnTli && status.GetStatus() == EStatus::ABORTED) {
                         return TStatus{EStatus::GENERIC_ERROR, NYql::TIssues{status.GetIssues()}};
@@ -558,7 +576,7 @@ TAsyncStatus TYdbControlPlaneStorageActor::ReadModifyWrite(
         ++(*retryCount);
 
         std::shared_ptr<bool> successFinish = std::make_shared<bool>();
-        return Validate(transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
+        return Validate(actorSystem, transaction, 0, validators, session, successFinish, debugInfo).Apply([=](const auto& future) {
             try {
                 auto status = future.GetValue();
                 if (!status.IsSuccess()) {

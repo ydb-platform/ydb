@@ -318,7 +318,7 @@ void TYdbControlPlaneStorageActor::HandleRateLimiterImpl(TEventPtr& ev) {
     readQueryBuilder.AddText(text);
 
     const auto query = readQueryBuilder.Build();
-    auto [readStatus, resultSets] = Read(query.Sql, query.Params, requestCounters, debugInfo);
+    auto [readStatus, resultSets] = Read(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo);
     readStatus.Subscribe(
         [resultSets = resultSets, actorSystem = NActors::TActivationContext::ActorSystem(), requestActor] (const TAsyncStatus& status) {
             actorSystem->Send(new IEventHandle(requestActor, requestActor, new TEvPrivate::TEvDbRequestResult(status, std::move(resultSets))));

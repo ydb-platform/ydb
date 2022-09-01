@@ -567,20 +567,22 @@ inline TMaybe<TString> ToMaybe(const TVector<TStringBuf>& vec) {
     return TString{vec[0]};
 }
 
-template<ui32 TRpcId, typename TReq, typename TResp>
+template<ui32 TRpcId, typename TReq, typename TResp, TRateLimiterMode RlMode = TRateLimiterMode::Off>
 class TGRpcRequestBiStreamWrapper :
     public IRequestProxyCtx,
-    public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>, TRpcId> {
+    public TEventLocal<TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp, RlMode>, TRpcId> {
 public:
     using TRequest = TReq;
     using TResponse = TResp;
     using IStreamCtx = NGRpcServer::IGRpcStreamingContext<TRequest, TResponse>;
-    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx)
+    static constexpr TRateLimiterMode RateLimitMode = RlMode;
+    TGRpcRequestBiStreamWrapper(TIntrusivePtr<IStreamCtx> ctx, bool rlAllowed = true)
         : Ctx_(ctx)
+        , RlAllowed_(rlAllowed)
     { }
 
     TRateLimiterMode GetRlMode() const override {
-        return TRateLimiterMode::Off;
+        return RlAllowed_ ? RateLimitMode : TRateLimiterMode::Off;
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
@@ -742,6 +744,7 @@ private:
     TString InternalToken_;
     NYql::TIssueManager IssueManager_;
     TMaybe<NRpcService::TRlPath> RlPath_;
+    bool RlAllowed_;
 };
 
 template <typename TDerived>
@@ -1253,12 +1256,13 @@ public:
     static IActor* CreateRpcActor(typename std::conditional<IsOperation, IRequestOpCtx, IRequestNoOpCtx>::type* msg);
     static constexpr bool IsOp = IsOperation;
     static constexpr TRateLimiterMode RateLimitMode = RlMode;
-    TGRpcRequestValidationWrapper(NGrpc::IRequestContextBase* ctx)
+    TGRpcRequestValidationWrapper(NGrpc::IRequestContextBase* ctx, bool rlAllowed = true)
         : TGRpcRequestWrapperImpl<TRpcId, TReq, TResp, IsOperation, TGRpcRequestValidationWrapper<TRpcId, TReq, TResp, IsOperation, RlMode>>(ctx)
+        , RlAllowed(rlAllowed)
     { }
 
     TRateLimiterMode GetRlMode() const override {
-        return RateLimitMode;
+        return RlAllowed ? RateLimitMode : TRateLimiterMode::Off;
     }
 
     bool TryCustomAttributeProcess(const TSchemeBoardEvents::TDescribeSchemeResult&, ICheckerIface*) override {
@@ -1268,6 +1272,8 @@ public:
     bool Validate(TString& error) override {
         return this->GetProtoRequest()->validate(error);
     }
+private:
+    bool RlAllowed;
 };
 
 } // namespace NGRpcService

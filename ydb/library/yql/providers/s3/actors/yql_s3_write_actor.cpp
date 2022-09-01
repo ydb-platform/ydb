@@ -1,15 +1,17 @@
 #include "yql_s3_write_actor.h"
 #include "yql_s3_retry_policy.h"
 
-#include <ydb/library/yql/utils/yql_panic.h>
+#include <ydb/core/protos/services.pb.h>
 
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/events.h>
 #include <library/cpp/actors/core/event_local.h>
 #include <library/cpp/actors/core/hfunc.h>
+#include <library/cpp/actors/core/log.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -21,6 +23,18 @@
 #undef THROW
 #endif
 #include <library/cpp/xml/document/xml-document.h>
+
+
+#define LOG_E(stream) \
+    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, stream)
+#define LOG_W(stream) \
+    LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, stream)
+#define LOG_I(stream) \
+    LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, stream)
+#define LOG_D(stream) \
+    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, stream)
+#define LOG_T(stream) \
+    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::KQP_COMPUTE, stream)
 
 namespace NYql::NDq {
 
@@ -89,6 +103,7 @@ public:
 
     void Bootstrap(const TActorId& parentId) {
         ParentId = parentId;
+        LOG_D("TS3FileWriteActor: BootStrapped" << SelfId() << " by " << ParentId);
         if (Parts->IsSealed() && 1U == Parts->Size()) {
             const auto size = Parts->Volume();
             InFlight += size;
@@ -101,6 +116,15 @@ public:
     }
 
     static constexpr char ActorName[] = "S3_FILE_WRITE_ACTOR";
+
+    void PassAway() override {
+        if (InFlight || !Parts->Empty()) {
+            LOG_W("TS3FileWriteActor: PassAway " << SelfId() << " NOT finished, InFlight: " << InFlight << ", Parts: " << Parts->Size());
+        } else {
+            LOG_D("TS3FileWriteActor: PassAway " << SelfId());
+        }
+        TActorBootstrapped<TS3FileWriteActor>::PassAway();
+    }
 
     void SendData(TString&& data) {
         Parts->Push(std::move(data));
@@ -327,6 +351,7 @@ public:
     }
 
     void Bootstrap() {
+        LOG_D("TS3WriteActor: BootStrapped" << SelfId());
         Become(&TS3WriteActor::StateFunc);
     }
 
@@ -385,6 +410,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
+        LOG_W("TS3WriteActor: TEvUploadError " << SelfId() << " " << result->Get()->Error.ToOneLineString());
         Callbacks->OnAsyncOutputError(OutputIndex, result->Get()->Error, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
     }
 
@@ -404,12 +430,20 @@ private:
 
     // IActor & IDqComputeActorAsyncOutput
     void PassAway() override { // Is called from Compute Actor
+        ui32 fileWriterCount = 0;
         for (const auto& p : FileWriteActors) {
             for (const auto& fileWriter : p.second) {
                 fileWriter->PassAway();
+                fileWriterCount++;
             }
         }
         FileWriteActors.clear();
+
+        if (fileWriterCount) {
+            LOG_W("TS3WriteActor: PassAway " << SelfId() << " with " << fileWriterCount << " NOT finished FileWriter(s)");
+        } else {
+            LOG_D("TS3WriteActor: PassAway " << SelfId());
+        }
 
         TActorBootstrapped<TS3WriteActor>::PassAway();
     }

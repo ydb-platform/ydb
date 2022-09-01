@@ -154,6 +154,29 @@ public:
             return TColor::BLACK;
         }
     }
+
+    ui32 ColorFlagLimit(NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+        switch (color) {
+        case TColor::CYAN:
+            return AtomicGet(HardLimit) - AtomicGet(Cyan);
+        case TColor::LIGHT_YELLOW:
+            return AtomicGet(HardLimit) - AtomicGet(LightYellow);
+        case TColor::YELLOW:
+            return AtomicGet(HardLimit) - AtomicGet(Yellow);
+        case TColor::LIGHT_ORANGE:
+            return AtomicGet(HardLimit) - AtomicGet(LightOrange);
+        case TColor::ORANGE:
+            return AtomicGet(HardLimit) - AtomicGet(Orange);
+        case TColor::RED:
+            return AtomicGet(HardLimit) - AtomicGet(Red);
+        case TColor::BLACK:
+            return AtomicGet(HardLimit) - AtomicGet(Black);
+        default:
+            return 0;
+        } 
+    }
 };
 
 } // NPDisk

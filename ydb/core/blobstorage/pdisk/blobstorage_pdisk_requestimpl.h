@@ -613,39 +613,55 @@ public:
 //
 // TChunkLock
 //
-class TChunksLock : public TRequestBase {
+class TChunkLock : public TRequestBase {
 public:
-    bool LockByRange;
-    ui32 Begin;
-    ui32 End;
+    NPDisk::TEvChunkLock::ELockFrom LockFrom;
+    bool ByVDiskId;
+    TOwner Owner;
+    TVDiskID VDiskId;
+    bool IsGenerationSet;
     ui32 Count;
+    NKikimrBlobStorage::TPDiskSpaceColor::E Color;
 
-    TChunksLock(const NPDisk::TEvChunksLock &ev, const TActorId &sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::ChunksLock, reqIdx), 0, 0, NPriInternal::Other)
-        , LockByRange(ev.LockByRange)
-        , Begin(ev.Begin)
-        , End(ev.End)
+    TChunkLock(const NPDisk::TEvChunkLock &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ChunkLock, reqIdx), 0, 0, NPriInternal::Other)
+        , LockFrom(ev.LockFrom)
+        , ByVDiskId(ev.ByVDiskId)
+        , Owner(ev.Owner)
+        , VDiskId(ev.VDiskId)
+        , IsGenerationSet(ev.IsGenerationSet)
         , Count(ev.Count)
+        , Color(ev.Color)
     {}
 
     ERequestType GetType() const override {
-        return ERequestType::RequestChunksLock;
+        return ERequestType::RequestChunkLock;
     }
 };
 
 //
-// TChunksUnlock
+// TChunkUnlock
 //
-class TChunksUnlock : public TRequestBase {
+class TChunkUnlock : public TRequestBase {
 public:
-    TChunksUnlock(const NPDisk::TEvChunksUnlock &ev, const TActorId &sender, TAtomicBase reqIdx)
-        : TRequestBase(sender, TReqId(TReqId::ChunksUnlock, reqIdx), 0, 0, NPriInternal::Other)
+    NPDisk::TEvChunkLock::ELockFrom LockFrom;
+    bool ByVDiskId;
+    TOwner Owner;
+    TVDiskID VDiskId;
+    bool IsGenerationSet;
+    
+    TChunkUnlock(const NPDisk::TEvChunkUnlock &ev, const TActorId &sender, TAtomicBase reqIdx)
+        : TRequestBase(sender, TReqId(TReqId::ChunkUnlock, reqIdx), 0, 0, NPriInternal::Other)
+        , LockFrom(ev.LockFrom)
+        , ByVDiskId(ev.ByVDiskId)
+        , Owner(ev.Owner)
+        , VDiskId(ev.VDiskId)
+        , IsGenerationSet(ev.IsGenerationSet)
     {
-        Y_UNUSED(ev);
     }
 
     ERequestType GetType() const override {
-        return ERequestType::RequestChunksUnlock;
+        return ERequestType::RequestChunkUnlock;
     }
 };
 

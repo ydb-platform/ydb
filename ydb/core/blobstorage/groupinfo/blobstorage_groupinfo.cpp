@@ -17,6 +17,9 @@
 #include <util/stream/input.h>
 #include <util/random/fast.h>
 #include <util/system/unaligned_mem.h>
+#include <util/string/vector.h>
+#include <util/string/type.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 
@@ -917,6 +920,42 @@ void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto)
     proto->SetRing(id.FailRealm);
     proto->SetDomain(id.FailDomain);
     proto->SetVDisk(id.VDisk);
+}
+
+TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet) {
+    if (str[0] != '[' || str.back() != ']') {
+        return TVDiskID::InvalidId;
+    }
+    str.pop_back();
+    str.erase(str.begin());
+    TVector<TString> parts = SplitString(str, ":");
+    if (parts.size() != 5) {
+        return TVDiskID::InvalidId;
+    } 
+
+    ui32 groupGeneration = 0;
+
+    if (!IsHexNumber(parts[0]) || !IsNumber(parts[2]) || !IsNumber(parts[3]) || !IsNumber(parts[4]) 
+        || !(IsNumber(parts[1]) || parts[1] == "_")) {
+        return TVDiskID::InvalidId;
+    }
+    
+    if (parts[1] == "_") {
+        if (isGenerationSet) {
+            *isGenerationSet = false;
+        }
+    } else {
+        if (isGenerationSet) {
+            *isGenerationSet = true;
+        }
+        groupGeneration = IntFromString<ui32, 10>(parts[1]);
+    }
+
+    return TVDiskID(IntFromString<ui32, 16>(parts[0]), 
+        groupGeneration, 
+        IntFromString<ui8, 10>(parts[2]), 
+        IntFromString<ui8, 10>(parts[3]), 
+        IntFromString<ui8, 10>(parts[4]));
 }
 
 

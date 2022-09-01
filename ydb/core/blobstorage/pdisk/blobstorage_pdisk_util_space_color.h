@@ -64,4 +64,57 @@ inline NPDisk::TStatusFlags SpaceColorToStatusFlag(NKikimrBlobStorage::TPDiskSpa
     return flags;
 }
 
+inline NKikimrBlobStorage::TPDiskSpaceColor::E ColorByName(const TString name) {
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+    if (name == "black") {
+        return TColor::BLACK;
+    } else if (name == "red") {
+        return TColor::RED;
+    } else if (name == "orange") {
+        return TColor::ORANGE;
+    } else if (name == "light_orange") {
+        return TColor::LIGHT_ORANGE;
+    } else if (name == "yellow") {
+        return TColor::YELLOW;
+    } else if (name == "light_yellow") {
+        return TColor::LIGHT_YELLOW;
+    } else if (name == "cyan") {
+        return TColor::CYAN;
+    } else {
+        return TColor::GREEN;
+    }
+}
+
+inline TString TPDiskSpaceColor_Name(const NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+    switch (color) {
+    case TColor::BLACK: return "black";
+    case TColor::RED: return "red";
+    case TColor::ORANGE: return "orange";
+    case TColor::LIGHT_ORANGE: return "light_orange";
+    case TColor::YELLOW: return "yellow";
+    case TColor::LIGHT_YELLOW: return "light_yellow";
+    case TColor::CYAN: return "cyan";
+    case TColor::GREEN: return "green";
+    default: return "unknown";
+    }
+}
+
+inline TString TPDiskSpaceColor_HtmlCode(const NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+
+    switch (color) {
+    case TColor::BLACK: return "black";
+    case TColor::RED: return "red";
+    case TColor::ORANGE: return "orange";
+    case TColor::LIGHT_ORANGE: return "#FFE500";
+    case TColor::YELLOW: return "yellow";
+    case TColor::LIGHT_YELLOW: return "#EEFF33";
+    case TColor::CYAN: return "cyan";
+    case TColor::GREEN: return "green";
+    default: return "grey";
+    }
+}
 }

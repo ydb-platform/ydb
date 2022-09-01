@@ -323,6 +323,26 @@ YARD_UNIT_TEST(TestChunkContinuity9000) {
     Run<TTestChunk3WriteRead<9000>>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
+YARD_UNIT_TEST(TestChunkLock) {
+    TTestContext tc(false, true);
+    Run<TTestChunkLock>(&tc, 1, MIN_CHUNK_SIZE);
+}
+
+YARD_UNIT_TEST(TestChunkUnlock) {
+    TTestContext tc(false, true);
+    Run<TTestChunkUnlock>(&tc, 1, MIN_CHUNK_SIZE);
+}
+
+YARD_UNIT_TEST(TestChunkUnlockHarakiri) {
+    TTestContext tc(false, true);
+    Run<TTestChunkUnlockHarakiri>(&tc, 1, MIN_CHUNK_SIZE);
+}
+
+YARD_UNIT_TEST(TestChunkUnlockRestart) {
+    TTestContext tc(false, true);
+    Run<TTestChunkUnlockRestart>(&tc, 1, MIN_CHUNK_SIZE);
+}
+
 YARD_UNIT_TEST(TestChunkReserve) {
     TTestContext tc(false, true);
     Run<TTestChunkReserve>(&tc, 1, MIN_CHUNK_SIZE);
@@ -331,17 +351,6 @@ YARD_UNIT_TEST(TestChunkReserve) {
 YARD_UNIT_TEST(TestCheckSpace) {
     TTestContext tc(false, true);
     Run<TTestCheckSpace>(&tc, 1, MIN_CHUNK_SIZE);
-}
-
-YARD_UNIT_TEST(TestChunksLockByRange) {
-    TTestContext tc(false, true);
-    FillDeviceWithZeroes(&tc, MIN_CHUNK_SIZE);
-    Run<TTestChunksLockByRange>(&tc, 1, MIN_CHUNK_SIZE);
-}
-
-YARD_UNIT_TEST(TestChunksLockUnlockReserve) {
-    TTestContext tc(false, true);
-    Run<TTestChunksLockUnlockReserve>(&tc, 1, MIN_CHUNK_SIZE);
 }
 
 YARD_UNIT_TEST(TestHttpInfo) {

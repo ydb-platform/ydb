@@ -154,6 +154,10 @@ public:
         UntrimmedFreeChunks.Push(chunkIdx);
     }
 
+    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        return ChunkTracker.ColorFlagLimit(owner, color);
+    }
+
     //
     // GUI
     //

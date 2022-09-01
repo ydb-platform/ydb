@@ -304,41 +304,91 @@ void TPDisk::OutputHtmlLogChunksDetails(TStringStream &str) {
     }
 }
 
-void TPDisk::OutputHtmlChunksLockUnlockInfo(TStringStream &str) {
+void TPDisk::OutputHtmlChunkLockUnlockInfo(TStringStream &str) {
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    bool chunkLockingEnabled = NKikimr::AppData(ActorSystem)->FeatureFlags.GetEnableChunkLocking();
+
+    auto commonParams = [&] (TStringStream &str, TString requestName) {
+        for (TEvChunkLock::ELockFrom from : { TEvChunkLock::ELockFrom::LOG, TEvChunkLock::ELockFrom::PERSONAL_QUOTA } ) {
+            str << "<input id='" << requestName << "LockFrom_" << TEvChunkLock::ELockFrom_Name(from) << 
+                "' name='lockFrom' type='radio' value='" << TEvChunkLock::ELockFrom_Name(from) << "'";
+            if (from == TEvChunkLock::ELockFrom::PERSONAL_QUOTA) {
+                str << " checked";
+            }
+            str << "/>";
+            str << "<label for='" << requestName << "LockFrom_'" << TEvChunkLock::ELockFrom_Name(from) << "'>" <<
+                TEvChunkLock::ELockFrom_Name(from) << "</label>";
+        }
+        str << "<br>";
+        str << "<input id='" << requestName << "ByVDiskId' name='byVDiskId' type='checkbox'/>";
+        str << "<label for='" << requestName << "ByVDiskId'>" << "By VDisk Id" << "</label>";
+        str << "<br>";
+        str << "<input id='" << requestName << "Owner' name='owner' type='text' value='" << 4 << "'/>";
+        str << "<label for='" << requestName << "Owner'>" << "Owner Id" << "</label>";
+        str << "<br>";
+        str << "<input id='" << requestName << "VDiskId' name='vdiskId' type='text' value='" << "[0:_:0:0:0]" << "'/>";
+        str << "<label for='" << requestName << "VDiskId'>" << "VDisk Id" << "</label>";
+    };
+
+
     HTML(str) {
-        str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
-            data-target='#lockByRangeCollapse'> Lock by range </button>";
-        str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
-            data-target='#lockByCountCollapse'> Lock by count </button>";
+        if (chunkLockingEnabled) {
+            str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
+                data-target='#lockByColorCollapse'> Lock by color </button>";
+            str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
+                data-target='#lockByCountCollapse'> Lock by count </button>";
+            str << "<button type='button' class='btn btn-default' data-toggle='collapse' style='margin:5px' \
+                data-target='#unlockCollapse'> Unlock </button>";
 
-        str << "<div id='lockByRangeCollapse' class='collapse'>";
-        str << "<form class='form_horizontal' method='post'>";
-        LABEL_CLASS_FOR("control-label", "begin") { str << "Begin&nbsp;"; }
-        str << "<input id='inputBegin' name='chunksLockBegin' type='text' value='" << 1 << "'/>";
-        LABEL_CLASS_FOR("control-label", "end") { str << "&nbsp;End&nbsp;&nbsp;&nbsp;"; }
-        str << "<input id='inputEnd' name='chunksLockEnd' type='text' value='" <<
-            ChunkState.size() << "'/>";
-        str << "<button type='submit' name='chunksLockByRange' class='btn btn-default'\
-            style='background:red; margin:5px'>Lock by range</button>";
-        str << "</form>";
-        str << "</div>";
+            str << "<div id='lockByColorCollapse' class='collapse'>";
+            str << "<form class='form_horizontal' method='post'>";
+            LABEL_CLASS_FOR("control-label", "color") { str << "Color"; }
+            for (TColor::E color : { TColor::CYAN, TColor::LIGHT_YELLOW, TColor::YELLOW, TColor::LIGHT_ORANGE,
+                    TColor::ORANGE, TColor::RED, TColor::BLACK} ) {
+                str << "<input id='inputColor_" << TPDiskSpaceColor_Name(color) << "' name='spaceColor' type='radio' value='" 
+                    << TPDiskSpaceColor_Name(color) << "'";
+                if (color == TColor::CYAN) {
+                    str << " checked";
+                }
+                str << "/>";
+                TString textColor = color == TColor::BLACK ? "white" : "black";
+                str << "<label for='inputColor_'" << TPDiskSpaceColor_Name(color) << "' style='background:" <<
+                    TPDiskSpaceColor_HtmlCode(color) << "; color:" << textColor << ";'>" <<
+                    TPDiskSpaceColor_Name(color) << "</label>";
+            }
 
-        str << "<div id='lockByCountCollapse' class='collapse'>";
-        str << "<form class='form_horizontal' method='post'>";
-        LABEL_CLASS_FOR("control-label", "begin") { str << "Begin&nbsp;"; }
-        str << "<input id='inputBegin' name='chunksLockBegin' type='text' value='" << 1 << "'/>";
-        LABEL_CLASS_FOR("control-label", "count") { str << "&nbsp;Count&nbsp;"; }
-        str << "<input id='inputCount' name='chunksLockCount' type='text' value='" <<
-            ChunkState.size() << "'/>";
-        str << "<button type='submit' name='chunksLockByCount' class='btn btn-default' \
-            style='background:red; margin:5px'>Lock by count</button>";
-        str << "</form>";
-        str << "</div>";
+            str << "<br>";
+            commonParams(str, "lockByColor");
+            str << "<br>";
 
-        str << "<form method='post'>";
-        str << "<button type='submit' name='chunksUnlock' class='btn btn-default' \
-            style='background:green; margin:5px'>Unlock All</button>";
-        str << "</form>";
+            str << "<button type='submit' name='chunkLockByColor' class='btn btn-default'\
+                style='background:red; margin:5px'>Lock by color</button>";
+            str << "</form>";
+            str << "</div>";
+
+            str << "<div id='lockByCountCollapse' class='collapse'>";
+            str << "<form class='form_horizontal' method='post'>";
+            LABEL_CLASS_FOR("control-label", "count") { str << "Count"; }
+            str << "<input id='inputByCountCount' name='count' type='text' value='" <<
+                ChunkState.size() << "'/>";
+            str << "<br>";
+            commonParams(str, "lockByCount");
+            str << "<br>";
+            str << "<button type='submit' name='chunkLockByCount' class='btn btn-default' \
+                style='background:red; margin:5px'>Lock by count</button>";
+            str << "</form>";
+            str << "</div>";
+
+            str << "<div id='unlockCollapse' class='collapse'>";
+            str << "<form class='form_horizontal' method='post'>";
+            commonParams(str, "unlock");
+            str << "<br>";
+            str << "<button type='submit' name='chunkUnlock' class='btn btn-default' \
+                style='background:green; margin:5px'>Unlock</button>";
+            str << "</form>";
+            str << "</div>";
+        }
+
         COLLAPSED_BUTTON_CONTENT("chunksStateTable", "Chunks State") {
             TABLE_CLASS ("") {
                 const size_t columns = 50;
@@ -360,6 +410,9 @@ void TPDisk::OutputHtmlChunksLockUnlockInfo(TStringStream &str) {
                                 if (idx < size) {
                                     const TChunkState &chunk = ChunkState[idx];
                                     TABLED() {
+                                        str << "<span style='color:";
+                                        str << (chunk.CommitState == TChunkState::LOCKED ? "red" : "black");
+                                        str << ";'>";
                                         if (chunk.OwnerId == (TOwner) OwnerSystem) {
                                             str << "L";
                                         } else if (chunk.OwnerId == OwnerUnallocated) {
@@ -370,10 +423,11 @@ void TPDisk::OutputHtmlChunksLockUnlockInfo(TStringStream &str) {
                                             str << "X";
                                         } else {
                                             str << (ui32)chunk.OwnerId;
-                                            if (chunk.CommitState != TChunkState::DATA_COMMITTED) {
+                                            if (chunk.CommitState != TChunkState::DATA_COMMITTED && chunk.CommitState != TChunkState::LOCKED) {
                                                 str << "-";
                                             }
                                         }
+                                        str << "</span>";
                                     }
                                 } else {
                                     TABLED() {}
@@ -446,7 +500,7 @@ void TPDisk::HttpInfo(THttpInfo &httpInfo) {
                     str << "Chunks";
                 }
                 DIV_CLASS("panel-body") {
-                    OutputHtmlChunksLockUnlockInfo(str);
+                    OutputHtmlChunkLockUnlockInfo(str);
                 }
             } // Chunks
 

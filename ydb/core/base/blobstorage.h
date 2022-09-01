@@ -638,8 +638,8 @@ struct TEvBlobStorage {
         EvAnubisQuantumDone,
         EvAnubisCandidates,
         EvAnubisVGet,
-        EvChunksLock,
-        EvChunksUnlock,                                         // 268 636 260
+        EvChunkLock,
+        EvChunkUnlock,                                         // 268 636 260
         EvWhiteboardReportResult,
         EvHttpInfoResult,
         EvReadLogContinue,
@@ -712,8 +712,8 @@ struct TEvBlobStorage {
         EvOsirisDone,
         EvSyncLogWriteDone,
         EvAnubisVGetResult,
-        EvChunksLockResult,
-        EvChunksUnlockResult,
+        EvChunkLockResult,
+        EvChunkUnlockResult,
         EvDelLogoBlobDataSyncLogResult,
         EvAddBulkSstResult,                                     /// 268 636 702
         EvAddBulkSstCommitted,

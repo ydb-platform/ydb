@@ -196,6 +196,10 @@ public:
         }
         str << "</table>";
     }
+
+    ui32 ColorFlagLimit(TOwner id, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        return QuotaForOwner[id].ColorFlagLimit(color);
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -443,6 +447,14 @@ public:
         GlobalQuota->PrintHTML(str, nullptr, nullptr);
         str << "<h4>OwnerQuota</h4>";
         OwnerQuota->PrintHTML(str, SharedQuota.Get(), &ColorBorder);
+    }
+
+    ui32 ColorFlagLimit(TOwner owner, NKikimrBlobStorage::TPDiskSpaceColor::E color) {
+        if (IsOwnerUser(owner)) {
+            return OwnerQuota->ColorFlagLimit(owner, color);
+        } else {
+            return GlobalQuota->ColorFlagLimit(owner, color);
+        }
     }
 };
 

@@ -1229,9 +1229,57 @@ public:
     {}
 };
 
+class TTestChunkLock : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkLock(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkUnlock : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 LockedNumLog;
+    ui32 LockedNumPersonal;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkUnlock(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkUnlockHarakiri : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    ui32 TotalFree;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkUnlockHarakiri(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
+
+class TTestChunkUnlockRestart : public TBaseTest {
+    NPDisk::TOwner Owner;
+    NPDisk::TOwnerRound OwnerRound;
+    TActorId WhiteboardID;
+    TActorId NodeWardenId;
+
+    void TestFSM(const TActorContext &ctx);
+public:
+    TTestChunkUnlockRestart(const TIntrusivePtr<TTestConfig> &cfg)
+        : TBaseTest(cfg)
+    {}
+};
 
 class TTestChunkReserve : public TBaseTest {
-    NPDisk::TOwner Owner;
+    NPDisk::TOwner Owner;    
     NPDisk::TOwnerRound OwnerRound;
 
     void TestFSM(const TActorContext &ctx);
@@ -1252,28 +1300,6 @@ public:
     {}
 };
 
-class TTestChunksLockByRange : public TBaseTest {
-    ui32 ChunksToBeLockedBegin;
-    ui32 ChunksToBeLockedEnd;
-
-    void TestFSM(const TActorContext &ctx);
-public:
-    TTestChunksLockByRange(const TIntrusivePtr<TTestConfig> &cfg)
-        : TBaseTest(cfg)
-    {}
-};
-
-class TTestChunksLockUnlockReserve : public TBaseTest {
-    NPDisk::TOwner Owner;
-    NPDisk::TOwnerRound OwnerRound;
-    ui32 ChunksToBeLockedCount;
-
-    void TestFSM(const TActorContext &ctx);
-public:
-    TTestChunksLockUnlockReserve(const TIntrusivePtr<TTestConfig> &cfg)
-        : TBaseTest(cfg)
-    {}
-};
 class TTestHttpInfo : public TBaseTest {
     THttpRequest HttpRequest;
     NMonitoring::TMonService2HttpRequest MonService2HttpRequest;

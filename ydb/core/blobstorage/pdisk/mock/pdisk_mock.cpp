@@ -3,6 +3,8 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/core/util/interval_set.h>
 
+#include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_util_space_color.h>
+
 namespace NKikimr {
 
 #ifdef _MSC_VER
@@ -41,6 +43,7 @@ struct TPDiskMockState::TImpl {
     ui32 NextFreeChunk = 1;
     std::unordered_map<TString, ui32> Blocks;
     TIntervalSet<ui64> Corrupted;
+    NPDisk::TStatusFlags StatusFlags;
 
     TImpl(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
         : NodeId(nodeId)
@@ -51,6 +54,7 @@ struct TPDiskMockState::TImpl {
         , TotalChunks(Size / ChunkSize)
         , AppendBlockSize(4096)
         , NextFreeChunk(1)
+        , StatusFlags(NPDisk::TStatusFlags{})
     {}
 
     TImpl(const TImpl&) = default;
@@ -209,6 +213,14 @@ struct TPDiskMockState::TImpl {
             }
         }
     }
+
+    void SetStatusFlags(NPDisk::TStatusFlags flags) {
+        StatusFlags = flags;
+    }
+
+    void SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor) {
+        StatusFlags = SpaceColorToStatusFlag(spaceColor);
+    }
 };
 
 TPDiskMockState::TPDiskMockState(ui32 nodeId, ui32 pdiskId, ui64 pdiskGuid, ui64 size, ui32 chunkSize)
@@ -240,6 +252,14 @@ TIntervalSet<i64> TPDiskMockState::GetWrittenAreas(ui32 chunkIdx) const {
 
 void TPDiskMockState::TrimQuery() {
     Impl->TrimQuery();
+}
+
+void TPDiskMockState::SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor) {
+    Impl->SetStatusFlags(spaceColor);
+}
+
+void TPDiskMockState::SetStatusFlags(NPDisk::TStatusFlags flags) {
+    Impl->SetStatusFlags(flags);
 }
 
 TPDiskMockState::TPtr TPDiskMockState::Snapshot() {
@@ -706,7 +726,7 @@ public:
     }
 
     NPDisk::TStatusFlags GetStatusFlags() {
-        return {};
+        return Impl.StatusFlags;
     }
 
     STRICT_STFUNC(StateFunc,

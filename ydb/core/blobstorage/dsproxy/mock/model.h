@@ -48,6 +48,8 @@ namespace NFake {
         THashMap<std::pair<TTabletId, TChannel>, TBarrier> Barriers;
         THashMap<std::pair<TTabletId, TChannel>, TBarrier> HardBarriers;
         TMap<TLogoBlobID, TBlob> Blobs;
+        // By default only NKikimrBlobStorage::StatusIsValid is set
+        TStorageStatusFlags StorageStatusFlags = TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid);
 
     public: // BS events interface : Handle(event) -> event
         TEvBlobStorage::TEvPutResult* Handle(TEvBlobStorage::TEvPut *msg) {
@@ -319,7 +321,45 @@ namespace NFake {
 
     public: // Non-event model interaction methods
         TStorageStatusFlags GetStorageStatusFlags() const noexcept {
-            return TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid);
+            return StorageStatusFlags;
+        }
+
+        void SetStorageStatusFlagsByColor(NKikimrBlobStorage::EStatusFlags color) {
+            // Only changes StorageStatusFlags if given EStatusFlags value is color 
+            // Also raises all color flags, that are 'greener' than given
+
+            ui32 newFlags = NKikimrBlobStorage::StatusIsValid;
+            switch (color) {
+            case NKikimrBlobStorage::StatusDiskSpaceBlack:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceBlack);
+                [[fallthrough]];
+            case NKikimrBlobStorage::StatusDiskSpaceRed:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceRed);
+                [[fallthrough]];
+            case NKikimrBlobStorage::StatusDiskSpaceOrange:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceOrange);
+                [[fallthrough]];
+            case NKikimrBlobStorage::StatusDiskSpaceLightOrange:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceLightOrange);
+                [[fallthrough]];
+            case NKikimrBlobStorage::StatusDiskSpaceYellowStop:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceYellowStop);
+                [[fallthrough]];
+            case NKikimrBlobStorage::StatusDiskSpaceLightYellowMove:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceLightYellowMove);
+                [[fallthrough]];
+            case NKikimrBlobStorage::StatusDiskSpaceCyan:
+                newFlags |= ui32(NKikimrBlobStorage::StatusDiskSpaceCyan);
+                break;
+            default:
+                newFlags = 0;
+                break;
+            }
+            StorageStatusFlags.Merge(newFlags);
+        }
+        
+        void SetStorageStatusFlags(TStorageStatusFlags flags) {
+            StorageStatusFlags = flags;
         }
 
         const TMap<TLogoBlobID, TBlob>& AllMyBlobs() const noexcept {

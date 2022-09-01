@@ -79,6 +79,7 @@ protected:
         ui32 FreeChunks;
         ui32 TotalChunks;
         ui32 UsedChunks;
+        ui32 UnlockedChunks;
         TEvBlobStorage::EEv EventType;
         NKikimrProto::EReplyStatus Status;
         NPDisk::TOwner Owner;
@@ -277,9 +278,8 @@ protected:
         ActTestFSM(ctx);
     }
 
-
-    void Handle(NPDisk::TEvChunksLockResult::TPtr &ev, const TActorContext &ctx) {
-        NPDisk::TEvChunksLockResult &result = *(ev->Get());
+    void Handle(NPDisk::TEvChunkLockResult::TPtr &ev, const TActorContext &ctx) {
+        NPDisk::TEvChunkLockResult &result = *(ev->Get());
         LastResponse.Status = result.Status;
         LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
         LastResponse.ChunkIds = result.LockedChunks;
@@ -288,10 +288,11 @@ protected:
         ActTestFSM(ctx);
     }
 
-    void Handle(NPDisk::TEvChunksUnlockResult::TPtr &ev, const TActorContext &ctx) {
-        NPDisk::TEvChunksUnlockResult &result = *(ev->Get());
+    void Handle(NPDisk::TEvChunkUnlockResult::TPtr &ev, const TActorContext &ctx) {
+        NPDisk::TEvChunkUnlockResult &result = *(ev->Get());
         LastResponse.Status = result.Status;
         LastResponse.EventType = (TEvBlobStorage::EEv)result.Type();
+        LastResponse.UnlockedChunks = result.UnlockedChunks;
         VERBOSE_COUT("Got " << result.ToString());
         ActTestFSM(ctx);
     }
@@ -372,8 +373,8 @@ public:
             HFunc(NPDisk::TEvChunkWriteResult, Handle);
             HFunc(NPDisk::TEvChunkReadResult, Handle);
             HFunc(NPDisk::TEvChunkReserveResult, Handle);
-            HFunc(NPDisk::TEvChunksLockResult, Handle);
-            HFunc(NPDisk::TEvChunksUnlockResult, Handle);
+            HFunc(NPDisk::TEvChunkLockResult, Handle);
+            HFunc(NPDisk::TEvChunkUnlockResult, Handle);
             HFunc(NPDisk::TEvHarakiriResult, Handle);
             HFunc(NPDisk::TEvSlayResult, Handle);
             HFunc(NPDisk::TEvYardControlResult, Handle);

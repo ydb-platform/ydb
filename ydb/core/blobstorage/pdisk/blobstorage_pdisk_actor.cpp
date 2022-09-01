@@ -738,13 +738,13 @@ public:
         PDisk->InputRequest(request);
     }
 
-    void Handle(NPDisk::TEvChunksLock::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TChunksLock>(*ev->Get(), ev->Sender);
+    void Handle(NPDisk::TEvChunkLock::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
-    void Handle(NPDisk::TEvChunksUnlock::TPtr &ev) {
-        auto* request = PDisk->ReqCreator.CreateFromEv<TChunksUnlock>(*ev->Get(), ev->Sender);
+    void Handle(NPDisk::TEvChunkUnlock::TPtr &ev) {
+        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkUnlock>(*ev->Get(), ev->Sender);
         PDisk->InputRequest(request);
     }
 
@@ -901,22 +901,77 @@ public:
 
     void Handle(NMon::TEvHttpInfo::TPtr &ev) {
         const TCgiParameters &cgi = ev->Get()->Request.GetPostParams();
-        if (cgi.Has("chunksLockByRange")) {
-            ui32 begin = strtoul(cgi.Get("chunksLockBegin").c_str(), nullptr, 10);
-            ui32 end = strtoul(cgi.Get("chunksLockEnd").c_str(), nullptr, 10);
-            TEvChunksLock evLock(true, begin, end, 0);
-            auto* request = PDisk->ReqCreator.CreateFromEv<TChunksLock>(evLock, ev->Sender);
-            PDisk->InputRequest(request);
-        } else if (cgi.Has("chunksLockByCount")) {
-            ui32 begin = strtoul(cgi.Get("chunksLockBegin").c_str(), nullptr, 10);
-            ui32 count = strtoul(cgi.Get("chunksLockCount").c_str(), nullptr, 10);
-            TEvChunksLock evLock(false, begin, 0, count);
-            auto* request = PDisk->ReqCreator.CreateFromEv<TChunksLock>(evLock , ev->Sender);
-            PDisk->InputRequest(request);
-        } else if (cgi.Has("chunksUnlock")) {
-            auto* request = PDisk->ReqCreator.CreateFromEv<TChunksUnlock>(NPDisk::TEvChunksUnlock(), ev->Sender);
-            PDisk->InputRequest(request);
-        } else if (cgi.Has("restartPDisk")) {
+
+        TAppData* app = NKikimr::AppData(TActivationContext::AsActorContext());
+        bool enableChunkLocking = app->FeatureFlags.GetEnableChunkLocking();
+
+        if (enableChunkLocking) {
+            using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+            if (cgi.Has("chunkLockByCount")) {
+                TEvChunkLock::ELockFrom lockFrom = TEvChunkLock::LockFromByName(cgi.Get("lockFrom"));
+                ui32 count = strtoul(cgi.Get("count").c_str(), nullptr, 10);
+                if (lockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA) {
+                    if (cgi.Has("byVDiskId")) {
+                        bool isGenSet = true;
+                        auto vdiskId = VDiskIDFromString(cgi.Get("vdiskId"), &isGenSet);
+                        TEvChunkLock evLock(lockFrom, vdiskId, isGenSet, count, TColor::GREEN);
+                        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(evLock, ev->Sender);
+                        PDisk->InputRequest(request);
+                    } else {
+                        ui8 owner = strtoul(cgi.Get("owner").c_str(), nullptr, 10);
+                        TEvChunkLock evLock(lockFrom, owner, count, TColor::GREEN);
+                        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(evLock, ev->Sender);
+                        PDisk->InputRequest(request);
+                    }
+                } else {
+                    TEvChunkLock evLock(lockFrom, count, TColor::GREEN);
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(evLock, ev->Sender);
+                    PDisk->InputRequest(request);
+                }
+            } else if (cgi.Has("chunkLockByColor")) {
+                TEvChunkLock::ELockFrom lockFrom = TEvChunkLock::LockFromByName(cgi.Get("lockFrom"));
+                TColor::E color = ColorByName(cgi.Get("spaceColor"));
+                if (lockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA) {
+                    if (cgi.Has("byVDiskId")) {
+                        bool isGenSet = true;
+                        auto vdiskId = VDiskIDFromString(cgi.Get("vdiskId"), &isGenSet);
+                        TEvChunkLock evLock(lockFrom, vdiskId, isGenSet, 0, color);
+                        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(evLock, ev->Sender);
+                        PDisk->InputRequest(request);
+                    } else {
+                        ui8 owner = strtoul(cgi.Get("owner").c_str(), nullptr, 10);
+                        TEvChunkLock evLock(lockFrom, owner, 0, color);
+                        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(evLock, ev->Sender);
+                        PDisk->InputRequest(request);
+                    }
+                } else {
+                    TEvChunkLock evLock(lockFrom, 0, color);
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TChunkLock>(evLock, ev->Sender);
+                    PDisk->InputRequest(request);
+                }
+            } else if (cgi.Has("chunkUnlock")) {
+                TEvChunkLock::ELockFrom lockFrom = TEvChunkLock::LockFromByName(cgi.Get("lockFrom"));
+                if (lockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA) {
+                    if (cgi.Has("byVDiskId")) {
+                        bool isGenSet = true;
+                        auto vdiskId = VDiskIDFromString(cgi.Get("vdiskId"), &isGenSet);
+                        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkUnlock>(
+                            NPDisk::TEvChunkUnlock(lockFrom, vdiskId, isGenSet), ev->Sender);
+                        PDisk->InputRequest(request);
+                    } else {
+                        ui8 owner = strtoul(cgi.Get("owner").c_str(), nullptr, 10);
+                        auto* request = PDisk->ReqCreator.CreateFromEv<TChunkUnlock>(
+                            NPDisk::TEvChunkUnlock(lockFrom, owner), ev->Sender);
+                        PDisk->InputRequest(request);
+                    }
+                } else {
+                    auto* request = PDisk->ReqCreator.CreateFromEv<TChunkUnlock>(
+                        NPDisk::TEvChunkUnlock(lockFrom), ev->Sender);
+                    PDisk->InputRequest(request);
+                }
+            } 
+        }
+        if (cgi.Has("restartPDisk")) {
             if (Cfg->SectorMap || CurrentStateFunc() == &TPDiskActor::StateError) {
                 Send(NodeWardenServiceId, new TEvBlobStorage::TEvAskRestartPDisk(PDisk->PDiskId));
                 // Send responce later when restart command will be received
@@ -1043,8 +1098,8 @@ public:
             hFunc(NPDisk::TEvSlay, Handle);
             hFunc(NPDisk::TEvChunkReserve, Handle);
             hFunc(NPDisk::TEvChunkForget, Handle);
-            hFunc(NPDisk::TEvChunksLock, Handle);
-            hFunc(NPDisk::TEvChunksUnlock, Handle);
+            hFunc(NPDisk::TEvChunkLock, Handle);
+            hFunc(NPDisk::TEvChunkUnlock, Handle);
             hFunc(NPDisk::TEvYardControl, Handle);
             hFunc(NPDisk::TEvAskForCutLog, Handle);
             hFunc(NPDisk::TEvConfigureScheduler, Handle);

@@ -475,54 +475,116 @@ struct TEvReadLogResult : public TEventLocal<TEvReadLogResult, TEvBlobStorage::E
     }
 };
 ////////////////////////////////////////////////////////////////////////////////
-// Lock chucks specified by range or by count
+// Lock chucks specified by color or by count
 ////////////////////////////////////////////////////////////////////////////////
-struct TEvChunksLock : public TEventLocal<TEvChunksLock, TEvBlobStorage::EvChunksLock> {
-    bool LockByRange;
-    TChunkIdx Begin;
-    TChunkIdx End;
-    ui32 Count;
+struct TEvChunkLock : public TEventLocal<TEvChunkLock, TEvBlobStorage::EvChunkLock> {
+    enum ELockFrom {
+        LOG,
+        PERSONAL_QUOTA,
+        COUNT
+    };
 
-    TEvChunksLock(bool lockByRange, TChunkIdx begin, TChunkIdx end, ui32 count)
-        : LockByRange(lockByRange)
-        , Begin(begin)
-        , End(end)
+    static TString ELockFrom_Name(const ELockFrom& from) {
+        switch (from) {
+            case LOG: return "log";
+            case PERSONAL_QUOTA: return "personal_quota";
+            default: return "unknown";
+        }
+    }
+
+    static ELockFrom LockFromByName(const TString& name) {
+        for (ELockFrom from : {ELockFrom::LOG, ELockFrom::PERSONAL_QUOTA}) {
+            if (name == ELockFrom_Name(from)) {
+                return from;
+            }
+        }
+        return ELockFrom::COUNT; // Wrong name
+    }
+
+    ELockFrom LockFrom;
+    bool ByVDiskId = true;
+    TOwner Owner = 0;
+    TVDiskID VDiskId = TVDiskID::InvalidId;
+    bool IsGenerationSet = true;
+    ui32 Count;
+    NKikimrBlobStorage::TPDiskSpaceColor::E Color;
+
+    TEvChunkLock(ELockFrom from, ui32 count, NKikimrBlobStorage::TPDiskSpaceColor::E color)
+        : LockFrom(from)
         , Count(count)
-    {}
+        , Color(color)
+    {
+        Y_VERIFY_DEBUG(from != ELockFrom::PERSONAL_QUOTA);
+    }
+
+    TEvChunkLock(ELockFrom from, TOwner owner, ui32 count, NKikimrBlobStorage::TPDiskSpaceColor::E color)
+        : LockFrom(from)
+        , ByVDiskId(false)
+        , Owner(owner)
+        , Count(count)
+        , Color(color)
+    {
+        Y_VERIFY_DEBUG(from == ELockFrom::PERSONAL_QUOTA);
+    }
+
+    TEvChunkLock(ELockFrom from, TVDiskID vdiskId, bool isGenerationSet, ui32 count, NKikimrBlobStorage::TPDiskSpaceColor::E color)
+        : LockFrom(from)
+        , ByVDiskId(true)
+        , VDiskId(vdiskId)
+        , IsGenerationSet(isGenerationSet)
+        , Count(count)
+        , Color(color)
+    {
+        Y_VERIFY_DEBUG(from == ELockFrom::PERSONAL_QUOTA);
+    }
 
     TString ToString() const {
         return ToString(*this);
     }
 
-    static TString ToString(const TEvChunksLock &record) {
+    static TString ToString(const TEvChunkLock &record) {
         TStringStream str;
-        str << "{EvChunksLock LockByRange# " << (ui32)record.LockByRange;
-        str << " Begin# " << record.Begin;
-        str << " End# " << record.End;
+
+        str << "{EvChunkLock LockFrom# " << ELockFrom_Name(record.LockFrom);
+
+        if (record.LockFrom == ELockFrom::PERSONAL_QUOTA) {
+            if (record.ByVDiskId) {
+                if (record.IsGenerationSet) {
+                    str << " VDiskId# " << record.VDiskId.ToString();
+                } else {
+                    str << " VDiskId# " << record.VDiskId.ToStringWOGeneration();
+                }
+            } else {
+                str << " Owner# " << record.Owner;
+            }
+        }
         str << " Count# " << record.Count;
         str << "}";
         return str.Str();
     }
 };
 
-struct TEvChunksLockResult : public TEventLocal<TEvChunksLockResult, TEvBlobStorage::EvChunksLockResult> {
+struct TEvChunkLockResult : public TEventLocal<TEvChunkLockResult, TEvBlobStorage::EvChunkLockResult> {
     NKikimrProto::EReplyStatus Status;
     TVector<TChunkIdx> LockedChunks;
     ui32 AvailableChunksCount;
+    TString ErrorReason;
 
-    TEvChunksLockResult(NKikimrProto::EReplyStatus status, TVector<TChunkIdx> locked, ui32 availableChunksCount)
+    TEvChunkLockResult(NKikimrProto::EReplyStatus status, TVector<TChunkIdx> locked, ui32 availableChunksCount,
+        TString errorReason = TString())
         : Status(status)
         , LockedChunks(locked)
         , AvailableChunksCount(availableChunksCount)
+        , ErrorReason(errorReason)
     {}
 
     TString ToString() const {
         return ToString(*this);
     }
 
-    static TString ToString(const TEvChunksLockResult &record) {
+    static TString ToString(const TEvChunkLockResult &record) {
         TStringStream str;
-        str << "{EvChunksLockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunkLockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " LockedChunks# {";
         for (ui64 i = 0; i < record.LockedChunks.size(); ++i) {
             if (i) {
@@ -531,6 +593,9 @@ struct TEvChunksLockResult : public TEventLocal<TEvChunksLockResult, TEvBlobStor
             str << record.LockedChunks[i];
         }
         str << "}";
+        if (!record.ErrorReason.empty()) {
+            str << " ErrorReason# " << record.ErrorReason;
+        }
         str << "}";
         return str.Str();
     }
@@ -538,40 +603,82 @@ struct TEvChunksLockResult : public TEventLocal<TEvChunksLockResult, TEvBlobStor
 ////////////////////////////////////////////////////////////////////////////////
 // Unlock all previously locked chunks
 ////////////////////////////////////////////////////////////////////////////////
-struct TEvChunksUnlock : public TEventLocal<TEvChunksUnlock, TEvBlobStorage::EvChunksUnlock> {
+struct TEvChunkUnlock : public TEventLocal<TEvChunkUnlock, TEvBlobStorage::EvChunkUnlock> {
+    TEvChunkLock::ELockFrom LockFrom;
+    bool ByVDiskId = true;
+    TOwner Owner = 0;
+    TVDiskID VDiskId = TVDiskID::InvalidId;
+    bool IsGenerationSet = true;
+    
+    TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom)
+        : LockFrom(lockFrom)
+    {
+        Y_VERIFY_DEBUG(LockFrom != TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
+    }
 
-    TEvChunksUnlock()
-    {}
+    TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom, TOwner owner)
+        : LockFrom(lockFrom)
+        , ByVDiskId(false)
+        , Owner(owner)
+    {
+        Y_VERIFY_DEBUG(LockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
+    }
+
+    TEvChunkUnlock(TEvChunkLock::ELockFrom lockFrom, TVDiskID vdiskId, bool isGenerationSet)
+        : LockFrom(lockFrom)
+        , ByVDiskId(true)
+        , VDiskId(vdiskId)
+        , IsGenerationSet(isGenerationSet)
+    {
+        Y_VERIFY_DEBUG(LockFrom == TEvChunkLock::ELockFrom::PERSONAL_QUOTA);
+    }
 
     TString ToString() const {
         return ToString(*this);
     }
 
-    static TString ToString(const TEvChunksUnlock &record) {
+    static TString ToString(const TEvChunkUnlock &record) {
         Y_UNUSED(record);
         TStringStream str;
-        str << "{EvChunksUnlock}";
+        str << "{EvChunkUnlock";
+        str << "{EvChunkLock LockFrom# " << TEvChunkLock::ELockFrom_Name(record.LockFrom);
+        if (record.Owner) {
+            str << " Owner# " << record.Owner;
+        } 
+        if (record.ByVDiskId) {
+            if (record.IsGenerationSet) {
+                str << " VDiskId# " << record.VDiskId.ToString();
+            } else {
+                str << " VDiskId# " << record.VDiskId.ToStringWOGeneration();
+            }
+        }
+        str << "}";
         return str.Str();
     }
 };
 
-struct TEvChunksUnlockResult : public TEventLocal<TEvChunksUnlockResult, TEvBlobStorage::EvChunksUnlockResult> {
+struct TEvChunkUnlockResult : public TEventLocal<TEvChunkUnlockResult, TEvBlobStorage::EvChunkUnlockResult> {
     NKikimrProto::EReplyStatus Status;
     ui32 UnlockedChunks;
+    TString ErrorReason;
 
-    TEvChunksUnlockResult(NKikimrProto::EReplyStatus status, ui32 unlocked)
+    TEvChunkUnlockResult(NKikimrProto::EReplyStatus status, ui32 unlocked, TString errorReason = "")
         : Status(status)
         , UnlockedChunks(unlocked)
+        , ErrorReason(errorReason)
     {}
 
     TString ToString() const {
         return ToString(*this);
     }
 
-    static TString ToString(const TEvChunksUnlockResult &record) {
+    static TString ToString(const TEvChunkUnlockResult &record) {
         TStringStream str;
-        str << "{EvChunksUnlockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
+        str << "{EvChunkUnlockResult Status# " << NKikimrProto::EReplyStatus_Name(record.Status).data();
         str << " UnlockedChunks# " << record.UnlockedChunks;
+        if (!record.ErrorReason.empty()) {
+            str << " ErrorReason# " << record.ErrorReason;
+        }
         str << "}";
         return str.Str();
     }

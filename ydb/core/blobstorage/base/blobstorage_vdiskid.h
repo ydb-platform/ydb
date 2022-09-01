@@ -81,6 +81,8 @@ struct TVDiskID {
 
 TVDiskID VDiskIDFromVDiskID(const NKikimrBlobStorage::TVDiskID &x);
 void VDiskIDFromVDiskID(const TVDiskID &id, NKikimrBlobStorage::TVDiskID *proto);
+// Takes a string in the same format as ToString output, sets isGenerationSet if second number is not '_'
+TVDiskID VDiskIDFromString(TString str, bool* isGenerationSet = nullptr);
 
 ////////////////////////////////////////////////////////////////////////////
 // TVDiskIdShort -- topology info about VDisk, it avoids runtime info like

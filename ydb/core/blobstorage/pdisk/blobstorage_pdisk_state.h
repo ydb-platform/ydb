@@ -156,6 +156,7 @@ struct TChunkState {
         DATA_DECOMMITTED,
         DATA_RESERVED_DECOMMIT_IN_PROGRESS,
         DATA_COMMITTED_DECOMMIT_IN_PROGRESS,
+        LOCKED,
     };
 
     ui64 Nonce;

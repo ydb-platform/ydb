@@ -948,6 +948,212 @@ void TTestChunkReserve::TestFSM(const TActorContext &ctx) {
     TestStep += 10;
 };
 
+void TTestChunkLock::TestFSM(const TActorContext &ctx) {
+    using EFrom = NPDisk::TEvChunkLock::ELockFrom;
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    TString data("testdata");
+    VERBOSE_COUT("Test step " << TestStep);
+    switch (TestStep) {
+    case 0:
+        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+        VERBOSE_COUT(" Sending TEvInit");
+        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+        break;
+    case 10:
+        TEST_RESPONSE(EvYardInitResult, OK);
+        Owner = LastResponse.Owner;
+        OwnerRound = LastResponse.OwnerRound;
+        VERBOSE_COUT(" Sending TEvChunkLock from LOG");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::LOG, 0, TColor::YELLOW));
+        break;
+    case 20:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        ASSERT_YTHROW(!LastResponse.ChunkIds.empty(), "Didn't lock anything");
+        VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA by count");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 5, TColor::GREEN));
+        break;
+    case 30:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 5, 
+            "Unexpected LockedChunks.size() == " << LastResponse.ChunkIds.size());
+        VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 0, TColor::RED));
+        break;
+    case 40:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        ASSERT_YTHROW(!LastResponse.ChunkIds.empty(), "Didn't lock anything");
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 10));
+        break;
+    case 50:
+        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
+        VERBOSE_COUT("Done");
+        SignalDoneEvent();
+        break;
+    default:
+        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+        break;
+    }
+    TestStep += 10;
+};
+
+void TTestChunkUnlock::TestFSM(const TActorContext &ctx) {
+    using EFrom = NPDisk::TEvChunkLock::ELockFrom;
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    TString data("testdata");
+    VERBOSE_COUT("Test step " << TestStep);
+    switch (TestStep) {
+    case 0:
+        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+        VERBOSE_COUT(" Sending TEvInit");
+        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+        break;
+    case 10:
+        TEST_RESPONSE(EvYardInitResult, OK);
+        Owner = LastResponse.Owner;
+        OwnerRound = LastResponse.OwnerRound;
+        VERBOSE_COUT(" Sending TEvChunkLock from LOG");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::LOG, 0, TColor::YELLOW));
+        break;
+    case 20:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        LockedNumLog = LastResponse.ChunkIds.size();
+        ASSERT_YTHROW(LockedNumLog, "Didn't lock anything");
+        VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 0, TColor::RED));
+        break;
+    case 30:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        LockedNumPersonal = LastResponse.ChunkIds.size();
+        ASSERT_YTHROW(LockedNumPersonal, "Didn't lock anything");
+        ctx.Send(Yard, new NPDisk::TEvChunkUnlock(EFrom::LOG));
+        break;
+    case 40:
+        TEST_RESPONSE(EvChunkUnlockResult, OK);
+        ASSERT_YTHROW(LastResponse.UnlockedChunks == LockedNumLog, "Expected" << LockedNumLog << 
+            " unlocked chunks, got " << LastResponse.UnlockedChunks);
+        ctx.Send(Yard, new NPDisk::TEvChunkUnlock(EFrom::PERSONAL_QUOTA, Owner));
+        break;
+    case 50:
+        TEST_RESPONSE(EvChunkUnlockResult, OK);
+        ASSERT_YTHROW(LastResponse.UnlockedChunks == LockedNumPersonal, "Expected" << LockedNumPersonal << 
+            " unlocked chunks, got " << LastResponse.UnlockedChunks);
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 10));
+        break;
+    case 60:
+        TEST_RESPONSE(EvChunkReserveResult, OK);
+        VERBOSE_COUT("Done");
+        SignalDoneEvent();
+        break;
+    default:
+        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+        break;
+    }
+    TestStep += 10;
+};
+
+void TTestChunkUnlockHarakiri::TestFSM(const TActorContext &ctx) {
+    using EFrom = NPDisk::TEvChunkLock::ELockFrom;
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    TString data("testdata");
+    VERBOSE_COUT("Test step " << TestStep);
+    switch (TestStep) {
+    case 0:
+        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+        VERBOSE_COUT(" Sending TEvInit");
+        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
+        break;
+    case 10:
+        TEST_RESPONSE(EvYardInitResult, OK);
+        Owner = LastResponse.Owner;
+        OwnerRound = LastResponse.OwnerRound;
+        VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 0, TColor::RED));
+        break;
+    case 20:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        VERBOSE_COUT(" Checking space to get TotalFree");
+        ASSERT_YTHROW(LastResponse.ChunkIds.size(), "Didn't lock anything");
+        ctx.Send(Yard, new NPDisk::TEvCheckSpace(Owner, OwnerRound));
+        break;
+    case 30:
+        TEST_RESPONSE(EvCheckSpaceResult, OK);
+        TotalFree = LastResponse.TotalChunks;
+        VERBOSE_COUT(" Sending TEvHarakiri");
+        ctx.Send(Yard, new NPDisk::TEvHarakiri(Owner, OwnerRound));
+        break;
+    case 40:
+        TEST_RESPONSE(EvHarakiriResult, OK);
+        VERBOSE_COUT(" Sending second TEvInit");
+        ctx.Send(Yard, new NPDisk::TEvYardInit(3, VDiskID, *PDiskGuid));
+        break;
+    case 50:
+        TEST_RESPONSE(EvYardInitResult, OK);
+        Owner = LastResponse.Owner;
+        OwnerRound = LastResponse.OwnerRound;
+        VERBOSE_COUT(" Checking space");
+        ctx.Send(Yard, new NPDisk::TEvCheckSpace(Owner, OwnerRound));
+        break;
+    case 60:
+        TEST_RESPONSE(EvCheckSpaceResult, OK);
+        ASSERT_YTHROW(TotalFree = LastResponse.TotalChunks, "Didn't unlock chunks after Harakiri, expected " <<
+            TotalFree << ", got " << LastResponse.TotalChunks);
+        VERBOSE_COUT("Done");
+        SignalDoneEvent();
+        break;
+    default:
+        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+        break;
+    }
+    TestStep += 10;
+};
+
+void TTestChunkUnlockRestart::TestFSM(const TActorContext &ctx) {
+    using EFrom = NPDisk::TEvChunkLock::ELockFrom;
+    using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
+    TString data("testdata");
+    VERBOSE_COUT("Test step " << TestStep);
+    switch (TestStep) {
+    case 0:
+        WhiteboardID = NNodeWhiteboard::MakeNodeWhiteboardServiceId(SelfId().NodeId());
+        ctx.ExecutorThread.ActorSystem->RegisterLocalService(WhiteboardID, SelfId());
+        NodeWardenId = MakeBlobStorageNodeWardenID(SelfId().NodeId());
+        ctx.ExecutorThread.ActorSystem->RegisterLocalService(NodeWardenId, SelfId());
+        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
+        VERBOSE_COUT(" Sending TEvInit");
+        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid, TActorId(), SelfId()));
+        break;
+    case 10:
+        TEST_RESPONSE(EvYardInitResult, OK);
+        VERBOSE_COUT(" Sending TEvChunkLock from PERSONAL_QUOTA");
+        ctx.Send(Yard, new NPDisk::TEvChunkLock(EFrom::PERSONAL_QUOTA, Owner, 0, TColor::RED));
+        break;
+    case 20:
+        TEST_RESPONSE(EvChunkLockResult, OK);
+        ASSERT_YTHROW(LastResponse.ChunkIds.size(), "Didn't lock anything");
+        if (!LastResponse.whiteboardPDiskResult || !LastResponse.whiteboardPDiskResult->Record.HasPDiskId()) {
+            VERBOSE_COUT(" Whiteboard didn't return PDiskId, test terminated");
+            VERBOSE_COUT("Terminated");
+            SignalDoneEvent();
+            break;
+        }
+        ctx.Send(NodeWardenId, new TEvBlobStorage::TEvAskRestartPDisk(LastResponse.whiteboardPDiskResult->Record.GetPDiskId()));
+        break;
+    case 30:
+        TEST_RESPONSE(EvHarakiri, OK);
+        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
+        break;
+    case 40:
+        TEST_RESPONSE(EvChunkReserveResult, OK);
+        VERBOSE_COUT("Done");
+        SignalDoneEvent();
+        break;
+    default:
+        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
+        break;
+    }
+    TestStep += 10;
+};
+
 void TTestCheckSpace::TestFSM(const TActorContext &ctx) {
     TString data("testdata");
     VERBOSE_COUT("Test step " << TestStep);
@@ -990,102 +1196,6 @@ void TTestCheckSpace::TestFSM(const TActorContext &ctx) {
         UNIT_ASSERT(LastResponse.UsedChunks == 3);
         UNIT_ASSERT(LastResponse.FreeChunks == 582);
         UNIT_ASSERT(LastResponse.TotalChunks == 585);
-        VERBOSE_COUT("Done");
-        SignalDoneEvent();
-        break;
-    default:
-        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
-        break;
-    }
-    TestStep += 10;
-};
-
-void TTestChunksLockByRange::TestFSM(const TActorContext &ctx) {
-    VERBOSE_COUT("Test step " << TestStep);
-    switch (TestStep) {
-    case 0:
-        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
-        VERBOSE_COUT(" Sending TEvInit");
-        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
-        break;
-    case 10:
-        TEST_RESPONSE(EvYardInitResult, OK);
-        VERBOSE_COUT("Sending empty TEvChunksLock");
-        ctx.Send(Yard, new NPDisk::TEvChunksLock(true, 1, 1, 0));
-        break;
-    case 20:
-        TEST_RESPONSE(EvChunksLockResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 0,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunksToBeLockedBegin = LastResponse.FreeChunks / 4;
-        ChunksToBeLockedEnd = LastResponse.FreeChunks * 3 / 4;
-        VERBOSE_COUT("Sending TEvChunksLock to lock range");
-        ctx.Send(Yard, new NPDisk::TEvChunksLock(true, ChunksToBeLockedBegin, ChunksToBeLockedEnd, 0));
-        break;
-    case 30:
-    {
-        TEST_RESPONSE(EvChunksLockResult, OK);
-        VERBOSE_COUT("Recieve TEvChunksLockResult, starting to test it ");
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() <= ChunksToBeLockedEnd - ChunksToBeLockedBegin,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ui32 lockedChunksCount = LastResponse.ChunkIds.size();
-        for (ui32 i = 0; i < lockedChunksCount; ++i) {
-            ASSERT_YTHROW(ChunksToBeLockedBegin <= LastResponse.ChunkIds[i] < ChunksToBeLockedEnd,
-                "Unexpected chunk locked == " << LastResponse.ChunkIds[i]);
-        }
-        VERBOSE_COUT("Done");
-        SignalDoneEvent();
-        break;
-    }
-    default:
-        ythrow TWithBackTrace<yexception>() << "Unexpected TestStep " << TestStep << Endl;
-        break;
-    }
-    TestStep += 10;
-};
-
-void TTestChunksLockUnlockReserve::TestFSM(const TActorContext &ctx) {
-    VERBOSE_COUT("Test step " << TestStep);
-    switch (TestStep) {
-    case 0:
-        ASSERT_YTHROW(LastResponse.Status == NKikimrProto::OK, StatusToString(LastResponse.Status));
-        VERBOSE_COUT(" Sending TEvInit");
-        ctx.Send(Yard, new NPDisk::TEvYardInit(2, VDiskID, *PDiskGuid));
-        break;
-    case 10:
-        TEST_RESPONSE(EvYardInitResult, OK);
-        Owner = LastResponse.Owner;
-        OwnerRound = LastResponse.OwnerRound;
-        VERBOSE_COUT(" Sending TEvChunksLock");
-        ctx.Send(Yard, new NPDisk::TEvChunksLock(false, 1, 0, 0));
-        break;
-    case 20:
-        TEST_RESPONSE(EvChunksLockResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == 0,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ChunksToBeLockedCount = LastResponse.FreeChunks / 2;
-        ctx.Send(Yard, new NPDisk::TEvChunksLock(false, 1, 0, ChunksToBeLockedCount));
-        break;
-    case 30:
-        TEST_RESPONSE(EvChunksLockResult, OK);
-        ASSERT_YTHROW(LastResponse.ChunkIds.size() == ChunksToBeLockedCount,
-            "Unexpected ChunkIds.size() == " << LastResponse.ChunkIds.size());
-        ctx.Send(Yard, new NPDisk::TEvChunksLock(false, 1, 0, (MIN_CHUNK_SIZE)+1));
-        break;
-    case 40:
-        TEST_RESPONSE(EvChunksLockResult, OK);
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    case 50:
-        TEST_RESPONSE(EvChunkReserveResult, OUT_OF_SPACE);
-        ctx.Send(Yard, new NPDisk::TEvChunksUnlock());
-        break;
-    case 60:
-        TEST_RESPONSE(EvChunksUnlockResult, OK);
-        ctx.Send(Yard, new NPDisk::TEvChunkReserve(Owner, OwnerRound, 1));
-        break;
-    case 70:
-        TEST_RESPONSE(EvChunkReserveResult, OK);
         VERBOSE_COUT("Done");
         SignalDoneEvent();
         break;

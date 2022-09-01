@@ -713,6 +713,7 @@ message TFeatureFlags {
     optional bool EnableMoveIndex = 70 [default = false];
     // enable http handle for self termination
     optional bool EnableFailureInjectionTermination = 71 [default = false];
+    optional bool EnableChunkLocking = 72 [default = false];
 }
 
 

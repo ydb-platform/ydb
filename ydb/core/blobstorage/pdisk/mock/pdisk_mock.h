@@ -25,6 +25,8 @@ namespace NKikimr {
         ui32 GetChunkSize() const;
         TIntervalSet<i64> GetWrittenAreas(ui32 chunkIdx) const;
         void TrimQuery();
+        void SetStatusFlags(NKikimrBlobStorage::TPDiskSpaceColor::E spaceColor);
+        void SetStatusFlags(NPDisk::TStatusFlags flags);
 
         TPtr Snapshot(); // create a copy of PDisk whole state
     };

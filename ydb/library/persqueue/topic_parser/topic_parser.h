@@ -278,12 +278,16 @@ class TTopicNamesConverterFactory {
 public:
     TTopicNamesConverterFactory(
             bool noDcMode, const TString& pqRootPrefix,
-            const TString& localDc
+            const TString& localDc, TMaybe<bool> isLocalDc = Nothing()
     )
         : NoDcMode(noDcMode)
         , PQRootPrefix(pqRootPrefix)
-        , LocalDc(localDc)
     {
+        if (isLocalDc.Defined()) {
+            IsLocalDc = *isLocalDc;
+        } else {
+            LocalDc = localDc;
+        }
         SetPQNormPrefix();
     }
 

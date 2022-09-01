@@ -284,6 +284,11 @@ Y_UNIT_TEST_SUITE(TopicNameConverterTest) {
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetFederationPath(), "my-stream");
         UNIT_ASSERT_VALUES_EQUAL(wrapper.TopicConverter->GetInternalName(), "/lb/database/my-stream");
     }
+    Y_UNIT_TEST(PathFromDiscoveryConverter) {
+        auto converterFactory = NPersQueue::TTopicNamesConverterFactory(false, "/Root/PQ", TString(), false);
+        auto converter = converterFactory.MakeDiscoveryConverter("topic1", false, "other", "database1");
+        UNIT_ASSERT_VALUES_EQUAL(converter->GetFullModernName(), "topic1-mirrored-from-other");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TopicNameConverterForCPTest) {

@@ -73,7 +73,7 @@ private:
             return TStatus::Error;
         }
 
-        TString normalized = NormalizeS3Path(ToString(path));
+        TString normalized = NS3::NormalizePath(ToString(path));
         if (normalized == "/") {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Unable to write to root directory"));
             return TStatus::Error;

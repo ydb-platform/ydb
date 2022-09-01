@@ -2,8 +2,19 @@
 
 #include <util/generic/string.h>
 
-namespace NYql {
+namespace NYql::NS3 {
 
-TString NormalizeS3Path(const TString& path, char slash = '/');
+/// remove duplicate slashes
+TString NormalizePath(const TString& path, char slash = '/');
+
+/// supported wildcards are: *, ?, {alt1, alt2, ...}
+size_t GetFirstWildcardPos(const TString& path);
+
+inline bool HasWildcards(const TString& path) {
+    return GetFirstWildcardPos(path) != TString::npos;
+}
+
+/// quotes regex meta characters
+TString EscapeRegex(const TString& str);
 
 }

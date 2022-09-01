@@ -31,9 +31,11 @@ public:
     // {variant1, variant2} - list of alternatives
     virtual NThreading::TFuture<TListResult> List(const TString& token, const TString& url, const TString& pattern) = 0;
 
-    static TPtr Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery = 0);
+    // pattern should be valid RE2 regex
+    // pathPrefix is a "constant" path prefix
+    virtual NThreading::TFuture<TListResult> ListRegex(const TString& token, const TString& url, const TString& pattern, const TString& pathPrefix) = 0;
 
-    static bool HasWildcards(const TString& pattern);
+    static TPtr Make(const IHTTPGateway::TPtr& httpGateway, ui64 maxFilesPerQuery = 0);
 };
 
 }

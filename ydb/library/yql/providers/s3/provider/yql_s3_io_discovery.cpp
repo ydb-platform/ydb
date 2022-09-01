@@ -36,6 +36,7 @@ struct TListRequest {
     TString Token;
     TString Url;
     TString Pattern;
+    TMaybe<TString> PathPrefix; // set iff Pattern is regex (not glob pattern)
     TVector<IPathGenerator::TColumnWithValue> ColumnValues;
 };
 
@@ -147,7 +148,7 @@ public:
                 }
 
                 const auto& listEntries = std::get<IS3Lister::TListEntries>(listResult);
-                if (listEntries.empty() && !IS3Lister::HasWildcards(req.Pattern)) {
+                if (listEntries.empty() && !NS3::HasWildcards(req.Pattern)) {
                     // request to list particular files that are missing
                     ctx.AddError(TIssue(ctx.GetPosition(object.Pos()),
                         TStringBuilder() << "Object " << req.Pattern << " doesn't exist."));
@@ -417,28 +418,43 @@ private:
                     // treat paths as regular wildcard patterns
                     req.Pattern = path;
                 }
-                req.Pattern = NormalizeS3Path(req.Pattern);
+                req.Pattern = NS3::NormalizePath(req.Pattern);
                 reqs.push_back(req);
             } else {
-                if (IS3Lister::HasWildcards(path)) {
+                if (NS3::HasWildcards(path)) {
                     ctx.AddError(TIssue(ctx.GetPosition(read.Pos()), TStringBuilder() << "Path prefix: '" << path << "' contains wildcards"));
                     return false;
                 }
                 if (!config.Generator) {
                     // Hive-style partitioning
-                    TStringBuilder generated;
-                    generated << path;
-                    for (auto& col : config.Columns) {
-                        generated << "/" << col << "=*";
+                    req.PathPrefix = path;
+                    if (!path.empty()) {
+                        req.PathPrefix = NS3::NormalizePath(TStringBuilder() << path << "/");
+                        if (req.PathPrefix == "/") {
+                            req.PathPrefix = "";
+                        }
                     }
-                    generated << "/*";
-                    req.Pattern = NormalizeS3Path(generated);
+                    TString pp = *req.PathPrefix;
+                    if (!pp.empty() && pp.back() == '/') {
+                        pp.pop_back();
+                    }
+
+                    TStringBuilder generated;
+                    generated << NS3::EscapeRegex(pp);
+                    for (auto& col : config.Columns) {
+                        if (!generated.empty()) {
+                            generated << "/";
+                        }
+                        generated << NS3::EscapeRegex(col) << "=(.*?)";
+                    }
+                    generated << "/(.*)";
+                    req.Pattern = generated;
                     reqs.push_back(req);
                 } else {
                     for (auto& rule : config.Generator->GetRules()) {
                         YQL_ENSURE(rule.ColumnValues.size() == config.Columns.size());
                         req.ColumnValues.assign(rule.ColumnValues.begin(), rule.ColumnValues.end());
-                        req.Pattern = NormalizeS3Path(TStringBuilder() << path << "/" << rule.Path << "/*");
+                        req.Pattern = NS3::NormalizePath(TStringBuilder() << path << "/" << rule.Path << "/*");
                         reqs.push_back(req);
                     }
                 }
@@ -447,7 +463,9 @@ private:
             for (auto& req : reqs) {
                 RequestsByNode_[read.Raw()].push_back(req);
                 if (PendingRequests_.find(req) == PendingRequests_.end()) {
-                    auto future = Lister_->List(req.Token, req.Url, req.Pattern);
+                    auto future = req.PathPrefix.Defined() ?
+                        Lister_->ListRegex(req.Token, req.Url, req.Pattern, *req.PathPrefix) :
+                        Lister_->List(req.Token, req.Url, req.Pattern);
                     PendingRequests_[req] = future;
                     futures.push_back(std::move(future));
                 }

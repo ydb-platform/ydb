@@ -519,6 +519,7 @@ message ListConnectionsRequest {
         string name = 1 [(Ydb.length).le = 1024]; // connections whose name contains the filter.name substring
         bool created_by_me = 2;
         ConnectionSetting.ConnectionType connection_type = 3;
+        Acl.Visibility visibility = 4;
     }
     Filter filter = 4;
 }
@@ -734,6 +735,7 @@ message ListBindingsRequest {
         string connection_id = 1 [(Ydb.length).le = 1024];
         string name = 2 [(Ydb.length).le = 1024]; // bindings whose name contains the filter.name substring
         bool created_by_me = 3;
+        Acl.Visibility visibility = 4;
     }
     Filter filter = 4;
 }

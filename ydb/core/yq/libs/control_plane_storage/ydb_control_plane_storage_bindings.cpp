@@ -204,6 +204,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
             filters.push_back("`" USER_COLUMN_NAME "` = $user");
         }
 
+        if (request.filter().visibility() != YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+            queryBuilder.AddInt64("visibility", request.filter().visibility());
+            filters.push_back("`" VISIBILITY_COLUMN_NAME "` = $visibility");
+        }
+
         filter = JoinSeq(" AND ", filters);
     }
 

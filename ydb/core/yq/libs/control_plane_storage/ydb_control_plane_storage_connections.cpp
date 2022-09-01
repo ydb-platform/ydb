@@ -108,6 +108,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     validators.push_back(validatorCountConnections);
 
     const auto query = queryBuilder.Build();
+
     auto debugInfo = Config.Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};
     TAsyncStatus result = Write(NActors::TActivationContext::ActorSystem(), query.Sql, query.Params, requestCounters, debugInfo, validators);
     auto prepare = [response] { return *response; };
@@ -194,6 +195,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
         if (request.filter().connection_type() != YandexQuery::ConnectionSetting::CONNECTION_TYPE_UNSPECIFIED) {
             queryBuilder.AddInt64("connection_type", request.filter().connection_type());
             filters.push_back("`" CONNECTION_TYPE_COLUMN_NAME "` = $connection_type");
+        }
+
+        if (request.filter().visibility() != YandexQuery::Acl::VISIBILITY_UNSPECIFIED) {
+            queryBuilder.AddInt64("visibility", request.filter().visibility());
+            filters.push_back("`" VISIBILITY_COLUMN_NAME "` = $visibility");
         }
 
         filter = JoinSeq(" AND ", filters);

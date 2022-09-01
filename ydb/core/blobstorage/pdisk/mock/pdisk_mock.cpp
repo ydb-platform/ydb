@@ -151,6 +151,7 @@ struct TPDiskMockState::TImpl {
     void DeleteChunk(TOwner& owner, TChunkIdx chunkIdx) {
         const ui32 num = owner.ReservedChunks.erase(chunkIdx) + owner.CommittedChunks.erase(chunkIdx);
         Y_VERIFY(num);
+        owner.ChunkData.erase(chunkIdx);
         const bool inserted = FreeChunks.insert(chunkIdx).second;
         Y_VERIFY(inserted);
         AdjustFreeChunks();

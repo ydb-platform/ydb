@@ -282,9 +282,9 @@ namespace NKikimr {
         }
 
         // Fresh Compaction
-        bool NeedsFreshCompaction(ui64 yardFreeUpToLsn) const {
+        bool NeedsFreshCompaction(ui64 yardFreeUpToLsn, bool force) const {
             Y_VERIFY_DEBUG(Loaded);
-            return Fresh.NeedsCompaction(yardFreeUpToLsn);
+            return Fresh.NeedsCompaction(yardFreeUpToLsn, force);
         }
 
         TIntrusivePtr<TFreshSegment> FindFreshSegmentForCompaction() {

@@ -90,10 +90,11 @@ namespace NKikimr {
     bool CompactFreshSegmentIfRequired(
             TIntrusivePtr<THullDs> &hullDs,
             std::shared_ptr<TLevelIndexRunTimeCtx<TKey, TMemRec>> &rtCtx,
-            const TActorContext &ctx)
+            const TActorContext &ctx,
+            bool force = false)
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
-        bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn);
+        bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
         if (compact) {
             CompactFreshSegment<TKey, TMemRec>(hullDs, rtCtx, ctx);
         }

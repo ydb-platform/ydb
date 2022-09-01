@@ -32,7 +32,7 @@ namespace NKikimr {
                 ui64 requestId,
                 const TActorId &recipient)
         {
-            FullCompactionAttrs = std::make_optional<NHullComp::TFullCompactionAttrs>(fullCompactionLsn, now);
+            FullCompactionAttrs.emplace(fullCompactionLsn, now);
             Requests.push_back({type, requestId, recipient});
         }
 
@@ -51,6 +51,11 @@ namespace NKikimr {
                 Requests.clear();
                 FullCompactionAttrs.reset();
             }
+        }
+
+        template<typename TRTCtx>
+        bool ForceFreshCompaction(const TRTCtx& rtCtx) const {
+            return Enabled() && !rtCtx->LevelIndex->IsWrittenToSstBeforeLsn(FullCompactionAttrs->FullCompactionLsn);
         }
 
         // returns FullCompactionAttrs for Level Compaction Selector
@@ -81,7 +86,7 @@ namespace NKikimr {
         using TFreshCompaction = ::NKikimr::THullCompaction<TKey, TMemRec, TIterator>;
 
         auto &hullCtx = hullDs->HullCtx;
-        Y_VERIFY(hullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(rtCtx->GetFreeUpToLsn()));
+        Y_VERIFY(hullCtx->FreshCompaction);
 
         // get fresh segment to compact
         TIntrusivePtr<TFreshSegment> freshSegment = rtCtx->LevelIndex->FindFreshSegmentForCompaction();
@@ -218,7 +223,7 @@ namespace NKikimr {
 
         void ScheduleCompaction(const TActorContext &ctx) {
             // schedule fresh if required
-            CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx);
+            CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx, FullCompactionState.ForceFreshCompaction(RTCtx));
             if (!RunLevelCompactionSelector(ctx)) {
                 ScheduleCompactionWakeup(ctx);
             }
@@ -259,13 +264,9 @@ namespace NKikimr {
             NHullComp::EAction action = ev->Get()->Action;
             CompactionTask = std::move(ev->Get()->CompactionTask);
 
-            if (action != NHullComp::ActNothing) {
-                // log out decision
-                LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
-                           VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s",
-                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(),
-                                 CompactionTask->ToString().data()));
-            }
+            LOG_LOG(ctx, action != NHullComp::ActNothing ? NLog::PRI_INFO : NLog::PRI_DEBUG,
+                NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s",
+                PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionTask->ToString().data()));
 
             FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
 
@@ -518,7 +519,8 @@ namespace NKikimr {
                     if (FullCompactionState.Enabled()) {
                         ScheduleCompaction(ctx);
                     } else {
-                        CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx);
+                        CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx,
+                            FullCompactionState.ForceFreshCompaction(RTCtx));
                     }
                     break;
                 case THullCommitFinished::CommitAdvanceLsn:
@@ -541,7 +543,8 @@ namespace NKikimr {
             const ui64 freeUpToLsn = ev->Get()->FreeUpToLsn;
             RTCtx->SetFreeUpToLsn(freeUpToLsn);
             // we check if we need to start fresh compaction, FreeUpToLsn influence our decision
-            const bool freshCompStarted = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx);
+            const bool freshCompStarted = CompactFreshSegmentIfRequired<TKey, TMemRec>(HullDs, RTCtx, ctx,
+                FullCompactionState.ForceFreshCompaction(RTCtx));
             // just for valid info output to the log
             bool moveEntryPointStarted = false;
             if (!freshCompStarted && !AdvanceCommitInProgress) {
@@ -585,7 +588,8 @@ namespace NKikimr {
             const ui64 confirmedLsn = RTCtx->LsnMngr->GetConfirmedLsnForHull();
             auto *msg = ev->Get();
             STLOG(PRI_INFO, BS_HULLCOMP, VDHC01, VDISKP(HullDs->HullCtx->VCtx, "TEvHullCompact"),
-                (ConfirmedLsn, confirmedLsn), (Msg, *msg));
+                (ConfirmedLsn, confirmedLsn), (Msg, *msg),
+                (CompState, TLevelIndexBase::LevelCompStateToStr(RTCtx->LevelIndex->GetCompState())));
             Y_VERIFY(TKeyToEHullDbType<TKey>() == msg->Type);
 
             switch (msg->Mode) {

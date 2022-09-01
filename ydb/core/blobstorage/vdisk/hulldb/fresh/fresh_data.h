@@ -55,7 +55,7 @@ namespace NKikimr {
         void PutAppendix(std::shared_ptr<TFreshAppendix> &&a, ui64 firstLsn, ui64 lastLsn);
 
         // Compaction
-        bool NeedsCompaction(ui64 yardFreeUpToLsn) const;
+        bool NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const;
         TIntrusivePtr<TFreshSegment> FindSegmentForCompaction();
         void CompactionSstCreated(TIntrusivePtr<TFreshSegment> &&freshSegment);
         void CompactionFinished();
@@ -112,9 +112,11 @@ namespace NKikimr {
     }
 
     template <class TKey, class TMemRec>
-    bool TFreshData<TKey, TMemRec>::NeedsCompaction(ui64 yardFreeUpToLsn) const {
+    bool TFreshData<TKey, TMemRec>::NeedsCompaction(ui64 yardFreeUpToLsn, bool force) const {
         if (CompactionInProgress()) {
             return false;
+        } else if (force) {
+            return true;
         } else {
             const bool compactDregByYard = UseDreg && Dreg && Dreg->NeedsCompactionByYard(yardFreeUpToLsn);
             const bool compactCurByYard = Cur && Cur->NeedsCompactionByYard(yardFreeUpToLsn);

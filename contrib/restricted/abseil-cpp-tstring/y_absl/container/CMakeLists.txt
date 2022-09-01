@@ -19,7 +19,6 @@ target_link_libraries(abseil-cpp-tstring-y_absl-container PUBLIC
   yutil
   abseil-cpp-tstring-y_absl-base
   abseil-cpp-tstring-y_absl-debugging
-  abseil-cpp-tstring-y_absl-demangle
   abseil-cpp-tstring-y_absl-hash
   abseil-cpp-tstring-y_absl-numeric
   abseil-cpp-tstring-y_absl-profiling

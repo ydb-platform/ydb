@@ -18,12 +18,12 @@ target_link_libraries(abseil-cpp-tstring-y_absl-hash PUBLIC
   contrib-libs-cxxsupp
   yutil
   abseil-cpp-tstring-y_absl-base
-  abseil-cpp-tstring-y_absl-city
   abseil-cpp-tstring-y_absl-numeric
   abseil-cpp-tstring-y_absl-strings
   abseil-cpp-tstring-y_absl-types
 )
 target_sources(abseil-cpp-tstring-y_absl-hash PRIVATE
+  ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal/city.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal/hash.cc
   ${CMAKE_SOURCE_DIR}/contrib/restricted/abseil-cpp-tstring/y_absl/hash/internal/low_level_hash.cc
 )

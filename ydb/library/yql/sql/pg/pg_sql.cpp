@@ -474,7 +474,13 @@ public:
                     TExprSettings settings;
                     settings.AllowColumns = true;
                     settings.Scope = "GROUP BY";
-                    auto expr = ParseExpr(node, settings);
+                    TAstNode* expr;
+                    if (NodeTag(node) == T_GroupingSet) {
+                        expr = ParseGroupingSet(CAST_NODE(GroupingSet, node), settings);
+                    } else {
+                        expr = ParseExpr(node, settings);
+                    }
+
                     if (!expr) {
                         return nullptr;
                     }
@@ -1490,6 +1496,86 @@ public:
 
         return VL(args.data(), args.size());
     }
+
+    TAstNode* ParseGroupingSet(const GroupingSet* value, const TExprSettings& settings) {
+        TString mode;
+        switch (value->kind) {
+        case GROUPING_SET_ROLLUP:
+            mode = "rollup";
+            break;
+        case GROUPING_SET_CUBE:
+            mode = "cube";
+            break;
+        case GROUPING_SET_SETS:
+            mode = "sets";
+            break;
+        default:
+            AddError(TStringBuilder() << "Unexpected grouping set kind: " << (int)value->kind);
+            return nullptr;
+        }
+
+        auto innerSettings = settings;
+        innerSettings.Scope = to_title(mode);
+
+        TVector<TAstNode*> args;
+        args.push_back(A("PgGroupingSet"));
+        args.push_back(QA(mode));
+        if (value->kind == GROUPING_SET_SETS) {
+            // tuple for each set
+            for (int i = 0; i < ListLength(value->content); ++i) {
+                auto child = ListNodeNth(value->content, i);
+                if (NodeTag(child) == T_GroupingSet) {
+                    auto kind = CAST_NODE(GroupingSet, child)->kind;
+                    if (kind != GROUPING_SET_EMPTY) {
+                        AddError(TStringBuilder() << "Unexpected inner grouping set kind: " << (int)kind);
+                        return nullptr;
+                    }
+
+                    args.push_back(QL());
+                    continue;
+                }
+
+                if (NodeTag(child) == T_RowExpr) {
+                    auto row = CAST_NODE(RowExpr, child);
+                    TVector<TAstNode*> tupleItems;
+                    for (int j = 0; j < ListLength(row->args); ++j) {
+                        auto elem = ParseExpr(ListNodeNth(row->args, j), innerSettings);
+                        if (!elem) {
+                            return nullptr;
+                        }
+
+                        tupleItems.push_back(elem);
+                    }
+
+                    args.push_back(QVL(tupleItems.data(), tupleItems.size()));
+                    continue;
+                }
+
+                auto elem = ParseExpr(ListNodeNth(value->content, i), innerSettings);
+                if (!elem) {
+                    return nullptr;
+                }
+
+                args.push_back(QL(elem));
+            }
+        } else {
+            // one tuple
+            TVector<TAstNode*> tupleItems;
+            for (int i = 0; i < ListLength(value->content); ++i) {
+                auto elem = ParseExpr(ListNodeNth(value->content, i), innerSettings);
+                if (!elem) {
+                    return nullptr;
+                }
+
+                tupleItems.push_back(elem);
+            }
+
+            args.push_back(QVL(tupleItems.data(), tupleItems.size()));
+        }
+
+        return VL(args.data(), args.size());
+    }
+    
 
     TAstNode* ParseSubLinkExpr(const SubLink* value, const TExprSettings& settings) {
         if (!settings.AllowSubLinks) {

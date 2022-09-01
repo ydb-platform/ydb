@@ -2196,9 +2196,55 @@ TExprNode::TPtr ReplaceGroupByExpr(const TExprNode::TPtr& root, const TExprNode&
     return ret;
 }
 
+bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprNode::TPtr& groupExprs, TExprContext& ctx) {
+    TExprNode::TListType groupSetsItems, groupExprsItems;
+    THashMap<ui64, TVector<ui32>> hashes;
+    for (const auto& child : data.Children()) {
+        const auto& lambda = child->Tail();
+        if (lambda.Tail().IsCallable("PgGroupingSet")) {
+            YQL_ENSURE(false);
+        } else {
+            TNodeMap<ui64> visited;
+            visited[&lambda.Head().Head()] = 0;
+            auto hash = CalculateExprHash(lambda.Tail(), visited);
+            ui32 index;
+            bool found = false;
+            auto it = hashes.find(hash);
+            if (it != hashes.end()) {
+                for (auto i : it->second) {
+                    TNodeSet visited;
+                    if (ExprNodesEquals(lambda.Tail(), groupExprsItems[i]->Tail().Tail(), visited)) {
+                        index = i;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!found) {
+                index = groupExprsItems.size();
+                hashes[hash].push_back(index);
+                groupExprsItems.push_back(child);
+            }
+
+            groupSetsItems.push_back(ctx.Builder(data.Pos())
+                .List()
+                    .List(0)
+                        .Atom(0, ToString(index))
+                    .Seal()
+                .Seal()
+                .Build());
+        }
+    }
+
+    groupSets = ctx.NewList(data.Pos(), std::move(groupSetsItems));
+    groupExprs = ctx.NewList(data.Pos(), std::move(groupExprsItems));
+    return true;
+}
+
 bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
     const TExprNode& data, TExtContext& ctx, TExprNode::TListType& newGroups, bool& hasNewGroups, bool scanColumnsOnly,
-    bool allowAggregates, const TExprNode::TPtr& groupBy) {
+    bool allowAggregates, const TExprNode::TPtr& groupExprs) {
     newGroups.clear();
     hasNewGroups = false;
     bool hasColumnRef = false;
@@ -2258,8 +2304,8 @@ bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
             continue;
         }
 
-        if (groupBy) {
-            auto ret = ReplaceGroupByExpr(group->TailPtr(), groupBy->Tail(), ctx.Expr);
+        if (groupExprs) {
+            auto ret = ReplaceGroupByExpr(group->TailPtr(), groupExprs->Tail(), ctx.Expr);
             if (!ret) {
                 return false;
             }
@@ -2319,7 +2365,7 @@ TMap<TString, ui32> ExtractExternalColumns(const TExprNode& select) {
 }
 
 bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TString>& possibleAliases,
-    const TExprNode& data, TExtContext& ctx, bool& hasNewSort, TExprNode::TListType& newSorts, bool scanColumnsOnly, const TExprNode::TPtr& groupBy) {
+    const TExprNode& data, TExtContext& ctx, bool& hasNewSort, TExprNode::TListType& newSorts, bool scanColumnsOnly, const TExprNode::TPtr& groupExprs) {
     newSorts.clear();
     for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
         auto oneSort = data.Child(index);
@@ -2393,8 +2439,8 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
             continue;
         }
 
-        if (groupBy) {
-            auto ret = ReplaceGroupByExpr(newLambda, groupBy->Tail(), ctx.Expr);
+        if (groupExprs) {
+            auto ret = ReplaceGroupByExpr(newLambda, groupExprs->Tail(), ctx.Expr);
             if (!ret) {
                 return false;
             }
@@ -2536,12 +2582,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         bool hasDistinctAll = false;
         bool hasDistinctOn = false;
         bool hasFinalExtraSortColumns = false;
-        TExprNode::TPtr groupBy;
+        TExprNode::TPtr groupExprs;
 
         // pass 0 - from/values
         // pass 1 - join
         // pass 2 - ext_types/final_ext_types, extra_sort_solumns
-        // pass 3 - where, group_by
+        // pass 3 - where, group_by, group_exprs, group_sets
         // pass 4 - having, window
         // pass 5 - result
         // pass 6 - distinct_all, distinct_on
@@ -2773,12 +2819,12 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             ScanAggregations(column->TailPtr(), hasAggregations);
                         }
 
-                        if (groupBy) {
+                        if (groupExprs) {
                             TExprNode::TListType newResultItems;
                             bool hasChanges = false;
                             for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
                                 const auto& column = *data.Child(index);
-                                auto ret = ReplaceGroupByExpr(column.TailPtr(), groupBy->Tail(), ctx.Expr);
+                                auto ret = ReplaceGroupByExpr(column.TailPtr(), groupExprs->Tail(), ctx.Expr);
                                 if (!ret) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
@@ -3035,8 +3081,8 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         }
                     }
 
-                    if (!scanColumnsOnly && optionName == "having" && groupBy) {
-                        auto ret = ReplaceGroupByExpr(data.TailPtr(), groupBy->Tail(), ctx.Expr);
+                    if (!scanColumnsOnly && optionName == "having" && groupExprs) {
+                        auto ret = ReplaceGroupByExpr(data.TailPtr(), groupExprs->Tail(), ctx.Expr);
                         if (!ret) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -3247,7 +3293,6 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         continue;
                     }
 
-                    groupBy = option;
                     if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
                         return IGraphTransformer::TStatus::Error;
                     }
@@ -3268,6 +3313,80 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         auto newSettings = ReplaceSetting(options, {}, "group_by", resultValue, ctx.Expr);
                         output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
                         return IGraphTransformer::TStatus::Repeat;
+                    }
+
+                    if (!scanColumnsOnly) {
+                        TExprNode::TPtr groupSets, groupExprs;
+                        if (!BuildGroupingSets(data, groupSets, groupExprs, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        auto newSettings = RemoveSetting(options, "group_by", ctx.Expr);
+                        newSettings = AddSetting(*newSettings, {}, "group_sets", groupSets, ctx.Expr);
+                        newSettings = AddSetting(*newSettings, {}, "group_exprs", groupExprs, ctx.Expr);
+                        output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
+                        return IGraphTransformer::TStatus::Repeat;
+                    }
+                }
+                else if (optionName == "group_exprs") {
+                    if (pass != 3) {
+                        continue;
+                    }
+
+                    groupExprs = option;
+                    if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    const auto& data = option->Tail();
+                    if (!EnsureTuple(data, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    for (const auto& child : data.Children()) {
+                        if (!child->IsCallable("PgGroup")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), "Expected PgGroup"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        if (child->Tail().Tail().IsCallable("PgGroupingSet")) {
+                            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(child->Pos()), "Grouping sets aren't expanded"));
+                            return IGraphTransformer::TStatus::Error;
+                        }
+                    }
+                }
+                else if (optionName == "group_sets") {
+                    if (pass != 3) {
+                        continue;
+                    }
+
+                    groupExprs = option;
+                    if (!EnsureTupleSize(*option, 2, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    const auto& data = option->Tail();
+                    if (!EnsureTuple(data, ctx.Expr)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+
+                    for (const auto& child : data.Children()) {
+                        // child - one GROUP BY item - list of lists
+                        if (!EnsureTuple(*child, ctx.Expr)) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
+                        for (const auto& child2 : child->Children()) {
+                            if (!EnsureTuple(*child2, ctx.Expr)) {
+                                return IGraphTransformer::TStatus::Error;
+                            }
+
+                            for (const auto& atom : child2->Children()) {
+                                if (!EnsureAtom(*atom, ctx.Expr)) {
+                                    return IGraphTransformer::TStatus::Error;
+                                }
+                            }
+                        }
                     }
                 }
                 else if (optionName == "window") {
@@ -3306,7 +3425,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                         auto newChildren = x->ChildrenList();
                         TExprNode::TListType newGroups;
                         bool hasNewGroups = false;
-                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupBy)) {
+                        if (!ValidateGroups(joinInputs, possibleAliases, *partitions, ctx, newGroups, hasNewGroups, scanColumnsOnly, true, groupExprs)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -3314,7 +3433,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                         bool hasNewSort = false;
                         TExprNode::TListType newSorts;
-                        if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, hasNewSort, newSorts, scanColumnsOnly, groupBy)) {
+                        if (!ValidateSort(joinInputs, joinInputs, possibleAliases, *sort, ctx, hasNewSort, newSorts, scanColumnsOnly, groupExprs)) {
                             return IGraphTransformer::TStatus::Error;
                         }
 
@@ -3408,7 +3527,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                     bool hasNewSort = false;
                     TExprNode::TListType newSortTupleItems;
                     // no effective types yet, scan lambda bodies
-                    if (!ValidateSort(projectionInputs, joinInputs, possibleAliases, data, ctx, hasNewSort, newSortTupleItems, scanColumnsOnly, groupBy)) {
+                    if (!ValidateSort(projectionInputs, joinInputs, possibleAliases, data, ctx, hasNewSort, newSortTupleItems, scanColumnsOnly, groupExprs)) {
                         return IGraphTransformer::TStatus::Error;
                     }
 
@@ -3574,7 +3693,7 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
         }
     }
 
-    if ((hasAggregations || GetSetting(options, "having")) && !GetSetting(options, "group_by")) {
+    if ((hasAggregations || GetSetting(options, "having")) && !GetSetting(options, "group_by") && !GetSetting(options, "group_sets")) {
         // add empty group by section
         auto newSettings = AddSetting(options, {}, "group_by", ctx.Expr.NewList(input->Pos(), {}), ctx.Expr);
         output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
@@ -4314,6 +4433,10 @@ IGraphTransformer::TStatus PgGroupingWrapper(const TExprNode::TPtr& input, TExpr
         return IGraphTransformer::TStatus::Error;
     }
 
+    if (!EnsureMaxArgsCount(*input, 31, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
     bool needRetype = false;
     for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
         auto type = input->Child(i)->GetTypeAnn();
@@ -4335,6 +4458,39 @@ IGraphTransformer::TStatus PgGroupingWrapper(const TExprNode::TPtr& input, TExpr
 
     auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
     input->SetTypeAnn(result);
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus PgGroupingSetWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureAtom(*input->Child(0), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto kind = input->Child(0)->Content();
+    if (!(kind == "cube" || kind == "rollup" || kind == "sets")) {
+        ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+            TStringBuilder() << "Unexpected grouping set kind: " << kind));
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (kind != "sets") {
+        if (!EnsureMaxArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    for (ui32 i = 1; i < input->ChildrenSize(); ++i) {
+        if (!EnsureTuple(*input->Child(i), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+    }
+
+    input->SetTypeAnn(ctx.Expr.MakeType<TVoidExprType>());
     return IGraphTransformer::TStatus::Ok;
 }
 

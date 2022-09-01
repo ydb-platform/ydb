@@ -841,7 +841,7 @@ void GatherUsedWindows(const TExprNode::TPtr& window, const TExprNode::TPtr& pro
 }
 
 TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::TPtr& joinOps,
-    const TExprNode::TPtr& filter, const TExprNode::TPtr& groupBy, const TExprNode::TPtr& having, const TExprNode::TPtr& extraSortColumns,
+    const TExprNode::TPtr& filter, const TExprNode::TPtr& groupExprs, const TExprNode::TPtr& having, const TExprNode::TPtr& extraSortColumns,
     const TExprNode::TPtr& window, const TWindowsCtx& winCtx) {
     TUsedColumns usedColumns;
     for (const auto& x : result->Tail().Children()) {
@@ -867,8 +867,8 @@ TUsedColumns GatherUsedColumns(const TExprNode::TPtr& result, const TExprNode::T
         AddColumnsFromSublinks(subLinks, usedColumns);
     }
 
-    if (groupBy) {
-        for (const auto& x : groupBy->Tail().Children()) {
+    if (groupExprs) {
+        for (const auto& x : groupExprs->Tail().Children()) {
             AddColumnsFromType(x->Child(0)->GetTypeAnn(), usedColumns);
         }
     }
@@ -1709,7 +1709,7 @@ TExprNode::TPtr BuildAggregationTraits(TPositionHandle pos, bool onWindow, const
 }
 
 TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
-    const TAggs& aggs, const TExprNode::TPtr& groupBy,
+    const TAggs& aggs, const TExprNode::TPtr& groupExprs, const TExprNode::TPtr& groupSets,
     const TExprNode::TPtr& finalExtTypes, TExprContext& ctx, TOptimizeContext& optCtx) {
 
     bool needRemapForDistinct = false;
@@ -1806,13 +1806,21 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
         }
     }
 
-    if (groupBy->Tail().ChildrenSize()) {
+    if (groupExprs->Tail().ChildrenSize()) {
         auto arg = ctx.NewArgument(pos, "row");
         auto arguments = ctx.NewArguments(pos, { arg });
 
         TExprNode::TListType newColumns;
-        for (ui32 i = 0; i < groupBy->Tail().ChildrenSize(); ++i) {
-            const auto& group = groupBy->Tail().Child(i);
+        for (ui32 i = 0; i < groupSets->Tail().ChildrenSize(); ++i) {
+            auto set = groupSets->Tail().Child(i);
+            YQL_ENSURE(set->ChildrenSize() == 1);
+            auto first = set->HeadPtr();
+            YQL_ENSURE(first->ChildrenSize() == 1);
+            auto second = first->HeadPtr();
+            YQL_ENSURE(second->IsAtom());
+            ui32 index = FromString<ui32>(second->Content());
+            YQL_ENSURE(index < groupExprs->Tail().ChildrenSize());
+            const auto& group = groupExprs->Tail().Child(index);
             const auto& lambda = group->Tail();
             auto name = "_yql_agg_key_" + ToString(i);
             keysItems.push_back(ctx.NewAtom(pos, name));
@@ -2506,10 +2514,10 @@ TExprNode::TPtr AddExtColumns(const TExprNode::TPtr& projectionRoot, const TExpr
         .Build();
 }
 
-void BuildExtraSortColumns(const TExprNode::TPtr& groupBy,
+void BuildExtraSortColumns(const TExprNode::TPtr& groupExprs,
     const TExprNode::TPtr& extraSortColumns, const TExprNode::TPtr& extraSortKeys,
     size_t aggIndexBegin, size_t aggIndexEnd, TVector<TString>& list) {
-    if (extraSortColumns && !groupBy) {
+    if (extraSortColumns && !groupExprs) {
         for (const auto& x : extraSortColumns->Tail().Children()) {
             for (const auto& y : x->Children()) {
                 list.push_back(TString(y->Content()));
@@ -2528,7 +2536,7 @@ void BuildExtraSortColumns(const TExprNode::TPtr& groupBy,
     }
 }
 
-TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& root, const TExprNode::TPtr& originalArg, const TExprNode::TPtr& groupBy,
+TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& root, const TExprNode::TPtr& originalArg, const TExprNode::TPtr& groupExprs,
     const TExprNode::TPtr& extraSortColumns, const TExprNode::TPtr& extraSortKeys,
     size_t aggIndexBegin, size_t aggIndexEnd, TExprContext& ctx) {
     return ctx.Builder(root->Pos())
@@ -2542,7 +2550,7 @@ TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& root, const TExprNode
                 .Callable(1, "AsStruct")
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
                         TVector<TString> list;
-                        BuildExtraSortColumns(groupBy, extraSortColumns, extraSortKeys, aggIndexBegin, aggIndexEnd, list);
+                        BuildExtraSortColumns(groupExprs, extraSortColumns, extraSortKeys, aggIndexBegin, aggIndexEnd, list);
                         for (ui32 i = 0; i < list.size(); ++i) {
                             TStringBuf from = list[i];
                             from.SkipPrefix("_yql_extra_");
@@ -2563,7 +2571,7 @@ TExprNode::TPtr AddExtraSortColumns(const TExprNode::TPtr& root, const TExprNode
         .Build();
 }
 
-TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, const TExprNode::TPtr& groupBy,
+TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, const TExprNode::TPtr& groupExprs,
     const TExprNode::TPtr& extraSortColumns, const TExprNode::TPtr& extraSortKeys,
     size_t aggIndexBegin, size_t aggIndexEnd, const TVector<TString>& sublinkColumns, TExprContext& ctx) {
     return ctx.Builder(list->Pos())
@@ -2576,7 +2584,7 @@ TExprNode::TPtr RemoveExtraSortColumns(const TExprNode::TPtr& list, const TExprN
                     .List(1)
                         .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
                             TVector<TString> list;
-                            BuildExtraSortColumns(groupBy, extraSortColumns, extraSortKeys, aggIndexBegin, aggIndexEnd, list);
+                            BuildExtraSortColumns(groupExprs, extraSortColumns, extraSortKeys, aggIndexBegin, aggIndexEnd, list);
                             list.insert(list.end(), sublinkColumns.begin(), sublinkColumns.end());
                             for (ui32 i = 0; i < list.size(); ++i) {
                                 parent.Atom(i, list[i]);
@@ -2886,7 +2894,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
         auto from = GetSetting(setItem->Tail(), "from");
         auto filter = GetSetting(setItem->Tail(), "where");
         auto joinOps = GetSetting(setItem->Tail(), "join_ops");
-        auto groupBy = GetSetting(setItem->Tail(), "group_by");
+        auto groupExprs = GetSetting(setItem->Tail(), "group_exprs");
+        auto groupSets = GetSetting(setItem->Tail(), "group_sets");
         auto having = GetSetting(setItem->Tail(), "having");
         auto window = GetSetting(setItem->Tail(), "window");
         auto distinctAll = GetSetting(setItem->Tail(), "distinct_all");
@@ -2917,7 +2926,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 cleanedInputs.push_back(list);
             } else {
                 // extract all used columns
-                auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupBy, having, extraSortColumns, window, winCtx);
+                auto usedColumns = GatherUsedColumns(result, joinOps, filter, groupExprs, having, extraSortColumns, window, winCtx);
 
                 // fill index of input for each column
                 FillInputIndices(from, finalExtTypes, usedColumns, optCtx);
@@ -2977,8 +2986,8 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
                 GatherAggregationsFromLambda(sortLambda, aggs, aggId, false);
             }
 
-            if (groupBy) {
-                list = BuildGroup(node->Pos(), list, aggs, groupBy, finalExtTypes, ctx, optCtx);
+            if (groupExprs) {
+                list = BuildGroup(node->Pos(), list, aggs, groupExprs, groupSets, finalExtTypes, ctx, optCtx);
             }
 
             if (having) {
@@ -3003,7 +3012,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             bool hasExtraSortColumns = (extraSortColumns || extraSortKeys || (aggsSizeBeforeSort < aggs.size()));
             if (hasExtraSortColumns) {
                 YQL_ENSURE(!distinctAll && !distinctOn);
-                projectionRoot = AddExtraSortColumns(projectionRoot, projectionArg, groupBy, extraSortColumns, extraSortKeys, aggsSizeBeforeSort, aggs.size(), ctx);
+                projectionRoot = AddExtraSortColumns(projectionRoot, projectionArg, groupExprs, extraSortColumns, extraSortKeys, aggsSizeBeforeSort, aggs.size(), ctx);
             }
 
             list = ctx.Builder(node->Pos())
@@ -3041,7 +3050,7 @@ TExprNode::TPtr ExpandPgSelectImpl(const TExprNode::TPtr& node, TExprContext& ct
             }
 
             if (hasExtraSortColumns) {
-                list = RemoveExtraSortColumns(list, groupBy, extraSortColumns, extraSortKeys, aggsSizeBeforeSort, aggs.size(), sublinkColumns, ctx);
+                list = RemoveExtraSortColumns(list, groupExprs, extraSortColumns, extraSortKeys, aggsSizeBeforeSort, aggs.size(), sublinkColumns, ctx);
             }
         }
 

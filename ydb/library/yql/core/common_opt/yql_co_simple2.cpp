@@ -501,6 +501,7 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     };
 
     map["PgGroupRef"] = ExpandPgGroupRef;
+    map["PgGrouping"] = ExpandPgGrouping;
 }
 
 }

@@ -1413,6 +1413,9 @@ public:
         case T_CoalesceExpr: {
             return ParseCoalesceExpr(CAST_NODE(CoalesceExpr, node), settings);
         }
+        case T_GroupingFunc: {
+            return ParseGroupingFunc(CAST_NODE(GroupingFunc, node));
+        }
         default:
             NodeNotImplemented(node);
             return nullptr;
@@ -1458,6 +1461,24 @@ public:
     TAstNode* ParseCoalesceExpr(const CoalesceExpr* value, const TExprSettings& settings) {
         TVector<TAstNode*> args;
         args.push_back(A("Coalesce"));
+        for (int i = 0; i < ListLength(value->args); ++i) {
+            auto elem = ParseExpr(ListNodeNth(value->args, i), settings);
+            if (!elem) {
+                return nullptr;
+            }
+
+            args.push_back(elem);
+        }
+
+        return VL(args.data(), args.size());
+    }
+
+    TAstNode* ParseGroupingFunc(const GroupingFunc* value) {
+        TVector<TAstNode*> args;
+        args.push_back(A("PgGrouping"));
+        TExprSettings settings;
+        settings.Scope = "GROUPING";
+        settings.AllowColumns = true;
         for (int i = 0; i < ListLength(value->args); ++i) {
             auto elem = ParseExpr(ListNodeNth(value->args, i), settings);
             if (!elem) {

@@ -23,4 +23,6 @@ TExprNode::TPtr ExpandPgBetween(const TExprNode::TPtr& node, TExprContext& ctx, 
 
 TExprNode::TPtr ExpandPgGroupRef(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
 
+TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx);
+
 } // namespace NYql

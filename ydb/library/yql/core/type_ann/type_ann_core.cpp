@@ -11405,6 +11405,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgBetweenSym"] = &PgBetweenWrapper;
         Functions["PgSubLink"] = &PgSubLinkWrapper;
         Functions["PgGroupRef"] = &PgGroupRefWrapper;
+        Functions["PgGrouping"] = &PgGroupingWrapper;
 
         Functions["AutoDemuxList"] = &AutoDemuxListWrapper;
         Functions["AggrCountInit"] = &AggrCountInitWrapper;

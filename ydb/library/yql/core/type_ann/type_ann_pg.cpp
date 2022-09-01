@@ -1966,6 +1966,11 @@ void ScanAggregations(const TExprNode::TPtr& root, bool& hasAggregations) {
             return false;
         }
 
+        if (node->IsCallable("PgGrouping")) {
+            hasAggregations = true;
+            return false;
+        }
+
         if (node->IsCallable("PgSubLink")) {
             return false;
         }
@@ -2059,8 +2064,8 @@ bool ExprNodesEquals(const TExprNode& left, const TExprNode& right, TNodeSet& vi
     }
 }
 
-bool ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, const TVector<TGroupExpr>& exprs,
-    TNodeOnNodeOwnedMap& replaces, TNodeMap<ui64>& hashVisited, TNodeMap<bool>& nodeVisited, TExprContext& ctx) {
+TMaybe<bool> ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, const TVector<TGroupExpr>& exprs,
+    TNodeOnNodeOwnedMap& replaces, TNodeMap<ui64>& hashVisited, TNodeMap<TMaybe<bool>>& nodeVisited, TExprContext& ctx, TMaybe<ui32> groupingDepth) {
     auto it = nodeVisited.find(&root);
     if (it != nodeVisited.end()) {
         return it->second;
@@ -2072,7 +2077,7 @@ bool ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, 
             hashVisited[testRowLambda.Head().Child(0)] = 0; // original row
             hashVisited[testRowLambda.Head().Child(1)] = 1; // sublink value
             ScanExprForMatchedGroup(testRowLambda.Head().ChildPtr(0), testRowLambda.Tail(),
-                exprs, replaces, hashVisited, nodeVisited, ctx);
+                exprs, replaces, hashVisited, nodeVisited, ctx, Nothing());
         }
 
         nodeVisited[&root] = false;
@@ -2084,10 +2089,39 @@ bool ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, 
         return false;
     }
 
+    if (root.IsCallable("PgGrouping")) {
+        groupingDepth = 0;
+    }
+
     bool hasChanges = false;
     for (const auto& child : root.Children()) {
-        if (!ScanExprForMatchedGroup(row, *child, exprs, replaces, hashVisited, nodeVisited, ctx)) {
+        auto childrenDepth = groupingDepth;
+        if (childrenDepth.Defined()) {
+            childrenDepth = *childrenDepth + 1;
+        }
+
+        auto ret = ScanExprForMatchedGroup(row, *child, exprs, replaces, hashVisited, nodeVisited, ctx, childrenDepth);
+        if (!ret) {
+            nodeVisited[&root] = Nothing();
+            return Nothing();
+        }
+
+        if (!*ret) {
             hasChanges = true;
+        }
+    }
+
+    if (groupingDepth.Defined() && *groupingDepth == 0) {
+        for (const auto& child : root.Children()) {
+            if (child->IsCallable("PgGroupRef")) {
+                continue;
+            }
+
+            if (!replaces.contains(child.Get())) {
+                ctx.AddError(TIssue(ctx.GetPosition(root.Pos()),
+                    "arguments to GROUPING must be grouping expressions of the associated query level"));
+                return Nothing();
+            }
         }
     }
 
@@ -2096,27 +2130,29 @@ bool ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, 
         return false;
     }
 
-    ui64 hash = CalculateExprHash(root, hashVisited);
-    for (ui32 i = 0; i < exprs.size(); ++i) {
-        if (exprs[i].Hash != hash) {
-            continue;
+    if (!groupingDepth || *groupingDepth == 1) {
+        ui64 hash = CalculateExprHash(root, hashVisited);
+        for (ui32 i = 0; i < exprs.size(); ++i) {
+            if (exprs[i].Hash != hash) {
+                continue;
+            }
+
+            TNodeSet equalsVisited;
+            if (!ExprNodesEquals(*exprs[i].OriginalRoot, root, equalsVisited)) {
+                continue;
+            }
+
+            replaces[&root] = ctx.Builder(root.Pos())
+                .Callable("PgGroupRef")
+                    .Add(0, row)
+                    .Add(1, exprs[i].TypeNode)
+                    .Atom(2, ToString(i))
+                .Seal()
+                .Build();
+
+            nodeVisited[&root] = false;
+            return false;
         }
-
-        TNodeSet equalsVisited;
-        if (!ExprNodesEquals(*exprs[i].OriginalRoot, root, equalsVisited)) {
-            continue;
-        }
-
-        replaces[&root] = ctx.Builder(root.Pos())
-            .Callable("PgGroupRef")
-                .Add(0, row)
-                .Add(1, exprs[i].TypeNode)
-                .Atom(2, ToString(i))
-            .Seal()
-            .Build();
-
-        nodeVisited[&root] = false;
-        return false;
     }
 
     nodeVisited[&root] = true;
@@ -2124,10 +2160,6 @@ bool ScanExprForMatchedGroup(const TExprNode::TPtr& row, const TExprNode& root, 
 }
 
 TExprNode::TPtr ReplaceGroupByExpr(const TExprNode::TPtr& root, const TExprNode& groups, TExprContext& ctx) {
-    if (!groups.ChildrenSize()) {
-        return root;
-    }
-
     // calculate hashes
     TVector<TGroupExpr> exprs;
     TExprNode::TListType typeNodes;
@@ -2145,9 +2177,13 @@ TExprNode::TPtr ReplaceGroupByExpr(const TExprNode::TPtr& root, const TExprNode&
 
     TNodeOnNodeOwnedMap replaces;
     TNodeMap<ui64> hashVisited;
-    TNodeMap<bool> nodeVisited;
+    TNodeMap<TMaybe<bool>> nodeVisited;
     hashVisited[&root->Head().Head()] = 0;
-    ScanExprForMatchedGroup(root->Head().HeadPtr(), root->Tail(), exprs, replaces, hashVisited, nodeVisited, ctx);
+    auto scanStatus = ScanExprForMatchedGroup(root->Head().HeadPtr(), root->Tail(), exprs, replaces, hashVisited, nodeVisited, ctx, Nothing());
+    if (!scanStatus) {
+        return nullptr;
+    }
+
     auto ret = root;
     if (replaces.empty()) {
         return ret;
@@ -2224,6 +2260,10 @@ bool ValidateGroups(TInputs& inputs, const THashSet<TString>& possibleAliases,
 
         if (groupBy) {
             auto ret = ReplaceGroupByExpr(group->TailPtr(), groupBy->Tail(), ctx.Expr);
+            if (!ret) {
+                return false;
+            }
+
             if (ret != group->TailPtr()) {
                 newGroups.push_back(ctx.Expr.ChangeChild(*group, 1, std::move(ret)));
                 hasNewGroups = true;
@@ -2355,6 +2395,10 @@ bool ValidateSort(TInputs& inputs, TInputs& subLinkInputs, const THashSet<TStrin
 
         if (groupBy) {
             auto ret = ReplaceGroupByExpr(newLambda, groupBy->Tail(), ctx.Expr);
+            if (!ret) {
+                return false;
+            }
+
             if (ret != newLambda) {
                 newSorts.push_back(ctx.Expr.ChangeChild(*oneSort, 1, std::move(ret)));
                 hasNewSort = true;
@@ -2735,6 +2779,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
                             for (ui32 index = 0; index < data.ChildrenSize(); ++index) {
                                 const auto& column = *data.Child(index);
                                 auto ret = ReplaceGroupByExpr(column.TailPtr(), groupBy->Tail(), ctx.Expr);
+                                if (!ret) {
+                                    return IGraphTransformer::TStatus::Error;
+                                }
+
                                 if (ret != column.TailPtr()) {
                                     hasChanges = true;
                                     newResultItems.push_back(ctx.Expr.ChangeChild(column, 2, std::move(ret)));
@@ -2989,6 +3037,10 @@ IGraphTransformer::TStatus PgSetItemWrapper(const TExprNode::TPtr& input, TExprN
 
                     if (!scanColumnsOnly && optionName == "having" && groupBy) {
                         auto ret = ReplaceGroupByExpr(data.TailPtr(), groupBy->Tail(), ctx.Expr);
+                        if (!ret) {
+                            return IGraphTransformer::TStatus::Error;
+                        }
+
                         if (ret != data.TailPtr()) {
                             auto newSettings = ReplaceSetting(options, {}, "having", ctx.Expr.ChangeChild(data, 1, std::move(ret)), ctx.Expr);
                             output = ctx.Expr.ChangeChild(*input, 0, std::move(newSettings));
@@ -4253,6 +4305,36 @@ IGraphTransformer::TStatus PgGroupRefWrapper(const TExprNode::TPtr& input, TExpr
     }
 
     input->SetTypeAnn(input->Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus PgGroupingWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureMinArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool needRetype = false;
+    for (ui32 i = 0; i < input->ChildrenSize(); ++i) {
+        auto type = input->Child(i)->GetTypeAnn();
+        ui32 argType;
+        bool convertToPg;
+        if (!ExtractPgType(type, argType, convertToPg, input->Child(i)->Pos(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (convertToPg) {
+            input->ChildRef(i) = ctx.Expr.NewCallable(input->Child(i)->Pos(), "ToPg", { input->ChildPtr(i) });
+            needRetype = true;
+        }
+    }
+
+    if (needRetype) {
+        return IGraphTransformer::TStatus::Repeat;
+    }
+
+    auto result = ctx.Expr.MakeType<TPgExprType>(NPg::LookupType("int4").TypeId);
+    input->SetTypeAnn(result);
     return IGraphTransformer::TStatus::Ok;
 }
 

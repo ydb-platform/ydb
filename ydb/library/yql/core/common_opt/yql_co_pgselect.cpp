@@ -3274,4 +3274,17 @@ TExprNode::TPtr ExpandPgGroupRef(const TExprNode::TPtr& node, TExprContext& ctx,
         .Build();
 }
 
+TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+    Y_UNUSED(node);
+    Y_UNUSED(optCtx);
+    return ctx.Builder(node->Pos())
+        .Callable("PgConst")
+            .Atom(0, "0")
+            .Callable(1, "PgType")
+                .Atom(0, "int4")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
 } // namespace NYql

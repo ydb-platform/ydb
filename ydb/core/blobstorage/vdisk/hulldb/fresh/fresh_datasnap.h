@@ -38,8 +38,8 @@ namespace NKikimr {
         class TBackwardCurDregSegsMerger;   // backward iterator, merges Cur and Dreg
 
     public:
-        TFreshDataSnapshot(const TFreshDataSnapshot &snap) = delete;
-        TFreshDataSnapshot &operator=(const TFreshDataSnapshot &) = delete;
+        TFreshDataSnapshot(const TFreshDataSnapshot &snap) = default;
+        TFreshDataSnapshot &operator=(const TFreshDataSnapshot &) = default;
         TFreshDataSnapshot(TFreshDataSnapshot &&) = default;
         TFreshDataSnapshot &operator=(TFreshDataSnapshot &&) = default;
 

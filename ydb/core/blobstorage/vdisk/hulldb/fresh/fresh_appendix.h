@@ -229,9 +229,9 @@ namespace NKikimr {
 
     public:
         TFreshAppendixTreeSnap() = default;
-        TFreshAppendixTreeSnap(const TFreshAppendixTreeSnap &) = delete;
+        TFreshAppendixTreeSnap(const TFreshAppendixTreeSnap &) = default;
         TFreshAppendixTreeSnap(TFreshAppendixTreeSnap &&) = default;
-        TFreshAppendixTreeSnap &operator=(const TFreshAppendixTreeSnap &) = delete;
+        TFreshAppendixTreeSnap &operator=(const TFreshAppendixTreeSnap &) = default;
         TFreshAppendixTreeSnap &operator=(TFreshAppendixTreeSnap &&) = default;
 
         void Destroy() {

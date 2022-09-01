@@ -448,6 +448,24 @@ namespace NKikimr {
         {
             return std::make_unique<TEvBlobStorage::TEvVAssimilateResult>(status, errorReason, vdiskID);
         }
+
+        static inline std::unique_ptr<IEventBase>
+        ErroneousResult(const TVDiskContextPtr& /*vctx*/, const NKikimrProto::EReplyStatus status, const TString& errorReason,
+                        TEvBlobStorage::TEvVTakeSnapshot::TPtr& /*ev*/, const TInstant& /*now*/,
+                        const TActorIDPtr &/*skeletonFrontIDPtr*/, const TVDiskID &vdiskID, ui64 /*vdiskIncarnationGuid*/,
+                        const TIntrusivePtr<TBlobStorageGroupInfo>& /*groupInfo*/)
+        {
+            return std::make_unique<TEvBlobStorage::TEvVTakeSnapshotResult>(status, errorReason, vdiskID);
+        }
+
+        static inline std::unique_ptr<IEventBase>
+        ErroneousResult(const TVDiskContextPtr& /*vctx*/, const NKikimrProto::EReplyStatus status, const TString& errorReason,
+                        TEvBlobStorage::TEvVReleaseSnapshot::TPtr& /*ev*/, const TInstant& /*now*/,
+                        const TActorIDPtr &/*skeletonFrontIDPtr*/, const TVDiskID &vdiskID, ui64 /*vdiskIncarnationGuid*/,
+                        const TIntrusivePtr<TBlobStorageGroupInfo>& /*groupInfo*/)
+        {
+            return std::make_unique<TEvBlobStorage::TEvVReleaseSnapshotResult>(status, errorReason, vdiskID);
+        }
     } // NErrBuilder
 
 } // NKikimr

@@ -491,6 +491,8 @@ message TEvVGet {
     optional bool AcquireBlockedGeneration = 22 [default = false]; // set to true to get the blocked generation
     optional TTimestamps Timestamps = 23;
     optional uint32 ForceBlockedGeneration = 24 [default = 0]; // non-zero means a successfull block must be done first
+
+    optional bytes SnapshotId = 30; // read data from specific snapshot (if set)
 }
 
 message TQueryResult {
@@ -626,6 +628,31 @@ message TEvVAssimilateResult {
     repeated TBlob Blobs = 12;
 
     optional TGroupInfo RecentGroup = 100; // filled in by VDisk on RACE when VDisk has newer generation
+}
+
+message TEvVTakeSnapshot {
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
+    optional bool NotifyIfNotReady = 2;
+    optional bytes SnapshotId = 3;
+    optional uint32 TimeToLiveSec = 4;
+}
+
+message TEvVTakeSnapshotResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
+}
+
+message TEvVReleaseSnapshot {
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 1;
+    optional bool NotifyIfNotReady = 2;
+    optional bytes SnapshotId = 3;
+}
+
+message TEvVReleaseSnapshotResult {
+    optional NKikimrProto.EReplyStatus Status = 1;
+    optional string ErrorReason = 2;
+    optional NKikimrBlobStorage.TVDiskID VDiskID = 3;
 }
 
 message TEvVCollectGarbage {

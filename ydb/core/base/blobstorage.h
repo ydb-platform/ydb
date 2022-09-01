@@ -495,6 +495,8 @@ struct TEvBlobStorage {
         EvVDefrag,
         EvVInplacePatch,
         EvVAssimilate,
+        EvVTakeSnapshot,
+        EvVReleaseSnapshot,
 
         EvVPutResult = EvPut + 3 * 512,                         /// 268 633 600
         EvVGetResult,
@@ -515,6 +517,8 @@ struct TEvBlobStorage {
         EvVDefragResult,
         EvVInplacePatchResult,
         EvVAssimilateResult,
+        EvVTakeSnapshotResult,
+        EvVReleaseSnapshotResult,
 
         // vdisk <-> vdisk interface
         EvVDisk = EvPut + 4 * 512,                              /// 268 634 112
@@ -2228,6 +2232,10 @@ struct TEvBlobStorage {
     struct TEvVDefragResult;
     struct TEvVAssimilate;
     struct TEvVAssimilateResult;
+    struct TEvVTakeSnapshot;
+    struct TEvVTakeSnapshotResult;
+    struct TEvVReleaseSnapshot;
+    struct TEvVReleaseSnapshotResult;
 
 
     struct TEvControllerRegisterNode;

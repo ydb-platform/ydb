@@ -1573,6 +1573,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVBaldSyncLog, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVTakeSnapshot, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVReleaseSnapshot, DatabaseNotReadyHandle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
@@ -1617,6 +1619,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
             HFunc(TEvBlobStorage::TEvVBaldSyncLog, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVTakeSnapshot, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVReleaseSnapshot, DatabaseNotReadyHandle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
@@ -1657,9 +1661,11 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVSyncFull, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVSyncGuid, DatabaseErrorHandle)
             HFunc(TEvBlobStorage::TEvVCheckReadiness, DatabaseErrorHandle)
-            HFunc(TEvBlobStorage::TEvVCompact, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVDefrag, DatabaseNotReadyHandle)
-            HFunc(TEvBlobStorage::TEvVBaldSyncLog, DatabaseNotReadyHandle)
+            HFunc(TEvBlobStorage::TEvVCompact, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVDefrag, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVBaldSyncLog, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVTakeSnapshot, DatabaseErrorHandle)
+            HFunc(TEvBlobStorage::TEvVReleaseSnapshot, DatabaseErrorHandle)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)
@@ -1695,7 +1701,9 @@ namespace NKikimr {
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVCompact>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVDefrag>
                 || std::is_same_v<TEv, TEvBlobStorage::TEvVBaldSyncLog>
-                || std::is_same_v<TEv, TEvBlobStorage::TEvVAssimilate>;
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVAssimilate>
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVTakeSnapshot>
+                || std::is_same_v<TEv, TEvBlobStorage::TEvVReleaseSnapshot>;
 
         template <typename TEv>
         static constexpr bool IsValidatable = std::is_same_v<TEv, TEvBlobStorage::TEvVMultiPut>
@@ -1777,6 +1785,8 @@ namespace NKikimr {
             HFunc(TEvBlobStorage::TEvVCompact, Check)
             HFunc(TEvBlobStorage::TEvVDefrag, Check)
             HFunc(TEvBlobStorage::TEvVBaldSyncLog, Check)
+            HFunc(TEvBlobStorage::TEvVTakeSnapshot, Check)
+            HFunc(TEvBlobStorage::TEvVReleaseSnapshot, Check)
             HFunc(TEvVGenerationChange, Handle)
             HFunc(TEvPDiskErrorStateChange, Handle)
             HFunc(NMon::TEvHttpInfo, Handle)

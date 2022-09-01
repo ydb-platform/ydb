@@ -2891,6 +2891,49 @@ namespace NKikimr {
         std::vector<TLayoutRecord> Layout;
     };
 
+    struct TEvBlobStorage::TEvVTakeSnapshot : TEventPB<TEvVTakeSnapshot, NKikimrBlobStorage::TEvVTakeSnapshot, EvVTakeSnapshot> {
+        TEvVTakeSnapshot() = default;
+
+        TEvVTakeSnapshot(TVDiskID vdiskId, const TString& snapshotId, ui32 timeToLiveSec) {
+            VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+            Record.SetSnapshotId(snapshotId);
+            Record.SetTimeToLiveSec(timeToLiveSec);
+        }
+    };
+
+    struct TEvBlobStorage::TEvVTakeSnapshotResult : TEventPB<TEvVTakeSnapshotResult, NKikimrBlobStorage::TEvVTakeSnapshotResult, EvVTakeSnapshotResult> {
+        TEvVTakeSnapshotResult() = default;
+
+        TEvVTakeSnapshotResult(NKikimrProto::EReplyStatus status, const TString& errorReason, TVDiskID vdiskId) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(errorReason);
+            }
+            VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+        }
+    };
+
+    struct TEvBlobStorage::TEvVReleaseSnapshot : TEventPB<TEvVReleaseSnapshot, NKikimrBlobStorage::TEvVReleaseSnapshot, EvVReleaseSnapshot> {
+        TEvVReleaseSnapshot() = default;
+
+        TEvVReleaseSnapshot(TVDiskID vdiskId, const TString& snapshotId) {
+            VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+            Record.SetSnapshotId(snapshotId);
+        }
+    };
+
+    struct TEvBlobStorage::TEvVReleaseSnapshotResult : TEventPB<TEvVReleaseSnapshotResult, NKikimrBlobStorage::TEvVReleaseSnapshotResult, EvVReleaseSnapshotResult> {
+        TEvVReleaseSnapshotResult() = default;
+
+        TEvVReleaseSnapshotResult(NKikimrProto::EReplyStatus status, const TString& errorReason, TVDiskID vdiskId) {
+            Record.SetStatus(status);
+            if (errorReason) {
+                Record.SetErrorReason(errorReason);
+            }
+            VDiskIDFromVDiskID(vdiskId, Record.MutableVDiskID());
+        }
+    };
+
     //////////////////////////////////////////////////////////////////////////////////////////////
     // FOR JSON
     //////////////////////////////////////////////////////////////////////////////////////////////

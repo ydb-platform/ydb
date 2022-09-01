@@ -37,9 +37,9 @@ namespace NKikimr {
         {}
         // for non-existen fresh segment
         TFreshIndexAndDataSnapshot() = default;
-        TFreshIndexAndDataSnapshot(const TFreshIndexAndDataSnapshot &) = delete;
+        TFreshIndexAndDataSnapshot(const TFreshIndexAndDataSnapshot &) = default;
         TFreshIndexAndDataSnapshot(TFreshIndexAndDataSnapshot &&) = default;
-        TFreshIndexAndDataSnapshot &operator=(const TFreshIndexAndDataSnapshot &) = delete;
+        TFreshIndexAndDataSnapshot &operator=(const TFreshIndexAndDataSnapshot &) = default;
         TFreshIndexAndDataSnapshot &operator=(TFreshIndexAndDataSnapshot &&) = default;
         ~TFreshIndexAndDataSnapshot() = default;
 
@@ -150,9 +150,9 @@ namespace NKikimr {
 
         // empty snapshot for non-existing fresh segment
         TFreshSegmentSnapshot() = default;
-        TFreshSegmentSnapshot(const TFreshSegmentSnapshot &) = delete;
+        TFreshSegmentSnapshot(const TFreshSegmentSnapshot &) = default;
         TFreshSegmentSnapshot(TFreshSegmentSnapshot &&) = default;
-        TFreshSegmentSnapshot &operator=(const TFreshSegmentSnapshot &) = delete;
+        TFreshSegmentSnapshot &operator=(const TFreshSegmentSnapshot &) = default;
         TFreshSegmentSnapshot &operator=(TFreshSegmentSnapshot &&) = default;
         ~TFreshSegmentSnapshot() = default;
 

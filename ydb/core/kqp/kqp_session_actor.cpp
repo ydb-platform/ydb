@@ -16,11 +16,13 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/cputime.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/base/wilson.h>
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/actors/core/actor_bootstrapped.h>
 #include <library/cpp/actors/core/event_pb.h>
@@ -91,6 +93,8 @@ struct TKqpQueryState {
 
     TString TxId; // User tx
     bool Commit = false;
+
+    NTopic::TOffsetsInfo Offsets;
 };
 
 struct TKqpCleanupCtx {
@@ -291,7 +295,7 @@ public:
         }
     }
 
-    void HandleReady(TEvKqp::TEvQueryRequest::TPtr& ev) {
+    void HandleReady(TEvKqp::TEvQueryRequest::TPtr& ev, const NActors::TActorContext& ctx) {
         ui64 proxyRequestId = ev->Cookie;
         auto& event = ev->Get()->Record;
         auto requestInfo = TKqpRequestInfo(event.GetTraceId(), event.GetRequest().GetSessionId());
@@ -392,11 +396,47 @@ public:
                 event.MutableRequest()->Swap(&QueryState->Request);
                 ForwardRequest(ev);
                 return;
+
+            case NKikimrKqp::QUERY_ACTION_TOPIC:
+                AddOffsetsToTransaction(ctx);
+                return;
         }
 
         StopIdleTimer();
 
         CompileQuery();
+    }
+
+    void AddOffsetsToTransaction(const NActors::TActorContext& ctx) {
+        YQL_ENSURE(QueryState);
+        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+
+        if (!PrepareQueryTransaction(requestInfo)) {
+            return;
+        }
+
+        QueryState->Offsets = NTopic::TOffsetsInfo();
+
+        for (auto& topic : QueryState->Request.topics()) {
+            auto path = CanonizePath(NPersQueue::GetFullTopicPath(ctx, QueryState->Request.GetDatabase(), topic.path()));
+            auto& t = QueryState->Offsets.AddTopic(path);
+
+            for (auto& partition : topic.partitions()) {
+                auto& p = t.AddPartition(partition.partition_id());
+
+                for (auto& range : partition.partition_offsets()) {
+                    p.AddRange(range);
+                }
+            }
+        }
+
+        auto navigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
+        navigate->DatabaseName = CanonizePath(QueryState->Request.GetDatabase());
+        QueryState->Offsets.FillSchemeCacheNavigate(*navigate);
+        navigate->UserToken = new NACLib::TUserToken(QueryState->UserToken);
+
+        Become(&TKqpSessionActor::TopicOpsState);
+        ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(navigate.release()));
     }
 
     void CompileQuery() {
@@ -638,10 +678,7 @@ public:
         return {success, ctx.IssueManager.GetIssues()};
     }
 
-    bool PrepareQueryContext() {
-        YQL_ENSURE(QueryState);
-        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
-
+    bool PrepareQueryTransaction(const TKqpRequestInfo& requestInfo) {
         auto& queryRequest = QueryState->Request;
 
         if (queryRequest.HasTxControl()) {
@@ -676,6 +713,17 @@ public:
             QueryState->TxCtx->EffectiveIsolationLevel = NKikimrKqp::ISOLATION_LEVEL_UNDEFINED;
         }
 
+        return true;
+    }
+
+    bool PrepareQueryContext() {
+        YQL_ENSURE(QueryState);
+        auto requestInfo = TKqpRequestInfo(QueryState->TraceId, SessionId);
+
+        if (!PrepareQueryTransaction(requestInfo)) {
+            return false;
+        }
+
         auto& queryCtx = QueryState->QueryCtx;
         queryCtx->TimeProvider = TAppData::TimeProvider;
         queryCtx->RandomProvider = TAppData::RandomProvider;
@@ -688,6 +736,7 @@ public:
             return false;
         }
 
+        auto& queryRequest = QueryState->Request;
         auto action = queryRequest.GetAction();
         auto type = queryRequest.GetType();
 
@@ -1845,10 +1894,10 @@ public:
         Cleanup(IsFatalError(ydbStatus));
     }
 
-    STATEFN(ReadyState) {
+    STFUNC(ReadyState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqp::TEvQueryRequest, HandleReady);
+                HFunc(TEvKqp::TEvQueryRequest, HandleReady);
 
                 hFunc(TEvKqp::TEvPingSessionRequest, Handle);
                 hFunc(TEvKqp::TEvIdleTimeout, Handle);
@@ -1942,6 +1991,28 @@ public:
         }
     }
 
+    STATEFN(TopicOpsState) {
+        try {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvKqp::TEvQueryRequest, HandleTopicOps);
+
+                hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleTopicOps);
+
+                hFunc(TEvKqp::TEvPingSessionRequest, Handle);
+                hFunc(TEvKqp::TEvCloseSessionRequest, HandleTopicOps);
+                hFunc(TEvKqp::TEvInitiateSessionShutdown, Handle);
+                hFunc(TEvKqp::TEvContinueShutdown, Handle);
+                hFunc(TEvKqp::TEvIdleTimeout, HandleNoop);
+            default:
+                UnexpectedEvent("TopicOpsState", ev);
+            }
+        } catch (const TRequestFail& ex) {
+            ReplyQueryError(ex.RequestInfo, ex.Status, ex.what(), ex.Issues);
+        } catch (const yexception& ex) {
+            InternalError(ex.what());
+        }
+    }
+
 private:
     void UnexpectedEvent(const TString& state, TAutoPtr<NActors::IEventHandle>& ev) {
         InternalError(TStringBuilder() << "TKqpSessionActor in state " << state << " recieve unexpected event " <<
@@ -1956,6 +2027,106 @@ private:
         } else {
             FinalCleanup();
         }
+    }
+
+    void HandleTopicOps(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        ReplyBusy(ev);
+    }
+
+    void HandleTopicOps(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        TKqpRequestInfo requestInfo(QueryState->TraceId, SessionId);
+        NSchemeCache::TSchemeCacheNavigate* response = ev->Get()->Request.Get();
+
+        Ydb::StatusIds_StatusCode status;
+        TString message;
+
+        if (IsAccessDenied(*response, message)) {
+            ythrow TRequestFail(requestInfo, Ydb::StatusIds::UNAUTHORIZED) << message;
+        }
+        if (HasErrors(*response, message)) {
+            ythrow TRequestFail(requestInfo, Ydb::StatusIds::SCHEME_ERROR) << message;
+        }
+
+        QueryState->Offsets.ProcessSchemeCacheNavigate(response->ResultSet,
+                                                       status,
+                                                       message);
+        if (status != Ydb::StatusIds::SUCCESS) {
+            ythrow TRequestFail(requestInfo, status) << message;
+        }
+
+        if (!TryMergeTopicOffsets(QueryState->Offsets, message)) {
+            ythrow TRequestFail(requestInfo, Ydb::StatusIds::BAD_REQUEST) << message;
+        }
+
+        ReplySuccess();
+    }
+
+    bool IsAccessDenied(const NSchemeCache::TSchemeCacheNavigate& response,
+                        TString& message)
+    {
+        bool denied = false;
+
+        TStringBuilder builder;
+        NACLib::TUserToken token(QueryState->UserToken);
+
+        builder << "Access for topic(s)";
+        for (auto& result : response.ResultSet) {
+            if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                continue;
+            }
+
+            auto rights = NACLib::EAccessRights::ReadAttributes | NACLib::EAccessRights::WriteAttributes;
+            if (result.SecurityObject && !result.SecurityObject->CheckAccess(rights, token)) {
+                builder << " '" << JoinPath(result.Path) << "'";
+                denied = true;
+            }
+        }
+
+        if (denied) {
+            builder << " is denied for subject '" << token.GetUserSID() << "'";
+
+            message = std::move(builder);
+        }
+
+        return denied;
+    }
+
+    bool HasErrors(const NSchemeCache::TSchemeCacheNavigate& response,
+                   TString& message)
+    {
+        if (response.ErrorCount == 0) {
+            return false;
+        }
+
+        TStringBuilder builder;
+
+        builder << "Unable to navigate:";
+        for (const auto& result : response.ResultSet) {
+            if (result.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                builder << "path: '" << JoinPath(result.Path) << "' status: " << result.Status;
+            }
+        }
+        message = std::move(builder);
+
+        return true;
+    }
+
+    bool TryMergeTopicOffsets(const NTopic::TOffsetsInfo &offsets, TString& message) {
+        try {
+            YQL_ENSURE(QueryState);
+            QueryState->TxCtx->MergeTopicOffsets(offsets);
+            return true;
+        } catch (const NTopic::TOffsetsRangeIntersectExpection &ex) {
+            message = ex.what();
+            return false;
+        }
+    }
+
+    void HandleTopicOps(TEvKqp::TEvCloseSessionRequest::TPtr&) {
+        YQL_ENSURE(QueryState);
+        ReplyQueryError(TKqpRequestInfo(QueryState->TraceId, SessionId), Ydb::StatusIds::BAD_SESSION,
+                "Request cancelled due to explicit session close request");
+        Counters->ReportSessionActorClosedRequest(Settings.DbCounters);
     }
 
 private:
@@ -1983,7 +2154,6 @@ private:
     TActorId IdleTimerActorId;
     ui32 IdleTimerId = 0;
     std::optional<TSessionShutdownState> ShutdownState;
-
 };
 
 } // namespace

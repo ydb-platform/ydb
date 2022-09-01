@@ -4966,6 +4966,5 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT(partId == 1 || partId == 3);
         }
     }
-
 }
 }

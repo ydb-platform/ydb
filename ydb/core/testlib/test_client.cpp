@@ -315,6 +315,7 @@ namespace Tests {
         GRpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::V1::TGRpcTopicService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxyId, true));
+        GRpcServer->AddService(new NGRpcService::V1::TGRpcTopicServiceTx(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxyId));
         GRpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, grpcRequestProxyId, true));
         GRpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxyId, true));

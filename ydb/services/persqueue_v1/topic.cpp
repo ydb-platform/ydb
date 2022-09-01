@@ -4,6 +4,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/grpc_services/grpc_helper.h>
+#include <ydb/core/grpc_services/service_table.h>
 #include <ydb/core/tx/scheme_board/cache.h>
 
 #include "grpc_pq_read.h"
@@ -121,11 +122,68 @@ void TGRpcTopicService::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
         })
 
 #undef ADD_REQUEST
-
-
 }
 
 void TGRpcTopicService::StopService() noexcept {
+    TGrpcServiceBase::StopService();
+}
+
+//
+// TGRpcTopicServiceTx
+//
+TGRpcTopicServiceTx::TGRpcTopicServiceTx(NActors::TActorSystem *system,
+                                         TIntrusivePtr<::NMonitoring::TDynamicCounters> counters,
+                                         const NActors::TActorId& grpcRequestProxy)
+    : ActorSystem(system)
+    , Counters(counters)
+    , GRpcRequestProxy(grpcRequestProxy)
+{
+}
+
+void TGRpcTopicServiceTx::InitService(grpc::ServerCompletionQueue *cq, NGrpc::TLoggerPtr logger) {
+    CQ = cq;
+
+    if (ActorSystem->AppData<TAppData>()->PQConfig.GetEnabled()) {
+        SetupIncomingRequests(std::move(logger));
+    }
+}
+
+void TGRpcTopicServiceTx::SetGlobalLimiterHandle(NGrpc::TGlobalLimiter* limiter) {
+    Limiter = limiter;
+}
+
+bool TGRpcTopicServiceTx::IncRequest() {
+    return Limiter->Inc();
+}
+
+void TGRpcTopicServiceTx::DecRequest() {
+    Limiter->Dec();
+}
+
+void TGRpcTopicServiceTx::SetupIncomingRequests(NGrpc::TLoggerPtr logger) {
+    auto getCounterBlock = NKikimr::NGRpcService::CreateCounterCb(Counters, ActorSystem);
+
+#ifdef ADD_REQUEST_LIMIT
+#error ADD_REQUEST_LIMIT macro already defined
+#endif
+
+#define ADD_REQUEST_LIMIT(NAME, CB, LIMIT_TYPE) \
+    MakeIntrusive<TGRpcRequest<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response, TGRpcTopicServiceTx>>     \
+        (this, this->GetService(), CQ,                                                                          \
+            [this](NGrpc::IRequestContextBase *ctx) {                                                           \
+                NGRpcService::ReportGrpcReqToMon(*ActorSystem, ctx->GetPeer());                                 \
+                ActorSystem->Send(GRpcRequestProxy,                                                             \
+                    new TGrpcRequestOperationCall<Ydb::Topic::NAME##Request, Ydb::Topic::NAME##Response>        \
+                        (ctx, &CB, TRequestAuxSettings{TRateLimiterMode::LIMIT_TYPE, nullptr}));                \
+            }, &Ydb::Topic::V1::TopicServiceTx::AsyncService::Request ## NAME,                                  \
+            #NAME, logger, getCounterBlock("topic", #NAME))->Run();
+
+    ADD_REQUEST_LIMIT(AddOffsetsToTransaction, DoAddOffsetsToTransaction, Ru)
+
+#undef ADD_REQUEST_LIMIT
+}
+
+void TGRpcTopicServiceTx::StopService() noexcept {
     TGrpcServiceBase::StopService();
 }
 

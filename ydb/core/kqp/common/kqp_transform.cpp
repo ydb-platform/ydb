@@ -18,14 +18,14 @@ IGraphTransformer::TStatus TLogExprTransformer::operator()(const TExprNode::TPtr
     return IGraphTransformer::TStatus::Ok;
 }
 
-TAutoPtr<IGraphTransformer> TLogExprTransformer::Sync(const TString& description, NLog::EComponent component,
-    NLog::ELevel level)
+TAutoPtr<IGraphTransformer> TLogExprTransformer::Sync(const TString& description, NYql::NLog::EComponent component,
+    NYql::NLog::ELevel level)
 {
     return CreateFunctorTransformer(TLogExprTransformer(description, component, level));
 }
 
-void TLogExprTransformer::LogExpr(const TExprNode& input, TExprContext& ctx, const TString& description, NLog::EComponent component,
-    NLog::ELevel level)
+void TLogExprTransformer::LogExpr(const TExprNode& input, TExprContext& ctx, const TString& description, NYql::NLog::EComponent component,
+    NYql::NLog::ELevel level)
 {
     YQL_CVLOG(level, component) << description << ":\n" << KqpExprToPrettyString(input, ctx);
 }

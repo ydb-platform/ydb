@@ -479,6 +479,5 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             }, event);
 
     }
-
 }
 } // namespace NYdb::NPersQueue::NTests

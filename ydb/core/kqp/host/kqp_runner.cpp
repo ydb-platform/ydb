@@ -161,8 +161,8 @@ public:
         KqlTypeAnnTransformer = CreateTypeAnnotationTransformer(CreateExtCallableTypeAnnotationTransformer(*typesCtx),
             *typesCtx);
 
-        auto logLevel = NLog::ELevel::TRACE;
-        auto logComp = NLog::EComponent::ProviderKqp;
+        auto logLevel = NYql::NLog::ELevel::TRACE;
+        auto logComp = NYql::NLog::EComponent::ProviderKqp;
 
         KqlOptimizeTransformer = TTransformationPipeline(typesCtx)
             .AddServiceTransformers()

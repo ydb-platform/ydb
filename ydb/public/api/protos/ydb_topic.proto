@@ -3,6 +3,7 @@ import "ydb/public/api/protos/ydb_operation.proto";
 import "ydb/public/api/protos/ydb_scheme.proto";
 import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/annotations/validation.proto";
 
 import "google/protobuf/duration.proto";
@@ -495,6 +496,45 @@ message StreamReadMessage {
     }
 }
 
+// Add offsets to transaction request sent from client to server.
+message AddOffsetsToTransactionRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+
+    // Session identifier from TableService.
+    string session_id = 2;
+
+    // Transaction identifier from TableService.
+    Ydb.Table.TransactionControl tx_control = 3;
+
+    // Ranges of offsets by topics.
+    repeated TopicOffsets topics = 4;
+
+    message TopicOffsets {
+        // Topic path.
+        string path = 1;
+
+        // Ranges of offsets by partitions.
+        repeated PartitionOffsets partitions = 2;
+
+        message PartitionOffsets {
+            // Partition identifier.
+            int64 partition_id = 1;
+
+            // List of offset ranges.
+            repeated OffsetsRange partition_offsets = 2;
+        }
+    }
+}
+
+// Add offsets to transaction response sent from server to client.
+message AddOffsetsToTransactionResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+// Add offsets to transaction result message that will be inside AddOffsetsToTransactionResponse.operation.
+message AddOffsetsToTransactionResult {
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Control messages

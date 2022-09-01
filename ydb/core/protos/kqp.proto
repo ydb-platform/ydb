@@ -10,6 +10,7 @@ import "ydb/public/api/protos/ydb_status_codes.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/core/protos/kqp_query_settings.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/library/yql/dq/actors/protos/dq_events.proto";
@@ -47,6 +48,7 @@ enum EQueryAction {
     QUERY_ACTION_COMMIT_TX = 7;
     QUERY_ACTION_ROLLBACK_TX = 8;
     QUERY_ACTION_PARSE = 9;
+    QUERY_ACTION_TOPIC = 10;
 };
 
 enum EIsolationLevel {
@@ -93,6 +95,7 @@ message TQueryRequest {
     reserved 19; // (deprecated) StatsMode
     optional NYql.NDqProto.EDqStatsMode StatsMode = 20; // deprecated
     optional Ydb.Table.QueryStatsCollection.Mode CollectStats = 21;
+    repeated Ydb.Topic.AddOffsetsToTransactionRequest.TopicOffsets Topics = 22;
 }
 
 message TKqpPathIdProto {

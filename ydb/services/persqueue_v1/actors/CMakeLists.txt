@@ -33,4 +33,5 @@ target_sources(services-persqueue_v1-actors PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_init_auth_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/read_info_actor.cpp
   ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/schema_actors.cpp
+  ${CMAKE_SOURCE_DIR}/ydb/services/persqueue_v1/actors/add_offsets_to_transaction_actor.cpp
 )

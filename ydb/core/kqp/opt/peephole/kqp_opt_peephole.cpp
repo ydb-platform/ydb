@@ -28,7 +28,7 @@ using TStatus = IGraphTransformer::TStatus;
 class TKqpPeepholeTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPeepholeTransformer()
-        : TOptimizeTransformerBase(nullptr, NLog::EComponent::ProviderKqp, {})
+        : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
     {
 #define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name)
         AddHandler(0, &TDqReplicate::Match, HNDL(RewriteReplicate));
@@ -260,7 +260,7 @@ public:
     {
         TxTransformer = TTransformationPipeline(&typesCtx)
             .AddServiceTransformers()
-            .Add(TLogExprTransformer::Sync("TxsPeephole", NLog::EComponent::ProviderKqp, NLog::ELevel::TRACE), "TxsPeephole")
+            .Add(TLogExprTransformer::Sync("TxsPeephole", NYql::NLog::EComponent::ProviderKqp, NYql::NLog::ELevel::TRACE), "TxsPeephole")
             .Add(*TypeAnnTransformer, "TypeAnnotation")
             .AddPostTypeAnnotation(/* forSubgraph */ true)
             .Add(CreateKqpTxPeepholeTransformer(TypeAnnTransformer.Get(), typesCtx, config), "Peephole")

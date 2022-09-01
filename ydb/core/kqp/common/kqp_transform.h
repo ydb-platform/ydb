@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
+
 #include <ydb/core/kqp/common/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_tx_info.h>
+#include <ydb/core/kqp/common/kqp_topic.h>
 
 #include <ydb/core/kqp/provider/yql_kikimr_expr_nodes.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
@@ -239,6 +241,10 @@ public:
         ForceNewEngineSettings.ForceNewEngineLevel = level;
     }
 
+    void MergeTopicOffsets(const NTopic::TOffsetsInfo &offsets) {
+        TopicOffsets.Merge(offsets);
+    }
+
 public:
     struct TParamsState : public TThrRefBase {
         TParamValueMap Values;
@@ -259,6 +265,7 @@ public:
     TKqpTxLocks Locks;
 
     TDeferredEffects DeferredEffects;
+    NTopic::TOffsetsInfo TopicOffsets;
     TIntrusivePtr<TParamsState> ParamsState;
 
     IKqpGateway::TKqpSnapshotHandle SnapshotHandle;

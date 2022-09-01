@@ -19,7 +19,7 @@ class TKqpLogicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpLogicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
         const TKikimrConfiguration::TPtr& config)
-        : TOptimizeTransformerBase(nullptr, NLog::EComponent::ProviderKqp, {})
+        : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
         , Config(config)

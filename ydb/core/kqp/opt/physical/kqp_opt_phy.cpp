@@ -21,7 +21,7 @@ using TStatus = IGraphTransformer::TStatus;
 class TKqpPhysicalOptTransformer : public TOptimizeTransformerBase {
 public:
     TKqpPhysicalOptTransformer(TTypeAnnotationContext& typesCtx, const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx)
-        : TOptimizeTransformerBase(nullptr, NLog::EComponent::ProviderKqp, {})
+        : TOptimizeTransformerBase(nullptr, NYql::NLog::EComponent::ProviderKqp, {})
         , TypesCtx(typesCtx)
         , KqpCtx(*kqpCtx)
     {

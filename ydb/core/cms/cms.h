@@ -71,6 +71,7 @@ struct TEvCms {
         EvSetConfigResponse,
         EvSetMarkerResponse,
         EvResetMarkerResponse,
+        EvStoreWalleTaskFailed,
 
         EvEnd
     };
@@ -198,6 +199,23 @@ struct TEvCms {
             return Sprintf("%s { Task: %s }", ToStringHeader().data(), Task.ToString().data());
         }
     };
+
+    struct TEvStoreWalleTaskFailed : public TEventLocal<TEvStoreWalleTaskFailed, EvStoreWalleTaskFailed> {
+        TString TaskId;
+        TString Reason;
+
+        TEvStoreWalleTaskFailed(TString id, TString reason)
+            : TaskId(id)
+            , Reason(reason)
+        {
+        }
+
+        TString ToString() const override
+        {
+            return Sprintf("%s { Task: %s Reason %s}", ToStringHeader().data(), TaskId.data(), Reason.data());
+        }
+    };
+
 
     struct TEvWalleTaskStored : public TEventLocal<TEvWalleTaskStored, EvWalleTaskStored> {
         TString TaskId;

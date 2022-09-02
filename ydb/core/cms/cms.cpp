@@ -1908,8 +1908,6 @@ void TCms::Handle(TEvCms::TEvWalleRemoveTaskRequest::TPtr &ev, const TActorConte
 void TCms::Handle(TEvCms::TEvStoreWalleTask::TPtr &ev, const TActorContext &ctx)
 {
     auto event = ev->Get();
-    State->WalleTasks.emplace(event->Task.TaskId, event->Task);
-    State->WalleRequests.emplace(event->Task.RequestId, event->Task.TaskId);
 
     auto handle = new IEventHandle(ev->Sender, SelfId(), new TEvCms::TEvWalleTaskStored(event->Task.TaskId), 0, ev->Cookie);
     Execute(CreateTxStoreWalleTask(event->Task, std::move(ev->Release()), handle), ctx);

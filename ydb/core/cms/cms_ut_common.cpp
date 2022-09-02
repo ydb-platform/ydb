@@ -746,6 +746,18 @@ TCmsTestEnv::CheckRequest(const TString &user,
     return rec;
 }
 
+
+void TCmsTestEnv::CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req)
+{ 
+    TString TaskId = req->Task.TaskId;
+    SendToPipe(CmsId, Sender, req, 0, GetPipeConfigWithRetries());
+    
+    TAutoPtr<IEventHandle> handle;
+    auto reply = GrabEdgeEventRethrow<TEvCms::TEvStoreWalleTaskFailed>(handle, TDuration::Seconds(30));
+    UNIT_ASSERT(reply);
+    UNIT_ASSERT_VALUES_EQUAL(reply->TaskId, TaskId);
+}
+
 void TCmsTestEnv::CheckWalleCreateTask(TAutoPtr<NCms::TEvCms::TEvWalleCreateTaskRequest> req,
                                        NKikimrCms::TStatus::ECode code)
 {

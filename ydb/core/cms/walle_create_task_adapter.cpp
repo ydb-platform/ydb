@@ -205,6 +205,10 @@ private:
         ctx.Send(Cms, request.Release());
     }
 
+    void Handle(TEvCms::TEvStoreWalleTaskFailed::TPtr &ev, const TActorContext &ctx) { 
+        ReplyWithErrorAndDie(TStatus::ERROR_TEMP, ev.Get()->Get()->Reason, ctx);
+    }
+
     void Finish(const TActorContext& ctx)
     {
         ReplyAndDie(Response, ctx);

@@ -1224,6 +1224,39 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
             }
         }
     }
+
+    Y_UNIT_TEST(WalleCleanupTest)
+    {
+        TCmsTestEnv env(8);
+
+        TAutoPtr<NCms::TEvCms::TEvPermissionRequest> event = new NCms::TEvCms::TEvPermissionRequest;
+        event->Record.SetUser(WALLE_CMS_USER);
+        event->Record.SetPartialPermissionAllowed(true);
+        event->Record.SetDryRun(false);
+        event->Record.SetSchedule(false);
+
+        AddActions(event, MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 600000000, "storage"));
+
+        NKikimrCms::TPermissionResponse res;
+        res = env.CheckPermissionRequest(event, TStatus::ALLOW);
+
+        // Check that permission is stored
+        env.CheckListPermissions(WALLE_CMS_USER, 1);
+
+        // Adbance time to run cleanup
+        env.AdvanceCurrentTime(TDuration::Minutes(3));
+        env.RestartCms();
+        
+        // TODO:: перенести внутрь TCmsTestEnv
+        TAutoPtr<TEvCms::TEvStoreWalleTask> event_store = new TEvCms::TEvStoreWalleTask;
+        event_store->Task.TaskId = "walle-test-task-1";
+        event_store->Task.RequestId = res.GetRequestId();
+
+        for (auto &permission : res.GetPermissions())
+            event_store->Task.Permissions.insert(permission.GetId());
+
+        env.CheckWalleStoreTaskIsFailed(event_store.Release());
+    }
 }
 
 } // NCmsTest

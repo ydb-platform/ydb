@@ -270,6 +270,8 @@ public:
         return CheckRequest(user, id, dry, NKikimrCms::MODE_MAX_AVAILABILITY, res, count);
     }
 
+    void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req);
+
     template<typename... Ts>
     void CheckWalleCreateTask(const TString &id,
                               const TString &action,

@@ -557,6 +557,98 @@ struct TTestHelper {
             || newLock->GetGeneration() != prevLock->GetGeneration());
     }
 
+    struct THangedReturn {
+        ui64 LastPlanStep = 0;
+        TVector<THolder<IEventHandle>> ReadSets;
+    };
+
+    THangedReturn HangWithTransactionWaitingRS(ui64 shardCount, bool finalUpserts = true) {
+        THangedReturn result;
+
+        auto& runtime = *Server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NActors::NLog::PRI_DEBUG);
+
+        CreateTable(Server, Sender, "/Root", "table-2", false, shardCount);
+        ExecSQL(Server, Sender, R"(
+            UPSERT INTO `/Root/table-2`
+            (key1, key2, key3, value)
+            VALUES
+            (1, 1, 1, 1000),
+            (3, 3, 3, 3000),
+            (5, 5, 5, 5000),
+            (8, 0, 0, 8000),
+            (8, 0, 1, 8010),
+            (8, 1, 0, 8020),
+            (8, 1, 1, 8030),
+            (11, 11, 11, 11110);
+        )");
+
+        auto waitFor = [&](const auto& condition, const TString& description) {
+            if (!condition()) {
+                Cerr << "... waiting for " << description << Endl;
+                TDispatchOptions options;
+                options.CustomFinalCondition = [&]() {
+                    return condition();
+                };
+                Server->GetRuntime()->DispatchEvents(options);
+                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
+            }
+        };
+
+        bool capturePlanStep = true;
+        bool dropRS = true;
+
+        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
+            switch (event->GetTypeRewrite()) {
+                case TEvTxProcessing::EvPlanStep: {
+                    if (capturePlanStep) {
+                        auto planMessage = event->Get<TEvTxProcessing::TEvPlanStep>();
+                        result.LastPlanStep = planMessage->Record.GetStep();
+                    }
+                    break;
+                }
+                case TEvTxProcessing::EvReadSet: {
+                    if (dropRS) {
+                        result.ReadSets.push_back(std::move(event));
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserverFunc = Server->GetRuntime()->SetObserverFunc(captureEvents);
+
+        capturePlanStep = true;
+
+        // Send SQL request which should hang due to lost RS
+        // We will capture its planstep
+        SendSQL(
+            Server,
+            Sender,
+            "UPSERT INTO `/Root/table-1` (key1, key2, key3, value) SELECT key1, key2, key3, value FROM `/Root/table-2`");
+
+        waitFor([&]{ return result.LastPlanStep != 0; }, "intercepted TEvPlanStep");
+        capturePlanStep = false;
+
+        if (finalUpserts) {
+            // With mvcc (or a better dependency tracking) the read below may start out-of-order,
+            // because transactions above are stuck before performing any writes. Make sure it's
+            // forced to wait for above transactions by commiting a write that is guaranteed
+            // to "happen" after transactions above.
+            SendSQL(Server, Sender, (R"(
+                UPSERT INTO `/Root/table-1` (key1, key2, key3, value) VALUES (11, 11, 11, 11234);
+                UPSERT INTO `/Root/table-2` (key1, key2, key3, value) VALUES (11, 11, 11, 112345);
+            )"));
+        }
+
+        waitFor([&]{ return result.ReadSets.size() == 1; }, "intercepted RS");
+
+        return result;
+    }
+
     NTabletPipe::TClientConfig GetTestPipeConfig() {
         auto config = GetPipeConfigWithRetries();
         if (WithFollower)
@@ -1639,6 +1731,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
     }
 
     Y_UNIT_TEST(ShouldReadFromHead) {
+        // read from HEAD when there is no conflicting operation
         TTestHelper helper;
 
         auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
@@ -1647,13 +1740,157 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
 
         auto readResult = helper.SendRead("table-1", request.release());
         UNIT_ASSERT(readResult);
-        UNIT_ASSERT(readResult->Record.HasSnapshot());
+        UNIT_ASSERT(!readResult->Record.HasSnapshot());
         CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
             {3, 3, 3, 300},
         });
     }
 
-    Y_UNIT_TEST_TWIN(ShouldProperlyOrderConflictingTransactionsMvcc, UseNewEngine) {
+    Y_UNIT_TEST(ShouldReadFromHeadWithConflict) {
+        // Similar to ShouldReadFromHead, but there is conflicting hanged operation.
+        // We will read all at once thus should not block
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetEnableMvcc(true)
+            .SetUseRealThreads(false);
+
+        const ui64 shardCount = 1;
+        TTestHelper helper(serverSettings, shardCount);
+
+        auto hangedInfo = helper.HangWithTransactionWaitingRS(shardCount, false);
+
+        {
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddKeyQuery(*request, {3, 3, 3});
+            AddKeyQuery(*request, {1, 1, 1});
+            AddKeyQuery(*request, {5, 5, 5});
+
+            auto readResult = helper.SendRead(
+                "table-1",
+                request.release(),
+                0,
+                helper.Sender,
+                TDuration::MilliSeconds(100));
+            UNIT_ASSERT(readResult); // read is not blocked by conflicts!
+            const auto& record = readResult->Record;
+            UNIT_ASSERT(record.HasFinished());
+            UNIT_ASSERT(!record.HasSnapshot());
+            CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+                {3, 3, 3, 300},
+                {1, 1, 1, 100},
+                {5, 5, 5, 500}
+            });
+        }
+
+        // Don't catch RS any more and send caught ones to proceed with upserts.
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        for (auto &rs : hangedInfo.ReadSets)
+            runtime.Send(rs.Release());
+
+        // Wait for upsert to finish.
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(IsTxResultComplete(), 1);
+            runtime.DispatchEvents(options);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldReadFromHeadToMvccWithConflict) {
+        // Similar to ShouldProperlyOrderConflictingTransactionsMvcc, but we read HEAD
+        //
+        // In this test HEAD read waits conflicting transaction: first time we read from HEAD and
+        // notice that result it not full. Then restart after conflicting operation finishes
+
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root")
+            .SetEnableMvcc(true)
+            .SetUseRealThreads(false);
+
+        const ui64 shardCount = 1;
+        TTestHelper helper(serverSettings, shardCount);
+
+        auto hangedInfo = helper.HangWithTransactionWaitingRS(shardCount, false);
+
+        {
+            // now read HEAD
+            auto request = helper.GetBaseReadRequest("table-1", 1, NKikimrTxDataShard::ARROW, TRowVersion::Max());
+            request->Record.ClearSnapshot();
+            AddKeyQuery(*request, {3, 3, 3});
+            AddKeyQuery(*request, {1, 1, 1});
+            AddKeyQuery(*request, {3, 3, 3});
+            AddKeyQuery(*request, {1, 1, 1});
+            AddKeyQuery(*request, {5, 5, 5});
+            AddKeyQuery(*request, {11, 11, 11});
+
+            // intentionally 2: we check that between Read restart Reader's state is reset.
+            // Because of implementation we always read 1
+            request->Record.SetMaxRowsInResult(2);
+
+            auto readResult = helper.SendRead(
+                "table-1",
+                request.release(),
+                0,
+                helper.Sender,
+                TDuration::MilliSeconds(100));
+            UNIT_ASSERT(!readResult); // read is blocked by conflicts
+        }
+
+        // Don't catch RS any more and send caught ones to proceed with upserts.
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
+        for (auto &rs : hangedInfo.ReadSets)
+            runtime.Send(rs.Release());
+
+        // Wait for upsert to finish.
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(IsTxResultComplete(), 1);
+            runtime.DispatchEvents(options);
+        }
+
+        {
+            // get1
+            auto readResult = helper.WaitReadResult();
+            const auto& record = readResult->Record;
+            UNIT_ASSERT(!record.HasFinished());
+            UNIT_ASSERT(record.HasSnapshot());
+            CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+                {3, 3, 3, 3000},
+                {1, 1, 1, 1000}
+            });
+        }
+
+        {
+            // get2
+            auto readResult = helper.WaitReadResult();
+            const auto& record = readResult->Record;
+            UNIT_ASSERT(!record.HasFinished());
+            UNIT_ASSERT(record.HasSnapshot());
+            CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+                {3, 3, 3, 3000},
+                {1, 1, 1, 1000}
+            });
+        }
+
+        {
+            // get3
+            auto readResult = helper.WaitReadResult();
+            const auto& record = readResult->Record;
+            UNIT_ASSERT(record.HasFinished());
+            UNIT_ASSERT(record.HasSnapshot());
+            CheckResult(helper.Tables["table-1"].UserTable, *readResult, {
+                {5, 5, 5, 5000},
+                {11, 11, 11, 11110}
+            });
+        }
+    }
+
+    Y_UNIT_TEST(ShouldProperlyOrderConflictingTransactionsMvcc) {
         // 1. Start read-write multishard transaction: readset will be blocked
         // to hang transaction. Write is the key we want to read.
         // 2a. Check that we can read prior blocked step.
@@ -1668,95 +1905,13 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
             .SetEnableMvcc(true)
-            .SetEnableKqpSessionActor(UseNewEngine)
             .SetUseRealThreads(false);
 
         const ui64 shardCount = 1;
         TTestHelper helper(serverSettings, shardCount);
-        const auto& sender = helper.Sender;
 
-        auto& runtime = *helper.Server->GetRuntime();
-        runtime.SetLogPriority(NKikimrServices::KQP_EXECUTER, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::KQP_PROXY, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::MINIKQL_ENGINE, NActors::NLog::PRI_DEBUG);
-
-        CreateTable(helper.Server, sender, "/Root", "table-2", false, shardCount);
-        ExecSQL(helper.Server, sender, R"(
-            UPSERT INTO `/Root/table-2`
-            (key1, key2, key3, value)
-            VALUES
-            (1, 1, 1, 1000),
-            (3, 3, 3, 3000),
-            (5, 5, 5, 5000),
-            (8, 0, 0, 8000),
-            (8, 0, 1, 8010),
-            (8, 1, 0, 8020),
-            (8, 1, 1, 8030),
-            (11, 11, 11, 11110);
-        )");
-
-        auto waitFor = [&](const auto& condition, const TString& description) {
-            if (!condition()) {
-                Cerr << "... waiting for " << description << Endl;
-                TDispatchOptions options;
-                options.CustomFinalCondition = [&]() {
-                    return condition();
-                };
-                helper.Server->GetRuntime()->DispatchEvents(options);
-                UNIT_ASSERT_C(condition(), "... failed to wait for " << description);
-            }
-        };
-
-        bool capturePlanStep = true;
-        bool dropRS = true;
-
-        ui64 lastPlanStep = 0;
-        TVector<THolder<IEventHandle>> readSets;
-
-        auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle> &event) -> auto {
-            switch (event->GetTypeRewrite()) {
-                case TEvTxProcessing::EvPlanStep: {
-                    if (capturePlanStep) {
-                        auto planMessage = event->Get<TEvTxProcessing::TEvPlanStep>();
-                        lastPlanStep = planMessage->Record.GetStep();
-                    }
-                    break;
-                }
-                case TEvTxProcessing::EvReadSet: {
-                    if (dropRS) {
-                        readSets.push_back(std::move(event));
-                        return TTestActorRuntime::EEventAction::DROP;
-                    }
-                    break;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        };
-        auto prevObserverFunc = helper.Server->GetRuntime()->SetObserverFunc(captureEvents);
-
-        capturePlanStep = true;
-
-        // Send SQL request which should hang due to lost RS
-        // We will capture its planstep
-        SendSQL(
-            helper.Server,
-            sender,
-            Q_("UPSERT INTO `/Root/table-1` (key1, key2, key3, value) SELECT key1, key2, key3, value FROM `/Root/table-2`"));
-
-        waitFor([&]{ return lastPlanStep != 0; }, "intercepted TEvPlanStep");
-        capturePlanStep = false;
-        const auto hangedStep = lastPlanStep;
-
-        // With mvcc (or a better dependency tracking) the read below may start out-of-order,
-        // because transactions above are stuck before performing any writes. Make sure it's
-        // forced to wait for above transactions by commiting a write that is guaranteed
-        // to "happen" after transactions above.
-        SendSQL(helper.Server, sender, Q_((R"(
-            UPSERT INTO `/Root/table-1` (key1, key2, key3, value) VALUES (11, 11, 11, 11234);
-            UPSERT INTO `/Root/table-2` (key1, key2, key3, value) VALUES (11, 11, 11, 112345);
-        )")));
-
-        waitFor([&]{ return readSets.size() == 1; }, "intercepted RS");
+        auto hangedInfo = helper.HangWithTransactionWaitingRS(shardCount);
+        auto hangedStep = hangedInfo.LastPlanStep;
 
         // 2a: read prior data
         {
@@ -1825,8 +1980,9 @@ Y_UNIT_TEST_SUITE(DataShardReadIterator) {
         }
 
         // 3. Don't catch RS any more and send caught ones to proceed with upserts.
+        auto& runtime = *helper.Server->GetRuntime();
         runtime.SetObserverFunc(&TTestActorRuntime::DefaultObserverFunc);
-        for (auto &rs : readSets)
+        for (auto &rs : hangedInfo.ReadSets)
             runtime.Send(rs.Release());
 
         // Wait for upserts and immediate tx to finish.
@@ -2506,7 +2662,7 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorSysTables) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorState) {
     Y_UNIT_TEST(ShouldCalculateQuota) {
-        NDataShard::TReadIteratorState state({});
+        NDataShard::TReadIteratorState state({}, false);
         state.Quota.Rows = 100;
         state.Quota.Bytes = 1000;
         state.ConsumeSeqNo(10, 100); // seqno1

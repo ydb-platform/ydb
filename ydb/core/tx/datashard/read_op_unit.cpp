@@ -14,23 +14,23 @@ public:
     ~TReadUnit() = default;
 
     bool IsReadyToExecute(TOperation::TPtr op) const override {
-        return !op->HasRuntimeConflicts();
+        return !op->HasRuntimeConflicts() && op->GetDependencies().empty();
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         IReadOperation* readOperation = dynamic_cast<IReadOperation*>(op.Get());
         Y_VERIFY(readOperation);
 
-        if (!readOperation->Execute(txc, ctx)) {
-            return EExecutionStatus::Restart;
-        }
+        auto status = readOperation->Execute(txc, ctx);
+        if (status == EExecutionStatus::Restart || status == EExecutionStatus::Continue)
+            return status;
 
         // TODO: check if we can send result right here to decrease latency
 
         // note that op has set locks itself, no ApplyLocks() required
         DataShard.SubscribeNewLocks(ctx);
 
-        return EExecutionStatus::DelayCompleteNoMoreRestarts;
+        return status;
     }
 
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override {

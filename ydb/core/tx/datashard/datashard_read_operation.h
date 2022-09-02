@@ -10,7 +10,7 @@ public:
     virtual ~IReadOperation() = default;
 
     // our interface for TReadUnit
-    virtual bool Execute(TTransactionContext& txc, const TActorContext& ctx) = 0;
+    virtual EExecutionStatus Execute(TTransactionContext& txc, const TActorContext& ctx) = 0;
     virtual void SendResult(const TActorContext& ctx) = 0;
     virtual void Complete(const TActorContext& ctx) = 0;
 

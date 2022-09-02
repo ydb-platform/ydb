@@ -1485,7 +1485,7 @@ message TEvGetCompactTableStatsResult {
 // 4. Shard replies with TEvReadResult, which contains:
 //    - ReadId which is the same as in TEvRead. Shard gives no guarantee
 //    that the ReadId will be valid any time.
-//    - Snapshot version, which is useful when it wasn't specified in TEvRead.
+//    - Snapshot version in case of MVCC read or when HEAD read transformed to MVCC, i.e. repeatable read
 //    - SeqNo that should be used by user in TEvReadAck
 //    - ContinuationToken, which user can use to restart the read.
 //    - TxLocks or BrokenTxLocks when user specified LockTxId and LockNodeId.

@@ -51,6 +51,9 @@ class TGetImpl {
     const bool PhantomCheck;
     const bool Decommission;
 
+    std::optional<ui64> ReaderTabletId;
+    std::optional<ui32> ReaderTabletGeneration;
+
 public:
     TGetImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &groupQueues,
             TEvBlobStorage::TEvGet *ev, TNodeLayoutInfoPtr&& nodeLayout, const TString& requestPrefix = {})
@@ -69,6 +72,8 @@ public:
         , RequestPrefix(requestPrefix)
         , PhantomCheck(ev->PhantomCheck)
         , Decommission(ev->Decommission)
+        , ReaderTabletId(ev->ReaderTabletId)
+        , ReaderTabletGeneration(ev->ReaderTabletGeneration)
     {
         Y_VERIFY(QuerySize > 0);
     }
@@ -80,6 +85,8 @@ public:
         ev->RestartCounter = counter;
         ev->PhantomCheck = PhantomCheck;
         ev->Decommission = Decommission;
+        ev->ReaderTabletId = ReaderTabletId;
+        ev->ReaderTabletGeneration = ReaderTabletGeneration;
         return ev;
     }
 

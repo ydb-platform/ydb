@@ -5,6 +5,8 @@
 
 #include <util/generic/set.h>
 
+#include <optional>
+
 namespace NKikimr {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -34,6 +36,9 @@ class TBlobStorageGroupMultiGetRequest : public TBlobStorageGroupRequestActor<TB
     std::deque<std::pair<std::unique_ptr<TEvBlobStorage::TEvGet>, ui64>> PendingGets;
 
     TStackVec<TRequestInfo, TypicalDisksInGroup> RequestInfos;
+
+    std::optional<ui64> ReaderTabletId;
+    std::optional<ui32> ReaderTabletGeneration;
 
     void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev) {
         RequestsInFlight--;
@@ -116,6 +121,8 @@ public:
         auto ev = std::make_unique<TEvBlobStorage::TEvGet>(queries, endIdx - beginIdx, Deadline, GetHandleClass,
             MustRestoreFirst, false, ForceBlockedGeneration);
         ev->IsInternal = IsInternal;
+        ev->ReaderTabletId = ReaderTabletId;
+        ev->ReaderTabletGeneration = ReaderTabletGeneration;
         PendingGets.emplace_back(std::move(ev), cookie);
     }
 

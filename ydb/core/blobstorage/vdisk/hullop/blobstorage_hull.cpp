@@ -408,7 +408,7 @@ namespace NKikimr {
         if (!CheckGC(ctx, record))
             return {NKikimrProto::ERROR, 0, false}; // record has duplicates
 
-        auto blockStatus = IsBlocked(record);
+        auto blockStatus = THullDbRecovery::IsBlocked(record);
         switch (blockStatus.Status) {
             case TBlocksCache::EStatus::OK:
                 break;

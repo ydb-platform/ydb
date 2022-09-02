@@ -284,6 +284,15 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
             vGet->Record.SetSuppressBarrierCheck(IsInternal);
             vGet->Record.SetTabletId(TabletId);
             vGet->Record.SetAcquireBlockedGeneration(AcquireBlockedGeneration);
+
+            if (ReaderTabletId) {
+                vGet->Record.SetReaderTabletId(*ReaderTabletId);
+            }
+
+            if (ReaderTabletGeneration) {
+                vGet->Record.SetReaderTabletGeneration(*ReaderTabletGeneration);
+            }
+
             R_LOG_DEBUG_SX(logCtx, "BPG14", "Send get to orderNumber# " << diskOrderNumber
                 << " beginIdx# " << beginIdx
                 << " endIdx# " << endIdx

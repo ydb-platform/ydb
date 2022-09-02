@@ -880,6 +880,10 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
             } else if (!CheckVGetQuery(record)) {
                 ReplyError(NKikimrProto::ERROR, "get query is invalid", ev, ctx, now);
+            } else if (record.HasReaderTabletId()
+                    && record.HasReaderTabletGeneration()
+                    && Hull->IsBlocked(record.GetReaderTabletId(), {record.GetReaderTabletGeneration(), 0})) {
+                ReplyError(NKikimrProto::ERROR, "tablet's generation is blocked", ev, ctx, now);
             } else {
                 std::optional<THullDsSnap> fullSnap;
                 if (record.HasSnapshotId()) {

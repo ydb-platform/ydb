@@ -757,9 +757,11 @@ private:
     }
 
     void Handle(TEvDqStats::TPtr& ev) {
-        Fq::Private::PingTaskRequest request;
-        *request.mutable_transient_issues() = ev->Get()->Record.issues();
-        Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
+        if (ev->Get()->Record.issues_size()) {
+            Fq::Private::PingTaskRequest request;
+            *request.mutable_transient_issues() = ev->Get()->Record.issues();
+            Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0);
+        }
     }
 
     i32 UpdateResultIndices() {

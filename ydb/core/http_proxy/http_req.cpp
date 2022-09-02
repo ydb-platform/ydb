@@ -563,6 +563,7 @@ namespace NKikimr::NHttpProxy {
         DECLARE_PROCESSOR(DecreaseStreamRetentionPeriod);
         DECLARE_PROCESSOR(IncreaseStreamRetentionPeriod);
         DECLARE_PROCESSOR(UpdateShardCount);
+        DECLARE_PROCESSOR(UpdateStreamMode);
         DECLARE_PROCESSOR(RegisterStreamConsumer);
         DECLARE_PROCESSOR(DeregisterStreamConsumer);
         DECLARE_PROCESSOR(DescribeStreamConsumer);

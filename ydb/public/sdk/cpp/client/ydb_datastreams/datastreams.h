@@ -28,6 +28,11 @@ namespace NYdb::NDataStreams::V1 {
         std::unique_ptr<TProtoResult> Result;
     };
 
+    enum EStreamMode {
+        ESM_PROVISIONED = 1,
+        ESM_ON_DEMAND = 2,
+    };
+
     using TCreateStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::CreateStreamResult>;
     using TDeleteStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::DeleteStreamResult>;
     using TDescribeStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::DescribeStreamResult>;
@@ -46,6 +51,7 @@ namespace NYdb::NDataStreams::V1 {
     using TDecreaseStreamRetentionPeriodResult = TProtoResultWrapper<Ydb::DataStreams::V1::DecreaseStreamRetentionPeriodResult>;
     using TIncreaseStreamRetentionPeriodResult = TProtoResultWrapper<Ydb::DataStreams::V1::IncreaseStreamRetentionPeriodResult>;
     using TUpdateShardCountResult = TProtoResultWrapper<Ydb::DataStreams::V1::UpdateShardCountResult>;
+    using TUpdateStreamModeResult = TProtoResultWrapper<Ydb::DataStreams::V1::UpdateStreamModeResult>;
     using TListStreamConsumersResult = TProtoResultWrapper<Ydb::DataStreams::V1::ListStreamConsumersResult>;
     using TAddTagsToStreamResult = TProtoResultWrapper<Ydb::DataStreams::V1::AddTagsToStreamResult>;
     using TDisableEnhancedMonitoringResult = TProtoResultWrapper<Ydb::DataStreams::V1::DisableEnhancedMonitoringResult>;
@@ -76,6 +82,7 @@ namespace NYdb::NDataStreams::V1 {
     using TAsyncDecreaseStreamRetentionPeriodResult = NThreading::TFuture<TDecreaseStreamRetentionPeriodResult>;
     using TAsyncIncreaseStreamRetentionPeriodResult = NThreading::TFuture<TIncreaseStreamRetentionPeriodResult>;
     using TAsyncUpdateShardCountResult = NThreading::TFuture<TUpdateShardCountResult>;
+    using TAsyncUpdateStreamModeResult = NThreading::TFuture<TUpdateStreamModeResult>;
     using TAsyncListStreamConsumersResult = NThreading::TFuture<TListStreamConsumersResult>;
     using TAsyncAddTagsToStreamResult = NThreading::TFuture<TAddTagsToStreamResult>;
     using TAsyncDisableEnhancedMonitoringResult = NThreading::TFuture<TDisableEnhancedMonitoringResult>;
@@ -99,6 +106,7 @@ namespace NYdb::NDataStreams::V1 {
         FLUENT_SETTING_OPTIONAL(ui32, RetentionPeriodHours);
         FLUENT_SETTING_OPTIONAL(ui32, RetentionStorageMegabytes);
         FLUENT_SETTING(ui64, WriteQuotaKbPerSec);
+        FLUENT_SETTING_OPTIONAL(EStreamMode, StreamMode);
     };
     struct TListStreamsSettings : public NYdb::TOperationRequestSettings<TListStreamsSettings> {
         FLUENT_SETTING(ui32, Limit);
@@ -137,11 +145,16 @@ namespace NYdb::NDataStreams::V1 {
     struct TUpdateShardCountSettings : public NYdb::TOperationRequestSettings<TUpdateShardCountSettings> {
         FLUENT_SETTING(ui32, TargetShardCount);
     };
+    struct TUpdateStreamModeSettings : public NYdb::TOperationRequestSettings<TUpdateStreamModeSettings> {
+        FLUENT_SETTING_DEFAULT(EStreamMode, StreamMode, ESM_PROVISIONED);
+    };
     struct TUpdateStreamSettings : public NYdb::TOperationRequestSettings<TUpdateStreamSettings> {
         FLUENT_SETTING(ui32, TargetShardCount);
         FLUENT_SETTING_OPTIONAL(ui32, RetentionPeriodHours);
         FLUENT_SETTING_OPTIONAL(ui32, RetentionStorageMegabytes);
         FLUENT_SETTING(ui64, WriteQuotaKbPerSec);
+        FLUENT_SETTING_OPTIONAL(EStreamMode, StreamMode);
+
     };
     struct TPutRecordSettings : public NYdb::TOperationRequestSettings<TPutRecordSettings> {};
     struct TPutRecordsSettings : public NYdb::TOperationRequestSettings<TPutRecordsSettings> {};
@@ -185,6 +198,7 @@ namespace NYdb::NDataStreams::V1 {
         TAsyncDecreaseStreamRetentionPeriodResult DecreaseStreamRetentionPeriod(const TString& path, TDecreaseStreamRetentionPeriodSettings settings = TDecreaseStreamRetentionPeriodSettings());
         TAsyncIncreaseStreamRetentionPeriodResult IncreaseStreamRetentionPeriod(const TString& path, TIncreaseStreamRetentionPeriodSettings settings = TIncreaseStreamRetentionPeriodSettings());
         TAsyncUpdateShardCountResult UpdateShardCount(const TString& path, TUpdateShardCountSettings settings = TUpdateShardCountSettings());
+        TAsyncUpdateStreamModeResult UpdateStreamMode(const TString& path, TUpdateStreamModeSettings settings = TUpdateStreamModeSettings());
         TAsyncRegisterStreamConsumerResult RegisterStreamConsumer(const TString& path, const TString& consumer_name, TRegisterStreamConsumerSettings settings = TRegisterStreamConsumerSettings());
         TAsyncDeregisterStreamConsumerResult DeregisterStreamConsumer(const TString& path, const TString& consumer_name, TDeregisterStreamConsumerSettings settings = TDeregisterStreamConsumerSettings());
         TAsyncDescribeStreamConsumerResult DescribeStreamConsumer(TDescribeStreamConsumerSettings settings = TDescribeStreamConsumerSettings());

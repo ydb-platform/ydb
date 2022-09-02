@@ -292,7 +292,14 @@ Y_UNIT_TEST_SUITE(DataStreams) {
         {
             auto result = testServer.DataStreamsClient->CreateStream(streamName,
                 NYDS_V1::TCreateStreamSettings().ShardCount(10)
-                                                .RetentionPeriodHours(20)).ExtractValueSync();
+                                                .RetentionPeriodHours(20).StreamMode(NYdb::NDataStreams::V1::ESM_ON_DEMAND)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->UpdateStreamMode(streamName,
+                NYDS_V1::TUpdateStreamModeSettings().StreamMode(NYdb::NDataStreams::V1::ESM_PROVISIONED)).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
@@ -810,6 +817,10 @@ Y_UNIT_TEST_SUITE(DataStreams) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().retention_period_hours(),
                                      TDuration::Days(7).Hours());
             UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().storage_limit_mb(), 50_GB / 1_MB);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().stream_description().stream_mode_details().stream_mode(),
+                                     Ydb::DataStreams::V1::StreamMode::PROVISIONED);
+
+
         }
     }
 

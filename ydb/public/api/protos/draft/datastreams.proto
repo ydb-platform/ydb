@@ -16,6 +16,7 @@ enum EFieldTransformationType {
     TRANSFORM_EMPTY_TO_NOTHING = 3;
 }
 
+
 extend google.protobuf.FieldOptions {
     EFieldTransformationType FieldTransformer = 58123;
 }
@@ -27,6 +28,13 @@ enum EncryptionType {
     NONE = 1;
     KMS = 2;
 }
+
+enum StreamMode {
+    STREAM_MODE_UNDEFINED = 0;
+    PROVISIONED = 1;
+    ON_DEMAND = 2;
+}
+
 
 message EnhancedMetrics {
     // List of shard-level metrics
@@ -109,6 +117,9 @@ message StreamDescription {
     string owner = 12;
     // YDS-specific Storage limit in MB of the stream
     int64 storage_limit_mb = 13;
+
+    // stream metering mode
+    StreamModeDetails stream_mode_details = 14;
 }
 
 // Represents range of possible sequence numbers for the shard
@@ -257,6 +268,11 @@ message Tag {
     string value = 2;
 }
 
+// Represents stream mode details
+message StreamModeDetails {
+    StreamMode stream_mode = 1;
+}
+
 message CreateStreamRequest {
     Ydb.Operations.OperationParams operation_params = 1;
     // Name of the stream
@@ -271,6 +287,8 @@ message CreateStreamRequest {
         // Retention storage in megabytes
         int32 retention_storage_megabytes = 6;
     }
+    // stream metering mode
+    StreamModeDetails stream_mode_details = 7;
 }
 
 message CreateStreamResponse {
@@ -375,6 +393,9 @@ message UpdateStreamRequest {
         // Retention storage in megabytes
         int32 retention_storage_megabytes = 6;
     }
+    // stream metering mode
+    StreamModeDetails stream_mode_details = 7;
+
 }
 
 message UpdateStreamResponse {
@@ -868,3 +889,23 @@ message UpdateShardCountResult {
     // Updated number of shards
     int32 target_shard_count = 3;
 }
+
+
+message UpdateStreamModeRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+    // Stream name or arn
+    string stream_arn = 2;
+    // stream metering mode
+    StreamModeDetails stream_mode_details = 3;
+
+
+}
+
+message UpdateStreamModeResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message UpdateStreamModeResult {
+}
+

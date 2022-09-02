@@ -15,7 +15,8 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     IRandomProvider*,
     IHTTPGateway::TPtr gateway,
     NS3::TSink&& params,
-    ui64 inputIndex,
+    ui64 outputIndex,
+    const TTxId& txId,
     const THashMap<TString, TString>& secureParams,
     IDqComputeActorAsyncOutput::ICallbacks* callbacks,
     ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);

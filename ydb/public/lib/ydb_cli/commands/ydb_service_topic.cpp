@@ -28,6 +28,16 @@ namespace NYdb::NConsoleClient {
             std::pair<TString, NYdb::NTopic::ECodec>("zstd", NYdb::NTopic::ECodec::ZSTD),
         };
 
+        THashMap<TString, NTopic::EMeteringMode> ExistingMeteringModes = {
+            std::pair<TString, NTopic::EMeteringMode>("request-units", NTopic::EMeteringMode::RequestUnits),
+            std::pair<TString, NTopic::EMeteringMode>("reserved-capacity", NTopic::EMeteringMode::ReservedCapacity),
+        };
+
+        THashMap<NTopic::EMeteringMode, TString> MeteringModesDescriptions = {
+            std::pair<NTopic::EMeteringMode, TString>(NTopic::EMeteringMode::ReservedCapacity, "Throughput and storage limits on hourly basis, write operations"),
+            std::pair<NTopic::EMeteringMode, TString>(NTopic::EMeteringMode::RequestUnits, "Read/write operations valued in request units, storage usage on hourly basis"),
+        };
+
         // TODO(shmel1k@): improve docs
         THashMap<ETopicMetadataField, TString> TopicMetadataFieldsDescriptions = {
             {ETopicMetadataField::Body, "Message data"},
@@ -109,6 +119,44 @@ namespace NYdb::NConsoleClient {
         return SupportedCodecs_;
     }
 
+    void TCommandWithMeteringMode::AddAllowedMeteringModes(TClientCommand::TConfig& config) {
+        TStringStream description;
+        description << "Topic metering for serverless databases pricing. Available metering modes: ";
+        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
+        for (const auto& mode: ExistingMeteringModes) {
+            auto findResult = MeteringModesDescriptions.find(mode.second);
+            Y_VERIFY(findResult != MeteringModesDescriptions.end(),
+                     "Couldn't find description for %s metering mode", (TStringBuilder() << mode.second).c_str());
+            description << "\n  " << colors.BoldColor() << mode.first << colors.OldColor()
+                        << "\n    " << findResult->second;
+        }
+        config.Opts->AddLongOption("metering-mode", description.Str())
+            .Optional()
+            .StoreResult(&MeteringModeStr_);
+    }
+
+    void TCommandWithMeteringMode::ParseMeteringMode() {
+        if (MeteringModeStr_.empty()) {
+            return;
+        }
+
+        TString toLowerMeteringMode = to_lower(MeteringModeStr_);
+        if (toLowerMeteringMode == "reserved-capacity") {
+            MeteringMode_ = NTopic::EMeteringMode::ReservedCapacity;
+            return;
+        }
+        if (toLowerMeteringMode == "request-units") {
+            MeteringMode_ = NTopic::EMeteringMode::RequestUnits;
+            return;
+        }
+
+        throw TMisuseException() << "Metering mode " << MeteringModeStr_ << " is not available for this command";
+    }
+
+    NTopic::EMeteringMode TCommandWithMeteringMode::GetMeteringMode() const {
+        return MeteringMode_;
+    }
+
     TCommandTopic::TCommandTopic()
         : TClientCommandTree("topic", {}, "TopicService operations") {
         AddCommand(std::make_unique<TCommandTopicCreate>());
@@ -138,12 +186,14 @@ namespace NYdb::NConsoleClient {
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "New topic path");
         AddAllowedCodecs(config, AllowedCodecs);
+        AddAllowedMeteringModes(config);
     }
 
     void TCommandTopicCreate::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
         ParseTopicName(config, 0);
         ParseCodecs();
+        ParseMeteringMode();
     }
 
     int TCommandTopicCreate::Run(TConfig& config) {
@@ -160,6 +210,11 @@ namespace NYdb::NConsoleClient {
         } else {
             settings.SetSupportedCodecs(AllowedCodecs);
         }
+
+        if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
+            settings.MeteringMode(GetMeteringMode());
+        }
+
         settings.RetentionPeriod(TDuration::Hours(RetentionPeriodHours_));
 
         auto status = persQueueClient.CreateTopic(TopicName, settings).GetValueSync();
@@ -184,12 +239,14 @@ namespace NYdb::NConsoleClient {
         config.Opts->SetFreeArgsNum(1);
         SetFreeArgTitle(0, "<topic-path>", "Topic to alter");
         AddAllowedCodecs(config, AllowedCodecs);
+        AddAllowedMeteringModes(config);
     }
 
     void TCommandTopicAlter::Parse(TConfig& config) {
         TYdbCommand::Parse(config);
         ParseTopicName(config, 0);
         ParseCodecs();
+        ParseMeteringMode();
     }
 
     NYdb::NTopic::TAlterTopicSettings TCommandTopicAlter::PrepareAlterSettings(
@@ -214,11 +271,16 @@ namespace NYdb::NConsoleClient {
             settings.SetPartitionWriteBurstBytes(*PartitionWriteSpeedKbps_ * 1_KB);
         }
 
+        if (GetMeteringMode() != NTopic::EMeteringMode::Unspecified && GetMeteringMode() != describeResult.GetTopicDescription().GetMeteringMode()) {
+            settings.SetMeteringMode(GetMeteringMode());
+        }
+
         return settings;
     }
 
     int TCommandTopicAlter::Run(TConfig& config) {
-        if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined() && !PartitionWriteSpeedKbps_.Defined()) {
+        if (!PartitionsCount_.Defined() && GetCodecs().empty() && !RetentionPeriodHours_.Defined() && !PartitionWriteSpeedKbps_.Defined() &&
+            GetMeteringMode() != NTopic::EMeteringMode::Unspecified) {
             return EXIT_SUCCESS;
         }
 

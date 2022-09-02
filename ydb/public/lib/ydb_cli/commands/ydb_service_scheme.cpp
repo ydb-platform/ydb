@@ -210,6 +210,7 @@ int TCommandDescribe::PrintTopicResponsePretty(const NYdb::NTopic::TTopicDescrip
     }
     Cout << Endl << "PartitionsCount: " << description.GetTotalPartitionsCount();
     Cout << Endl << "PartitionWriteSpeed: " << description.GetPartitionWriteSpeedBytesPerSecond() / 1_KB << " KB";
+    Cout << Endl << "MeteringMode: " << (TStringBuilder() << description.GetMeteringMode());
     if (!description.GetSupportedCodecs().empty()) {
         Cout << Endl << "SupportedCodecs: " << FormatCodecs(description.GetSupportedCodecs()) << Endl;
     }

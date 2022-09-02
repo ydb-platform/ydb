@@ -25,12 +25,23 @@ namespace NYdb::NConsoleClient {
         TVector<NTopic::ECodec> SupportedCodecs_;
     };
 
+    class TCommandWithMeteringMode {
+    protected:
+        void AddAllowedMeteringModes(TClientCommand::TConfig& config);
+        void ParseMeteringMode();
+        NTopic::EMeteringMode GetMeteringMode() const;
+
+    private:
+        TString MeteringModeStr_;
+        NTopic::EMeteringMode MeteringMode_ = NTopic::EMeteringMode::Unspecified;
+    };
+
     class TCommandTopic: public TClientCommandTree {
     public:
         TCommandTopic();
     };
 
-    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
+    class TCommandTopicCreate: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode {
     public:
         TCommandTopicCreate();
         void Config(TConfig& config) override;
@@ -43,7 +54,7 @@ namespace NYdb::NConsoleClient {
         ui32 PartitionWriteSpeedKbps_;
     };
 
-    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs {
+    class TCommandTopicAlter: public TYdbCommand, public TCommandWithTopicName, public TCommandWithSupportedCodecs, public TCommandWithMeteringMode {
     public:
         TCommandTopicAlter();
         void Config(TConfig& config) override;
@@ -54,6 +65,7 @@ namespace NYdb::NConsoleClient {
         TMaybe<ui64> RetentionPeriodHours_;
         TMaybe<ui32> PartitionsCount_;
         TMaybe<ui32> PartitionWriteSpeedKbps_;
+
         NYdb::NTopic::TAlterTopicSettings PrepareAlterSettings(NYdb::NTopic::TDescribeTopicResult& describeResult);
     };
 

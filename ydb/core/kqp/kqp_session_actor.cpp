@@ -1121,6 +1121,13 @@ public:
         return true;
     }
 
+    void InvalidateQuery() {
+        auto invalidateEv = MakeHolder<TEvKqp::TEvCompileInvalidateRequest>(
+            QueryState->CompileResult->Uid, Settings.DbCounters);
+
+        Send(MakeKqpCompileServiceID(SelfId().NodeId()), invalidateEv.Release());
+    }
+
     void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         QueryState->Orbit = std::move(ev->Get()->Orbit);
 
@@ -1140,15 +1147,31 @@ public:
             TransactionsToBeAborted.emplace_back(txCtx);
             RemoveTransaction(QueryState->TxId);
 
+            auto status = response->GetStatus();
             TIssues issues;
-            issues.AddIssue(YqlIssue({}, TIssuesIds::CORE_EXEC, "Execution"));
-            TIssues subIssues;
-            IssuesFromMessage(response->GetIssues(), subIssues);
-            for (auto& i : subIssues) {
-                issues.back().AddSubIssue(MakeIntrusive<TIssue>(i));
+            IssuesFromMessage(response->GetIssues(), issues);
+
+            // Invalidate query cache on scheme/internal errors
+            switch (status) {
+                case Ydb::StatusIds::SCHEME_ERROR:
+                case Ydb::StatusIds::INTERNAL_ERROR:
+                    InvalidateQuery();
+                    issues.AddIssue(YqlIssue(TPosition(), TIssuesIds::KIKIMR_QUERY_INVALIDATED,
+                        TStringBuilder() << "Query invalidated on scheme/internal error."));
+
+                    // SCHEME_ERROR during execution is a soft (retriable) error, we abort query execution,
+                    // invalidate query cache, and return ABORTED as retriable status.
+                    if (status == Ydb::StatusIds::SCHEME_ERROR) {
+                        status = Ydb::StatusIds::ABORTED;
+                    }
+
+                    break;
+
+                default:
+                    break;
             }
 
-            ReplyQueryError(requestInfo, response->GetStatus(), "", MessageFromIssues(issues));
+            ReplyQueryError(requestInfo, status, "", MessageFromIssues(issues));
             return;
         }
 

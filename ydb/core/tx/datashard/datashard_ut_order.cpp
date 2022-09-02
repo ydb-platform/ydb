@@ -3750,7 +3750,7 @@ void TestLateKqpQueryAfterColumnDrop(bool dataQuery, const TString& query, bool 
     auto& response = ev->Get()->Record.GetRef();
     Cerr << response.DebugString() << Endl;
     UNIT_ASSERT_VALUES_EQUAL(response.GetYdbStatus(), Ydb::StatusIds::ABORTED);
-    auto& issue = response.GetResponse().GetQueryIssues(0).Getissues(0);
+    auto& issue = response.GetResponse().GetQueryIssues(0);
     UNIT_ASSERT_VALUES_EQUAL(issue.issue_code(), (int) NYql::TIssuesIds::KIKIMR_SCHEME_MISMATCH);
     UNIT_ASSERT_STRINGS_EQUAL(issue.message(), "Table \'/Root/table-1\' scheme changed.");
 }

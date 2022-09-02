@@ -1234,7 +1234,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
         auto part = it.ReadNext().GetValueSync();
 
         UNIT_ASSERT_EQUAL_C(part.GetStatus(), EStatus::PRECONDITION_FAILED, part.GetStatus());
-        UNIT_ASSERT_STRINGS_EQUAL(part.GetIssues().back().GetSubIssues().back()->Message, "Requested too many execution units: 32");
+        part.GetIssues().PrintTo(Cerr);
+        UNIT_ASSERT(HasIssue(part.GetIssues(), NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+            [](const NYql::TIssue& issue) {
+                return issue.Message.Contains("Requested too many execution units");
+            }));
 
         part = it.ReadNext().GetValueSync();
         UNIT_ASSERT(part.EOS());

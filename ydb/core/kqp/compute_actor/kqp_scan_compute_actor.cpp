@@ -103,7 +103,7 @@ public:
     TKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TActorId& executerId, ui64 txId,
         NDqProto::TDqTask&& task, IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, TIntrusivePtr<TKqpCounters> counters, 
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId))
         , ComputeCtx(settings.StatsMode)
@@ -442,6 +442,7 @@ private:
         YQL_ENSURE(state->Generation == msg.GetGeneration());
 
         if (state->State == EShardState::Starting) {
+            // TODO: Do not parse issues here, use status code.
             if (FindSchemeErrorInIssues(status, issues)) {
                 return EnqueueResolveShard(state);
             }
@@ -515,17 +516,22 @@ private:
                     switch (x.Status) {
                         case NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            issueCode = TIssuesIds::KIKIMR_SCHEME_ERROR;
+                            issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Table '" << ScanData->TablePath << "' not exists.";
                             break;
                         case NSchemeCache::TSchemeCacheRequest::EStatus::TypeCheckError:
-                        statusCode = NDqProto::StatusIds::ABORTED;
+                            statusCode = NDqProto::StatusIds::SCHEME_ERROR;
                             issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Table '" << ScanData->TablePath << "' scheme changed.";
                             break;
+                        case NSchemeCache::TSchemeCacheRequest::EStatus::LookupError:
+                            statusCode = NDqProto::StatusIds::UNAVAILABLE;
+                            issueCode = TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE;
+                            error = TStringBuilder() << "Failed to resolve table '" << ScanData->TablePath << "'.";
+                            break;
                         default:
                             statusCode = NDqProto::StatusIds::SCHEME_ERROR;
-                            issueCode = TIssuesIds::KIKIMR_SCHEME_ERROR;
+                            issueCode = TIssuesIds::KIKIMR_SCHEME_MISMATCH;
                             error = TStringBuilder() << "Unresolved table '" << ScanData->TablePath << "'. Status: " << x.Status;
                             break;
                     }
@@ -540,7 +546,7 @@ private:
         if (keyDesc->GetPartitions().empty()) {
             TString error = TStringBuilder() << "No partitions to read from '" << ScanData->TablePath << "'";
             CA_LOG_E(error);
-            InternalError(NDqProto::StatusIds::SCHEME_ERROR, TIssuesIds::KIKIMR_SCHEME_ERROR, error);
+            InternalError(NDqProto::StatusIds::SCHEME_ERROR, TIssuesIds::KIKIMR_SCHEME_MISMATCH, error);
             return;
         }
 

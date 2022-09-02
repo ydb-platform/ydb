@@ -476,11 +476,14 @@ private:
             case NKikimrTxDataShard::TEvProposeTransactionResult::ERROR: {
                 Counters->TxProxyMon->TxResultError->Inc();
                 for (auto& er : result.GetError()) {
-                    if (er.GetKind() == NKikimrTxDataShard::TError::SCHEME_CHANGED) {
-                        return ReplyErrorAndDie(Ydb::StatusIds::ABORTED, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
-                    }
-                    if (er.GetKind() == NKikimrTxDataShard::TError::SCHEME_ERROR) {
-                        return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({}, TIssuesIds::KIKIMR_SCHEME_ERROR, er.GetReason()));
+                    switch (er.GetKind()) {
+                        case NKikimrTxDataShard::TError::SCHEME_CHANGED:
+                        case NKikimrTxDataShard::TError::SCHEME_ERROR:
+                            return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, YqlIssue({},
+                                TIssuesIds::KIKIMR_SCHEME_MISMATCH, er.GetReason()));
+
+                        default:
+                            break;
                     }
                 }
                 auto issue = YqlIssue({}, TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE);
@@ -1825,12 +1828,12 @@ private:
         }
 
         LWTRACK(KqpDataExecuterFinalize, ResponseEv->Orbit, TxId, LastShard, response.GetResult().ResultsSize(), response.ByteSize());
-        
+
         if (ExecuterStateSpan) {
             ExecuterStateSpan.End();
             ExecuterStateSpan = {};
         }
-        
+
         if (ExecuterSpan) {
             ExecuterSpan.EndOk();
         }

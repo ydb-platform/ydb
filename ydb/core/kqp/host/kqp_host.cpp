@@ -1072,7 +1072,7 @@ public:
                 settingName == "DisableOrderedColumns" ||
                 settingName == "Warning";
         };
-        auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, allowSettings);
+        auto configProvider = CreateConfigProvider(*TypesCtx, gatewaysConfig, {}, allowSettings);
         TypesCtx->AddDataSource(ConfigProviderName, configProvider);
 
         YQL_ENSURE(TypesCtx->Initialize(*ExprCtx));

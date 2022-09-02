@@ -2,6 +2,7 @@
 
 #include "yql_setting.h"
 
+#include <ydb/library/yql/providers/common/activation/yql_activation.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
 
 #include <library/cpp/string_utils/parse_size/parse_size.h>
@@ -327,7 +328,7 @@ public:
     template <class TContainer>
     void Dispatch(const TString& cluster, const TContainer& clusterValues, const TString& userName) {
         for (auto& v: clusterValues) {
-            if (!v.HasActivation() || Allow(v.GetActivation(), userName)) {
+            if (!v.HasActivation() || NConfig::Allow(v.GetActivation(), userName)) {
                 Dispatch(cluster, v.GetName(), v.GetValue(), EStage::CONFIG);
             }
         }
@@ -352,10 +353,6 @@ public:
 
     void FreezeDefaults();
     void Restore();
-
-protected:
-    template <class TActivation>
-    static bool Allow(const TActivation& activation, const TString& userName);
 
 protected:
     THashSet<TString> ValidClusters;

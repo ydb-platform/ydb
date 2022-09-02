@@ -444,6 +444,7 @@ message TDqGatewayConfig {
 message TCoreAttr {
     required string Name = 1;
     repeated string Args = 2;
+    optional TActivationPercentage Activation = 3;
 }
 
 message TYqlCoreConfig {

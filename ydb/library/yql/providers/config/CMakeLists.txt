@@ -23,6 +23,7 @@ target_link_libraries(yql-providers-config PUBLIC
   yql-core-expr_nodes
   providers-common-proto
   providers-common-provider
+  providers-common-activation
 )
 target_sources(yql-providers-config PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/library/yql/providers/config/yql_config_provider.cpp

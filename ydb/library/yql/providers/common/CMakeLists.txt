@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(activation)
 add_subdirectory(codec)
 add_subdirectory(comp_nodes)
 add_subdirectory(config)

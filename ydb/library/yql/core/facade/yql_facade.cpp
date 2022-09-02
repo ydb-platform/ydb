@@ -1371,7 +1371,7 @@ TTypeAnnotationContextPtr TProgram::BuildTypeAnnotationContext(const TString& us
     }
 
     {
-        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_);
+        auto configProvider = CreateConfigProvider(*typeAnnotationContext, GatewaysConfig_, username);
         typeAnnotationContext->AddDataSource(ConfigProviderName, configProvider);
     }
 

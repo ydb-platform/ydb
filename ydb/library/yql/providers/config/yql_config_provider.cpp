@@ -4,6 +4,7 @@
 #include <ydb/library/yql/providers/common/provider/yql_data_provider_impl.h>
 #include <ydb/library/yql/providers/common/proto/gateways_config.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider.h>
+#include <ydb/library/yql/providers/common/activation/yql_activation.h>
 #include <ydb/library/yql/core/expr_nodes/yql_expr_nodes.h>
 #include <ydb/library/yql/core/yql_execution.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
@@ -128,9 +129,10 @@ namespace {
             }
         };
 
-        TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TAllowSettingPolicy& policy)
+        TConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username, const TAllowSettingPolicy& policy)
             : Types(types)
             , CoreConfig(config && config->HasYqlCore() ? &config->GetYqlCore() : nullptr)
+            , Username(username)
             , Policy(policy)
         {}
 
@@ -142,12 +144,14 @@ namespace {
             if (CoreConfig) {
                 TPosition pos;
                 for (auto& flag: CoreConfig->GetFlags()) {
-                    TVector<TStringBuf> args;
-                    for (auto& arg: flag.GetArgs()) {
-                        args.push_back(arg);
-                    }
-                    if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
-                        return false;
+                    if (!flag.HasActivation() || !Username || NConfig::Allow(flag.GetActivation(), Username)) {
+                        TVector<TStringBuf> args;
+                        for (auto& arg: flag.GetArgs()) {
+                            args.push_back(arg);
+                        }
+                        if (!ApplyFlag(pos, flag.GetName(), args, ctx)) {
+                            return false;
+                        }
                     }
                 }
             }
@@ -1002,14 +1006,15 @@ namespace {
         TAutoPtr<IGraphTransformer> ConfigurationTransformer;
         TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
         const TYqlCoreConfig* CoreConfig;
+        TString Username;
         const TAllowSettingPolicy Policy;
     };
 }
 
-TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config,
+TIntrusivePtr<IDataProvider> CreateConfigProvider(TTypeAnnotationContext& types, const TGatewaysConfig* config, const TString& username,
     const TAllowSettingPolicy& policy)
 {
-    return new TConfigProvider(types, config, policy);
+    return new TConfigProvider(types, config, username, policy);
 }
 
 const THashSet<TStringBuf>& ConfigProviderFunctions() {

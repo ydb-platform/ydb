@@ -7,6 +7,36 @@ using namespace NYdb;
 using namespace NYdb::NTable;
 
 Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
+    Y_UNIT_TEST_NEW_ENGINE(CreateTableWithDisabledNotNullDataColumns) {
+        TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE `/Root/TestCreateTable` (
+                    Key Uint64 NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q_(R"(
+                CREATE TABLE `/Root/TestCreateTable` (
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST_NEW_ENGINE(InsertNotNullPk) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();
@@ -170,7 +200,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(SelectNotNullColumns) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -218,7 +251,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(InsertNotNull) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -256,7 +292,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(UpsertNotNull) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -294,7 +333,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(ReplaceNotNull) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -332,7 +374,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(UpdateNotNull) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -381,7 +426,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(UpdateOnNotNull) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -443,19 +491,15 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         {
             const auto query = Q_("ALTER TABLE `/Root/TestAddNotNullColumn` ADD COLUMN Value2 String NOT NULL");
             auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {  /* set NULL to not null column */
-            const auto query = Q_("UPSERT INTO `/Root/TestAddNotNullColumn` (Key, Value1, Value2) VALUES (1, 'Value1', NULL)");
-            auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-            UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_BAD_COLUMN_TYPE), result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
         }
     }
 
     Y_UNIT_TEST_NEW_ENGINE(AlterDropNotNullColumn) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -480,7 +524,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(FailedMultiEffects) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -516,8 +563,47 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
         }
     }
 
-    Y_UNIT_TEST_NEW_ENGINE(SecondaryKeyWithNotNullColumn) {
+    Y_UNIT_TEST_NEW_ENGINE(CreateIndexedTableWithDisabledNotNullDataColumns) {
         TKikimrRunner kikimr;
+        auto client = kikimr.GetTableClient();
+        auto session = client.CreateSession().GetValueSync().GetSession();
+
+        {
+            const auto query = Q1_(R"(
+                CREATE TABLE `/Root/TestCreateIndexedTable` (
+                    Key Uint64 NOT NULL,
+                    SecondaryKey Uint64,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key),
+                    INDEX Index GLOBAL ON (SecondaryKey)
+                    COVER (Value))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+        }
+
+        {
+            const auto query = Q1_(R"(
+                CREATE TABLE `/Root/TestCreateIndexedTable` (
+                    Key Uint64 NOT NULL,
+                    SecondaryKey Uint64,
+                    Value String,
+                    PRIMARY KEY (Key),
+                    INDEX Index GLOBAL ON (SecondaryKey)
+                    COVER (Value))
+            )");
+
+            auto result = session.ExecuteSchemeQuery(query).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_NEW_ENGINE(SecondaryKeyWithNotNullColumn) {
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 
@@ -616,7 +702,10 @@ Y_UNIT_TEST_SUITE(KqpNotNullColumns) {
     }
 
     Y_UNIT_TEST_NEW_ENGINE(SecondaryIndexWithNotNullDataColumn) {
-        TKikimrRunner kikimr;
+        auto settings = TKikimrSettings()
+            .SetEnableNotNullDataColumns(true);
+
+        TKikimrRunner kikimr(settings);
         auto client = kikimr.GetTableClient();
         auto session = client.CreateSession().GetValueSync().GetSession();
 

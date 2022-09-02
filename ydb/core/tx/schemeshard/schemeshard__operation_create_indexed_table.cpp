@@ -216,9 +216,18 @@ TVector<ISubOperationBase::TPtr> CreateIndexedTable(TOperationId nextId, const T
     }
 
     for (auto& column : baseTableDescription.GetColumns()) {
-        if (column.GetNotNull() && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
-            TString msg = TStringBuilder() << "It is not allowed to create not null column";
-            return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
+        if (column.GetNotNull()) {
+            bool isPrimaryKey =  keys.contains(column.GetName());
+
+            if (isPrimaryKey && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
+                TString msg = TStringBuilder() << "It is not allowed to create not null pk: " << column.GetName();
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
+            }
+
+            if (!isPrimaryKey && !AppData()->FeatureFlags.GetEnableNotNullDataColumns()) {
+                TString msg = TStringBuilder() << "It is not allowed to create not null data column: " << column.GetName();
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusPreconditionFailed, msg)};
+            }
         }
 
         if (column.HasDefaultFromSequence()) {

@@ -38,6 +38,7 @@ public:
     FEATURE_FLAG_SETTER(EnableKqpScanQueryStreamLookup)
     FEATURE_FLAG_SETTER(EnableMoveIndex)
     FEATURE_FLAG_SETTER(EnablePredicateExtractForDataQueries)
+    FEATURE_FLAG_SETTER(EnableNotNullDataColumns)
 
     TDerived& SetEnableMvcc(std::optional<bool> value) {
         if (value) {

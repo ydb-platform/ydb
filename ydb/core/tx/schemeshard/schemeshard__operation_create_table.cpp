@@ -19,6 +19,28 @@ void PrepareScheme(NKikimrSchemeOp::TTableDescription& schema) {
     schema.ClearKeyColumnIds();
 }
 
+bool CheckColumnTypesConstraints(NKikimrSchemeOp::TTableDescription& desc, TString& errMsg) {
+    THashSet<TString> keyColumns(desc.GetKeyColumnNames().begin(), desc.GetKeyColumnNames().end());
+
+    for (const auto& column : desc.GetColumns()) {
+        if (column.GetNotNull()) {
+            bool isPrimaryKey = keyColumns.contains(column.GetName());
+
+            if (isPrimaryKey && !AppData()->FeatureFlags.GetEnableNotNullColumns()) {
+                errMsg = TStringBuilder() << "It is not allowed to create not null pk: " << column.GetName();
+                return false;
+            }
+
+            if (!isPrimaryKey && !AppData()->FeatureFlags.GetEnableNotNullDataColumns()) {
+                errMsg = TStringBuilder() << "It is not allowed to create not null data column: " << column.GetName();
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 bool InitPartitioning(const NKikimrSchemeOp::TTableDescription& op,
                       const NScheme::TTypeRegistry* typeRegistry,
                       const TVector<ui32>& keyColIds,
@@ -541,6 +563,11 @@ public:
         PrepareScheme(schema);
 
         TString errStr;
+
+        if (!CheckColumnTypesConstraints(schema, errStr)) {
+            result->SetError(NKikimrScheme::StatusPreconditionFailed, errStr);
+            return result;
+        }
 
         NKikimrSchemeOp::TPartitionConfig compilationPartitionConfig;
         if (!TPartitionConfigMerger::ApplyChanges(compilationPartitionConfig, TPartitionConfigMerger::DefaultConfig(AppData()), schema.GetPartitionConfig(), AppData(), errStr)

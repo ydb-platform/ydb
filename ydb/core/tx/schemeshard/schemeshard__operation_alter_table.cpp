@@ -87,6 +87,11 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
 
     // Ignore column ids if they were passed by user!
     for (auto& col : *copyAlter.MutableColumns()) {
+        if (col.GetNotNull()) {
+            errStr = Sprintf("Not null columns is not supported for alter command");
+            status = NKikimrScheme::StatusInvalidParameter;
+            return nullptr;
+        }
         col.ClearId();
     }
 

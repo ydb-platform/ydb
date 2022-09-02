@@ -3615,7 +3615,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
     ReadRuleVersions: 567
     TopicPath: "/Root/PQ/rt3.dc1--acc--topic3"
     YdbDatabasePath: "/Root"
-    MeteringMode: METERING_MODE_REQUEST_UNITS
   }
   ErrorCode: OK
 }
@@ -4737,6 +4736,98 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         TestReadRuleServiceTypePasswordImpl(true);
     }
 
+    void CreateTopicWithMeteringMode(bool meteringEnabled) {
+        TServerSettings serverSettings = PQSettings(0);
+        serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        serverSettings.PQConfig.MutableBillingMeteringConfig()->SetEnabled(meteringEnabled);
+        NPersQueue::TTestServer server(serverSettings);
+
+        using namespace NYdb::NTopic;
+        auto client = TTopicClient(server.GetDriver());
+
+        for (const auto mode : {EMeteringMode::RequestUnits, EMeteringMode::ReservedCapacity}) {
+            const TString path = TStringBuilder() << "/Root/PQ/Topic" << mode;
+
+            auto res = client.CreateTopic(path, TCreateTopicSettings()
+                .MeteringMode(mode)
+            ).ExtractValueSync();
+
+            if (!meteringEnabled) {
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+                continue;
+            }
+
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            auto desc = client.DescribeTopic(path).ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetMeteringMode(), mode);
+        }
+    }
+
+    Y_UNIT_TEST(CreateTopicWithMeteringMode) {
+        CreateTopicWithMeteringMode(false);
+        CreateTopicWithMeteringMode(true);
+    }
+
+    void SetMeteringMode(bool meteringEnabled) {
+        TServerSettings serverSettings = PQSettings(0);
+        serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        serverSettings.PQConfig.MutableBillingMeteringConfig()->SetEnabled(meteringEnabled);
+        NPersQueue::TTestServer server(serverSettings);
+
+        using namespace NYdb::NTopic;
+        auto client = TTopicClient(server.GetDriver());
+
+        {
+            auto res = client.CreateTopic("/Root/PQ/ttt").ExtractValueSync();
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
+
+        for (const auto mode : {EMeteringMode::RequestUnits, EMeteringMode::ReservedCapacity}) {
+            auto res = client.AlterTopic("/Root/PQ/ttt", TAlterTopicSettings()
+                .SetMeteringMode(mode)
+            ).ExtractValueSync();
+
+            if (!meteringEnabled) {
+                UNIT_ASSERT_VALUES_EQUAL(res.GetStatus(), NYdb::EStatus::PRECONDITION_FAILED);
+                continue;
+            }
+
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            auto desc = client.DescribeTopic("/Root/PQ/ttt").ExtractValueSync();
+            UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetMeteringMode(), mode);
+        }
+    }
+
+    Y_UNIT_TEST(SetMeteringMode) {
+        SetMeteringMode(false);
+        SetMeteringMode(true);
+    }
+
+    void DefaultMeteringMode(bool meteringEnabled) {
+        TServerSettings serverSettings = PQSettings(0);
+        serverSettings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        serverSettings.PQConfig.MutableBillingMeteringConfig()->SetEnabled(meteringEnabled);
+        NPersQueue::TTestServer server(serverSettings);
+
+        using namespace NYdb::NTopic;
+        auto client = TTopicClient(server.GetDriver());
+
+        auto res = client.CreateTopic("/Root/PQ/ttt").ExtractValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+        auto desc = client.DescribeTopic("/Root/PQ/ttt").ExtractValueSync();
+        UNIT_ASSERT_C(desc.IsSuccess(), desc.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(desc.GetTopicDescription().GetMeteringMode(), (meteringEnabled
+            ? EMeteringMode::RequestUnits
+            : EMeteringMode::Unspecified));
+    }
+
+    Y_UNIT_TEST(DefaultMeteringMode) {
+        DefaultMeteringMode(false);
+        DefaultMeteringMode(true);
+    }
 
     Y_UNIT_TEST(TClusterTrackerTest) {
         APITestSetup setup{TEST_CASE_NAME};

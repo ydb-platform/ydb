@@ -75,10 +75,10 @@ public:
     }
 
     TPersQueueGroupInfo::TPtr ParseParams(
-            TOperationContext& context, bool isServerlessDomain,
+            TOperationContext& context,
             NKikimrPQ::TPQTabletConfig* tabletConfig,
             const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
-            TEvSchemeShard::EStatus& status, TString& errStr)
+            TString& errStr)
     {
         TPersQueueGroupInfo::TPtr params = new TPersQueueGroupInfo();
         const bool hasKeySchema = tabletConfig->PartitionKeySchemaSize();
@@ -111,17 +111,6 @@ public:
 
             if (!CheckPersQueueConfig(alterConfig, false, &errStr)) {
                 return nullptr;
-            }
-
-            if (alterConfig.HasRequestMeteringMode()) {
-                if (!isServerlessDomain) {
-                    status = NKikimrScheme::StatusPreconditionFailed;
-                    errStr = "Metering mode can only be specified in a serverless domain";
-                    return nullptr;
-                } else {
-                    alterConfig.SetMeteringMode(alterConfig.GetRequestMeteringMode());
-                    alterConfig.ClearRequestMeteringMode();
-                }
             }
 
             if (alterConfig.GetPartitionConfig().ExplicitChannelProfilesSize() > 0) {
@@ -466,13 +455,10 @@ public:
         }
         newTabletConfig = tabletConfig;
 
-        const auto domainPath = TPath::Init(path.GetPathIdForDomain(), context.SS);
-        TEvSchemeShard::EStatus parseStatus = NKikimrScheme::StatusInvalidParameter;
-        TPersQueueGroupInfo::TPtr alterData = ParseParams(
-            context, context.SS->IsServerlessDomain(domainPath), &newTabletConfig, alter, parseStatus, errStr);
+        TPersQueueGroupInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);
 
         if (!alterData) {
-            result->SetError(parseStatus, errStr);
+            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
             return result;
         }
 

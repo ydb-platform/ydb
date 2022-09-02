@@ -849,7 +849,40 @@ namespace NKikimr::NGRpcProxy::V1 {
         return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
     }
 
+    static bool FillMeteringMode(Ydb::Topic::MeteringMode mode, NKikimrPQ::TPQTabletConfig& config,
+            bool meteringEnabled, bool isAlter, Ydb::StatusIds::StatusCode& code, TString& error)
+    {
+        if (meteringEnabled) {
+            switch (mode) {
+                case Ydb::Topic::METERING_MODE_UNSPECIFIED:
+                    if (!isAlter) {
+                        config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                    }
+                    break;
+                case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
+                    config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
+                    break;
+                case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
+                    config.SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+                    break;
+                default:
+                    code = Ydb::StatusIds::BAD_REQUEST;
+                    error = "Unknown metering mode";
+                    return false;
+            }
+        } else {
+            switch (mode) {
+                case Ydb::Topic::METERING_MODE_UNSPECIFIED:
+                    break;
+                default:
+                    code = Ydb::StatusIds::PRECONDITION_FAILED;
+                    error = "Metering mode can only be specified in a serverless database";
+                    return false;
+            }
+        }
 
+        return true;
+    }
 
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
             const TString& name, const Ydb::Topic::CreateTopicRequest& request,
@@ -975,19 +1008,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        switch (request.metering_mode()) {
-            case Ydb::Topic::METERING_MODE_UNSPECIFIED:
-                config->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-                break;
-            case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
-                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-                break;
-            case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
-                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
-                break;
-            default:
-                error = "Unknown metering mode";
-                return Ydb::StatusIds::BAD_REQUEST;
+        Ydb::StatusIds::StatusCode code;
+        if (!FillMeteringMode(request.metering_mode(), *config, pqConfig.GetBillingMeteringConfig().GetEnabled(), false, code, error)) {
+            return code;
         }
 
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);
@@ -1003,8 +1026,6 @@ namespace NKikimr::NGRpcProxy::V1 {
         return CheckConfig(*config, supportedClientServiceTypes, error, ctx, Ydb::StatusIds::BAD_REQUEST);
     }
 
-
-
     Ydb::StatusIds::StatusCode FillProposeRequestImpl(
             const Ydb::Topic::AlterTopicRequest& request,
             NKikimrSchemeOp::TPersQueueGroupDescription& pqDescr, const TActorContext& ctx,
@@ -1014,6 +1035,8 @@ namespace NKikimr::NGRpcProxy::V1 {
                     error = "Full alter of cdc stream is forbidden";\
                     return Ydb::StatusIds::BAD_REQUEST;\
             }
+
+        const auto& pqConfig = AppData(ctx)->PQConfig;
 
         if (request.has_alter_partitioning_settings() && request.alter_partitioning_settings().has_set_min_active_partitions()) {
             CHECK_CDC;
@@ -1058,7 +1081,7 @@ namespace NKikimr::NGRpcProxy::V1 {
         }
 
         bool local = true; //todo: check locality
-        if (local || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
             if (request.has_set_partition_write_speed_bytes_per_second()) {
                 CHECK_CDC;
                 auto partSpeed = request.set_partition_write_speed_bytes_per_second();
@@ -1099,18 +1122,9 @@ namespace NKikimr::NGRpcProxy::V1 {
             }
         }
 
-        switch (request.set_metering_mode()) {
-            case Ydb::Topic::METERING_MODE_UNSPECIFIED:
-                break; // do not change
-            case Ydb::Topic::METERING_MODE_REQUEST_UNITS:
-                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-                break;
-            case Ydb::Topic::METERING_MODE_RESERVED_CAPACITY:
-                config->SetRequestMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
-                break;
-            default:
-                error = "Unknown metering mode";
-                return Ydb::StatusIds::BAD_REQUEST;
+        Ydb::StatusIds::StatusCode code;
+        if (!FillMeteringMode(request.set_metering_mode(), *config, pqConfig.GetBillingMeteringConfig().GetEnabled(), true, code, error)) {
+            return code;
         }
 
         const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes(ctx);

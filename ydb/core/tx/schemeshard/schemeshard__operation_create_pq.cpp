@@ -12,7 +12,7 @@ namespace {
 using namespace NKikimr;
 using namespace NSchemeShard;
 
-TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context, bool isServerlessDomain,
+TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
                                                const NKikimrSchemeOp::TPersQueueGroupDescription& op,
                                                TEvSchemeShard::EStatus& status, TString& errStr)
 {
@@ -145,17 +145,6 @@ TPersQueueGroupInfo::TPtr CreatePersQueueGroup(TOperationContext& context, bool 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;
         return nullptr;
-    }
-
-    if (tabletConfig.HasRequestMeteringMode()) {
-        if (!isServerlessDomain) {
-            status = NKikimrScheme::StatusPreconditionFailed;
-            errStr = "Metering mode can only be specified in a serverless domain";
-            return nullptr;
-        } else {
-            tabletConfig.SetMeteringMode(tabletConfig.GetRequestMeteringMode());
-            tabletConfig.ClearRequestMeteringMode();
-        }
     }
 
     const TPathElement::TPtr dbRootEl = context.SS->PathsById.at(context.SS->RootPathId());
@@ -387,9 +376,8 @@ public:
             return result;
         }
 
-        const auto domainPath = TPath::Init(dstPath.GetPathIdForDomain(), context.SS);
         TPersQueueGroupInfo::TPtr pqGroup = CreatePersQueueGroup(
-            context, context.SS->IsServerlessDomain(domainPath), createDEscription, status, errStr);
+            context, createDEscription, status, errStr);
 
         if (!pqGroup.Get()) {
             result->SetError(status, errStr);

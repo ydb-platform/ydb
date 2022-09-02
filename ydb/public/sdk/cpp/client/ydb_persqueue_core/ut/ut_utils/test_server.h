@@ -93,6 +93,10 @@ public:
         AnnoyingClient->UpdateDC(name, local, enabled);
     }
 
+    const NYdb::TDriver& GetDriver() const {
+        return CleverServer->GetDriver();
+    }
+
 public:
     TSimpleSharedPtr<TPortManager> PortManager;
     ui16 Port;

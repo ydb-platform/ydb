@@ -126,6 +126,7 @@ message TPQConfig {
     }
 
     message TBillingMeteringConfig {
+        // Enables billing & allows to use MeteringMode (see below)
         optional bool Enabled = 1 [default = false];
         optional uint64 FlushIntervalSec = 2 [default = 30];
         optional TReadMeteringConfig Read = 3;
@@ -309,10 +310,7 @@ message TPQTabletConfig {
         METERING_MODE_RESERVED_CAPACITY = 0;
         METERING_MODE_REQUEST_UNITS = 1;
     }
-    // Metering mode used in config
     optional EMeteringMode MeteringMode = 34;
-    // Metering mode passed in the request
-    optional EMeteringMode RequestMeteringMode = 35;
 }
 
 message TMessageGroupInfo {

@@ -139,7 +139,9 @@ namespace NKikimr::NDataStreams::V1 {
 
         pqDescr->SetPartitionPerTablet(1);
         // TODO: support StreamMode
-        pqDescr->MutablePQTabletConfig()->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+        if (AppData(ctx)->PQConfig.GetBillingMeteringConfig().GetEnabled()) {
+            pqDescr->MutablePQTabletConfig()->SetMeteringMode(NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY);
+        }
 
         TString error;
         auto status = NKikimr::NGRpcProxy::V1::FillProposeRequestImpl(name, topicSettings, modifyScheme, ctx, false, error,

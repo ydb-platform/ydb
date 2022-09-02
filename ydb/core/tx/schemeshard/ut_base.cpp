@@ -6379,99 +6379,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TTestEnv env(runtime);
         ui64 txId = 100;
 
-        // create shared db
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
-            Name: "Shared"
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
-            Name: "Shared"
-            StoragePools {
-              Name: "pool-1"
-              Kind: "pool-kind-1"
-            }
-            StoragePools {
-              Name: "pool-2"
-              Kind: "pool-kind-2"
-            }
-            PlanResolution: 50
-            Coordinators: 1
-            Mediators: 1
-            TimeCastBucketsPerMediator: 2
-            ExternalSchemeShard: true
-            ExternalHive: false
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        ui64 sharedSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Shared"), {
-            NLs::PathExist,
-            NLs::IsExternalSubDomain("Shared"),
-            NLs::ExtractTenantSchemeshard(&sharedSchemeShard)
-        });
-
-        UNIT_ASSERT(sharedSchemeShard != 0 && sharedSchemeShard != TTestTxConfig::SchemeShard);
-
-        // create serverless db
-        TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", Sprintf(R"(
-            Name: "Serverless"
-            ResourcesDomainKey {
-                SchemeShard: %lu
-                PathId: 2
-            }
-        )", TTestTxConfig::SchemeShard));
-        env.TestWaitNotification(runtime, txId);
-
-        TestAlterExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
-            Name: "Serverless"
-            StoragePools {
-              Name: "pool-1"
-              Kind: "pool-kind-1"
-            }
-            PlanResolution: 50
-            Coordinators: 1
-            Mediators: 1
-            TimeCastBucketsPerMediator: 2
-            ExternalSchemeShard: true
-            ExternalHive: false
-        )");
-        env.TestWaitNotification(runtime, txId);
-
-        ui64 serverlessSchemeShard = 0;
-        TestDescribeResult(DescribePath(runtime, "/MyRoot/Serverless"), {
-            NLs::PathExist,
-            NLs::IsExternalSubDomain("Serverless"),
-            NLs::ExtractTenantSchemeshard(&serverlessSchemeShard)
-        });
-
-        UNIT_ASSERT(serverlessSchemeShard != 0 && serverlessSchemeShard != TTestTxConfig::SchemeShard);
-
-        // create topic in a serverless db
-        TestCreatePQGroup(runtime, serverlessSchemeShard, ++txId, "/MyRoot/Serverless", R"(
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
             Name: "Topic1"
-            TotalGroupCount: 1
-            PartitionPerTablet: 1
-            PQTabletConfig {
-                PartitionConfig { LifetimeSeconds: 10 }
-                RequestMeteringMode: METERING_MODE_REQUEST_UNITS
-            }
-        )");
-        env.TestWaitNotification(runtime, txId, serverlessSchemeShard);
-
-        TestDescribeResult(
-            DescribePath(runtime, serverlessSchemeShard, "/MyRoot/Serverless/Topic1"), {
-                NLs::PathExist,
-                NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-                    UNIT_ASSERT(config.HasMeteringMode());
-                    UNIT_ASSERT(config.GetMeteringMode() == NKikimrPQ::TPQTabletConfig::METERING_MODE_REQUEST_UNITS);
-                }
-            }
-        );
-
-        TestCreatePQGroup(runtime, serverlessSchemeShard, ++txId, "/MyRoot/Serverless", R"(
-            Name: "Topic2"
             TotalGroupCount: 1
             PartitionPerTablet: 1
             PQTabletConfig {
@@ -6479,10 +6388,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 MeteringMode: METERING_MODE_REQUEST_UNITS
             }
         )");
-        env.TestWaitNotification(runtime, txId, serverlessSchemeShard);
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(
-            DescribePath(runtime, serverlessSchemeShard, "/MyRoot/Serverless/Topic2"), {
+            DescribePath(runtime, "/MyRoot/Topic1"), {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
@@ -6492,18 +6401,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         );
 
-        // alter topic in a serverless db
-        TestAlterPQGroup(runtime, serverlessSchemeShard, ++txId, "/MyRoot/Serverless", R"(
-            Name: "Topic2"
+        TestAlterPQGroup(runtime, ++txId, "/MyRoot", R"(
+            Name: "Topic1"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                RequestMeteringMode: METERING_MODE_RESERVED_CAPACITY
+                MeteringMode: METERING_MODE_RESERVED_CAPACITY
             }
         )");
-        env.TestWaitNotification(runtime, txId, serverlessSchemeShard);
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(
-            DescribePath(runtime, serverlessSchemeShard, "/MyRoot/Serverless/Topic2"), {
+            DescribePath(runtime, "/MyRoot/Topic1"), {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
@@ -6513,18 +6421,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         );
 
-        // try to create topic in a non-serverless db
-        TestCreatePQGroup(runtime, sharedSchemeShard, ++txId, "/MyRoot/Shared", R"(
-            Name: "Topic1"
-            TotalGroupCount: 1
-            PartitionPerTablet: 1
-            PQTabletConfig {
-                PartitionConfig { LifetimeSeconds: 10 }
-                RequestMeteringMode: METERING_MODE_REQUEST_UNITS
-            }
-        )", {NKikimrScheme::StatusPreconditionFailed});
-
-        TestCreatePQGroup(runtime, sharedSchemeShard, ++txId, "/MyRoot/Shared", R"(
+        TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
             Name: "Topic2"
             TotalGroupCount: 1
             PartitionPerTablet: 1
@@ -6532,10 +6429,10 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 PartitionConfig { LifetimeSeconds: 10 }
             }
         )");
-        env.TestWaitNotification(runtime, txId, sharedSchemeShard);
+        env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(
-            DescribePath(runtime, sharedSchemeShard, "/MyRoot/Shared/Topic2"), {
+            DescribePath(runtime, "/MyRoot/Topic2"), {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
@@ -6543,15 +6440,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 }
             }
         );
-
-        // alter topic in a non-serverless db
-        TestAlterPQGroup(runtime, sharedSchemeShard, ++txId, "/MyRoot/Shared", R"(
-            Name: "Topic2"
-            PQTabletConfig {
-                PartitionConfig { LifetimeSeconds: 10 }
-                RequestMeteringMode: METERING_MODE_RESERVED_CAPACITY
-            }
-        )", {NKikimrScheme::StatusPreconditionFailed});
     }
 
     Y_UNIT_TEST(DropTable) { //+

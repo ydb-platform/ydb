@@ -508,7 +508,9 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
         (*result.mutable_attributes())["_message_group_seqno_retention_period_ms"] = TStringBuilder() << (partConfig.GetSourceIdLifetimeSeconds() * 1000);
         (*result.mutable_attributes())["__max_partition_message_groups_seqno_stored"] = TStringBuilder() << partConfig.GetSourceIdMaxCounts();
 
-        if (local || AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+        const auto& pqConfig = AppData(ctx)->PQConfig;
+
+        if (local || pqConfig.GetTopicsAreFirstClassCitizen()) {
             result.set_partition_write_speed_bytes_per_second(partConfig.GetWriteSpeedInBytesPerSecond());
             result.set_partition_write_burst_bytes(partConfig.GetBurstSize());
         }
@@ -517,7 +519,7 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             result.mutable_supported_codecs()->add_codecs((Ydb::Topic::Codec)(codec + 1));
         }
 
-        if (response.DomainInfo && response.DomainInfo->IsServerless()) {
+        if (pqConfig.GetBillingMeteringConfig().GetEnabled()) {
             switch (config.GetMeteringMode()) {
                 case NKikimrPQ::TPQTabletConfig::METERING_MODE_RESERVED_CAPACITY:
                     result.set_metering_mode(Ydb::Topic::METERING_MODE_RESERVED_CAPACITY);
@@ -530,7 +532,6 @@ void TDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::TEv
             }
         }
 
-        const auto& pqConfig = AppData(ctx)->PQConfig;
         for (ui32 i = 0; i < config.ReadRulesSize(); ++i) {
             auto rr = result.add_consumers();
             auto consumerName = NPersQueue::ConvertOldConsumerName(config.GetReadRules(i), ctx);

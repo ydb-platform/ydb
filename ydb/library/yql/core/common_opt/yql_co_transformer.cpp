@@ -183,6 +183,7 @@ const TCoCallableRules& TCoCallableRules::Instance() {
 TCoCallableRules::TCoCallableRules() {
     RegisterCoSimpleCallables1(SimpleCallables[SIMPLE_STEP_1]);
     RegisterCoSimpleCallables2(SimpleCallables[SIMPLE_STEP_2]);
+    RegisterCoSimpleCallables3(SimpleCallables[SIMPLE_STEP_3]);
     RegisterCoFlowCallables1(FlowCallables[FLOW_STEP_1]);
     RegisterCoFlowCallables2(FlowCallables[FLOW_STEP_2]);
     RegisterCoFinalizers(Finalizers);

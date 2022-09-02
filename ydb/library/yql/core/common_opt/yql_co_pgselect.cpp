@@ -1889,6 +1889,44 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
             .Seal()
             .Build();
 
+        if (currentKeys.size() < groupExprs->Tail().ChildrenSize()) {
+            // mark missing columns
+            aggregate = ctx.Builder(pos)
+                .Callable("OrderedMap")
+                    .Add(0, aggregate)
+                    .Lambda(1)
+                        .Param("row")
+                        .Callable("FlattenMembers")
+                            .List(0)
+                                .Atom(0, "")
+                                .Arg(1, "row")
+                            .Seal()
+                            .List(1)
+                                .Atom(0, "")
+                                .Callable(1, "AsStruct")
+                                    .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder & {
+                                        ui32 j = 0;
+                                        for (ui32 i = 0; i < groupExprs->Tail().ChildrenSize(); ++i) {
+                                            if (!currentKeys.contains(i)) {
+                                                parent.List(j++)
+                                                    .Atom(0, "_yql_grouping_" + ToString(i))
+                                                    .Callable(1, "Int32")
+                                                        .Atom(0, "1")
+                                                    .Seal()
+                                                    .Seal();
+                                            }
+                                        }
+
+                                        return parent;
+                                    })
+                                .Seal()
+                            .Seal()
+                        .Seal()
+                    .Seal()
+                .Seal()
+                .Build();
+        }
+
         unionAllItems.push_back(aggregate);
         // shift iterator
         ui32 i = 0;
@@ -3323,14 +3361,48 @@ TExprNode::TPtr ExpandPgGroupRef(const TExprNode::TPtr& node, TExprContext& ctx,
 }
 
 TExprNode::TPtr ExpandPgGrouping(const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
-    Y_UNUSED(node);
     Y_UNUSED(optCtx);
-    return ctx.Builder(node->Pos())
-        .Callable("PgConst")
-            .Atom(0, "0")
-            .Callable(1, "PgType")
-                .Atom(0, "int4")
+    TExprNode::TPtr sum;
+    YQL_ENSURE(node->ChildrenSize() >= 1);
+    for (ui32 i = 0; i < node->ChildrenSize(); ++i) {
+        auto child = node->Child(i);
+        YQL_ENSURE(child->IsCallable("PgGroupRef"));
+        auto row = child->HeadPtr();
+        auto index = child->Tail().Content();
+        auto value = ctx.Builder(node->Pos())
+            .Callable("Coalesce")
+                .Callable(0, "TryMember")
+                    .Add(0, row)
+                    .Atom(1, TString("_yql_grouping_") + index)
+                    .Callable(2, "Null")
+                    .Seal()
+                .Seal()
+                .Callable(1, "Int32")
+                    .Atom(0, "0")
+                .Seal()
             .Seal()
+            .Build();
+
+        if (!sum) {
+            sum = value;
+        } else {
+            sum = ctx.Builder(node->Pos())
+                .Callable("+")
+                    .Callable(0, "*")
+                        .Add(0, sum)
+                        .Callable(1, "Int32")
+                            .Atom(0, "2")
+                        .Seal()
+                    .Seal()
+                    .Add(1, value)
+                .Seal()
+                .Build();
+        }
+    }
+
+    return ctx.Builder(node->Pos())
+        .Callable("ToPg")
+            .Add(0, sum)
         .Seal()
         .Build();
 }

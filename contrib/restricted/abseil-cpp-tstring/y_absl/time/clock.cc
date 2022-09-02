@@ -196,7 +196,7 @@ struct Y_ABSL_CACHELINE_ALIGNED TimeState {
   y_absl::base_internal::SpinLock lock{y_absl::kConstInit,
                                      base_internal::SCHEDULE_KERNEL_ONLY};
 };
-Y_ABSL_CONST_INIT static TimeState time_state{};
+Y_ABSL_CONST_INIT static TimeState time_state;
 
 // Return the time in ns as told by the kernel interface.  Place in *cycleclock
 // the value of the cycleclock at about the time of the syscall.

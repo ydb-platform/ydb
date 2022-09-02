@@ -2196,45 +2196,110 @@ TExprNode::TPtr ReplaceGroupByExpr(const TExprNode::TPtr& root, const TExprNode&
     return ret;
 }
 
+ui32 RegisterGroupExpression(const TExprNode::TPtr& root, const TExprNode::TPtr& args, const TExprNode::TPtr& group,
+    THashMap<ui64, TVector<ui32>>& hashes, TExprNode::TListType& groupExprsItems, TExprContext& ctx) {
+    TNodeMap<ui64> visitedHashes;
+    visitedHashes[&args->Head()] = 0;
+    auto hash = CalculateExprHash(*root, visitedHashes);
+    auto it = hashes.find(hash);
+    if (it != hashes.end()) {
+        for (auto i : it->second) {
+            TNodeSet visitedNodes;
+            if (ExprNodesEquals(*root, groupExprsItems[i]->Tail().Tail(), visitedNodes)) {
+                return i;
+            }
+        }
+    }
+
+    auto index = groupExprsItems.size();
+    hashes[hash].push_back(index);
+    auto newLambda = ctx.Builder(group->Pos())
+        .Lambda()
+            .Param("row")
+            .ApplyPartial(args, root)
+                .With(0, "row")
+            .Seal()
+        .Seal()
+        .Build();
+
+    newLambda->Head().Head().SetArgIndex(0);
+    auto newExpr = ctx.ChangeChild(*group, 1, std::move(newLambda));
+    groupExprsItems.push_back(newExpr);
+    return index;
+}
+
 bool BuildGroupingSets(const TExprNode& data, TExprNode::TPtr& groupSets, TExprNode::TPtr& groupExprs, TExprContext& ctx) {
     TExprNode::TListType groupSetsItems, groupExprsItems;
     THashMap<ui64, TVector<ui32>> hashes;
     for (const auto& child : data.Children()) {
         const auto& lambda = child->Tail();
+        TExprNode::TPtr sets;
         if (lambda.Tail().IsCallable("PgGroupingSet")) {
-            YQL_ENSURE(false);
-        } else {
-            TNodeMap<ui64> visited;
-            visited[&lambda.Head().Head()] = 0;
-            auto hash = CalculateExprHash(lambda.Tail(), visited);
-            ui32 index;
-            bool found = false;
-            auto it = hashes.find(hash);
-            if (it != hashes.end()) {
-                for (auto i : it->second) {
-                    TNodeSet visited;
-                    if (ExprNodesEquals(lambda.Tail(), groupExprsItems[i]->Tail().Tail(), visited)) {
-                        index = i;
-                        found = true;
-                        break;
+            const auto& gs = lambda.Tail();
+            auto kind = gs.Head().Content();
+            if (kind == "cube" || kind == "rollup") {
+                TExprNode::TListType indices;
+                for (const auto& expr : gs.Tail().Children()) {
+                    auto index = RegisterGroupExpression(expr, lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
+                    indices.push_back(ctx.NewAtom(expr->Pos(), ToString(index)));
+                }
+
+                TExprNode::TListType setsItems;
+                if (kind == "rollup") {
+                    // generate N+1 sets
+                    for (ui32 i = 0; i <= indices.size(); ++i) {
+                        TExprNode::TListType oneSetItems;
+                        for (ui32 j = 0; j < i; ++j) {
+                            oneSetItems.push_back(indices[j]);
+                        }
+
+                        setsItems.push_back(ctx.NewList(data.Pos(), std::move(oneSetItems)));
+                    }
+                } else {
+                    // generate 2**N sets
+                    YQL_ENSURE(indices.size() <= 5, "Too many CUBE components");
+                    ui32 count = (1u << indices.size());
+                    for (ui32 i = 0; i < count; ++i) {
+                        TExprNode::TListType oneSetItems;
+                        for (ui32 j = 0; j < indices.size(); ++j) {
+                            if ((1u << j) & i) {
+                                oneSetItems.push_back(indices[j]);
+                            }
+                        }
+
+                        setsItems.push_back(ctx.NewList(data.Pos(), std::move(oneSetItems)));
                     }
                 }
-            }
 
-            if (!found) {
-                index = groupExprsItems.size();
-                hashes[hash].push_back(index);
-                groupExprsItems.push_back(child);
-            }
+                sets = ctx.NewList(data.Pos(), std::move(setsItems));
+            } else {
+                YQL_ENSURE(kind == "sets");
+                TExprNode::TListType setsItems;
+                for (ui32 setIndex = 1; setIndex < gs.ChildrenSize(); ++setIndex) {
+                    const auto& g = gs.Child(setIndex);
+                    TExprNode::TListType oneSetItems;
+                    for (const auto& expr : g->Children()) {
+                        auto index = RegisterGroupExpression(expr, lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
+                        oneSetItems.push_back(ctx.NewAtom(expr->Pos(), ToString(index)));
+                    }
 
-            groupSetsItems.push_back(ctx.Builder(data.Pos())
+                    setsItems.push_back(ctx.NewList(data.Pos(), std::move(oneSetItems)));
+                }
+
+                sets = ctx.NewList(data.Pos(), std::move(setsItems));
+            }
+        } else {
+            auto index = RegisterGroupExpression(lambda.TailPtr(), lambda.HeadPtr(), child, hashes, groupExprsItems, ctx);
+            sets = ctx.Builder(data.Pos())
                 .List()
                     .List(0)
                         .Atom(0, ToString(index))
                     .Seal()
                 .Seal()
-                .Build());
+                .Build();
         }
+
+        groupSetsItems.push_back(sets);
     }
 
     groupSets = ctx.NewList(data.Pos(), std::move(groupSetsItems));

@@ -1796,34 +1796,27 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
     }
 
     auto payloadsNode = ctx.NewList(pos, std::move(payloadItems));
-    TExprNode::TListType keysItems;
+    TExprNode::TListType extKeysItems;
     if (finalExtTypes) {
         for (const auto& x : finalExtTypes->Tail().Children()) {
             auto type = x->Tail().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
             for (const auto& i : type->GetItems()) {
-                keysItems.push_back(ctx.NewAtom(pos, NTypeAnnImpl::MakeAliasedColumn(x->Head().Content(), i->GetName())));
+                extKeysItems.push_back(ctx.NewAtom(pos, NTypeAnnImpl::MakeAliasedColumn(x->Head().Content(), i->GetName())));
             }
         }
     }
 
+    TExprNode::TListType groupKeysItems;
     if (groupExprs->Tail().ChildrenSize()) {
         auto arg = ctx.NewArgument(pos, "row");
         auto arguments = ctx.NewArguments(pos, { arg });
 
         TExprNode::TListType newColumns;
-        for (ui32 i = 0; i < groupSets->Tail().ChildrenSize(); ++i) {
-            auto set = groupSets->Tail().Child(i);
-            YQL_ENSURE(set->ChildrenSize() == 1);
-            auto first = set->HeadPtr();
-            YQL_ENSURE(first->ChildrenSize() == 1);
-            auto second = first->HeadPtr();
-            YQL_ENSURE(second->IsAtom());
-            ui32 index = FromString<ui32>(second->Content());
-            YQL_ENSURE(index < groupExprs->Tail().ChildrenSize());
-            const auto& group = groupExprs->Tail().Child(index);
+        for (ui32 i = 0; i < groupExprs->Tail().ChildrenSize(); ++i) {
+            const auto& group = groupExprs->Tail().Child(i);
             const auto& lambda = group->Tail();
             auto name = "_yql_agg_key_" + ToString(i);
-            keysItems.push_back(ctx.NewAtom(pos, name));
+            groupKeysItems.push_back(ctx.NewAtom(pos, name));
             newColumns.push_back(ctx.Builder(pos)
                 .List()
                     .Atom(0, name)
@@ -1858,17 +1851,63 @@ TExprNode::TPtr BuildGroup(TPositionHandle pos, TExprNode::TPtr list,
             .Build();
     }
 
-    auto keysNode = ctx.NewList(pos, std::move(keysItems));
+    TVector<ui32> currentSetIndices, setCounts;
+    currentSetIndices.resize(groupSets->Tail().ChildrenSize());
+    for (ui32 i = 0; i < groupSets->Tail().ChildrenSize(); ++i) {
+        auto set = groupSets->Tail().Child(i);
+        YQL_ENSURE(set->ChildrenSize() >= 1);
+        setCounts.push_back(set->ChildrenSize());
+    }
 
-    return ctx.Builder(pos)
-        .Callable("Aggregate")
-            .Add(0, list)
-            .Add(1, keysNode)
-            .Add(2, payloadsNode)
-            .List(3) // options
+    TExprNode::TListType unionAllItems;
+    for (;;) {
+        TExprNode::TListType keysItems = extKeysItems;
+        // calculate grouping set keys for current position
+        TSet<ui32> currentKeys;
+        for (ui32 i = 0; i < currentSetIndices.size(); ++i) {
+            const auto& set = groupSets->Tail().Child(i)->Child(currentSetIndices[i]);
+            YQL_ENSURE(set->IsList());
+            for (const auto& atom : set->Children()) {
+                YQL_ENSURE(atom->IsAtom());
+                currentKeys.insert(FromString<ui32>(atom->Content()));
+            }
+        }
+
+        for (auto keyIndex : currentKeys) {
+            YQL_ENSURE(keyIndex < groupKeysItems.size());
+            keysItems.push_back(groupKeysItems[keyIndex]);
+        }
+
+        auto keysNode = ctx.NewList(pos, std::move(keysItems));
+        auto aggregate = ctx.Builder(pos)
+            .Callable("Aggregate")
+                .Add(0, list)
+                .Add(1, keysNode)
+                .Add(2, payloadsNode)
+                .List(3) // options
+                .Seal()
             .Seal()
-        .Seal()
-        .Build();
+            .Build();
+
+        unionAllItems.push_back(aggregate);
+        // shift iterator
+        ui32 i = 0;
+        while (i < currentSetIndices.size()) {
+            ++currentSetIndices[i];
+            if (currentSetIndices[i] < setCounts[i]) {
+                break;
+            }
+
+            currentSetIndices[i] = 0;
+            ++i;
+        }
+
+        if (i == currentSetIndices.size()) {
+            break;
+        }
+    }
+
+    return ctx.NewCallable(pos, "UnionAll", std::move(unionAllItems));
 }
 
 TExprNode::TPtr BuildHaving(TPositionHandle pos, TExprNode::TPtr list, const TExprNode::TPtr& having,

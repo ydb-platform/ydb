@@ -99,11 +99,11 @@ public:
             return TStatus::Error;
         }
 
-        if (!NCommon::ValidateFormat(read.Format().Ref().Content(), ctx)) {
+        if (!NCommon::ValidateFormatForInput(read.Format().Ref().Content(), ctx)) {
             return TStatus::Error;
         }
 
-        if (!NCommon::ValidateCompression(read.Compression().Ref().Content(), ctx)) {
+        if (!NCommon::ValidateCompressionForInput(read.Compression().Ref().Content(), ctx)) {
             return TStatus::Error;
         }
 

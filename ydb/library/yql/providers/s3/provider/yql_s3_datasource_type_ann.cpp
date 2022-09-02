@@ -134,7 +134,7 @@ public:
         }
 
         if (!EnsureAtom(*input->Child(TS3ParseSettings::idx_Format), ctx) ||
-            !NCommon::ValidateFormat(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
+            !NCommon::ValidateFormatForInput(input->Child(TS3ParseSettings::idx_Format)->Content(), ctx))
         {
             return TStatus::Error;
         }
@@ -250,11 +250,8 @@ public:
             return TStatus::Error;
         }
 
-        auto format = input->Child(TS3Object::idx_Format)->Content();
-
-        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) ||
-            !NCommon::ValidateFormat(format, ctx))
-        {
+        const auto format = input->Child(TS3Object::idx_Format)->Content();
+        if (!EnsureAtom(*input->Child(TS3Object::idx_Format), ctx) || !NCommon::ValidateFormatForInput(format, ctx)) {
             return TStatus::Error;
         }
 
@@ -284,7 +281,7 @@ public:
                         }
                         compression = value.Head().Content();
                     }
-                    return NCommon::ValidateCompression(compression, ctx);
+                    return NCommon::ValidateCompressionForInput(compression, ctx);
                 }
                 if (name == "partitionedby") {
                     havePartitionedBy = true;

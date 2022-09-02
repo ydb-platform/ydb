@@ -73,30 +73,62 @@ private:
             return TStatus::Error;
         }
 
-        TString normalized = NS3::NormalizePath(ToString(path));
-        if (normalized == "/") {
+        if (const auto& normalized = NS3::NormalizePath(ToString(path)); normalized == "/") {
             ctx.AddError(TIssue(ctx.GetPosition(input->Child(TS3Target::idx_Path)->Pos()), "Unable to write to root directory"));
             return TStatus::Error;
-        }
-
-        if (normalized != path) {
+        } else if (normalized != path) {
             output = ctx.ChangeChild(*input, TS3Target::idx_Path, ctx.NewAtom(input->Child(TS3Target::idx_Path)->Pos(), normalized));
             return TStatus::Repeat;
         }
 
-        if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormat(input->Child(TS3Target::idx_Format)->Content(), ctx)) {
+        if (!EnsureAtom(*input->Child(TS3Target::idx_Format), ctx) || !NCommon::ValidateFormatForOutput(input->Child(TS3Target::idx_Format)->Content(), ctx)) {
             return TStatus::Error;
         }
 
-        if (input->ChildrenSize() > TS3Target::idx_Settings && !EnsureTuple(*input->Child(TS3Target::idx_Settings), ctx)) {
-            return TStatus::Error;
+        if (input->ChildrenSize() > TS3Target::idx_Settings) {
+            if (!EnsureTuple(*input->Child(TS3Target::idx_Settings), ctx))
+                return TStatus::Error;
+
+            const auto validator = [&](TStringBuf name, const TExprNode& setting, TExprContext& ctx) {
+                if (name == "compression") {
+                    const auto& value = setting.Tail();
+                    if (!EnsureAtom(value, ctx)) {
+                        return false;
+                    }
+
+                    return NCommon::ValidateCompressionForOutput(value.Content(), ctx);
+                }
+
+                if (name == "partitionedby") {
+                    if (setting.ChildrenSize() < 2) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting.Pos()), "Expected at least one column in partitioned_by setting"));
+                        return false;
+                    }
+
+                    std::unordered_set<std::string_view> uniqs(setting.ChildrenSize());
+                    for (size_t i = 1; i < setting.ChildrenSize(); ++i) {
+                        const auto& column = setting.Child(i);
+                        if (!EnsureAtom(*column, ctx)) {
+                            return false;
+                        }
+                        if (!uniqs.emplace(column->Content()).second) {
+                            ctx.AddError(TIssue(ctx.GetPosition(column->Pos()),
+                                TStringBuilder() << "Duplicate partitioned_by column '" << column->Content() << "'"));
+                            return false;
+                        }
+                    }
+
+                    return true;
+                }
+
+                return true;
+            };
+
+            if (!EnsureValidSettings(*input->Child(TS3Object::idx_Settings), {"compression", "partitionedby", "mode"}, validator, ctx)) {
+                return TStatus::Error;
+            }
         }
-/* TODO
-        const auto compression = GetCompression(*input->Child(TS3Target::idx_Settings));
-        if (!NCommon::ValidateCompression(compression, ctx)) {
-            return TStatus::Error;
-        }
-*/
+
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }

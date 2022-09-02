@@ -123,11 +123,13 @@ double GetDataReplicationFactor(const TExprNode& lambda, TExprContext& ctx);
 
 void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<ui32, TOperationStatistics>& statistics);
 
-bool ValidateCompression(TStringBuf compression, TExprContext& ctx);
+bool ValidateCompressionForInput(std::string_view compression, TExprContext& ctx);
+bool ValidateCompressionForOutput(std::string_view compression, TExprContext& ctx);
 
-bool ValidateFormat(TStringBuf format, TExprContext& ctx);
+bool ValidateFormatForInput(std::string_view format, TExprContext& ctx);
+bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx);
 
-bool ValidateIntervalUnit(TStringBuf format, TExprContext& ctx);
+bool ValidateIntervalUnit(std::string_view format, TExprContext& ctx);
 
 } // namespace NCommon
 } // namespace NYql

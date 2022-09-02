@@ -22,7 +22,7 @@ namespace NCommon {
 using namespace NNodes;
 
 namespace {
-    constexpr std::array<std::string_view, 8> Formats = {
+    constexpr std::array<std::string_view, 8> FormatsForInput = {
         "csv_with_names"sv,
         "tsv_with_names"sv,
         "json_list"sv,
@@ -32,13 +32,25 @@ namespace {
         "json_each_row"sv,
         "parquet"sv
     };
-    constexpr std::array<std::string_view, 6> Compressions = {
+    constexpr std::array<std::string_view, 7> FormatsForOutput = {
+        "csv_with_names"sv,
+        "tsv_with_names"sv,
+        "json_list"sv,
+        "json"sv,
+        "raw"sv,
+        "json_each_row"sv,
+        "parquet"sv
+    };
+    constexpr std::array<std::string_view, 6> CompressionsForInput = {
         "gzip"sv,
         "zstd"sv,
         "lz4"sv,
         "brotli"sv,
         "bzip2"sv,
         "xz"sv
+    };
+    constexpr std::array<std::string_view, 1> CompressionsForOutput = {
+        "lz4"sv
     };
     constexpr std::array<std::string_view, 10> IntervalUnits = {
         "MICROSECONDS"sv,
@@ -1089,25 +1101,43 @@ void WriteStatistics(NYson::TYsonWriter& writer, bool totalOnly, const THashMap<
     writer.OnEndMap();
 }
 
-bool ValidateCompression(TStringBuf compression, TExprContext& ctx) {
-    if (compression.empty() || IsIn(Compressions, compression)) {
+bool ValidateCompressionForInput(std::string_view compression, TExprContext& ctx) {
+    if (compression.empty() || IsIn(CompressionsForInput, compression)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
-        << ". Use one of: " << JoinSeq(", ", Compressions)));
+        << ". Use one of: " << JoinSeq(", ", CompressionsForInput)));
     return false;
 }
 
-bool ValidateFormat(TStringBuf format, TExprContext& ctx) {
-    if (format.empty() || IsIn(Formats, format)) {
+bool ValidateCompressionForOutput(std::string_view compression, TExprContext& ctx) {
+    if (compression.empty() || IsIn(CompressionsForOutput, compression)) {
+        return true;
+    }
+    ctx.AddError(TIssue(TStringBuilder() << "Unknown compression: " << compression
+        << ". Use one of: " << JoinSeq(", ", CompressionsForOutput)));
+    return false;
+}
+
+bool ValidateFormatForInput(std::string_view format, TExprContext& ctx) {
+    if (format.empty() || IsIn(FormatsForInput, format)) {
         return true;
     }
     ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
-        << ". Use one of: " << JoinSeq(", ", Formats)));
+        << ". Use one of: " << JoinSeq(", ", FormatsForInput)));
     return false;
 }
 
-bool ValidateIntervalUnit(TStringBuf unit, TExprContext& ctx) {
+bool ValidateFormatForOutput(std::string_view format, TExprContext& ctx) {
+    if (format.empty() || IsIn(FormatsForOutput, format)) {
+        return true;
+    }
+    ctx.AddError(TIssue(TStringBuilder() << "Unknown format: " << format
+        << ". Use one of: " << JoinSeq(", ", FormatsForOutput)));
+    return false;
+}
+
+bool ValidateIntervalUnit(std::string_view unit, TExprContext& ctx) {
     if (unit.empty() || IsIn(IntervalUnits, unit)) {
         return true;
     }

@@ -167,6 +167,7 @@ namespace NYdb::NConsoleClient {
     }
 
     int TTopicReader::HandleDataReceivedEvent(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent* event, IOutputStream& output) {
+        event->GetPartitionSession()->RequestStatus();
         HasFirstMessage_ = true;
 
         NTopic::TDeferredCommit defCommit;
@@ -195,12 +196,27 @@ namespace NYdb::NConsoleClient {
 
     int TTopicReader::HandleStartPartitionSessionEvent(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent* event) {
         event->Confirm();
+        if (event->GetCommittedOffset() == event->GetEndOffset()) {
+            ReadingStatus_ = EReadingStatus::PartitionWithoutData;
+        } else {
+            ReadingStatus_ = EReadingStatus::PartitionWithData;
+        }
 
         return EXIT_SUCCESS;
     }
 
     int TTopicReader::HandleCommitOffsetAcknowledgementEvent(NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent* event) {
         Y_UNUSED(event);
+
+        return EXIT_SUCCESS;
+    }
+
+    int TTopicReader::HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent* event) {
+        if (event->GetReadOffset() == event->GetCommittedOffset()) {
+            ReadingStatus_ = EReadingStatus::PartitionWithoutData;
+        } else {
+            ReadingStatus_ = EReadingStatus::PartitionWithData;
+        }
 
         return EXIT_SUCCESS;
     }
@@ -216,6 +232,8 @@ namespace NYdb::NConsoleClient {
             return HandleStartPartitionSessionEvent(createPartitionStreamEvent);
         } else if (auto* commitEvent = std::get_if<NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent>(&*event)) {
             return HandleCommitOffsetAcknowledgementEvent(commitEvent);
+        } else if (auto* partitionStatusEvent = std::get_if<NTopic::TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
+            return HandlePartitionSessionStatusEvent(partitionStatusEvent);
         } else if (auto* sessionClosedEvent = std::get_if<NTopic::TSessionClosedEvent>(&*event)) {
             ThrowOnError(*sessionClosedEvent);
             return 1;
@@ -233,16 +251,18 @@ namespace NYdb::NConsoleClient {
             NThreading::TFuture<void> future = ReadSession_->WaitEvent();
             future.Wait(messageReceiveDeadline);
             if (!future.HasValue()) {
-                if (ReaderParams_.Wait() && !HasFirstMessage_) {
-                    LastMessageReceivedTs_ = Now();
-                    continue;
-                }
-
                 if (waitForever) {
+                    LastMessageReceivedTs_ = TInstant::Now();
                     continue;
                 }
 
-                return EXIT_SUCCESS;
+                bool isReading = ReadingStatus_ == EReadingStatus::PartitionWithData;
+                if (!isReading || (isReading && HasFirstMessage_)) {
+                    return EXIT_SUCCESS;
+                }
+
+                LastMessageReceivedTs_ = TInstant::Now();
+                continue;
             }
 
             // TODO(shmel1k@): throttling?

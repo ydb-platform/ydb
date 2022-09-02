@@ -68,6 +68,7 @@ namespace NYdb::NConsoleClient {
         void HandleReceivedMessage(const TReceivedMessage& message, IOutputStream& output);
 
         int HandleStartPartitionSessionEvent(NTopic::TReadSessionEvent::TStartPartitionSessionEvent*);
+        int HandlePartitionSessionStatusEvent(NTopic::TReadSessionEvent::TPartitionSessionStatusEvent*);
         int HandleDataReceivedEvent(NTopic::TReadSessionEvent::TDataReceivedEvent*, IOutputStream&);
         int HandleCommitOffsetAcknowledgementEvent(NTopic::TReadSessionEvent::TCommitOffsetAcknowledgementEvent*);
         int HandleEvent(TMaybe<NTopic::TReadSessionEvent::TEvent>&, IOutputStream&);
@@ -75,6 +76,12 @@ namespace NYdb::NConsoleClient {
     private:
         void PrintMessagesInPrettyFormat(IOutputStream& output);
         void PrintMessagesInJsonArrayFormat(IOutputStream& output);
+
+        enum EReadingStatus {
+            NoPartitionTaken = 0,
+            PartitionWithoutData = 1,
+            PartitionWithData = 2,
+        };
 
     private:
         std::shared_ptr<NTopic::IReadSession> ReadSession_;
@@ -86,6 +93,8 @@ namespace NYdb::NConsoleClient {
 
         std::unique_ptr<TPrettyTable> OutputTable_;
         TVector<TReceivedMessage> ReceivedMessages_;
+
+        EReadingStatus ReadingStatus_ = EReadingStatus::NoPartitionTaken;
 
         friend class TTopicReaderTests;
     };

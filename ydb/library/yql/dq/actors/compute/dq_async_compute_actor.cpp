@@ -157,7 +157,7 @@ private:
     void OnStatisticsResponse(NTaskRunnerActor::TEvStatistics::TPtr& ev) {
         SentStatsRequest = false;
         if (ev->Get()->Stats) {
-            CA_LOG_D("update task runner stats");
+            CA_LOG_T("update task runner stats");
             TaskRunnerStats = std::move(ev->Get()->Stats);
         }
         auto record = NDqProto::TEvComputeActorState();

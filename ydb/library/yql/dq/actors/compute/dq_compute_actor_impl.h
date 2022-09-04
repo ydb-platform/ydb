@@ -199,7 +199,7 @@ protected:
         IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
-        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr, 
+        const ::NMonitoring::TDynamicCounterPtr& taskCounters = nullptr,
         NWilson::TTraceId traceId = {})
         : ExecuterId(executerId)
         , TxId(txId)
@@ -371,7 +371,7 @@ protected:
     void ProcessOutputsImpl(ERunStatus status) {
         ProcessOutputsState.LastRunStatus = status;
 
-        CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight );
+        CA_LOG_T("ProcessOutputsState.Inflight: " << ProcessOutputsState.Inflight);
         if (ProcessOutputsState.Inflight == 0) {
             ProcessOutputsState = TProcessOutputsState();
         }
@@ -1133,7 +1133,7 @@ protected:
         this->TerminateSources(issues, success);
 
         if (ev->Sender != ExecuterId) {
-            
+
             if (ComputeActorSpan) {
                 ComputeActorSpan.End();
             }
@@ -1803,7 +1803,7 @@ protected:
         if (ComputeActorSpan) {
             ComputeActorSpan.End();
         }
-        
+
         this->Send(ExecuterId, evState.release(), NActors::IEventHandle::FlagTrackDelivery);
 
         LastSendStatsTime = now;

@@ -75,9 +75,24 @@ public:
     };
 
     TEasyCurl(const ::NMonitoring::TDynamicCounters::TCounterPtr& counter, const ::NMonitoring::TDynamicCounters::TCounterPtr& downloadedBytes, const ::NMonitoring::TDynamicCounters::TCounterPtr& uploadedBytes, TString url, IHTTPGateway::THeaders headers, EMethod method, size_t offset = 0ULL, size_t bodySize = 0, ui64 expectedSize = 0, const TCurlInitConfig& config = TCurlInitConfig())
-        : Offset(offset), Handle(curl_easy_init()), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes)
+        : Headers(headers), Method(method), Offset(offset), BodySize(bodySize), ExpectedSize(expectedSize), Counter(counter), DownloadedBytes(downloadedBytes), UploadedBytes(uploadedBytes), Config(config), Url(url)
     {
-        switch (method) {
+        InitHandles();
+        Counter->Inc();
+    }
+
+    virtual ~TEasyCurl() {
+        Counter->Dec();
+        FreeHandles();
+    }
+
+    void InitHandles() {
+        if (Handle) {
+            return;
+        }
+
+        Handle = curl_easy_init();
+        switch (Method) {
             case EMethod::GET:
                 break;
             case EMethod::POST:
@@ -95,42 +110,46 @@ public:
         // will print tokens in HTTP headers
         // curl_easy_setopt(Handle, CURLOPT_VERBOSE, 1L);
 
-        curl_easy_setopt(Handle, CURLOPT_URL, url.c_str());
+        curl_easy_setopt(Handle, CURLOPT_URL, Url.c_str());
         curl_easy_setopt(Handle, CURLOPT_USERAGENT, "YQ HTTP gateway");
         curl_easy_setopt(Handle, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(Handle, CURLOPT_CONNECTTIMEOUT, config.ConnectionTimeout);
-        curl_easy_setopt(Handle, CURLOPT_MAX_RECV_SPEED_LARGE, config.BytesPerSecondLimit);
-        curl_easy_setopt(Handle, CURLOPT_BUFFERSIZE, config.BufferSize);
+        curl_easy_setopt(Handle, CURLOPT_CONNECTTIMEOUT, Config.ConnectionTimeout);
+        curl_easy_setopt(Handle, CURLOPT_MAX_RECV_SPEED_LARGE, Config.BytesPerSecondLimit);
+        curl_easy_setopt(Handle, CURLOPT_BUFFERSIZE, Config.BufferSize);
+        curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_TIME, 20L);
+        curl_easy_setopt(Handle, CURLOPT_LOW_SPEED_LIMIT, 1024L);
 
-        if (!headers.empty()) {
-            Headers = std::accumulate(headers.cbegin(), headers.cend(), Headers,
+        if (!Headers.empty()) {
+            CurlHeaders = std::accumulate(Headers.cbegin(), Headers.cend(), CurlHeaders,
                 std::bind(&curl_slist_append, std::placeholders::_1, std::bind(&TString::c_str, std::placeholders::_2)));
-            curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, Headers);
+            curl_easy_setopt(Handle, CURLOPT_HTTPHEADER, CurlHeaders);
         }
         TStringBuilder byteRange;
         byteRange << Offset << "-";
-        if (expectedSize) {
-            byteRange << Offset + expectedSize - 1;
+        if (ExpectedSize) {
+            byteRange << Offset + ExpectedSize - 1;
         }
         curl_easy_setopt(Handle, CURLOPT_RANGE, byteRange.c_str());
-        curl_easy_setopt(Handle, EMethod::PUT == method ? CURLOPT_HEADERFUNCTION : CURLOPT_WRITEFUNCTION, &WriteMemoryCallback);
-        curl_easy_setopt(Handle, EMethod::PUT == method ? CURLOPT_HEADERDATA :CURLOPT_WRITEDATA, static_cast<void*>(this));
-        if (method == EMethod::POST) {
-            curl_easy_setopt(Handle, CURLOPT_POSTFIELDSIZE, bodySize);
+        curl_easy_setopt(Handle, EMethod::PUT == Method ? CURLOPT_HEADERFUNCTION : CURLOPT_WRITEFUNCTION, &WriteMemoryCallback);
+        curl_easy_setopt(Handle, EMethod::PUT == Method ? CURLOPT_HEADERDATA :CURLOPT_WRITEDATA, static_cast<void*>(this));
+        if (Method == EMethod::POST) {
+            curl_easy_setopt(Handle, CURLOPT_POSTFIELDSIZE, BodySize);
         }
 
-        if (bodySize) {
+        if (BodySize) {
             curl_easy_setopt(Handle, CURLOPT_READFUNCTION, &ReadMemoryCallback);
             curl_easy_setopt(Handle, CURLOPT_READDATA, static_cast<void*>(this));
         }
-        Counter->Inc();
     }
 
-    virtual ~TEasyCurl() {
-        Counter->Dec();
-        curl_easy_cleanup(Handle);
+    void FreeHandles() {
+        if (Handle) {
+            curl_easy_cleanup(Handle);
+            Handle = nullptr;
+        }
         if (Headers) {
-            curl_slist_free_all(Headers);
+            curl_slist_free_all(CurlHeaders);
+            CurlHeaders = nullptr;
         }
     }
 
@@ -164,12 +183,19 @@ private:
         return res;
     };
 
+    const IHTTPGateway::THeaders Headers;
+    const EMethod Method;
     const size_t Offset;
-    CURL *const Handle;
-    curl_slist* Headers = nullptr;
+    const size_t BodySize;
+    const ui64 ExpectedSize;
+    CURL* Handle = nullptr;
+    curl_slist* CurlHeaders = nullptr;
     const ::NMonitoring::TDynamicCounters::TCounterPtr Counter;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
+    const TCurlInitConfig Config;
+public:
+    TString Url;
 };
 
 class TEasyCurlBuffer : public TEasyCurl {
@@ -213,6 +239,8 @@ public:
         TStringOutput(Buffer).Swap(Output);
         Output.Reserve(ExpectedSize);
         TStringInput(Data).Swap(Input);
+        FreeHandles();
+        InitHandles();
     }
 private:
     void Fail(const TIssue& error) final  {

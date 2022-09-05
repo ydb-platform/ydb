@@ -3,6 +3,7 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 #include <util/generic/hash_set.h>
+#include <util/generic/scope.h>
 #include <util/stream/str.h>
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
@@ -14,8 +15,26 @@
 
 struct IRopeChunkBackend : TThrRefBase {
     using TData = std::tuple<const char*, size_t>;
+    using TMutData = std::tuple<char*, size_t>;
     virtual ~IRopeChunkBackend() = default;
+    /**
+     * Should give immutable access to data
+     */
     virtual TData GetData() const = 0;
+    /**
+     * Should give mutable access to underlying data
+     * If data is shared - data should be copied
+     * E.g. for TString str.Detach() should be used
+     */
+    virtual TMutData GetDataMut() = 0;
+    /**
+     * Should give mutable access to undelying data as fast as possible
+     * Even if data is shared this property should be ignored
+     * E.g. in TString const_cast<char *>(str.data()) should be used
+     */
+    virtual TMutData UnsafeGetDataMut() {
+        return GetDataMut();
+    }
     virtual size_t GetCapacity() const = 0;
     using TPtr = TIntrusivePtr<IRopeChunkBackend>;
 };
@@ -60,6 +79,10 @@ public:
     }
 
     TData GetData() const override {
+        return {Data + Offset, Size};
+    }
+
+    TMutData GetDataMut() override {
         return {Data + Offset, Size};
     }
 
@@ -176,6 +199,32 @@ class TRope {
                 });
             }
 
+            const IRopeChunkBackend::TMutData GetDataMut() {
+                return Visit(Owner, [](EType, auto& value) -> IRopeChunkBackend::TMutData {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, TString>) {
+                        return {value.Detach(), value.size()};
+                    } else if constexpr (std::is_same_v<T, IRopeChunkBackend::TPtr>) {
+                        return value->GetDataMut();
+                    } else {
+                        return {};
+                    }
+                });
+            }
+
+            const IRopeChunkBackend::TMutData UnsafeGetDataMut() const {
+                return Visit(Owner, [](EType, auto& value) -> IRopeChunkBackend::TMutData {
+                    using T = std::decay_t<decltype(value)>;
+                    if constexpr (std::is_same_v<T, TString>) {
+                        return {const_cast<char*>(value.data()), value.size()};
+                    } else if constexpr (std::is_same_v<T, IRopeChunkBackend::TPtr>) {
+                        return value->UnsafeGetDataMut();
+                    } else {
+                        return {};
+                    }
+                });
+            }
+
             size_t GetCapacity() const {
                 return Visit(Owner, [](EType, auto& value) {
                     using T = std::decay_t<decltype(value)>;
@@ -191,6 +240,7 @@ class TRope {
 
             explicit operator bool() const {
                 return Owner;
+
             }
 
         private:
@@ -224,29 +274,39 @@ class TRope {
                 }
             }
 
-            template<typename TCallback>
-            static std::invoke_result_t<TCallback, EType, TString&> VisitRaw(uintptr_t value, TCallback&& callback) {
-                Y_VERIFY_DEBUG(value);
-                const EType type = static_cast<EType>(value & TypeMask);
-                value &= ValueMask;
+            template<typename TOwner, typename TCallback, bool IsConst = std::is_const_v<TOwner>>
+            static std::invoke_result_t<TCallback, EType, std::conditional_t<IsConst, const TString&, TString&>> VisitRaw(TOwner& origValue, TCallback&& callback) {
+                Y_VERIFY_DEBUG(origValue);
+                const EType type = static_cast<EType>(origValue & TypeMask);
+                uintptr_t value = origValue & ValueMask;
+                // bring object type back
+                Y_SCOPE_EXIT(&value, &origValue, type){
+                    if constexpr(!IsConst) {
+                        origValue = value | static_cast<uintptr_t>(type);
+                    } else {
+                        Y_UNUSED(value);
+                        Y_UNUSED(origValue);
+                        Y_UNUSED(type);
+                    }
+                };
                 auto caller = [&](auto& value) { return std::invoke(std::forward<TCallback>(callback), type, value); };
                 auto wrapper = [&](auto& value) {
                     using T = std::decay_t<decltype(value)>;
                     if constexpr (sizeof(T) <= sizeof(uintptr_t)) {
                         return caller(value);
                     } else {
-                        return caller(reinterpret_cast<TObjectHolder<T>&>(value));
+                        return caller(reinterpret_cast<std::conditional_t<IsConst, const TObjectHolder<T>&, TObjectHolder<T>&>>(value));
                     }
                 };
                 switch (type) {
-                    case EType::STRING:             return wrapper(reinterpret_cast<TString&>(value));
-                    case EType::ROPE_CHUNK_BACKEND: return wrapper(reinterpret_cast<IRopeChunkBackend::TPtr&>(value));
+                    case EType::STRING:             return wrapper(reinterpret_cast<std::conditional_t<IsConst, const TString&, TString&>>(value));
+                    case EType::ROPE_CHUNK_BACKEND: return wrapper(reinterpret_cast<std::conditional_t<IsConst, const IRopeChunkBackend::TPtr&, IRopeChunkBackend::TPtr&>>(value));
                 }
                 Y_FAIL("Unexpected type# %" PRIu64, static_cast<ui64>(type));
             }
 
-            template<typename TCallback>
-            static std::invoke_result_t<TCallback, EType, TString&> Visit(uintptr_t value, TCallback&& callback) {
+            template<typename TOwner, typename TCallback, bool IsConst = std::is_const_v<TOwner>>
+            static std::invoke_result_t<TCallback, EType, std::conditional_t<IsConst, const TString&, TString&>> Visit(TOwner& value, TCallback&& callback) {
                 return VisitRaw(value, [&](EType type, auto& value) {
                     return std::invoke(std::forward<TCallback>(callback), type, Unwrap(value));
                 });
@@ -254,12 +314,15 @@ class TRope {
 
             template<typename T> static T& Unwrap(T& object) { return object; }
             template<typename T> static T& Unwrap(TObjectHolder<T>& holder) { return holder.Object->Value; }
+            template<typename T> static const T& Unwrap(const TObjectHolder<T>& holder) { return holder.Object->Value; }
 
-            static uintptr_t Clone(uintptr_t value) {
+            template<typename TOwner>
+            static uintptr_t Clone(TOwner& value) {
                 return VisitRaw(value, [](EType type, auto& value) { return Construct(type, value); });
             }
 
-            static void Destroy(uintptr_t value) {
+            template<typename TOwner>
+            static void Destroy(TOwner& value) {
                 VisitRaw(value, [](EType, auto& value) { CallDtor(value); });
             }
 
@@ -331,6 +394,27 @@ class TRope {
         size_t GetCapacity() const {
             return Backend.GetCapacity();
         }
+
+        char* GetDataMut() {
+            const char* oldBegin = std::get<0>(Backend.GetData());
+            ptrdiff_t offset = Begin - oldBegin;
+            size_t size = GetSize();
+            char* newBegin = std::get<0>(Backend.GetDataMut());
+            Begin = newBegin + offset;
+            End = Begin + size;
+            return newBegin + offset;
+        }
+
+        char* UnsafeGetDataMut() {
+            const char* oldBegin = std::get<0>(Backend.GetData());
+            ptrdiff_t offset = Begin - oldBegin;
+            size_t size = GetSize();
+            char* newBegin = std::get<0>(Backend.UnsafeGetDataMut());
+            Begin = newBegin + offset;
+            End = Begin + size;
+            return newBegin + offset;
+        }
+
     };
 
     using TChunkList = NRopeDetails::TChunkList<TChunk>;
@@ -458,6 +542,18 @@ private:
             return Ptr;
         }
 
+        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
+        char *ContiguousDataMut() {
+            CheckValid();
+            return GetChunk().GetDataMut();
+        }
+
+        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
+        char *UnsafeContiguousDataMut() {
+            CheckValid();
+            return GetChunk().UnsafeGetDataMut();
+        }
+
         // Get the amount of contiguous block.
         size_t ContiguousSize() const {
             CheckValid();
@@ -530,6 +626,12 @@ private:
         }
 
         const TChunk& GetChunk() const {
+            CheckValid();
+            return *Iter;
+        }
+
+        template<bool Mut = !IsConst, std::enable_if_t<Mut, bool> = true>
+        TChunk& GetChunk() {
             CheckValid();
             return *Iter;
         }
@@ -631,6 +733,14 @@ public:
     }
 
     size_t GetSize() const {
+        return Size;
+    }
+
+    size_t size() const {
+        return Size;
+    }
+
+    size_t capacity() const {
         return Size;
     }
 
@@ -863,15 +973,151 @@ public:
 
     // Use this method carefully -- it may significantly reduce performance when misused.
     TString ConvertToString() const {
+        // TODO(innokentii): could be microoptimized for single TString case
         TString res = TString::Uninitialized(GetSize());
         Begin().ExtractPlainDataAndAdvance(res.Detach(), res.size());
         return res;
     }
 
+    class TContiguousSpan;
+    class TMutableContiguousSpan {
+        friend class TContiguousSpan;
+    private:
+        char *Data;
+        size_t Size;
+
+    public:
+        TMutableContiguousSpan(char *data, size_t size)
+            : Data(data)
+            , Size(size)
+        {}
+
+        char *data() {
+            return Data;
+        }
+
+        const char *data() const {
+            return Data;
+        }
+
+        size_t size() const {
+            return Size;
+        }
+
+        char *GetData() {
+            return Data;
+        }
+
+        const char *GetData() const {
+            return Data;
+        }
+
+        size_t GetSize() const {
+            return Size;
+        }
+    };
+
+    class TContiguousSpan {
+    private:
+        const char *Data;
+        size_t Size;
+
+    public:
+        TContiguousSpan(const char *data, size_t size)
+            : Data(data)
+            , Size(size)
+        {}
+
+        TContiguousSpan(const TMutableContiguousSpan& other)
+            : Data(other.Data)
+            , Size(other.Size)
+        {}
+
+        TContiguousSpan& operator =(const TMutableContiguousSpan& other) {
+            Data = other.Data;
+            Size = other.Size;
+            return *this;
+        }
+
+        const char *data() const {
+            return Data;
+        }
+
+        size_t size() const {
+            return Size;
+        }
+
+        const char *GetData() const {
+            return Data;
+        }
+
+        size_t GetSize() const {
+            return Size;
+        }
+    };
+
+    void clear() {
+        Erase(Begin(), End());
+    }
+
+    bool IsContiguous() {
+        if(Begin() == End() || (++Begin() == End())) {
+            return true;
+        }
+        return false;
+    }
+
+    void Compact() {
+        if(!IsContiguous()) {
+            // TODO(innokentii): use better container, when most outer users stop use TString
+            TString res = TString::Uninitialized(GetSize());
+            Begin().ExtractPlainDataAndAdvance(res.Detach(), res.size());
+            Erase(Begin(), End());
+            Insert(End(), res);
+        }
+    }
+
+    /**
+     * Compacts data and calls GetData() on undelying container
+     * WARN: Will copy if data isn't contiguous
+     */
+    TContiguousSpan GetContiguousSpan() {
+        if(Begin() == End()) {
+            return {nullptr, 0};
+        }
+        Compact();
+        return {Begin().ContiguousData(), Begin().ContiguousSize()};
+    }
+
+    /**
+     * Compacts data and calls GetDataMut() on undelying container
+     * WARN: Will copy if data isn't contiguous
+     */
+    TMutableContiguousSpan GetContiguousSpanMut() {
+        if(Begin() == End()) {
+            return {nullptr, 0};
+        }
+        Compact();
+        return {Begin().ContiguousDataMut(), Begin().ContiguousSize()};
+    }
+
+    /**
+     * Compacts data and calls UnsafeGetDataMut() on undelying container
+     * WARN: Will copy if data isn't contiguous
+     * WARN: Even if underlying container is shared - returns reference to its underlying data
+     */
+    TMutableContiguousSpan UnsafeGetContiguousSpanMut() {
+        if(Begin() == End()) {
+            return {nullptr, 0};
+        }
+        Compact();
+        return {Begin().UnsafeContiguousDataMut(), Begin().ContiguousSize()};
+    }
+
     TString DebugString() const {
         TStringStream s;
         s << "{Size# " << Size;
-        for (const auto& chunk : Chain) {
+        for (const auto& chunk  : Chain) {
             const char *data;
             std::tie(data, std::ignore) = chunk.Backend.GetData();
             s << " [" << chunk.Begin - data << ", " << chunk.End - data << ")@" << chunk.Backend.UniqueId();

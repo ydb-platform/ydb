@@ -14,6 +14,14 @@ public:
         return {Buffer.data(), Buffer.size()};
     }
 
+    TMutData GetDataMut() override {
+        return {Buffer.Detach(), Buffer.size()};
+    }
+
+    TMutData UnsafeGetDataMut() override {
+        return {const_cast<char*>(Buffer.data()), Buffer.size()};
+    }
+
     size_t GetCapacity() const override {
         return Buffer.capacity();
     }
@@ -59,6 +67,37 @@ Y_UNIT_TEST_SUITE(TRope) {
         TRope rope = CreateRope(Text, 10);
         rope.Erase(rope.Begin() + begin, rope.Begin() + end);
     }
+
+    Y_UNIT_TEST(Compacted) {
+        TRope rope = CreateRope(Text, 10);
+        UNIT_ASSERT_EQUAL(rope.UnsafeGetContiguousSpanMut().data(), Text);
+        UNIT_ASSERT(rope.IsContiguous());
+    }
+
+#ifndef TSTRING_IS_STD_STRING
+    Y_UNIT_TEST(TStringDetach) {
+        TRope pf;
+        TRope rope;
+        TString string = TString(Text.data(), Text.size());
+        rope = string;
+        pf = rope;
+        pf.GetContiguousSpanMut();
+        UNIT_ASSERT(!string.IsDetached());
+        rope.GetContiguousSpanMut();
+        UNIT_ASSERT(string.IsDetached());
+    }
+
+    Y_UNIT_TEST(TStringUnsafeShared) {
+        TRope pf;
+        TRope rope;
+        TString string = TString(Text.data(), Text.size());
+        rope = string;
+        pf = rope;
+        UNIT_ASSERT(pf.IsContiguous());
+        UNIT_ASSERT_EQUAL(pf.UnsafeGetContiguousSpanMut().data(), string.data());
+        UNIT_ASSERT(!string.IsDetached());
+    }
+#endif
 
     Y_UNIT_TEST(BasicRange) {
         TRope rope = CreateRope(Text, 10);

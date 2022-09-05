@@ -22,6 +22,10 @@ namespace NKikimr {
             return Capacity;
         }
 
+        TMutData GetDataMut() override {
+            return {Data, Capacity};
+        }
+
         static TIntrusivePtr<IRopeChunkBackend> Allocate() {
             return MakeIntrusive<TRopeArenaBackend>();
         }

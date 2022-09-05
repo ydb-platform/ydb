@@ -69,6 +69,14 @@ public:
         return {reinterpret_cast<const char *>(Buffer.Data()), Buffer.Size()};
     }
 
+    TMutData GetDataMut() override {
+        return {reinterpret_cast<char *>(Buffer.Data()), Buffer.Size()};
+    }
+
+    TMutData UnsafeGetDataMut() override {
+        return {reinterpret_cast<char *>(Buffer.Data()), Buffer.Size()};
+    }
+
     size_t GetCapacity() const override {
         return Buffer.Size();
     }

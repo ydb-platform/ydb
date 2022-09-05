@@ -22,8 +22,18 @@
 
 #include <variant>
 
+// Forward delcarations
+
 namespace NYdb::NTopic {
     class TReadSession;
+}
+
+namespace NYdb::NPersQueue::NCompressionDetails {
+    extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data);
+}
+
+namespace NYdb::NTopic::NCompressionDetails {
+    extern TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec);
 }
 
 namespace NYdb::NPersQueue {
@@ -2179,12 +2189,6 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::TDecompression
     , Ready(ready) {
 }
 
-// Forward delcaration
-namespace NCompressionDetails {
-    extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data);
-    extern TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec);
-}
-
 template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator()() {
     i64 minOffset = Max<i64>();
@@ -2224,7 +2228,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_RAW
                         && static_cast<Ydb::Topic::Codec>(batch.codec()) != Ydb::Topic::CODEC_UNSPECIFIED
                     ) {
-                        TString decompressed = NCompressionDetails::Decompress(data, static_cast<Ydb::Topic::Codec>(batch.codec()));
+                        TString decompressed = ::NYdb::NTopic::NCompressionDetails::Decompress(data, static_cast<Ydb::Topic::Codec>(batch.codec()));
                         data.set_data(decompressed);
                     }
                 }

@@ -201,12 +201,20 @@ public:
 
     // Runtime API.
     std::shared_ptr<IReadSession> CreateReadSession(const TReadSessionSettings& settings);
+    std::shared_ptr<ISimpleBlockingWriteSession> CreateSimpleWriteSession(const TWriteSessionSettings& settings);
+    std::shared_ptr<IWriteSession> CreateWriteSession(const TWriteSessionSettings& settings);
 
     using IReadSessionConnectionProcessorFactory =
         NYdb::NPersQueue::ISessionConnectionProcessorFactory<Ydb::Topic::StreamReadMessage::FromClient,
                                                              Ydb::Topic::StreamReadMessage::FromServer>;
 
     std::shared_ptr<IReadSessionConnectionProcessorFactory> CreateReadSessionConnectionProcessorFactory();
+
+    using IWriteSessionConnectionProcessorFactory =
+        NYdb::NPersQueue::ISessionConnectionProcessorFactory<Ydb::Topic::StreamWriteMessage::FromClient,
+                                                             Ydb::Topic::StreamWriteMessage::FromServer>;
+
+    std::shared_ptr<IWriteSessionConnectionProcessorFactory> CreateWriteSessionConnectionProcessorFactory();
 
     NGrpc::IQueueClientContextPtr CreateContext() {
         return Connections_->CreateContext();

@@ -6,6 +6,7 @@
 # original buildsystem will not be accepted.
 
 
+add_subdirectory(codecs)
 add_subdirectory(impl)
 add_subdirectory(ut)
 
@@ -14,11 +15,14 @@ target_link_libraries(cpp-client-ydb_topic PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
-  client-ydb_persqueue_public-codecs
+  client-ydb_topic-codecs
   library-cpp-retry
   client-ydb_topic-impl
   cpp-client-ydb_proto
   cpp-client-ydb_driver
+  api-grpc
+  api-grpc-draft
+  api-protos
 )
 target_sources(cpp-client-ydb_topic PRIVATE
   ${CMAKE_SOURCE_DIR}/ydb/public/sdk/cpp/client/ydb_topic/proto_accessor.cpp

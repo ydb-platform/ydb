@@ -234,4 +234,12 @@ std::shared_ptr<IReadSession> TTopicClient::CreateReadSession(const TReadSession
     return Impl_->CreateReadSession(settings);
 }
 
+std::shared_ptr<ISimpleBlockingWriteSession> TTopicClient::CreateSimpleBlockingWriteSession(const TWriteSessionSettings& settings) {
+    return Impl_->CreateSimpleWriteSession(settings);
+}
+
+std::shared_ptr<IWriteSession> TTopicClient::CreateWriteSession(const TWriteSessionSettings& settings) {
+    return Impl_->CreateWriteSession(settings);
+}
+
 } // namespace NYdb::NTopic

@@ -30,7 +30,7 @@ target_link_libraries(ydb-public-sdk-cpp-client-ydb_topic-ut PUBLIC
   cpp-client-ydb_persqueue_core
   client-ydb_persqueue_core-impl
   ydb_persqueue_core-ut-ut_utils
-  client-ydb_persqueue_public-codecs
+  client-ydb_topic-codecs
   client-ydb_topic-impl
 )
 target_link_options(ydb-public-sdk-cpp-client-ydb_topic-ut PRIVATE

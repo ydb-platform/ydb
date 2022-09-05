@@ -9,7 +9,6 @@ namespace NYdb::NPersQueue {
 namespace NCompressionDetails {
 
 extern TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data);
-extern TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec);
 
 THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality);
 

@@ -5,32 +5,32 @@
 
 #include "codecs.h"
 
-namespace NYdb::NPersQueue {
+namespace NYdb::NTopic {
 namespace NCompressionDetails {
 
 using TInputStreamVariant = std::variant<std::monostate, TZLibDecompress, TZstdDecompress>;
 
-IInputStream* CreateDecompressorStream(TInputStreamVariant& inputStreamStorage, Ydb::PersQueue::V1::Codec codec, IInputStream* origin) {
+IInputStream* CreateDecompressorStream(TInputStreamVariant& inputStreamStorage, Ydb::Topic::Codec codec, IInputStream* origin) {
     switch (codec) {
-    case Ydb::PersQueue::V1::CODEC_GZIP:
+    case Ydb::Topic::CODEC_GZIP:
         return &inputStreamStorage.emplace<TZLibDecompress>(origin);
-    case Ydb::PersQueue::V1::CODEC_LZOP:
+    case Ydb::Topic::CODEC_LZOP:
         throw yexception() << "LZO codec is disabled";
-    case Ydb::PersQueue::V1::CODEC_ZSTD:
+    case Ydb::Topic::CODEC_ZSTD:
         return &inputStreamStorage.emplace<TZstdDecompress>(origin);
     default:
-    //case Ydb::PersQueue::V1::CODEC_RAW:
-    //case Ydb::PersQueue::V1::CODEC_UNSPECIFIED:
+    //case Ydb::Topic::CODEC_RAW:
+    //case Ydb::Topic::CODEC_UNSPECIFIED:
         throw yexception() << "unsupported codec value : " << ui64(codec);
     }
 }
 
-TString Decompress(const Ydb::PersQueue::V1::MigrationStreamingReadServerMessage::DataBatch::MessageData& data) {
+TString Decompress(const Ydb::Topic::StreamReadMessage::ReadResponse::MessageData& data, Ydb::Topic::Codec codec) {
     TMemoryInput input(data.data().data(), data.data().size());
     TString result;
     TStringOutput resultOutput(result);
     TInputStreamVariant inputStreamStorage;
-    TransferData(CreateDecompressorStream(inputStreamStorage, data.codec(), &input), &resultOutput);
+    TransferData(CreateDecompressorStream(inputStreamStorage, codec, &input), &resultOutput);
     return result;
 }
 
@@ -68,4 +68,4 @@ THolder<IOutputStream> CreateCoder(ECodec codec, TBuffer& result, int quality) {
 
 } // namespace NDecompressionDetails
 
-} // namespace NYdb::NPersQueue
+} // namespace NYdb::NTopic

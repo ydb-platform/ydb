@@ -88,4 +88,9 @@ TThreadPoolExecutor::TThreadPoolExecutor(size_t threadsCount)
     ThreadsCount = threadsCount;
 }
 
+IExecutor::TPtr CreateSyncExecutor()
+{
+    return MakeIntrusive<TSyncExecutor>();
+}
+
 }

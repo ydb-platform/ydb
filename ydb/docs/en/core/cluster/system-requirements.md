@@ -26,6 +26,8 @@ The number of servers and disks is determined by the fault-tolerance requirement
 
    {{ ydb-short-name }} health and performance weren't tested on any types of virtual or network storage devices.
 
+   When planning space, remember that {{ ydb-short-name }} uses some disk space for its own internal needs. For example, on a medium-sized cluster of 8 nodes, you can expect approximately 100 GB to be consumed for a static group on the whole cluster. On a large cluster with >1500 nodes, this will be about 200 GB. There are also logs of 25.6 GB on each Pdisk and a system area on each Pdisk. Its size depends on the size of the Pdisk, but is no less than 0.2 GB.
+
 ## Software configuration {#software}
 
 A {{ ydb-short-name }} server can run on servers with Linux kernel 4.4 or higher.

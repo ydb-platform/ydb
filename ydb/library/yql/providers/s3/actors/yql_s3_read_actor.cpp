@@ -46,6 +46,7 @@
 #include <library/cpp/actors/core/hfunc.h>
 
 #include <util/generic/size_literals.h>
+#include <util/stream/format.h>
 
 #include <queue>
 
@@ -438,7 +439,11 @@ private:
     }
 
     void ProcessUnexpectedEvent(TAutoPtr<IEventHandle> ev) final {
-        TString message = Sprintf("Unexpected message type 0x%08" PRIx32, ev->GetTypeRewrite());
+        TStringBuilder message;
+        message << "S3 read. Unexpected message type " << Hex(ev->GetTypeRewrite());
+        if (auto* eventBase = ev->GetBase()) {
+            message << " (" << eventBase->ToStringHeader() << ")";
+        }
         Send(ComputeActorId, new IDqComputeActorAsyncInput::TEvAsyncInputError(InputIndex, TIssues{TIssue(message)}));
     }
 private:

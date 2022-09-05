@@ -104,10 +104,7 @@ BOOST_PP_REPEAT( BOOST_TEST_MAX_PREDICATE_ARITY, IMPL_FRWD, _ )
 template <class Left, class Right>
 inline assertion_result equal_impl( Left const& left, Right const& right )
 {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wsign-compare"
     return left == right;
-#pragma GCC diagnostic pop
 }
 
 //____________________________________________________________________________//

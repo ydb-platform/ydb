@@ -554,6 +554,14 @@ void THive::BuildCurrentConfig() {
     for (const NKikimrConfig::THiveTabletPreference& tabletPreference : CurrentConfig.GetDefaultTabletPreference()) {
         DefaultDataCentersPreference[tabletPreference.GetType()] = tabletPreference.GetDataCentersPreference();
     }
+    BalancerIgnoreTabletTypes.clear();
+    for (auto i : CurrentConfig.GetBalancerIgnoreTabletTypes()) {
+        const auto type = TTabletTypes::EType(i);
+        if (IsValidTabletType(type)) {
+            BalancerIgnoreTabletTypes.emplace_back(type);
+        }
+    }
+    MakeTabletTypeSet(BalancerIgnoreTabletTypes);
 }
 
 void THive::Cleanup() {

@@ -181,7 +181,8 @@ bool TTabletInfo::IsStopped() const {
 }
 
 bool TTabletInfo::IsGoodForBalancer(TInstant now) const {
-    return now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod();
+    return !Hive.IsInBalancerIgnoreList(GetTabletType())
+            && (now - LastBalancerDecisionTime > Hive.GetTabletKickCooldownPeriod());
 }
 
 bool TTabletInfo::InitiateBoot() {

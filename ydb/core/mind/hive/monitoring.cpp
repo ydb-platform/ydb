@@ -730,6 +730,29 @@ public:
         UpdateConfig(db, "NodeSelectStrategy");
         UpdateConfig(db, "CheckMoveExpediency");
 
+        if (params.contains("BalancerIgnoreTabletTypes")) {
+            TVector<TString> tabletTypeNames = SplitString(params.Get("BalancerIgnoreTabletTypes"), ";");
+            std::vector<TTabletTypes::EType> newTypeList;
+            for (const auto& name : tabletTypeNames) {
+                TTabletTypes::EType type = TTabletTypes::StrToType(Strip(name));
+                if (IsValidTabletType(type)) {
+                    newTypeList.emplace_back(type);
+                }
+            }
+            MakeTabletTypeSet(newTypeList);
+            if (newTypeList != Self->BalancerIgnoreTabletTypes) {
+                // replace DatabaseConfig.BalancerIgnoreTabletTypes inplace
+                auto* field = Self->DatabaseConfig.MutableBalancerIgnoreTabletTypes();
+                field->Reserve(newTypeList.size());
+                field->Clear();
+                for (auto i : newTypeList) {
+                    field->Add(i);
+                }
+                ChangeRequest = true;
+                // Self->BalancerIgnoreTabletTypes will be replaced by Self->BuildCurrentConfig()
+            }
+        }
+
         if (ChangeRequest) {
             Self->BuildCurrentConfig();
             db.Table<Schema::State>().Key(TSchemeIds::State::DefaultState).Update<Schema::State::Config>(Self->DatabaseConfig);
@@ -880,6 +903,65 @@ public:
         }
     }
 
+    void ShowConfigForBalancerIgnoreTabletTypes(IOutputStream& out) {
+        // value of protobuf type "repeated field of ETabletTypes::EType"
+        // is represented as a single string build from list delimited type names
+
+        auto makeListString = [] (const NKikimrConfig::THiveConfig& config) {
+            std::vector<TTabletTypes::EType> types;
+            for (auto i : config.GetBalancerIgnoreTabletTypes()) {
+                const auto type = TTabletTypes::EType(i);
+                if (IsValidTabletType(type)) {
+                    types.emplace_back(type);
+                }
+            }
+            MakeTabletTypeSet(types);
+            TVector<TString> names;
+            for (auto i : types) {
+                names.emplace_back(TTabletTypes::TypeToStr(i));
+            }
+            return JoinStrings(names, ";");
+        };
+
+        const TString param("BalancerIgnoreTabletTypes");
+
+        NKikimrConfig::THiveConfig builtinConfig;
+        auto builtinDefault = makeListString(builtinConfig);
+        auto clusterDefault = makeListString(Self->ClusterConfig);
+        auto currentValue = makeListString(Self->CurrentConfig);
+
+        bool localOverrided = (currentValue != clusterDefault);
+
+        out << "<div class='row'>";
+        {
+            // mark if value is changed locally
+            out << "<div class='col-sm-3' style='padding-top:12px;text-align:right'>"
+                << "<label for='" << param << "'"
+                << (localOverrided ? "" : "' style='font-weight:normal'")
+                << ">" << param << ":</label>"
+                << "</div>";
+            // editable current value
+            out << "<div class='col-sm-2' style='padding-top:5px'>"
+                << "<input id='" << param << "' style='max-width:170px;margin-top:7px' onkeydown='edit(this);' onchange='edit(this);'"
+                << " value='" << currentValue << "'>"
+                << "</div>";
+            // apply button
+            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='applyVal(this, \"" << param << "\");' disabled='true'>Apply</button></div>";
+            // reset button
+            out << "<div class='col-sm-1'><button type='button' class='btn' style='margin-top:5px' onclick='resetVal(this, \"" << param << "\");' " << (localOverrided ? "" : "disabled='true'") << ">Reset</button></div>";
+            // show cluster default
+            out << "<div id='CMS" << param << "' class='col-sm-2' style='padding-top:12px'>"
+                << clusterDefault
+                << "</div>";
+            // show builtin default
+            out << "<div id='Default" << param << "' class='col-sm-2' style='padding-top:12px'>"
+                << builtinDefault
+                << "</div>";
+        }
+        out << "</div>";
+    }
+
+
     void RenderHTMLPage(IOutputStream& out, const TActorContext&/* ctx*/) {
         out << "<head></head><body>";
         out << "<script>$('.container > h2').html('Settings');</script>";
@@ -916,6 +998,7 @@ public:
         ShowConfig(out, "MaxMovementsOnAutoBalancer");
         ShowConfig(out, "ContinueAutoBalancer");
         ShowConfig(out, "CheckMoveExpediency");
+        ShowConfigForBalancerIgnoreTabletTypes(out);
 
         out << "<div class='row' style='margin-top:40px'>";
         out << "<div class='col-sm-2' style='padding-top:30px;text-align:right'><label for='allowedMetrics'>AllowedMetrics:</label></div>";
@@ -956,9 +1039,7 @@ public:
         }
         out << "</table></div>";
         out << "<div class='col-sm-2' style='padding-top:22px'><button type='button' class='btn' style='margin-top:5px' onclick='applyTab(this);' disabled='true'>Apply</button></div>";
-
         out << "</div>";
-
 
         out << "</div>";
 
@@ -1027,6 +1108,7 @@ public:
                        error: function() { $(button).addClass('btn-danger'); }
                    });
                }
+
                </script>
                )___";
 
@@ -1061,6 +1143,7 @@ public:
         Y_UNUSED(ctx);
     }
 
+    //TODO: move to hive_statics.cpp as utility function
     static TString GetTabletType(TTabletTypes::EType type) {
         switch(type) {
         case TTabletTypes::SchemeShard:

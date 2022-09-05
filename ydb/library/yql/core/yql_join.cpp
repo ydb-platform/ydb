@@ -1270,18 +1270,22 @@ TExprNode::TPtr RemapNonConvertibleMemberForJoin(TPositionHandle pos, const TExp
     }
 
     if (RemoveOptionalType(&unifiedType)->GetKind() != ETypeAnnotationKind::Data) {
-        result = ctx.Builder(pos)
-            .Callable("If")
-                .Callable(0, "HasNull")
-                    .Add(0, result)
+        if (unifiedType.HasOptionalOrNull()) {
+            result = ctx.Builder(pos)
+                .Callable("If")
+                    .Callable(0, "HasNull")
+                        .Add(0, result)
+                    .Seal()
+                    .Callable(1, "Null")
+                    .Seal()
+                    .Callable(2, "StablePickle")
+                        .Add(0, result)
+                    .Seal()
                 .Seal()
-                .Callable(1, "Null")
-                .Seal()
-                .Callable(2, "StablePickle")
-                    .Add(0, result)
-                .Seal()
-            .Seal()
-            .Build();
+                .Build();
+        } else {
+            result = ctx.NewCallable(pos, "StablePickle", { result });
+        }
     }
 
     return result;

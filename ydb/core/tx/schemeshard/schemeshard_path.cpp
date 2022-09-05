@@ -1102,7 +1102,7 @@ TPath TPath::Root(TSchemeShard* ss) {
     return result;
 }
 
-TString TPath::PathString() const { //O(1) if resolved, in other case O(result length) complexity
+TString TPath::PathString() const { // O(result length) complexity
     if (!NameParts) {
         return TString();
     }

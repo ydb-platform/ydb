@@ -28,6 +28,12 @@ TCommandConfig::TCommandConfig()
     AddCommand(std::make_unique<TCommandProfile>());
 }
 
+void TCommandConfig::Config(TConfig& config) {
+    TClientCommandTree::Config(config);
+
+    config.NeedToConnect = false;
+}
+
 TCommandProfile::TCommandProfile()
     : TClientCommandTree("profile", {}, "Manage configuration profiles")
 {
@@ -367,6 +373,8 @@ TCommandInit::TCommandInit()
 
 void TCommandInit::Config(TConfig& config) {
     TClientCommand::Config(config);
+
+    config.NeedToConnect = false;
 
     config.SetFreeArgsNum(0);
 }

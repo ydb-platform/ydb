@@ -29,11 +29,6 @@ public:
 
     TClientCommand(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
 
-    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
-    public:
-        TOptsParseOneLevelResult(const NLastGetopt::TOpts* options, int argc, char** argv);
-    };
-
     class TConfig {
         struct TCommandInfo {
             TString Name;
@@ -77,6 +72,8 @@ public:
         TVector<TString> Tokens;
         TString SecurityToken;
         TList<TCommandInfo> ParentCommands;
+        THashSet<TString> ExecutableOptions;
+        bool HasExecutableOptions = false;
         TString Path;
         THolder<TArgSettings> ArgsSettings;
         TString Address;
@@ -106,6 +103,10 @@ public:
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
         bool UseExportToYt = true;
+        // Whether a command needs a connection to YDB
+        bool NeedToConnect = true;
+        bool NeedToCheckForUpdate = true;
+        bool ForceVersionCheck = false;
 
         TCredentialsGetter CredentialsGetter;
 
@@ -126,76 +127,8 @@ public:
             };
         }
 
-        bool IsHelpCommand() const {
-            TString lastArg = ArgV[ArgC - 1];
-            return lastArg == "--help" || lastArg == "-h" || lastArg == "-?";
-        }
-
-        bool IsYdbCommand() const {
-            for (int i = 0; i < InitialArgC; ++i) {
-                TString arg = InitialArgV[i];
-                if (arg.EndsWith("ydb") || arg.EndsWith("ydb.exe")) {
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        bool IsSvnVersionCommand() const {
-            TString lastArg = ArgV[ArgC - 1];
-            return lastArg == "--svnrevision" || lastArg == "-V";
-        }
-
-        bool IsVersionCommand() const {
-            return HasArgs({ "version" });
-        }
-
-        bool IsVersionForceCheckCommand() const {
-            return HasArgs({ "version", "--check" });
-        }
-
-        bool IsSetVersionCheckCommand() const {
-            return HasArgs({ "version", "--enable-checks" }) || HasArgs({ "version", "--disable-checks" });
-        }
-
-        bool IsUpdateCommand() const {
-            return HasArgs({ "update" });
-        }
-
-        bool IsInitCommand() const {
-            return HasArgs({ "init" }) && !HasArgs({ "workload" });
-        }
-
-        bool IsProfileCommand() const {
-            return HasArgs({ "profile" });
-        }
-
-        bool IsLicenseCommand() const {
-            TString lastArg = ArgV[ArgC - 1];
-            return lastArg == "--license";
-        }
-
-        bool IsCreditsCommand() const {
-            TString lastArg = ArgV[ArgC - 1];
-            return lastArg == "--credits";
-        }
-
-        bool IsHelpExCommand() const {
-            TString lastArg = ArgV[ArgC - 1];
-            return lastArg == "--help-ex";
-        }
-
-        // "System" commands doesn't need endpoint, database and authentication to operate
-        bool IsSystemCommand() const {
-            if (IsHelpCommand()) {
-                return true;
-            }
-            if (!IsYdbCommand()) {
-                return false;
-            }
-            return IsSvnVersionCommand() || IsUpdateCommand() || IsVersionCommand()
-                || IsInitCommand() || IsProfileCommand() || IsLicenseCommand() || IsCreditsCommand()
-                || IsHelpExCommand();
+        bool HasHelpCommand() const {
+            return HasArgs({ "--help" }) || HasArgs({ "-h" }) || HasArgs({ "-?" }) || HasArgs({ "--help-ex" });
         }
 
         void SetFreeArgsMin(size_t value) {
@@ -220,7 +153,7 @@ public:
 
         void CheckParamsCount() {
             size_t count = GetParamsCount();
-            if (IsSystemCommand()) {
+            if (HasHelpCommand() || HasExecutableOptions) {
                 return;
             }
             bool minSet = ArgsSettings->Min.GetIsSet();
@@ -309,12 +242,16 @@ public:
         }
     };
 
+    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
+    public:
+        TOptsParseOneLevelResult(TConfig& config);
+    };
+
     virtual ~TClientCommand() {}
 
-    virtual void Config(TConfig& config);
-    virtual void Parse(TConfig& config);
-    virtual int Run(TConfig& config);
     virtual int Process(TConfig& config);
+    virtual void Prepare(TConfig& config);
+    virtual int ValidateAndRun(TConfig& config);
 
     virtual void RenderCommandsDescription(
         TStringStream& stream,
@@ -323,12 +260,22 @@ public:
     );
 
 protected:
+    virtual void Config(TConfig& config);
+    virtual void SaveParseResult(TConfig& config);
+    virtual void Parse(TConfig& config);
+    virtual void Validate(TConfig& config);
+    virtual int Run(TConfig& config);
+
     void SetFreeArgTitle(size_t pos, const TString& title, const TString& help);
     virtual void SetCustomUsage(TConfig& config);
+
+protected:
+    std::shared_ptr<NLastGetopt::TOptsParseResult> ParseResult;
 
 private:
     void HideOption(const TString& name);
     void ChangeOptionDescription(const TString& name, const TString& description);
+    void CheckForExecutableOptions(TConfig& config);
 
     constexpr static int DESCRIPTION_ALIGNMENT = 28;
 
@@ -343,16 +290,19 @@ public:
 
     TClientCommandTree(const TString& name, const std::initializer_list<TString>& aliases = std::initializer_list<TString>(), const TString& description = TString());
     void AddCommand(std::unique_ptr<TClientCommand> command);
-    virtual void Config(TConfig& config) override;
-    virtual void Parse(TConfig& config) override;
-    virtual int Run(TConfig& config) override;
-    virtual int Process(TConfig& config) override;
+    virtual void Prepare(TConfig& config) override;
     virtual void RenderCommandsDescription(
         TStringStream& stream,
         const NColorizer::TColors& colors = NColorizer::TColors(false),
         const std::basic_string<bool>& ends = std::basic_string<bool>()
     ) override;
     virtual void SetFreeArgs(TConfig& config);
+
+protected:
+    virtual void Config(TConfig& config) override;
+    virtual void SaveParseResult(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
+    virtual int Run(TConfig& config) override;
 
 private:
     bool HasOptionsToShow();

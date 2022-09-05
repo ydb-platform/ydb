@@ -14,12 +14,14 @@ TCommandVersion::TCommandVersion()
 void TCommandVersion::Config(TConfig& config) {
     TClientCommand::Config(config);
 
+    config.NeedToConnect = false;
+
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption("semantic", "Print semantic version only")
         .StoreTrue(&Semantic);
     config.Opts->AddLongOption("check", "Force to check latest version available")
-        .StoreTrue(&ForceCheck);
+        .StoreTrue(&config.ForceVersionCheck);
     config.Opts->AddLongOption("disable-checks", "Disable version checks. CLI will not check whether there is a newer version available")
         .StoreTrue(&DisableChecks);
     config.Opts->AddLongOption("enable-checks", "Enable version checks. CLI will regularly check whether there is a newer version available")
@@ -31,6 +33,12 @@ void TCommandVersion::Config(TConfig& config) {
     config.Opts->MutuallyExclusive("enable-checks", "semantic");
     config.Opts->MutuallyExclusive("enable-checks", "check");
     config.Opts->MutuallyExclusive("check", "semantic");
+}
+
+void TCommandVersion::Parse(TConfig& config) {
+    TClientCommand::Parse(config);
+
+    config.NeedToCheckForUpdate = !DisableChecks && !EnableChecks;
 }
 
 int TCommandVersion::Run(TConfig& config) {

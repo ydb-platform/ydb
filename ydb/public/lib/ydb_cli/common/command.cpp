@@ -98,21 +98,20 @@ TClientCommand::TClientCommand(const TString& name, const std::initializer_list<
     Opts.SetWrap(Max(Opts.Wrap_, static_cast<ui32>(TermWidth())));
 }
 
-
-TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(const NLastGetopt::TOpts* options, int argc, char** argv) {
+TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(TConfig& config) {
     int _argc = 1;
     int levels = 1;
 
-    while (levels > 0 && _argc < argc) {
-        if (argv[_argc][0] == '-') {
+    while (levels > 0 && _argc < config.ArgC) {
+        if (config.ArgV[_argc][0] == '-') {
             const NLastGetopt::TOpt* opt = nullptr;
-            TStringBuf optName(argv[_argc]);
+            TStringBuf optName(config.ArgV[_argc]);
             auto eqPos = optName.find('=');
             optName = optName.substr(0, eqPos);
             if (optName.StartsWith("--")) {
-                opt = options->FindLongOption(optName.substr(2));
+                opt = config.Opts->FindLongOption(optName.substr(2));
             } else {
-                opt = options->FindCharOption(optName[1]);
+                opt = config.Opts->FindCharOption(optName[1]);
             }
             if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT) {
                 if (eqPos == TStringBuf::npos) {
@@ -124,7 +123,32 @@ TClientCommand::TOptsParseOneLevelResult::TOptsParseOneLevelResult(const NLastGe
         }
         ++_argc;
     }
-    Init(options, _argc, const_cast<const char**>(argv));
+    Init(config.Opts, _argc, const_cast<const char**>(config.ArgV));
+}
+
+void TClientCommand::CheckForExecutableOptions(TConfig& config) {
+    int argc = 1;
+
+    while (argc < config.ArgC && config.ArgV[argc][0] == '-') {
+        const NLastGetopt::TOpt* opt = nullptr;
+        TStringBuf optName(config.ArgV[argc]);
+        auto eqPos = optName.find('=');
+        optName = optName.substr(0, eqPos);
+        if (optName.StartsWith("--")) {
+            opt = config.Opts->FindLongOption(optName.substr(2));
+        } else {
+            opt = config.Opts->FindCharOption(optName[1]);
+        }
+        if (config.ExecutableOptions.find(optName) != config.ExecutableOptions.end()) {
+            config.HasExecutableOptions = true;
+        }
+        if (opt != nullptr && opt->GetHasArg() != NLastGetopt::NO_ARGUMENT) {
+            if (eqPos == TStringBuf::npos) {
+                ++argc;
+            }
+        }
+        ++argc;
+    }
 }
 
 void TClientCommand::Config(TConfig& config) {
@@ -141,6 +165,10 @@ void TClientCommand::Parse(TConfig& config) {
     Y_UNUSED(config);
 }
 
+void TClientCommand::Validate(TConfig& config) {
+    Y_UNUSED(config);
+}
+
 int TClientCommand::Run(TConfig& config) {
     Y_UNUSED(config);
     // TODO: invalid usage ? error? help?
@@ -148,14 +176,30 @@ int TClientCommand::Run(TConfig& config) {
 }
 
 int TClientCommand::Process(TConfig& config) {
+    Prepare(config);
+    return ValidateAndRun(config);
+}
+
+void TClientCommand::SaveParseResult(TConfig& config) {
+    ParseResult = std::make_shared<NLastGetopt::TOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
+}
+
+void TClientCommand::Prepare(TConfig& config) {
     config.ArgsSettings.Reset(new TConfig::TArgSettings());
     config.Opts = &Opts;
     Config(config);
+    CheckForExecutableOptions(config);
     config.CheckParamsCount();
     SetCustomUsage(config);
-    NLastGetopt::TOptsParseResult parseResult(config.Opts, config.ArgC, config.ArgV);
-    config.ParseResult = &parseResult;
+    SaveParseResult(config);
+    config.ParseResult = ParseResult.get();
     Parse(config);
+}
+
+int TClientCommand::ValidateAndRun(TConfig& config) {
+    config.Opts = &Opts;
+    config.ParseResult = ParseResult.get();
+    Validate(config);
     return Run(config);
 }
 
@@ -265,11 +309,6 @@ void TClientCommandTree::Config(TConfig& config) {
     TClientCommand::Config(config);
     SetFreeArgs(config);
     TString commands;
-    for (auto it = SubCommands.begin(); it != SubCommands.end(); ++it) {
-        if (!commands.empty())
-            commands += ',';
-        commands += it->first;
-    }
     SetFreeArgTitle(0, "<subcommand>", commands);
     TStringStream stream;
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
@@ -280,6 +319,10 @@ void TClientCommandTree::Config(TConfig& config) {
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
+}
+
+void TClientCommandTree::SaveParseResult(TConfig& config) {
+    ParseResult = std::make_shared<TOptsParseOneLevelResult>(config);
 }
 
 void TClientCommandTree::Parse(TConfig& config) {
@@ -310,22 +353,20 @@ void TClientCommandTree::Parse(TConfig& config) {
 
 int TClientCommandTree::Run(TConfig& config) {
     if (SelectedCommand) {
-        return SelectedCommand->Process(config);
+        return SelectedCommand->ValidateAndRun(config);
     }
-    throw yexception() << "Error";
+    throw yexception() << "No child command to run";
 }
 
-int TClientCommandTree::Process(TConfig& config) {
-    config.ArgsSettings.Reset(new TConfig::TArgSettings());
-    config.Opts = &Opts;
-    Config(config);
-    config.CheckParamsCount();
-    SetCustomUsage(config);
-    TOptsParseOneLevelResult parseResult(config.Opts, config.ArgC, config.ArgV);
-    config.ParseResult = &parseResult;
-    Parse(config);
+void TClientCommandTree::Prepare(TConfig& config) {
+    TClientCommand::Prepare(config);
     config.ParentCommands.push_back({ Name, HasOptionsToShow() ? &Opts : nullptr });
-    return Run(config);
+
+    if (SelectedCommand) {
+        SelectedCommand->Prepare(config);
+    } else {
+        throw yexception() << "No child command to prepare";
+    }
 }
 
 void TClientCommandTree::SetFreeArgs(TConfig& config) {

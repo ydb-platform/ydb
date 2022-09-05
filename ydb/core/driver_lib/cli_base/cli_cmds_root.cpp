@@ -104,12 +104,7 @@ public:
                     port = FromString<ui32>(portStr);
                 }
             } else {
-                if (config.IsHelpCommand()) {
-                    return;
-                } else {
-                    throw TMisuseException()
-                        << "Missing required option 'server'. Also couldn't find 'host' variable in profile config.";
-                }
+                return;
             }
         }
         ParseProtocol(config);
@@ -124,6 +119,15 @@ public:
             auto *p = std::get_if<NGrpc::TGRpcClientConfig>(&CommandConfig.ClientConfig.GetRef());
             p->EnableSsl = config.EnableSsl;
             p->SslCaCert = config.CaCerts;
+        }
+    }
+
+    void Validate(TConfig& config) override {
+        TClientCommandRootBase::Validate(config);
+
+        if (Address.empty() && config.NeedToConnect) {
+            throw TMisuseException()
+                << "Missing required option 'server'. Also couldn't find 'host' variable in profile config.";
         }
     }
 

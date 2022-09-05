@@ -32,6 +32,7 @@ public:
     void Parse(TConfig& config) override;
     void ParseAddress(TConfig& config) override;
     void ParseCredentials(TConfig& config) override;
+    void Validate(TConfig& config) override;
 
 protected:
     virtual void FillConfig(TConfig& config);

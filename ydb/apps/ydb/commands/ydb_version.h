@@ -10,10 +10,10 @@ public:
     TCommandVersion();
     virtual void Config(TConfig& config) override;
     virtual int Run(TConfig& config) override;
+    virtual void Parse(TConfig& config) override;
 
 private:
     bool Semantic = false;
-    bool ForceCheck = false;
     bool DisableChecks = false;
     bool EnableChecks = false;
 };

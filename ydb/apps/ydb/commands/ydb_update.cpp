@@ -10,6 +10,9 @@ TCommandUpdate::TCommandUpdate()
 void TCommandUpdate::Config(TConfig& config) {
     TClientCommand::Config(config);
 
+    config.NeedToConnect = false;
+    config.NeedToCheckForUpdate = false;
+
     config.SetFreeArgsNum(0);
 
     config.Opts->AddLongOption('f', "force", "Force update. Do not check if there is a newer version available.")

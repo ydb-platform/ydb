@@ -11,6 +11,7 @@ std::shared_ptr<IProfileManager> CreateYdbProfileManager(const TString& ydbDir);
 class TCommandConfig : public TClientCommandTree {
 public:
     TCommandConfig();
+    virtual void Config(TConfig& config) override;
 };
 
 class TCommandProfile : public TClientCommandTree {

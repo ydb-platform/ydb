@@ -227,10 +227,8 @@ void TClientCommandRootCommon::Parse(TConfig& config) {
     ParseProfile();
 
     TClientCommandRootBase::Parse(config);
-    if (!config.IsSystemCommand()) {
-        ParseDatabase(config);
-        ParseCaCerts(config);
-    }
+    ParseDatabase(config);
+    ParseCaCerts(config);
     config.IsVerbose = IsVerbose;
 }
 
@@ -248,14 +246,7 @@ void TClientCommandRootCommon::ParseAddress(TConfig& config) {
         }
     }
 
-    if (Address.empty()) {
-        if (config.IsSystemCommand()) {
-            return;
-        } else {
-            throw TMisuseException()
-                << "Missing required option 'endpoint'.";
-        }
-    } else {
+    if (!Address.empty()) {
         config.EnableSsl = Settings.EnableSsl.GetRef();
         ParseProtocol(config);
         auto colon_pos = Address.find(":");
@@ -293,14 +284,26 @@ void TClientCommandRootCommon::ParseDatabase(TConfig& config) {
         }
     }
 
-    if (Database.empty()) {
+    config.Database = Database;
+}
+
+void TClientCommandRootCommon::Validate(TConfig& config) {
+    TClientCommandRootBase::Validate(config);
+
+    if (Address.empty() && config.NeedToConnect) {
         throw TMisuseException()
-            << "Missing required option 'database'.";
+            << "Missing required option 'endpoint'.";
+    }
+
+    if (Database.empty()) {
+        if (config.NeedToConnect) {
+            throw TMisuseException()
+                << "Missing required option 'database'.";
+        }
     } else if (!Database.StartsWith('/')) {
         throw TMisuseException() << "Path to a database \"" << Database
             << "\" is incorrect. It must be absolute and thus must begin with '/'.";
     }
-    config.Database = Database;
 }
 
 namespace {

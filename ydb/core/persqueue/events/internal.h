@@ -12,6 +12,10 @@
 
 #include <util/generic/maybe.h>
 
+namespace NYdb {
+    class ICredentialsProviderFactory;
+}
+
 namespace NKikimr {
 
 namespace NPQ {
@@ -109,6 +113,7 @@ struct TEvPQ {
         EvReadLimiterCounters,
         EvRetryWrite,
         EvInitCredentials,
+        EvCredentialsCreated,
         EvCreateConsumer,
         EvRequestPartitionStatus,
         EvReaderEventArrived,
@@ -606,6 +611,19 @@ struct TEvPQ {
     struct TEvInitCredentials : public TEventLocal<TEvInitCredentials, EvInitCredentials> {
         TEvInitCredentials()
         {}
+    };
+    
+    struct TEvCredentialsCreated : public TEventLocal<TEvCredentialsCreated, EvCredentialsCreated> {
+        TEvCredentialsCreated(const TString& error)
+            : Error(error)
+        {}
+        
+        TEvCredentialsCreated(std::shared_ptr<NYdb::ICredentialsProviderFactory> credentials)
+            : Credentials(credentials)
+        {}
+
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> Credentials;
+        std::optional<TString> Error;
     };
 
     struct TEvCreateConsumer : public TEventLocal<TEvCreateConsumer, EvCreateConsumer> {

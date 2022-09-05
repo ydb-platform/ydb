@@ -34,9 +34,15 @@ public:
         Driver = std::make_shared<NYdb::TDriver>(driverConfig);
     }
 
-    virtual std::shared_ptr<NYdb::ICredentialsProviderFactory> GetCredentialsProvider(
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProvider(
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
-    ) const = 0;
+    ) const noexcept {
+        try {
+            return GetCredentialsProviderImpl(cred);
+        } catch(...) {
+            return NThreading::MakeErrorFuture<NYdb::TCredentialsProviderFactoryPtr>(std::current_exception());
+        }
+    }
 
     virtual std::shared_ptr<NYdb::NPersQueue::IReadSession> GetReadSession(
         const NKikimrPQ::TMirrorPartitionConfig& config,
@@ -53,18 +59,24 @@ public:
     }
 
 protected:
+    virtual NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
+        const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
+    ) const = 0;
+
+
+protected:
     mutable TDeferredActorLogBackend::TSharedAtomicActorSystemPtr ActorSystemPtr;
     mutable std::shared_ptr<NYdb::TDriver> Driver;
 };
 
 class TPersQueueMirrorReaderFactory : public IPersQueueMirrorReaderFactory {
-public:
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> GetCredentialsProvider(
+protected:
+    NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr> GetCredentialsProviderImpl(
         const NKikimrPQ::TMirrorPartitionConfig::TCredentials& cred
     ) const override {
         switch (cred.GetCredentialsCase()) {
             case NKikimrPQ::TMirrorPartitionConfig::TCredentials::CREDENTIALS_NOT_SET: {
-                return NYdb::CreateInsecureCredentialsProviderFactory();
+                return NThreading::MakeFuture(NYdb::CreateInsecureCredentialsProviderFactory());
             }
             default: {
                 ythrow yexception() << "unsupported credentials type " << ui64(cred.GetCredentialsCase());
@@ -72,6 +84,7 @@ public:
         }
     }
 
+public:
     std::shared_ptr<NYdb::NPersQueue::IReadSession> GetReadSession(
         const NKikimrPQ::TMirrorPartitionConfig& config,
         ui32 partition,

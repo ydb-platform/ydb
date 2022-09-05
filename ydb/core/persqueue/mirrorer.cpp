@@ -242,7 +242,8 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         LastStateLogTimestamp = ctx.Now();
         LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << "[STATE] current state=" << GetCurrentState()
-            << ", read session=" << bool(ReadSession) << ", credentials provider=" << bool(CredentialsProvider));
+            << ", read session=" << bool(ReadSession) << ", credentials provider=" << bool(CredentialsProvider)
+            << ", credentials request inflight=" << CredentialsRequestInFlight);
         if (ReadSession) {
             LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
                 << "[STATE] read session id " << ReadSession->GetSessionId());
@@ -317,8 +318,7 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
         LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " changing config");
 
-        Become(&TThis::StateInitConsumer);
-        ctx.Send(SelfId(), new TEvPQ::TEvInitCredentials);
+        StartInit(ctx);
     }
 }
 
@@ -361,15 +361,49 @@ void TMirrorer::TryToWrite(const TActorContext& ctx) {
 
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
+    if (CredentialsRequestInFlight) {
+        LOG_WARN_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " credentials request already inflight.");
+        return;
+    }
     LastInitStageTimestamp = ctx.Now();
-    try {
-        RecreateCredentialsProvider(ctx);
-    } catch(...) {
-        ProcessError(ctx, "cannot initialize credentials provider: " + CurrentExceptionMessage());
+    CredentialsProvider = nullptr;
+
+    auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
+    Y_VERIFY(factory);
+    auto future = factory->GetCredentialsProvider(Config.GetCredentials());
+    future.Subscribe(
+        [
+            actorSystem = ctx.ExecutorThread.ActorSystem,
+            selfId = SelfId()
+        ](const NThreading::TFuture<NYdb::TCredentialsProviderFactoryPtr>& result) {
+            THolder<TEvPQ::TEvCredentialsCreated> ev;
+            if (result.HasException()) {
+                TString error;
+                try {
+                    result.TryRethrow();
+                } catch(...) {
+                    error = CurrentExceptionMessage();
+                }
+                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(error);
+            } else {
+                ev = MakeHolder<TEvPQ::TEvCredentialsCreated>(result.GetValue());
+            }
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, ev.Release()));
+        }
+    );
+    CredentialsRequestInFlight = true;
+}
+
+void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
+    CredentialsRequestInFlight = false;
+    if (ev->Get()->Error) {
+        ProcessError(ctx, TStringBuilder() << "cannot initialize credentials provider: " << ev->Get()->Error.value());
         ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
         return;
     }
-    LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " credentials provider created");
+
+    CredentialsProvider = ev->Get()->Credentials;
+    LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " credentials provider created " << bool(CredentialsProvider));
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
     ScheduleConsumerCreation(ctx);
 }
@@ -424,8 +458,14 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         return logPrefix + message;
     });
 
-    ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
-
+    try {
+        ReadSession = factory->GetReadSession(Config, Partition, CredentialsProvider, MAX_BYTES_IN_FLIGHT, log);
+    } catch(...) {
+        ProcessError(ctx, TStringBuilder() << "got an exception during the creation read session: " << CurrentExceptionMessage());
+        ScheduleConsumerCreation(ctx);
+        return;
+    }
+    
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription()
             << " read session created: " << ReadSession->GetSessionId());
 
@@ -485,14 +525,6 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
     LOG_NOTICE_S(ctx, NKikimrServices::PQ_MIRRORER, MirrorerDescription() << " schedule consumer creation");
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
-}
-
-void TMirrorer::RecreateCredentialsProvider(const TActorContext& ctx) {
-    CredentialsProvider = nullptr;
-
-    auto factory = AppData(ctx)->PersQueueMirrorReaderFactory;
-    Y_VERIFY(factory);
-    CredentialsProvider = factory->GetCredentialsProvider(Config.GetCredentials());
 }
 
 TString TMirrorer::MirrorerDescription() const {

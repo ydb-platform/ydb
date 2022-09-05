@@ -76,8 +76,8 @@ Y_UNIT_TEST_SUITE(Get) {
 
         // check that TEvGet still returns OK for blocked generation without reader params
         SendGet(test, originalBlobId, data, NKikimrProto::OK);
-        // check that now TEvGet returns ERROR for blocked generation with reader params
-        SendGet(test, originalBlobId, data, NKikimrProto::ERROR, tabletId, tabletGeneration);
+        // check that now TEvGet returns BLOCKED for blocked generation with reader params
+        SendGet(test, originalBlobId, data, NKikimrProto::BLOCKED, tabletId, tabletGeneration);
     }
 
     Y_UNIT_TEST(EvGetReaderParams) {

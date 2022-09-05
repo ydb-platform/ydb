@@ -158,12 +158,8 @@ namespace NKikimr {
             return BlocksCache.Find(tabletID, outGen);
         }
 
-        bool IsBlocked(ui64 tabletID, TBlocksCache::TBlockedGen tabletGeneration) {
-            auto res = BlocksCache.IsBlocked(tabletID, tabletGeneration);
-            if (res.Status == TBlocksCache::EStatus::OK) {
-                return false;
-            }
-            return true;
+        TBlocksCache::TBlockRes IsBlocked(ui64 tabletID, TBlocksCache::TBlockedGen tabletGeneration) {
+            return BlocksCache.IsBlocked(tabletID, tabletGeneration);
         }
 
         ////////////////////////////////////////////////////////////////////////

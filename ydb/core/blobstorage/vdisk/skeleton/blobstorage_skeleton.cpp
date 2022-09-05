@@ -882,8 +882,8 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::ERROR, "get query is invalid", ev, ctx, now);
             } else if (record.HasReaderTabletId()
                     && record.HasReaderTabletGeneration()
-                    && Hull->IsBlocked(record.GetReaderTabletId(), {record.GetReaderTabletGeneration(), 0})) {
-                ReplyError(NKikimrProto::ERROR, "tablet's generation is blocked", ev, ctx, now);
+                    && Hull->IsBlocked(record.GetReaderTabletId(), {record.GetReaderTabletGeneration(), 0}).Status != TBlocksCache::EStatus::OK) {
+                ReplyError(NKikimrProto::BLOCKED, "tablet's generation is blocked", ev, ctx, now);
             } else {
                 std::optional<THullDsSnap> fullSnap;
                 if (record.HasSnapshotId()) {

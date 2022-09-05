@@ -1,9 +1,10 @@
 #pragma once 
+
+#include <ydb/core/blobstorage/pdisk/mock/pdisk_mock.h>
 #include "blobstorage_pdisk_ut.h"
 
 #include "blobstorage_pdisk_abstract.h"
 #include "blobstorage_pdisk_impl.h"
-#include "blobstorage_pdisk_ut_env.h"
 
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/testlib/actors/test_runtime.h>
@@ -18,6 +19,7 @@ private:
     THolder<TTestActorRuntime> Runtime;
     std::shared_ptr<NPDisk::IIoContextFactory> IoContext;
     NPDisk::TPDisk *PDisk = nullptr;
+    bool UsePDiskMock;
 
 public:
     TActorId Sender;
@@ -40,8 +42,9 @@ public:
         return pDiskConfig;
     }
 
-    TActorTestContext(bool isBad)
+    TActorTestContext(bool isBad, bool usePDiskMock = false)
         : Runtime(new TTestActorRuntime(1, true))
+        , UsePDiskMock(usePDiskMock)
     {
         auto appData = MakeHolder<TAppData>(0, 0, 0, 0, TMap<TString, ui32>(), nullptr, nullptr, nullptr, nullptr);
         IoContext = std::make_shared<NPDisk::TIoContextFactoryOSS>();
@@ -59,7 +62,10 @@ public:
     }
 
     TIntrusivePtr<TPDiskConfig> GetPDiskConfig() {
-        return GetPDisk()->Cfg;
+        if (!UsePDiskMock) {
+            return GetPDisk()->Cfg;
+        }
+        return nullptr;
     }
 
     void UpdateConfigRecreatePDisk(TIntrusivePtr<TPDiskConfig> cfg) {
@@ -71,9 +77,16 @@ public:
             Runtime->Send(new IEventHandle(*PDiskActor, Sender, new TKikimrEvents::TEvPoisonPill));
         }
 
-        auto mainCounters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
-        IActor* pDiskActor = CreatePDisk(cfg.Get(), MainKey, mainCounters);
-        PDiskActor = Runtime->Register(pDiskActor);
+        if (UsePDiskMock) {
+            ui32 nodeId = 1;
+            ui64 size = ui64(10) << 40;
+            TPDiskMockState::TPtr state(new TPDiskMockState((ui32)nodeId, (ui32)cfg->PDiskId, (ui64)cfg->PDiskGuid, (ui64)size, (ui32)cfg->ChunkSize));
+            PDiskActor = Runtime->Register(CreatePDiskMockActor(state));
+        } else {
+            auto mainCounters = TIntrusivePtr<::NMonitoring::TDynamicCounters>(new ::NMonitoring::TDynamicCounters());
+            IActor* pDiskActor = CreatePDisk(cfg.Get(), MainKey, mainCounters);
+            PDiskActor = Runtime->Register(pDiskActor);
+        }
     }
 
     void Send(IEventBase* ev) {
@@ -81,7 +94,7 @@ public:
     }
 
     NPDisk::TPDisk *GetPDisk() {
-        if (!PDisk) {
+        if (!PDisk && !UsePDiskMock) {
             // To be sure that pdisk actor is in StateOnline
             TestResponce<NPDisk::TEvYardControlResult>(
                     new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStart, &MainKey),
@@ -102,12 +115,14 @@ public:
     }
 
     void RestartPDiskSync() {
-        TestResponce<NPDisk::TEvYardControlResult>(
-                new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
-                NKikimrProto::OK);
-        PDisk = nullptr;
-        // wait initialization and update this->PDisk
-        GetPDisk();
+        if (!UsePDiskMock) {
+            TestResponce<NPDisk::TEvYardControlResult>(
+                    new NPDisk::TEvYardControl(NPDisk::TEvYardControl::PDiskStop, nullptr),
+                    NKikimrProto::OK);
+            PDisk = nullptr;
+            // wait initialization and update this->PDisk
+            GetPDisk();
+        }
     }
 
     template<typename TRes>

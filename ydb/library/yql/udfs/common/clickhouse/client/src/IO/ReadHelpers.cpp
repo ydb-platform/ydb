@@ -93,10 +93,10 @@ void NO_INLINE throwAtAssertionFailed(const char * s, ReadBuffer & buf)
     throw ParsingException(out.str(), ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED);
 }
 
-void NO_INLINE throwTypeParseFailed(int column)
+void NO_INLINE throwTypeParseFailed(const String& column_name, size_t row_num)
 {
     WriteBufferFromOwnString out;
-    out << "Failed to parse type in column " << column << " of csv";
+    out << "failed to parse data in column `" << column_name << "' from row " << row_num << ", probably data type differs from specified in schema";
 
     throw ParsingException(out.str(), ErrorCodes::CANNOT_PARSE_INPUT_ASSERTION_FAILED);
 }

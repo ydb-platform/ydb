@@ -37,6 +37,8 @@ private:
     DataTypes data_types;
     using IndexesMap = std::unordered_map<String, size_t>;
     IndexesMap column_indexes_by_names;
+    std::vector<String> names_by_column_indexes;
+    std::vector<bool> is_required_columns;
 
     void addInputColumn(const String & column_name);
 

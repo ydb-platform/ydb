@@ -17,6 +17,7 @@ struct RowReadExtension
     /// IRowInputFormat::read output. It contains non zero for columns that actually read from the source and zero otherwise.
     /// It's used to attach defaults for partially filled rows.
     std::vector<UInt8> read_columns;
+    size_t current_row = 0;
 };
 
 /// Common parameters for generating blocks.

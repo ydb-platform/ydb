@@ -73,6 +73,7 @@ Chunk IRowInputFormat::generate()
         {
             try
             {
+                info.current_row = total_rows;
                 ++total_rows;
 
                 info.read_columns.clear();

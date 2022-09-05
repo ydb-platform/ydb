@@ -163,7 +163,7 @@ void assertEOF(ReadBuffer & buf);
 
 [[noreturn]] void throwAtAssertionFailed(const char * s, ReadBuffer & buf);
 
-[[noreturn]] void throwTypeParseFailed(int column);
+[[noreturn]] void throwTypeParseFailed(const String & column, size_t row_num);
 
 
 inline void assertChar(char symbol, ReadBuffer & buf)

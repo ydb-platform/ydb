@@ -36,13 +36,17 @@ CSVRowInputFormat::CSVRowInputFormat(const Block & header_, ReadBuffer & in_, co
 
     data_types.resize(num_columns);
     column_indexes_by_names.reserve(num_columns);
+    names_by_column_indexes.resize(num_columns);
+    is_required_columns.resize(num_columns);
+    auto columns = sample.cloneEmptyColumns();
 
     for (size_t i = 0; i < num_columns; ++i)
     {
         const auto & column_info = sample.getByPosition(i);
-
+        is_required_columns[i] = !columns[i]->isNullable();
         data_types[i] = column_info.type;
         column_indexes_by_names.emplace(column_info.name, i);
+        names_by_column_indexes[i] = column_info.name;
     }
 }
 
@@ -221,6 +225,13 @@ void CSVRowInputFormat::readPrefix()
                 }
             }
 
+            for (size_t i = 0; i < column_mapping->read_columns.size(); i++)
+            {
+                if (!column_mapping->read_columns[i] && is_required_columns[i])
+                {
+                    throw Exception(String("Column `") + names_by_column_indexes[i] + "` is marked as not null, but was not found in the csv file", ErrorCodes::INCORRECT_DATA);
+                }
+            }
             return;
         }
         else
@@ -261,6 +272,10 @@ bool CSVRowInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext
             if (!ext.read_columns[*table_column])
                 have_default_columns = true;
             skipWhitespacesAndTabs(in);
+
+            if (!checkTypeValidness(in, delimiter, is_last_file_column)) {
+                throwTypeParseFailed(names_by_column_indexes[*table_column], ext.current_row);
+            }
         }
         else
         {
@@ -269,9 +284,6 @@ bool CSVRowInputFormat::readRow(MutableColumns & columns, RowReadExtension & ext
             readCSVString(tmp, in, format_settings.csv);
         }
 
-        if (!checkTypeValidness(in, delimiter, is_last_file_column)) {
-            throwTypeParseFailed(file_column);
-        }
         skipDelimiter(in, delimiter, is_last_file_column);
     }
 

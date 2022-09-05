@@ -138,7 +138,10 @@ inline void FillChunkDataFromReq(
     const auto& msg = writeRequest.messages(messageIndex);
     proto.SetSeqNo(msg.seq_no());
     proto.SetCreateTime(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
-    proto.SetCodec(writeRequest.codec());
+    // TODO (ildar-khisam@): refactor codec enum convert
+    if (writeRequest.codec() > 0) {
+        proto.SetCodec(writeRequest.codec() - 1);
+    }
     proto.SetData(msg.data());
 }
 
@@ -1384,8 +1387,8 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             }
 
             const ui32 codecID = data.codec();
-            TString error;
-            if (!ValidateWriteWithCodec(InitialPQTabletConfig, codecID, error)) {
+            TString error = "unspecified (id 0)";
+            if (codecID == 0 || !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error)) {
                 CloseSession(TStringBuilder() << "bad write request - codec is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
                 return false;
             }

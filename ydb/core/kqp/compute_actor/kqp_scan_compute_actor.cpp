@@ -103,11 +103,12 @@ public:
     TKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TActorId& executerId, ui64 txId,
         NDqProto::TDqTask&& task, IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, TIntrusivePtr<TKqpCounters> counters,
+        const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, const TScanSettings& scanSettings, TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : TBase(executerId, txId, std::move(task), std::move(asyncIoFactory), functionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId))
         , ComputeCtx(settings.StatsMode)
         , Snapshot(snapshot)
+        , ScanSettings(scanSettings)
         , Counters(counters)
     {
         YQL_ENSURE(GetTask().GetMeta().UnpackTo(&Meta), "Invalid task meta: " << GetTask().GetMeta().DebugString());
@@ -677,7 +678,7 @@ private:
 
     bool StartTableScan() {
         // allow reading from multiple shards if data is not sorted
-        const ui32 maxAllowedInFlight = IsSortedOutput() ? 1 : PendingShards.size();
+        const ui32 maxAllowedInFlight = IsSortedOutput() ? 1 : ScanSettings.GetSimultaneousShardsCount();
 
         while (!PendingShards.empty() && InFlightShards.size() + PendingResolveShards.size() + 1 <= maxAllowedInFlight) {
             ui64 tabletId = PendingShards.front().TabletId;
@@ -1030,6 +1031,7 @@ private:
 private:
     NMiniKQL::TKqpScanComputeContext ComputeCtx;
     NKikimrKqp::TKqpSnapshot Snapshot;
+    TScanSettings ScanSettings;
     TIntrusivePtr<TKqpCounters> Counters;
     TScannedDataStats Stats;
     NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta Meta;
@@ -1052,11 +1054,11 @@ private:
 IActor* CreateKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, const TActorId& executerId, ui64 txId,
     NDqProto::TDqTask&& task, IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
-    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits, TIntrusivePtr<TKqpCounters> counters,
-    NWilson::TTraceId traceId)
+    const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
+    const TScanSettings& scanSettings, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId)
 {
     return new TKqpScanComputeActor(snapshot, executerId, txId, std::move(task), std::move(asyncIoFactory),
-        functionRegistry, settings, memoryLimits, counters, std::move(traceId));
+        functionRegistry, settings, memoryLimits, scanSettings, counters, std::move(traceId));
 }
 
 } // namespace NKqp

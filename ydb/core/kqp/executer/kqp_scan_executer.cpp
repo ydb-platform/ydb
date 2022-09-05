@@ -412,7 +412,7 @@ private:
     static ui32 GetMaxTasksPerNodeEstimate(TStageInfo& stageInfo) {
         // TODO: take into account number of active scans on node
         const auto& stage = GetStage(stageInfo);
-        bool heavyProgram = stage.GetProgram().GetSettings().GetHasSort() ||
+        const bool heavyProgram = stage.GetProgram().GetSettings().GetHasSort() ||
                             stage.GetProgram().GetSettings().GetHasMapJoin();
 
         if (heavyProgram) {
@@ -423,10 +423,10 @@ private:
     }
 
     TTask& AssignTaskToShard(
-        TStageInfo& stageInfo, ui64 shardId,
+        TStageInfo& stageInfo, const ui64 shardId,
         THashMap<ui64, std::vector<ui64>>& nodeTasks,
         THashMap<ui64, ui64>& assignedShardsCount,
-        bool sorted)
+        const bool sorted, const bool isOlapScan)
     {
         ui64 nodeId = ShardIdToNodeId.at(shardId);
         if (stageInfo.Meta.IsOlap() && sorted) {
@@ -438,7 +438,7 @@ private:
         auto& tasks = nodeTasks[nodeId];
         auto& cnt = assignedShardsCount[nodeId];
 
-        const ui32 maxScansPerNode = GetMaxTasksPerNodeEstimate(stageInfo);
+        const ui32 maxScansPerNode = isOlapScan ? 1 : GetMaxTasksPerNodeEstimate(stageInfo);
         if (cnt < maxScansPerNode) {
             auto& task = TasksGraph.AddTask(stageInfo);
             task.Meta.NodeId = nodeId;
@@ -470,6 +470,7 @@ private:
             THashMap<ui64, TShardInfo> partitions = PrunePartitions(TableKeys, op, stageInfo, holderFactory, typeEnv);
 
             bool reverse = false;
+            const bool isOlapScan = (op.GetTypeCase() == NKqpProto::TKqpPhyTableOperation::kReadOlapRange);
             ui64 itemsLimit = 0;
             bool sorted = true;
             TString itemsLimitParamName;
@@ -496,7 +497,7 @@ private:
             for (auto& [shardId, shardInfo] : partitions) {
                 YQL_ENSURE(!shardInfo.KeyWriteRanges);
 
-                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount, sorted);
+                auto& task = AssignTaskToShard(stageInfo, shardId, nodeTasks, assignedShardsCount, sorted, isOlapScan);
 
                 for (auto& [name, value] : shardInfo.Params) {
                     auto ret = task.Meta.Params.emplace(name, std::move(value));

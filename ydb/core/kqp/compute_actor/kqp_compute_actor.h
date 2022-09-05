@@ -16,6 +16,19 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
 namespace NKqp {
 
+class TScanSettings {
+private:
+    ui32 SimultaneousShardsCount = 8;
+public:
+    TScanSettings& SetSimultaneousShardsCount(const ui32 value) {
+        SimultaneousShardsCount = value;
+        return *this;
+    }
+    ui32 GetSimultaneousShardsCount() const {
+        return SimultaneousShardsCount;
+    }
+};
+
 IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask&& task,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
@@ -26,7 +39,7 @@ IActor* CreateKqpScanComputeActor(const NKikimrKqp::TKqpSnapshot& snapshot, cons
     NYql::NDqProto::TDqTask&& task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
     const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits,
-    TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId = {});
+    const TScanSettings& scanSettings, TIntrusivePtr<TKqpCounters> counters, NWilson::TTraceId traceId = {});
 
 namespace NComputeActor {
 

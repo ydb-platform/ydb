@@ -1017,6 +1017,7 @@ message TTableServiceConfig {
 
         optional uint64 MaxTotalScanBuffersSize = 13 [default = 4294967296];    // 4 GB
         optional uint64 MinScanBufferSize = 14 [default = 2097152];             // 2 MB
+        optional uint32 SimultaneouslyShardsScanningCount = 15 [default = 16];
     }
 
     message TSpillingServiceConfig {

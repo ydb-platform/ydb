@@ -286,6 +286,8 @@ private:
 
         runtimeSettingsBase.ReportStatsSettings = NYql::NDq::TReportStatsSettings{MinStatInterval, MaxStatInterval};
 
+        TScanSettings scanSettings;
+        scanSettings.SetSimultaneousShardsCount(Config.GetSimultaneouslyShardsScanningCount());
         auto actorSystem = TlsActivationContext->ActorSystem();
 
         // start compute actors
@@ -319,7 +321,7 @@ private:
             IActor* computeActor;
             if (tableKind == ETableKind::Datashard || tableKind == ETableKind::Olap) {
                 computeActor = CreateKqpScanComputeActor(msg.GetSnapshot(), request.Executer, txId, std::move(dqTask),
-                    CreateAsyncIoFactory(), nullptr, runtimeSettings, memoryLimits, Counters, NWilson::TTraceId(ev->TraceId));
+                    CreateAsyncIoFactory(), nullptr, runtimeSettings, memoryLimits, scanSettings, Counters, NWilson::TTraceId(ev->TraceId));
                 taskCtx.ComputeActorId = Register(computeActor);
             } else {
                 if (Y_LIKELY(!CaFactory)) {
